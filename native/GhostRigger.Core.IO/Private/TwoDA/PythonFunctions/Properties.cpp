@@ -1,4 +1,4 @@
-#include "2DA/PythonFunctions/Properties.h"
+#include "TwoDA/PythonFunctions/Properties.h"
 
 namespace ghostrigger::core::templates {
 

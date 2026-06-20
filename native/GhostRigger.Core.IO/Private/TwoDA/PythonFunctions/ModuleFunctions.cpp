@@ -1,4 +1,4 @@
-#include "2DA/PythonFunctions/ModuleFunctions.h"
+#include "TwoDA/PythonFunctions/ModuleFunctions.h"
 
 namespace ghostrigger::core::templates {
 

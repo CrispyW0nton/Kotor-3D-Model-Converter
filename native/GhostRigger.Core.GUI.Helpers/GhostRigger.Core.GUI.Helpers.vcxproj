@@ -14,11 +14,11 @@
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'"><ClCompile><WarningLevel>Level4</WarningLevel><FunctionLevelLinking>true</FunctionLevelLinking><IntrinsicFunctions>true</IntrinsicFunctions><SDLCheck>true</SDLCheck><PreprocessorDefinitions>WIN32;NDEBUG;GHOSTRIGGER_GIZMO_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions><ConformanceMode>true</ConformanceMode><LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.Core.Foundation\Public;$(SolutionDir)native\GhostRigger.Native.Core.Foundation;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories></ClCompile><Link><SubSystem>Windows</SubSystem><EnableCOMDATFolding>true</EnableCOMDATFolding><OptimizeReferences>true</OptimizeReferences><GenerateDebugInformation>false</GenerateDebugInformation></Link><PostBuildEvent><Command>del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul
 del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></ItemDefinitionGroup>
-  <ItemGroup><ClCompile Include="Private\GhostRiggerGizmo.cpp" /><ClCompile Include="Private\GizmoMode.cpp" /></ItemGroup><ItemGroup><ClInclude Include="Public\GhostRiggerGizmo.h" /><ClInclude Include="Public\GizmoMode.h" /></ItemGroup>
+  <ItemGroup><ClCompile Include="Private\GhostRiggerGizmo.cpp"><ObjectFileName>$(IntDir)Private_GhostRiggerGizmo.cpp.obj</ObjectFileName></ClCompile><ClCompile Include="Private\GizmoMode.cpp"><ObjectFileName>$(IntDir)Private_GizmoMode.cpp.obj</ObjectFileName></ClCompile></ItemGroup><ItemGroup><ClInclude Include="Public\GhostRiggerGizmo.h" /><ClInclude Include="Public\GizmoMode.h" /></ItemGroup>
   <ItemGroup Label="NativeFunctionImplementations">
-    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp" />
-    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp" />
-    <ClCompile Include="Private\PythonFunctions\StaticMethods.cpp" />
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp"><ObjectFileName>$(IntDir)Private_PythonFunctions_InstanceMethods.cpp.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp"><ObjectFileName>$(IntDir)Private_PythonFunctions_ModuleFunctions.cpp.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="Private\PythonFunctions\StaticMethods.cpp"><ObjectFileName>$(IntDir)Private_PythonFunctions_StaticMethods.cpp.obj</ObjectFileName></ClCompile>
     <ClInclude Include="Public\PythonFunctions\InstanceMethods.h" />
     <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h" />
     <ClInclude Include="Public\PythonFunctions\StaticMethods.h" />

@@ -1,4 +1,4 @@
-#include "2DA/PythonFunctions/NestedFunctions.h"
+#include "TwoDA/PythonFunctions/NestedFunctions.h"
 
 namespace ghostrigger::core::templates {
 

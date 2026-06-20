@@ -9,134 +9,115 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_INIT",
             "source_path": "src/core/camera/__init__.py",
             "packaged_path": "Python/src/core/camera/__init__.py",
-            "sha256": "547e032e7416f10ece568552bf1a7d9ffef02011f0e7321a918996d081c7f49a",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "547e032e7416f10ece568552bf1a7d9ffef02011f0e7321a918996d081c7f49a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_ARCBALL_CAMERA",
             "source_path": "src/core/camera/arcball_camera.py",
             "packaged_path": "Python/src/core/camera/arcball_camera.py",
-            "sha256": "b6fc91ba942f5fa92762dc62b91b02b042cf2dbb45a4ae4c35b548fcebf08195",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "b6fc91ba942f5fa92762dc62b91b02b042cf2dbb45a4ae4c35b548fcebf08195"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_CONTROLLER",
             "source_path": "src/core/camera/camera_controller.py",
             "packaged_path": "Python/src/core/camera/camera_controller.py",
-            "sha256": "d7cc7c7c36597b93e921a46620e23d61fabb3ca8d8be674a5a9dcdfeb0ef0da2",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "d7cc7c7c36597b93e921a46620e23d61fabb3ca8d8be674a5a9dcdfeb0ef0da2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_MANAGER",
             "source_path": "src/core/camera/camera_manager.py",
             "packaged_path": "Python/src/core/camera/camera_manager.py",
-            "sha256": "2625d84e9551ce3440c7465abffee8ebcf34f1db04a881ebef0855028404f8d6",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "2625d84e9551ce3440c7465abffee8ebcf34f1db04a881ebef0855028404f8d6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_MODEL",
             "source_path": "src/core/camera/camera_model.py",
             "packaged_path": "Python/src/core/camera/camera_model.py",
-            "sha256": "81306d87832072b6d6c35d8dd8493bb74f059808a118897fbff00a629ed76508",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "81306d87832072b6d6c35d8dd8493bb74f059808a118897fbff00a629ed76508"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_PICKER",
             "source_path": "src/core/camera/camera_picker.py",
             "packaged_path": "Python/src/core/camera/camera_picker.py",
-            "sha256": "a16c34d1f557aa2b3e70a04208053689155845bb06b11ec484f6a6dfb99997d6",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "a16c34d1f557aa2b3e70a04208053689155845bb06b11ec484f6a6dfb99997d6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_PRESETS",
             "source_path": "src/core/camera/camera_presets.py",
             "packaged_path": "Python/src/core/camera/camera_presets.py",
-            "sha256": "885e3f7ccf0679097e371ad63feb45ebeb8ade7da08fe3b5d26a938b81767e48",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "885e3f7ccf0679097e371ad63feb45ebeb8ade7da08fe3b5d26a938b81767e48"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_RENDER_SETTINGS",
             "source_path": "src/core/camera/camera_render_settings.py",
             "packaged_path": "Python/src/core/camera/camera_render_settings.py",
-            "sha256": "eb47bfff2c51999d541c6537e6270ca70e58b7e753231dcdb610dd90814f8ec2",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "eb47bfff2c51999d541c6537e6270ca70e58b7e753231dcdb610dd90814f8ec2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_RIG",
             "source_path": "src/core/camera/camera_rig.py",
             "packaged_path": "Python/src/core/camera/camera_rig.py",
-            "sha256": "d5149a1e1d3ae97bc0bcc8aa4d2fdda755ac0a7e2b2f018464b7b325fc9e7aa2",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "d5149a1e1d3ae97bc0bcc8aa4d2fdda755ac0a7e2b2f018464b7b325fc9e7aa2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_SELECTION",
             "source_path": "src/core/camera/camera_selection.py",
             "packaged_path": "Python/src/core/camera/camera_selection.py",
-            "sha256": "1bac72106ec595ac9b227ae1c34cd01b3a5f4adc3551ab0f3d2f99d247658748",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "1bac72106ec595ac9b227ae1c34cd01b3a5f4adc3551ab0f3d2f99d247658748"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_TARGET",
             "source_path": "src/core/camera/camera_target.py",
             "packaged_path": "Python/src/core/camera/camera_target.py",
-            "sha256": "ed9fbfbc4d9affb1525870ebbf54bf88d39e12c23f8c34be5b85512d0d164875",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "ed9fbfbc4d9affb1525870ebbf54bf88d39e12c23f8c34be5b85512d0d164875"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_VIEWPORT_ADAPTER",
             "source_path": "src/core/camera/camera_viewport_adapter.py",
             "packaged_path": "Python/src/core/camera/camera_viewport_adapter.py",
-            "sha256": "4678dede1cd04fb23a22019f7fc689d7f18b391e7c187cbbce220b97594cba88",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "4678dede1cd04fb23a22019f7fc689d7f18b391e7c187cbbce220b97594cba88"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_RENDER_MANIFEST",
             "source_path": "src/core/camera/render_manifest.py",
             "packaged_path": "Python/src/core/camera/render_manifest.py",
-            "sha256": "10b40ab4c1a582352a665473edc2306b6e8f0853060330c3d67a0a5427a1e017",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "10b40ab4c1a582352a665473edc2306b6e8f0853060330c3d67a0a5427a1e017"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_RENDER_OUTPUT",
             "source_path": "src/core/camera/render_output.py",
             "packaged_path": "Python/src/core/camera/render_output.py",
-            "sha256": "ad2805cc7eacb629101999b92a08c7277e1cde0819e583091ec0f301fc36286b",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "ad2805cc7eacb629101999b92a08c7277e1cde0819e583091ec0f301fc36286b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_INIT",
             "source_path": "src/core/geometry/__init__.py",
             "packaged_path": "Python/src/core/geometry/__init__.py",
-            "sha256": "a0a22627060292608bec4c6f26badde8edeedfcba27445938b91c67ba9d290f5",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "a0a22627060292608bec4c6f26badde8edeedfcba27445938b91c67ba9d290f5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_LIGHTSABER",
             "source_path": "src/core/geometry/lightsaber.py",
             "packaged_path": "Python/src/core/geometry/lightsaber.py",
-            "sha256": "e746b3a9a119df9934ab83a05d6733533f120837a551750fc242ed3cc05d8252",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "e746b3a9a119df9934ab83a05d6733533f120837a551750fc242ed3cc05d8252"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_MAP_SNAP_TOOLS",
             "source_path": "src/core/geometry/map_snap_tools.py",
             "packaged_path": "Python/src/core/geometry/map_snap_tools.py",
-            "sha256": "080f3ed3b05762c4b7e98f53da08591675e947be6d50afbb007e80cc025dbf0f",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "080f3ed3b05762c4b7e98f53da08591675e947be6d50afbb007e80cc025dbf0f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_MODEL_DATA",
             "source_path": "src/core/geometry/model_data.py",
             "packaged_path": "Python/src/core/geometry/model_data.py",
-            "sha256": "aa12bc22123f64c8627d4a8d987b0bf2e6ff7311023baf7fc3397d547bafc57e",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "aa12bc22123f64c8627d4a8d987b0bf2e6ff7311023baf7fc3397d547bafc57e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_VERTEX_SPACE",
             "source_path": "src/core/geometry/vertex_space.py",
             "packaged_path": "Python/src/core/geometry/vertex_space.py",
-            "sha256": "3cd45cf2850af8d64339855857635c5df95b29b6dc4be4e1d27809486d115275",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "3cd45cf2850af8d64339855857635c5df95b29b6dc4be4e1d27809486d115275"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_MATH_HELPERS",
@@ -148,64 +129,55 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_ARCBALL_CAMERA",
             "source_path": "src/gui/camera/arcball_camera.py",
             "packaged_path": "Python/src/gui/camera/arcball_camera.py",
-            "sha256": "92af210f4b2fb9b920d8f2aba937df79de0f01b59c0d88af9c06db2464c77ba7",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "92af210f4b2fb9b920d8f2aba937df79de0f01b59c0d88af9c06db2464c77ba7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_CONTROLLER",
             "source_path": "src/gui/camera/camera_controller.py",
             "packaged_path": "Python/src/gui/camera/camera_controller.py",
-            "sha256": "4324fdf578e1f58a7733355ce057e4dc40830855711801fa5701fe01dbf740da",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "4324fdf578e1f58a7733355ce057e4dc40830855711801fa5701fe01dbf740da"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_MANAGER",
             "source_path": "src/gui/camera/camera_manager.py",
             "packaged_path": "Python/src/gui/camera/camera_manager.py",
-            "sha256": "4d45a39c19be258bc52edb8ee0d7142e9cf547fd2cf33ee7e5897250f65574de",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "4d45a39c19be258bc52edb8ee0d7142e9cf547fd2cf33ee7e5897250f65574de"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_MATH",
             "source_path": "src/gui/camera/camera_math.py",
             "packaged_path": "Python/src/gui/camera/camera_math.py",
-            "sha256": "7d54879cf4c89324d145ae209af390a68297d5fe62d61d9cd4dc2012a38db2e7",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "7d54879cf4c89324d145ae209af390a68297d5fe62d61d9cd4dc2012a38db2e7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_MODEL",
             "source_path": "src/gui/camera/camera_model.py",
             "packaged_path": "Python/src/gui/camera/camera_model.py",
-            "sha256": "300e1efd0e49078f6264e3699e82fc1b843de0f137f9c4cc0d1282abeecc8ad4",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "300e1efd0e49078f6264e3699e82fc1b843de0f137f9c4cc0d1282abeecc8ad4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_PRESETS",
             "source_path": "src/gui/camera/camera_presets.py",
             "packaged_path": "Python/src/gui/camera/camera_presets.py",
-            "sha256": "09ff55541029cf1114cd21452ca91c73d2273be50a2ac445408915e1aafeaf0f",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "09ff55541029cf1114cd21452ca91c73d2273be50a2ac445408915e1aafeaf0f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_RENDER_SETTINGS",
             "source_path": "src/gui/camera/camera_render_settings.py",
             "packaged_path": "Python/src/gui/camera/camera_render_settings.py",
-            "sha256": "d733e0bfbd26896eba9907a608ab73638a1f6111ed317abb6c70fc488bc663f3",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "d733e0bfbd26896eba9907a608ab73638a1f6111ed317abb6c70fc488bc663f3"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_RIG",
             "source_path": "src/gui/camera/camera_rig.py",
             "packaged_path": "Python/src/gui/camera/camera_rig.py",
-            "sha256": "fea252e061e1b34dcdd258731cc850ae583ccb345a9809b385b6ff169b9c8078",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "fea252e061e1b34dcdd258731cc850ae583ccb345a9809b385b6ff169b9c8078"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_TARGET",
             "source_path": "src/gui/camera/camera_target.py",
             "packaged_path": "Python/src/gui/camera/camera_target.py",
-            "sha256": "9fc7565a85e0c68a436cefd65d7db495f3440a3d0330e16d306e3068198aac9c",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "9fc7565a85e0c68a436cefd65d7db495f3440a3d0330e16d306e3068198aac9c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_GIZMO_TRANSFORM_MATH",
@@ -253,64 +225,55 @@
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_INIT",
             "source_path": "src/measurement/__init__.py",
             "packaged_path": "Python/src/measurement/__init__.py",
-            "sha256": "b1010b1266cd9698b3dd41ef419559b2d341ef9c9a2b337df46a838fd86e384b",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "b1010b1266cd9698b3dd41ef419559b2d341ef9c9a2b337df46a838fd86e384b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_ANGLE_SNAP",
             "source_path": "src/measurement/angle_snap.py",
             "packaged_path": "Python/src/measurement/angle_snap.py",
-            "sha256": "32a1ba982623a9b33853a18738edc74d5fa91e9aa27dfd138a02e716c946b478",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "32a1ba982623a9b33853a18738edc74d5fa91e9aa27dfd138a02e716c946b478"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_DIMENSION_CALCULATOR",
             "source_path": "src/measurement/dimension_calculator.py",
             "packaged_path": "Python/src/measurement/dimension_calculator.py",
-            "sha256": "e7815bdc593a7ffc5068a9917cd49063576074de9a5c8e6ea8a934ee26aba0c5",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "e7815bdc593a7ffc5068a9917cd49063576074de9a5c8e6ea8a934ee26aba0c5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_GRID_MEASUREMENT",
             "source_path": "src/measurement/grid_measurement.py",
             "packaged_path": "Python/src/measurement/grid_measurement.py",
-            "sha256": "d24dc0b201d7d65adad88dbc0e7c5f55a3ad6d37e3cfd334fc11f4fc1c9ba305",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "d24dc0b201d7d65adad88dbc0e7c5f55a3ad6d37e3cfd334fc11f4fc1c9ba305"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_MEASUREMENT_CONTROLLER",
             "source_path": "src/measurement/measurement_controller.py",
             "packaged_path": "Python/src/measurement/measurement_controller.py",
-            "sha256": "51678dc84c62649be8fd42c6ba6f4cdc83e10b7c899b1d054a34a62502dc7ff2",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "51678dc84c62649be8fd42c6ba6f4cdc83e10b7c899b1d054a34a62502dc7ff2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_MEASUREMENT_FORMATTER",
             "source_path": "src/measurement/measurement_formatter.py",
             "packaged_path": "Python/src/measurement/measurement_formatter.py",
-            "sha256": "8195bfae71923559e5f0cd16a6d3d1800a856041b65c419844523c623a0a6d54",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "8195bfae71923559e5f0cd16a6d3d1800a856041b65c419844523c623a0a6d54"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_PERCENT_SNAP",
             "source_path": "src/measurement/percent_snap.py",
             "packaged_path": "Python/src/measurement/percent_snap.py",
-            "sha256": "435aa64b670ab4c81d06bcae94e6d917e23754505ee50fb379f9974a79dfc094",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "435aa64b670ab4c81d06bcae94e6d917e23754505ee50fb379f9974a79dfc094"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_UNIT_SETTINGS",
             "source_path": "src/measurement/unit_settings.py",
             "packaged_path": "Python/src/measurement/unit_settings.py",
-            "sha256": "3bad24f75ff3bab5bcac5ff9f6ad056c8da13cdf5307c6ec2241b7dfdf8c8a37",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "3bad24f75ff3bab5bcac5ff9f6ad056c8da13cdf5307c6ec2241b7dfdf8c8a37"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_UNIT_SYSTEM",
             "source_path": "src/measurement/unit_system.py",
             "packaged_path": "Python/src/measurement/unit_system.py",
-            "sha256": "08c7d1bb16e43f1614711df63cb8d37778badf6b5540b3d3045ea2a1442d17bc",
-            "project": "GhostRigger.Core.Math"
+            "sha256": "08c7d1bb16e43f1614711df63cb8d37778badf6b5540b3d3045ea2a1442d17bc"
         }
     ]
 }

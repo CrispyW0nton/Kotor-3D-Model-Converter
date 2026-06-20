@@ -139,7 +139,7 @@ del /Q "$(TargetDir)$(TargetName).pdb" 2&gt;nul</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Private\main.cpp" />
+    <ClCompile Include="Private\main.cpp"><ObjectFileName>$(IntDir)Private_main.cpp.obj</ObjectFileName></ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\GhostRiggerNativeDependencies.h" />

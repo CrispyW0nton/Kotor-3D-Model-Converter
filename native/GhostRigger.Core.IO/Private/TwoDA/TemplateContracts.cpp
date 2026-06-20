@@ -1,4 +1,4 @@
-#include "2DA/TemplateContracts.h"
+#include "TwoDA/TemplateContracts.h"
 
 #include <algorithm>
 #include <cctype>

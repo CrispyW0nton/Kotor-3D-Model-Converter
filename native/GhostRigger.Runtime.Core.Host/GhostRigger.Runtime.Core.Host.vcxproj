@@ -1,5 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
@@ -110,16 +110,16 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Private\GhostRiggerDeviceResources.cpp" />
-    <ClCompile Include="Private\GhostRiggerRuntimeCoreHost.cpp" />
+    <ClCompile Include="Private\GhostRiggerDeviceResources.cpp"><ObjectFileName>$(IntDir)Private_GhostRiggerDeviceResources.cpp.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="Private\GhostRiggerRuntimeCoreHost.cpp"><ObjectFileName>$(IntDir)Private_GhostRiggerRuntimeCoreHost.cpp.obj</ObjectFileName></ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\GhostRiggerDeviceResources.h" />
     <ClInclude Include="Public\GhostRiggerRuntimeCoreHost.h" />
   </ItemGroup>
   <ItemGroup Label="NativeFunctionImplementations">
-    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp" />
-    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp" />
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp"><ObjectFileName>$(IntDir)Private_PythonFunctions_InstanceMethods.cpp.obj</ObjectFileName></ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp"><ObjectFileName>$(IntDir)Private_PythonFunctions_ModuleFunctions.cpp.obj</ObjectFileName></ClCompile>
     <ClInclude Include="Public\PythonFunctions\InstanceMethods.h" />
     <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h" />
   </ItemGroup>

@@ -77,7 +77,7 @@
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;NATIVE_CORE_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;NATIVE_CORE_EXPORTS;NATIVE_CORE_DIAGNOSTICS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.Core.Foundation\Public;$(SolutionDir)native\GhostRigger.Native.Core.Foundation;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -93,7 +93,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;NATIVE_CORE_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;NATIVE_CORE_EXPORTS;NATIVE_CORE_DIAGNOSTICS_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)Public;$(SolutionDir)native\GhostRigger.Native.Core.Foundation\Public;$(SolutionDir)native\GhostRigger.Native.Core.Foundation;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -110,13 +110,13 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Private\GhostRiggerNativeCoreFoundation.cpp" />
+    <ClCompile Include="Private\GhostRiggerNativeCoreFoundation.cpp"><ObjectFileName>$(IntDir)Private_GhostRiggerNativeCoreFoundation.cpp.obj</ObjectFileName></ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Public\GhostRiggerNativeCoreFoundation.h" />
   </ItemGroup>
   <ItemGroup Label="NativeFunctionImplementations">
-    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp" />
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp"><ObjectFileName>$(IntDir)Private_PythonFunctions_ModuleFunctions.cpp.obj</ObjectFileName></ClCompile>
     <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h" />
   </ItemGroup>
 <PropertyGroup Label="PythonPayloadBuild">
@@ -129,4 +129,4 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command>
   </Target>
 <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets" />
-<ItemGroup Label="MergedNativeSources"><ClCompile Include="Private\Core_Diagnostics\PythonFunctions\InstanceMethods.cpp" /><ClCompile Include="Private\Core_Diagnostics\PythonFunctions\ModuleFunctions.cpp" /><ClCompile Include="Private\Core_Diagnostics\PythonFunctions\NestedFunctions.cpp" /><ClCompile Include="Private\Core_Diagnostics\PythonFunctions\Properties.cpp" /></ItemGroup><ItemGroup Label="MergedNativeHeaders"><ClInclude Include="Public\Core_Diagnostics\GhostRiggerNativeCoreDiagnostics.h" /><ClInclude Include="Public\Core_Diagnostics\PythonFunctions\InstanceMethods.h" /><ClInclude Include="Public\Core_Diagnostics\PythonFunctions\ModuleFunctions.h" /><ClInclude Include="Public\Core_Diagnostics\PythonFunctions\NestedFunctions.h" /><ClInclude Include="Public\Core_Diagnostics\PythonFunctions\Properties.h" /><ClInclude Include="Public\GhostRiggerPythonPayloadResource.h" /></ItemGroup><ItemGroup Label="PythonPayload"><ResourceCompile Include="GhostRiggerPythonPayload.rc" /><None Include="GhostRiggerPythonPayload.json" /><None Include="GeneratePythonPayload.py" /><None Include="Python\src\adapters\__init__.py" /><None Include="Python\src\adapters\native_core\__init__.py" /><None Include="Python\src\adapters\native_core\package_registry.py" /><None Include="Python\src\adapters\rendering\gpu_diagnostics_exports.py" /><None Include="Python\src\core\diagnostics\__init__.py" /><None Include="Python\src\core\diagnostics\diagnostics.py" /><None Include="Python\src\core\diagnostics\module_reference_safety.py" /><None Include="Python\src\core\diagnostics\validation_service.py" /><None Include="Python\src\core\rendering\gpu_diagnostics_config.py" /><None Include="Python\src\core\rendering\gpu_diagnostics_records.py" /></ItemGroup></Project>
+<ItemGroup Label="MergedNativeSources"><ClCompile Include="Private\Core_Diagnostics\PythonFunctions\InstanceMethods.cpp"><ObjectFileName>$(IntDir)Private_Core_Diagnostics_PythonFunctions_InstanceMethods.cpp.obj</ObjectFileName></ClCompile><ClCompile Include="Private\Core_Diagnostics\PythonFunctions\ModuleFunctions.cpp"><ObjectFileName>$(IntDir)Private_Core_Diagnostics_PythonFunctions_ModuleFunctions.cpp.obj</ObjectFileName></ClCompile><ClCompile Include="Private\Core_Diagnostics\PythonFunctions\NestedFunctions.cpp"><ObjectFileName>$(IntDir)Private_Core_Diagnostics_PythonFunctions_NestedFunctions.cpp.obj</ObjectFileName></ClCompile><ClCompile Include="Private\Core_Diagnostics\PythonFunctions\Properties.cpp"><ObjectFileName>$(IntDir)Private_Core_Diagnostics_PythonFunctions_Properties.cpp.obj</ObjectFileName></ClCompile></ItemGroup><ItemGroup Label="MergedNativeHeaders"><ClInclude Include="Public\Core_Diagnostics\GhostRiggerNativeCoreDiagnostics.h" /><ClInclude Include="Public\Core_Diagnostics\PythonFunctions\InstanceMethods.h" /><ClInclude Include="Public\Core_Diagnostics\PythonFunctions\ModuleFunctions.h" /><ClInclude Include="Public\Core_Diagnostics\PythonFunctions\NestedFunctions.h" /><ClInclude Include="Public\Core_Diagnostics\PythonFunctions\Properties.h" /><ClInclude Include="Public\GhostRiggerPythonPayloadResource.h" /></ItemGroup><ItemGroup Label="PythonPayload"><ResourceCompile Include="GhostRiggerPythonPayload.rc" /><None Include="GhostRiggerPythonPayload.json" /><None Include="GeneratePythonPayload.py" /><None Include="Python\src\adapters\__init__.py" /><None Include="Python\src\adapters\native_core\__init__.py" /><None Include="Python\src\adapters\native_core\package_registry.py" /><None Include="Python\src\adapters\rendering\gpu_diagnostics_exports.py" /><None Include="Python\src\core\diagnostics\__init__.py" /><None Include="Python\src\core\diagnostics\diagnostics.py" /><None Include="Python\src\core\diagnostics\module_reference_safety.py" /><None Include="Python\src\core\diagnostics\validation_service.py" /><None Include="Python\src\core\rendering\gpu_diagnostics_config.py" /><None Include="Python\src\core\rendering\gpu_diagnostics_records.py" /></ItemGroup></Project>

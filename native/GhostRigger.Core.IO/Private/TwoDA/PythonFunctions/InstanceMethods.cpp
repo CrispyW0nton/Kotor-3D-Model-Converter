@@ -1,4 +1,4 @@
-#include "2DA/PythonFunctions/InstanceMethods.h"
+#include "TwoDA/PythonFunctions/InstanceMethods.h"
 
 namespace ghostrigger::core::templates {
 

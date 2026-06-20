@@ -365,7 +365,7 @@ def test_native_projects_have_python_function_migration_sources() -> None:
             assert '"python_runtime_required":false' in source_text
             assert '"native_first":true' in source_text
             source_item = str(private_source.relative_to(project_dir)).replace("/", "\\")
-            assert f'<ClCompile Include="{source_item}" />' in vcxproj
+            assert f'<ClCompile Include="{source_item}"' in vcxproj
         assert native_contract_count <= python_function_count
         assert native_contract_count > 0
 
@@ -376,7 +376,7 @@ def test_native_projects_have_python_function_migration_sources() -> None:
             assert "phase15" not in header_text
             assert "descriptor_json" not in header_text
             header_item = str(public_header.relative_to(project_dir)).replace("/", "\\")
-            assert f'<ClInclude Include="{header_item}" />' in vcxproj
+            assert f'<ClInclude Include="{header_item}"' in vcxproj
 
 
 def test_native_visual_studio_projects_do_not_use_wildcard_items() -> None:

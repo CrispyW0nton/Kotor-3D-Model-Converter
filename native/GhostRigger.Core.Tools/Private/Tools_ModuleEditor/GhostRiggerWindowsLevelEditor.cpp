@@ -50,16 +50,3 @@ GR_WINDOWS_LEVEL_EDITOR_API const char* gr_windows_level_editor_host_service_sch
 
 }
 
-extern "C" {
-
-__declspec(dllexport) const char* gr_python_payload_manifest_json() {
-    return ghostrigger::native::core::payload::manifest_json_from_module_symbol(
-        reinterpret_cast<const void*>(&gr_python_payload_manifest_json)
-    );
-}
-
-__declspec(dllexport) unsigned int gr_python_payload_file_count() {
-    return ghostrigger::native::core::payload::file_count_from_manifest_json(gr_python_payload_manifest_json());
-}
-
-}
