@@ -43,8 +43,12 @@ Use these files before making related code or roadmap decisions:
   selection, validation, and undo expectations.
 - `extrusionskill.md`: extrusion, bevel, inset, bridge, boolean, split/fill,
   and cleanup tools for Map Studio.
+- `computationalgeometryskill.md`: robust predicates, polygon operations,
+  spatial queries, triangulation, tolerances, and degeneracy handling.
 - `terrainsculptskill.md`: low-latency terrain sculpting, heightfields,
   brush coalescing, dirty regions, walkability/WOK validation.
+- `uvtextureskill.md`: UV preservation, material slots, texture references,
+  lightmap/secondary UV policy, and DCC round-trip constraints.
 - `riggingskill.md`: Character Builder skeleton fitting, binding, skinning,
   deformation preview, donor weights, and export preflight.
 - `qtuiskill.md`: Qt actions, model/view, threading, undo, theming, and
@@ -55,6 +59,29 @@ Use these files before making related code or roadmap decisions:
   async jobs, bounded budgets, and validation cadence.
 - `mapstudioskill.md`: Maya/ZBrush-inspired Map Studio workspace rules tied to
   KOTOR authored resources, validation, export readiness, and game proof.
+
+## 2026-06-20 Book Pass Method
+
+This pass inspected the local PDF metadata, outlines, and targeted topic hits
+with `pypdf` for mesh, vertex, edge, face, extrusion, bevel, boolean, terrain,
+heightfield, sculpt, snapping, undo, model/view, OpenGL, quaternion, matrix,
+rigging, skinning, weight, BVH, triangulation, and Delaunay. The resulting docs
+are paraphrased GhostRigger working rules, not copied book excerpts.
+
+Practical source-to-skill mapping:
+
+- Mukundan and de Berg drive topology, adjacency, triangulation, degeneracy,
+  and mesh-operation validation.
+- Marschner/Shirley, Hayes, Vince, Dunn/Parberry, and Kneusel drive transforms,
+  robust math, coordinate conventions, rendering data flow, and performance
+  budgets.
+- O'Hailey plus the automatic skinning/weight-retargeting paper drive
+  Character Builder guide-joint, donor-weight, bind-pose, and deformation
+  preview rules.
+- Fitzpatrick, Summerfield, Lee, and official Qt docs drive actions,
+  model/view lists, undo stacks, workers, theme/layout, and tool-belt UI.
+- Xu is used only for scale/performance discipline: caching, bounded work,
+  background jobs, and explicit degraded states.
 
 ## Program-Wide Rule
 

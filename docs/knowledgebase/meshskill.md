@@ -11,6 +11,10 @@ GhostRigger programming crosswalk.
 
 - Treat mesh data as structured topology, not just vertex lists. Track vertices,
   faces, material groups, normals, UVs, and object/export boundaries separately.
+- For editable meshes, maintain adjacency explicitly enough to answer "what
+  edges/faces touch this vertex?" without rebuilding the world. Half-edge or
+  winged-edge style records are the preferred internal mental model even if the
+  serialized KMAP shape remains simpler.
 - Keep KMAP authoring state human-readable and stable. Do not store heavy mesh
   blobs in KMAP unless a future schema explicitly requires it.
 - Preserve object identity. Separate/combine operations must keep stable IDs,
@@ -21,6 +25,9 @@ GhostRigger programming crosswalk.
   points, degenerate triangles, inverted faces, and sliver WOK triangles.
 - Keep render geometry and WOK intent linked but not identical. Visual objects
   can be decorative; walkable surfaces must be deliberate.
+- Bounds, normals, tangents, UVs, and adjacency are derived caches. Invalidate
+  them with explicit reasons after topology edits; do not let the viewport own
+  the only copy.
 
 ## GhostRigger Applications
 
@@ -41,6 +48,7 @@ GhostRigger programming crosswalk.
 - Are material/texture references preserved by name and case?
 - Is WOK surface intent explicit for player traversal?
 - Are object boundaries visible to the modder before export?
+- Did this operation change topology or only transform an existing object?
 
 ## Tests To Prefer
 

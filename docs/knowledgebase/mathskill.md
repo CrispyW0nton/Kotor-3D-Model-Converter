@@ -20,6 +20,11 @@ Marschner/Shirley graphics fundamentals.
 - Direction is not orientation. Segment direction checks do not catch twist.
 - Use barycentric/triangle-plane tests for WOK and terrain height sampling, not
   vertex-average shortcuts.
+- Use robust comparison policies. Exact equality is useful for byte/fixture
+  audits, but viewport picking, fitting, snapping, and geometry predicates need
+  named tolerances and degeneracy handling.
+- Bounding boxes are not anatomy. Use them for coarse scale/framing, then use
+  landmarks, axes, and joint chains for character fitting or retargeting.
 
 ## GhostRigger Applications
 
@@ -29,6 +34,8 @@ Marschner/Shirley graphics fundamentals.
   evidence, not only bounding boxes.
 - Map Studio placement validation must sample actual WOK triangle planes.
 - Viewport gizmos and snapping need clear world/local/object/reference modes.
+- Terrain and floor-plan tools need deterministic rounding/snap grids so saved
+  KMAP files do not drift across repeated edits.
 
 ## Preflight Checklist
 

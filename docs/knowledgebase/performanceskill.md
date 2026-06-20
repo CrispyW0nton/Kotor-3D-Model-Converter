@@ -20,6 +20,9 @@ OpenGL/render-pipeline texts, GhostRigger terrain/tool-belt work.
   export packaging.
 - Prefer measured budgets over vibes. Store performance estimates in metadata
   where the UI can explain why an operation was deferred.
+- Data structures matter. Repeated selection, snap, paint, and validation
+  queries should use cached adjacency/spatial indexes instead of full scene
+  scans in the live path.
 
 ## GhostRigger Applications
 
@@ -27,6 +30,8 @@ OpenGL/render-pipeline texts, GhostRigger terrain/tool-belt work.
 - Viewport overlays should update only affected objects/tiles/samples.
 - Map Studio validation can run lightweight checks live and full checks after
   commit.
+- Tool-belt changes, filters, and resource search should update models, not
+  destroy/recreate large widget trees.
 - Character Builder deformation preview should cache sampled animation/bind data
   instead of recomputing every draw.
 - Retarget Workbench playback must not rerun full solver/export on every frame.

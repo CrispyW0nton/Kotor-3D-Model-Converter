@@ -16,8 +16,14 @@ Character Builder rigging notes.
   export preflight.
 - Use imported skeleton landmarks to orient/scale/snap the mesh to the KOTOR
   skeleton, then preserve the final KOTOR hierarchy and node casing.
+- Landmark fitting should prefer semantically paired joints (head, pelvis,
+  shoulders, elbows, wrists, knees, ankles, hands, feet) over raw bounding boxes.
+  Bounds are a fallback and should lower confidence.
 - Do not treat nearest-bone weights as launch-quality for complex characters.
   Prefer donor/native-template correspondence, then validate deformations.
+- Weight transfer should be treated as data retargeting: find a donor surface or
+  skeleton correspondence, transfer weights, smooth/normalize, then preview
+  inherited animations before export.
 - Freeze transforms and center pivot are authoring steps. They must not corrupt
   the native KOTOR node transforms or exported bind pose.
 - Visible mesh plausibility is not enough. Bone axes, twist, skin influence
@@ -29,6 +35,9 @@ Character Builder rigging notes.
 - Success means Bendak imports, auto-fits, binds to the KOTOR skeleton, previews
   inherited animations without deformation collapse, and exports MDL/MDX through
   validation/export gates.
+- If Bendak looks correct in bind pose but collapses during `S_Male02`
+  animation playback, the issue is binding/weights/bind-pose authority, not a
+  viewport-only problem.
 - Character Builder should expose manual correction tools after auto-fit:
   symmetry toggle, hold-V snap, guide/bone move, scale, freeze, and deformation
   preview.

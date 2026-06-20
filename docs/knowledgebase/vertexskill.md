@@ -12,6 +12,8 @@ geometric primitives/tests, Vince transforms, O'Hailey rigging workflows.
   Walkmesh are different edit modes with different validation risks.
 - Vertex snapping is not welding. Snap moves one component to a target; weld
   merges topology and must update faces/WOK references.
+- Snapping should be a previewable interaction: show the candidate target,
+  constrain to the active reference mode, and commit one command on release.
 - Preserve selection intent across edits where possible. Avoid silently clearing
   selection after every operation unless topology invalidates it.
 - Reject degenerate output early: duplicate points, zero-length edges,
@@ -27,6 +29,8 @@ geometric primitives/tests, Vince transforms, O'Hailey rigging workflows.
   apply one undoable move command.
 - Symmetry must be a toggleable policy, not a hidden side effect. Mirrored edits
   should be explicit in command metadata.
+- For bones/guide joints, hold-V snap can align endpoints or landmarks, but
+  binding still requires a separate confirm/build step.
 - Vertex edits in Map Studio should mark staged exports/game proof stale.
 - Component mode labels in UI should match the actual active edit scope.
 
@@ -35,6 +39,7 @@ geometric primitives/tests, Vince transforms, O'Hailey rigging workflows.
 - What component type is active?
 - What exact item(s) are selected?
 - Does the operation mutate transform, topology, WOK intent, or selection?
+- Is snap preview separate from snap commit?
 - Does the operation preserve stable KMAP IDs?
 - Is the output still valid for MDL/WOK generation?
 - Is undo/redo possible for destructive edits?

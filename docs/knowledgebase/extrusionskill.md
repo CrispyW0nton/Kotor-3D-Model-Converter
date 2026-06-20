@@ -13,6 +13,8 @@ from Dunn/Parberry and Vince.
 - Keep first-pass operations conservative: convex floor-plan edge extrusion,
   rectangular cuts, deterministic bridge corridors, and simple primitive
   booleans are safer than arbitrary mesh surgery.
+- Record the operation source: selected face/edge loop, normal/reference axis,
+  distance/offset, material inheritance, UV policy, and WOK intent.
 - Bevel/inset must reject tiny or self-intersecting results that create sliver
   triangles or broken doorway seams.
 - Bridge operations need compatible edge orientation, elevation, material, WOK
@@ -28,6 +30,8 @@ from Dunn/Parberry and Vince.
   room/resource facts.
 - Cut, bridge, and separate should create explicit exportable room/object
   boundaries when that is safer than editing one huge mesh.
+- New faces need predictable material and UV defaults so external DCC texturing
+  can happen without guessing which faces were generated.
 - Any operation that changes traversal must update WOK preview/readiness.
 - Exterior/terrain transitions should stay visible as planned/export-candidate
   until in-game proof exists.

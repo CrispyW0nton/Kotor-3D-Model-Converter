@@ -16,12 +16,17 @@ KOTOR module purpose. A primitive, bevel, terrain brush, snap, or placement is
 not done until it can be represented in KMAP, validated against KOTOR module
 rules, and routed toward MDL/MDX/WOK/LYT/VIS/PTH/GIT/ARE/IFO export.
 
+The Level Editor / Map Studio window is the product surface. Do not put these
+workflows in the main model viewer, Character Builder, or Retarget Workbench.
+
 ## Workspace Model
 
 - Keep tool modes explicit: Object, Vertex, Edge, Face, Terrain, Walkmesh,
   Placement, Lighting, Validation, Export.
 - Keep the modeling belt customizable, but back every button with a stable
   action key and an owning service/API. Do not bury behavior in the window.
+- Search, filters, presets, and favorites belong in the belt UI; operation
+  semantics belong in core modules or systems.
 - Separate visual authoring from export ownership. Room mesh, terrain mesh,
   walkmesh, gameplay markers, and module metadata can be edited together, but
   they are distinct authored resources.
@@ -43,6 +48,9 @@ rules, and routed toward MDL/MDX/WOK/LYT/VIS/PTH/GIT/ARE/IFO export.
   repair face indices, WOK references, selection state, and undo metadata.
 - Combine/separate should preserve stable object IDs and material names so a
   modder can export UV/texturing work to another DCC and re-import safely.
+- Center pivot and freeze transforms are authoring commands. They must update
+  KMAP object transforms/pivots without silently baking mesh vertices unless the
+  user selects a bake/export operation.
 
 ## Terrain Sculpting Rules
 
@@ -66,6 +74,9 @@ rules, and routed toward MDL/MDX/WOK/LYT/VIS/PTH/GIT/ARE/IFO export.
   markers plus authored GIT/IFO data.
 - Export readiness must distinguish previewable, export candidate,
   installed-ready-for-game-test, and game-tested.
+- PTH pathing, WOK walkability, entry point placement, and transition markers
+  are load/playability gates. Treat them as first-class readiness signals, not
+  afterthought warnings hidden in export logs.
 
 ## Performance Rules
 

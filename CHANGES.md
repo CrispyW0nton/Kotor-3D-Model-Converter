@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Knowledge Base Expands Book-Derived Modeling Skills
+
+Owner: LordVaderCW
+Task: T2600 / T2605 / T2908
+Subsystem: Documentation / book-derived working skills / Map Studio and Character Builder guidance
+Intersects: docs/knowledgebase skill index and Map Studio modeling roadmap.
+
+- Inspected the local `knowledge_base/books` PDF set with targeted outline/topic extraction and strengthened the project skill docs with GhostRigger-specific working rules.
+- Added computational-geometry and UV/texture skills so future Map Studio work has explicit guardrails for robust predicates, spatial queries, triangulation, UV preservation, material slots, and DCC round-trip handoff.
+- Expanded mesh, vertex, extrusion, terrain, rigging, Qt UI, math, performance, and Map Studio skills with actionable implementation checkpoints tied to KOTOR validation/export gates.
+- Verification: `pypdf` metadata/outline/topic pass over local books; `git diff --check`.
+
 ### [2026-06-20] Map Studio Workspace Changes Sync Edit Mode
 
 Owner: LordVaderCW

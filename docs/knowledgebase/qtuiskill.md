@@ -14,6 +14,10 @@ docs referenced in prior notes, GhostRigger Qt architecture crosswalk.
   toolbars, context menus, shortcuts, or command belts.
 - Use model/view when data must sort, filter, preserve selection, show multiple
   views, or represent hierarchies.
+- Search-as-you-type lists should use a model/proxy-model pattern rather than
+  rebuilding combo-box contents ad hoc on every keypress.
+- Use `QUndoStack`-style command thinking for editor operations even when the
+  implementation is Python-side: execute, undo, redo, stale-state reason.
 - Long work belongs in jobs/workers, reporting back through signals/results.
 - UI readiness is a first-class model: can preview, can export, stale preview,
   missing input, runtime requirements, and game-tested state.
@@ -27,6 +31,9 @@ docs referenced in prior notes, GhostRigger Qt architecture crosswalk.
   Character Builder, or Map Studio controls.
 - Map Studio tool belts should be customizable, stable-object-named, and backed
   by core tool policy.
+- Character Builder step buttons must update the right inspector scope for the
+  selected character type; avoid generic panels that silently mismatch the left
+  workflow rail.
 - Validation and export should surface actionable errors before file writes.
 
 ## Preflight Checklist

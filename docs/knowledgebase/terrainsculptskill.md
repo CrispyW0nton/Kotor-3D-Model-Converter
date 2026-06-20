@@ -12,6 +12,9 @@ System Design performance budgeting.
 - Terrain sculpting must feel immediate. Treat lag as a bug, not polish debt.
 - Live strokes update dirty height samples, local preview triangles, local bounds,
   and walkability overlay only. They must not rebuild the whole module.
+- Use a heightfield/tile representation for live sculpting, then compile to
+  room mesh and WOK surfaces on commit/export. The live brush data and exported
+  mesh are related but should not be the same mutable object.
 - Coalesce high-frequency pointer/tablet samples per viewport frame. Drop stale
   frames when newer input exists.
 - Full MDL/WOK/export rebuilds happen on stroke commit, validation, or staged
@@ -19,6 +22,8 @@ System Design performance budgeting.
 - Every brush records metadata: brush name, dirty region, changed sample count,
   performance estimate, slope report, and rebuild deferral.
 - WOK slope/walkability feedback is live guidance, not game proof.
+- Brush kernels must have deterministic falloff and bounded radius so undo,
+  redo, and multiplayer agent reproduction all produce the same terrain.
 
 ## Brush Policy
 
