@@ -461,12 +461,15 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "floorPlanVertexCleanupRequested = QtCore.Signal" in source
         assert "floorPlanVertexMirrorRequested = QtCore.Signal" in source
         assert "floorPlanFaceFillRequested = QtCore.Signal" in source
+        assert "floorPlanFaceSplitRequested = QtCore.Signal" in source
         assert "floorPlanFaceTriangulateRequested = QtCore.Signal" in source
         assert "floorPlanNormalsCleanupRequested = QtCore.Signal" in source
         assert "mapStudioFillFloorPlanFaceButton" in source
+        assert "mapStudioSplitFloorPlanFaceButton" in source
         assert "mapStudioTriangulateFloorPlanFaceButton" in source
         assert "mapStudioCleanupFloorPlanNormalsButton" in source
         assert "Fill Selected Face Loop" in source
+        assert "Split Face Between Points" in source
         assert "Triangulate Footprint" in source
         assert "Cleanup Face Normals" in source
         assert "planes, walls, ramps, stairs, arches, cubes, and cylinders" in source
@@ -769,6 +772,7 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "floorPlanVertexCleanupRequested.connect(self.cleanup_authored_floor_plan_vertices)" in window_source
     assert "floorPlanVertexMirrorRequested.connect(self.mirror_authored_floor_plan_vertices)" in window_source
     assert "floorPlanFaceFillRequested.connect(self.fill_authored_floor_plan_face)" in window_source
+    assert "floorPlanFaceSplitRequested.connect(self.split_authored_floor_plan_face)" in window_source
     assert "floorPlanFaceTriangulateRequested.connect(self.triangulate_authored_floor_plan_face)" in window_source
     assert "floorPlanNormalsCleanupRequested.connect(self.cleanup_authored_floor_plan_normals)" in window_source
     assert "def bridge_authored_floor_plan_edges" in window_source
@@ -779,6 +783,7 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "def cleanup_authored_floor_plan_vertices" in window_source
     assert "def mirror_authored_floor_plan_vertices" in window_source
     assert "def fill_authored_floor_plan_face" in window_source
+    assert "def split_authored_floor_plan_face" in window_source
     assert "def triangulate_authored_floor_plan_face" in window_source
     assert "def cleanup_authored_floor_plan_normals" in window_source
     assert '"bridge"' in window_source

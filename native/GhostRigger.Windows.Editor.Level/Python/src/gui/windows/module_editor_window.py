@@ -713,6 +713,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.floorPlanVertexCleanupRequested.connect(self.cleanup_authored_floor_plan_vertices)
         self.builder_tab.floorPlanVertexMirrorRequested.connect(self.mirror_authored_floor_plan_vertices)
         self.builder_tab.floorPlanFaceFillRequested.connect(self.fill_authored_floor_plan_face)
+        self.builder_tab.floorPlanFaceSplitRequested.connect(self.split_authored_floor_plan_face)
         self.builder_tab.floorPlanFaceTriangulateRequested.connect(self.triangulate_authored_floor_plan_face)
         self.builder_tab.floorPlanNormalsCleanupRequested.connect(self.cleanup_authored_floor_plan_normals)
         self.builder_tab.terrainOperationRequested.connect(self.apply_authored_terrain_operation)
@@ -2177,6 +2178,25 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         readiness = result.readiness
         message = f"Filled floor-plan face loop in {room_resref}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+
+    def split_authored_floor_plan_face(
+        self,
+        room_resref: str,
+        point_indices: object,
+    ) -> None:
+        try:
+            result = self.controller.split_authored_floor_plan_face(
+                room_resref=room_resref,
+                point_indices=tuple(point_indices or ()),
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Split Floor-Plan Face", str(exc))
+            return
+        readiness = result.readiness
+        message = f"Split floor-plan face in {room_resref}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
         self._refresh_all(message)

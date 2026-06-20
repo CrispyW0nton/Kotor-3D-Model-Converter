@@ -18,6 +18,7 @@ class BuilderTab(QtWidgets.QWidget):
     floorPlanVertexCleanupRequested = QtCore.Signal(str, float)
     floorPlanVertexMirrorRequested = QtCore.Signal(str, str)
     floorPlanFaceFillRequested = QtCore.Signal(str, object)
+    floorPlanFaceSplitRequested = QtCore.Signal(str, object)
     floorPlanFaceTriangulateRequested = QtCore.Signal(str)
     floorPlanNormalsCleanupRequested = QtCore.Signal(str)
     terrainOperationRequested = QtCore.Signal(str, str, int, int, float, float, int, int, float)
@@ -318,6 +319,8 @@ class BuilderTab(QtWidgets.QWidget):
         self.cleanupFloorPlanVerticesButton.setObjectName("mapStudioCleanupFloorPlanVerticesButton")
         self.fillFloorPlanFaceButton = QtWidgets.QPushButton("Fill Selected Face Loop")
         self.fillFloorPlanFaceButton.setObjectName("mapStudioFillFloorPlanFaceButton")
+        self.splitFloorPlanFaceButton = QtWidgets.QPushButton("Split Face Between Points")
+        self.splitFloorPlanFaceButton.setObjectName("mapStudioSplitFloorPlanFaceButton")
         self.triangulateFloorPlanFaceButton = QtWidgets.QPushButton("Triangulate Footprint")
         self.triangulateFloorPlanFaceButton.setObjectName("mapStudioTriangulateFloorPlanFaceButton")
         self.cleanupFloorPlanNormalsButton = QtWidgets.QPushButton("Cleanup Face Normals")
@@ -338,6 +341,7 @@ class BuilderTab(QtWidgets.QWidget):
         vertex_layout.addRow("Cleanup tolerance:", self.floorPlanCleanupToleranceSpinBox)
         vertex_layout.addRow(self.cleanupFloorPlanVerticesButton)
         vertex_layout.addRow(self.fillFloorPlanFaceButton)
+        vertex_layout.addRow(self.splitFloorPlanFaceButton)
         vertex_layout.addRow(self.triangulateFloorPlanFaceButton)
         vertex_layout.addRow(self.cleanupFloorPlanNormalsButton)
         layout.addWidget(vertex_box)
@@ -781,6 +785,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.mirrorFloorPlanVerticesButton.clicked.connect(self._emit_floor_plan_vertex_mirror)
         self.cleanupFloorPlanVerticesButton.clicked.connect(self._emit_floor_plan_vertex_cleanup)
         self.fillFloorPlanFaceButton.clicked.connect(self._emit_floor_plan_face_fill)
+        self.splitFloorPlanFaceButton.clicked.connect(self._emit_floor_plan_face_split)
         self.triangulateFloorPlanFaceButton.clicked.connect(self._emit_floor_plan_face_triangulate)
         self.cleanupFloorPlanNormalsButton.clicked.connect(self._emit_floor_plan_normals_cleanup)
         self.terrainRoomComboBox.currentIndexChanged.connect(self._update_terrain_controls)
@@ -1584,6 +1589,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.mirrorFloorPlanVerticesButton.setEnabled(enabled and point_count >= 3)
         self.cleanupFloorPlanVerticesButton.setEnabled(enabled and point_count >= 3)
         self.fillFloorPlanFaceButton.setEnabled(enabled and len(selected) >= 3)
+        self.splitFloorPlanFaceButton.setEnabled(enabled and len(selected) == 2 and point_count >= 4)
         self.triangulateFloorPlanFaceButton.setEnabled(enabled and point_count >= 3)
         self.cleanupFloorPlanNormalsButton.setEnabled(enabled and point_count >= 3)
         self.floorPlanSourcePointSpinBox.setRange(0, max(point_count - 1, 0))
@@ -1594,7 +1600,7 @@ class BuilderTab(QtWidgets.QWidget):
             )
         elif not selected:
             self.floorPlanVertexHintLabel.setText(
-                f"Editing {room.get('room_resref')}: {point_count} points. Enter point indices to weld, flatten, or fill a face loop; snap one source point, mirror the footprint, triangulate it, or cleanup redundant points/normals."
+                f"Editing {room.get('room_resref')}: {point_count} points. Enter point indices to weld, flatten, split between two non-adjacent points, or fill a face loop; snap one source point, mirror the footprint, triangulate it, or cleanup redundant points/normals."
             )
         else:
             self.floorPlanVertexHintLabel.setText(
@@ -1658,6 +1664,22 @@ class BuilderTab(QtWidgets.QWidget):
             self.floorPlanVertexHintLabel.setText("Point indices must be comma-separated integers, e.g. 0,1,2.")
             return
         self.floorPlanFaceFillRequested.emit(room, selected)
+
+    def _emit_floor_plan_face_split(self) -> None:
+        room = str(self._current_floor_plan_vertex_room_data().get("room_resref") or "").strip()
+        if not room:
+            return
+        try:
+            selected = self._parse_floor_plan_point_indices()
+        except ValueError:
+            self.floorPlanVertexHintLabel.setText("Point indices must be comma-separated integers, e.g. 0,2.")
+            return
+        if len(selected) != 2:
+            self.floorPlanVertexHintLabel.setText(
+                "Face split requires exactly two non-adjacent point indices, e.g. 0,2."
+            )
+            return
+        self.floorPlanFaceSplitRequested.emit(room, selected)
 
     def _emit_floor_plan_face_triangulate(self) -> None:
         room = str(self._current_floor_plan_vertex_room_data().get("room_resref") or "").strip()

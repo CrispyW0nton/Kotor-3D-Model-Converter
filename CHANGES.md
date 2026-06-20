@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Exposes Floor-Plan Face Split Controls
+
+Owner: LordVaderCW
+Task: T2601 / T2908
+Subsystem: Map Studio / Level Editor builder tab / component-edit workflow UI
+Intersects: GUI Boundary Panels, Windows Editor Level, ModuleMeshes mirror package, and Map Studio workflow source contracts.
+
+- Added a dedicated Builder tab control for splitting a floor-plan face between exactly two selected non-adjacent points, keeping the action in the Map Studio component-edit workspace.
+- Routed the new face-split signal through the Level Editor window to `ModuleEditorController.split_authored_floor_plan_face` so the UI uses the audited headless operation added earlier.
+- Mirrored the Builder tab change into the ModuleMeshes workflow package and refreshed native Python payload hashes for the touched GUI/window packages.
+- Verification: `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt tests/test_map_studio_workflow_panel.py::test_t2601_map_studio_builder_exposes_modeling_mode_and_snap_palette -q --basetemp .pytest_tmp_map_studio_face_split_ui`; `git diff --check`.
+
 ### [2026-06-20] Map Studio Records Selected-Vertex Floor-Plan Splits
 
 Owner: LordVaderCW
