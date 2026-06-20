@@ -1224,7 +1224,25 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             if isinstance(data, dict) and str(data.get("key") or "") == wanted:
                 combo.setCurrentIndex(index)
                 combo.setFocus()
+                label = str(data.get("label") or wanted).strip() or wanted
+                operation = str(data.get("operation") or wanted).strip() or wanted
+                guardrail = str(data.get("guardrail") or "").strip()
+                self.workflow_panel.set_active_authoring_context(
+                    f"Terrain brush: {label}. Live strokes update dirty terrain samples only; "
+                    "full MDL/WOK rebuild waits for stroke commit, validation, or export."
+                )
+                message = (
+                    f"Map Studio terrain brush selected: {label} ({operation}). "
+                    "Brush frames stay dirty-region scoped for low-latency sculpting."
+                )
+                if guardrail:
+                    message += f" KOTOR: {guardrail}"
+                self._log(message)
                 return
+        self.workflow_panel.set_active_authoring_context(
+            f"Terrain brush: {wanted or '(none)'} is not available in the current Map Studio tool set."
+        )
+        self._log(f"Map Studio terrain brush '{wanted}' is not available.")
 
     def _focus_map_studio_opening_marker_controls(self) -> None:
         """Focus Builder controls that convert authored openings into KOTOR transition markers."""

@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Shows Terrain Brush Performance Guidance
+
+Owner: LordVaderCW
+Task: T2907 / T2908
+Subsystem: Map Studio / Level Editor terrain sculpting UX
+Intersects: Windows Editor Level terrain brush routing and Map Studio tool-belt source contracts.
+
+- Added active-context and log feedback when a terrain sculpt brush is selected from the Map Studio tool belt, naming the brush and explaining that live strokes stay dirty-region scoped.
+- Made the UI explicitly state that full MDL/WOK rebuilds wait for stroke commit, validation, or export so modders understand the live-sculpt performance model.
+- Verification: `python -m py_compile native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_terrain_brush_guidance`.
+
 ### [2026-06-20] Map Studio Clarifies Tool-Belt Object Workflows
 
 Owner: LordVaderCW

@@ -739,6 +739,8 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert '"sculpt_noise": "noise"' in window_source
     assert "self.controller.map_studio_viewport_performance_policy()" in window_source
     assert "self._select_map_studio_terrain_brush(terrain_brush)" in window_source
+    assert "Terrain brush: {label}. Live strokes update dirty terrain samples only" in window_source
+    assert "Brush frames stay dirty-region scoped for low-latency sculpting." in window_source
     assert "mapStudioToolBeltWidget" in window_source
     assert "mapStudioCustomizeToolBeltButton" in window_source
     assert "mapStudioToolBeltCustomizeSearchLineEdit" in window_source
