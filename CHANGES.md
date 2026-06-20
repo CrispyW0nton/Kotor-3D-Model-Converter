@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Adds Vertex Snap Target Queries
+
+Owner: LordVaderCW
+Task: T2601 / T2908
+Subsystem: Map Studio / Level Editor vertex workflow / authored floor-plan operations
+Intersects: Domain Core Modules, ModuleMeshes mirror package, and vertex-editing knowledgebase.
+
+- Added non-mutating authored floor-plan vertex snap candidates so Maya-style Hold-V snapping can preview nearest same-room or cross-room vertices before committing a KMAP edit.
+- Exposed the snap-candidate query through `ModuleEditorController` without dirtying project state, keeping preview/commit behavior separate from the existing snap and weld operations.
+- Documented the snap discovery versus snap commit boundary in the vertex skill notes.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/module_editor_controller.py tests/test_authored_room_operations.py`; `python -m pytest tests/test_authored_room_operations.py::test_t2601_controller_lists_floor_plan_vertex_snap_candidates_without_mutating tests/test_authored_room_operations.py::test_t2908_controller_snaps_floor_plan_vertex_to_cross_room_vertex tests/test_authored_room_operations.py::test_t2908_controller_welds_floor_plan_vertices_and_remains_exportable -q --basetemp .pytest_tmp_map_studio_snap_candidates`.
+
 ### [2026-06-20] Map Studio Separates Vertex Snap From Weld
 
 Owner: LordVaderCW

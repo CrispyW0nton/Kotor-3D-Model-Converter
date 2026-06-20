@@ -92,6 +92,7 @@ from .authored_room_operations import (
     apply_authored_floor_plan_operation,
     available_authored_composition_primitive_kinds,
     authored_floor_plan_room_choices,
+    authored_floor_plan_vertex_snap_candidates,
     authored_terrain_room_choices,
     authored_room_composition_primitives,
     bridge_authored_floor_plan_edges,
@@ -945,6 +946,37 @@ class ModuleEditorController:
             f"Moved Map Studio room {room_resref or '(first room)'} outline point {int(point_index)}; previous exports/proofs are now stale."
         )
         return self.authored_module_readiness()
+
+    def authored_floor_plan_vertex_snap_candidates(
+        self,
+        *,
+        room_resref: str,
+        point_index: int,
+        max_distance: float | None = None,
+        include_same_room: bool = True,
+        include_cross_room: bool = True,
+        limit: int = 8,
+    ):
+        """Return nearest floor-plan vertex snap targets without mutating project state."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_floor_plan_vertex_snap_candidates(
+            authored,
+            room_resref=room_resref,
+            point_index=int(point_index),
+            max_distance=max_distance,
+            include_same_room=bool(include_same_room),
+            include_cross_room=bool(include_cross_room),
+            limit=int(limit),
+        )
 
     def snap_authored_floor_plan_vertex(
         self,

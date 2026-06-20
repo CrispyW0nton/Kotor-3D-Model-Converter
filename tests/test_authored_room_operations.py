@@ -538,6 +538,109 @@ def test_t2908_controller_snaps_floor_plan_vertex_to_cross_room_vertex() -> None
     assert not build.blocking_issues
 
 
+def test_t2601_controller_lists_floor_plan_vertex_snap_candidates_without_mutating() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload, authored_project_to_kmap_payload
+    from src.core.modules.authored_module_project import AuthoredRoomSpec
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
+    from src.core.modules.authored_room_primitives import PrimitiveMaterial
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    base = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grsnapq",
+        game="K1",
+    )
+    material = PrimitiveMaterial(texture="default", metadata={"source": "test"})
+    first_primitive = FloorPlanRoomPrimitive(
+        room_resref="grsnapq_room01",
+        points=((-5.0, -5.0), (4.0, -5.0), (4.0, 5.0), (-5.0, 5.0)),
+        wall_height=3.0,
+        floor_surface_id=4,
+        material=material,
+        include_walls=True,
+        metadata={"source": "test"},
+    )
+    second_primitive = FloorPlanRoomPrimitive(
+        room_resref="grsnapq_room02",
+        points=((-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0)),
+        wall_height=3.0,
+        floor_surface_id=4,
+        material=material,
+        include_walls=True,
+        metadata={"source": "test"},
+    )
+    visible = ("grsnapq_room01", "grsnapq_room02")
+    project = replace(
+        base,
+        rooms=(
+            replace(
+                base.rooms[0],
+                room_resref="grsnapq_room01",
+                primitive=first_primitive,
+                composition=None,
+                visible_rooms=visible,
+                metadata={"primitive": "floor_plan_extrusion"},
+            ),
+            AuthoredRoomSpec(
+                room_resref="grsnapq_room02",
+                primitive=second_primitive,
+                composition=None,
+                position=(10.0, 0.0, 0.0),
+                visible_rooms=visible,
+                metadata={"primitive": "floor_plan_extrusion"},
+            ),
+        ),
+    )
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(project)
+    original_payload = controller.project.extra_sections["authored_module"]
+
+    candidates = controller.authored_floor_plan_vertex_snap_candidates(
+        room_resref="grsnapq_room01",
+        point_index=1,
+        limit=3,
+    )
+
+    assert [item.room_resref for item in candidates] == ["grsnapq_room02", "grsnapq_room01", "grsnapq_room01"]
+    assert [item.point_index for item in candidates] == [0, 0, 2]
+    assert candidates[0].world_position == (5.0, -5.0, 0.0)
+    assert candidates[0].distance == 1.0
+    assert candidates[0].same_room is False
+    assert candidates[0].label == "grsnapq_room02 point 0 (1.000 m)"
+
+    cross_only = controller.authored_floor_plan_vertex_snap_candidates(
+        room_resref="grsnapq_room01",
+        point_index=1,
+        include_same_room=False,
+        limit=2,
+    )
+    same_only = controller.authored_floor_plan_vertex_snap_candidates(
+        room_resref="grsnapq_room01",
+        point_index=1,
+        include_cross_room=False,
+        limit=1,
+    )
+    too_far = controller.authored_floor_plan_vertex_snap_candidates(
+        room_resref="grsnapq_room01",
+        point_index=1,
+        max_distance=0.5,
+    )
+
+    assert [item.room_resref for item in cross_only] == ["grsnapq_room02", "grsnapq_room02"]
+    assert same_only[0].room_resref == "grsnapq_room01"
+    assert same_only[0].same_room is True
+    assert too_far == ()
+    assert controller.project.extra_sections["authored_module"] == original_payload
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    assert tuple(authored.rooms[0].primitive.points)[1] == (4.0, -5.0)
+
+
 def test_t2908_controller_welds_floor_plan_vertices_and_remains_exportable() -> None:
     _install_native_payload_paths()
 

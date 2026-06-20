@@ -137,6 +137,18 @@ class AuthoredFloorPlanRoomChoice:
 
 
 @dataclass(frozen=True)
+class AuthoredFloorPlanVertexSnapCandidate:
+    """UI-ready candidate for Maya-style vertex snapping in Map Studio."""
+
+    room_resref: str
+    point_index: int
+    world_position: tuple[float, float, float]
+    distance: float
+    same_room: bool
+    label: str
+
+
+@dataclass(frozen=True)
 class AuthoredTerrainRoomChoice:
     """UI-ready terrain room choice for heightfield sculpt operations."""
 
@@ -333,6 +345,16 @@ def _floor_plan_component_mesh(primitive: FloorPlanRoomPrimitive):
         ((float(x), float(y), float(primitive.z)) for x, y in tuple(primitive.points or ())),
         metadata={"room_resref": normalise_resref(primitive.room_resref), "source": "floor_plan"},
     )
+
+
+def _floor_plan_point_world_position(
+    room: AuthoredRoomSpec,
+    primitive: FloorPlanRoomPrimitive,
+    point: tuple[float, float],
+) -> tuple[float, float, float]:
+    offset = _room_offset(room)
+    x, y = point
+    return (float(x) + offset[0], float(y) + offset[1], float(primitive.z) + offset[2])
 
 
 def _floor_plan_component_mesh_with_face(primitive: FloorPlanRoomPrimitive):
@@ -2066,6 +2088,75 @@ def move_authored_floor_plan_point(
     return _replace_rooms(project, rooms, operation="move_floor_plan_point")
 
 
+def authored_floor_plan_vertex_snap_candidates(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    point_index: int,
+    max_distance: float | None = None,
+    include_same_room: bool = True,
+    include_cross_room: bool = True,
+    limit: int = 8,
+) -> tuple[AuthoredFloorPlanVertexSnapCandidate, ...]:
+    """Return nearest snap targets for one authored floor-plan vertex.
+
+    This query is intentionally non-mutating so viewport Hold-V snapping can
+    preview a target before committing a move/snap operation into the KMAP.
+    """
+
+    source_room_index = _target_room_index(project, room_resref)
+    source_room = project.rooms[source_room_index]
+    source_primitive = _floor_plan_for_room(source_room)
+    source_points = tuple(source_primitive.points or ())
+    source_vertex_index = int(point_index)
+    if source_vertex_index < 0 or source_vertex_index >= len(source_points):
+        raise ValueError(f"Room {source_room.room_resref} has no outline point {point_index}.")
+
+    max_results = int(limit)
+    if max_results <= 0:
+        return ()
+    distance_limit = None if max_distance is None else float(max_distance)
+    if distance_limit is not None and distance_limit < 0:
+        raise ValueError("Floor-plan vertex snap max_distance must be zero or greater.")
+
+    source_world = _floor_plan_point_world_position(source_room, source_primitive, source_points[source_vertex_index])
+    candidates: list[AuthoredFloorPlanVertexSnapCandidate] = []
+    for candidate_room_index, candidate_room in enumerate(tuple(project.rooms or ())):
+        try:
+            candidate_primitive = _floor_plan_for_room(candidate_room)
+        except ValueError:
+            continue
+        same_room = candidate_room_index == source_room_index
+        if same_room and not include_same_room:
+            continue
+        if not same_room and not include_cross_room:
+            continue
+        candidate_resref = normalise_resref(candidate_room.room_resref)
+        for candidate_point_index, candidate_point in enumerate(tuple(candidate_primitive.points or ())):
+            if same_room and candidate_point_index == source_vertex_index:
+                continue
+            world_position = _floor_plan_point_world_position(candidate_room, candidate_primitive, candidate_point)
+            distance = math.sqrt(
+                (world_position[0] - source_world[0]) ** 2
+                + (world_position[1] - source_world[1]) ** 2
+                + (world_position[2] - source_world[2]) ** 2
+            )
+            if distance_limit is not None and distance > distance_limit:
+                continue
+            candidates.append(
+                AuthoredFloorPlanVertexSnapCandidate(
+                    room_resref=candidate_resref,
+                    point_index=int(candidate_point_index),
+                    world_position=world_position,
+                    distance=float(distance),
+                    same_room=bool(same_room),
+                    label=f"{candidate_resref} point {candidate_point_index} ({distance:.3f} m)",
+                )
+            )
+    candidates.sort(key=lambda item: (item.distance, item.room_resref, item.point_index))
+    return tuple(candidates[:max_results])
+
+
 def snap_authored_floor_plan_vertex_to_vertex(
     project: AuthoredModuleProject,
     *,
@@ -2687,6 +2778,7 @@ __all__ = [
     "AuthoredCompositionPrimitiveKind",
     "AuthoredCompositionPrimitiveDimension",
     "AuthoredCompositionPrimitiveTransform",
+    "AuthoredFloorPlanVertexSnapCandidate",
     "AuthoredFloorPlanRoomChoice",
     "AuthoredTerrainRoomChoice",
     "add_authored_floor_plan_opening_transition_marker",
@@ -2700,6 +2792,7 @@ __all__ = [
     "apply_authored_floor_plan_operation",
     "apply_authored_floor_plan_rectangular_cut",
     "available_authored_composition_primitive_kinds",
+    "authored_floor_plan_vertex_snap_candidates",
     "authored_floor_plan_room_choices",
     "authored_terrain_room_choices",
     "authored_room_composition_primitives",

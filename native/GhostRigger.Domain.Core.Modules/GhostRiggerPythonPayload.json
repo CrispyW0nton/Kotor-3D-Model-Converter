@@ -45,7 +45,7 @@
       "resource_name": "PYTHON_PAYLOAD_0007",
       "source_path": "src/core/modules/module_editor_controller.py",
       "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-      "sha256": "3a783453c399b4f340679eddac21ecdae90fb075ae49005bef26d0a9e200d4b1"
+      "sha256": "936b1890bcd3a211a3f5e6b8ca99e45420b45bec65967b38810a5cc60f750ce0"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0008",
@@ -237,7 +237,7 @@
       "resource_name": "PYTHON_PAYLOAD_0039",
       "source_path": "src/core/modules/authored_room_operations.py",
       "packaged_path": "Python/src/core/modules/authored_room_operations.py",
-      "sha256": "3ab18273d72f19bd517b81ab23ed753c8a7d5386c1db2aa3a182c850559acbb0"
+      "sha256": "263058ce4f949c6b0a80472f4cd87e6f9aa7ad17dcc892fa7da4da4aceb38af3"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0040",

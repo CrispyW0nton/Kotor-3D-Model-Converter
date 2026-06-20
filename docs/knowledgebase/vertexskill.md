@@ -27,6 +27,9 @@ geometric primitives/tests, Vince transforms, O'Hailey rigging workflows.
 
 - Hold-V vertex/bone snapping should identify nearby valid snap targets and
   apply one undoable move command.
+- Snap target discovery is a non-mutating query. Commit only through the
+  authored operation that moves or snaps the selected point so readiness/export
+  state stays honest.
 - In Map Studio, `Snap Vtx` should select the `snap_vertices` modeling tool and
   Vertex snap mode. It must not route to `weld_vertices`; welding is a separate
   topology-changing command.
