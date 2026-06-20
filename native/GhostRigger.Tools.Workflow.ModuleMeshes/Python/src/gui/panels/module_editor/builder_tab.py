@@ -121,6 +121,8 @@ class BuilderTab(QtWidgets.QWidget):
         self.roomOperationComboBox.addItem("Bevel corners", "bevel")
         self.roomOperationComboBox.addItem("Inset footprint", "inset")
         self.roomOperationComboBox.addItem("Extrude edge", "edge_extrude")
+        self.roomOperationComboBox.addItem("Split room on X", "split_x")
+        self.roomOperationComboBox.addItem("Split room on Y", "split_y")
         self.roomOperationComboBox.addItem("Rectangular cut", "rectangular_cut")
         self.operationDistanceSpinBox = QtWidgets.QDoubleSpinBox()
         self.operationDistanceSpinBox.setObjectName("mapStudioRoomOperationDistanceSpinBox")
@@ -2237,8 +2239,12 @@ class BuilderTab(QtWidgets.QWidget):
     def _update_operation_controls(self) -> None:
         operation = str(self.roomOperationComboBox.currentData() or "")
         is_cut = operation == "rectangular_cut"
-        for widget in (self.cutCenterXSpinBox, self.cutCenterYSpinBox, self.cutWidthSpinBox, self.cutDepthSpinBox):
-            widget.setEnabled(is_cut)
+        is_split_x = operation == "split_x"
+        is_split_y = operation == "split_y"
+        self.cutCenterXSpinBox.setEnabled(is_cut or is_split_x)
+        self.cutCenterYSpinBox.setEnabled(is_cut or is_split_y)
+        self.cutWidthSpinBox.setEnabled(is_cut)
+        self.cutDepthSpinBox.setEnabled(is_cut)
         self.operationDistanceSpinBox.setEnabled(operation in {"bevel", "inset", "edge_extrude"})
         self.operationEdgeIndexSpinBox.setEnabled(operation == "edge_extrude")
 

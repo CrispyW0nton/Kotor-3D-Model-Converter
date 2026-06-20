@@ -516,8 +516,8 @@ _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
         "Cut",
         "geometry",
         "knife_split",
-        "Apply a rectangular room cut for openings, split blockouts, or floor-plan detail.",
-        "Cut pieces remain separate exportable rooms and must still pass WOK/visibility validation.",
+        "Split a floor-plan room into separate exportable KOTOR room pieces, or use rectangular cuts for openings/detail.",
+        "Split pieces remain separate exportable rooms and must still pass WOK/visibility validation.",
         implemented=True,
     ),
     MapStudioToolBeltAction(

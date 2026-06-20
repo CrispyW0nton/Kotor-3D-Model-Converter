@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Adds Safe Floor-Plan Split Operation
+
+Owner: LordVaderCW
+Task: T2601 / T2911
+Subsystem: Map Studio / geometry kernel / Level Editor Builder tools
+Intersects: Domain Core Modules room operations, GUI Boundary Panels Builder tab, Windows Editor Level shell, ModuleMeshes mirror package.
+
+- Added a headless axis-aligned floor-plan split operation that turns one rectangular authored room into two exportable KOTOR room MDL/MDX/WOK pieces without losing floor area.
+- Wired `axis_split`, `split_x`, `split_y`, and `knife_split` through the authored-room operation dispatcher so tool-belt Cut has real room-splitting behavior while rectangular cut remains available for openings/detail.
+- Added Builder tab split operations, routed the Cut belt action to the split workflow, kept Boolean focused on rectangular cut, mirrored the core/UI changes, and refreshed native Python payload hashes.
+- Verification: `python -m pytest tests/test_authored_room_operations.py::test_t2601_axis_split_creates_two_exportable_floor_plan_rooms -q --basetemp .pytest_tmp_axis_split`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_axis_split_ui`; `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_floorplan.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_floorplan.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py`.
+
 ### [2026-06-20] Map Studio Projects Floor-Plan Geometry Issues Into Validation Rows
 
 Owner: LordVaderCW

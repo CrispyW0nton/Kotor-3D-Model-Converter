@@ -135,7 +135,7 @@
       "resource_name": "PYTHON_PAYLOAD_0022",
       "source_path": "src/core/modules/authored_room_floorplan.py",
       "packaged_path": "Python/src/core/modules/authored_room_floorplan.py",
-      "sha256": "1f029a1268d82a15f48740f6c10c75d86e54f0b907de6292a866785682538b6f"
+      "sha256": "cc844021b50713229434141dafc3743a0fd0cecc2c4612c9cfe7ba30959bbee0"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0023",
@@ -237,7 +237,7 @@
       "resource_name": "PYTHON_PAYLOAD_0039",
       "source_path": "src/core/modules/authored_room_operations.py",
       "packaged_path": "Python/src/core/modules/authored_room_operations.py",
-      "sha256": "a653154926552673d36ed6d7049132568055cc4445c59476f8e369b0bdb5a21b"
+      "sha256": "67b75761462fa287fc2e004a79c13944616670c3a5d8a4909dcadadb1d71b461"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0040",
@@ -285,7 +285,7 @@
       "resource_name": "PYTHON_PAYLOAD_0047",
       "source_path": "src/core/modules/map_studio_modeling_tools.py",
       "packaged_path": "Python/src/core/modules/map_studio_modeling_tools.py",
-      "sha256": "84389fab5ecae338d4e46fee92d6a020af3a0b19fe6b0aa2af91d90d4dd20aa0"
+      "sha256": "c4d659f606abc5397b7ec4e9d5a2b92d56e240f144e2e7f615372f4123f15693"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0048",

@@ -161,6 +161,41 @@ def test_t2651_rectangular_cut_splits_current_room_and_remains_exportable() -> N
     assert all((room.normalised_resref(), "mdx") in build.resources for room in cut.rooms)
 
 
+def test_t2601_axis_split_creates_two_exportable_floor_plan_rooms() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_room_operations import apply_authored_floor_plan_operation
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grsplit01",
+        game="K1",
+    )
+    split = apply_authored_floor_plan_operation(
+        project,
+        "axis_split",
+        axis="x",
+        coordinate=0.0,
+        room_resref_prefix="grsplitpiece",
+    )
+    build = build_authored_module(split)
+
+    assert len(split.rooms) == 2
+    assert {room.metadata["split_piece_role"] for room in split.rooms} == {"left", "right"}
+    assert all(room.metadata["split_axis"] == "x" for room in split.rooms)
+    assert all(room.visible_rooms == tuple(room.normalised_resref() for room in split.rooms) for room in split.rooms)
+    assert split.placements.metadata["placement_repaired_after_axis_split"] is True
+    assert not build.blocking_issues
+    assert build.metadata["room_count"] == 2
+    assert ("grsplit01", "lyt") in build.resources
+    assert ("grsplit01", "vis") in build.resources
+    assert all((room.normalised_resref(), "wok") in build.resources for room in split.rooms)
+    assert all((room.normalised_resref(), "mdl") in build.resources for room in split.rooms)
+    assert all((room.normalised_resref(), "mdx") in build.resources for room in split.rooms)
+
+
 def test_t2679_controller_unions_adjacent_floor_plan_rooms_and_remains_exportable() -> None:
     _install_native_payload_paths()
 

@@ -21,7 +21,7 @@
       "resource_name": "PYTHON_PAYLOAD_0003",
       "source_path": "src/gui/panels/module_editor/builder_tab.py",
       "packaged_path": "Python/src/gui/panels/module_editor/builder_tab.py",
-      "sha256": "cc199c5ddd751810437138b03431768c7e4f0e1ea7ca98d5c43458043ab01ab8"
+      "sha256": "32a521ad2a6b59ff2d1897e0380df1a92c72ce5e8ad3e295013b3d27bbaf3046"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0004",
@@ -57,7 +57,7 @@
       "resource_name": "PYTHON_PAYLOAD_0009",
       "source_path": "src/gui/panels/module_editor/module_editor_viewport_panel.py",
       "packaged_path": "Python/src/gui/panels/module_editor/module_editor_viewport_panel.py",
-      "sha256": "7c81547b95ab094c5e23d33ffc4842cf4fa043ba6b6ba5ba1342411a99627a93"
+      "sha256": "095ce9cb4b3211d240dc1edf593463b332a2ac57974d272231cd0a9535a342f8"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0010",
@@ -213,7 +213,7 @@
       "resource_name": "PYTHON_PAYLOAD_0035",
       "source_path": "src/core/modules/authored_room_floorplan.py",
       "packaged_path": "Python/src/core/modules/authored_room_floorplan.py",
-      "sha256": "1f029a1268d82a15f48740f6c10c75d86e54f0b907de6292a866785682538b6f"
+      "sha256": "cc844021b50713229434141dafc3743a0fd0cecc2c4612c9cfe7ba30959bbee0"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0036",
@@ -315,7 +315,7 @@
       "resource_name": "PYTHON_PAYLOAD_0052",
       "source_path": "src/core/modules/authored_room_operations.py",
       "packaged_path": "Python/src/core/modules/authored_room_operations.py",
-      "sha256": "a653154926552673d36ed6d7049132568055cc4445c59476f8e369b0bdb5a21b"
+      "sha256": "67b75761462fa287fc2e004a79c13944616670c3a5d8a4909dcadadb1d71b461"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0053",
@@ -447,7 +447,7 @@
       "resource_name": "PYTHON_PAYLOAD_0074",
       "source_path": "src/core/modules/map_studio_modeling_tools.py",
       "packaged_path": "Python/src/core/modules/map_studio_modeling_tools.py",
-      "sha256": "84389fab5ecae338d4e46fee92d6a020af3a0b19fe6b0aa2af91d90d4dd20aa0"
+      "sha256": "c4d659f606abc5397b7ec4e9d5a2b92d56e240f144e2e7f615372f4123f15693"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0075",

@@ -86,6 +86,16 @@ class FloorPlanRectangularCutOperation:
 
 
 @dataclass(frozen=True)
+class FloorPlanAxisSplitOperation:
+    """Split an axis-aligned rectangular floor plan into two exportable rooms."""
+
+    axis: str
+    coordinate: float
+    room_resref_prefix: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class FloorPlanRectangularUnionOperation:
     """Boolean union for rectangular floor plans that remain one rectangle."""
 
@@ -653,6 +663,72 @@ def apply_floor_plan_rectangular_cut(
     return tuple(pieces)
 
 
+def apply_floor_plan_axis_split(
+    primitive: FloorPlanRoomPrimitive,
+    operation: FloorPlanAxisSplitOperation,
+) -> tuple[FloorPlanRoomPrimitive, FloorPlanRoomPrimitive]:
+    """Split an axis-aligned rectangle into two room primitives.
+
+    Unlike rectangular cut, this operation preserves all floor area. It is the
+    safe "knife split" primitive Map Studio can use when a blockout room needs
+    to become separate KOTOR room MDL/MDX/WOK exports.
+    """
+
+    source = _normalise_points(primitive.points)
+    source_bounds = _rect_bounds(source)
+    if source_bounds is None:
+        raise ValueError("Floor-plan axis split currently requires an axis-aligned rectangular source footprint.")
+    axis = str(operation.axis or "").strip().lower()
+    if axis not in {"x", "y"}:
+        raise ValueError("Floor-plan axis split axis must be 'x' or 'y'.")
+    coordinate = float(operation.coordinate)
+    if not math.isfinite(coordinate):
+        raise ValueError("Floor-plan axis split coordinate must be finite.")
+    sx0, sy0, sx1, sy1 = source_bounds
+    if axis == "x":
+        if coordinate <= sx0 + 1.0e-7 or coordinate >= sx1 - 1.0e-7:
+            raise ValueError("Floor-plan X split coordinate must be inside the source footprint.")
+        spans = (
+            ("left", (sx0, sy0, coordinate, sy1)),
+            ("right", (coordinate, sy0, sx1, sy1)),
+        )
+    else:
+        if coordinate <= sy0 + 1.0e-7 or coordinate >= sy1 - 1.0e-7:
+            raise ValueError("Floor-plan Y split coordinate must be inside the source footprint.")
+        spans = (
+            ("bottom", (sx0, sy0, sx1, coordinate)),
+            ("top", (sx0, coordinate, sx1, sy1)),
+        )
+
+    prefix = _normalise_resref(operation.room_resref_prefix) or _normalise_resref(primitive.room_resref)
+    pieces: list[FloorPlanRoomPrimitive] = []
+    for piece_index, (role, (x0, y0, x1, y1)) in enumerate(spans, start=1):
+        metadata = {
+            **dict(primitive.metadata),
+            "operation": "axis_split",
+            "split_axis": axis,
+            "split_coordinate": coordinate,
+            "source_room_resref": primitive.room_resref,
+            "piece_role": role,
+            "piece_index": piece_index,
+            **dict(operation.metadata),
+        }
+        pieces.append(
+            FloorPlanRoomPrimitive(
+                room_resref=_piece_resref(prefix, role, piece_index),
+                points=_rectangle_points(x0, y0, x1, y1),
+                z=primitive.z,
+                wall_height=primitive.wall_height,
+                floor_surface_id=primitive.floor_surface_id,
+                material=primitive.material,
+                include_walls=primitive.include_walls,
+                openings=(),
+                metadata=metadata,
+            )
+        )
+    return pieces[0], pieces[1]
+
+
 def build_floor_plan_floor_mesh(primitive: FloorPlanRoomPrimitive) -> PrimitiveMesh:
     """Build a triangulated floor mesh from a convex floor-plan footprint."""
 
@@ -822,6 +898,7 @@ def compile_floor_plan_room_geometry(primitive: FloorPlanRoomPrimitive) -> Autho
 
 
 __all__ = [
+    "FloorPlanAxisSplitOperation",
     "FloorPlanBevelOperation",
     "FloorPlanEdgeExtrudeOperation",
     "FloorPlanInsetOperation",
@@ -830,6 +907,7 @@ __all__ = [
     "FloorPlanRoomPrimitive",
     "FloorPlanRoomValidation",
     "FloorPlanWallOpening",
+    "apply_floor_plan_axis_split",
     "apply_floor_plan_bevel",
     "apply_floor_plan_edge_extrude",
     "apply_floor_plan_inset",

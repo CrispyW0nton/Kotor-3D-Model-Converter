@@ -389,6 +389,8 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     for source in (builder_source, builder_mirror_source):
         assert 'roomOperationRequested = QtCore.Signal(str, float, int, float, float, float, float)' in source
         assert '"Extrude edge", "edge_extrude"' in source
+        assert '"Split room on X", "split_x"' in source
+        assert '"Split room on Y", "split_y"' in source
         assert "mapStudioRoomOperationEdgeIndexSpinBox" in source
         assert "floorPlanBridgeRequested = QtCore.Signal" in source
         assert "Bridge Floor-Plan Edges" in source
@@ -635,7 +637,9 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "self.controller.map_studio_tool_belt_preferences" in window_source
     assert "Map Studio custom tool belt saved in this KMAP." in window_source
     assert 'operation_combo.findData("edge_extrude")' in window_source
+    assert 'operation_combo.findData("split_x")' in window_source
     assert 'operation_combo.findData("rectangular_cut")' in window_source
+    assert 'operation in {"split_x", "split_y"}' in window_source
     assert "def _map_studio_belt_primitive_kind" in window_source
     assert "def _select_map_studio_modeling_tool" in window_source
     assert '"door_frame": "door_frame"' in window_source

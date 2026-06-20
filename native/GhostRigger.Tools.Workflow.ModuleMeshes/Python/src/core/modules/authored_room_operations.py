@@ -30,12 +30,14 @@ from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, au
 from .authored_module_objects import AuthoredGameplayPlacement
 from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, PrimitiveTransform
 from .authored_room_floorplan import (
+    FloorPlanAxisSplitOperation,
     FloorPlanBevelOperation,
     FloorPlanEdgeExtrudeOperation,
     FloorPlanInsetOperation,
     FloorPlanRectangularCutOperation,
     FloorPlanRectangularUnionOperation,
     FloorPlanRoomPrimitive,
+    apply_floor_plan_axis_split,
     apply_floor_plan_bevel,
     apply_floor_plan_edge_extrude,
     apply_floor_plan_inset,
@@ -1571,7 +1573,12 @@ def _offset_anchor(anchor: tuple[float, float, float], dx: float, dy: float) -> 
     return (anchor[0] + float(dx), anchor[1] + float(dy), anchor[2])
 
 
-def _placements_for_cut(project: AuthoredModuleProject, first_piece: FloorPlanRoomPrimitive) -> AuthoredGameplayPlacement:
+def _placements_for_floor_plan_piece(
+    project: AuthoredModuleProject,
+    first_piece: FloorPlanRoomPrimitive,
+    *,
+    operation: str,
+) -> AuthoredGameplayPlacement:
     anchor = _safe_anchor_for_piece(first_piece)
     return replace(
         project.placements,
@@ -1580,10 +1587,14 @@ def _placements_for_cut(project: AuthoredModuleProject, first_piece: FloorPlanRo
         waypoints=tuple(replace(item, position=anchor) for item in project.placements.waypoints),
         metadata={
             **dict(project.placements.metadata),
-            "last_room_operation": "rectangular_cut",
-            "placement_repaired_after_cut": True,
+            "last_room_operation": operation,
+            f"placement_repaired_after_{operation}": True,
         },
     )
+
+
+def _placements_for_cut(project: AuthoredModuleProject, first_piece: FloorPlanRoomPrimitive) -> AuthoredGameplayPlacement:
+    return _placements_for_floor_plan_piece(project, first_piece, operation="rectangular_cut")
 
 
 def _terrain_room_position(room: AuthoredRoomSpec) -> tuple[float, float, float]:
@@ -1677,6 +1688,57 @@ def apply_authored_floor_plan_rectangular_cut(
     visible = _all_room_names(rooms)
     rooms = tuple(replace(item, visible_rooms=visible) for item in rooms)
     return _replace_rooms(project, rooms, operation="rectangular_cut", placements=_placements_for_cut(project, pieces[0]))
+
+
+def apply_authored_floor_plan_axis_split(
+    project: AuthoredModuleProject,
+    *,
+    axis: str,
+    coordinate: float,
+    room_resref: str = "",
+    room_resref_prefix: str | None = None,
+) -> AuthoredModuleProject:
+    """Split a rectangular floor-plan room into two exportable KOTOR rooms."""
+
+    index = _target_room_index(project, room_resref)
+    room = project.rooms[index]
+    primitive = _floor_plan_for_room(room)
+    prefix = room_resref_prefix or f"{normalise_resref(room.room_resref)}_split"
+    pieces = apply_floor_plan_axis_split(
+        primitive,
+        FloorPlanAxisSplitOperation(
+            axis=axis,
+            coordinate=float(coordinate),
+            room_resref_prefix=prefix,
+            metadata={"source": "map_studio:project_operation"},
+        ),
+    )
+    piece_rooms = tuple(
+        replace(
+            room,
+            room_resref=piece.room_resref,
+            primitive=piece,
+            composition=None,
+            visible_rooms=(),
+            metadata={
+                **dict(room.metadata),
+                "last_operation": "axis_split",
+                "split_axis": piece.metadata.get("split_axis", ""),
+                "split_coordinate": piece.metadata.get("split_coordinate", 0.0),
+                "split_piece_role": piece.metadata.get("piece_role", ""),
+            },
+        )
+        for piece in pieces
+    )
+    rooms = tuple(project.rooms[:index] + piece_rooms + project.rooms[index + 1 :])
+    visible = _all_room_names(rooms)
+    rooms = tuple(replace(item, visible_rooms=visible) for item in rooms)
+    return _replace_rooms(
+        project,
+        rooms,
+        operation="axis_split",
+        placements=_placements_for_floor_plan_piece(project, pieces[0], operation="axis_split"),
+    )
 
 
 def apply_authored_floor_plan_rectangular_union(
@@ -2227,6 +2289,22 @@ def apply_authored_floor_plan_operation(project: AuthoredModuleProject, operatio
             room_resref=str(kwargs.get("room_resref", "")),
             room_resref_prefix=kwargs.get("room_resref_prefix"),
         )
+    if op in {"axis_split", "split", "knife_split", "split_x", "split_y"}:
+        axis = str(kwargs.get("axis", "") or "").strip().lower()
+        if op == "split_x":
+            axis = "x"
+        elif op == "split_y":
+            axis = "y"
+        if not axis:
+            axis = "x"
+        coordinate = kwargs.get("coordinate", kwargs.get("split_coordinate", 0.0))
+        return apply_authored_floor_plan_axis_split(
+            project,
+            axis=axis,
+            coordinate=float(coordinate),
+            room_resref=str(kwargs.get("room_resref", "")),
+            room_resref_prefix=kwargs.get("room_resref_prefix"),
+        )
     raise ValueError(f"Unsupported authored floor-plan operation: {operation}.")
 
 
@@ -2322,6 +2400,7 @@ __all__ = [
     "AuthoredTerrainRoomChoice",
     "add_authored_room_composition_primitive",
     "apply_authored_terrain_operation",
+    "apply_authored_floor_plan_axis_split",
     "apply_authored_floor_plan_rectangular_union",
     "apply_authored_floor_plan_bevel",
     "apply_authored_floor_plan_edge_extrude",

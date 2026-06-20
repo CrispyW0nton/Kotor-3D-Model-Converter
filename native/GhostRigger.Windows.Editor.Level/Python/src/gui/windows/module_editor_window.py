@@ -1130,6 +1130,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             if key == "cut":
                 operation_combo = getattr(self.builder_tab, "roomOperationComboBox", None)
                 if operation_combo is not None:
+                    index = operation_combo.findData("split_x")
+                    if index >= 0:
+                        operation_combo.setCurrentIndex(index)
+                    operation_combo.setFocus()
+            if key == "boolean":
+                operation_combo = getattr(self.builder_tab, "roomOperationComboBox", None)
+                if operation_combo is not None:
                     index = operation_combo.findData("rectangular_cut")
                     if index >= 0:
                         operation_combo.setCurrentIndex(index)
@@ -1622,6 +1629,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     operation=operation,
                     center=(cut_center_x, cut_center_y),
                     size=(cut_width, cut_depth),
+                )
+            elif operation in {"split_x", "split_y"}:
+                result = self.controller.apply_authored_room_operation(
+                    operation=operation,
+                    axis="x" if operation == "split_x" else "y",
+                    coordinate=cut_center_x if operation == "split_x" else cut_center_y,
                 )
             elif operation == "edge_extrude":
                 result = self.controller.apply_authored_room_operation(
