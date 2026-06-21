@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Routes Cut Belt Action Through Axis Split Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Floor-plan cutting
+Intersects: native payload mirror sync for Scene/Tools Map Studio cut routing and Level Editor floor-plan operation context.
+
+- Routed the `Cut` tool-belt action through `apply_authored_room_operation(operation="axis_split")` so it performs an authored KMAP floor-plan split instead of only focusing the shape-operation controls.
+- Reused the existing operation axis/cut-coordinate UI context so `Cut`, `Cut/Slice`, and `Insert Edge Loop` share the same headless floor-plan split command path.
+- Updated the tool-belt audit and dispatcher tests so `Cut` proves KMAP mutation, command-history participation, and undoable room-boundary changes.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_contract_audit.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_contract_audit.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_cut_belt`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_cut_ui`.
+
 ### [2026-06-21] Map Studio Routes Wall Opening Belt Action Through KMAP Command
 
 Owner: LordVaderCW

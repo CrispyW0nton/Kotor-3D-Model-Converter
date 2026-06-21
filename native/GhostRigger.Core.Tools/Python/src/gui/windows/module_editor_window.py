@@ -1396,7 +1396,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             axis = "y"
         elif key == "mirror_x":
             axis = "x"
-        elif key in {"cut_slice_insert_edges", "insert_edge_loop"} and operation_combo is not None:
+        elif key in {"cut", "cut_slice_insert_edges", "insert_edge_loop"} and operation_combo is not None:
             axis = "y" if str(operation_combo.currentData() or "") == "split_y" else "x"
         elif key in {"mirror", "flatten", "transform_snap_level"}:
             axis_combo = mirror_axis if key == "mirror" else flatten_axis
@@ -1902,6 +1902,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "boolean",
             "boolean_a_minus_b",
             "boolean_b_minus_a",
+            "cut",
             "cut_slice_insert_edges",
             "insert_edge_loop",
             "fill",

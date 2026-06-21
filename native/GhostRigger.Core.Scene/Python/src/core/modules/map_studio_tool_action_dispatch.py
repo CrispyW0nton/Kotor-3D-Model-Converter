@@ -726,7 +726,7 @@ def resolve_map_studio_tool_belt_action(
             ),
         )
 
-    if key in {"boolean", "cut_slice_insert_edges", "insert_edge_loop"}:
+    if key in {"boolean", "cut", "cut_slice_insert_edges", "insert_edge_loop"}:
         operation = "rectangular_cut" if key == "boolean" else "axis_split"
         kwargs: dict[str, Any] = {"operation": operation, "room_resref": ctx.room_resref}
         if operation == "rectangular_cut":

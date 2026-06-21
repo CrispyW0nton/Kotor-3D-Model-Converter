@@ -42,8 +42,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert audit.blocking_messages == ()
     assert audit.total_actions >= 80
     assert audit.implemented_actions == audit.total_actions
-    assert audit.command_backed_actions >= 67
-    assert audit.mutating_command_actions >= 66
+    assert audit.command_backed_actions >= 68
+    assert audit.mutating_command_actions >= 67
     assert audit.query_command_actions >= 1
     assert audit.workflow_focus_actions <= 10
     assert statuses["cube"].contract_kind == "command_mutates_kmap"
@@ -57,6 +57,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["entry_point"].command_method == "set_authored_module_entry_point"
     assert statuses["opening"].contract_kind == "command_mutates_kmap"
     assert statuses["opening"].command_method == "apply_authored_room_operation"
+    assert statuses["cut"].contract_kind == "command_mutates_kmap"
+    assert statuses["cut"].command_method == "apply_authored_room_operation"
     assert statuses["opening_marker"].contract_kind == "command_mutates_kmap"
     assert statuses["opening_marker"].command_method == "apply_authored_room_operation"
     assert statuses["sculpt_raise"].contract_kind == "command_mutates_kmap"
@@ -344,6 +346,21 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert boolean_b_minus_a.enabled is True
     assert boolean_b_minus_a.command_kwargs["first_room_resref"] == "room_b"
     assert boolean_b_minus_a.command_kwargs["second_room_resref"] == "room_a"
+
+    cut = resolve_map_studio_tool_belt_action(
+        "cut",
+        MapStudioToolActionContext(room_resref="room_a", axis="x", cut_center=(1.25, 2.5)),
+    )
+
+    assert cut.enabled is True
+    assert cut.command_method == "apply_authored_room_operation"
+    assert cut.command_kwargs == {
+        "operation": "axis_split",
+        "room_resref": "room_a",
+        "axis": "x",
+        "coordinate": 1.25,
+    }
+    assert cut.mutates_kmap is True
 
     slice_y = resolve_map_studio_tool_belt_action(
         "cut_slice_insert_edges",
@@ -740,7 +757,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
 
     execute_map_studio_tool_belt_action(
         controller,
-        "insert_edge_loop",
+        "cut",
         MapStudioToolActionContext(
             room_resref=room_before_split.room_resref,
             axis="x",
@@ -1099,6 +1116,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert "set_universal_transform_overlay" in window_source
     assert '"duplicate_special",' in window_source
     assert '"shrink_wrap",' in window_source
+    assert '"cut",' in window_source
     assert '"opening_marker",' in window_source
     assert '"mirror_z",' in window_source
     assert '"bend_tool",' in window_source
