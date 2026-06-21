@@ -680,6 +680,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.map_studio_tool_belt_preset_combo.currentIndexChanged.connect(self._handle_map_studio_tool_belt_preset_changed)
         self.map_studio_customize_tool_belt_button.clicked.connect(self._customize_map_studio_tool_belt)
         self.map_studio_custom_tool_add_button.clicked.connect(self._add_selected_map_studio_custom_tool)
+        self.map_studio_universal_transform_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+T"), self)
+        self.map_studio_universal_transform_shortcut.setObjectName("mapStudioUniversalTransformShortcut")
+        self.map_studio_universal_transform_shortcut.activated.connect(self._activate_map_studio_universal_transform_shortcut)
         self.toolbar.actionRequested.connect(self._toolbar_action)
         self.toolbar.viewModeChanged.connect(self.viewport_panel.set_view_mode)
         self.toolbar.selectionModeChanged.connect(self._handle_map_studio_edit_mode_changed)
@@ -1343,6 +1346,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         key = str(action_key or "").strip()
         tool_by_action = {
             "vertex_snap": "snap_vertices",
+            "transform_snap_level": "transform_snap_level",
             "weld": "weld_vertices",
             "flatten": "flatten_vertices",
             "mirror": "mirror_footprint",
@@ -1350,6 +1354,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         }
         snap_by_action = {
             "vertex_snap": "vertex",
+            "transform_snap_level": "level",
             "weld": "vertex",
             "flatten": "grid",
             "mirror": "grid",
@@ -1366,6 +1371,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 "and repair room/WOK references before export."
             ),
             "flatten": "Flatten vertices: align selected points on a local X/Y line for clean walls, seams, and doorways.",
+            "transform_snap_level": (
+                "Transform level snap: hold J with transform active to align selected vertices or edges "
+                "onto one shared X/Y/Z level before validating room seams and WOK output."
+            ),
             "mirror": "Mirror vertices: mirror authored footprint points while preserving a valid convex KOTOR room boundary.",
             "cleanup": "Cleanup vertices: remove duplicate or collinear floor-plan points before MDL/WOK generation.",
         }
@@ -1376,6 +1385,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             ),
             "weld": "Map Studio Weld focused. Welding merges topology and can change WOK/room face references.",
             "flatten": "Map Studio Flatten focused. Align selected points before validating room seams and WOK output.",
+            "transform_snap_level": "Map Studio Transform Level Snap focused. Hold J during transform to align selected vertices/edges to one level.",
             "mirror": "Map Studio Mirror focused. Mirrored footprints still need convexity and WOK validation.",
             "cleanup": "Map Studio Cleanup focused. Cleanup removes duplicate/collinear points before export.",
         }
@@ -1390,6 +1400,27 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         preview = getattr(self.builder_tab, "request_floor_plan_vertex_snap_preview", None)
         if callable(preview):
             preview()
+
+    def _activate_map_studio_universal_transform_shortcut(self) -> None:
+        """Route Ctrl+T through the Map Studio tool-belt action catalog."""
+
+        for action in self.controller.available_map_studio_tool_belt_actions():
+            if str(getattr(action, "key", "") or "") == "universal_transform":
+                self._handle_map_studio_tool_belt_action(action)
+                return
+        self._focus_map_studio_universal_transform()
+
+    def _focus_map_studio_universal_transform(self) -> None:
+        """Focus the selected-component Universal Manipulator workflow."""
+
+        self.show_map_studio_geometry_tools()
+        self._select_map_studio_component_mode("object")
+        self._select_map_studio_modeling_tool("universal_transform")
+        self.workflow_panel.set_active_authoring_context(
+            "Universal Manipulator: Ctrl+T displays selected component bounds, gizmo handles, and exact width/depth/height for modular-kit scaling."
+        )
+        self.statusBar().showMessage("Map Studio Universal Manipulator active. Select a mesh/component to inspect width, depth, and height.", 5000)
+        self._log("Map Studio Universal Manipulator focused. Use selected bounds for exact modular-kit dimensions.")
 
     def _select_map_studio_gameplay_kind(self, placement_kind: str) -> None:
         """Focus the Builder placement controls for one KOTOR resource kind."""
@@ -1575,6 +1606,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if key in {
             "create_room",
             "primitive",
+            "universal_transform",
             "extrude",
             "bridge",
             "cut",
@@ -1584,6 +1616,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "fill",
             "fill_hole",
             "vertex_snap",
+            "transform_snap_level",
             "weld",
             "merge_components",
             "flatten",
@@ -1612,6 +1645,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self.show_map_studio_geometry_tools()
             if tool_key:
                 self._select_map_studio_modeling_tool(tool_key)
+            if key == "universal_transform":
+                self._focus_map_studio_universal_transform()
+                return
             if key == "extrude":
                 operation_combo = getattr(self.builder_tab, "roomOperationComboBox", None)
                 if operation_combo is not None:
@@ -1666,7 +1702,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 )
                 if tool is not None:
                     tool.setFocus()
-            if key in {"vertex_snap", "weld", "merge_components", "flatten", "mirror", "mirror_x", "mirror_y", "mirror_z", "cleanup"}:
+            if key in {"vertex_snap", "transform_snap_level", "weld", "merge_components", "flatten", "mirror", "mirror_x", "mirror_y", "mirror_z", "cleanup"}:
                 self._focus_map_studio_vertex_workflow({
                     "merge_components": "weld",
                     "mirror_x": "mirror",

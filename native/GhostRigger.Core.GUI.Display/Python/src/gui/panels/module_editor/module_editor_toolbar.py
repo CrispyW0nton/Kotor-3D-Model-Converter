@@ -39,10 +39,12 @@ class ModuleEditorToolbar(QtWidgets.QWidget):
         ("ramp", "Ramp", "Add a sloped ramp primitive with walkmesh intent."),
         ("stairs", "Stairs", "Add a stair primitive with a ramp-style WOK proxy."),
         ("arch", "Arch", "Add an arch primitive for visual portal silhouettes."),
+        ("universal_transform", "Ctrl+T", "Activate the Universal Manipulator with selected width, depth, and height dimensions."),
         ("extrude", "Extrude", "Focus edge/face extrusion for room and corridor growth."),
         ("bevel", "Bevel", "Focus bevel/inset tools for blockout cleanup."),
         ("bridge", "Bridge", "Focus edge bridge tools for corridors and room joins."),
         ("vertex_snap", "Snap Vtx", "Focus vertex snapping. Hold V previews snap targets."),
+        ("transform_snap_level", "Level Snap", "Focus transform snapping. Hold J aligns selected vertices or edges to one level."),
         ("weld", "Weld", "Focus topology welding for floor-plan vertices."),
         ("terrain_patch", "Terrain", "Create or focus a terrain patch for sculpting."),
     )

@@ -1025,6 +1025,10 @@ def test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes() -> None:
         assert "snap, weld, flatten, mirror, and cleanup" in source
         assert "stage, install, hand off, warp-test, and record game proof" in source
         assert "MAP_STUDIO_TOOL_BELT_ACTIONS" in source
+        assert "universal_transform" in source
+        assert "transform_snap_level" in source
+        assert "Ctrl+T" in source
+        assert "Hold J" in source
         assert "mapStudioMainToolbarModelingLabel" in source
         assert "mapStudioMainToolBeltButton_" in source
         assert "self.actionRequested.emit(f\"tool_belt:{name}\")" in source
@@ -1036,6 +1040,11 @@ def test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes() -> None:
     assert "mapStudioCustomToolComboBox" in window_source
     assert "mapStudioCustomToolAddButton" in window_source
     assert "mapStudioCustomToolBeltWidget" in window_source
+    assert "mapStudioUniversalTransformShortcut" in window_source
+    assert 'QtGui.QKeySequence("Ctrl+T")' in window_source
+    assert "def _activate_map_studio_universal_transform_shortcut" in window_source
+    assert "def _focus_map_studio_universal_transform" in window_source
+    assert "Universal Manipulator: Ctrl+T displays selected component bounds" in window_source
     assert "def _refresh_map_studio_tool_index" in window_source
     assert "def _add_selected_map_studio_custom_tool" in window_source
     assert "str(action or \"\").startswith(\"tool_belt:\")" in window_source
@@ -1091,6 +1100,10 @@ def test_t2605_map_studio_edit_mode_context_is_headless_policy() -> None:
 
     for source in (model_tools_source, model_tools_mirror_source):
         assert "class MapStudioEditModeContext" in source
+        assert "Universal Manipulator" in source
+        assert "Transform Snap Level" in source
+        assert '"level", "Transform Level"' in source
+        assert "Hold J" in source
         assert "_EDIT_MODE_CONTEXTS" in source
         assert "available_map_studio_edit_mode_contexts" in source
         assert "def map_studio_edit_mode_context" in source

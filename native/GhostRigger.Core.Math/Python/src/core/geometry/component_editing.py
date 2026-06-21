@@ -55,6 +55,30 @@ class ComponentEditAudit:
     metadata: dict[str, object] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class ComponentBounds:
+    """Axis-aligned bounds for a selected Map Studio component set."""
+
+    min_corner: Vector3
+    max_corner: Vector3
+    center: Vector3
+    dimensions: Vector3
+
+
+@dataclass(frozen=True)
+class ComponentTransformControl:
+    """Headless data behind Map Studio's Universal Manipulator overlay."""
+
+    selected_indices: tuple[int, ...]
+    bounds: ComponentBounds
+    pivot: Vector3
+    width: float
+    depth: float
+    height: float
+    dimension_labels: dict[str, str] = field(default_factory=dict)
+    metadata: dict[str, object] = field(default_factory=dict)
+
+
 def _finite_vertex(value: Sequence[float]) -> Vector3:
     if len(value) < 3:
         raise ValueError("Vertex must contain at least three coordinates.")
@@ -96,6 +120,82 @@ def _validate_indices(vertex_count: int, indices: Iterable[int]) -> tuple[int, .
 def _replace_vertices(mesh: ComponentMesh, replacements: dict[int, Vector3]) -> ComponentMesh:
     vertices = tuple(replacements.get(index, vertex) for index, vertex in enumerate(mesh.vertices))
     return ComponentMesh(vertices=vertices, faces=mesh.faces, metadata=dict(mesh.metadata))
+
+
+def component_bounds(mesh: ComponentMesh, indices: Iterable[int] = ()) -> ComponentBounds:
+    """Return selected component bounds using Map Studio's X/Y/Z axes.
+
+    Width is the X span, depth is the Y span, and height is the Z span. The
+    helper is intentionally viewport-free so the same numbers can drive the
+    Universal Manipulator overlay, exact dimension labels, and export/readiness
+    checks.
+    """
+
+    selected = tuple(dict.fromkeys(_validate_indices(len(mesh.vertices), indices or range(len(mesh.vertices)))))
+    if not selected:
+        raise ValueError("Component bounds require at least one vertex.")
+    vertices = tuple(mesh.vertices[index] for index in selected)
+    min_corner = (
+        min(vertex[0] for vertex in vertices),
+        min(vertex[1] for vertex in vertices),
+        min(vertex[2] for vertex in vertices),
+    )
+    max_corner = (
+        max(vertex[0] for vertex in vertices),
+        max(vertex[1] for vertex in vertices),
+        max(vertex[2] for vertex in vertices),
+    )
+    dimensions = (
+        max_corner[0] - min_corner[0],
+        max_corner[1] - min_corner[1],
+        max_corner[2] - min_corner[2],
+    )
+    center = (
+        min_corner[0] + (dimensions[0] * 0.5),
+        min_corner[1] + (dimensions[1] * 0.5),
+        min_corner[2] + (dimensions[2] * 0.5),
+    )
+    return ComponentBounds(
+        min_corner=min_corner,
+        max_corner=max_corner,
+        center=center,
+        dimensions=dimensions,
+    )
+
+
+def component_universal_transform_control(
+    mesh: ComponentMesh,
+    indices: Iterable[int] = (),
+    *,
+    unit_label: str = "m",
+    precision: int = 3,
+) -> ComponentTransformControl:
+    """Build Universal Manipulator data for the selected component set."""
+
+    selected = tuple(dict.fromkeys(_validate_indices(len(mesh.vertices), indices or range(len(mesh.vertices)))))
+    bounds = component_bounds(mesh, selected)
+    width, depth, height = bounds.dimensions
+    safe_precision = max(0, int(precision))
+    labels = {
+        "width": f"{width:.{safe_precision}f} {unit_label}".strip(),
+        "depth": f"{depth:.{safe_precision}f} {unit_label}".strip(),
+        "height": f"{height:.{safe_precision}f} {unit_label}".strip(),
+    }
+    return ComponentTransformControl(
+        selected_indices=selected,
+        bounds=bounds,
+        pivot=bounds.center,
+        width=width,
+        depth=depth,
+        height=height,
+        dimension_labels=labels,
+        metadata={
+            "operation": "component_universal_transform_control",
+            "selected_vertex_count": len(selected),
+            "unit_label": unit_label,
+            "precision": safe_precision,
+        },
+    )
 
 
 def _sub(a: Vector3, b: Vector3) -> Vector3:
@@ -401,6 +501,35 @@ def snap_vertex_to_vertex(mesh: ComponentMesh, source_index: int, target_index: 
     )
 
 
+def snap_vertices_to_vertex(
+    mesh: ComponentMesh,
+    source_indices: Iterable[int],
+    target_index: int,
+) -> ComponentEditResult:
+    """Move one or more vertices exactly onto a target vertex.
+
+    This is the bulk form used by Map Studio when a modder holds V and drags a
+    selected component set toward another vertex. It preserves topology and
+    therefore remains distinct from welding.
+    """
+
+    selected = tuple(dict.fromkeys(_validate_indices(len(mesh.vertices), source_indices)))
+    target = _validate_indices(len(mesh.vertices), (target_index,))[0]
+    moving = tuple(index for index in selected if index != target)
+    if not moving:
+        return ComponentEditResult(mesh=mesh, warnings=("No source vertices to snap.",))
+    replacements = {index: mesh.vertices[target] for index in moving}
+    return ComponentEditResult(
+        mesh=_replace_vertices(mesh, replacements),
+        changed_vertex_count=len(replacements),
+        metadata={
+            "operation": "snap_vertices_to_vertex",
+            "source_indices": moving,
+            "target_index": target,
+        },
+    )
+
+
 def _metadata_int(metadata: dict[str, object], key: str) -> int:
     try:
         return int(metadata.get(key) or 0)
@@ -586,6 +715,65 @@ def flatten_vertices(
     )
 
 
+def transform_snap_vertices_to_level(
+    mesh: ComponentMesh,
+    indices: Iterable[int],
+    *,
+    axis: str = "z",
+    target_value: float | None = None,
+    target_index: int | None = None,
+    level_policy: str = "average",
+) -> ComponentEditResult:
+    """Align selected vertices or expanded edge vertices onto one axis level.
+
+    This is the headless behavior for Map Studio's hold-J transform snap. When
+    the UI provides a target vertex, selected components snap to that vertex's
+    coordinate on the chosen axis. Otherwise the policy chooses average, min, or
+    max from the current selection.
+    """
+
+    selected = _validate_indices(len(mesh.vertices), indices)
+    if not selected:
+        return ComponentEditResult(mesh=mesh, warnings=("No vertices selected for transform snap.",))
+    axis_key = axis.lower()
+    axis_index = {"x": 0, "y": 1, "z": 2}.get(axis_key)
+    if axis_index is None:
+        raise ValueError("axis must be one of 'x', 'y', or 'z'.")
+    policy = str(level_policy or "average").strip().lower()
+    if target_index is not None:
+        target = _validate_indices(len(mesh.vertices), (target_index,))[0]
+        snap_value = mesh.vertices[target][axis_index]
+        policy = "target"
+    elif target_value is not None:
+        snap_value = float(target_value)
+        policy = "explicit"
+    elif policy == "min":
+        snap_value = min(mesh.vertices[index][axis_index] for index in selected)
+    elif policy == "max":
+        snap_value = max(mesh.vertices[index][axis_index] for index in selected)
+    elif policy == "average":
+        snap_value = sum(mesh.vertices[index][axis_index] for index in selected) / len(selected)
+    else:
+        raise ValueError("level_policy must be 'average', 'min', 'max', or use target_value/target_index.")
+
+    replacements: dict[int, Vector3] = {}
+    for index in selected:
+        coords = list(mesh.vertices[index])
+        coords[axis_index] = float(snap_value)
+        replacements[index] = (float(coords[0]), float(coords[1]), float(coords[2]))
+    return ComponentEditResult(
+        mesh=_replace_vertices(mesh, replacements),
+        changed_vertex_count=len(replacements),
+        metadata={
+            "operation": "transform_snap_vertices_to_level",
+            "axis": axis_key,
+            "value": float(snap_value),
+            "level_policy": policy,
+            "target_index": target_index,
+        },
+    )
+
+
 def mirror_vertices(
     mesh: ComponentMesh,
     indices: Iterable[int] = (),
@@ -761,21 +949,27 @@ def weld_vertices(
 __all__ = [
     "ComponentEditAudit",
     "ComponentEditResult",
+    "ComponentBounds",
     "ComponentMesh",
+    "ComponentTransformControl",
     "Face",
     "Vector3",
     "audit_component_edit_result",
     "bridge_edges",
     "cleanup_degenerate_faces",
     "cleanup_face_normals",
+    "component_bounds",
     "component_mesh",
+    "component_universal_transform_control",
     "extrude_face",
     "fill_face",
     "flatten_vertices",
     "mirror_vertices",
     "split_face_with_edge",
     "snap_vertex_to_vertex",
+    "snap_vertices_to_vertex",
     "snap_vertices_to_grid",
+    "transform_snap_vertices_to_level",
     "triangulate_faces",
     "weld_vertices",
 ]

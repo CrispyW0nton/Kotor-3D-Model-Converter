@@ -44,7 +44,11 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.grid_box.setChecked(True)
         self.snap_box = QtWidgets.QCheckBox("Snap")
         self.snap_box.setObjectName("mapStudioViewportSnapCheckBox")
-        self.snap_box.setToolTip("Snap authored room and gameplay marker drags to the viewport grid. Hold V while dragging a room outline point to snap it to another vertex.")
+        self.snap_box.setToolTip(
+            "Snap authored room and gameplay marker drags to the viewport grid. "
+            "Hold V while dragging a room outline point to snap it to another vertex. "
+            "Hold J with transform active to align selected vertices or edges to one level."
+        )
         self.terrain_brush_box = QtWidgets.QCheckBox("Terrain Brush")
         self.terrain_brush_box.setObjectName("mapStudioViewportTerrainBrushCheckBox")
         self.terrain_brush_box.setToolTip("Paint the selected terrain heightfield brush directly in the viewport.")
@@ -92,6 +96,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._room_outline_point_drag: dict[str, object] | None = None
         self._room_outline_vertex_snap_candidates: dict[tuple[str, int], tuple[object, ...]] = {}
         self._vertex_snap_modifier_active = False
+        self._transform_snap_modifier_active = False
         self._room_primitive_drag: dict[str, object] | None = None
         self._terrain_brush_drag: dict[str, object] | None = None
         self._terrain_brush_context: dict[str, object] = {
@@ -228,6 +233,15 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                             self._request_room_outline_snap_preview_for_drag()
                         else:
                             self._clear_room_outline_snap_highlight()
+                    return False
+                if key == QtCore.Qt.Key_J:
+                    self._transform_snap_modifier_active = event_type == QtCore.QEvent.KeyPress
+                    if self._transform_snap_modifier_active:
+                        self.marker_summary_label.setText(
+                            "Transform Level Snap active: selected vertices/edges will align to one level when the transform is committed."
+                        )
+                    else:
+                        self._restore_marker_summary_after_transform_snap()
                     return False
             if event_type == QtCore.QEvent.MouseButtonPress:
                 if getattr(event, "button", lambda: None)() == QtCore.Qt.LeftButton:
@@ -860,6 +874,15 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             clearer()
         elif callable(setter):
             setter(None)
+
+    def transform_snap_modifier_active(self) -> bool:
+        """Return whether Map Studio's hold-J transform snap modifier is active."""
+
+        return bool(self._transform_snap_modifier_active)
+
+    def _restore_marker_summary_after_transform_snap(self) -> None:
+        count = len(self._placement_markers)
+        self.marker_summary_label.setText(f"Gameplay markers: {count}" if count else "Gameplay markers: none")
 
     def _select_room_outline_edge(
         self,

@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Adds Universal Transform And Snap Controls
+
+Owner: LordVaderCW
+Task: T2605
+Subsystem: Map Studio / Component editing / Level Editor tool belt
+
+- Added headless component bounds and Universal Manipulator data so Map Studio can show selected width, depth, height, pivot, and bounds from a single geometry source of truth.
+- Added bulk vertex-to-vertex snapping for Maya-style hold-V workflows and transform-level snapping for hold-J alignment of selected vertices or expanded edge vertices.
+- Added Universal Manipulator and Transform Snap Level to the Map Studio modeling catalog, Default/Component tool-belt presets, top toolbar, Builder guidance, and Level Editor Ctrl+T shortcut routing.
+- Verification: `python -m py_compile native/GhostRigger.Core.Math/Python/src/core/geometry/component_editing.py native/GhostRigger.Core.Math/Python/src/core/geometry/__init__.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/module_editor_toolbar.py native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/module_editor_toolbar.py native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py`; `python -m pytest tests/test_component_editing.py tests/test_map_studio_workflow_panel.py::test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes tests/test_map_studio_workflow_panel.py::test_t2605_map_studio_edit_mode_context_is_headless_policy -q --basetemp .pytest_tmp_map_studio_transform_controls`; `git diff --check`.
+
 ### [2026-06-21] Merge LordVader Fork Updates Into Map Studio Branch
 
 Owner: LordVaderCW

@@ -43,6 +43,65 @@ def test_t2601_component_edit_audit_marks_snap_as_geometry_change_not_topology()
     assert "Review WOK surface intent before exporting the module." in audit.validation_messages
 
 
+def test_t2605_universal_transform_reports_selected_component_dimensions() -> None:
+    _install_native_geometry_path()
+
+    from src.core.geometry import component_mesh, component_universal_transform_control
+
+    mesh = component_mesh(
+        vertices=[(-2.0, -1.0, 0.0), (4.0, 3.5, 2.25), (0.5, 10.0, 9.0)],
+        metadata={"room": "kit_panel"},
+    )
+
+    control = component_universal_transform_control(mesh, (0, 1), unit_label="m", precision=2)
+
+    assert control.selected_indices == (0, 1)
+    assert control.bounds.min_corner == (-2.0, -1.0, 0.0)
+    assert control.bounds.max_corner == (4.0, 3.5, 2.25)
+    assert control.pivot == (1.0, 1.25, 1.125)
+    assert control.width == 6.0
+    assert control.depth == 4.5
+    assert control.height == 2.25
+    assert control.dimension_labels == {"width": "6.00 m", "depth": "4.50 m", "height": "2.25 m"}
+
+
+def test_t2605_vertex_snap_bulk_preserves_topology_until_weld() -> None:
+    _install_native_geometry_path()
+
+    from src.core.geometry import component_mesh, snap_vertices_to_vertex
+
+    mesh = component_mesh(
+        vertices=[(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (4.0, 1.0, 0.0), (0.0, 1.0, 0.0)],
+        faces=[(0, 1, 2, 3)],
+    )
+
+    result = snap_vertices_to_vertex(mesh, (0, 3), 2)
+
+    assert result.changed_vertex_count == 2
+    assert result.mesh.vertices[0] == (4.0, 1.0, 0.0)
+    assert result.mesh.vertices[3] == (4.0, 1.0, 0.0)
+    assert result.mesh.vertices[2] == (4.0, 1.0, 0.0)
+    assert result.mesh.faces == ((0, 1, 2, 3),)
+    assert result.metadata["operation"] == "snap_vertices_to_vertex"
+
+
+def test_t2605_transform_snap_level_aligns_vertices_to_target_axis() -> None:
+    _install_native_geometry_path()
+
+    from src.core.geometry import component_mesh, transform_snap_vertices_to_level
+
+    mesh = component_mesh(vertices=[(0.0, 0.0, 0.0), (2.0, 1.5, 4.0), (4.0, 3.0, 8.0)])
+
+    result = transform_snap_vertices_to_level(mesh, (0, 1), axis="z", target_index=2)
+
+    assert result.changed_vertex_count == 2
+    assert result.mesh.vertices[0] == (0.0, 0.0, 8.0)
+    assert result.mesh.vertices[1] == (2.0, 1.5, 8.0)
+    assert result.mesh.vertices[2] == (4.0, 3.0, 8.0)
+    assert result.metadata["axis"] == "z"
+    assert result.metadata["level_policy"] == "target"
+
+
 def test_t2601_component_edit_audit_marks_weld_as_topology_change() -> None:
     _install_native_geometry_path()
 
