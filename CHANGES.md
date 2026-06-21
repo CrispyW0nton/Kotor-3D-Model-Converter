@@ -10,6 +10,66 @@ For each completed change, add a dated entry with:
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
 ## 2026-06-21
+### [2026-06-21] Merge Workflow Payload Ownership Out Of Tools
+
+Owner: LordVaderCW
+Subsystem: Native embedded Python payloads / Workflow ownership
+
+- Removed duplicated `core/animation`, `core/characters`, and `core/retargeting` Python payload copies from `GhostRigger.Core.Tools`; `GhostRigger.Core.Workflow` remains the single embedded owner for those reusable workflow packages.
+- Regenerated the `GhostRigger.Core.Tools` payload manifest/resources and reduced the root payload manifest from 1,249 to 1,145 packaged Python references.
+- Updated native payload contracts and current-shape documentation so Tools cannot repackage Workflow-owned payloads again.
+- Left Map Studio/module-editor payload paths untouched.
+
+Verification:
+- `python scripts/native_python_payload_generator.py GhostRigger.Core.Tools`
+- `python -m pytest tests/test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests/test_native_python_payloads.py::test_reusable_workflow_payloads_are_owned_by_workflow_not_tools tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested tests/test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects -q`
+- `python -m pytest tests/test_native_skeleton_snapshot.py tests/test_character_builder_template_rig.py -q`
+- `python -m py_compile native/GhostRigger.Core.Workflow/Python/src/core/characters/native_skeleton.py native/GhostRigger.Core.Workflow/Python/src/core/characters/character_builder.py native/GhostRigger.Core.Workflow/Python/src/core/animation/animation_engine.py tests/test_native_python_payloads.py`
+- Tools `.vcxproj` and `.vcxproj.filters` XML parse check passed.
+- Direct import check confirmed `src.core.characters.native_skeleton` and `src.core.animation.animation_engine` now resolve from `native/GhostRigger.Core.Workflow/Python`.
+- Visible Debug-app UI workflow testing was not required because this change only alters backend/native payload ownership and avoids UI/Map Studio behavior.
+
+### [2026-06-21] Smooth Startup Handoff Library Hydration
+
+Owner: LordVaderCW
+Subsystem: GUI Display startup / Content Browser / embedded Python payloads
+
+- Deferred preloaded library binding until after the main window has painted, so splash-to-workspace handoff no longer does Content Browser population inside the constructor.
+- Added chunked Content Browser descriptor creation and item insertion for large startup library payloads, keeping the Qt event loop moving while model rows become visible.
+- Preserved pending background prelaunch results so library data that finishes after first paint still applies once ready.
+- Regenerated the `GhostRigger.Core.GUI.Display` embedded Python payload manifest.
+
+Verification:
+- `python -m py_compile native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/qt_main_window.py native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/startup_library.py native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/qt_content_browser_panel.py`
+- `python -m pytest tests/test_core_contracts.py::test_main_window_defers_post_show_startup_tasks_until_after_first_paint tests/test_content_browser_panel.py::test_preloaded_library_skips_post_show_auto_detect_timer`
+- `python scripts/native_python_payload_generator.py GhostRigger.Core.GUI.Display`
+- `MSBuild GhostRigger.sln /t:GhostRigger_Core_GUI_Display /p:Configuration=Debug /p:Platform=x64 /m /v:minimal`
+- Visible Debug startup smoke launched `build/vs/x64/Debug/GhostRigger.exe`; log reached renderer initialization, layout apply, and IPC startup with no fatal startup errors before the timed close.
+- Full `tests/test_content_browser_panel.py` was not used as acceptance because it currently includes unrelated import/temp-permission and existing asset metadata failures outside this startup handoff change.
+
+### [2026-06-21] Harden Native Character DAG Snapshot And Binding Tests
+
+Owner: LordVaderCW
+Task: T2501, T2504, T3502, T3302
+Subsystem: Character Studio native KOTOR DAG / skin binding / embedded Python payloads
+
+- Updated native Character Builder snapshot capture so `Rhand_g` and `Lhand_g` are classified as right/left hand sockets, matching KOTOR body fixture usage and Bendak workflow evidence.
+- Added focused native skeleton snapshot tests for exact node paths, flags, local transforms, hook categories, mesh/skin counts, texture metadata, source provenance, JSON roundtrip, and stable DAG fingerprints.
+- Added a backend native structural diff report for Character Builder rig binding that records preserved, missing, and added DAG paths, missing socket hooks, changed local transforms, and imported payload skin row counts.
+- Tightened Character export preflight so required socket categories report missing exact native socket nodes even when another node in the same category is still present.
+- Synced the Tools package Character Builder backend with the newer Workflow/Scene behavior for imported source skin remap metadata, native hand/finger refinement evidence, animation-base bind preview support, export/validation evidence, and headless workflow parity.
+- Updated pytest path configuration to load the native-split Python package roots used by the MCP server so focused Character Builder tests import the collapsed 19-project package layout correctly.
+- Regenerated the affected embedded Python payload manifests/resources for `GhostRigger.Core.Tools` and `GhostRigger.Core.Workflow`.
+
+Verification:
+- `python -m pytest tests/test_native_skeleton_snapshot.py tests/test_character_builder_template_rig.py -q`
+- `python -m py_compile native/GhostRigger.Core.Tools/Python/src/core/characters/native_skeleton.py native/GhostRigger.Core.Workflow/Python/src/core/characters/native_skeleton.py native/GhostRigger.Core.Tools/Python/src/core/characters/character_builder.py native/GhostRigger.Core.Workflow/Python/src/core/characters/character_builder.py tests/test_native_skeleton_snapshot.py tests/test_character_builder_template_rig.py`
+- `python -m pytest tests/test_character_builder_export_preflight.py -q --basetemp .pytest_tmp_character_export`
+- `python -m pytest tests/test_character_builder_export_preflight.py::test_character_export_preflight_blocks_missing_bind_dag_fingerprint tests/test_character_builder_export_preflight.py::test_character_export_preflight_blocks_stale_bind_dag_fingerprint tests/test_character_builder_export_preflight.py::test_native_skeleton_fingerprint_tracks_dag_contract_not_paths -q`
+- `python -m pytest tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`
+- `python -m py_compile tests/conftest.py tests/test_native_skeleton_snapshot.py native/GhostRigger.Core.Tools/Python/src/core/characters/native_skeleton.py native/GhostRigger.Core.Workflow/Python/src/core/characters/native_skeleton.py native/GhostRigger.Core.Tools/Python/src/core/characters/character_builder.py native/GhostRigger.Core.Tools/Python/src/core/skeleton/skeleton_builder.py native/GhostRigger.Core.Tools/Python/src/core/animation/gpu_skinning.py`
+- No visible Debug-app UI workflow test was required because this change is backend/package-test infrastructure only.
+
 ### [2026-06-21] Rewrite Root README Front Page
 
 Owner: LordVaderCW

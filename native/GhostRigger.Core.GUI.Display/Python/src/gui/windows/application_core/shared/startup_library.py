@@ -167,10 +167,21 @@ class StartupLibraryMixin:
             return
         self._auto_detect_dirs()
 
+    def _apply_deferred_preloaded_library(self) -> None:
+        if getattr(self, "_preloaded_library_applied", False):
+            return
+        self._apply_preloaded_library()
+
     def _apply_preloaded_library(self) -> None:
+        if getattr(self, "_preloaded_library_applied", False):
+            return
         preloaded = getattr(self, "_preloaded_library", {}) or {}
         if not preloaded:
             return
+        if preloaded.get("pending"):
+            self.library_panel.set_status("Startup library scan finishing in background")
+            return
+        self._preloaded_library_applied = True
         k1_dir = str(preloaded.get("k1_dir") or "").strip()
         k2_dir = str(preloaded.get("k2_dir") or "").strip()
         if k1_dir or k2_dir:
@@ -193,8 +204,12 @@ class StartupLibraryMixin:
             self._log(status, "warning")
             return
         self._library_rows = rows
-        self._rebuild_library_list()
-        self.library_panel.set_rows(rows)
+        self.library_list.clear()
+        self.library_list.addItem("Content Browser is preparing indexed models...")
+        if hasattr(self.library_panel, "set_rows_deferred"):
+            self.library_panel.set_rows_deferred(rows)
+        else:
+            self.library_panel.set_rows(rows)
         self.library_panel.set_status(f"{len(rows)} models")
         module_editor_window = getattr(self, "module_editor_window", None)
         if module_editor_window is not None:

@@ -711,7 +711,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_CONTENT_BROWSER_PANEL",
             "source_path": "src/gui/panels/qt_content_browser_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_content_browser_panel.py",
-            "sha256": "01e1c158378e0d23cdf31ac36c17a89a05f4a3f36c1d002afb4dbe1b76aa689a"
+            "sha256": "dd0ffbe91fe78b4d4fe4ef7c50be9dd00d89ebd1df1e9e710a73ac804a362d47"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_DIAGNOSTICS_PANEL",
@@ -1665,7 +1665,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_STARTUP_LIBRARY",
             "source_path": "src/gui/windows/application_core/shared/startup_library.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/startup_library.py",
-            "sha256": "0622b6cc8ab8fc853c7cceee028f9d5b5c7974895e90c90022c5a6f0d30b70e3"
+            "sha256": "65080a740585c94d58d04f542040526e69ffab366892152321d2aa526837178c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_THEME_LAYOUT",
@@ -1719,7 +1719,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_MAIN_WINDOW",
             "source_path": "src/gui/windows/qt_main_window.py",
             "packaged_path": "Python/src/gui/windows/qt_main_window.py",
-            "sha256": "d9240c48178c6ebd9ae4acfd638e5685ace85cfd69f37ff7e057a2bd9b93a74a"
+            "sha256": "4a7ad2c4b089fd67a6e07b022cca601beaa4411b03aa059a72edc5142659285b"
         }
     ]
 }

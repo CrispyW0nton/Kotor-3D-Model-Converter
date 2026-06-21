@@ -940,11 +940,13 @@ def apply_template_rig(
         try:
             try:
                 from .native_skeleton import (
+                    build_native_skeleton_structural_diff,
                     capture_native_skeleton_snapshot,
                     native_skeleton_fingerprint,
                 )
             except ImportError:  # pragma: no cover
                 from src.core.characters.native_skeleton import (  # type: ignore
+                    build_native_skeleton_structural_diff,
                     capture_native_skeleton_snapshot,
                     native_skeleton_fingerprint,
                 )
@@ -1054,6 +1056,26 @@ def apply_template_rig(
                 str(getattr(mesh_node, "name", "") or "")
                 for mesh_node in mesh_payloads
             )
+            native_structural_diff = None
+            if native_skeleton_snapshot is not None:
+                try:
+                    native_structural_diff = build_native_skeleton_structural_diff(
+                        native_skeleton_snapshot,
+                        result_model,
+                        payload_mesh_names=payload_mesh_names,
+                    )
+                    setattr(
+                        result_model,
+                        "_gr_native_skeleton_structural_diff",
+                        native_structural_diff,
+                    )
+                except Exception as exc:
+                    log.debug(
+                        "apply_template_rig native structural diff failed: %s",
+                        exc,
+                        exc_info=True,
+                    )
+                    warnings.append(f"Native skeleton structural diff failed: {exc}")
             donor_weight_transfer = bool(getattr(bind_report, "donor_weight_transfer", False))
             source_skin_remap = bool(getattr(bind_report, "source_skin_remap", False))
             source_hand_refinement = bool(getattr(bind_report, "source_hand_refinement", False))
@@ -1077,6 +1099,7 @@ def apply_template_rig(
                     "mesh_names": list(payload_mesh_names),
                     "removed_import_armature_or_helper_nodes": removed_import_nodes,
                 },
+                "native_structural_diff": native_structural_diff,
                 "mesh_count": len(mesh_payloads),
                 "skinned_meshes": bind_report.skinned_meshes,
                 "weighted_vertices": bind_report.weighted_vertices,
@@ -1172,6 +1195,7 @@ def apply_template_rig(
             "removed_import_nodes": removed_import_nodes,
             "replaced_native_render_nodes": replaced_native_render_nodes,
             "native_skeleton_snapshot": native_skeleton_snapshot,
+            "native_structural_diff": native_structural_diff,
         }
     except Exception as exc:
         log.error("apply_template_rig: %s", exc, exc_info=True)

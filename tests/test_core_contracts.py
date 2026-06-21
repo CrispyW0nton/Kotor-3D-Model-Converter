@@ -10550,11 +10550,16 @@ def test_main_window_defers_post_show_startup_tasks_until_after_first_paint() ->
     assert "def start_post_show_startup_tasks(self) -> None:" in source
     assert "QtCore.QTimer.singleShot(0, self._refresh_startup_layout_after_show)" in source
     assert "QtCore.QTimer.singleShot(0, self._open_startup_inputs)" in source
+    assert "QtCore.QTimer.singleShot(75, self._apply_deferred_preloaded_library)" in source
     assert "QtCore.QTimer.singleShot(250, self._start_ipc_server)" in source
     assert "QtCore.QTimer.singleShot(300, self._finish_pending_prelaunch_after_first_paint)" in source
     constructor_tail = source.split("def start_post_show_startup_tasks", 1)[0]
     assert "QtCore.QTimer.singleShot(0, self._open_startup_inputs)" not in constructor_tail
     assert "self._start_ipc_server()" not in constructor_tail
+    assert "self._apply_preloaded_library()" not in constructor_tail
+    assert "def _apply_deferred_preloaded_library(self) -> None:" in startup_source
+    assert 'preloaded.get("pending")' in startup_source
+    assert "self.library_panel.set_rows_deferred(rows)" in startup_source
     assert "QtCore.QTimer.singleShot(300, self._finish_preloaded_library_after_first_paint)" in startup_source
     assert "resource_dock is not None and resource_dock.isVisible()" in startup_source
     assert "def _finish_pending_prelaunch_after_first_paint(self) -> None:" in startup_source

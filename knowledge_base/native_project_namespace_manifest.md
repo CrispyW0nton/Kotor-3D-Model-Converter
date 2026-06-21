@@ -13,7 +13,7 @@ authority for deciding where future behavior belongs.
 - Real C++ projects in `GhostRigger.sln`: 19
 - Solution-folder projects in `GhostRigger.sln`: 0
 - Python-payload DLL projects in `native/GhostRigger.PythonPayloadManifest.json`: 18
-- Packaged Python file references: 1,249
+- Packaged Python file references: 1,145
 - Payload regeneration for this collapse was skipped per owner instruction.
 
 ## Project Manifest

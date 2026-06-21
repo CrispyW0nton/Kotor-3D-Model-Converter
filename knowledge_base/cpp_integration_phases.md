@@ -434,10 +434,9 @@ Current completed foundation:
   `native/<Project>/Python/src/...` and are built into native DLLs as
   `RCDATA` resources through per-project `GhostRiggerPythonPayload.rc` files,
   alongside per-project `GhostRiggerPythonPayload.json` manifests.
-- The manifest contains 1,249 packaged Python file references. Duplicate source
-  references are allowed and expected when product-surface DLLs, renderer DLLs,
-  shared runtime DLLs, and diagnostic native-core extension DLLs all need a copy
-  of the same Python owner surface.
+- The manifest contains 1,145 packaged Python file references. Duplicate source
+  references are permitted only when separate runtime, renderer, window, shared
+  runtime, or diagnostic native-core boundaries need the same Python owner.
 - Phase 1.5 does not change runtime import behavior. The packaged Python files
   are byte-identical DLL payload copies; the active application still imports
   originals from `src/` until a later native bridge, extraction, or import path

@@ -168,9 +168,9 @@ owns the current implementation until a later migration slice proves parity.
 Python payload sweep. It maps every non-DEBUG native DLL project to packaged
 Python source copies under `native/<Project>/Python/src/...` and builds
 them into the DLL as `RCDATA` resources through `GhostRiggerPythonPayload.rc`.
-The manifest covers all 18 Python-payload DLL projects and 1,249 packaged Python file
-references; duplicated references are intentional when toolbox, renderer,
-window, or shared-runtime package boundaries depend on the same Python owner.
+The manifest covers all 18 Python-payload DLL projects and 1,145 packaged Python file
+references; duplicated references are permitted only when separate runtime,
+renderer, window, or shared-runtime package boundaries need the same owner.
 These are packaged copies only; the active Python application still imports the
 originals from `src/` until a later bridge, extraction, or import path is
 deliberately enabled.

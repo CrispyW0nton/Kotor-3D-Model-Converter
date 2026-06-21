@@ -100,6 +100,7 @@ native/GhostRigger.Core.IO.MDL/**/*.py[cod]
 !/tests/test_character_autofit_report.py
 !/tests/test_character_builder_bendak_local_fixture.py
 !/tests/test_character_builder_override_package.py
+!/tests/test_native_skeleton_snapshot.py
 !/tests/test_game_resource_provider.py
 !/tests/test_qt_resource_browser_model.py
 !/tests/test_sampler.py

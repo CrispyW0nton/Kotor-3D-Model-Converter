@@ -578,6 +578,8 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self._scanned_animation_entries: list[dict] = []
         self._assets: list[ContentAssetDescriptor] = []
         self._active_nav: tuple[str, str] = ("type", "All")
+        self._deferred_asset_generation = 0
+        self._deferred_filter_generation = 0
         self._splitter_user_adjusted = False
         self._splitter_layout_applied = False
         self.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
@@ -1026,6 +1028,47 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         self._library_rows = enrich_library_rows(rows)
         self._rebuild_assets()
 
+    def set_rows_deferred(self, rows: list[dict], batch_size: int = 350) -> None:
+        self._deferred_asset_generation += 1
+        generation = self._deferred_asset_generation
+        self._library_rows = [dict(row) for row in rows]
+        self._assets = []
+        self.asset_view.clear()
+        self.count_label.setText(f"Preparing {len(self._library_rows)} asset(s)...")
+        self.status_label.setText("Preparing Content Browser assets...")
+
+        total = len(self._library_rows)
+        batch = max(50, int(batch_size or 350))
+        index = 0
+
+        def build_next_batch() -> None:
+            nonlocal index
+            if generation != self._deferred_asset_generation:
+                return
+            end = min(total, index + batch)
+            self._assets.extend(
+                descriptor_from_library_row(row)
+                for row in self._library_rows[index:end]
+            )
+            index = end
+            self.count_label.setText(f"Preparing {index}/{total} asset(s)...")
+            if index < total:
+                QtCore.QTimer.singleShot(0, build_next_batch)
+                return
+            self._assets.extend(
+                descriptor_from_animation_entry(entry)
+                for entry in self._scene_animation_entries
+            )
+            self._assets.extend(
+                descriptor_from_animation_entry(entry)
+                for entry in self._scanned_animation_entries
+            )
+            self._rebuild_sources()
+            self._rebuild_navigation()
+            self._apply_filter()
+
+        QtCore.QTimer.singleShot(0, build_next_batch)
+
     def set_animation_entries(self, entries: list[dict]) -> None:
         self.set_scene_animation_entries(entries)
 
@@ -1259,35 +1302,106 @@ class QtContentBrowserPanel(QtWidgets.QWidget):
         compatibility = self.compat_filter.currentText()
         nav_key, nav_value = self._active_nav
 
+        filtered = [
+            asset
+            for asset in self._assets
+            if self._asset_matches_filters(
+                asset,
+                needle=needle,
+                asset_type=asset_type,
+                game=game,
+                source=source,
+                tag=tag,
+                compatibility=compatibility,
+                nav_key=nav_key,
+                nav_value=nav_value,
+            )
+        ]
+        if len(filtered) > 750:
+            self._apply_filter_deferred(filtered)
+            return
+        self._replace_asset_items(filtered, resize_columns=True)
+
+    def _asset_matches_filters(
+        self,
+        asset: ContentAssetDescriptor,
+        *,
+        needle: str,
+        asset_type: str,
+        game: str,
+        source: str,
+        tag: str,
+        compatibility: str,
+        nav_key: str,
+        nav_value: str,
+    ) -> bool:
+        if asset_type != "All" and asset.asset_type != asset_type:
+            return False
+        if game != "All" and asset.game != game:
+            return False
+        if source != "All Sources" and asset.source != source:
+            return False
+        if nav_key == "category" and asset.category != nav_value:
+            return False
+        if nav_key == "subcategory":
+            nav_category, _, nav_subcategory = nav_value.partition("\0")
+            if asset.category != nav_category or asset.metadata.get("subcategory") != nav_subcategory:
+                return False
+        if tag != "All Tags" and not self._matches_tag(asset, tag):
+            return False
+        if compatibility == "Current Game" and game != "All" and asset.game and asset.game != game:
+            return False
+        if compatibility == "Cross-Game" and asset.game not in {"", "K1", "K2"}:
+            return False
+        return not (needle and needle not in asset.searchable_text)
+
+    def _replace_asset_items(self, assets: list[ContentAssetDescriptor], *, resize_columns: bool) -> None:
+        self.asset_view.setSortingEnabled(False)
         self.asset_view.clear()
-        for asset in self._assets:
-            if asset_type != "All" and asset.asset_type != asset_type:
-                continue
-            if game != "All" and asset.game != game:
-                continue
-            if source != "All Sources" and asset.source != source:
-                continue
-            if nav_key == "category" and asset.category != nav_value:
-                continue
-            if nav_key == "subcategory":
-                nav_category, _, nav_subcategory = nav_value.partition("\0")
-                if asset.category != nav_category or asset.metadata.get("subcategory") != nav_subcategory:
-                    continue
-            if tag != "All Tags" and not self._matches_tag(asset, tag):
-                continue
-            if compatibility == "Current Game" and game != "All" and asset.game and asset.game != game:
-                continue
-            if compatibility == "Cross-Game" and asset.game not in {"", "K1", "K2"}:
-                continue
-            if needle and needle not in asset.searchable_text:
-                continue
+        for asset in assets:
             item = QtContentAssetItem(asset)
             item.setIcon(0, self._asset_icon(asset))
             self.asset_view.addTopLevelItem(item)
+        self.asset_view.setSortingEnabled(True)
+        self.asset_view.sortByColumn(0, QtCore.Qt.AscendingOrder)
         self.count_label.setText(f"{self.asset_view.topLevelItemCount()} asset(s) shown")
-        for column in range(self.asset_view.columnCount()):
-            self.asset_view.resizeColumnToContents(column)
+        if resize_columns:
+            for column in range(self.asset_view.columnCount()):
+                self.asset_view.resizeColumnToContents(column)
         self._update_details()
+
+    def _apply_filter_deferred(self, assets: list[ContentAssetDescriptor], batch_size: int = 300) -> None:
+        self._deferred_filter_generation += 1
+        generation = self._deferred_filter_generation
+        self.asset_view.setSortingEnabled(False)
+        self.asset_view.clear()
+        self.count_label.setText(f"Showing 0/{len(assets)} asset(s)...")
+        total = len(assets)
+        batch = max(50, int(batch_size or 300))
+        index = 0
+
+        def add_next_batch() -> None:
+            nonlocal index
+            if generation != self._deferred_filter_generation:
+                return
+            end = min(total, index + batch)
+            items = []
+            for asset in assets[index:end]:
+                item = QtContentAssetItem(asset)
+                item.setIcon(0, self._asset_icon(asset))
+                items.append(item)
+            self.asset_view.addTopLevelItems(items)
+            index = end
+            self.count_label.setText(f"Showing {index}/{total} asset(s)...")
+            if index < total:
+                QtCore.QTimer.singleShot(0, add_next_batch)
+                return
+            self.asset_view.setSortingEnabled(True)
+            self.asset_view.sortByColumn(0, QtCore.Qt.AscendingOrder)
+            self.count_label.setText(f"{total} asset(s) shown")
+            self._update_details()
+
+        QtCore.QTimer.singleShot(0, add_next_batch)
 
     def _matches_tag(self, asset: ContentAssetDescriptor, tag: str) -> bool:
         if " / " in tag:

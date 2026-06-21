@@ -51,7 +51,7 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     }
 
     assert len(entries) == 18
-    assert len(payload_files) == 1249
+    assert len(payload_files) == 1145
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 
@@ -110,6 +110,35 @@ def test_twoda_parser_is_owned_by_domain_core_templates_only() -> None:
         assert not (workflow_project / path).exists()
         assert path not in workflow_sources
         assert path.replace("/", "\\") not in workflow_sources
+
+
+def test_reusable_workflow_payloads_are_owned_by_workflow_not_tools() -> None:
+    """Tools must consume reusable workflow packages instead of repackaging forks."""
+
+    owner_project = ROOT / "native" / "GhostRigger.Core.Workflow"
+    tools_project = ROOT / "native" / "GhostRigger.Core.Tools"
+    workflow_prefixes = (
+        "Python/src/core/animation/",
+        "Python/src/core/characters/",
+        "Python/src/core/retargeting/",
+    )
+
+    owner_payload = json.loads((owner_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    tools_payload = json.loads((tools_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    owner_packaged = {str(row["packaged_path"]) for row in owner_payload["files"]}
+    tools_packaged = {str(row["packaged_path"]) for row in tools_payload["files"]}
+    tools_project_text = (
+        (tools_project / "GhostRigger.Core.Tools.vcxproj").read_text(encoding="utf-8")
+        + "\n"
+        + (tools_project / "GhostRigger.Core.Tools.vcxproj.filters").read_text(encoding="utf-8")
+    )
+
+    for path in sorted(owner_packaged):
+        if not path.startswith(workflow_prefixes):
+            continue
+        assert path not in tools_packaged
+        assert not (tools_project / path).exists()
+        assert path.replace("/", "\\") not in tools_project_text
 
 
 def test_python_payload_copies_are_byte_identical_and_manifested() -> None:

@@ -22,7 +22,7 @@ integration.
 ## Current Native Shape
 
 - Current solution shape: 19 native projects total, 18 non-debug Python-payload
-  DLL projects, and 1,249 packaged Python file references in
+  DLL projects, and 1,145 packaged Python file references in
   `native/GhostRigger.PythonPayloadManifest.json`.
 - Current aggregate project owners include `GhostRigger.Core.Automation`,
   `GhostRigger.Core.Bridge`, `GhostRigger.Core.GUI.Display`,

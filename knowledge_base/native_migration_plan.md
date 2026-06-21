@@ -252,7 +252,7 @@ a launcher and native workspace first, not a rewrite of the application.
   Python payload sweep manifest. It maps all 91 non-DEBUG native DLL projects
   to byte-identical packaged Python source copies under
   `native/<Project>/Python/src/...`.
-- The manifest includes 1,249 packaged Python file references and covers every
+- The manifest includes 1,145 packaged Python file references and covers every
   `src/**/*.py` file at least once. Duplicate source references are intentional
   where toolbox, renderer, window, native-core, or runtime-shared package
   boundaries all depend on the same Python owner.

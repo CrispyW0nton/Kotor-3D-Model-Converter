@@ -1609,10 +1609,15 @@ def _validate_socket_categories(
     if not opts.require_required_sockets:
         return
     current_nodes = list(_iter_nodes(model))
+    present_socket_paths = {
+        tuple(node.full_path)
+        for node in snapshot.nodes
+        if node.socket_category and _find_node_exact_path(current_nodes, tuple(node.full_path)) is not None
+    }
     present_categories = {
         node.socket_category
         for node in snapshot.nodes
-        if node.socket_category and _find_node_exact_path(current_nodes, tuple(node.full_path)) is not None
+        if node.socket_category and tuple(node.full_path) in present_socket_paths
     }
     native_categories = {
         node.socket_category
@@ -1620,8 +1625,16 @@ def _validate_socket_categories(
         if node.socket_category
     }
     for category in opts.required_socket_categories:
-        if category not in present_categories:
-            category_evidence = _socket_category_evidence_details(snapshot, category)
+        missing_nodes = tuple(
+            node for node in snapshot.nodes
+            if node.socket_category == category and tuple(node.full_path) not in present_socket_paths
+        )
+        if missing_nodes:
+            category_evidence = _socket_category_evidence_details(
+                snapshot,
+                category,
+                nodes=missing_nodes,
+            )
             report.add(_issue(
                 "blocking",
                 "character.export.required_socket_missing",
@@ -1697,10 +1710,15 @@ def _is_exportable_mesh_payload(node: Any) -> bool:
 def _socket_category_evidence_details(
     snapshot: NativeSkeletonSnapshot,
     category: str,
+    *,
+    nodes: tuple[NativeNodeSnapshot, ...] | None = None,
 ) -> dict[str, Any]:
-    expected_nodes = tuple(
-        node.name for node in snapshot.nodes
+    selected_nodes = nodes or tuple(
+        node for node in snapshot.nodes
         if node.socket_category == category
+    )
+    expected_nodes = tuple(
+        node.name for node in selected_nodes
     )
     return {
         "expected_native_socket_nodes": list(expected_nodes),

@@ -24,7 +24,9 @@ KOTOR_SOCKET_CATEGORIES: dict[str, str] = {
     "revmask1hook": "headgear",
     "revmask2hook": "headgear",
     "rhand": "right_hand",
+    "rhand_g": "right_hand",
     "lhand": "left_hand",
+    "lhand_g": "left_hand",
     "lightsaberhook": "lightsaber",
     "deflecthook": "combat_helper",
     "impact": "combat_helper",
@@ -141,6 +143,10 @@ def capture_native_skeleton_snapshot(
         snapshots.append(_snapshot_node(node, include_mesh_stats=include_mesh_stats))
 
     hooks = tuple(node.name for node in snapshots if node.socket_category)
+    socket_summary: dict[str, list[str]] = {}
+    for node in snapshots:
+        if node.socket_category:
+            socket_summary.setdefault(node.socket_category, []).append(node.name)
     metadata = {
         "source_mdl_path": str(getattr(model, "mdl_path", "") or ""),
         "source_mdx_path": str(getattr(model, "mdx_path", "") or ""),
@@ -152,6 +158,10 @@ def capture_native_skeleton_snapshot(
         "source_game": str(getattr(model, "_gr_source_game", "") or ""),
         "source_layer": str(getattr(model, "_gr_source_layer", "") or ""),
         "animation_count": len(getattr(model, "animations", []) or []),
+        "socket_categories": {
+            category: tuple(names)
+            for category, names in sorted(socket_summary.items())
+        },
         "captured_for": "character_builder_native_dag",
     }
 
@@ -195,6 +205,98 @@ def find_snapshot_node(
         if node.name.lower() == wanted:
             return node
     return None
+
+
+def build_native_skeleton_structural_diff(
+    snapshot: NativeSkeletonSnapshot,
+    model: Any,
+    *,
+    payload_mesh_names: Iterable[str] = (),
+    transform_tolerance: float = 1.0e-6,
+) -> dict[str, Any]:
+    """Compare a captured native DAG contract with a current rigged model."""
+
+    current_raw_nodes = list(_iter_model_nodes(model))
+    current_nodes = [
+        _snapshot_node(node, include_mesh_stats=True)
+        for node in current_raw_nodes
+    ]
+    snapshot_by_path = {node.full_path: node for node in snapshot.nodes}
+    current_by_path = {node.full_path: node for node in current_nodes}
+    snapshot_paths = set(snapshot_by_path)
+    current_paths = set(current_by_path)
+    payload_names = {str(name or "") for name in payload_mesh_names}
+
+    preserved_paths = sorted(snapshot_paths & current_paths)
+    missing_paths = sorted(snapshot_paths - current_paths)
+    added_paths = sorted(current_paths - snapshot_paths)
+
+    changed_transforms: list[dict[str, Any]] = []
+    for path in preserved_paths:
+        before = snapshot_by_path[path]
+        after = current_by_path[path]
+        position_changed = not _tuple_close(
+            before.position,
+            after.position,
+            transform_tolerance,
+        )
+        rotation_changed = not _tuple_close(
+            before.rotation,
+            after.rotation,
+            transform_tolerance,
+        )
+        if not position_changed and not rotation_changed:
+            continue
+        record: dict[str, Any] = {"name": after.name, "path": list(path)}
+        if position_changed:
+            record["position"] = {
+                "snapshot": list(before.position),
+                "current": list(after.position),
+            }
+        if rotation_changed:
+            record["rotation"] = {
+                "snapshot": list(before.rotation),
+                "current": list(after.rotation),
+            }
+        changed_transforms.append(record)
+
+    missing_hooks = [
+        {
+            "name": snapshot_by_path[path].name,
+            "path": list(path),
+            "socket_category": snapshot_by_path[path].socket_category,
+        }
+        for path in missing_paths
+        if snapshot_by_path[path].socket_category
+    ]
+    skin_rows = [
+        _skin_row_record(node, payload_names=payload_names)
+        for node in current_raw_nodes
+        if _has_skin_rows(node)
+    ]
+
+    return {
+        "schema": "ghostrigger.native_skeleton_structural_diff.v1",
+        "model_name": str(getattr(model, "name", "") or ""),
+        "snapshot_model_name": snapshot.model_name,
+        "payload_mesh_names": sorted(payload_names),
+        "summary": {
+            "snapshot_node_count": len(snapshot.nodes),
+            "current_node_count": len(current_nodes),
+            "preserved_node_count": len(preserved_paths),
+            "missing_node_count": len(missing_paths),
+            "added_node_count": len(added_paths),
+            "changed_transform_count": len(changed_transforms),
+            "missing_hook_count": len(missing_hooks),
+            "skin_mesh_count": len(skin_rows),
+        },
+        "preserved_nodes": [list(path) for path in preserved_paths],
+        "missing_nodes": [_node_diff_record(snapshot_by_path[path]) for path in missing_paths],
+        "added_nodes": [_node_diff_record(current_by_path[path]) for path in added_paths],
+        "changed_transforms": changed_transforms,
+        "missing_hooks": missing_hooks,
+        "skin_row_counts": skin_rows,
+    }
 
 
 def native_skeleton_fingerprint_payload(
@@ -385,6 +487,57 @@ def _safe_int(value: Any) -> int | None:
         return int(value)
     except Exception:
         return None
+
+
+def _tuple_close(left: Iterable[Any], right: Iterable[Any], tolerance: float) -> bool:
+    left_values = tuple(left)
+    right_values = tuple(right)
+    if len(left_values) != len(right_values):
+        return False
+    for a, b in zip(left_values, right_values):
+        try:
+            if abs(float(a) - float(b)) > tolerance:
+                return False
+        except Exception:
+            if a != b:
+                return False
+    return True
+
+
+def _node_diff_record(node: NativeNodeSnapshot) -> dict[str, Any]:
+    return {
+        "name": node.name,
+        "path": list(node.full_path),
+        "parent_path": list(node.parent_path),
+        "type_label": node.type_label,
+        "export_role": node.export_role,
+        "is_mesh": node.is_mesh,
+        "is_skin": node.is_skin,
+        "socket_category": node.socket_category,
+    }
+
+
+def _has_skin_rows(node: Any) -> bool:
+    return bool(
+        getattr(node, "is_skin", False)
+        or getattr(node, "skin_data", None)
+        or getattr(node, "bone_map", None)
+    )
+
+
+def _skin_row_record(node: Any, *, payload_names: set[str]) -> dict[str, Any]:
+    name = str(getattr(node, "name", "") or "")
+    vertices = list(getattr(node, "vertices", []) or [])
+    skin_rows = list(getattr(node, "skin_data", []) or [])
+    bone_map = list(getattr(node, "bone_map", []) or [])
+    return {
+        "name": name,
+        "path": list(_full_path(node)),
+        "payload_mesh": name in payload_names,
+        "vertices": len(vertices),
+        "skin_rows": len(skin_rows),
+        "bone_map_count": len(bone_map),
+    }
 
 
 def _game_label(model: Any) -> str:

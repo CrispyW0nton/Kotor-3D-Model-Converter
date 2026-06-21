@@ -66,7 +66,7 @@ application. Do not treat the repository as a flat Python app.
   scaffolding.
 
 The current root payload manifest covers 18 non-debug native DLL projects and
-1,249 packaged Python file references. Treat the manifest and
+1,145 packaged Python file references. Treat the manifest and
 `tests/test_native_python_payloads.py` as the source of truth if counts drift.
 
 ### Native Package Families

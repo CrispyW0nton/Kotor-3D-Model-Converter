@@ -1640,25 +1640,29 @@ def test_prelaunch_library_payload_scans_before_main_window(tmp_path, monkeypatc
 
 
 def test_preloaded_library_skips_post_show_auto_detect_timer() -> None:
-    import inspect
-
-    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
-
-    init_source = inspect.getsource(QtGhostRiggerMainWindow.__init__)
+    source = (
+        _REPO_ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/qt_main_window.py"
+    ).read_text(encoding="utf-8")
+    startup_source = (
+        _REPO_ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/startup_library.py"
+    ).read_text(encoding="utf-8")
+    init_source = source.split("def start_post_show_startup_tasks", 1)[0]
+    post_show_source = source.split("def start_post_show_startup_tasks", 1)[1]
     assert "self._preloaded_library" in init_source
-    assert 'if not self._preloaded_library.get("detection_attempted")' in init_source
-    assert "QtCore.QTimer.singleShot(250, self._auto_detect_dirs_on_startup)" in init_source
-    assert 'preloaded.get("_resource_manager")' in inspect.getsource(
-        QtGhostRiggerMainWindow._apply_preloaded_library
-    )
-    assert "manager = self._get_resource_manager()" in inspect.getsource(
-        QtGhostRiggerMainWindow._populate_resource_panel
-    )
+    assert 'if not self._preloaded_library.get("detection_attempted")' in post_show_source
+    assert "QtCore.QTimer.singleShot(350, self._auto_detect_dirs_on_startup)" in post_show_source
+    assert "QtCore.QTimer.singleShot(75, self._apply_deferred_preloaded_library)" in post_show_source
+    assert 'preloaded.get("_resource_manager")' in startup_source
+    resource_source = (
+        _REPO_ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/resource_panels.py"
+    ).read_text(encoding="utf-8")
+    assert "manager = self._get_resource_manager()" in resource_source
     assert "self._suppress_theme_progress_toast = True" in init_source
-    assert "QtCore.QTimer.singleShot(1200, self._enable_theme_progress_toasts)" in init_source
-    assert "self._suppress_theme_progress_toast = False" in inspect.getsource(
-        QtGhostRiggerMainWindow._enable_theme_progress_toasts
-    )
+    assert "QtCore.QTimer.singleShot(1200, self._enable_theme_progress_toasts)" in post_show_source
+    assert "self._suppress_theme_progress_toast = False" in source
 
 
 def test_startup_renderer_and_hardware_scans_stream_through_splash() -> None:

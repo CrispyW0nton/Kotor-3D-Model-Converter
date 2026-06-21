@@ -281,6 +281,7 @@ class QtGhostRiggerMainWindow(
         self._pending_prelaunch_run = self.startup_input.get("_pending_prelaunch_run")
         self._pending_prelaunch_diagnostics_applied = False
         self._pending_prelaunch_library_applied = False
+        self._preloaded_library_applied = False
         self._suppress_theme_progress_toast = True
         self.theme_manager = ThemeManager(self.app_root, self.settings_data, self)
         self.layout_manager = LayoutManager(self.app_root, self.settings_data, self)
@@ -375,7 +376,6 @@ class QtGhostRiggerMainWindow(
         self.theme_manager.apply_current_theme(self)
         self.layout_manager.apply_current_layout(self)
         self._build_statusbar()
-        self._apply_preloaded_library()
         self._refresh_scene_view()
         self.scene_manager.active_scene.mark_clean()
         self._update_scene_chrome()
@@ -388,6 +388,7 @@ class QtGhostRiggerMainWindow(
         QtCore.QTimer.singleShot(0, self._refresh_startup_layout_after_show)
         QtCore.QTimer.singleShot(0, self._configure_theme_watcher)
         QtCore.QTimer.singleShot(0, self._open_startup_inputs)
+        QtCore.QTimer.singleShot(75, self._apply_deferred_preloaded_library)
         QtCore.QTimer.singleShot(250, self._start_ipc_server)
         QtCore.QTimer.singleShot(1200, self._enable_theme_progress_toasts)
         QtCore.QTimer.singleShot(300, self._finish_pending_prelaunch_after_first_paint)
