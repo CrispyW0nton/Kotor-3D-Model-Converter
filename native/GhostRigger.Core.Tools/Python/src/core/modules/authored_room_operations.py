@@ -24,6 +24,7 @@ from src.core.geometry.component_editing import (
     mirror_vertices,
     split_face_with_edge,
     snap_vertex_to_vertex,
+    transform_snap_vertices_to_level,
     triangulate_faces,
     weld_vertices,
 )
@@ -2822,6 +2823,74 @@ def flatten_authored_floor_plan_vertices(
     )
 
 
+def transform_snap_authored_floor_plan_vertices(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    point_indices: tuple[int, ...] | list[int],
+    axis: str = "x",
+    target_point_index: int | None = None,
+    value: float | None = None,
+    level_policy: str = "average",
+) -> AuthoredModuleProject:
+    """Apply Maya-style hold-J level snapping to floor-plan vertices.
+
+    This is intentionally distinct from generic flattening so KMAP metadata,
+    undo labels, readiness reports, and future direct-manipulation UI can tell
+    that the user performed a transform snapping gesture. Current floor-plan
+    editing is 2D, so only local X/Y levels are valid here.
+    """
+
+    room_index = _target_room_index(project, room_resref)
+    room = project.rooms[room_index]
+    primitive = _floor_plan_for_room(room)
+    selected = tuple(dict.fromkeys(int(index) for index in point_indices))
+    if len(selected) < 1:
+        raise ValueError("Transform level snap requires at least one floor-plan point index.")
+    axis_key = str(axis or "x").strip().lower()
+    if axis_key not in {"x", "y"}:
+        raise ValueError("Floor-plan transform level snapping supports local X or Y only; use terrain tools for Z.")
+    policy = str(level_policy or "average").strip().lower() or "average"
+    target_index = None if target_point_index is None else int(target_point_index)
+    result = transform_snap_vertices_to_level(
+        _floor_plan_component_mesh(primitive),
+        selected,
+        axis=axis_key,
+        target_value=value,
+        target_index=target_index,
+        level_policy=policy,
+    )
+    audit = audit_component_edit_result(result, component_kind="floor_plan_vertex", affects_walkmesh=True)
+    updated_primitive = replace(
+        primitive,
+        points=_floor_plan_points_from_component_vertices(result.mesh.vertices),
+        metadata={
+            **dict(primitive.metadata),
+            "last_operation": "transform_snap_floor_plan_vertices",
+            "transform_snap_vertices": list(selected),
+            "transform_snap_axis": axis_key,
+            "transform_snap_value": result.metadata.get("value"),
+            "transform_snap_policy": result.metadata.get("level_policy"),
+            "transform_snap_target_index": target_index,
+            "source": "map_studio:floor_plan_transform_level_snap",
+            "last_component_edit_audit": _component_edit_audit_payload(audit),
+        },
+    )
+    return _replace_floor_plan_room(
+        project,
+        room_index,
+        updated_primitive,
+        operation="transform_snap_floor_plan_vertices",
+        room_metadata={
+            "transform_snap_vertices": list(selected),
+            "transform_snap_axis": axis_key,
+            "transform_snap_policy": result.metadata.get("level_policy"),
+            "transform_snap_target_index": target_index,
+            "last_component_edit_audit": _component_edit_audit_payload(audit),
+        },
+    )
+
+
 def mirror_authored_floor_plan_vertices(
     project: AuthoredModuleProject,
     *,
@@ -3364,6 +3433,7 @@ __all__ = [
     "set_authored_room_composition_primitive_transform",
     "split_authored_floor_plan_face",
     "snap_authored_floor_plan_vertex_to_vertex",
+    "transform_snap_authored_floor_plan_vertices",
     "triangulate_authored_floor_plan_face",
     "weld_authored_floor_plan_vertices",
 ]

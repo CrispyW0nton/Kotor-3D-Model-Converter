@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Promotes Hold-J Transform Level Snap To Headless Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Component editing / Tool belt dispatch
+Intersects: native Scene/Tools authored room operations, ModuleEditorController mirrors, and Map Studio tool-belt dispatcher.
+
+- Added a distinct `transform_snap_authored_floor_plan_vertices` authored-room operation for Maya-style Hold-J level snapping so KMAP metadata, undo labels, readiness impact, and future UI feedback no longer hide the gesture under generic flattening.
+- Routed the `transform_snap_level` tool-belt action through the new controller command while keeping `flatten` on the existing flatten operation; both routes still mark MDL/MDX/WOK/LYT/VIS/PTH/.mod output and game proof stale when geometry changes.
+- Added focused regression coverage for the new KMAP metadata, component-edit audit payload, undo label, dispatcher route, and source contract.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_authored_room_operations.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_authored_room_operations.py::test_t2606_controller_transform_level_snap_records_distinct_kmap_metadata -q --basetemp .pytest_tmp_map_studio_transform_snap_ops`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests/test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q --basetemp .pytest_tmp_map_studio_transform_snap_dispatch`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Adds Dispatcher-Backed Context Menu Commands
 
 Owner: LordVaderCW

@@ -524,6 +524,31 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert ready_snap.command_method == "snap_authored_floor_plan_vertex"
     assert ready_snap.command_kwargs["target_room_resref"] == "room_b"
 
+    level_snap = resolve_map_studio_tool_belt_action(
+        "transform_snap_level",
+        MapStudioToolActionContext(
+            room_resref="room_a",
+            point_indices=(1, 2),
+            target_point_index=3,
+            axis="y",
+            metadata={"level_policy": "average"},
+        ),
+    )
+
+    assert level_snap.enabled is True
+    assert level_snap.focus_snap_mode == "level"
+    assert level_snap.command_method == "transform_snap_authored_floor_plan_vertices"
+    assert level_snap.command_kwargs == {
+        "room_resref": "room_a",
+        "point_indices": (1, 2),
+        "axis": "y",
+        "target_point_index": 3,
+        "value": None,
+        "level_policy": "average",
+    }
+    assert level_snap.mutates_kmap is True
+    assert "hold-J command path" in level_snap.authoring_context
+
     extrude = resolve_map_studio_tool_belt_action(
         "extrude",
         MapStudioToolActionContext(room_resref="room_a", operation_distance=0.75, operation_edge_index=2),
@@ -1612,6 +1637,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="add_authored_room_primitive"' in source
         assert 'command_method="create_authored_room_preset_module"' in source
         assert 'command_method="snap_authored_floor_plan_vertex"' in source
+        assert 'command_method="transform_snap_authored_floor_plan_vertices"' in source
         assert 'if key == "light":' in source
         assert "light_room_resref" in source
         assert 'command_method="add_authored_room_light"' in source

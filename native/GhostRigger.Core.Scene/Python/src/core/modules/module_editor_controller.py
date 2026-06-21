@@ -121,6 +121,7 @@ from .authored_room_operations import (
     set_authored_room_composition_primitive_transform,
     split_authored_floor_plan_face,
     snap_authored_floor_plan_vertex_to_vertex,
+    transform_snap_authored_floor_plan_vertices,
     triangulate_authored_floor_plan_face,
     weld_authored_floor_plan_vertices,
 )
@@ -1479,6 +1480,60 @@ class ModuleEditorController:
             label=f"Flatten {room_resref or 'room'} vertices on {axis}",
             before=before,
             metadata={"room_resref": room_resref, "point_indices": indices, "axis": axis, "value": value},
+        )
+        return self.authored_module_readiness()
+
+    def transform_snap_authored_floor_plan_vertices(
+        self,
+        *,
+        room_resref: str,
+        point_indices: Any,
+        axis: str = "x",
+        target_point_index: int | None = None,
+        value: float | None = None,
+        level_policy: str = "average",
+    ):
+        """Apply hold-J transform level snapping through the domain operation."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        indices = tuple(int(index) for index in tuple(point_indices or ()))
+        updated = transform_snap_authored_floor_plan_vertices(
+            authored,
+            room_resref=room_resref,
+            point_indices=indices,
+            axis=axis,
+            target_point_index=target_point_index,
+            value=value,
+            level_policy=level_policy,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Transform-snapped Map Studio room {room_resref or '(first room)'} floor-plan vertices {indices} on {axis}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.transform_snap_level",
+            label=f"Transform snap {room_resref or 'room'} vertices on {axis}",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "point_indices": indices,
+                "axis": axis,
+                "target_point_index": target_point_index,
+                "value": value,
+                "level_policy": level_policy,
+            },
         )
         return self.authored_module_readiness()
 

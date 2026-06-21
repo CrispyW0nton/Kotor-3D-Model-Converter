@@ -893,6 +893,71 @@ def test_t2908_controller_flattens_floor_plan_vertices_for_clean_wall_alignment(
     assert not build.blocking_issues
 
 
+def test_t2606_controller_transform_level_snap_records_distinct_kmap_metadata() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload, authored_project_to_kmap_payload
+    from src.core.modules.authored_room_floorplan import FloorPlanRoomPrimitive
+    from src.core.modules.authored_room_primitives import PrimitiveMaterial
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    base = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grsnapj",
+        game="K1",
+    )
+    primitive = FloorPlanRoomPrimitive(
+        room_resref="grsnapj_room01",
+        points=((-5.0, -5.0), (4.5, -5.0), (5.5, 5.0), (-5.0, 5.0)),
+        wall_height=3.0,
+        floor_surface_id=4,
+        material=PrimitiveMaterial(texture="default", metadata={"source": "test"}),
+        include_walls=True,
+        metadata={"source": "test"},
+    )
+    project = replace(
+        base,
+        rooms=(
+            replace(
+                base.rooms[0],
+                room_resref="grsnapj_room01",
+                primitive=primitive,
+                composition=None,
+                visible_rooms=("grsnapj_room01",),
+                metadata={"primitive": "floor_plan_extrusion"},
+            ),
+        ),
+    )
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    controller.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(project)
+
+    result = controller.transform_snap_authored_floor_plan_vertices(
+        room_resref="grsnapj_room01",
+        point_indices=(1, 2),
+        axis="x",
+    )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    build = build_authored_module(authored)
+    primitive = authored.rooms[0].primitive
+    points = tuple(primitive.points)
+
+    assert points[1] == (5.0, -5.0)
+    assert points[2] == (5.0, 5.0)
+    assert authored.rooms[0].metadata["last_operation"] == "transform_snap_floor_plan_vertices"
+    assert authored.rooms[0].metadata["transform_snap_axis"] == "x"
+    assert primitive.metadata["source"] == "map_studio:floor_plan_transform_level_snap"
+    assert primitive.metadata["last_component_edit_audit"]["operation"] == "transform_snap_vertices_to_level"
+    assert controller.command_history.undo_label == "Transform snap grsnapj_room01 vertices on x"
+    assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert not build.blocking_issues
+
+
 def test_t2908_controller_mirrors_floor_plan_footprint_and_remains_exportable() -> None:
     _install_native_payload_paths()
 

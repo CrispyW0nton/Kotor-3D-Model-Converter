@@ -760,20 +760,20 @@ def resolve_map_studio_tool_belt_action(
             mutates_kmap=True,
         )
 
-    if key in {"flatten", "transform_snap_level"}:
+    if key == "flatten":
         indices = _clean_indices(ctx.point_indices)
         if len(indices) < 2:
             return _route(
                 action,
                 focus_component_mode="vertex",
-                focus_snap_mode="level" if key == "transform_snap_level" else "grid",
+                focus_snap_mode="grid",
                 enabled=False,
-                disabled_reason="Level/flatten snap needs two or more selected floor-plan vertices.",
+                disabled_reason="Flatten needs two or more selected floor-plan vertices.",
             )
         return _route(
             action,
             focus_component_mode="vertex",
-            focus_snap_mode="level" if key == "transform_snap_level" else "grid",
+            focus_snap_mode="grid",
             command_method="flatten_authored_floor_plan_vertices",
             command_kwargs={
                 "room_resref": ctx.room_resref,
@@ -782,6 +782,36 @@ def resolve_map_studio_tool_belt_action(
                 "value": ctx.metadata.get("value"),
             },
             mutates_kmap=True,
+        )
+
+    if key == "transform_snap_level":
+        indices = _clean_indices(ctx.point_indices)
+        if len(indices) < 2:
+            return _route(
+                action,
+                focus_component_mode="vertex",
+                focus_snap_mode="level",
+                enabled=False,
+                disabled_reason="Transform level snap needs two or more selected floor-plan vertices.",
+            )
+        return _route(
+            action,
+            focus_component_mode="vertex",
+            focus_snap_mode="level",
+            command_method="transform_snap_authored_floor_plan_vertices",
+            command_kwargs={
+                "room_resref": ctx.room_resref,
+                "point_indices": indices,
+                "axis": _clean_axis(ctx.axis),
+                "target_point_index": ctx.target_point_index,
+                "value": ctx.metadata.get("value"),
+                "level_policy": str(ctx.metadata.get("level_policy") or "average"),
+            },
+            mutates_kmap=True,
+            authoring_context=(
+                "Transform Level Snap: align selected floor-plan vertices onto one shared local X/Y level through "
+                "the hold-J command path; KMAP geometry, WOK readiness, staged export, and game proof become stale."
+            ),
         )
 
     if key == "cleanup":
