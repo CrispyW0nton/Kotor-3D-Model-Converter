@@ -48,6 +48,16 @@ class MapStudioToolActionContext:
     positive_z: bool = True
     operation_distance: float = 0.25
     operation_edge_index: int = 0
+    terrain_row_index: int = 0
+    terrain_column_index: int = 0
+    terrain_points: tuple[tuple[int, int, float], ...] = ()
+    terrain_delta: float = 0.1
+    terrain_radius: int = 0
+    terrain_height: float = 0.0
+    terrain_iterations: int = 1
+    terrain_strength: float = 0.5
+    terrain_preserve_boundary: bool = True
+    terrain_symmetry_axis: str = ""
     cut_center: tuple[float, float] = (0.0, 0.0)
     cut_size: tuple[float, float] = (1.0, 1.0)
     duplicate_count: int = 1
@@ -257,13 +267,46 @@ def resolve_map_studio_tool_belt_action(
 
     terrain_brush = _TERRAIN_BRUSH_ACTIONS.get(key)
     if terrain_brush:
+        if not str(ctx.room_resref or "").strip():
+            return _route(
+                action,
+                focus_component_mode="terrain",
+                terrain_brush=terrain_brush,
+                enabled=False,
+                disabled_reason="Terrain brush needs a selected authored terrain room.",
+            )
+        terrain_points = tuple(ctx.terrain_points or ((int(ctx.terrain_row_index), int(ctx.terrain_column_index), 1.0),))
+        kwargs: dict[str, Any] = {
+            "operation": f"brush_stroke:{terrain_brush}",
+            "room_resref": str(ctx.room_resref or "").strip(),
+            "row_index": int(ctx.terrain_row_index),
+            "column_index": int(ctx.terrain_column_index),
+            "points": terrain_points,
+            "delta": float(ctx.terrain_delta),
+            "radius": int(ctx.terrain_radius),
+            "height": float(ctx.terrain_height),
+            "iterations": int(ctx.terrain_iterations),
+            "strength": float(ctx.terrain_strength),
+            "preserve_boundary": bool(ctx.terrain_preserve_boundary),
+        }
+        if str(ctx.terrain_symmetry_axis or "").strip():
+            kwargs["symmetry_axis"] = str(ctx.terrain_symmetry_axis or "").strip().lower()
         return _route(
             action,
             focus_component_mode="terrain",
+            focus_snap_mode="surface",
             terrain_brush=terrain_brush,
+            command_method="apply_authored_terrain_operation",
+            command_kwargs=kwargs,
+            mutates_kmap=True,
+            status_message=(
+                f"Applied terrain brush {terrain_brush}; dirty terrain samples changed and "
+                "MDL/WOK/export/game proof are stale."
+            ),
             authoring_context=(
-                f"Terrain brush: {terrain_brush}. Live frames must stay dirty-region scoped; "
-                "full MDL/WOK rebuild waits for stroke commit, validation, or export."
+                f"Terrain brush: {terrain_brush}. Commit one dirty-region scoped heightfield stroke "
+                "to authored KMAP terrain; live frames remain viewport-coalesced, while full MDL/WOK "
+                "rebuild waits for validation or staged export."
             ),
         )
 

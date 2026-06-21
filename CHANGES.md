@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Routes Terrain Brush Belt Actions Through KMAP Commands
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Terrain sculpting
+Intersects: native payload mirror sync for Scene/Tools Map Studio terrain brush routing and Level Editor terrain UI context.
+
+- Routed terrain sculpt tool-belt actions (`sculpt_raise`, `sculpt_lower`, `sculpt_smooth`, `sculpt_flatten`, `sculpt_erase`, `sculpt_plateau`, `sculpt_ramp`, `sculpt_slope`, `sculpt_terrace`, `sculpt_pinch`, `sculpt_erode`, and `sculpt_noise`) through `apply_authored_terrain_operation` instead of leaving them as brush-focus-only controls.
+- Added explicit terrain sample/stroke fields to the shared tool action context so the Level Editor passes selected terrain room, row, column, delta, radius, height, iterations, and strength into the existing dirty-region heightfield brush command.
+- Updated the tool-belt contract and execution tests so terrain brush actions prove KMAP mutation, dirty-region metadata, stale export/game-proof impact, and undo restoration.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_terrain_belt`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_terrain_ui`.
+
 ### [2026-06-21] Map Studio Routes Entry Point Belt Action Through IFO Player Start Command
 
 Owner: LordVaderCW

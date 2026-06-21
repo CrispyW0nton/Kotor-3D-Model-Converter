@@ -42,10 +42,10 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert audit.blocking_messages == ()
     assert audit.total_actions >= 80
     assert audit.implemented_actions == audit.total_actions
-    assert audit.command_backed_actions >= 51
-    assert audit.mutating_command_actions >= 51
+    assert audit.command_backed_actions >= 65
+    assert audit.mutating_command_actions >= 64
     assert audit.query_command_actions >= 1
-    assert audit.workflow_focus_actions >= 20
+    assert audit.workflow_focus_actions <= 10
     assert statuses["cube"].contract_kind == "command_mutates_kmap"
     assert statuses["cube"].command_method == "add_authored_room_primitive"
     assert statuses["cube"].mutates_kmap is True
@@ -55,6 +55,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["placeable"].command_method == "add_authored_gameplay_placement"
     assert statuses["entry_point"].contract_kind == "command_mutates_kmap"
     assert statuses["entry_point"].command_method == "set_authored_module_entry_point"
+    assert statuses["sculpt_raise"].contract_kind == "command_mutates_kmap"
+    assert statuses["sculpt_raise"].command_method == "apply_authored_terrain_operation"
     assert statuses["terrain"].contract_kind == "workflow_focus"
     assert statuses["stage_module"].contract_kind == "studio_workspace"
     assert all(status.in_any_preset for status in audit.statuses)
@@ -122,6 +124,44 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     }
     assert placeable_route.mutates_kmap is True
     assert "authored GIT/IFO state" in placeable_route.authoring_context
+
+    terrain_raise = resolve_map_studio_tool_belt_action(
+        "sculpt_raise",
+        MapStudioToolActionContext(
+            room_resref="terrain01",
+            terrain_row_index=1,
+            terrain_column_index=2,
+            terrain_delta=0.25,
+            terrain_radius=1,
+            terrain_height=0.5,
+            terrain_iterations=2,
+            terrain_strength=0.75,
+        ),
+    )
+
+    assert terrain_raise.enabled is True
+    assert terrain_raise.command_method == "apply_authored_terrain_operation"
+    assert terrain_raise.command_kwargs == {
+        "operation": "brush_stroke:raise",
+        "room_resref": "terrain01",
+        "row_index": 1,
+        "column_index": 2,
+        "points": ((1, 2, 1.0),),
+        "delta": 0.25,
+        "radius": 1,
+        "height": 0.5,
+        "iterations": 2,
+        "strength": 0.75,
+        "preserve_boundary": True,
+    }
+    assert terrain_raise.mutates_kmap is True
+    assert terrain_raise.stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+    assert "dirty-region scoped heightfield stroke" in terrain_raise.authoring_context
+
+    terrain_missing = resolve_map_studio_tool_belt_action("sculpt_lower")
+
+    assert terrain_missing.enabled is False
+    assert "selected authored terrain room" in terrain_missing.disabled_reason
 
     creature_route = resolve_map_studio_tool_belt_action(
         "creature",
@@ -720,6 +760,38 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
     assert restored_placements["entry_point"]["position"][2] == 9.0
     assert restored_placements["placeables"][0]["position"][2] == -7.0
     assert restored_placements["waypoints"][0]["position"][2] == 8.0
+
+    source_terrain_heights = copy.deepcopy(restored_terrain_payload["rooms"][0]["primitive"]["heights"])
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "sculpt_raise",
+        MapStudioToolActionContext(
+            room_resref=terrain_room.room_resref,
+            terrain_row_index=1,
+            terrain_column_index=1,
+            terrain_delta=0.25,
+            terrain_radius=0,
+            terrain_points=((1, 1, 1.0),),
+        ),
+    )
+
+    brushed_payload = controller.project.extra_sections["authored_module"]
+    brushed_room = brushed_payload["rooms"][0]
+    brushed_heights = brushed_room["primitive"]["heights"]
+
+    assert round(float(brushed_heights[1][1]), 6) == round(float(source_terrain_heights[1][1]) + 0.25, 6)
+    assert brushed_room["primitive"]["metadata"]["last_brush"] == "raise"
+    assert brushed_room["primitive"]["metadata"]["last_dirty_region"]["changed_sample_count"] == 1
+    assert brushed_room["primitive"]["metadata"]["dirty_region_only"] is True
+    assert brushed_room["primitive"]["metadata"]["source"] == "map_studio:terrain_brush_stroke"
+    assert brushed_room["metadata"]["last_operation"] == "terrain_brush_stroke"
+    assert controller.command_history.undo_label == "Apply terrain operation brush_stroke:raise"
+
+    controller.undo_map_studio_command()
+
+    restored_brush_payload = controller.project.extra_sections["authored_module"]
+    assert restored_brush_payload["rooms"][0]["primitive"]["heights"] == source_terrain_heights
 
     controller.create_authored_room_preset_module(preset_id="terrain_heightfield", module_root="grmirz01")
     mirror_room = controller.authored_terrain_room_choices()[0]

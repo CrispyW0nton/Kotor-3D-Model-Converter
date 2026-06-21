@@ -1418,8 +1418,20 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         entry_y = getattr(self.builder_tab, "entryPointPosYSpinBox", None)
         entry_z = getattr(self.builder_tab, "entryPointPosZSpinBox", None)
         entry_facing = getattr(self.builder_tab, "entryPointFacingSpinBox", None)
+        terrain_context_getter = getattr(self.builder_tab, "current_terrain_brush_context", None)
+        terrain_context = terrain_context_getter() if callable(terrain_context_getter) else {}
+        if not isinstance(terrain_context, dict):
+            terrain_context = {}
+        terrain_row = getattr(self.builder_tab, "terrainRowSpinBox", None)
+        terrain_column = getattr(self.builder_tab, "terrainColumnSpinBox", None)
+        terrain_room_resref = str(terrain_context.get("room_resref") or "").strip()
+        current_room_resref = str(
+            terrain_room_resref
+            if key.startswith("sculpt_")
+            else vertex_data.get("room_resref") or primitive_data.get("room_resref") or self._map_studio_current_room_resref()
+        )
         return MapStudioToolActionContext(
-            room_resref=str(vertex_data.get("room_resref") or primitive_data.get("room_resref") or self._map_studio_current_room_resref()),
+            room_resref=current_room_resref,
             first_room_resref=str(bridge_first.get("room_resref") or union_first.get("room_resref") or ""),
             second_room_resref=str(bridge_second.get("room_resref") or union_second.get("room_resref") or ""),
             result_room_resref=str(
@@ -1456,6 +1468,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             positive_z=key != "reverse_normals",
             operation_distance=float(operation_distance.value()) if operation_distance is not None else 0.25,
             operation_edge_index=int(operation_edge.value()) if operation_edge is not None else 0,
+            terrain_row_index=int(terrain_row.value()) if terrain_row is not None else 0,
+            terrain_column_index=int(terrain_column.value()) if terrain_column is not None else 0,
+            terrain_delta=float(terrain_context.get("delta", 0.1) or 0.1),
+            terrain_radius=int(terrain_context.get("radius", 0) or 0),
+            terrain_height=float(terrain_context.get("height", 0.0) or 0.0),
+            terrain_iterations=int(terrain_context.get("iterations", 1) or 1),
+            terrain_strength=float(terrain_context.get("strength", 0.5) or 0.5),
             cut_center=(
                 float(cut_center_x.value()) if cut_center_x is not None else 0.0,
                 float(cut_center_y.value()) if cut_center_y is not None else 0.0,
@@ -1860,6 +1879,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "sound",
             "camera",
             "store",
+            "sculpt_raise",
+            "sculpt_lower",
+            "sculpt_smooth",
+            "sculpt_flatten",
+            "sculpt_erase",
+            "sculpt_plateau",
+            "sculpt_ramp",
+            "sculpt_slope",
+            "sculpt_terrace",
+            "sculpt_pinch",
+            "sculpt_erode",
+            "sculpt_noise",
         }
         if key in direct_command_actions:
             if self._execute_map_studio_tool_belt_command(key):
