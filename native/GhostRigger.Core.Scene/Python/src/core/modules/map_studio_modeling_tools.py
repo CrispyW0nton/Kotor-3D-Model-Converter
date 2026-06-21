@@ -381,7 +381,7 @@ _MODELING_TOOLS: tuple[MapStudioModelingTool, ...] = (
         ("object", "vertex", "edge", "face"),
         "Mirror authored components vertically for ceilings, overhangs, and layered terrain planning.",
         "Vertical mirroring needs explicit MDL/WOK rebuild validation before it can be promoted beyond planning.",
-        implemented=False,
+        implemented=True,
     ),
     MapStudioModelingTool(
         "boolean_a_minus_b",
@@ -987,8 +987,8 @@ _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
         "geometry",
         "mirror_z",
         "Mirror authored components vertically.",
-        "Vertical mirroring is planned until backed by deterministic MDL/WOK validation.",
-        implemented=False,
+        "Mirror Z reflects terrain heightfields around a horizontal plane; arbitrary mesh mirroring remains planned.",
+        implemented=True,
     ),
     MapStudioToolBeltAction(
         "insert_edge_loop",

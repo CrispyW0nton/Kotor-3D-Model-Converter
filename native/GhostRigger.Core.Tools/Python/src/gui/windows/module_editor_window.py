@@ -1784,6 +1784,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "mirror",
             "mirror_x",
             "mirror_y",
+            "mirror_z",
             "extrude",
             "bevel",
             "boolean",

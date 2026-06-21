@@ -210,6 +210,19 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert tool_by_key["soften_edges"].implemented is True
     assert tool_by_key["harden_edges"].implemented is True
 
+    mirror_z = resolve_map_studio_tool_belt_action(
+        "mirror_z",
+        MapStudioToolActionContext(room_resref="terrain01", metadata={"center_height": 0.25}),
+    )
+
+    assert mirror_z.enabled is True
+    assert mirror_z.command_method == "apply_authored_terrain_operation"
+    assert mirror_z.command_kwargs == {"operation": "mirror_z", "room_resref": "terrain01", "center_height": 0.25}
+    assert mirror_z.mutates_kmap is True
+    assert "horizontal Z plane" in mirror_z.authoring_context
+    assert "Arbitrary mesh/component Z mirroring remains planned" in mirror_z.authoring_context
+    assert tool_by_key["mirror_z"].implemented is True
+
     shrink_wrap = resolve_map_studio_tool_belt_action(
         "shrink_wrap",
         MapStudioToolActionContext(room_resref="terrain01"),
@@ -453,6 +466,41 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
     assert restored_placements["placeables"][0]["position"][2] == -7.0
     assert restored_placements["waypoints"][0]["position"][2] == 8.0
 
+    controller.create_authored_room_preset_module(preset_id="terrain_heightfield", module_root="grmirz01")
+    mirror_room = controller.authored_terrain_room_choices()[0]
+    mirror_payload = controller.project.extra_sections["authored_module"]
+    mirror_heights = [list(row) for row in mirror_payload["rooms"][0]["primitive"]["heights"]]
+    mirror_heights[0][0] = 0.0
+    mirror_heights[2][2] = 0.6
+    mirror_payload["rooms"][0]["primitive"]["heights"] = mirror_heights
+    controller.project.extra_sections["authored_module"] = mirror_payload
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "mirror_z",
+        MapStudioToolActionContext(room_resref=mirror_room.room_resref, metadata={"center_height": 0.3}),
+    )
+
+    mirrored_payload = controller.project.extra_sections["authored_module"]
+    mirrored_room = mirrored_payload["rooms"][0]
+    mirrored_heights = mirrored_room["primitive"]["heights"]
+
+    assert mirrored_heights[0][0] == 0.6
+    assert mirrored_heights[2][2] == 0.0
+    assert mirrored_room["primitive"]["metadata"]["last_operation"] == "mirror_z"
+    assert mirrored_room["primitive"]["metadata"]["mirror_axis"] == "z"
+    assert mirrored_room["primitive"]["metadata"]["mirror_center_height"] == 0.3
+    assert mirrored_room["metadata"]["last_operation"] == "terrain_mirror_z"
+    assert mirrored_payload["placements"]["metadata"]["terrain_height_repaired_after_operation"] == "terrain_mirror_z"
+    assert controller.command_history.undo_label == "Apply terrain operation mirror_z"
+
+    controller.undo_map_studio_command()
+
+    restored_mirror_payload = controller.project.extra_sections["authored_module"]
+    restored_heights = restored_mirror_payload["rooms"][0]["primitive"]["heights"]
+    assert restored_heights[0][0] == 0.0
+    assert restored_heights[2][2] == 0.6
+
 
 def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -> None:
     window_source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
@@ -466,6 +514,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert "execute_map_studio_tool_belt_action(self.controller, action_key, context)" in window_source
     assert '"duplicate_special",' in window_source
     assert '"shrink_wrap",' in window_source
+    assert '"mirror_z",' in window_source
     assert 'MapStudioToolBeltAction(\n        "triangulate",' in scene_catalog
     assert 'MapStudioToolBeltAction(\n        "triangulate",' in tools_catalog
 

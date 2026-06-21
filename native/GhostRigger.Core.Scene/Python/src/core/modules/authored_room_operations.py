@@ -58,6 +58,7 @@ from .authored_terrain_builder import (
     apply_terrain_brush_stroke,
     apply_terrain_shape_preset,
     flatten_terrain_heightfield,
+    mirror_terrain_heightfield_z,
     offset_terrain_heightfield_samples,
     sample_terrain_height,
     set_terrain_heightfield_sample,
@@ -3111,6 +3112,12 @@ def apply_authored_terrain_operation(project: AuthoredModuleProject, operation: 
             iterations=int(kwargs.get("iterations", 1)),
             strength=float(kwargs.get("strength", 0.5)),
             preserve_boundary=bool(kwargs.get("preserve_boundary", True)),
+        )
+    elif op in {"mirror_z", "vertical_mirror"}:
+        center_height = kwargs.get("center_height", kwargs.get("height", None))
+        updated_primitive = mirror_terrain_heightfield_z(
+            primitive,
+            center_height=None if center_height is None else float(center_height),
         )
     elif op in {"brush_stroke", "terrain_brush_stroke"}:
         updated_primitive = apply_terrain_brush_stroke(

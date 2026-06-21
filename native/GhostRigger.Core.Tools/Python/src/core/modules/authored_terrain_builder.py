@@ -242,6 +242,54 @@ def terrain_height_range(primitive: TerrainHeightfieldPrimitive) -> tuple[float,
     return (min(values), max(values))
 
 
+def mirror_terrain_heightfield_z(
+    primitive: TerrainHeightfieldPrimitive,
+    *,
+    center_height: float | None = None,
+) -> TerrainHeightfieldPrimitive:
+    """Reflect terrain height samples around a horizontal Z plane."""
+
+    validation = validate_terrain_heightfield_primitive(primitive)
+    if not validation.ok:
+        raise ValueError("; ".join(validation.blocking_issues))
+    min_height, max_height = terrain_height_range(primitive)
+    if center_height is None:
+        mirror_height = (float(min_height) + float(max_height)) * 0.5
+    else:
+        mirror_height = float(center_height)
+    if not math.isfinite(mirror_height):
+        raise ValueError("Terrain Mirror Z center height must be finite.")
+    rows = tuple(
+        tuple((2.0 * mirror_height) - float(value) for value in row)
+        for row in _height_rows(primitive)
+    )
+    mirrored = _replace_height_rows(
+        primitive,
+        rows,
+        operation="mirror_z",
+        metadata={
+            "mirror_axis": "z",
+            "mirror_center_height": mirror_height,
+            "height_min_before": float(min_height),
+            "height_max_before": float(max_height),
+            "source": "map_studio:terrain_mirror_z",
+        },
+    )
+    slope_report = analyse_terrain_slopes(mirrored)
+    return replace(
+        mirrored,
+        metadata={
+            **dict(mirrored.metadata),
+            "mirror_z_slope_report": {
+                "max_slope_degrees": float(slope_report.max_slope_degrees),
+                "walkable_triangle_count": int(slope_report.walkable_triangle_count),
+                "non_walk_triangle_count": int(slope_report.non_walk_triangle_count),
+                "warnings": list(slope_report.warnings),
+            },
+        },
+    )
+
+
 def available_terrain_shape_presets() -> tuple[TerrainShapePreset, ...]:
     """Return named terrain forms available to Map Studio."""
 
@@ -1036,6 +1084,7 @@ __all__ = [
     "build_terrain_wok",
     "compile_terrain_room_geometry",
     "flatten_terrain_heightfield",
+    "mirror_terrain_heightfield_z",
     "offset_terrain_heightfield_samples",
     "sample_terrain_height",
     "set_terrain_heightfield_sample",

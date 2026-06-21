@@ -342,6 +342,26 @@ def resolve_map_studio_tool_belt_action(
             mutates_kmap=True,
         )
 
+    if key == "mirror_z":
+        kwargs: dict[str, Any] = {
+            "operation": "mirror_z",
+            "room_resref": ctx.room_resref,
+        }
+        if "center_height" in ctx.metadata:
+            kwargs["center_height"] = float(ctx.metadata["center_height"])
+        return _route(
+            action,
+            focus_component_mode="terrain",
+            focus_snap_mode="surface",
+            command_method="apply_authored_terrain_operation",
+            command_kwargs=kwargs,
+            mutates_kmap=True,
+            authoring_context=(
+                "Mirror Z: reflect a terrain heightfield around a horizontal Z plane, then revalidate WOK slope, "
+                "placements, and export readiness. Arbitrary mesh/component Z mirroring remains planned."
+            ),
+        )
+
     if key in {"mirror", "mirror_x", "mirror_y"}:
         axis = {"mirror_y": "y", "mirror_x": "x"}.get(key, _clean_axis(ctx.axis))
         return _route(
