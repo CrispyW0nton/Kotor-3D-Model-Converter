@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Readiness Panel Shows VIS And Lightmap Status
+
+Owner: LordVaderCW
+Task: T2604
+Subsystem: Map Studio / Level Editor readiness panel UX
+Intersects: GUI Boundary Panels readiness panel and ModuleMeshes mirror package.
+
+- Added dedicated `VIS visibility` and `Lighting/lightmaps` summaries to the Map Studio readiness panel so modders can see room visibility links, broken VIS targets, viewport-light-only status, lightmap manifest state, and game-tested lighting proof before staging a `.mod`.
+- Kept KOTOR runtime policy in the headless readiness contract; the panel now formats existing `visibility` and `lighting` metadata instead of owning export rules.
+- Mirrored the readiness panel changes into the ModuleMeshes package and updated source-contract coverage for the new labels and metadata bindings.
+- Verification: `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/readiness_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/readiness_panel.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_runtime_resources -q --basetemp .pytest_tmp_map_studio_readiness_vis_light`.
+
 ### [2026-06-21] Map Studio Shows VIS Readiness In Workflow Panel
 
 Owner: LordVaderCW

@@ -65,6 +65,16 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.pathing_export_gate_label.setWordWrap(True)
         root.addWidget(self.pathing_export_gate_label)
 
+        self.visibility_label = QtWidgets.QLabel("VIS visibility: Not checked")
+        self.visibility_label.setObjectName("mapStudioReadinessVisibilityLabel")
+        self.visibility_label.setWordWrap(True)
+        root.addWidget(self.visibility_label)
+
+        self.lighting_label = QtWidgets.QLabel("Lighting/lightmaps: Not checked")
+        self.lighting_label.setObjectName("mapStudioReadinessLightingLabel")
+        self.lighting_label.setWordWrap(True)
+        root.addWidget(self.lighting_label)
+
         self.pathing_blocker_table = QtWidgets.QTableWidget(0, 3)
         self.pathing_blocker_table.setObjectName("mapStudioReadinessPathingBlockerTable")
         self.pathing_blocker_table.setHorizontalHeaderLabels(("PTH / WOK issue", "Export impact", "Fix"))
@@ -281,6 +291,8 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.runtime_label.setText("Runtime resources: Not checked")
             self.pathing_label.setText("Pathing: Not checked")
             self.pathing_export_gate_label.setText("Pathing export gate: Not checked")
+            self.visibility_label.setText("VIS visibility: Not checked")
+            self.lighting_label.setText("Lighting/lightmaps: Not checked")
             self._set_pathing_blocker_rows((), "")
             self.floor_plan_geometry_label.setText("Floor-plan geometry: Not checked")
             self.doorway_transition_label.setText("Doorway/transition intent: Not checked")
@@ -338,6 +350,8 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         else:
             self.runtime_label.setText("Runtime resources: Not checked")
         self._set_pathing_summary(dict(metadata.get("pathing", {}) or {}))
+        self._set_visibility_summary(dict(metadata.get("visibility", {}) or {}))
+        self._set_lighting_summary(dict(metadata.get("lighting", {}) or {}))
         self._set_floor_plan_geometry_summary(dict(metadata.get("geometry_validation", {}) or {}))
         self._set_doorway_transition_summary(dict(metadata.get("doorway_transition", {}) or {}))
         self._set_component_edit_summary(dict(metadata.get("component_edit", {}) or {}))
@@ -540,6 +554,81 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             f"Pathing: {status}. {resource}; {point_count} point(s), "
             f"{connection_count} connection(s); anchors: {anchor_text}"
         )
+
+    def _set_visibility_summary(self, visibility: dict[str, Any]) -> None:
+        """Show authored VIS room-link readiness from the core readiness contract."""
+
+        if not visibility:
+            self.visibility_label.setText("VIS visibility: Not checked")
+            return
+        status = str(visibility.get("status") or "Not checked")
+        ready = bool(visibility.get("ready", False))
+        try:
+            room_count = int(visibility.get("room_count", 0) or 0)
+            vis_entry_count = int(visibility.get("vis_entry_count", 0) or 0)
+            link_count = int(visibility.get("link_count", 0) or 0)
+            cross_room_link_count = int(visibility.get("cross_room_link_count", 0) or 0)
+        except (TypeError, ValueError):
+            room_count = vis_entry_count = link_count = cross_room_link_count = 0
+        isolated_rooms = [str(room) for room in list(visibility.get("isolated_rooms") or []) if str(room).strip()]
+        missing_targets = [dict(item) for item in list(visibility.get("missing_targets") or []) if isinstance(item, dict)]
+        blockers = [str(message) for message in list(visibility.get("blocking_messages") or []) if str(message).strip()]
+        warnings = [str(message) for message in list(visibility.get("warnings") or []) if str(message).strip()]
+        fix_hint = str(visibility.get("fix_hint") or "Review LYT/VIS room visibility links before packaging.").strip()
+        if blockers:
+            self.visibility_label.setText(f"VIS visibility: {status}. Blocks export: {blockers[0]} Fix: {fix_hint}")
+            return
+        if isolated_rooms:
+            first_rooms = ", ".join(isolated_rooms[:4])
+            if len(isolated_rooms) > 4:
+                first_rooms += f", +{len(isolated_rooms) - 4} more"
+            self.visibility_label.setText(f"VIS visibility: {status}. Isolated room(s): {first_rooms}. Fix: {fix_hint}")
+            return
+        if warnings:
+            self.visibility_label.setText(f"VIS visibility: {status}. Review: {warnings[0]} Fix: {fix_hint}")
+            return
+        missing_text = f", {len(missing_targets)} missing target(s)" if missing_targets else ""
+        label = "ready" if ready else "needs work"
+        entry_word = "entry" if vis_entry_count == 1 else "entries"
+        self.visibility_label.setText(
+            f"VIS visibility: {status} ({label}). {vis_entry_count}/{room_count} room VIS {entry_word}; "
+            f"{link_count} link(s), {cross_room_link_count} cross-room{missing_text}."
+        )
+
+    def _set_lighting_summary(self, lighting: dict[str, Any]) -> None:
+        """Show viewport-light, lightmap, and game-proof lighting status."""
+
+        if not lighting:
+            self.lighting_label.setText("Lighting/lightmaps: Not checked")
+            return
+        status = str(lighting.get("status") or "Not checked")
+        ready = bool(lighting.get("ready", False))
+        try:
+            light_count = int(lighting.get("light_count", 0) or 0)
+            room_count = int(lighting.get("room_count", 0) or 0)
+            lit_room_count = len(list(lighting.get("rooms_with_lights") or []))
+            lightmap_room_count = int(lighting.get("lightmap_room_count", 0) or 0)
+        except (TypeError, ValueError):
+            light_count = room_count = lit_room_count = lightmap_room_count = 0
+        lightmap_status = str(lighting.get("lightmap_status") or "not_started")
+        manifest = str(lighting.get("lightmap_manifest_path") or "").strip()
+        game_tested = bool(lighting.get("game_tested_lighting", False))
+        warnings = [str(message) for message in list(lighting.get("warnings") or []) if str(message).strip()]
+        fix_hint = str(lighting.get("fix_hint") or "Plan lights or attach a lightmap proof manifest before game-ready labeling.").strip()
+        proof = "game-tested" if game_tested else ("export candidate" if ready else "not game-tested")
+        details = (
+            f"{light_count} authored light(s); {lit_room_count}/{room_count} room(s) lit; "
+            f"lightmap {lightmap_status}; {lightmap_room_count} lightmapped room(s); proof: {proof}."
+        )
+        if manifest:
+            details += f" Manifest: {manifest}."
+        if warnings:
+            self.lighting_label.setText(f"Lighting/lightmaps: {status}. {details} Review: {warnings[0]} Fix: {fix_hint}")
+            return
+        if not ready:
+            self.lighting_label.setText(f"Lighting/lightmaps: {status}. {details} Fix: {fix_hint}")
+            return
+        self.lighting_label.setText(f"Lighting/lightmaps: {status}. {details}")
 
     def _set_pathing_blocker_rows(self, blockers: tuple[str, ...], fix_hint: str) -> None:
         """List PTH/WOK blockers that prevent safe .mod export."""
