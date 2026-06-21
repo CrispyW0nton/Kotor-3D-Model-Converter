@@ -218,6 +218,14 @@ knowledge_base/reference/spreadsheets/
 # ── Demo / capture artefacts ──────────────────────────────────────────────────
 *.mp4
 capture_demo_video.py
+test_artifacts/
+test_artificates/
+knowledge_base/test_artifacts/
+knowledge_base/test_artificates/
+docs/knowledgebase/test_artifacts/
+docs/knowledgebase/test_artificates/
+docs/knowledge_base/test_artifacts/
+docs/knowledge_base/test_artificates/
 
 # ── OS noise ──────────────────────────────────────────────────────────────────
 .DS_Store

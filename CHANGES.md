@@ -10,6 +10,19 @@ For each completed change, add a dated entry with:
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
 ## 2026-06-21
+### [2026-06-21] Ignore Generated Test Artifacts
+
+Owner: LordVaderCW
+Subsystem: Git hygiene / test artifacts
+
+- Added ignore rules for generated `test_artifacts` directories and the misspelled `test_artificates` variant across root, `knowledge_base`, and docs knowledgebase paths.
+- Removed previously tracked `knowledge_base/test_artifacts` files from the Git index with `git rm --cached` so the local diagnostic captures remain on disk but will not upload to GitHub.
+
+Verification:
+- `git ls-files | Select-String -Pattern '(^|/)(test_artifacts|test_artificates)(/|$)' | Select-Object -First 5` -> no tracked artifact paths remain.
+- `git check-ignore -v knowledge_base/test_artifacts/viewport_video_2026_06_21_135842/frames/frame_00001.jpg` confirms the generated frame path is ignored.
+- `Test-Path knowledge_base\test_artifacts\viewport_video_2026_06_21_135842\frames\frame_00001.jpg` confirms local artifact files were preserved.
+
 ### [2026-06-21] Align Animated Scene Bone Overlays With Viewport Meshes
 
 Owner: LordVaderCW
