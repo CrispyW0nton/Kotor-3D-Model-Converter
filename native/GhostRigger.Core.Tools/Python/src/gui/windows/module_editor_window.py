@@ -665,6 +665,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.export_fbx_action.triggered.connect(lambda: self.export_fbx(False))
         self.export_package_action.triggered.connect(lambda: self.build_module_files())
         self.close_action.triggered.connect(self.close)
+        self.undo_action.triggered.connect(self.undo_map_studio_command)
+        self.redo_action.triggered.connect(self.redo_map_studio_command)
         self.delete_action.triggered.connect(self.delete_selected)
         self.duplicate_action.triggered.connect(self.duplicate_selected)
         self.rename_action.triggered.connect(self.rename_selected)
@@ -789,6 +791,30 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.properties_action.toggled.connect(lambda visible: self.properties.setVisible(visible))
         self.viewport_action.toggled.connect(lambda visible: self.viewport_panel.setVisible(visible))
         self.validation_action.toggled.connect(lambda visible: self.bottom_tabs.setVisible(visible))
+
+    def undo_map_studio_command(self) -> None:
+        result = self.controller.undo_map_studio_command()
+        if result is None:
+            self._update_map_studio_undo_redo_actions()
+            self._log("Nothing to undo.")
+            return
+        self._refresh_all(result.message)
+
+    def redo_map_studio_command(self) -> None:
+        result = self.controller.redo_map_studio_command()
+        if result is None:
+            self._update_map_studio_undo_redo_actions()
+            self._log("Nothing to redo.")
+            return
+        self._refresh_all(result.message)
+
+    def _update_map_studio_undo_redo_actions(self) -> None:
+        undo_label = self.controller.command_history.undo_label
+        redo_label = self.controller.command_history.redo_label
+        self.undo_action.setEnabled(self.controller.can_undo_map_studio_command())
+        self.redo_action.setEnabled(self.controller.can_redo_map_studio_command())
+        self.undo_action.setText(f"Undo {undo_label}" if undo_label else "Undo")
+        self.redo_action.setText(f"Redo {redo_label}" if redo_label else "Redo")
 
     def new_kmap(self) -> None:
         if not self._confirm_discard_or_save():
@@ -3298,6 +3324,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
 
     def _refresh_all(self, message: str = "") -> None:
         self.setWindowTitle(f"GhostRigger Map Studio - Level Editor - {self.project.name}{' *' if self.project.dirty else ''}")
+        self._update_map_studio_undo_redo_actions()
         self._apply_map_studio_tool_belt_preferences_from_project()
         self._refresh_map_studio_tool_belt()
         authored_placements = self.controller.authored_gameplay_placements()

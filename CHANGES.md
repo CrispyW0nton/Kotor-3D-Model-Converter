@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Adds Command History For Undoable Modeling Edits
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Command history / Level Editor undo-redo
+
+- Added a headless Map Studio command-history service that snapshots serialized KMAP authored state, editor selection context, stale KOTOR output metadata, and readiness impact for undoable modeling commands.
+- Wired the Level Editor Undo/Redo actions to the Map Studio command spine with dynamic action labels and restored selection/module/room context on undo or redo.
+- Recorded undo checkpoints for direct floor-plan edits, terrain operations, and primitive add/move/transform commands so the tool belt can call core operations without owning KMAP mutation policy.
+- Verification: `python -m pytest tests/test_map_studio_command_history.py -q --basetemp .pytest_tmp_map_studio_command_history`; `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_command_history.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_command_history.py native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Tools/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py`.
+
 ### [2026-06-21] Map Studio Adds Universal Transform And Snap Controls
 
 Owner: LordVaderCW

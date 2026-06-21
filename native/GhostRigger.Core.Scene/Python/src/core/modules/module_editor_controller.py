@@ -51,6 +51,7 @@ from .map_studio_tool_belt_preferences import (
     MAP_STUDIO_TOOL_BELT_SECTION,
     normalise_map_studio_tool_belt_preferences,
 )
+from .map_studio_command_history import MapStudioCommandHistory, MapStudioCommandRestoreResult
 from .authored_gameplay_marker_geometry import (
     AuthoredGameplayMarkerGeometry,
     authored_gameplay_marker_geometry_for_project,
@@ -139,6 +140,10 @@ def _read_json_object(path: str | Path) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+MAP_STUDIO_MODELING_STALE_OUTPUTS = ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+MAP_STUDIO_MODELING_READINESS_IMPACT = "Map Studio validation, export, install handoff, and game proof are stale."
+
+
 class ModuleEditorController:
     def __init__(self, model: ModuleEditorModel | None = None) -> None:
         self.model = model or ModuleEditorModel()
@@ -149,12 +154,72 @@ class ModuleEditorController:
         self.porter_service = ModulePorterService()
         self.validator = KMapValidator()
         self.export_bridge = LevelExportBridge(self.validator)
-        self.undo_stack: list[tuple[str, Any]] = []
-        self.redo_stack: list[tuple[str, Any]] = []
+        self.command_history = MapStudioCommandHistory()
 
     @property
     def project(self) -> KMapProject:
         return self.model.project
+
+    def _capture_map_studio_command_state(self):
+        return self.command_history.capture(
+            self.project,
+            selected_ids=tuple(self.model.selected_ids),
+            active_module_id=self.model.active_module_id,
+            active_room_id=self.model.active_room_id,
+        )
+
+    def _record_map_studio_command(
+        self,
+        *,
+        action_key: str,
+        label: str,
+        before,
+        stale_outputs: tuple[str, ...] = MAP_STUDIO_MODELING_STALE_OUTPUTS,
+        readiness_impact: str = MAP_STUDIO_MODELING_READINESS_IMPACT,
+        summary: str = "",
+        metadata: dict[str, Any] | None = None,
+    ):
+        record = self.command_history.record(
+            action_key=action_key,
+            label=label,
+            before=before,
+            after=self._capture_map_studio_command_state(),
+            stale_outputs=stale_outputs,
+            readiness_impact=readiness_impact,
+            summary=summary,
+            metadata=metadata,
+        )
+        if record is not None:
+            self.model.log(f"Undo checkpoint recorded: {record.label}.")
+        return record
+
+    def can_undo_map_studio_command(self) -> bool:
+        return self.command_history.can_undo
+
+    def can_redo_map_studio_command(self) -> bool:
+        return self.command_history.can_redo
+
+    def undo_map_studio_command(self) -> MapStudioCommandRestoreResult | None:
+        result = self.command_history.undo()
+        if result is None:
+            return None
+        self.model.set_project(result.project)
+        self.model.selected_ids = list(result.selected_ids)
+        self.model.active_module_id = result.active_module_id
+        self.model.active_room_id = result.active_room_id
+        self.model.log(result.message)
+        return result
+
+    def redo_map_studio_command(self) -> MapStudioCommandRestoreResult | None:
+        result = self.command_history.redo()
+        if result is None:
+            return None
+        self.model.set_project(result.project)
+        self.model.selected_ids = list(result.selected_ids)
+        self.model.active_module_id = result.active_module_id
+        self.model.active_room_id = result.active_room_id
+        self.model.log(result.message)
+        return result
 
     def new_project(self, name: str = "new_level", game: str = "K1", author: str = "") -> KMapProject:
         game_key = str(game or "K1").strip().upper()
@@ -165,6 +230,7 @@ class ModuleEditorController:
             raise ValueError(issue)
         project_name = normalise_resref(name) or "new_level"
         self.model.set_project(new_kmap_project(name=project_name, game=game_key, author=str(author or "").strip()))
+        self.command_history.clear()
         self.model.project.dirty = True
         self.model.log(f"Created new Map Studio KMAP project {project_name} for {game_key}.")
         return self.model.project
@@ -172,6 +238,7 @@ class ModuleEditorController:
     def open_project(self, path: str | Path) -> KMapProject:
         project = KMapSerializer.load(path)
         self.model.set_project(project)
+        self.command_history.clear()
         self.model.log(f"Opened KMAP {Path(path).name}.")
         return project
 
@@ -689,6 +756,12 @@ class ModuleEditorController:
         self.project.game = updated.game
         self.project.dirty = True
         self.model.log(f"Applied Map Studio room operation {operation}.")
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.operation",
+            label=f"Apply room operation {operation}",
+            before=before,
+            metadata={"operation": operation, "kwargs": dict(kwargs)},
+        )
         return self.authored_module_readiness()
 
     def apply_authored_terrain_operation(self, *, operation: str, **kwargs: Any):
@@ -698,6 +771,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -709,6 +783,12 @@ class ModuleEditorController:
         self.project.game = updated.game
         self.project.dirty = True
         self.model.log(f"Applied Map Studio terrain operation {operation}.")
+        self._record_map_studio_command(
+            action_key="map_studio.terrain.operation",
+            label=f"Apply terrain operation {operation}",
+            before=before,
+            metadata={"operation": operation, "kwargs": dict(kwargs)},
+        )
         return self.authored_module_readiness()
 
     def prepare_map_studio_terrain_sculpt_frame(
@@ -927,6 +1007,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -944,6 +1025,12 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Moved Map Studio room {room_resref or '(first room)'} outline point {int(point_index)}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.move_vertex",
+            label=f"Move {room_resref or 'room'} outline point {int(point_index)}",
+            before=before,
+            metadata={"room_resref": room_resref, "point_index": int(point_index), "world_position": tuple(world_position)},
         )
         return self.authored_module_readiness()
 
@@ -992,6 +1079,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -1011,6 +1099,17 @@ class ModuleEditorController:
         self.model.log(
             f"Snapped Map Studio room {room_resref or '(first room)'} point {int(point_index)} to point {int(target_point_index)}; previous exports/proofs are now stale."
         )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.snap_vertex",
+            label=f"Snap {room_resref or 'room'} point {int(point_index)}",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "point_index": int(point_index),
+                "target_point_index": int(target_point_index),
+                "target_room_resref": target_room_resref,
+            },
+        )
         return self.authored_module_readiness()
 
     def weld_authored_floor_plan_vertices(
@@ -1027,6 +1126,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -1047,6 +1147,17 @@ class ModuleEditorController:
         self.model.log(
             f"Welded Map Studio room {room_resref or '(first room)'} floor-plan vertices {indices}; previous exports/proofs are now stale."
         )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.weld_vertices",
+            label=f"Weld {room_resref or 'room'} vertices",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "point_indices": indices,
+                "target_point_index": target_point_index,
+                "position_policy": position_policy,
+            },
+        )
         return self.authored_module_readiness()
 
     def flatten_authored_floor_plan_vertices(
@@ -1063,6 +1174,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -1083,6 +1195,12 @@ class ModuleEditorController:
         self.model.log(
             f"Flattened Map Studio room {room_resref or '(first room)'} floor-plan vertices {indices} on {axis}; previous exports/proofs are now stale."
         )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.flatten_vertices",
+            label=f"Flatten {room_resref or 'room'} vertices on {axis}",
+            before=before,
+            metadata={"room_resref": room_resref, "point_indices": indices, "axis": axis, "value": value},
+        )
         return self.authored_module_readiness()
 
     def cleanup_authored_floor_plan_vertices(
@@ -1097,6 +1215,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -1114,6 +1233,12 @@ class ModuleEditorController:
         self.model.log(
             f"Cleaned Map Studio room {room_resref or '(first room)'} floor-plan vertices; previous exports/proofs are now stale."
         )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.cleanup_vertices",
+            label=f"Clean {room_resref or 'room'} floor-plan vertices",
+            before=before,
+            metadata={"room_resref": room_resref, "tolerance": float(tolerance)},
+        )
         return self.authored_module_readiness()
 
     def fill_authored_floor_plan_face(
@@ -1128,6 +1253,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -1146,6 +1272,12 @@ class ModuleEditorController:
         self.model.log(
             f"Filled Map Studio room {room_resref or '(first room)'} floor-plan face loop {indices}; previous exports/proofs are now stale."
         )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.fill_face",
+            label=f"Fill {room_resref or 'room'} floor-plan face",
+            before=before,
+            metadata={"room_resref": room_resref, "point_indices": indices},
+        )
         return self.authored_module_readiness()
 
     def triangulate_authored_floor_plan_face(
@@ -1159,6 +1291,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -1287,6 +1420,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -1308,6 +1442,19 @@ class ModuleEditorController:
         self.model.log(
             f"Transformed Map Studio room primitive {primitive_name} in {room_resref or '(first room)'}; previous exports/proofs are now stale."
         )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.transform",
+            label=f"Transform primitive {primitive_name}",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "primitive_name": primitive_name,
+                "translation": translation,
+                "rotation_degrees_z": rotation_degrees_z,
+                "scale": scale,
+                "pivot": pivot,
+            },
+        )
         return self.authored_module_readiness()
 
     def move_authored_room_primitive(self, *, room_resref: str, primitive_name: str, world_delta: Any):
@@ -1317,6 +1464,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -1334,6 +1482,12 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Moved Map Studio room primitive {primitive_name}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.move",
+            label=f"Move primitive {primitive_name}",
+            before=before,
+            metadata={"room_resref": room_resref, "primitive_name": primitive_name, "world_delta": world_delta},
         )
         return self.authored_module_readiness()
 
@@ -1356,6 +1510,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -1379,6 +1534,22 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Added Map Studio room primitive {primitive_kind} {primitive_name or '(auto-named)'}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.add",
+            label=f"Add {primitive_kind} primitive",
+            before=before,
+            metadata={
+                "primitive_kind": primitive_kind,
+                "room_resref": room_resref,
+                "primitive_name": primitive_name,
+                "translation": translation,
+                "rotation_degrees_z": rotation_degrees_z,
+                "scale": scale,
+                "pivot": pivot,
+                "texture": texture,
+                "floor_surface": floor_surface,
+            },
         )
         return self.authored_module_readiness()
 
