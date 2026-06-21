@@ -1068,9 +1068,8 @@ def resolve_map_studio_tool_belt_action(
             action,
             focus_component_mode="object",
             focus_snap_mode="grid",
-            command_method="apply_authored_room_operation",
+            command_method="boolean_difference_authored_floor_plan_rooms",
             command_kwargs={
-                "operation": "boolean_difference",
                 "first_room_resref": minuend,
                 "second_room_resref": cutter,
                 "result_room_resref": ctx.result_room_resref,

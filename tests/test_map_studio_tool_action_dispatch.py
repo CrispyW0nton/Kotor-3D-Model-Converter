@@ -74,6 +74,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["opening"].command_method == "apply_authored_room_operation"
     assert statuses["cut"].contract_kind == "command_mutates_kmap"
     assert statuses["cut"].command_method == "apply_authored_room_operation"
+    assert statuses["boolean_a_minus_b"].contract_kind == "command_mutates_kmap"
+    assert statuses["boolean_a_minus_b"].command_method == "boolean_difference_authored_floor_plan_rooms"
     assert statuses["opening_marker"].contract_kind == "command_mutates_kmap"
     assert statuses["opening_marker"].command_method == "apply_authored_room_operation"
     assert statuses["sculpt_raise"].contract_kind == "command_mutates_kmap"
@@ -616,9 +618,8 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     )
 
     assert boolean_a_minus_b.enabled is True
-    assert boolean_a_minus_b.command_method == "apply_authored_room_operation"
+    assert boolean_a_minus_b.command_method == "boolean_difference_authored_floor_plan_rooms"
     assert boolean_a_minus_b.command_kwargs == {
-        "operation": "boolean_difference",
         "first_room_resref": "room_a",
         "second_room_resref": "room_b",
         "result_room_resref": "bool_out",
@@ -1365,7 +1366,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert boolean_payload_after["rooms"][0]["primitive"]["metadata"]["operation"] == "boolean_difference"
     assert boolean_payload_after["rooms"][0]["primitive"]["metadata"]["boolean_cutter_consumed"] is True
     assert boolean_payload_after["rooms"][0]["primitive"]["metadata"]["boolean_cutter_room_resref"] == "grbool01_cut"
-    assert controller.command_history.undo_label == "Apply room operation boolean_difference"
+    assert controller.command_history.undo_label == "Boolean difference grbool01_room01 - grbool01_cut"
 
     controller.undo_map_studio_command()
 
@@ -1676,6 +1677,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert "script_field_name" in source
         assert 'command_method = "set_authored_script_hook" if script_resref else "remove_authored_script_hook"' in source
         assert 'command_method="apply_authored_room_operation"' in source
+        assert 'command_method="boolean_difference_authored_floor_plan_rooms"' in source
         assert 'command_method="duplicate_authored_room_primitive"' in source
         assert 'command_method="set_authored_room_edge_normal_policy"' in source
         assert 'command_method="apply_authored_terrain_operation"' in source

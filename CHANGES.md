@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Names Boolean Difference Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Boolean room editing / Tool belt dispatch
+Intersects: native Scene/Tools ModuleEditorController mirrors and Map Studio tool-belt dispatcher.
+
+- Added a named `boolean_difference_authored_floor_plan_rooms` controller command for Boolean A-B/B-A so the Level Editor routes rectangular room subtraction through explicit command/readiness metadata instead of the generic room-operation endpoint.
+- Preserved the existing deterministic rectangular floor-plan boolean implementation while improving log text, undo label, action key, and command-search/contract clarity for KOTOR-safe room/export pieces.
+- Updated dispatcher tests to prove Boolean A-B/B-A route through the named command while keeping the existing room-piece output and undo/redo behavior intact.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests/test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q --basetemp .pytest_tmp_map_studio_boolean_diff`.
+
 ### [2026-06-21] Map Studio Adds Grid Snap Floor-Plan Command
 
 Owner: LordVaderCW
