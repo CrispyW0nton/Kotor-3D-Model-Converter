@@ -31,6 +31,10 @@ class MapStudioToolActionContext:
     primitive_name: str = ""
     primitive_kind: str = ""
     placement_kind: str = ""
+    placement_template_resref: str = ""
+    placement_tag: str = ""
+    placement_position: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    placement_bearing: float = 0.0
     point_index: int | None = None
     point_indices: tuple[int, ...] = ()
     target_point_index: int | None = None
@@ -86,6 +90,7 @@ _PRIMITIVE_ACTIONS: dict[str, str] = {
 }
 
 _PLACEMENT_ACTIONS: dict[str, str] = {
+    "place": "placeable",
     "placeable": "placeable",
     "creature": "creature",
     "door": "door",
@@ -95,6 +100,18 @@ _PLACEMENT_ACTIONS: dict[str, str] = {
     "sound": "sound",
     "camera": "camera",
     "store": "store",
+}
+
+_PLACEMENT_DEFAULT_TEMPLATES: dict[str, str] = {
+    "placeable": "plc_bench",
+    "creature": "c_drdmkone",
+    "door": "door_t01",
+    "waypoint": "wp_mapstudio",
+    "trigger": "trg_mapstudio",
+    "encounter": "enc_mapstudio",
+    "sound": "snd_mapstudio",
+    "store": "store_map",
+    "camera": "",
 }
 
 _TERRAIN_BRUSH_ACTIONS: dict[str, str] = {
@@ -137,6 +154,20 @@ def _clean_axis(axis: str) -> str:
 
 def _clean_indices(values: tuple[int, ...] | list[int] | Any) -> tuple[int, ...]:
     return tuple(int(index) for index in tuple(values or ()))
+
+
+def _placement_template_for_action(ctx: MapStudioToolActionContext, placement_kind: str, requested_kind: str) -> str:
+    selected_kind = str(ctx.placement_kind or "").strip().lower()
+    if (not selected_kind or selected_kind == placement_kind or requested_kind == "place") and str(ctx.placement_template_resref or "").strip():
+        return str(ctx.placement_template_resref or "").strip()
+    return _PLACEMENT_DEFAULT_TEMPLATES.get(placement_kind, "")
+
+
+def _placement_tag_for_action(ctx: MapStudioToolActionContext, placement_kind: str) -> str:
+    tag = str(ctx.placement_tag or "").strip()
+    if tag:
+        return tag
+    return f"map_{placement_kind}"[:32]
 
 
 def _disabled(action: MapStudioToolBeltAction | None, action_key: str, reason: str) -> MapStudioToolActionRoute:
@@ -277,10 +308,23 @@ def resolve_map_studio_tool_belt_action(
 
     placement_kind = _PLACEMENT_ACTIONS.get(key)
     if placement_kind:
+        template_resref = _placement_template_for_action(ctx, placement_kind, key)
         return _route(
             action,
             placement_kind=placement_kind,
-            authoring_context=f"Placement: choose a {placement_kind} blueprint/resref and place it into authored GIT state.",
+            command_method="add_authored_gameplay_placement",
+            command_kwargs={
+                "kind": placement_kind,
+                "template_resref": template_resref,
+                "tag": _placement_tag_for_action(ctx, placement_kind),
+                "position": tuple(ctx.placement_position),
+                "bearing": float(ctx.placement_bearing),
+            },
+            mutates_kmap=True,
+            authoring_context=(
+                f"Placement: add a {placement_kind} blueprint/resref to authored GIT/IFO state at the current placement position; "
+                "validate template availability and walkable WOK before export/game proof."
+            ),
         )
 
     if key == "vertex_snap":

@@ -42,15 +42,17 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert audit.blocking_messages == ()
     assert audit.total_actions >= 80
     assert audit.implemented_actions == audit.total_actions
-    assert audit.command_backed_actions >= 40
-    assert audit.mutating_command_actions >= 40
+    assert audit.command_backed_actions >= 50
+    assert audit.mutating_command_actions >= 50
     assert audit.query_command_actions >= 1
-    assert audit.workflow_focus_actions >= 30
+    assert audit.workflow_focus_actions >= 20
     assert statuses["cube"].contract_kind == "command_mutates_kmap"
     assert statuses["cube"].command_method == "add_authored_room_primitive"
     assert statuses["cube"].mutates_kmap is True
     assert statuses["universal_transform"].contract_kind == "command_query"
     assert statuses["universal_transform"].command_method == "map_studio_universal_transform_overlay"
+    assert statuses["placeable"].contract_kind == "command_mutates_kmap"
+    assert statuses["placeable"].command_method == "add_authored_gameplay_placement"
     assert statuses["terrain"].contract_kind == "workflow_focus"
     assert statuses["stage_module"].contract_kind == "studio_workspace"
     assert all(status.in_any_preset for status in audit.statuses)
@@ -95,6 +97,42 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert universal_ready.mutates_kmap is False
     assert universal_ready.stale_outputs == ()
     assert "transform handles" in universal_ready.authoring_context
+
+    placeable_route = resolve_map_studio_tool_belt_action(
+        "placeable",
+        MapStudioToolActionContext(
+            placement_kind="placeable",
+            placement_template_resref="plc_bench",
+            placement_tag="map_bench",
+            placement_position=(2.0, 1.0, 0.0),
+            placement_bearing=90.0,
+        ),
+    )
+
+    assert placeable_route.enabled is True
+    assert placeable_route.command_method == "add_authored_gameplay_placement"
+    assert placeable_route.command_kwargs == {
+        "kind": "placeable",
+        "template_resref": "plc_bench",
+        "tag": "map_bench",
+        "position": (2.0, 1.0, 0.0),
+        "bearing": 90.0,
+    }
+    assert placeable_route.mutates_kmap is True
+    assert "authored GIT/IFO state" in placeable_route.authoring_context
+
+    creature_route = resolve_map_studio_tool_belt_action(
+        "creature",
+        MapStudioToolActionContext(
+            placement_kind="placeable",
+            placement_template_resref="plc_bench",
+            placement_position=(0.0, 0.0, 0.0),
+        ),
+    )
+
+    assert creature_route.command_method == "add_authored_gameplay_placement"
+    assert creature_route.command_kwargs["kind"] == "creature"
+    assert creature_route.command_kwargs["template_resref"] == "c_drdmkone"
 
     snap = resolve_map_studio_tool_belt_action("vertex_snap")
 
@@ -415,6 +453,29 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
 
     assert undo is not None
     assert len(controller.authored_room_primitive_transforms()) == before_count
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "placeable",
+        MapStudioToolActionContext(
+            placement_kind="placeable",
+            placement_template_resref="plc_bench",
+            placement_tag="belt_bench",
+            placement_position=(1.25, 1.5, 0.0),
+            placement_bearing=45.0,
+        ),
+    )
+
+    placement_payload = controller.project.extra_sections["authored_module"]["placements"]
+    assert placement_payload["placeables"][-1]["template_resref"] == "plc_bench"
+    assert placement_payload["placeables"][-1]["tag"] == "belt_bench"
+    assert placement_payload["placeables"][-1]["position"] == [1.25, 1.5, 0.0]
+    assert controller.command_history.undo_label == "Add placeable placement belt_bench"
+
+    controller.undo_map_studio_command()
+
+    restored_placement_payload = controller.project.extra_sections["authored_module"]["placements"]
+    assert all(row.get("tag") != "belt_bench" for row in restored_placement_payload["placeables"])
 
     controller.create_authored_room_preset_module(preset_id="octagonal_room", module_root="grbevel01")
     room_before = controller.authored_floor_plan_room_choices()[0]

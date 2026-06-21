@@ -2074,6 +2074,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         update = add_authored_gameplay_placement(
             authored,
             kind=kind,
@@ -2088,6 +2089,18 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Added Map Studio {update.kind} placement {update.tag} at {update.position}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.gameplay.add_placement",
+            label=f"Add {update.kind} placement {update.tag}",
+            before=before,
+            metadata={
+                "kind": update.kind,
+                "template_resref": update.template_resref,
+                "tag": update.tag,
+                "position": update.position,
+                "placement_id": update.placement_id,
+            },
         )
         return self.authored_module_readiness()
 

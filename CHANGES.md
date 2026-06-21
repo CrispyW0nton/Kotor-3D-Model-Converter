@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Routes Placement Belt Actions Through KMAP Commands
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Gameplay placements
+Intersects: native payload mirror sync for Scene/Tools Map Studio placement routing and Module Editor UI context.
+
+- Routed placement-oriented tool-belt actions (`place`, `placeable`, `creature`, `door`, `waypoint`, `trigger`, `encounter`, `sound`, `camera`, and `store`) through `add_authored_gameplay_placement` instead of leaving them as workflow-focus buttons.
+- Added placement kind, template resref, tag, position, and bearing to the shared tool action context so the Level Editor can pass Builder placement-panel intent into the command dispatcher while still using safe defaults for mismatched action kinds.
+- Recorded gameplay placement commands in Map Studio undo history so belt-created authored GIT/IFO placements can be reverted through the same KMAP command spine as room and terrain edits.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_contract_audit.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_contract_audit.py native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Tools/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py tests/test_authored_gameplay_placements.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_placement_belt`; `python -m pytest tests/test_authored_gameplay_placements.py -q --basetemp .pytest_tmp_map_studio_placement_undo`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_placement_ui`.
+
 ### [2026-06-21] Map Studio Adds Tool-Belt Contract Audit
 
 Owner: LordVaderCW

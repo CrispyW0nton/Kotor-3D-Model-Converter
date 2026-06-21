@@ -1405,6 +1405,14 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         weld_policy = getattr(self.builder_tab, "floorPlanWeldPolicyComboBox", None)
         if weld_policy is not None:
             metadata["position_policy"] = str(weld_policy.currentData() or "target")
+        placement_kind_combo = getattr(self.builder_tab, "gameplayPlacementKindComboBox", None)
+        placement_kind = str(placement_kind_combo.currentData() or "") if placement_kind_combo is not None else ""
+        placement_template = str(getattr(getattr(self.builder_tab, "gameplayTemplateLineEdit", None), "text", lambda: "")()).strip()
+        placement_tag = str(getattr(getattr(self.builder_tab, "gameplayTagLineEdit", None), "text", lambda: "")()).strip()
+        placement_x = getattr(self.builder_tab, "gameplayPosXSpinBox", None)
+        placement_y = getattr(self.builder_tab, "gameplayPosYSpinBox", None)
+        placement_z = getattr(self.builder_tab, "gameplayPosZSpinBox", None)
+        placement_bearing = getattr(self.builder_tab, "gameplayBearingSpinBox", None)
         return MapStudioToolActionContext(
             room_resref=str(vertex_data.get("room_resref") or primitive_data.get("room_resref") or self._map_studio_current_room_resref()),
             first_room_resref=str(bridge_first.get("room_resref") or union_first.get("room_resref") or ""),
@@ -1417,6 +1425,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 else getattr(getattr(self.builder_tab, "roomPrimitiveSeparateResultLineEdit", None), "text", lambda: "")()
             ).strip(),
             primitive_name=str(primitive_data.get("primitive_name") or ""),
+            placement_kind=placement_kind,
+            placement_template_resref=placement_template,
+            placement_tag=placement_tag,
+            placement_position=(
+                float(placement_x.value()) if placement_x is not None else 0.0,
+                float(placement_y.value()) if placement_y is not None else 0.0,
+                float(placement_z.value()) if placement_z is not None else 0.0,
+            ),
+            placement_bearing=float(placement_bearing.value()) if placement_bearing is not None else 0.0,
             point_index=int(source_point.value()) if source_point is not None else None,
             point_indices=selected_points,
             target_point_index=int(target_point.value()) if target_point is not None else None,
@@ -1823,6 +1840,16 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "merge_components",
             "flatten",
             "transform_snap_level",
+            "place",
+            "placeable",
+            "creature",
+            "door",
+            "waypoint",
+            "trigger",
+            "encounter",
+            "sound",
+            "camera",
+            "store",
         }
         if key in direct_command_actions:
             if self._execute_map_studio_tool_belt_command(key):
