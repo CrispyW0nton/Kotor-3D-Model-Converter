@@ -8,6 +8,7 @@ module-placement behavior without constructing the UI.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -16,6 +17,7 @@ from .authored_walkmesh_surfaces import walkable_walkmesh_surface_ids, walkmesh_
 
 Vec3 = tuple[float, float, float]
 Vec4 = tuple[float, float, float, float]
+_RESREF_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
 GIT_STRUCT_ID_CAMERA = 14
 GIT_STRUCT_ID_CREATURE = 4
 GIT_STRUCT_ID_DOOR = 8
@@ -210,8 +212,17 @@ def _camera_id_value(camera_id: int | str) -> int | None:
 
 
 def _validate_template(kind: str, template_resref: str, blocking: list[str]) -> None:
-    if not normalise_resource_resref(template_resref):
+    raw = str(template_resref or "").strip()
+    if "." in raw:
+        raw = raw.rsplit(".", 1)[0]
+    if not raw:
         blocking.append(f"{kind} placement requires a template resref.")
+        return
+    if len(raw) > 16:
+        blocking.append(f"{kind} template resref '{raw}' is {len(raw)} characters; KOTOR resrefs must be 16 characters or fewer.")
+        return
+    if not _RESREF_PATTERN.match(raw):
+        blocking.append(f"{kind} template resref '{raw}' may only contain letters, numbers, and underscores.")
 
 
 def _validate_transition_intent(kind: str, item: Any, blocking: list[str]) -> None:

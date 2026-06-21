@@ -167,9 +167,14 @@ def _default_trigger_geometry(position: Vec3, size: float = 1.0) -> tuple[Vec3, 
 
 
 def _require_template(kind: str, template_resref: Any) -> str:
-    template = normalise_resource_resref(template_resref)
-    if kind not in {"camera"} and not template:
+    if kind in {"camera"}:
+        return ""
+    if not str(template_resref or "").strip():
         raise ValueError(f"{kind.title()} placement requires a template resref.")
+    issue = authored_resref_blocking_issue(f"{kind.title()} template", template_resref)
+    if issue:
+        raise ValueError(issue)
+    template = normalise_resource_resref(template_resref)
     return template
 
 

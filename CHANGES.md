@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Rejects Unsafe Gameplay Template Resrefs
+
+Owner: LordVaderCW
+Task: T2605
+Subsystem: Map Studio / Gameplay placement authoring and export validation
+Intersects: Domain Core Modules placement services, ModuleMeshes mirror package, and authored module export tests.
+
+- Hardened authored gameplay placement validation so UTC/UTP/UTD/UTT/UTE/UTS/UTM/UTW template resrefs must be KOTOR-safe before they can be placed or exported.
+- Moved raw template checking into the placement authoring path so invalid names like `bad/template` or overlong resrefs are rejected before they silently truncate into project state.
+- Preserved the existing empty-template error wording for current Map Studio UI/tests while adding stricter invalid-character and length checks.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_objects.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_placements.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_objects.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_placements.py tests/test_authored_module_export.py`; `python -m pytest tests/test_authored_module_export.py::test_t2605_invalid_gameplay_template_resref_blocks_authored_export tests/test_authored_module_export.py::test_t2605_overlong_gameplay_template_resref_blocks_authored_export tests/test_authored_module_export.py::test_t2680_pathing_includes_walkable_spatial_gameplay_anchors tests/test_authored_gameplay_placements.py::test_t2653_invalid_placement_blocks_clearly -q --basetemp .pytest_tmp_map_studio_template_resref_final`.
+
 ### [2026-06-21] Map Studio Validates Local Transition Targets
 
 Owner: LordVaderCW

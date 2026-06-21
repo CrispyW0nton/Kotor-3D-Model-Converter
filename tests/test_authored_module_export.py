@@ -4,6 +4,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 
 def _install_native_payload_paths() -> None:
     repo = Path(__file__).resolve().parents[1]
@@ -396,6 +398,50 @@ def test_t2605_local_door_transition_accepts_matching_authored_waypoint() -> Non
     assert readiness.metadata["transition_incomplete_count"] == 0
     assert readiness.metadata["transition_references"][0]["status"] == "local_transition"
     assert readiness.can_export_candidate is True
+
+
+def test_t2605_invalid_gameplay_template_resref_blocks_authored_export() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_placements import add_authored_gameplay_placement
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grres01",
+        game="K1",
+    )
+
+    with pytest.raises(ValueError, match="Placeable template resref 'bad/template' may only contain"):
+        add_authored_gameplay_placement(
+            project,
+            kind="placeable",
+            template_resref="bad/template",
+            tag="bad_template_placeable",
+            position=(0.0, 0.0, 0.0),
+        )
+
+
+def test_t2605_overlong_gameplay_template_resref_blocks_authored_export() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_placements import add_authored_gameplay_placement
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grres02",
+        game="K1",
+    )
+
+    with pytest.raises(ValueError, match="Creature template resref 'creature_template_that_is_too_long' is"):
+        add_authored_gameplay_placement(
+            project,
+            kind="creature",
+            template_resref="creature_template_that_is_too_long",
+            tag="too_long_creature",
+            position=(0.0, 0.0, 0.0),
+        )
 
 
 def test_t2907_terrain_preset_exports_walkable_wok_pathing_and_lighting(tmp_path: Path) -> None:
