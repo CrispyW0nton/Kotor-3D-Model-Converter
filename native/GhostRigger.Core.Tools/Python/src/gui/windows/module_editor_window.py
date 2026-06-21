@@ -1380,12 +1380,21 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         cleanup_tolerance = getattr(self.builder_tab, "floorPlanCleanupToleranceSpinBox", None)
         flatten_axis = getattr(self.builder_tab, "floorPlanFlattenAxisComboBox", None)
         mirror_axis = getattr(self.builder_tab, "floorPlanMirrorAxisComboBox", None)
+        operation_combo = getattr(self.builder_tab, "roomOperationComboBox", None)
+        operation_distance = getattr(self.builder_tab, "operationDistanceSpinBox", None)
+        operation_edge = getattr(self.builder_tab, "operationEdgeIndexSpinBox", None)
+        cut_center_x = getattr(self.builder_tab, "cutCenterXSpinBox", None)
+        cut_center_y = getattr(self.builder_tab, "cutCenterYSpinBox", None)
+        cut_width = getattr(self.builder_tab, "cutWidthSpinBox", None)
+        cut_depth = getattr(self.builder_tab, "cutDepthSpinBox", None)
         key = str(action_key or "").strip()
         axis = "x"
         if key == "mirror_y":
             axis = "y"
         elif key == "mirror_x":
             axis = "x"
+        elif key == "cut_slice_insert_edges" and operation_combo is not None:
+            axis = "y" if str(operation_combo.currentData() or "") == "split_y" else "x"
         elif key in {"mirror", "flatten", "transform_snap_level"}:
             axis_combo = mirror_axis if key == "mirror" else flatten_axis
             if axis_combo is not None:
@@ -1416,6 +1425,16 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             second_edge_index=int(bridge_second_edge.value()) if bridge_second_edge is not None else None,
             axis=axis,
             positive_z=key != "reverse_normals",
+            operation_distance=float(operation_distance.value()) if operation_distance is not None else 0.25,
+            operation_edge_index=int(operation_edge.value()) if operation_edge is not None else 0,
+            cut_center=(
+                float(cut_center_x.value()) if cut_center_x is not None else 0.0,
+                float(cut_center_y.value()) if cut_center_y is not None else 0.0,
+            ),
+            cut_size=(
+                float(cut_width.value()) if cut_width is not None else 1.0,
+                float(cut_depth.value()) if cut_depth is not None else 1.0,
+            ),
             metadata=metadata,
         )
 
@@ -1763,6 +1782,20 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "mirror",
             "mirror_x",
             "mirror_y",
+            "extrude",
+            "bevel",
+            "boolean",
+            "cut_slice_insert_edges",
+            "fill",
+            "fill_hole",
+            "bridge",
+            "combine",
+            "separate",
+            "vertex_snap",
+            "weld",
+            "merge_components",
+            "flatten",
+            "transform_snap_level",
         }
         if key in direct_command_actions:
             if self._execute_map_studio_tool_belt_command(key):

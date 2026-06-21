@@ -64,11 +64,39 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert ready_snap.command_method == "snap_authored_floor_plan_vertex"
     assert ready_snap.command_kwargs["target_room_resref"] == "room_b"
 
+    extrude = resolve_map_studio_tool_belt_action(
+        "extrude",
+        MapStudioToolActionContext(room_resref="room_a", operation_distance=0.75, operation_edge_index=2),
+    )
+
+    assert extrude.enabled is True
+    assert extrude.command_method == "apply_authored_room_operation"
+    assert extrude.command_kwargs == {
+        "operation": "edge_extrude",
+        "room_resref": "room_a",
+        "distance": 0.75,
+        "edge_index": 2,
+    }
+
+    boolean = resolve_map_studio_tool_belt_action(
+        "boolean",
+        MapStudioToolActionContext(room_resref="room_a", cut_center=(1.0, 2.0), cut_size=(3.0, 4.0)),
+    )
+
+    assert boolean.enabled is True
+    assert boolean.command_method == "apply_authored_room_operation"
+    assert boolean.command_kwargs["operation"] == "rectangular_cut"
+    assert boolean.command_kwargs["center"] == (1.0, 2.0)
+    assert boolean.command_kwargs["size"] == (3.0, 4.0)
+
 
 def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo() -> None:
     _install_native_payload_paths()
 
-    from src.core.modules.map_studio_tool_action_dispatch import execute_map_studio_tool_belt_action
+    from src.core.modules.map_studio_tool_action_dispatch import (
+        MapStudioToolActionContext,
+        execute_map_studio_tool_belt_action,
+    )
     from src.core.modules.module_editor_controller import ModuleEditorController
 
     controller = ModuleEditorController()
@@ -89,6 +117,19 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
 
     assert undo is not None
     assert len(controller.authored_room_primitive_transforms()) == before_count
+
+    controller.create_authored_room_preset_module(preset_id="octagonal_room", module_root="grbevel01")
+    room_before = controller.authored_floor_plan_room_choices()[0]
+    execute_map_studio_tool_belt_action(
+        controller,
+        "bevel",
+        MapStudioToolActionContext(room_resref=room_before.room_resref, operation_distance=0.1),
+    )
+    room_after = controller.authored_floor_plan_room_choices()[0]
+
+    assert room_after.point_count > room_before.point_count
+    assert controller.can_undo_map_studio_command() is True
+    assert controller.command_history.undo_label == "Apply room operation bevel"
 
 
 def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -> None:
@@ -111,3 +152,4 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert "def execute_map_studio_tool_belt_action" in source
         assert 'command_method="add_authored_room_primitive"' in source
         assert 'command_method="snap_authored_floor_plan_vertex"' in source
+        assert 'command_method="apply_authored_room_operation"' in source

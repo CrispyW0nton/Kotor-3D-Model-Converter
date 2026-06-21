@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Promotes Modeling Belt Operations To Executable Routes
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Floor-plan modeling commands
+
+- Routed Extrude, Bevel, Boolean rectangular cut, Cut/Slice, Fill, Bridge, Combine, Separate, Vertex Snap, Weld/Merge, Flatten, and Transform Snap Level through the headless Map Studio tool-action dispatcher when the current Builder context is complete.
+- Added dispatcher context fields for room-operation distance, edge index, cut center, and cut size so the tool belt uses the same authored operation parameters as the Builder controls.
+- Added targeted tests proving bevel executes through the command spine, mutates floor-plan topology, and records undo metadata instead of remaining a UI-only focus action.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_tool_action_dispatch`; `python -m pytest tests/test_map_studio_command_history.py tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_action_spine`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Routes Tool Belt Actions Through Command Spine
 
 Owner: LordVaderCW

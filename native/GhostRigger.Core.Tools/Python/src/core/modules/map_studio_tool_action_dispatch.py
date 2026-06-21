@@ -39,6 +39,10 @@ class MapStudioToolActionContext:
     second_edge_index: int | None = None
     axis: str = "x"
     positive_z: bool = True
+    operation_distance: float = 0.25
+    operation_edge_index: int = 0
+    cut_center: tuple[float, float] = (0.0, 0.0)
+    cut_size: tuple[float, float] = (1.0, 1.0)
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -336,6 +340,61 @@ def resolve_map_studio_tool_belt_action(
             command_method="cleanup_authored_floor_plan_normals",
             command_kwargs={"room_resref": ctx.room_resref, "positive_z": key != "reverse_normals" and bool(ctx.positive_z)},
             mutates_kmap=True,
+        )
+
+    if key == "extrude":
+        return _route(
+            action,
+            focus_component_mode="edge",
+            focus_snap_mode="grid",
+            command_method="apply_authored_room_operation",
+            command_kwargs={
+                "operation": "edge_extrude",
+                "room_resref": ctx.room_resref,
+                "distance": float(ctx.operation_distance),
+                "edge_index": int(ctx.operation_edge_index),
+            },
+            mutates_kmap=True,
+            authoring_context=(
+                "Extrude: pull the selected floor-plan edge into a KOTOR-authored room footprint; "
+                "MDL/WOK generation must be revalidated."
+            ),
+        )
+
+    if key == "bevel":
+        return _route(
+            action,
+            focus_component_mode="edge",
+            focus_snap_mode="grid",
+            command_method="apply_authored_room_operation",
+            command_kwargs={
+                "operation": "bevel",
+                "room_resref": ctx.room_resref,
+                "distance": float(ctx.operation_distance),
+            },
+            mutates_kmap=True,
+            authoring_context=(
+                "Bevel: chamfer convex room footprint corners while preserving deterministic WOK output."
+            ),
+        )
+
+    if key in {"boolean", "cut_slice_insert_edges"}:
+        operation = "rectangular_cut" if key == "boolean" else "split_x"
+        kwargs: dict[str, Any] = {"operation": operation, "room_resref": ctx.room_resref}
+        if operation == "rectangular_cut":
+            kwargs.update({"center": tuple(ctx.cut_center), "size": tuple(ctx.cut_size)})
+        else:
+            kwargs.update({"axis": _clean_axis(ctx.axis), "coordinate": float(ctx.cut_center[0])})
+        return _route(
+            action,
+            focus_component_mode="face",
+            focus_snap_mode="grid",
+            command_method="apply_authored_room_operation",
+            command_kwargs=kwargs,
+            mutates_kmap=True,
+            authoring_context=(
+                "Cut/boolean: split or subtract simple floor-plan geometry, then cleanup and validate before export."
+            ),
         )
 
     if key == "triangulate":
