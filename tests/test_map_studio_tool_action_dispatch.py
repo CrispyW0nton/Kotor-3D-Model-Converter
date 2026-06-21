@@ -35,8 +35,10 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
         MapStudioToolActionContext,
         resolve_map_studio_tool_belt_action,
     )
+    from src.core.modules.map_studio_modeling_tools import available_map_studio_modeling_tools
 
     cube = resolve_map_studio_tool_belt_action("cube")
+    tool_by_key = {tool.key: tool for tool in available_map_studio_modeling_tools()}
 
     assert cube.enabled is True
     assert cube.command_method == "add_authored_room_primitive"
@@ -205,6 +207,8 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert harden.enabled is True
     assert harden.command_method == "set_authored_room_edge_normal_policy"
     assert harden.command_kwargs["policy"] == "hard"
+    assert tool_by_key["soften_edges"].implemented is True
+    assert tool_by_key["harden_edges"].implemented is True
 
     shrink_wrap = resolve_map_studio_tool_belt_action(
         "shrink_wrap",

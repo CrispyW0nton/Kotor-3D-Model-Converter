@@ -471,7 +471,7 @@ _MODELING_TOOLS: tuple[MapStudioModelingTool, ...] = (
         ("edge", "face"),
         "Soften selected visual mesh edges for smoother lighting across authored geometry.",
         "Softened edges affect viewport/export normals only; WOK geometry still needs hard traversal validation.",
-        implemented=False,
+        implemented=True,
     ),
     MapStudioModelingTool(
         "harden_edges",
@@ -480,7 +480,7 @@ _MODELING_TOOLS: tuple[MapStudioModelingTool, ...] = (
         ("edge", "face"),
         "Harden selected visual mesh edges for crisp KOTOR hard-surface room silhouettes.",
         "Hardened edges should preserve explicit material and lightmap seams.",
-        implemented=False,
+        implemented=True,
     ),
     MapStudioModelingTool(
         "duplicate_special",
