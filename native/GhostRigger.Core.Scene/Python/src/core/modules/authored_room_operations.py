@@ -57,6 +57,7 @@ from .authored_terrain_builder import (
     analyse_terrain_slopes,
     apply_terrain_brush_stroke,
     apply_terrain_shape_preset,
+    bend_terrain_heightfield,
     flatten_terrain_heightfield,
     mirror_terrain_heightfield_z,
     offset_terrain_heightfield_samples,
@@ -3118,6 +3119,16 @@ def apply_authored_terrain_operation(project: AuthoredModuleProject, operation: 
         updated_primitive = mirror_terrain_heightfield_z(
             primitive,
             center_height=None if center_height is None else float(center_height),
+        )
+    elif op in {"bend", "bend_terrain", "terrain_bend"}:
+        center = kwargs.get("center", None)
+        span = kwargs.get("span", None)
+        updated_primitive = bend_terrain_heightfield(
+            primitive,
+            axis=str(kwargs.get("axis", "x")),
+            amplitude=float(kwargs.get("amplitude", kwargs.get("distance", 0.25))),
+            center=None if center is None else float(center),
+            span=None if span is None else float(span),
         )
     elif op in {"brush_stroke", "terrain_brush_stroke"}:
         updated_primitive = apply_terrain_brush_stroke(

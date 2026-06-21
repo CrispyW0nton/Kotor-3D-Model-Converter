@@ -290,6 +290,80 @@ def mirror_terrain_heightfield_z(
     )
 
 
+def bend_terrain_heightfield(
+    primitive: TerrainHeightfieldPrimitive,
+    *,
+    axis: str = "x",
+    amplitude: float = 0.25,
+    center: float | None = None,
+    span: float | None = None,
+) -> TerrainHeightfieldPrimitive:
+    """Bend a terrain heightfield with a baked parabolic height profile.
+
+    This is a terrain authoring command, not a runtime deformation primitive:
+    KOTOR receives the resulting baked MDL/WOK geometry after validation.
+    """
+
+    validation = validate_terrain_heightfield_primitive(primitive)
+    if not validation.ok:
+        raise ValueError("; ".join(validation.blocking_issues))
+    axis_key = str(axis or "x").strip().lower()
+    if axis_key not in {"x", "y"}:
+        raise ValueError("Terrain Bend axis must be 'x' or 'y'.")
+    bend_amplitude = float(amplitude)
+    if not math.isfinite(bend_amplitude):
+        raise ValueError("Terrain Bend amplitude must be finite.")
+    axis_length = float(primitive.width if axis_key == "x" else primitive.depth)
+    bend_center = 0.0 if center is None else float(center)
+    if not math.isfinite(bend_center):
+        raise ValueError("Terrain Bend center must be finite.")
+    bend_span = axis_length if span is None else float(span)
+    if not math.isfinite(bend_span) or bend_span <= 0.0:
+        raise ValueError("Terrain Bend span must be a positive finite value.")
+    half_span = max(bend_span * 0.5, 1.0e-9)
+    rows = _height_rows(primitive)
+    bent_rows: list[tuple[float, ...]] = []
+    for row_index, row in enumerate(rows):
+        bent_row: list[float] = []
+        for column_index, height in enumerate(row):
+            if axis_key == "x":
+                coordinate = -float(primitive.width) * 0.5 + (float(primitive.width) * column_index / max(1, validation.column_count - 1))
+            else:
+                coordinate = -float(primitive.depth) * 0.5 + (float(primitive.depth) * row_index / max(1, validation.row_count - 1))
+            t = max(-1.0, min(1.0, (coordinate - bend_center) / half_span))
+            weight = 1.0 - (t * t)
+            bent_row.append(float(height) + (bend_amplitude * weight))
+        bent_rows.append(tuple(bent_row))
+    min_height, max_height = terrain_height_range(primitive)
+    bent = _replace_height_rows(
+        primitive,
+        tuple(bent_rows),
+        operation="bend",
+        metadata={
+            "bend_axis": axis_key,
+            "bend_amplitude": bend_amplitude,
+            "bend_center": bend_center,
+            "bend_span": bend_span,
+            "height_min_before": float(min_height),
+            "height_max_before": float(max_height),
+            "source": "map_studio:terrain_bend",
+        },
+    )
+    slope_report = analyse_terrain_slopes(bent)
+    return replace(
+        bent,
+        metadata={
+            **dict(bent.metadata),
+            "bend_slope_report": {
+                "max_slope_degrees": float(slope_report.max_slope_degrees),
+                "walkable_triangle_count": int(slope_report.walkable_triangle_count),
+                "non_walk_triangle_count": int(slope_report.non_walk_triangle_count),
+                "warnings": list(slope_report.warnings),
+            },
+        },
+    )
+
+
 def available_terrain_shape_presets() -> tuple[TerrainShapePreset, ...]:
     """Return named terrain forms available to Map Studio."""
 
@@ -1080,6 +1154,7 @@ __all__ = [
     "apply_terrain_brush_stroke",
     "apply_terrain_shape_preset",
     "available_terrain_shape_presets",
+    "bend_terrain_heightfield",
     "build_terrain_mesh",
     "build_terrain_wok",
     "compile_terrain_room_geometry",

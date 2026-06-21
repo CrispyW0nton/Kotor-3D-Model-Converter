@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Adds Terrain Bend Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Terrain / Baked Bend
+
+- Added a headless terrain Bend kernel that applies a deterministic parabolic X/Y height profile to authored terrain heightfields, preserving slope metadata and KOTOR export/readiness impact.
+- Routed the Bend tool-belt action through `apply_authored_terrain_operation` so the Level Editor executes it through KMAP state, undo/redo, placement re-snapping, and stale export/game-proof metadata.
+- Marked Bend implemented in the Scene and Tools catalogs while keeping capability honest that arbitrary mesh/component bending remains planned.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Core.Tools/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Core.Scene/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Core.Tools/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py tests/test_map_studio_command_history.py -q --basetemp .pytest_tmp_map_studio_bend`.
+
 ### [2026-06-21] Map Studio Adds Terrain Mirror Z Command
 
 Owner: LordVaderCW

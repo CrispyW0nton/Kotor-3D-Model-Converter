@@ -362,6 +362,30 @@ def resolve_map_studio_tool_belt_action(
             ),
         )
 
+    if key == "bend_tool":
+        kwargs = {
+            "operation": "bend",
+            "room_resref": ctx.room_resref,
+            "axis": _clean_axis(ctx.axis),
+            "amplitude": float(ctx.metadata.get("amplitude", ctx.operation_distance)),
+        }
+        if "center" in ctx.metadata:
+            kwargs["center"] = float(ctx.metadata["center"])
+        if "span" in ctx.metadata:
+            kwargs["span"] = float(ctx.metadata["span"])
+        return _route(
+            action,
+            focus_component_mode="terrain",
+            focus_snap_mode="surface",
+            command_method="apply_authored_terrain_operation",
+            command_kwargs=kwargs,
+            mutates_kmap=True,
+            authoring_context=(
+                "Bend: bake a parabolic X/Y height profile into the selected terrain heightfield, "
+                "then revalidate WOK slope, placements, and export readiness. Arbitrary mesh/component bending remains planned."
+            ),
+        )
+
     if key in {"mirror", "mirror_x", "mirror_y"}:
         axis = {"mirror_y": "y", "mirror_x": "x"}.get(key, _clean_axis(ctx.axis))
         return _route(

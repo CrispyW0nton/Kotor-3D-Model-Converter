@@ -1796,6 +1796,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "fill_hole",
             "bridge",
             "shrink_wrap",
+            "bend_tool",
             "combine",
             "separate",
             "duplicate_special",

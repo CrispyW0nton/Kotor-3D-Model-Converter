@@ -223,6 +223,31 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert "Arbitrary mesh/component Z mirroring remains planned" in mirror_z.authoring_context
     assert tool_by_key["mirror_z"].implemented is True
 
+    bend = resolve_map_studio_tool_belt_action(
+        "bend_tool",
+        MapStudioToolActionContext(
+            room_resref="terrain01",
+            axis="y",
+            operation_distance=0.4,
+            metadata={"center": 0.0, "span": 4.0},
+        ),
+    )
+
+    assert bend.enabled is True
+    assert bend.command_method == "apply_authored_terrain_operation"
+    assert bend.command_kwargs == {
+        "operation": "bend",
+        "room_resref": "terrain01",
+        "axis": "y",
+        "amplitude": 0.4,
+        "center": 0.0,
+        "span": 4.0,
+    }
+    assert bend.mutates_kmap is True
+    assert "height profile" in bend.authoring_context
+    assert "Arbitrary mesh/component bending remains planned" in bend.authoring_context
+    assert tool_by_key["bend_tool"].implemented is True
+
     shrink_wrap = resolve_map_studio_tool_belt_action(
         "shrink_wrap",
         MapStudioToolActionContext(room_resref="terrain01"),
@@ -501,6 +526,41 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
     assert restored_heights[0][0] == 0.0
     assert restored_heights[2][2] == 0.6
 
+    controller.create_authored_room_preset_module(preset_id="terrain_heightfield", module_root="grbend01")
+    bend_room = controller.authored_terrain_room_choices()[0]
+    bend_payload = controller.project.extra_sections["authored_module"]
+    source_bend_heights = [[0.0 for _column in row] for row in bend_payload["rooms"][0]["primitive"]["heights"]]
+    bend_payload["rooms"][0]["primitive"]["heights"] = copy.deepcopy(source_bend_heights)
+    controller.project.extra_sections["authored_module"] = bend_payload
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "bend_tool",
+        MapStudioToolActionContext(room_resref=bend_room.room_resref, axis="x", operation_distance=0.4),
+    )
+
+    bent_payload = controller.project.extra_sections["authored_module"]
+    bent_room = bent_payload["rooms"][0]
+    bent_heights = bent_room["primitive"]["heights"]
+    bent_values = [round(float(value), 6) for row in bent_heights for value in row]
+
+    assert max(bent_values) == 0.4
+    assert round(float(bent_heights[0][0]), 6) == 0.0
+    assert round(float(bent_heights[-1][-1]), 6) == 0.0
+    assert bent_room["primitive"]["metadata"]["last_operation"] == "bend"
+    assert bent_room["primitive"]["metadata"]["bend_axis"] == "x"
+    assert bent_room["primitive"]["metadata"]["bend_amplitude"] == 0.4
+    assert bent_room["primitive"]["metadata"]["source"] == "map_studio:terrain_bend"
+    assert "bend_slope_report" in bent_room["primitive"]["metadata"]
+    assert bent_room["metadata"]["last_operation"] == "terrain_bend"
+    assert bent_payload["placements"]["metadata"]["terrain_height_repaired_after_operation"] == "terrain_bend"
+    assert controller.command_history.undo_label == "Apply terrain operation bend"
+
+    controller.undo_map_studio_command()
+
+    restored_bend_payload = controller.project.extra_sections["authored_module"]
+    assert restored_bend_payload["rooms"][0]["primitive"]["heights"] == source_bend_heights
+
 
 def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -> None:
     window_source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
@@ -515,6 +575,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert '"duplicate_special",' in window_source
     assert '"shrink_wrap",' in window_source
     assert '"mirror_z",' in window_source
+    assert '"bend_tool",' in window_source
     assert 'MapStudioToolBeltAction(\n        "triangulate",' in scene_catalog
     assert 'MapStudioToolBeltAction(\n        "triangulate",' in tools_catalog
 
@@ -529,6 +590,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="duplicate_authored_room_primitive"' in source
         assert 'command_method="set_authored_room_edge_normal_policy"' in source
         assert 'command_method="apply_authored_terrain_operation"' in source
+        assert '"operation": "bend"' in source
         assert '"boolean_a_minus_b"' in source
         assert '"boolean_b_minus_a"' in source
         assert '"insert_edge_loop"' in source
