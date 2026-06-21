@@ -1487,6 +1487,20 @@ def test_t2603_controller_applies_plateau_ramp_pinch_and_erode_terrain_brushes()
     assert ramped_terrain.heights[-1][-1] > plateau_terrain.heights[0][0]
 
     controller.apply_authored_terrain_operation(
+        operation="brush_stroke:slope",
+        room_resref="grsculpt_room01",
+        points=((0, 4, 1.0), (2, 2, 1.0), (4, 0, 1.0)),
+        height=0.9,
+        radius=0,
+        strength=1.0,
+    )
+    sloped = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    sloped_terrain = sloped.rooms[0].primitive
+    assert sloped_terrain.metadata["last_brush"] == "slope"
+    assert sloped_terrain.metadata["last_dirty_region"]["changed_sample_count"] == 3
+    assert sloped_terrain.metadata["last_brush_slope_report"]["walkable_triangle_count"] > 0
+
+    controller.apply_authored_terrain_operation(
         operation="set_height",
         room_resref="grsculpt_room01",
         row_index=2,

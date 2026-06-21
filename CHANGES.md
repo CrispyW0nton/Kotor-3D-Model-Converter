@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Adds Terrain Slope Brush
+
+Owner: LordVaderCW
+Task: T2603 / T2908
+Subsystem: Map Studio / Terrain Builder sculpting workflow
+Intersects: Domain Core Modules terrain service, ModuleMeshes mirror package, and Map Studio tool-belt contracts.
+
+- Added a deterministic local `slope` terrain brush that creates a controlled grade between stroke points while preserving dirty-region-only live sculpt metadata.
+- Exposed `Slope` in the Map Studio terrain tool belt beside raise, lower, smooth, flatten, erase, plateau, ramp, terrace, pinch, erode, and noise.
+- Updated terrain tool descriptions to list the currently available primitive set instead of stale future-primitive wording.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py tests/test_authored_terrain_builder.py tests/test_map_studio_workflow_panel.py tests/test_authored_room_operations.py`; `python -m pytest tests/test_authored_terrain_builder.py::test_t2603_terrain_slope_brush_creates_controlled_local_grade -q --basetemp .pytest_tmp_map_studio_slope_brush`; `python -m pytest tests/test_authored_room_operations.py::test_t2603_controller_applies_plateau_ramp_pinch_and_erode_terrain_brushes -q --basetemp .pytest_tmp_map_studio_slope_controller`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_slope_belt`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Serializes Door Frame Tool Additions
 
 Owner: LordVaderCW

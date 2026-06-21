@@ -198,6 +198,41 @@ def test_t2603_terrain_erase_brush_resets_local_dirty_region() -> None:
     assert erased.metadata["defer_full_rebuild_until_stroke_end"] is True
 
 
+def test_t2603_terrain_slope_brush_creates_controlled_local_grade() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_terrain_builder import TerrainHeightfieldPrimitive, apply_terrain_brush_stroke
+
+    terrain = TerrainHeightfieldPrimitive(
+        room_resref="grslope_room01",
+        heights=tuple(tuple(0.0 for _column in range(5)) for _row in range(5)),
+    )
+
+    sloped = apply_terrain_brush_stroke(
+        terrain,
+        brush="slope",
+        points=((0, 0, 1.0), (2, 2, 1.0), (4, 4, 1.0)),
+        radius=0,
+        height=1.0,
+        strength=1.0,
+    )
+
+    assert sloped.heights[0][0] == 0.0
+    assert round(sloped.heights[2][2], 6) == 0.5
+    assert sloped.heights[4][4] == 1.0
+    assert sloped.metadata["last_brush"] == "slope"
+    assert sloped.metadata["last_dirty_region"] == {
+        "min_row": 0,
+        "max_row": 4,
+        "min_column": 0,
+        "max_column": 4,
+        "changed_sample_count": 3,
+    }
+    assert sloped.metadata["last_brush_slope_report"]["walkable_triangle_count"] > 0
+    assert sloped.metadata["dirty_region_only"] is True
+    assert sloped.metadata["defer_full_rebuild_until_stroke_end"] is True
+
+
 def test_t2907_terrain_shape_presets_create_readable_heightfields() -> None:
     _install_native_payload_paths()
 

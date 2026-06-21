@@ -485,7 +485,7 @@ def audit_terrain_brush_stroke_interaction(
 
     op = str(brush or "").strip().lower()
     iteration_multiplier = max(1, int(iterations)) if op in {"smooth", "erode"} else 1
-    if op in {"terrace", "noise", "plateau", "pinch", "ramp", "erase", "reset"}:
+    if op in {"terrace", "noise", "plateau", "pinch", "ramp", "slope", "erase", "reset"}:
         iteration_multiplier = max(1, iteration_multiplier)
     operation_count = max(1, len(affected_cells) * iteration_multiplier)
     estimated_apply_ms = round((operation_count * 0.01) + (len(stroke_points) * 0.02), 3)
@@ -527,14 +527,14 @@ def apply_terrain_brush_stroke(
         raise ValueError("; ".join(validation.blocking_issues))
     stroke_points = _normalise_stroke_points(points)
     op = str(brush or "").strip().lower()
-    if op not in {"raise", "lower", "offset", "flatten", "smooth", "terrace", "noise", "plateau", "pinch", "ramp", "erode", "erase", "reset"}:
+    if op not in {"raise", "lower", "offset", "flatten", "smooth", "terrace", "noise", "plateau", "pinch", "ramp", "slope", "erode", "erase", "reset"}:
         raise ValueError(f"Unsupported terrain brush stroke '{brush}'.")
     rows = [list(item) for item in _height_rows(primitive)]
     dirty_cells: set[tuple[int, int]] = set()
     brush_radius = max(0, int(radius))
     blend = max(0.0, min(1.0, float(strength)))
 
-    if op in {"raise", "lower", "offset", "flatten", "terrace", "noise", "plateau", "pinch", "ramp", "erase", "reset"}:
+    if op in {"raise", "lower", "offset", "flatten", "terrace", "noise", "plateau", "pinch", "ramp", "slope", "erase", "reset"}:
         signed_delta = float(delta)
         if op == "raise":
             signed_delta = abs(signed_delta)
@@ -545,7 +545,7 @@ def apply_terrain_brush_stroke(
         ramp_end: tuple[int, int] | None = None
         ramp_start_height = 0.0
         ramp_end_height = 0.0
-        if op == "ramp":
+        if op in {"ramp", "slope"}:
             start_point = stroke_points[0]
             end_point = stroke_points[-1]
             ramp_start = _sample_indices(primitive, start_point.row_index, start_point.column_index)
@@ -587,7 +587,7 @@ def apply_terrain_brush_stroke(
                     local_blend = max(0.0, min(1.0, blend * weight))
                     current = float(rows[row_cursor][column_cursor])
                     rows[row_cursor][column_cursor] = current + ((center_height - current) * local_blend)
-                elif op == "ramp":
+                elif op in {"ramp", "slope"}:
                     current = float(rows[row_cursor][column_cursor])
                     target = current
                     if ramp_start is not None and ramp_end is not None:

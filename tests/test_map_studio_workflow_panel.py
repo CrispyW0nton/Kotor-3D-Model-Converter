@@ -533,6 +533,7 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert '"sculpt_erase"' in source
         assert '"sculpt_plateau"' in source
         assert '"sculpt_ramp"' in source
+        assert '"sculpt_slope"' in source
         assert '"sculpt_terrace"' in source
         assert '"sculpt_pinch"' in source
         assert '"sculpt_erode"' in source
