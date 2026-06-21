@@ -1027,27 +1027,39 @@ def resolve_map_studio_tool_belt_action(
             ),
         )
 
-    if key in {"boolean", "cut", "cut_slice_insert_edges", "insert_edge_loop"}:
-        operation = "rectangular_cut" if key == "boolean" else "axis_split"
-        kwargs: dict[str, Any] = {"operation": operation, "room_resref": ctx.room_resref}
-        if operation == "rectangular_cut":
-            kwargs.update({"center": tuple(ctx.cut_center), "size": tuple(ctx.cut_size)})
-        else:
-            axis = _clean_axis(ctx.axis)
-            coordinate = float(ctx.cut_center[1] if axis == "y" else ctx.cut_center[0])
-            kwargs.update({"axis": axis, "coordinate": coordinate})
+    if key == "boolean":
         return _route(
             action,
             focus_component_mode="face",
             focus_snap_mode="grid",
             command_method="apply_authored_room_operation",
-            command_kwargs=kwargs,
+            command_kwargs={
+                "operation": "rectangular_cut",
+                "room_resref": ctx.room_resref,
+                "center": tuple(ctx.cut_center),
+                "size": tuple(ctx.cut_size),
+            },
+            mutates_kmap=True,
+            authoring_context="Cut/boolean: split or subtract simple floor-plan geometry, then cleanup and validate before export.",
+        )
+
+    if key in {"cut", "cut_slice_insert_edges", "insert_edge_loop"}:
+        axis = _clean_axis(ctx.axis)
+        coordinate = float(ctx.cut_center[1] if axis == "y" else ctx.cut_center[0])
+        return _route(
+            action,
+            focus_component_mode="face",
+            focus_snap_mode="grid",
+            command_method="axis_split_authored_floor_plan_room",
+            command_kwargs={
+                "room_resref": ctx.room_resref,
+                "axis": axis,
+                "coordinate": coordinate,
+            },
             mutates_kmap=True,
             authoring_context=(
                 "Cut/Slice/Edge Loop: split simple floor-plan geometry into explicit KOTOR room/export boundaries, "
                 "then cleanup and validate before export."
-                if operation == "axis_split"
-                else "Cut/boolean: split or subtract simple floor-plan geometry, then cleanup and validate before export."
             ),
         )
 

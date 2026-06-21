@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Names Axis Split Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Cut-slice editing / Tool belt dispatch
+Intersects: native Scene/Tools ModuleEditorController mirrors and Map Studio tool-belt dispatcher.
+
+- Added a named `axis_split_authored_floor_plan_room` controller command for Cut, Cut/Slice/Insert Edges, and Insert Edge Loop actions so simple floor-plan slicing now has explicit KMAP command/readiness metadata instead of hiding behind the generic room-operation endpoint.
+- Kept the existing deterministic floor-plan axis-split geometry and placement repair behavior while improving command ownership, log text, undo labels, and source-contract coverage.
+- Preserved rectangular boolean cut as a separate generic `rectangular_cut` route because it remains a different operation from edge-loop-style axis splitting.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests/test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q --basetemp .pytest_tmp_map_studio_axis_split`.
+
 ### [2026-06-21] Map Studio Names Boolean Difference Command
 
 Owner: LordVaderCW

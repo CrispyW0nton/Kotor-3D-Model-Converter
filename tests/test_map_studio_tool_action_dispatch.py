@@ -73,7 +73,7 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["opening"].contract_kind == "command_mutates_kmap"
     assert statuses["opening"].command_method == "apply_authored_room_operation"
     assert statuses["cut"].contract_kind == "command_mutates_kmap"
-    assert statuses["cut"].command_method == "apply_authored_room_operation"
+    assert statuses["cut"].command_method == "axis_split_authored_floor_plan_room"
     assert statuses["boolean_a_minus_b"].contract_kind == "command_mutates_kmap"
     assert statuses["boolean_a_minus_b"].command_method == "boolean_difference_authored_floor_plan_rooms"
     assert statuses["opening_marker"].contract_kind == "command_mutates_kmap"
@@ -641,9 +641,8 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     )
 
     assert cut.enabled is True
-    assert cut.command_method == "apply_authored_room_operation"
+    assert cut.command_method == "axis_split_authored_floor_plan_room"
     assert cut.command_kwargs == {
-        "operation": "axis_split",
         "room_resref": "room_a",
         "axis": "x",
         "coordinate": 1.25,
@@ -656,9 +655,8 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     )
 
     assert slice_y.enabled is True
-    assert slice_y.command_method == "apply_authored_room_operation"
+    assert slice_y.command_method == "axis_split_authored_floor_plan_room"
     assert slice_y.command_kwargs == {
-        "operation": "axis_split",
         "room_resref": "room_a",
         "axis": "y",
         "coordinate": 2.0,
@@ -670,9 +668,8 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     )
 
     assert edge_loop.enabled is True
-    assert edge_loop.command_method == "apply_authored_room_operation"
+    assert edge_loop.command_method == "axis_split_authored_floor_plan_room"
     assert edge_loop.command_kwargs == {
-        "operation": "axis_split",
         "room_resref": "room_a",
         "axis": "x",
         "coordinate": 1.25,
@@ -1273,7 +1270,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert len(split_rooms) == 2
     assert {room.room_resref for room in split_rooms} == {"gredge01_room_l1", "gredge01_room_r2"}
     assert controller.can_undo_map_studio_command() is True
-    assert controller.command_history.undo_label == "Apply room operation axis_split"
+    assert controller.command_history.undo_label == "Axis split gredge01_room01 on x"
 
     controller.undo_map_studio_command()
 
@@ -1677,6 +1674,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert "script_field_name" in source
         assert 'command_method = "set_authored_script_hook" if script_resref else "remove_authored_script_hook"' in source
         assert 'command_method="apply_authored_room_operation"' in source
+        assert 'command_method="axis_split_authored_floor_plan_room"' in source
         assert 'command_method="boolean_difference_authored_floor_plan_rooms"' in source
         assert 'command_method="duplicate_authored_room_primitive"' in source
         assert 'command_method="set_authored_room_edge_normal_policy"' in source

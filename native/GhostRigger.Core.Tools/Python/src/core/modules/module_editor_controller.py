@@ -94,6 +94,7 @@ from .authored_module_placements import (
 )
 from .authored_room_operations import (
     add_authored_room_composition_primitive,
+    apply_authored_floor_plan_axis_split,
     apply_authored_floor_plan_boolean_difference,
     apply_authored_terrain_operation,
     apply_authored_floor_plan_rectangular_union,
@@ -980,6 +981,55 @@ class ModuleEditorController:
                 "first_room_resref": first_room_resref,
                 "second_room_resref": second_room_resref,
                 "result_room_resref": result_room_resref,
+            },
+        )
+        return self.authored_module_readiness()
+
+    def axis_split_authored_floor_plan_room(
+        self,
+        *,
+        room_resref: str = "",
+        axis: str,
+        coordinate: float,
+        room_resref_prefix: str | None = None,
+    ):
+        """Split one floor-plan room along a local X/Y axis with explicit KMAP metadata."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        split_axis = str(axis or "x").strip().lower()
+        split_coordinate = float(coordinate)
+        updated = apply_authored_floor_plan_axis_split(
+            authored,
+            room_resref=room_resref,
+            axis=split_axis,
+            coordinate=split_coordinate,
+            room_resref_prefix=room_resref_prefix,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Axis-split Map Studio room {room_resref or '(first room)'} on {split_axis}={split_coordinate:g}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.axis_split",
+            label=f"Axis split {room_resref or 'room'} on {split_axis}",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "axis": split_axis,
+                "coordinate": split_coordinate,
+                "room_resref_prefix": room_resref_prefix or "",
             },
         )
         return self.authored_module_readiness()
