@@ -1372,6 +1372,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         bridge_second = self._map_studio_combo_data("floorPlanBridgeSecondRoomComboBox")
         union_first = self._map_studio_combo_data("floorPlanUnionFirstRoomComboBox")
         union_second = self._map_studio_combo_data("floorPlanUnionSecondRoomComboBox")
+        opening_data = self._map_studio_combo_data("floorPlanOpeningRoomComboBox")
         primitive_data = self._map_studio_combo_data("roomPrimitiveTransformComboBox")
         opening_marker_data = self._map_studio_combo_data("floorPlanOpeningMarkerRoomComboBox")
         selected_points = self._map_studio_selected_point_indices()
@@ -1420,6 +1421,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         entry_y = getattr(self.builder_tab, "entryPointPosYSpinBox", None)
         entry_z = getattr(self.builder_tab, "entryPointPosZSpinBox", None)
         entry_facing = getattr(self.builder_tab, "entryPointFacingSpinBox", None)
+        wall_opening_name = str(getattr(getattr(self.builder_tab, "floorPlanOpeningNameLineEdit", None), "text", lambda: "")()).strip()
+        wall_opening_edge = getattr(self.builder_tab, "floorPlanOpeningEdgeSpinBox", None)
+        wall_opening_center = getattr(self.builder_tab, "floorPlanOpeningCenterSpinBox", None)
+        wall_opening_width = getattr(self.builder_tab, "floorPlanOpeningWidthSpinBox", None)
+        wall_opening_height = getattr(self.builder_tab, "floorPlanOpeningHeightSpinBox", None)
+        wall_opening_bottom = getattr(self.builder_tab, "floorPlanOpeningBottomSpinBox", None)
         opening_marker_opening = getattr(self.builder_tab, "floorPlanOpeningMarkerNameComboBox", None)
         opening_marker_kind = getattr(self.builder_tab, "floorPlanOpeningMarkerKindComboBox", None)
         opening_marker_template = str(getattr(getattr(self.builder_tab, "floorPlanOpeningMarkerTemplateLineEdit", None), "text", lambda: "")()).strip()
@@ -1436,6 +1443,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         terrain_room_resref = str(terrain_context.get("room_resref") or "").strip()
         if key.startswith("sculpt_"):
             current_room_resref = terrain_room_resref
+        elif key == "opening":
+            current_room_resref = str(opening_data.get("room_resref") or "").strip()
         elif key == "opening_marker":
             current_room_resref = str(opening_marker_data.get("room_resref") or "").strip()
         else:
@@ -1472,6 +1481,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 float(entry_z.value()) if entry_z is not None else 0.0,
             ),
             entry_facing=float(entry_facing.value()) if entry_facing is not None else 0.0,
+            wall_opening_name=wall_opening_name,
+            wall_opening_edge_index=int(wall_opening_edge.value()) if wall_opening_edge is not None else 0,
+            wall_opening_center_fraction=float(wall_opening_center.value()) if wall_opening_center is not None else 0.5,
+            wall_opening_width=float(wall_opening_width.value()) if wall_opening_width is not None else 1.5,
+            wall_opening_height=float(wall_opening_height.value()) if wall_opening_height is not None else 2.1,
+            wall_opening_bottom=float(wall_opening_bottom.value()) if wall_opening_bottom is not None else 0.0,
             opening_name=str(
                 (
                     opening_marker_opening.currentData()
@@ -1915,6 +1930,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "sound",
             "camera",
             "store",
+            "opening",
             "opening_marker",
             "sculpt_raise",
             "sculpt_lower",

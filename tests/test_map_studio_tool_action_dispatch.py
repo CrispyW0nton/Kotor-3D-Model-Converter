@@ -42,8 +42,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert audit.blocking_messages == ()
     assert audit.total_actions >= 80
     assert audit.implemented_actions == audit.total_actions
-    assert audit.command_backed_actions >= 66
-    assert audit.mutating_command_actions >= 65
+    assert audit.command_backed_actions >= 67
+    assert audit.mutating_command_actions >= 66
     assert audit.query_command_actions >= 1
     assert audit.workflow_focus_actions <= 10
     assert statuses["cube"].contract_kind == "command_mutates_kmap"
@@ -55,6 +55,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["placeable"].command_method == "add_authored_gameplay_placement"
     assert statuses["entry_point"].contract_kind == "command_mutates_kmap"
     assert statuses["entry_point"].command_method == "set_authored_module_entry_point"
+    assert statuses["opening"].contract_kind == "command_mutates_kmap"
+    assert statuses["opening"].command_method == "apply_authored_room_operation"
     assert statuses["opening_marker"].contract_kind == "command_mutates_kmap"
     assert statuses["opening_marker"].command_method == "apply_authored_room_operation"
     assert statuses["sculpt_raise"].contract_kind == "command_mutates_kmap"
@@ -196,6 +198,39 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     }
     assert entry_point_route.mutates_kmap is True
     assert "IFO player start" in entry_point_route.authoring_context
+
+    opening_missing = resolve_map_studio_tool_belt_action("opening")
+
+    assert opening_missing.enabled is False
+    assert "selected authored floor-plan room" in opening_missing.disabled_reason
+
+    opening_route = resolve_map_studio_tool_belt_action(
+        "opening",
+        MapStudioToolActionContext(
+            room_resref="room_a",
+            wall_opening_name="south_door",
+            wall_opening_edge_index=0,
+            wall_opening_center_fraction=0.5,
+            wall_opening_width=1.5,
+            wall_opening_height=2.0,
+            wall_opening_bottom=0.0,
+        ),
+    )
+
+    assert opening_route.enabled is True
+    assert opening_route.command_method == "apply_authored_room_operation"
+    assert opening_route.command_kwargs == {
+        "operation": "wall_opening",
+        "room_resref": "room_a",
+        "name": "south_door",
+        "edge_index": 0,
+        "center_fraction": 0.5,
+        "width": 1.5,
+        "height": 2.0,
+        "bottom": 0.0,
+    }
+    assert opening_route.mutates_kmap is True
+    assert "cut a named doorway/window opening" in opening_route.authoring_context
 
     opening_marker_missing = resolve_map_studio_tool_belt_action("opening_marker")
 
@@ -598,16 +633,27 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
 
     controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="gropmk01")
     opening_room = controller.authored_floor_plan_room_choices()[0]
-    controller.apply_authored_room_operation(
-        operation="wall_opening",
-        room_resref=opening_room.room_resref,
-        name="south_door",
-        edge_index=0,
-        center_fraction=0.5,
-        width=1.5,
-        height=2.0,
-        bottom=0.0,
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "opening",
+        MapStudioToolActionContext(
+            room_resref=opening_room.room_resref,
+            wall_opening_name="south_door",
+            wall_opening_edge_index=0,
+            wall_opening_center_fraction=0.5,
+            wall_opening_width=1.5,
+            wall_opening_height=2.0,
+            wall_opening_bottom=0.0,
+        ),
     )
+
+    opening_payload = controller.project.extra_sections["authored_module"]
+    opening_primitive = opening_payload["rooms"][0]["primitive"]
+    assert opening_primitive["openings"][-1]["name"] == "south_door"
+    assert opening_primitive["openings"][-1]["edge_index"] == 0
+    assert opening_primitive["metadata"]["last_operation"] == "set_wall_opening"
+    assert controller.command_history.undo_label == "Apply room operation wall_opening"
 
     execute_map_studio_tool_belt_action(
         controller,
@@ -1079,6 +1125,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert '"boolean_a_minus_b"' in source
         assert '"boolean_b_minus_a"' in source
         assert '"insert_edge_loop"' in source
+        assert '"operation": "wall_opening"' in source
         assert '"operation": "opening_transition_marker"' in source
         assert 'command_method="map_studio_universal_transform_overlay"' in source
 

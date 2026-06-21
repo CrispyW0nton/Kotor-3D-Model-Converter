@@ -38,6 +38,12 @@ class MapStudioToolActionContext:
     entry_area_resref: str = ""
     entry_position: tuple[float, float, float] = (0.0, 0.0, 0.0)
     entry_facing: float = 0.0
+    wall_opening_name: str = ""
+    wall_opening_edge_index: int = 0
+    wall_opening_center_fraction: float = 0.5
+    wall_opening_width: float = 1.5
+    wall_opening_height: float = 2.1
+    wall_opening_bottom: float = 0.0
     opening_name: str = ""
     opening_marker_kind: str = "door"
     opening_marker_template_resref: str = ""
@@ -375,6 +381,38 @@ def resolve_map_studio_tool_belt_action(
             authoring_context=(
                 "Entry Point: write the authored module IFO player start from the selected KMAP-world position; "
                 "validate that it lands on a reachable WOK before export/game proof."
+            ),
+        )
+
+    if key == "opening":
+        room_resref = str(ctx.room_resref or "").strip()
+        if not room_resref:
+            return _route(
+                action,
+                focus_component_mode="edge",
+                focus_snap_mode="edge",
+                enabled=False,
+                disabled_reason="Wall Opening needs a selected authored floor-plan room before it can cut KOTOR-safe doorway geometry.",
+            )
+        return _route(
+            action,
+            focus_component_mode="edge",
+            focus_snap_mode="edge",
+            command_method="apply_authored_room_operation",
+            command_kwargs={
+                "operation": "wall_opening",
+                "room_resref": room_resref,
+                "name": str(ctx.wall_opening_name or "doorway_opening").strip() or "doorway_opening",
+                "edge_index": int(ctx.wall_opening_edge_index),
+                "center_fraction": float(ctx.wall_opening_center_fraction),
+                "width": float(ctx.wall_opening_width),
+                "height": float(ctx.wall_opening_height),
+                "bottom": float(ctx.wall_opening_bottom),
+            },
+            mutates_kmap=True,
+            authoring_context=(
+                "Wall Opening: cut a named doorway/window opening into one authored floor-plan wall edge; "
+                "use Opening Marker next to turn it into KOTOR door, trigger, or waypoint transition data."
             ),
         )
 

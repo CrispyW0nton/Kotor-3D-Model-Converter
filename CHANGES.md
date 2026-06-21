@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Routes Wall Opening Belt Action Through KMAP Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Floor-plan wall openings
+Intersects: native payload mirror sync for Scene/Tools Map Studio wall-opening routing and Level Editor floor-plan UI context.
+
+- Routed the `Opening` tool-belt action through `apply_authored_room_operation(operation="wall_opening")` so the Maya-like shelf can cut named KOTOR-safe doorway/window openings into authored floor-plan wall edges.
+- Added explicit wall-opening name, edge, center fraction, width, height, and bottom fields to the shared tool action context and Level Editor context builder.
+- Updated the tool-belt audit and dispatcher tests so the `Opening` action proves KMAP mutation, command-history participation, and the paired `Opening Marker` transition workflow.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_contract_audit.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_contract_audit.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_wall_opening_belt`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_wall_opening_ui`.
+
 ### [2026-06-21] Map Studio Routes Opening Marker Belt Action Through Transition Command
 
 Owner: LordVaderCW
