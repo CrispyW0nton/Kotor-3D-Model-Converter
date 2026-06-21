@@ -20,6 +20,7 @@ from .authored_module_pathing import AuthoredPathAnchor, compile_authored_pathin
 from .authored_module_project import AuthoredModuleProject, compile_authored_room_spec, normalise_resref, validate_authored_module_project
 from .authored_room_floorplan import FloorPlanRoomPrimitive, polygon_signed_area, validate_floor_plan_room_primitive
 from .map_studio_export_objects import map_studio_export_object_boundaries
+from .authored_walkmesh_audit import audit_authored_wok
 from .authored_walkmesh_surfaces import walkmesh_surface_name
 
 
@@ -81,6 +82,11 @@ class AuthoredRoomReadiness:
     floor_surface_name: str = ""
     helper_mesh_count: int = 0
     walkable_face_count: int = 0
+    walkable_component_count: int = 0
+    invalid_wok_face_count: int = 0
+    degenerate_wok_face_count: int = 0
+    non_manifold_wok_edge_count: int = 0
+    warnings: tuple[str, ...] = ()
     blocking_messages: tuple[str, ...] = ()
 
 
@@ -1287,6 +1293,7 @@ def _room_readiness(project: AuthoredModuleProject) -> tuple[AuthoredRoomReadine
             )
             continue
         walkable_faces = int(getattr(geometry.wok, "walkable_face_count", lambda: 0)())
+        walkmesh_audit = audit_authored_wok(room_resref, geometry.wok)
         faces = tuple(getattr(geometry.wok, "faces", ()) or ())
         floor_surface_id = int(getattr(faces[0], "surface", -1)) if faces else -1
         blockers: list[str] = []
@@ -1294,6 +1301,7 @@ def _room_readiness(project: AuthoredModuleProject) -> tuple[AuthoredRoomReadine
             blockers.append(f"Room {room_resref} has no renderable room mesh faces.")
         if walkable_faces <= 0:
             blockers.append(f"Room {room_resref} has no walkable WOK faces.")
+        blockers.extend(walkmesh_audit.blocking_messages)
         rooms.append(
             AuthoredRoomReadiness(
                 room_resref=normalise_resref(geometry.room_resref or room_resref),
@@ -1305,6 +1313,11 @@ def _room_readiness(project: AuthoredModuleProject) -> tuple[AuthoredRoomReadine
                 floor_surface_name=walkmesh_surface_name(floor_surface_id) if floor_surface_id >= 0 else "",
                 helper_mesh_count=len(tuple(getattr(geometry, "helper_meshes", ()) or ())),
                 walkable_face_count=walkable_faces,
+                walkable_component_count=walkmesh_audit.walkable_component_count,
+                invalid_wok_face_count=walkmesh_audit.invalid_face_count,
+                degenerate_wok_face_count=walkmesh_audit.degenerate_face_count,
+                non_manifold_wok_edge_count=walkmesh_audit.non_manifold_edge_count,
+                warnings=tuple(walkmesh_audit.warnings),
                 blocking_messages=tuple(blockers),
             )
         )
@@ -1366,8 +1379,10 @@ def build_authored_module_readiness(
             f"{external_script_count} authored script hook(s) rely on base-game, Override, or another installed mod .ncs instead of being packaged.",
         )
     component_warnings = component_edit.validation_messages if not component_edit.ready else ()
+    room_warnings = tuple(warning for room in rooms for warning in room.warnings)
     warnings = (
         tuple(validation.warnings)
+        + room_warnings
         + geometry_validation.warnings
         + tuple(pathing.warnings or ())
         + doorway_transition.warnings
@@ -1493,6 +1508,11 @@ def build_authored_module_readiness(
             "export_object_boundaries": [boundary.to_metadata() for boundary in export_object_boundaries],
             "uv_handoff_object_count": sum(1 for boundary in export_object_boundaries if boundary.uv_handoff_recommended),
             "walkable_face_count": sum(room.walkable_face_count for room in rooms),
+            "walkable_component_count": sum(room.walkable_component_count for room in rooms),
+            "disconnected_walkmesh_room_count": sum(1 for room in rooms if room.walkable_component_count > 1),
+            "invalid_wok_face_count": sum(room.invalid_wok_face_count for room in rooms),
+            "degenerate_wok_face_count": sum(room.degenerate_wok_face_count for room in rooms),
+            "non_manifold_wok_edge_count": sum(room.non_manifold_wok_edge_count for room in rooms),
             "pathing": {
                 "ready": pathing.ready,
                 "status": pathing.status,

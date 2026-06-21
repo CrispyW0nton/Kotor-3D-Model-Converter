@@ -216,10 +216,14 @@ def test_t2692_readiness_reports_full_map_studio_toolchain_scope() -> None:
 
     assert set(preview_steps) == {
         "Geometry authoring",
+        "Component edit audit",
+        "Floor-plan validation",
         "Walkmesh",
+        "PTH pathing",
         "Lighting",
         "Resource placement",
         "Gameplay layout",
+        "Doorway/transition intent",
         "Transitions",
         "Scripts",
         "Runtime package",
@@ -229,7 +233,10 @@ def test_t2692_readiness_reports_full_map_studio_toolchain_scope() -> None:
     assert "floor-plan extrusion" in preview_steps["Geometry authoring"].value_label
     assert "bevel" in preview_steps["Geometry authoring"].value_label
     assert "rectangular union" in preview_steps["Geometry authoring"].value_label
+    assert preview_steps["Component edit audit"].ready is True
+    assert preview_steps["Floor-plan validation"].ready is True
     assert preview_steps["Walkmesh"].ready is True
+    assert preview_steps["PTH pathing"].ready is True
     assert preview_steps["Lighting"].ready is True
     assert preview_steps["Lighting"].status == "Optional"
     assert preview_steps["Resource placement"].ready is True
@@ -238,6 +245,7 @@ def test_t2692_readiness_reports_full_map_studio_toolchain_scope() -> None:
     assert "creatures, placeables, doors, triggers" in preview_steps["Resource placement"].value_label
     assert "merchants/stores" in preview_steps["Resource placement"].value_label
     assert preview_steps["Gameplay layout"].ready is True
+    assert preview_steps["Doorway/transition intent"].ready is True
     assert preview_steps["Transitions"].ready is True
     assert preview_steps["Transitions"].status == "Optional"
     assert preview_steps["Scripts"].ready is True

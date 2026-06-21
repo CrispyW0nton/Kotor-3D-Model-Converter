@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Blocks Unsafe Disconnected WOK Islands
+
+Owner: LordVaderCW
+Task: T2604
+Subsystem: Map Studio / Walkmesh and Pathing Reliability
+Intersects: Domain Core Modules walkmesh readiness, ModuleMeshes mirror package, and authored module readiness tests.
+
+- Added a headless generated-WOK audit that detects invalid face indices, degenerate faces, non-manifold walkable edges, and disconnected walkable islands before Map Studio marks a module preview/export-ready.
+- Wired the audit into the Walkmesh tab status contract and authored module readiness so unsafe WOK topology becomes a specific blocker with KOTOR-focused fix guidance instead of a hidden runtime risk.
+- Refreshed the native Python payload manifests and updated readiness test expectations for the current expanded Map Studio toolchain scope.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_walkmesh_audit.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_walkmesh_status.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_walkmesh_audit.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_walkmesh_status.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py`; `python -m pytest tests/test_authored_module_readiness.py tests/test_authored_walkmesh_status.py tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_walkmesh_tab_explains_wok_workflow -q --basetemp .pytest_tmp_map_studio_walkmesh_ready`; payload manifest JSON parse; `git diff --check`.
+
 ### [2026-06-21] Map Studio Adds Local Terrain Erase Brush
 
 Owner: LordVaderCW

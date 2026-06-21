@@ -2,7 +2,7 @@
   "schema": "ghostrigger_python_payload.v1",
   "phase": "P1.5 embedded python payload",
   "project": "GhostRigger.Domain.Core.Modules",
-  "file_count": 50,
+  "file_count": 51,
   "originals_remain_in_src": true,
   "files": [
     {
@@ -219,7 +219,7 @@
       "resource_name": "PYTHON_PAYLOAD_0036",
       "source_path": "src/core/modules/authored_module_readiness.py",
       "packaged_path": "Python/src/core/modules/authored_module_readiness.py",
-      "sha256": "ea8cfaf8e0dab77bd02497873586b058e0736a7fc0b19c0a1563e0c18b69224a"
+      "sha256": "8ae738eb375f29329b1949a72d0f0bd04fd85dfcb7a1cb2b0f8375997c02c591"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0037",
@@ -279,7 +279,7 @@
       "resource_name": "PYTHON_PAYLOAD_0046",
       "source_path": "src/core/modules/authored_walkmesh_status.py",
       "packaged_path": "Python/src/core/modules/authored_walkmesh_status.py",
-      "sha256": "574c0c9d2f76e1e200056f4c49f7e8683916f149d71b8322dd51c35cfeb2787a"
+      "sha256": "f97be29279eede73fbc294f1c37f8b698f49887600149a547fe5d5b8123f42e7"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0047",
@@ -304,6 +304,12 @@
       "source_path": "src/core/modules/map_studio_terrain_sculpt_session.py",
       "packaged_path": "Python/src/core/modules/map_studio_terrain_sculpt_session.py",
       "sha256": "a8aad1aececa3b5b9536727db8098479d0d3d0a2150ffa7c2da7b52900abf9cf"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0051",
+      "source_path": "src/core/modules/authored_walkmesh_audit.py",
+      "packaged_path": "Python/src/core/modules/authored_walkmesh_audit.py",
+      "sha256": "cc4a1b59f06745fc9795444c36de9b04e863bad38ea140a57820cf69c8667342"
     }
   ]
 }
