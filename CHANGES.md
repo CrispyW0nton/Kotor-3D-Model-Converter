@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Validates Multi-Room Pathing Against Module WOK
+
+Owner: LordVaderCW
+Task: T2604
+Subsystem: Map Studio / Gameplay placement and PTH pathing reliability
+Intersects: Domain Core Modules pathing/readiness services and ModuleMeshes mirror package.
+
+- Added a module-coordinate WOK combiner for authored Map Studio projects so pathing and gameplay placement checks account for each authored room's position instead of validating every anchor against one selected room.
+- Updated generated PTH graph creation to seed one walkmesh center per reachable WOK island and to avoid creating fake PTH links through non-walkable gaps between separated rooms.
+- Exposed walkmesh island counts in pathing readiness metadata and verified that an offset second-room placement validates against the combined module WOK.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_walkmesh.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_pathing.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_walkmesh.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_pathing.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py`; `python -m pytest tests/test_authored_gameplay_placements.py tests/test_authored_module_pathing.py tests/test_authored_module_readiness.py -q --basetemp .pytest_tmp_map_studio_multiroom_pathing`; payload manifest JSON parse.
+
 ### [2026-06-21] Map Studio Blocks Unsafe Disconnected WOK Islands
 
 Owner: LordVaderCW

@@ -2,7 +2,7 @@
   "schema": "ghostrigger_python_payload.v1",
   "phase": "P1.5 embedded python payload",
   "project": "GhostRigger.Tools.Workflow.ModuleMeshes",
-  "file_count": 78,
+  "file_count": 79,
   "originals_remain_in_src": true,
   "files": [
     {
@@ -249,7 +249,7 @@
       "resource_name": "PYTHON_PAYLOAD_0041",
       "source_path": "src/core/modules/authored_module_pathing.py",
       "packaged_path": "Python/src/core/modules/authored_module_pathing.py",
-      "sha256": "f66e6b4e0b924300d97d118620c6797ee01f0f3ce3ae971670daddcd9175b74b"
+      "sha256": "096a4a1aa010345504719042ac0cef942c0334566c37aef71e46d3f211eea5c1"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0042",
@@ -297,7 +297,7 @@
       "resource_name": "PYTHON_PAYLOAD_0049",
       "source_path": "src/core/modules/authored_module_readiness.py",
       "packaged_path": "Python/src/core/modules/authored_module_readiness.py",
-      "sha256": "8ae738eb375f29329b1949a72d0f0bd04fd85dfcb7a1cb2b0f8375997c02c591"
+      "sha256": "528c3f91a6d7d75443e909cf605377876f5e0cd64af7499702470b1a786b8b8e"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0050",
@@ -472,6 +472,12 @@
       "source_path": "src/core/modules/authored_walkmesh_audit.py",
       "packaged_path": "Python/src/core/modules/authored_walkmesh_audit.py",
       "sha256": "cc4a1b59f06745fc9795444c36de9b04e863bad38ea140a57820cf69c8667342"
+    },
+    {
+      "resource_name": "PYTHON_PAYLOAD_0079",
+      "source_path": "src/core/modules/authored_module_walkmesh.py",
+      "packaged_path": "Python/src/core/modules/authored_module_walkmesh.py",
+      "sha256": "57d7e025e3b6d5f9d234a7912add5ac45a62a00902a66107390ff395e0dd7d16"
     }
   ]
 }

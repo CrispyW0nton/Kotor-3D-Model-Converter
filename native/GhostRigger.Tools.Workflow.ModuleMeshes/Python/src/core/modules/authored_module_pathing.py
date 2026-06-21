@@ -120,6 +120,73 @@ def _connection_on_walkmesh(
     return True, None
 
 
+def _face_indices(face: Any) -> tuple[int, int, int]:
+    return int(getattr(face, "v1", -1)), int(getattr(face, "v2", -1)), int(getattr(face, "v3", -1))
+
+
+def _face_centroid(wok: Any, face_index: int) -> tuple[float, float] | None:
+    faces = list(getattr(wok, "faces", ()) or ())
+    verts = list(getattr(wok, "verts", ()) or ())
+    if face_index < 0 or face_index >= len(faces):
+        return None
+    indices = _face_indices(faces[face_index])
+    if any(index < 0 or index >= len(verts) for index in indices):
+        return None
+    return (
+        sum(float(verts[index][0]) for index in indices) / 3.0,
+        sum(float(verts[index][1]) for index in indices) / 3.0,
+    )
+
+
+def _walkable_components(wok: Any) -> tuple[tuple[int, ...], ...]:
+    faces = list(getattr(wok, "faces", ()) or ())
+    verts = list(getattr(wok, "verts", ()) or ())
+    walkable: set[int] = set()
+    edge_faces: dict[tuple[tuple[float, float, float], tuple[float, float, float]], list[int]] = {}
+    for face_index, face in enumerate(faces):
+        if int(getattr(face, "surface", -1)) not in WALKABLE_SURFACE_IDS:
+            continue
+        indices = _face_indices(face)
+        if any(index < 0 or index >= len(verts) for index in indices):
+            continue
+        walkable.add(face_index)
+        for left, right in ((indices[0], indices[1]), (indices[1], indices[2]), (indices[2], indices[0])):
+            a = tuple(round(float(value), 5) for value in verts[left])
+            b = tuple(round(float(value), 5) for value in verts[right])
+            key = (a, b) if a <= b else (b, a)
+            edge_faces.setdefault(key, []).append(face_index)
+
+    adjacency: dict[int, set[int]] = {face_index: set() for face_index in walkable}
+    for linked in edge_faces.values():
+        unique = sorted(set(linked))
+        for left in unique:
+            for right in unique:
+                if left != right:
+                    adjacency[left].add(right)
+    for face_index in walkable:
+        face = faces[face_index]
+        for adjacent in (int(getattr(face, "adj1", -1)), int(getattr(face, "adj2", -1)), int(getattr(face, "adj3", -1))):
+            if adjacent in walkable:
+                adjacency[face_index].add(adjacent)
+                adjacency[adjacent].add(face_index)
+
+    components: list[tuple[int, ...]] = []
+    remaining = set(walkable)
+    while remaining:
+        start = remaining.pop()
+        stack = [start]
+        component = [start]
+        while stack:
+            current = stack.pop()
+            for neighbor in adjacency.get(current, ()):
+                if neighbor in remaining:
+                    remaining.remove(neighbor)
+                    component.append(neighbor)
+                    stack.append(neighbor)
+        components.append(tuple(sorted(component)))
+    return tuple(sorted(components, key=lambda item: (-len(item), item[0] if item else -1)))
+
+
 def build_authored_path_graph_from_walkmesh(
     wok: Any,
     *,
@@ -128,16 +195,41 @@ def build_authored_path_graph_from_walkmesh(
     """Build a compact initial path graph from a WOK and gameplay anchors."""
 
     min_x, min_y, max_x, max_y = _walkmesh_bounds(wok)
-    center = ((min_x + max_x) * 0.5, (min_y + max_y) * 0.5)
-    points: list[AuthoredPathPoint] = [
-        AuthoredPathPoint(
-            label="walkmesh_center",
-            x=center[0],
-            y=center[1],
-            metadata={"source": "walkmesh_bounds"},
+    points: list[AuthoredPathPoint] = []
+    seen: set[tuple[int, int]] = set()
+    components = _walkable_components(wok)
+    for component_index, component in enumerate(components):
+        centers = [_face_centroid(wok, face_index) for face_index in component]
+        valid_centers = [center for center in centers if center is not None]
+        if not valid_centers:
+            continue
+        center = (
+            sum(item[0] for item in valid_centers) / len(valid_centers),
+            sum(item[1] for item in valid_centers) / len(valid_centers),
         )
-    ]
-    seen = {_xy_key(center[0], center[1])}
+        key = _xy_key(center[0], center[1])
+        if key in seen:
+            continue
+        points.append(
+            AuthoredPathPoint(
+                label="walkmesh_center" if component_index == 0 else f"walkmesh_center_{component_index + 1}",
+                x=center[0],
+                y=center[1],
+                metadata={"source": "walkmesh_component", "component_index": component_index, "face_count": len(component)},
+            )
+        )
+        seen.add(key)
+    if not points:
+        center = ((min_x + max_x) * 0.5, (min_y + max_y) * 0.5)
+        points.append(
+            AuthoredPathPoint(
+                label="walkmesh_center",
+                x=center[0],
+                y=center[1],
+                metadata={"source": "walkmesh_bounds"},
+            )
+        )
+        seen.add(_xy_key(center[0], center[1]))
     anchor_labels: list[str] = []
     for anchor in anchors:
         x = float(anchor.position[0])
@@ -167,7 +259,9 @@ def build_authored_path_graph_from_walkmesh(
     for source in range(len(points)):
         for target in range(len(points)):
             if source != target:
-                connections.append(AuthoredPathConnection(source=source, target=target))
+                ok, _failed = _connection_on_walkmesh(wok, points[source], points[target], sample_interval=0.5)
+                if ok:
+                    connections.append(AuthoredPathConnection(source=source, target=target))
     return AuthoredPathGraph(
         points=tuple(points),
         connections=tuple(connections),
@@ -175,6 +269,7 @@ def build_authored_path_graph_from_walkmesh(
             "source": "src.core.modules.authored_module_pathing",
             "generated_from": "walkmesh_and_gameplay_anchors",
             "walkmesh_bounds": [min_x, min_y, max_x, max_y],
+            "walkmesh_component_count": len(components),
             "anchor_labels": anchor_labels,
         },
     )
@@ -233,7 +328,14 @@ def validate_authored_path_graph(
                     f"({x:.3f}, {y:.3f})."
                 )
     if len(graph.points) > 1 and not graph.connections:
-        blocking.append("Authored path graph with multiple points requires path connections.")
+        component_count = int(graph.metadata.get("walkmesh_component_count", 0) or 0)
+        if component_count > 1:
+            warnings.append(
+                f"Authored path graph has {component_count} disconnected walkmesh island(s); "
+                "Map Studio will not create PTH links through non-walkable gaps."
+            )
+        else:
+            blocking.append("Authored path graph with multiple points requires path connections.")
     return AuthoredPathingValidation(
         ok=not blocking,
         warnings=tuple(warnings),
@@ -275,6 +377,7 @@ def compile_authored_pathing_for_module(
             "connection_count": len(graph.connections),
             "anchor_labels": list(graph.metadata.get("anchor_labels", [])),
             "walkmesh_bounds": list(graph.metadata.get("walkmesh_bounds", [])),
+            "walkmesh_component_count": int(graph.metadata.get("walkmesh_component_count", 0) or 0),
         },
     )
 

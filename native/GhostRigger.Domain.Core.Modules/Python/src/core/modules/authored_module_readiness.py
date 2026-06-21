@@ -18,6 +18,7 @@ from .authored_module_objects import normalise_resource_resref, validate_authore
 from .authored_module_placements import authored_gameplay_placement_rows
 from .authored_module_pathing import AuthoredPathAnchor, compile_authored_pathing_for_module
 from .authored_module_project import AuthoredModuleProject, compile_authored_room_spec, normalise_resref, validate_authored_module_project
+from .authored_module_walkmesh import combine_authored_module_walkmesh
 from .authored_room_floorplan import FloorPlanRoomPrimitive, polygon_signed_area, validate_floor_plan_room_primitive
 from .map_studio_export_objects import map_studio_export_object_boundaries
 from .authored_walkmesh_audit import audit_authored_wok
@@ -151,6 +152,7 @@ class AuthoredModulePathingReadiness:
     pth_resource: str = ""
     point_count: int = 0
     connection_count: int = 0
+    walkmesh_component_count: int = 0
     anchor_labels: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
     blocking_messages: tuple[str, ...] = ()
@@ -613,15 +615,9 @@ def _pathing_readiness(project: AuthoredModuleProject) -> AuthoredModulePathingR
             fix_hint="Create at least one room so Map Studio can compile walkmesh-backed pathing.",
         )
 
-    room_woks: dict[str, Any] = {}
-    blocking: list[str] = []
-    for room in project.rooms:
-        room_resref = room.normalised_resref()
-        try:
-            room_woks[room_resref] = compile_authored_room_spec(room).wok
-        except Exception as exc:
-            blocking.append(f"Room {room_resref or '(unnamed)'} could not compile for pathing: {exc}")
-    if not room_woks:
+    module_walkmesh = combine_authored_module_walkmesh(project)
+    blocking: list[str] = list(module_walkmesh.blocking_issues)
+    if not module_walkmesh.wok.faces:
         return AuthoredModulePathingReadiness(
             ready=False,
             status="Needs room WOK",
@@ -630,10 +626,7 @@ def _pathing_readiness(project: AuthoredModuleProject) -> AuthoredModulePathingR
             fix_hint="Fix room geometry before Map Studio can compile PTH pathing.",
         )
 
-    entry_room = normalise_resref(project.placements.entry_point.area_resref)
-    selected_room = entry_room if entry_room in room_woks else next(iter(sorted(room_woks)))
-    entry_wok = room_woks[selected_room]
-    walkability = validate_authored_gameplay_placement_against_walkmesh(project.placements, entry_wok)
+    walkability = validate_authored_gameplay_placement_against_walkmesh(project.placements, module_walkmesh.wok)
     blocking.extend(str(issue) for issue in tuple(getattr(walkability, "blocking_issues", ()) or ()))
     if blocking:
         blocking_targets = _pathing_blocking_targets(project, walkability)
@@ -647,7 +640,7 @@ def _pathing_readiness(project: AuthoredModuleProject) -> AuthoredModulePathingR
         )
 
     try:
-        compiled = compile_authored_pathing_for_module(entry_wok, anchors=_path_anchors_from_walkability(project, walkability))
+        compiled = compile_authored_pathing_for_module(module_walkmesh.wok, anchors=_path_anchors_from_walkability(project, walkability))
     except Exception as exc:
         return AuthoredModulePathingReadiness(
             ready=False,
@@ -663,8 +656,9 @@ def _pathing_readiness(project: AuthoredModuleProject) -> AuthoredModulePathingR
         pth_resource=f"{root}.pth",
         point_count=int(metadata.get("point_count", 0) or 0),
         connection_count=int(metadata.get("connection_count", 0) or 0),
+        walkmesh_component_count=int(metadata.get("walkmesh_component_count", 0) or 0),
         anchor_labels=tuple(str(label) for label in list(metadata.get("anchor_labels", []) or ())),
-        warnings=tuple(getattr(getattr(compiled, "validation", None), "warnings", ()) or ()),
+        warnings=tuple(module_walkmesh.warnings) + tuple(getattr(getattr(compiled, "validation", None), "warnings", ()) or ()),
         fix_hint="Validate in game by walking between authored anchors after export.",
     )
 
@@ -1219,7 +1213,8 @@ def _toolchain_statuses(
             pathing.status,
             (
                 f"{pathing.pth_resource or '(no PTH)'}; {pathing.point_count} point(s), "
-                f"{pathing.connection_count} connection(s); anchors: {', '.join(pathing.anchor_labels) or 'walkmesh center only'}"
+                f"{pathing.connection_count} connection(s), {pathing.walkmesh_component_count} walkmesh island(s); "
+                f"anchors: {', '.join(pathing.anchor_labels) or 'walkmesh center only'}"
             ),
             pathing.fix_hint or "Fix walkability/path anchors before export.",
         ),
@@ -1519,6 +1514,7 @@ def build_authored_module_readiness(
                 "pth_resource": pathing.pth_resource,
                 "point_count": pathing.point_count,
                 "connection_count": pathing.connection_count,
+                "walkmesh_component_count": pathing.walkmesh_component_count,
                 "anchor_labels": list(pathing.anchor_labels),
                 "warnings": list(pathing.warnings),
                 "blocking_messages": list(pathing.blocking_messages),

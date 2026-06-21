@@ -239,6 +239,50 @@ def test_t2602_pathing_blocker_targets_off_walkmesh_authored_placement() -> None
     assert "move it onto generated walkable WOK" in target["fix_action"]
 
 
+def test_t2604_pathing_validates_placements_against_offset_multi_room_wok() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, AuthoredPlaceableInstance, ModuleEntryPoint
+    from src.core.modules.authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject, AuthoredRoomSpec
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+    from src.core.modules.authored_room_geometry import RectangularRoomPrimitive
+
+    project = AuthoredModuleProject(
+        metadata=AuthoredModuleMetadata(module_root="grmulti", game="K1", display_name="Multi Room WOK"),
+        rooms=(
+            AuthoredRoomSpec(
+                room_resref="grmulti_a",
+                primitive=RectangularRoomPrimitive(room_resref="grmulti_a", width=8.0, depth=8.0),
+                position=(0.0, 0.0, 0.0),
+            ),
+            AuthoredRoomSpec(
+                room_resref="grmulti_b",
+                primitive=RectangularRoomPrimitive(room_resref="grmulti_b", width=8.0, depth=8.0),
+                position=(20.0, 0.0, 0.0),
+            ),
+        ),
+        placements=AuthoredGameplayPlacement(
+            entry_point=ModuleEntryPoint(area_resref="grmulti", position=(0.0, 0.0, 0.0)),
+            placeables=(
+                AuthoredPlaceableInstance(
+                    template_resref="plc_bench",
+                    tag="bench_room_b",
+                    position=(20.0, 0.0, 0.0),
+                ),
+            ),
+        ),
+    )
+
+    readiness = build_authored_module_readiness(project)
+    pathing = readiness.metadata["pathing"]
+
+    assert readiness.can_preview is True
+    assert pathing["ready"] is True
+    assert pathing["walkmesh_component_count"] == 2
+    assert "placeable:bench_room_b" in pathing["anchor_labels"]
+    assert not pathing["blocking_messages"]
+
+
 def test_t2600_authored_transition_edit_updates_rows_and_payload() -> None:
     _install_native_payload_paths()
 
