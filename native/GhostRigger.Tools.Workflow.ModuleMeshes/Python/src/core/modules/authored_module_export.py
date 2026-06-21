@@ -370,6 +370,102 @@ def _walkability_to_manifest(walkability: Any) -> dict[str, Any]:
     }
 
 
+def _visibility_to_manifest(project: AuthoredModuleProject, layout: Any | None) -> dict[str, Any]:
+    """Return a modder-facing VIS graph summary for export manifests."""
+
+    room_names = [normalise_resref(room.room_resref) for room in tuple(project.rooms or ()) if normalise_resref(room.room_resref)]
+    room_set = set(room_names)
+    if layout is None:
+        return {
+            "source": "map_studio:authored:vis",
+            "ready": False,
+            "status": "Not compiled",
+            "vis_resource": f"{project.module_root}.vis",
+            "room_count": len(room_names),
+            "vis_entry_count": 0,
+            "link_count": 0,
+            "cross_room_link_count": 0,
+            "entries": [],
+            "isolated_rooms": room_names if len(room_names) > 1 else [],
+            "missing_targets": [],
+            "warnings": [],
+            "blocking_messages": ["VIS visibility resource was not compiled."],
+            "fix_hint": "Resolve layout/VIS validation errors, then rebuild the module package.",
+        }
+
+    visibility_source = getattr(getattr(layout, "vis", None), "visibility", {}) or {}
+    entries: list[dict[str, Any]] = []
+    normalised_visibility: dict[str, list[str]] = {}
+    missing_targets: list[dict[str, str]] = []
+    for room_name in room_names:
+        raw_targets = tuple(visibility_source.get(room_name, ()) or ())
+        targets = []
+        for raw_target in raw_targets:
+            target = normalise_resref(raw_target)
+            if not target or target in targets:
+                continue
+            targets.append(target)
+            if target not in room_set:
+                missing_targets.append({"room": room_name, "target": target})
+        normalised_visibility[room_name] = targets
+        entries.append({"room": room_name, "visible_rooms": list(targets)})
+
+    isolated_rooms: list[str] = []
+    if len(room_names) > 1:
+        for room_name in room_names:
+            outgoing = {target for target in normalised_visibility.get(room_name, ()) if target != room_name}
+            incoming = {
+                other_room
+                for other_room, targets in normalised_visibility.items()
+                if other_room != room_name and room_name in set(targets)
+            }
+            if not outgoing and not incoming:
+                isolated_rooms.append(room_name)
+
+    link_count = sum(len(targets) for targets in normalised_visibility.values())
+    cross_room_link_count = sum(
+        1
+        for room_name, targets in normalised_visibility.items()
+        for target in targets
+        if target != room_name
+    )
+    warnings = list(getattr(layout, "warnings", ()) or ())
+    if isolated_rooms:
+        warnings.append(
+            f"VIS graph has {len(isolated_rooms)} isolated room(s); add room visibility links before calling the module visually game-tested."
+        )
+    blocking_messages = [
+        f"VIS room {item['room']} references missing room {item['target']}."
+        for item in missing_targets
+    ]
+    ready = not missing_targets and not isolated_rooms
+    if blocking_messages:
+        status = f"Blocked: {len(blocking_messages)} broken VIS target(s)"
+        fix_hint = "Remove missing VIS targets or add matching authored rooms."
+    elif isolated_rooms:
+        status = "Needs visibility links"
+        fix_hint = "Link rooms that should see each other in the room visibility graph."
+    else:
+        status = "Ready"
+        fix_hint = ""
+    return {
+        "source": "map_studio:authored:vis",
+        "ready": ready,
+        "status": status,
+        "vis_resource": f"{project.module_root}.vis",
+        "room_count": len(room_names),
+        "vis_entry_count": len(normalised_visibility),
+        "link_count": link_count,
+        "cross_room_link_count": cross_room_link_count,
+        "entries": entries,
+        "isolated_rooms": isolated_rooms,
+        "missing_targets": missing_targets,
+        "warnings": warnings,
+        "blocking_messages": blocking_messages,
+        "fix_hint": fix_hint,
+    }
+
+
 def _positioned_expectations(kind: str, items: Any) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for index, item in enumerate(tuple(items or ())):
@@ -630,6 +726,7 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
     )
     walkability_metadata = _walkability_to_manifest(walkability)
     pathing_metadata = dict(pathing.metadata) if pathing is not None else {}
+    visibility_metadata = _visibility_to_manifest(project, layout)
     smoke_expectations = _smoke_expectations_from_build_parts(
         project,
         walkability=walkability_metadata,
@@ -662,6 +759,7 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
             "gameplay_external_template_dependency_count": external_template_count,
             "lighting_count": len(room_lights),
             "room_lights": room_lights,
+            "visibility": visibility_metadata,
             "walkability": walkability_metadata,
             "pathing": pathing_metadata,
             "smoke_expectations": smoke_expectations,
@@ -721,6 +819,7 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
         "gameplay_external_template_dependency_count": int(build.metadata.get("gameplay_external_template_dependency_count", 0) or 0),
         "lighting_count": int(build.metadata.get("lighting_count", 0) or 0),
         "room_lights": list(build.metadata.get("room_lights", []) or []),
+        "visibility": dict(build.metadata.get("visibility", {}) or {}),
         "walkability": dict(build.metadata.get("walkability", {})),
         "pathing": dict(build.metadata.get("pathing", {})),
         "smoke_expectations": dict(build.metadata.get("smoke_expectations", {})),

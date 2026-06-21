@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Records VIS Readiness In Export Manifests
+
+Owner: LordVaderCW
+Task: T2605 / T2606
+Subsystem: Map Studio / Authored module export manifests and VIS readiness
+Intersects: Domain Core Modules authored export service, ModuleMeshes mirror package, and authored module export tests.
+
+- Added modder-facing VIS metadata to authored module build/export manifests, including the produced `.vis` resource, room count, VIS entries, total links, cross-room links, isolated rooms, missing targets, status, and fix hints.
+- Kept existing VIS compilation behavior unchanged while making visibility intent visible alongside walkability, pathing, lighting, and gameplay-template proof.
+- Added regressions for the canonical `grdev01` single-room smoke export and a two-room authored build with explicit cross-room VIS links.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_export.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_export.py tests/test_authored_module_export.py`; `python -m pytest tests/test_authored_module_export.py::test_t2643_exports_kmap_authored_module_package tests/test_authored_module_export.py::test_t2606_authored_build_metadata_records_multi_room_vis_links -q --basetemp .pytest_tmp_map_studio_visibility_manifest`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Rejects Unsafe Gameplay Template Resrefs
 
 Owner: LordVaderCW

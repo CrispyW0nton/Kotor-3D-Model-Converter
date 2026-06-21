@@ -67,6 +67,18 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert authored_manifest["room_lights"][0]["name"] == "grdev01_key_light"
     assert authored_manifest["room_lights"][0]["room_resref"] == "grdev01_room01"
     assert authored_manifest["room_lights"][0]["metadata"]["purpose"] == "canonical_smoke_visibility"
+    assert authored_manifest["visibility"]["vis_resource"] == "grdev01.vis"
+    assert authored_manifest["visibility"]["ready"] is True
+    assert authored_manifest["visibility"]["status"] == "Ready"
+    assert authored_manifest["visibility"]["room_count"] == 1
+    assert authored_manifest["visibility"]["vis_entry_count"] == 1
+    assert authored_manifest["visibility"]["link_count"] == 1
+    assert authored_manifest["visibility"]["cross_room_link_count"] == 0
+    assert authored_manifest["visibility"]["entries"] == [
+        {"room": "grdev01_room01", "visible_rooms": ["grdev01_room01"]}
+    ]
+    assert authored_manifest["visibility"]["isolated_rooms"] == []
+    assert authored_manifest["visibility"]["missing_targets"] == []
     assert authored_manifest["rooms"][0]["wok_walkable_faces"] == 2
     assert authored_manifest["rooms"][0]["wok_non_walk_faces"] == 8
     assert authored_manifest["rooms"][0]["walkmesh_boundary_wall_faces"] == 8
@@ -135,6 +147,52 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert ("plc_bench", "utp", "placeable") in template_keys
     assert ("sw_startloc001", "utw", "waypoint") in template_keys
     assert all(row["status"] == "external_or_base_game" for row in template_dependencies)
+
+
+def test_t2606_authored_build_metadata_records_multi_room_vis_links() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+    from src.core.modules.authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject, AuthoredRoomSpec
+    from src.core.modules.authored_room_geometry import RectangularRoomPrimitive
+
+    project = AuthoredModuleProject(
+        metadata=AuthoredModuleMetadata(module_root="grvis01", game="K1"),
+        rooms=(
+            AuthoredRoomSpec(
+                room_resref="grvis01_a",
+                primitive=RectangularRoomPrimitive(room_resref="grvis01_a"),
+                position=(0.0, 0.0, 0.0),
+                visible_rooms=("grvis01_a", "grvis01_b"),
+            ),
+            AuthoredRoomSpec(
+                room_resref="grvis01_b",
+                primitive=RectangularRoomPrimitive(room_resref="grvis01_b"),
+                position=(8.0, 0.0, 0.0),
+                visible_rooms=("grvis01_a", "grvis01_b"),
+            ),
+        ),
+        placements=AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref="grvis01")),
+    )
+
+    build = build_authored_module(project)
+
+    visibility = build.metadata["visibility"]
+    assert visibility["ready"] is True
+    assert visibility["status"] == "Ready"
+    assert visibility["vis_resource"] == "grvis01.vis"
+    assert visibility["room_count"] == 2
+    assert visibility["vis_entry_count"] == 2
+    assert visibility["link_count"] == 4
+    assert visibility["cross_room_link_count"] == 2
+    assert visibility["entries"] == [
+        {"room": "grvis01_a", "visible_rooms": ["grvis01_a", "grvis01_b"]},
+        {"room": "grvis01_b", "visible_rooms": ["grvis01_a", "grvis01_b"]},
+    ]
+    assert visibility["isolated_rooms"] == []
+    assert visibility["missing_targets"] == []
+    assert ("grvis01", "vis") in build.resources
 
 
 def test_t2643_exports_diagnostic_kmap_authored_module_without_optional_placed_content(tmp_path: Path) -> None:
