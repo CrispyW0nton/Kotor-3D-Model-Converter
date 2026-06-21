@@ -10,6 +10,11 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from src.core.level import KMapProject, LevelScene, LevelTransform
 from src.core.modules.authored_module_export import authored_module_smoke_summary_lines
 from src.core.modules.module_editor_controller import ModuleEditorController
+from src.core.modules.map_studio_tool_action_dispatch import (
+    MapStudioToolActionContext,
+    execute_map_studio_tool_belt_action,
+    resolve_map_studio_tool_belt_action,
+)
 from src.gui.panels.module_editor.blueprints_tab import BlueprintsTab
 from src.gui.panels.module_editor.builder_tab import BuilderTab
 from src.gui.panels.module_editor.export_panel import ModuleExportPanel
@@ -1313,6 +1318,133 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "sculpt_noise": "noise",
         }.get(str(action_key or "").strip(), "")
 
+    def _map_studio_combo_data(self, combo_name: str) -> dict[str, Any]:
+        """Return the current data dictionary for one Builder combo."""
+
+        combo = getattr(self.builder_tab, combo_name, None)
+        if combo is None:
+            return {}
+        data = combo.currentData()
+        if isinstance(data, dict):
+            return dict(data)
+        if isinstance(data, str):
+            return {"room_resref": data}
+        return {}
+
+    def _map_studio_current_room_resref(self) -> str:
+        """Return the best current authored room context visible in Builder."""
+
+        for combo_name in (
+            "floorPlanVertexRoomComboBox",
+            "floorPlanExtrusionRoomComboBox",
+            "floorPlanOpeningRoomComboBox",
+            "floorPlanUnionFirstRoomComboBox",
+            "floorPlanBridgeFirstRoomComboBox",
+            "roomPrimitiveTransformComboBox",
+        ):
+            data = self._map_studio_combo_data(combo_name)
+            room = str(data.get("room_resref") or "").strip()
+            if room:
+                return room
+        choices = self.controller.authored_floor_plan_room_choices()
+        if choices:
+            return str(getattr(choices[0], "room_resref", "") or "")
+        return ""
+
+    def _map_studio_selected_point_indices(self) -> tuple[int, ...]:
+        """Return selected Builder point indices without owning selection policy."""
+
+        parser = getattr(self.builder_tab, "_parse_floor_plan_point_indices", None)
+        if callable(parser):
+            try:
+                return tuple(int(index) for index in tuple(parser() or ()))
+            except Exception:
+                return ()
+        return ()
+
+    def _map_studio_tool_action_context(self, action_key: str) -> MapStudioToolActionContext:
+        """Collect current UI selection facts for the core action dispatcher."""
+
+        vertex_data = self._map_studio_combo_data("floorPlanVertexRoomComboBox")
+        vertex_target_data = self._map_studio_combo_data("floorPlanVertexTargetRoomComboBox")
+        bridge_first = self._map_studio_combo_data("floorPlanBridgeFirstRoomComboBox")
+        bridge_second = self._map_studio_combo_data("floorPlanBridgeSecondRoomComboBox")
+        union_first = self._map_studio_combo_data("floorPlanUnionFirstRoomComboBox")
+        union_second = self._map_studio_combo_data("floorPlanUnionSecondRoomComboBox")
+        primitive_data = self._map_studio_combo_data("roomPrimitiveTransformComboBox")
+        selected_points = self._map_studio_selected_point_indices()
+        source_point = getattr(self.builder_tab, "floorPlanSourcePointSpinBox", None)
+        target_point = getattr(self.builder_tab, "floorPlanTargetPointSpinBox", None)
+        bridge_first_edge = getattr(self.builder_tab, "floorPlanBridgeFirstEdgeSpinBox", None)
+        bridge_second_edge = getattr(self.builder_tab, "floorPlanBridgeSecondEdgeSpinBox", None)
+        cleanup_tolerance = getattr(self.builder_tab, "floorPlanCleanupToleranceSpinBox", None)
+        flatten_axis = getattr(self.builder_tab, "floorPlanFlattenAxisComboBox", None)
+        mirror_axis = getattr(self.builder_tab, "floorPlanMirrorAxisComboBox", None)
+        key = str(action_key or "").strip()
+        axis = "x"
+        if key == "mirror_y":
+            axis = "y"
+        elif key == "mirror_x":
+            axis = "x"
+        elif key in {"mirror", "flatten", "transform_snap_level"}:
+            axis_combo = mirror_axis if key == "mirror" else flatten_axis
+            if axis_combo is not None:
+                axis = str(axis_combo.currentData() or "x")
+        metadata: dict[str, Any] = {}
+        if cleanup_tolerance is not None:
+            metadata["tolerance"] = float(cleanup_tolerance.value())
+        weld_policy = getattr(self.builder_tab, "floorPlanWeldPolicyComboBox", None)
+        if weld_policy is not None:
+            metadata["position_policy"] = str(weld_policy.currentData() or "target")
+        return MapStudioToolActionContext(
+            room_resref=str(vertex_data.get("room_resref") or primitive_data.get("room_resref") or self._map_studio_current_room_resref()),
+            first_room_resref=str(bridge_first.get("room_resref") or union_first.get("room_resref") or ""),
+            second_room_resref=str(bridge_second.get("room_resref") or union_second.get("room_resref") or ""),
+            result_room_resref=str(
+                getattr(getattr(self.builder_tab, "floorPlanUnionResultRoomLineEdit", None), "text", lambda: "")()
+                if key == "combine"
+                else getattr(getattr(self.builder_tab, "floorPlanBridgeResultRoomLineEdit", None), "text", lambda: "")()
+                if key == "bridge"
+                else getattr(getattr(self.builder_tab, "roomPrimitiveSeparateResultLineEdit", None), "text", lambda: "")()
+            ).strip(),
+            primitive_name=str(primitive_data.get("primitive_name") or ""),
+            point_index=int(source_point.value()) if source_point is not None else None,
+            point_indices=selected_points,
+            target_point_index=int(target_point.value()) if target_point is not None else None,
+            target_room_resref=str(vertex_target_data.get("room_resref") or ""),
+            first_edge_index=int(bridge_first_edge.value()) if bridge_first_edge is not None else None,
+            second_edge_index=int(bridge_second_edge.value()) if bridge_second_edge is not None else None,
+            axis=axis,
+            positive_z=key != "reverse_normals",
+            metadata=metadata,
+        )
+
+    def _execute_map_studio_tool_belt_command(self, action_key: str) -> bool:
+        """Execute a tool-belt action when the core dispatcher has a command."""
+
+        context = self._map_studio_tool_action_context(action_key)
+        route = resolve_map_studio_tool_belt_action(action_key, context)
+        if not route.command_method:
+            if route.disabled_reason:
+                self.statusBar().showMessage(route.disabled_reason, 5000)
+                self._log(f"Map Studio action not ready: {route.disabled_reason}")
+            return False
+        if not route.enabled:
+            self.statusBar().showMessage(route.disabled_reason or "Map Studio action is not ready.", 5000)
+            self._log(f"Map Studio action not ready: {route.disabled_reason}")
+            return False
+        try:
+            execute_map_studio_tool_belt_action(self.controller, action_key, context)
+        except Exception as exc:
+            self.statusBar().showMessage(str(exc), 6000)
+            self._log(f"Map Studio action failed: {exc}")
+            return False
+        self._refresh_all(route.status_message or f"{route.label} complete.")
+        self.workflow_panel.set_active_authoring_context(
+            route.authoring_context or route.readiness_impact or route.status_message or route.label
+        )
+        return True
+
     def _focus_map_studio_entry_point_controls(self) -> None:
         """Focus Builder controls for the authored IFO player start."""
 
@@ -1613,18 +1745,42 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if key == "opening_marker":
             self._focus_map_studio_opening_marker_controls()
             return
-        terrain_brush = self._map_studio_belt_terrain_brush(key)
+        route_context = self._map_studio_tool_action_context(key)
+        route = resolve_map_studio_tool_belt_action(key, route_context)
+        direct_command_actions = {
+            "plane",
+            "cube",
+            "wall",
+            "ramp",
+            "stairs",
+            "cylinder",
+            "door_frame",
+            "arch",
+            "cleanup",
+            "triangulate",
+            "normals",
+            "reverse_normals",
+            "mirror",
+            "mirror_x",
+            "mirror_y",
+        }
+        if key in direct_command_actions:
+            if self._execute_map_studio_tool_belt_command(key):
+                return
+            if route.command_method:
+                return
+        terrain_brush = route.terrain_brush or self._map_studio_belt_terrain_brush(key)
         if terrain_brush:
             self.show_map_studio_terrain_tools()
             self._select_map_studio_terrain_brush(terrain_brush)
             self._sync_map_studio_terrain_brush_context(force_enabled=True)
             return
-        primitive_kind = self._map_studio_belt_primitive_kind(key)
+        primitive_kind = route.primitive_kind or self._map_studio_belt_primitive_kind(key)
         if primitive_kind:
             self.show_map_studio_geometry_tools()
             self.add_authored_room_primitive(primitive_kind, "")
             return
-        placement_kind = self._map_studio_belt_placement_kind(key)
+        placement_kind = route.placement_kind or self._map_studio_belt_placement_kind(key)
         if placement_kind:
             self.show_map_studio_placement_tools()
             self._select_map_studio_gameplay_kind(placement_kind)

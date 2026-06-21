@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Routes Tool Belt Actions Through Command Spine
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Level Editor command routing
+
+- Added a headless Map Studio tool-action dispatcher in the Scene and Tools native trees so tool-belt action keys resolve to command methods, disabled reasons, focus modes, stale KOTOR outputs, and readiness impact outside the Qt window.
+- Routed direct Level Editor tool-belt actions for primitives, cleanup, triangulation, normals, and mirroring through the dispatcher instead of window-local command decisions.
+- Added the missing `Triangulate` modeling action to the catalog so the Default/Component presets no longer reference an action without a command definition.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_tool_action_dispatch`; `python -m pytest tests/test_map_studio_command_history.py tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_action_spine`.
+
 ### [2026-06-21] Map Studio Expands Undo Coverage For Topology And Terrain Commands
 
 Owner: LordVaderCW

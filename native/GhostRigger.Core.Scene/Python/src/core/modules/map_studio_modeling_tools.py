@@ -910,6 +910,15 @@ _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
         implemented=True,
     ),
     MapStudioToolBeltAction(
+        "triangulate",
+        "Triangulate",
+        "geometry",
+        "triangulate_face",
+        "Triangulate the active floor-plan face deterministically before MDL/WOK validation.",
+        "Triangulation is an export-facing cleanup step; WOK and room validation must still run afterward.",
+        implemented=True,
+    ),
+    MapStudioToolBeltAction(
         "mirror",
         "Mirror",
         "geometry",
