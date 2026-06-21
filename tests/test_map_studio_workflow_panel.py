@@ -30,6 +30,7 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "mapStudioWorkflowMissingResourcesLabel" in panel_source
     assert "mapStudioWorkflowGeometryLabel" in panel_source
     assert "mapStudioWorkflowWalkmeshLabel" in panel_source
+    assert "mapStudioWorkflowVisibilityLabel" in panel_source
     assert "mapStudioWorkflowLightingLabel" in panel_source
     assert "mapStudioWorkflowPlacementLabel" in panel_source
     assert "mapStudioWorkflowLayoutLabel" in panel_source
@@ -128,6 +129,15 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
         '            "Walkmesh",\n'
         '            "Walkmesh",\n'
         '            "Walkmesh status unavailable.",'
+    ) in panel_source
+    assert "VIS visibility:" in panel_source
+    assert '"VIS visibility"' in panel_source
+    assert (
+        'self.visibility_label,\n'
+        '            readiness,\n'
+        '            "VIS visibility",\n'
+        '            "VIS visibility",\n'
+        '            "VIS status unavailable.",'
     ) in panel_source
     assert "Lighting/lightmaps:" in panel_source
     assert '"Lighting"' in panel_source
@@ -1724,6 +1734,7 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "mapStudioWorkflowMissingResourcesLabel" in mirror_source
     assert "mapStudioWorkflowGeometryLabel" in mirror_source
     assert "mapStudioWorkflowWalkmeshLabel" in mirror_source
+    assert "mapStudioWorkflowVisibilityLabel" in mirror_source
     assert "mapStudioWorkflowLightingLabel" in mirror_source
     assert "mapStudioWorkflowTerrainToolsButton" in mirror_source
     assert "mapStudioWorkflowLightingToolsButton" in mirror_source
@@ -1771,6 +1782,8 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "Required resources missing" in mirror_source
     assert "Geometry authoring" in mirror_source
     assert "Walkmesh" in mirror_source
+    assert "VIS visibility:" in mirror_source
+    assert '"VIS visibility"' in mirror_source
     assert "Lighting/lightmaps:" in mirror_source
     assert '"Lighting"' in mirror_source
     assert "Resource placement:" in mirror_source

@@ -170,6 +170,11 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.walkmesh_label.setWordWrap(True)
         root.addWidget(self.walkmesh_label)
 
+        self.visibility_label = QtWidgets.QLabel("VIS visibility: Not checked")
+        self.visibility_label.setObjectName("mapStudioWorkflowVisibilityLabel")
+        self.visibility_label.setWordWrap(True)
+        root.addWidget(self.visibility_label)
+
         self.lighting_label = QtWidgets.QLabel("Lighting/lightmaps: Not checked")
         self.lighting_label.setObjectName("mapStudioWorkflowLightingLabel")
         self.lighting_label.setWordWrap(True)
@@ -358,6 +363,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.missing_resources_label.setText("Required resources: open a KMAP before checking module files.")
             self.geometry_label.setText("Geometry: Create or open a KMAP before authoring rooms.")
             self.walkmesh_label.setText("Walkmesh: Create authored rooms before generating walkable WOK faces.")
+            self.visibility_label.setText("VIS visibility: Create authored rooms before connecting room visibility.")
             self.lighting_label.setText("Lighting/lightmaps: Create authored rooms before planning room lights or lightmaps.")
             self.placement_label.setText("Resource placement: Create authored geometry before placing KOTOR resources.")
             self.layout_label.setText("Spawn/layout: Create authored geometry before placing the player start or gameplay objects.")
@@ -386,6 +392,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.missing_resources_label.setText("Required resources: waiting for readiness check.")
             self.geometry_label.setText("Geometry: Waiting for readiness check.")
             self.walkmesh_label.setText("Walkmesh: Waiting for readiness check.")
+            self.visibility_label.setText("VIS visibility: Waiting for readiness check.")
             self.lighting_label.setText("Lighting/lightmaps: Waiting for readiness check.")
             self.placement_label.setText("Resource placement: Waiting for readiness check.")
             self.layout_label.setText("Spawn/layout: Waiting for readiness check.")
@@ -397,6 +404,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.missing_resources_label.setText("Required resources: no authored room resources yet.")
             self.geometry_label.setText("Geometry: Use Builder to create room, corridor, doorway, or terrain geometry.")
             self.walkmesh_label.setText("Walkmesh: No authored room yet. Create geometry before checking walkability.")
+            self.visibility_label.setText("VIS visibility: No authored room yet. Add rooms before authoring LYT/VIS visibility.")
             self.lighting_label.setText("Lighting/lightmaps: No authored room yet. Create geometry before planning room lights.")
             self.placement_label.setText("Resource placement: Use authored placement tools for creatures, placeables, doors, triggers, encounters, cameras, sounds, merchants, and waypoints.")
             self.layout_label.setText("Spawn/layout: Create an authored module, then place the player start and gameplay objects.")
@@ -467,6 +475,13 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             "Walkmesh",
             "Walkmesh",
             "Walkmesh status unavailable.",
+        )
+        self._set_toolchain_label(
+            self.visibility_label,
+            readiness,
+            "VIS visibility",
+            "VIS visibility",
+            "VIS status unavailable.",
         )
         self._set_toolchain_label(
             self.lighting_label,

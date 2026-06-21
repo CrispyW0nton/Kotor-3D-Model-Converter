@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Shows VIS Readiness In Workflow Panel
+
+Owner: LordVaderCW
+Task: T2604
+Subsystem: Map Studio / Level Editor workflow panel UX
+Intersects: GUI Boundary Panels workflow panel and ModuleMeshes mirror package.
+
+- Added a dedicated `VIS visibility` readiness row to the Level Editor / Map Studio workflow panel so modders can see broken VIS links, isolated rooms, and VIS export intent separately from generic runtime resource readiness.
+- Wired the new row to the existing headless `VIS visibility` toolchain status instead of duplicating visibility policy in the Qt panel.
+- Mirrored the panel contract into the ModuleMeshes package and updated source-contract tests so future merges keep the VIS row visible.
+- Verification: `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/workflow_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/workflow_panel.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_workflow_panel_surfaces_editor_spine tests/test_map_studio_workflow_panel.py::test_t2600_workflow_panel_is_mirrored_for_module_meshes_package -q --basetemp .pytest_tmp_map_studio_workflow_vis_ui`.
+
 ### [2026-06-21] Map Studio Distinguishes Lighting and Lightmap Readiness
 
 Owner: LordVaderCW
