@@ -1440,6 +1440,17 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             terrain_context = {}
         terrain_row = getattr(self.builder_tab, "terrainRowSpinBox", None)
         terrain_column = getattr(self.builder_tab, "terrainColumnSpinBox", None)
+        primitive_kind_combo = getattr(self.builder_tab, "compositionPrimitiveKindComboBox", None)
+        primitive_name_line = getattr(self.builder_tab, "compositionPrimitiveNameLineEdit", None)
+        primitive_kind_data = primitive_kind_combo.currentData() if primitive_kind_combo is not None else {}
+        if not isinstance(primitive_kind_data, dict):
+            primitive_kind_data = {}
+        primitive_kind = str(primitive_kind_data.get("kind") or "").strip()
+        primitive_name = (
+            str(getattr(primitive_name_line, "text", lambda: "")()).strip()
+            if key == "primitive"
+            else str(primitive_data.get("primitive_name") or "")
+        )
         terrain_room_resref = str(terrain_context.get("room_resref") or "").strip()
         if key.startswith("sculpt_"):
             current_room_resref = terrain_room_resref
@@ -1464,7 +1475,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 if key == "bridge"
                 else getattr(getattr(self.builder_tab, "roomPrimitiveSeparateResultLineEdit", None), "text", lambda: "")()
             ).strip(),
-            primitive_name=str(primitive_data.get("primitive_name") or ""),
+            primitive_name=primitive_name,
+            primitive_kind=primitive_kind,
             placement_kind=placement_kind,
             placement_template_resref=placement_template,
             placement_tag=placement_tag,
@@ -1902,6 +1914,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "boolean",
             "boolean_a_minus_b",
             "boolean_b_minus_a",
+            "primitive",
             "cut",
             "cut_slice_insert_edges",
             "insert_edge_loop",

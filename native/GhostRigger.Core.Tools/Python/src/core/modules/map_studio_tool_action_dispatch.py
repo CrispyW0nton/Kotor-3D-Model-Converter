@@ -106,6 +106,7 @@ class MapStudioToolActionRoute:
 
 
 _PRIMITIVE_ACTIONS: dict[str, str] = {
+    "primitive": "cube",
     "plane": "plane",
     "cube": "cube",
     "wall": "wall",
@@ -270,6 +271,7 @@ def resolve_map_studio_tool_belt_action(
             command_method="add_authored_room_primitive",
             command_kwargs={
                 "primitive_kind": primitive_kind,
+                "room_resref": ctx.room_resref,
                 "primitive_name": ctx.primitive_name,
             },
             mutates_kmap=True,

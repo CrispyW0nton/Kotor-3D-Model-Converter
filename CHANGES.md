@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Routes Generic Primitive Belt Action Through KMAP Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Primitive authoring
+Intersects: native payload mirror sync for Scene/Tools Map Studio primitive routing and Level Editor composition primitive UI context.
+
+- Routed the generic `Primitive` tool-belt action through `add_authored_room_primitive` so the Maya-like shelf adds the selected authored primitive kind to KMAP state instead of only focusing primitive controls.
+- Added Level Editor context collection for the selected composition primitive kind and optional stable primitive name, while preserving selected existing-primitive context for transform/separate/duplicate actions.
+- Updated the tool-belt audit and dispatcher tests so `Primitive` proves KMAP mutation, command-history participation, undo restoration, and export/game-proof readiness staleness.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_contract_audit.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_contract_audit.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_primitive_belt`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_primitive_ui`.
+
 ### [2026-06-21] Map Studio Routes Cut Belt Action Through Axis Split Command
 
 Owner: LordVaderCW

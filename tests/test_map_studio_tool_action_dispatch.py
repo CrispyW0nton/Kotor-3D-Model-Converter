@@ -42,13 +42,15 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert audit.blocking_messages == ()
     assert audit.total_actions >= 80
     assert audit.implemented_actions == audit.total_actions
-    assert audit.command_backed_actions >= 68
-    assert audit.mutating_command_actions >= 67
+    assert audit.command_backed_actions >= 69
+    assert audit.mutating_command_actions >= 68
     assert audit.query_command_actions >= 1
     assert audit.workflow_focus_actions <= 10
     assert statuses["cube"].contract_kind == "command_mutates_kmap"
     assert statuses["cube"].command_method == "add_authored_room_primitive"
     assert statuses["cube"].mutates_kmap is True
+    assert statuses["primitive"].contract_kind == "command_mutates_kmap"
+    assert statuses["primitive"].command_method == "add_authored_room_primitive"
     assert statuses["universal_transform"].contract_kind == "command_query"
     assert statuses["universal_transform"].command_method == "map_studio_universal_transform_overlay"
     assert statuses["placeable"].contract_kind == "command_mutates_kmap"
@@ -90,6 +92,24 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert cube.mutates_kmap is True
     assert cube.stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
     assert "game proof" in cube.readiness_impact
+
+    selected_primitive = resolve_map_studio_tool_belt_action(
+        "primitive",
+        MapStudioToolActionContext(
+            room_resref="room_a",
+            primitive_kind="cylinder",
+            primitive_name="room_a_cyl_01",
+        ),
+    )
+
+    assert selected_primitive.enabled is True
+    assert selected_primitive.command_method == "add_authored_room_primitive"
+    assert selected_primitive.command_kwargs == {
+        "primitive_kind": "cylinder",
+        "room_resref": "room_a",
+        "primitive_name": "room_a_cyl_01",
+    }
+    assert selected_primitive.mutates_kmap is True
 
     universal_missing = resolve_map_studio_tool_belt_action("universal_transform")
 
@@ -606,6 +626,22 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
 
     execute_map_studio_tool_belt_action(
         controller,
+        "primitive",
+        MapStudioToolActionContext(primitive_kind="wall", primitive_name="belt_wall"),
+    )
+
+    generic_after = controller.authored_room_primitive_transforms()
+    assert len(generic_after) == before_count + 1
+    assert generic_after[-1].primitive_type == "wall"
+    assert generic_after[-1].primitive_name == "belt_wall"
+    assert controller.command_history.undo_label == "Add wall primitive"
+
+    controller.undo_map_studio_command()
+
+    assert len(controller.authored_room_primitive_transforms()) == before_count
+
+    execute_map_studio_tool_belt_action(
+        controller,
         "placeable",
         MapStudioToolActionContext(
             placement_kind="placeable",
@@ -1116,6 +1152,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert "set_universal_transform_overlay" in window_source
     assert '"duplicate_special",' in window_source
     assert '"shrink_wrap",' in window_source
+    assert '"primitive",' in window_source
     assert '"cut",' in window_source
     assert '"opening_marker",' in window_source
     assert '"mirror_z",' in window_source
