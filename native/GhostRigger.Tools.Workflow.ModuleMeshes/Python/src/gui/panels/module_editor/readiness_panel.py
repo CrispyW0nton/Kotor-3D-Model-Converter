@@ -197,6 +197,11 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.authored_summary_label.setWordWrap(True)
         root.addWidget(self.authored_summary_label)
 
+        self.authored_source_label = QtWidgets.QLabel("Authored source: Not checked")
+        self.authored_source_label.setObjectName("mapStudioReadinessAuthoredSourceLabel")
+        self.authored_source_label.setWordWrap(True)
+        root.addWidget(self.authored_source_label)
+
         self.export_objects_label = QtWidgets.QLabel("Export objects: Not checked")
         self.export_objects_label.setObjectName("mapStudioReadinessExportObjectsLabel")
         self.export_objects_label.setWordWrap(True)
@@ -306,6 +311,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.proof_manifest_edit.clear()
             self._update_copy_buttons()
             self.authored_summary_label.setText("Authored content: Not checked")
+            self.authored_source_label.setText("Authored source: Not checked")
             self.export_objects_label.setText("Export objects: Not checked")
             self._set_export_object_rows(())
             self.template_references_label.setText("Template references: Not checked")
@@ -421,6 +427,38 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             f"Authored content: {room_text or 'No room style summary'}; "
             f"{placement_total} gameplay placement(s); {lighting_count} room light(s)"
         )
+        source_identity = dict(metadata.get("source_identity") or {})
+        modder_absent = (
+            dict(modder_test_plan.get("expected_absent_runtime_observations") or {})
+            if isinstance(modder_test_plan.get("expected_absent_runtime_observations"), dict)
+            else {}
+        )
+        content_origin = str(metadata.get("content_origin") or source_identity.get("content_origin") or "unknown").replace("_", " ")
+        source_resref = str(metadata.get("source_module_resref") or source_identity.get("source_module_resref") or "").strip()
+        authored_original = bool(metadata.get("authored_from_scratch", source_identity.get("authored_from_scratch", False)))
+        copied_from_base_game = bool(
+            metadata.get("copied_from_base_game_module", source_identity.get("copied_from_base_game_module", False))
+        )
+        inherited_content = bool(
+            metadata.get("inherited_base_game_module_content", source_identity.get("inherited_base_game_module_content", False))
+        )
+        inherited_movers_expected = bool(source_identity.get("inherited_scripted_movers_expected", False))
+        must_rule_out_movers = bool(
+            modder_absent.get("inherited_scripted_moving_test_objects", authored_original and not inherited_movers_expected)
+        )
+        if authored_original and must_rule_out_movers:
+            self.authored_source_label.setText(
+                "Authored source: Original Map Studio KMAP. Game proof must show this is the authored module, "
+                "not PLCaa/Taris/fallback base-game content, and that no scripted moving base-game test objects are present."
+            )
+        elif copied_from_base_game or inherited_content:
+            source_text = f" from {source_resref}" if source_resref else ""
+            self.authored_source_label.setText(
+                f"Authored source: Base-game-derived{source_text}. Verify inherited geometry, scripts, and movers are intentional "
+                "before calling the module game-tested."
+            )
+        else:
+            self.authored_source_label.setText(f"Authored source: {content_origin or 'Not checked'}")
         export_objects = list(metadata.get("export_object_boundaries", ()) or ())
         uv_handoff_count = int(metadata.get("uv_handoff_object_count", 0) or 0)
         if export_objects:

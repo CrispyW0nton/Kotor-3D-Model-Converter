@@ -1343,6 +1343,12 @@ def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
         assert "missing_runtime_resources" in source
         assert "Generate or stage this runtime file before export/install." in source
         assert "ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX readiness" in source
+        assert "mapStudioReadinessAuthoredSourceLabel" in source
+        assert "source_identity" in source
+        assert "expected_absent_runtime_observations" in source
+        assert "Original Map Studio KMAP" in source
+        assert "not PLCaa/Taris/fallback base-game content" in source
+        assert "no scripted moving base-game test objects are present" in source
         assert "modder_test_plan" in source
         assert "acceptance check(s) still need live KOTOR evidence" in source
 

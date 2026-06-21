@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Shows Authored Smoke-Map Source Proof
+
+Owner: LordVaderCW
+Task: T2605
+Subsystem: Map Studio / Level Editor readiness panel UX
+Intersects: GUI Boundary Panels readiness panel and ModuleMeshes mirror package.
+
+- Added an authored-source readiness label that tells modders whether the current smoke module is original Map Studio KMAP content or base-game-derived.
+- Surfaced the live proof requirement that original smoke maps must be verified as the authored module, not PLCaa/Taris/fallback base-game content, with no scripted moving base-game test objects present.
+- Kept the proof policy in the headless readiness/export metadata; the panel only formats `source_identity` and `expected_absent_runtime_observations`.
+- Verification: `python -m py_compile native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/readiness_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/readiness_panel.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_workflow_panel_source`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Hardens Authored Smoke-Map Proof Contract
 
 Owner: LordVaderCW
