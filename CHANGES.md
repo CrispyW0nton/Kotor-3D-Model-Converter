@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Seeds Smoke Map Lighting
+
+Owner: LordVaderCW
+Task: T2605 / T2601
+Subsystem: Map Studio / Authored smoke-map KMAP payload and export manifest
+Intersects: Domain Core Modules KMAP bridge, ModuleMeshes mirror package, and authored module export tests.
+
+- Added a default authored key light to the canonical `grdev01` smoke-map payload so the test map now carries simple room lighting intent instead of relying only on viewport lighting.
+- Extended the single-room authored project factory to accept room lights and verified the default light survives KMAP serialization, readiness metadata, and export manifest generation.
+- Kept the light marked as authored Map Studio smoke visibility metadata so future in-game proof can distinguish authored lighting intent from renderer-only preview state.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_project.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_kmap_bridge.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_project.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_kmap_bridge.py tests/test_authored_module_export.py tests/test_authored_module_kmap_bridge.py`; `python -m pytest tests/test_authored_module_export.py::test_t2643_exports_kmap_authored_module_package tests/test_authored_module_kmap_bridge.py::test_t2642_dev_test_payload_roundtrips_placeable_and_waypoint tests/test_authored_module_kmap_bridge.py::test_t2642_controller_creates_authored_dev_room_in_kmap -q --basetemp .pytest_tmp_map_studio_smoke_light`; `python -m pytest tests/test_authored_module_export.py tests/test_authored_module_kmap_bridge.py -q --basetemp .pytest_tmp_map_studio_smoke_light_files`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Shows Authored Smoke-Map Source Proof
 
 Owner: LordVaderCW

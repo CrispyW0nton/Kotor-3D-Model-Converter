@@ -156,12 +156,19 @@ def test_t2642_dev_test_payload_roundtrips_placeable_and_waypoint() -> None:
     assert payload["metadata"]["content_origin"] == "map_studio_original"
     assert payload["metadata"]["authored_from_scratch"] is True
     assert payload["metadata"]["copied_from_base_game_module"] is False
+    assert payload["metadata"]["include_basic_light"] is True
     assert payload["rooms"][0]["primitive"]["type"] == "rectangular"
+    assert payload["lights"][0]["name"] == "grdev01_key_light"
+    assert payload["lights"][0]["room_resref"] == "grdev01_room01"
+    assert payload["lights"][0]["metadata"]["purpose"] == "canonical_smoke_visibility"
     assert project.placements.entry_point.position == (0.0, -3.0, 0.0)
     assert project.placements.placeables[0].template_resref == "plc_bench"
     assert project.placements.waypoints[0].template_resref == "sw_startloc001"
+    assert project.lights[0].name == "grdev01_key_light"
     assert restored["placements"]["placeables"][0]["tag"] == "grdev01_test_placeable"
     assert restored["placements"]["waypoints"][0]["tag"] == "start"
+    assert restored["lights"][0]["name"] == "grdev01_key_light"
+    assert restored["placements"]["metadata"]["light_count"] == 1
 
 
 def test_t2642_controller_creates_authored_dev_room_in_kmap() -> None:
@@ -182,6 +189,7 @@ def test_t2642_controller_creates_authored_dev_room_in_kmap() -> None:
     assert result.readiness.can_preview is True
     assert result.readiness.metadata["source_identity"]["content_origin"] == "map_studio_original"
     assert result.readiness.metadata["source_identity"]["authored_from_scratch"] is True
+    assert result.readiness.metadata["lighting_count"] == 1
 
 
 def test_t2667_kmap_round_trips_composition_room_primitives() -> None:

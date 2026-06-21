@@ -782,6 +782,7 @@ def create_dev_test_authored_module_payload(
     include_test_placeable: bool = True,
     include_start_waypoint: bool = True,
     include_doorway_marker: bool = True,
+    include_basic_light: bool = True,
 ) -> dict[str, Any]:
     """Create the first editable from-scratch Map Studio KMAP payload."""
 
@@ -805,6 +806,23 @@ def create_dev_test_authored_module_payload(
                 position=(0.0, -3.0, 0.0),
             ),
         )
+    lights = ()
+    if include_basic_light:
+        lights = (
+            AuthoredRoomLight(
+                name=f"{root}_key_light"[:32],
+                room_resref=room_resref,
+                position=(0.0, -1.5, 2.45),
+                color=(1.0, 0.92, 0.76),
+                radius=8.0,
+                intensity=1.0,
+                light_type="point",
+                metadata={
+                    "source": "map_studio:dev_test_smoke_light",
+                    "purpose": "canonical_smoke_visibility",
+                },
+            ),
+        )
     project = create_single_room_project(
         module_root=root,
         game=game,
@@ -818,6 +836,7 @@ def create_dev_test_authored_module_payload(
             texture=normalize_authored_room_texture(DEFAULT_AUTHORED_ROOM_TEXTURE),
             include_doorway_marker=bool(include_doorway_marker),
         ),
+        lights=lights,
         placements=AuthoredGameplayPlacement(
             entry_point=ModuleEntryPoint(area_resref=root, position=(0.0, -3.0, 0.0)),
             placeables=placeables,
@@ -828,8 +847,10 @@ def create_dev_test_authored_module_payload(
                 "include_test_placeable": bool(include_test_placeable),
                 "include_start_waypoint": bool(include_start_waypoint),
                 "include_doorway_marker": bool(include_doorway_marker),
+                "include_basic_light": bool(include_basic_light),
                 "placeable_count": len(placeables),
                 "waypoint_count": len(waypoints),
+                "light_count": len(lights),
             },
         ),
         notes=(
@@ -847,6 +868,7 @@ def create_dev_test_authored_module_payload(
             "inherited_scripted_movers_expected": False,
             "room_geometry_mode": "rectangular_composition",
             "include_doorway_marker": bool(include_doorway_marker),
+            "include_basic_light": bool(include_basic_light),
         },
     )
     return authored_project_to_kmap_payload(project)

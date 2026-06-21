@@ -61,6 +61,10 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert authored_manifest["capability_stage"] == "export_candidate"
     assert authored_manifest["game_tested"] is False
     assert authored_manifest["warp_command"] == "warp grdev01"
+    assert authored_manifest["lighting_count"] == 1
+    assert authored_manifest["room_lights"][0]["name"] == "grdev01_key_light"
+    assert authored_manifest["room_lights"][0]["room_resref"] == "grdev01_room01"
+    assert authored_manifest["room_lights"][0]["metadata"]["purpose"] == "canonical_smoke_visibility"
     assert authored_manifest["rooms"][0]["wok_walkable_faces"] == 2
     assert authored_manifest["rooms"][0]["wok_non_walk_faces"] == 8
     assert authored_manifest["rooms"][0]["walkmesh_boundary_wall_faces"] == 8

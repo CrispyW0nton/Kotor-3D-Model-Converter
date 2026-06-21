@@ -208,6 +208,7 @@ def create_single_room_project(
     display_name: str,
     room_primitive: RectangularRoomPrimitive,
     placements: AuthoredGameplayPlacement,
+    lights: tuple[AuthoredRoomLight, ...] = (),
     notes: tuple[str, ...] = (),
     metadata: dict[str, Any] | None = None,
 ) -> AuthoredModuleProject:
@@ -231,7 +232,7 @@ def create_single_room_project(
         ),
         rooms=(room,),
         placements=placements,
-        lights=(),
+        lights=tuple(lights or ()),
         notes=notes,
     )
 
