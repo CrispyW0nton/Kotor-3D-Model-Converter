@@ -259,6 +259,56 @@ def test_t2680_pathing_includes_walkable_spatial_gameplay_anchors() -> None:
     assert ("stm_shop", "utm", "store") in template_keys
 
 
+def test_t2907_terrain_preset_exports_walkable_wok_pathing_and_lighting(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import AuthoredModuleExportRequest, export_authored_module_project
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="terrain_heightfield",
+        module_root="grterr01",
+        game="K1",
+    )
+
+    result = export_authored_module_project(AuthoredModuleExportRequest(project=project, output_dir=str(tmp_path)))
+
+    assert result.ok is True
+    assert result.code == "export_candidate"
+    assert result.blocking_issues == []
+    resource_keys = {(summary.resref, summary.restype) for summary in result.resources}
+    assert {
+        ("grterr01", "are"),
+        ("grterr01", "git"),
+        ("grterr01", "lyt"),
+        ("grterr01", "vis"),
+        ("grterr01", "pth"),
+        ("module", "ifo"),
+        ("grterr01_room01", "mdl"),
+        ("grterr01_room01", "mdx"),
+        ("grterr01_room01", "wok"),
+    } <= resource_keys
+    manifest = json.loads(Path(result.manifest_path).read_text(encoding="utf-8"))
+    authored_manifest = manifest["map_studio_authored_module"]
+    room = authored_manifest["rooms"][0]
+    assert room["resref"] == "grterr01_room01"
+    assert room["wok_walkable_faces"] == 32
+    assert room["wok_non_walk_faces"] == 32
+    assert room["walkmesh_boundary_wall_faces"] == 32
+    assert room["floor_surface_id"] == 3
+    assert authored_manifest["lighting_count"] == 1
+    assert authored_manifest["room_lights"][0]["name"] == "grterr01_key_light"
+    assert authored_manifest["room_lights"][0]["room_resref"] == "grterr01_room01"
+    assert authored_manifest["room_lights"][0]["metadata"]["purpose"] == "starter_room_visibility"
+    assert authored_manifest["walkability"]["ok"] is True
+    walkability_labels = {row["label"] for row in authored_manifest["walkability"]["checks"]}
+    assert {"entry_point", "placeable:grterr01_test_placeable", "waypoint:start"} <= walkability_labels
+    assert authored_manifest["pathing"]["walkmesh_component_count"] == 1
+    assert {"entry_point", "placeable:grterr01_test_placeable", "waypoint:start"} <= set(
+        authored_manifest["pathing"]["anchor_labels"]
+    )
+
+
 def test_t2600_camera_properties_update_survives_kmap_payload_roundtrip() -> None:
     _install_native_payload_paths()
 

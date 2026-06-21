@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Proves Terrain Preset Export Path
+
+Owner: LordVaderCW
+Task: T2603 / T2605 / T2907
+Subsystem: Map Studio / Terrain Builder presets and authored module export
+Intersects: Domain Core Modules room presets, ModuleMeshes mirror package, and authored module export tests.
+
+- Added default authored key-light intent to Map Studio room presets so starter rooms and terrain patches have editable lighting metadata rather than relying on renderer-only viewport light.
+- Added a terrain-heightfield export regression that proves the terrain preset compiles into staged ARE/GIT/IFO/LYT/VIS/PTH/MDL/MDX/WOK resources with walkable WOK faces, pathing anchors, and authored lighting in the manifest.
+- Kept the terrain output at `export_candidate` capability: it is packaged and read back, but still requires install/warp evidence before being called game-tested.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_presets.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_presets.py tests/test_authored_module_export.py`; `python -m pytest tests/test_authored_module_export.py::test_t2907_terrain_preset_exports_walkable_wok_pathing_and_lighting -q --basetemp .pytest_tmp_map_studio_terrain_export`; `python -m pytest tests/test_authored_module_export.py -q --basetemp .pytest_tmp_map_studio_terrain_export_file`; `python -m pytest tests/test_authored_terrain_builder.py -q --basetemp .pytest_tmp_map_studio_terrain_builder`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Aligns Direct Smoke Builder Lighting
 
 Owner: LordVaderCW

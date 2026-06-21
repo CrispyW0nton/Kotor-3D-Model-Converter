@@ -12,6 +12,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Any
 
+from .authored_module_lighting import AuthoredRoomLight
 from .authored_module_objects import (
     AuthoredGameplayPlacement,
     AuthoredPlaceableInstance,
@@ -151,6 +152,27 @@ def get_authored_room_primitive_preset(preset_id: str) -> AuthoredRoomPrimitiveP
     raise ValueError(f"Unknown Map Studio room primitive preset '{preset_id}'. Known presets: {known}.")
 
 
+def _preset_room_lights(*, preset: AuthoredRoomPrimitivePreset, root: str, room_resref: str) -> tuple[AuthoredRoomLight, ...]:
+    """Return starter authored light intent for one room preset."""
+
+    return (
+        AuthoredRoomLight(
+            name=f"{root}_key_light"[:32],
+            room_resref=room_resref,
+            position=(0.0, -1.5, max(2.25, float(preset.wall_height) * 0.75)),
+            color=(1.0, 0.92, 0.76),
+            radius=max(8.0, max(abs(float(x)) for point in preset.points for x in point)),
+            intensity=1.0,
+            light_type="point",
+            metadata={
+                "source": "map_studio:room_primitive_preset",
+                "preset_id": preset.preset_id,
+                "purpose": "starter_room_visibility",
+            },
+        ),
+    )
+
+
 def _composition_project_from_preset(
     *,
     preset: AuthoredRoomPrimitivePreset,
@@ -276,6 +298,7 @@ def _composition_project_from_preset(
         display_name=display_name,
         composition=composition,
         placements=placements,
+        lights=_preset_room_lights(preset=preset, root=root, room_resref=room_resref),
         notes=(
             f"Map Studio primitive preset: {preset.label}.",
             "Editable KMAP-authored primitive-composition room with generated WOK intent.",
@@ -354,6 +377,7 @@ def _terrain_project_from_preset(
         display_name=display_name,
         terrain=terrain,
         placements=placements,
+        lights=_preset_room_lights(preset=preset, root=root, room_resref=room_resref),
         notes=(
             f"Map Studio primitive preset: {preset.label}.",
             "Editable KMAP-authored terrain heightfield with generated slope-aware WOK intent.",
@@ -450,6 +474,7 @@ def create_authored_module_from_room_preset(
         display_name=display_name or preset.label,
         floor_plan=primitive,
         placements=placements,
+        lights=_preset_room_lights(preset=preset, root=root, room_resref=room_resref),
         notes=(
             f"Map Studio primitive preset: {preset.label}.",
             "Editable KMAP-authored floor-plan room with generated WOK intent.",
