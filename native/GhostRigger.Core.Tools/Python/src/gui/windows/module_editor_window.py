@@ -1338,6 +1338,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "floorPlanVertexRoomComboBox",
             "floorPlanExtrusionRoomComboBox",
             "floorPlanOpeningRoomComboBox",
+            "floorPlanOpeningMarkerRoomComboBox",
             "floorPlanUnionFirstRoomComboBox",
             "floorPlanBridgeFirstRoomComboBox",
             "roomPrimitiveTransformComboBox",
@@ -1372,6 +1373,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         union_first = self._map_studio_combo_data("floorPlanUnionFirstRoomComboBox")
         union_second = self._map_studio_combo_data("floorPlanUnionSecondRoomComboBox")
         primitive_data = self._map_studio_combo_data("roomPrimitiveTransformComboBox")
+        opening_marker_data = self._map_studio_combo_data("floorPlanOpeningMarkerRoomComboBox")
         selected_points = self._map_studio_selected_point_indices()
         source_point = getattr(self.builder_tab, "floorPlanSourcePointSpinBox", None)
         target_point = getattr(self.builder_tab, "floorPlanTargetPointSpinBox", None)
@@ -1418,6 +1420,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         entry_y = getattr(self.builder_tab, "entryPointPosYSpinBox", None)
         entry_z = getattr(self.builder_tab, "entryPointPosZSpinBox", None)
         entry_facing = getattr(self.builder_tab, "entryPointFacingSpinBox", None)
+        opening_marker_opening = getattr(self.builder_tab, "floorPlanOpeningMarkerNameComboBox", None)
+        opening_marker_kind = getattr(self.builder_tab, "floorPlanOpeningMarkerKindComboBox", None)
+        opening_marker_template = str(getattr(getattr(self.builder_tab, "floorPlanOpeningMarkerTemplateLineEdit", None), "text", lambda: "")()).strip()
+        opening_marker_tag = str(getattr(getattr(self.builder_tab, "floorPlanOpeningMarkerTagLineEdit", None), "text", lambda: "")()).strip()
+        opening_marker_linked_to = str(getattr(getattr(self.builder_tab, "floorPlanOpeningMarkerLinkedToLineEdit", None), "text", lambda: "")()).strip()
+        opening_marker_linked_module = str(getattr(getattr(self.builder_tab, "floorPlanOpeningMarkerLinkedModuleLineEdit", None), "text", lambda: "")()).strip()
+        opening_marker_transition = getattr(self.builder_tab, "floorPlanOpeningMarkerTransitionDestSpinBox", None)
         terrain_context_getter = getattr(self.builder_tab, "current_terrain_brush_context", None)
         terrain_context = terrain_context_getter() if callable(terrain_context_getter) else {}
         if not isinstance(terrain_context, dict):
@@ -1425,11 +1434,16 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         terrain_row = getattr(self.builder_tab, "terrainRowSpinBox", None)
         terrain_column = getattr(self.builder_tab, "terrainColumnSpinBox", None)
         terrain_room_resref = str(terrain_context.get("room_resref") or "").strip()
-        current_room_resref = str(
-            terrain_room_resref
-            if key.startswith("sculpt_")
-            else vertex_data.get("room_resref") or primitive_data.get("room_resref") or self._map_studio_current_room_resref()
-        )
+        if key.startswith("sculpt_"):
+            current_room_resref = terrain_room_resref
+        elif key == "opening_marker":
+            current_room_resref = str(opening_marker_data.get("room_resref") or "").strip()
+        else:
+            current_room_resref = str(
+                vertex_data.get("room_resref")
+                or primitive_data.get("room_resref")
+                or self._map_studio_current_room_resref()
+            ).strip()
         return MapStudioToolActionContext(
             room_resref=current_room_resref,
             first_room_resref=str(bridge_first.get("room_resref") or union_first.get("room_resref") or ""),
@@ -1458,6 +1472,31 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 float(entry_z.value()) if entry_z is not None else 0.0,
             ),
             entry_facing=float(entry_facing.value()) if entry_facing is not None else 0.0,
+            opening_name=str(
+                (
+                    opening_marker_opening.currentData()
+                    if opening_marker_opening is not None and opening_marker_opening.currentData()
+                    else opening_marker_opening.currentText()
+                    if opening_marker_opening is not None
+                    else ""
+                )
+                or ""
+            ).strip(),
+            opening_marker_kind=str(
+                (
+                    opening_marker_kind.currentData()
+                    if opening_marker_kind is not None and opening_marker_kind.currentData()
+                    else opening_marker_kind.currentText()
+                    if opening_marker_kind is not None
+                    else "door"
+                )
+                or "door"
+            ),
+            opening_marker_template_resref=opening_marker_template,
+            opening_marker_tag=opening_marker_tag,
+            opening_marker_linked_to=opening_marker_linked_to,
+            opening_marker_linked_to_module=opening_marker_linked_module,
+            opening_marker_transition_destination=int(opening_marker_transition.value()) if opening_marker_transition is not None else 0,
             point_index=int(source_point.value()) if source_point is not None else None,
             point_indices=selected_points,
             target_point_index=int(target_point.value()) if target_point is not None else None,
@@ -1821,9 +1860,6 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if key == "terrain_patch":
             self.create_map_studio_starter_terrain()
             return
-        if key == "opening_marker":
-            self._focus_map_studio_opening_marker_controls()
-            return
         route_context = self._map_studio_tool_action_context(key)
         route = resolve_map_studio_tool_belt_action(key, route_context)
         direct_command_actions = {
@@ -1879,6 +1915,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "sound",
             "camera",
             "store",
+            "opening_marker",
             "sculpt_raise",
             "sculpt_lower",
             "sculpt_smooth",
@@ -1896,6 +1933,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             if self._execute_map_studio_tool_belt_command(key):
                 return
             if route.command_method:
+                return
+            if key == "opening_marker":
+                self._focus_map_studio_opening_marker_controls()
                 return
         terrain_brush = route.terrain_brush or self._map_studio_belt_terrain_brush(key)
         if terrain_brush:

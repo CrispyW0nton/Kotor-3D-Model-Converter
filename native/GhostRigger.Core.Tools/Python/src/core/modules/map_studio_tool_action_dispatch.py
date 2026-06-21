@@ -38,6 +38,14 @@ class MapStudioToolActionContext:
     entry_area_resref: str = ""
     entry_position: tuple[float, float, float] = (0.0, 0.0, 0.0)
     entry_facing: float = 0.0
+    opening_name: str = ""
+    opening_marker_kind: str = "door"
+    opening_marker_template_resref: str = ""
+    opening_marker_tag: str = ""
+    opening_marker_linked_to: str = ""
+    opening_marker_linked_to_module: str = ""
+    opening_marker_transition_destination: int = 0
+    opening_marker_edge_index: int | None = None
     point_index: int | None = None
     point_indices: tuple[int, ...] = ()
     target_point_index: int | None = None
@@ -367,6 +375,42 @@ def resolve_map_studio_tool_belt_action(
             authoring_context=(
                 "Entry Point: write the authored module IFO player start from the selected KMAP-world position; "
                 "validate that it lands on a reachable WOK before export/game proof."
+            ),
+        )
+
+    if key == "opening_marker":
+        opening_name = str(ctx.opening_name or "").strip()
+        if not str(ctx.room_resref or "").strip() or not opening_name:
+            return _route(
+                action,
+                focus_component_mode="placement",
+                focus_snap_mode="doorhook",
+                enabled=False,
+                disabled_reason="Opening Marker needs an authored wall opening selected before it can create KOTOR transition data.",
+            )
+        kwargs: dict[str, Any] = {
+            "operation": "opening_transition_marker",
+            "room_resref": str(ctx.room_resref or "").strip(),
+            "opening_name": opening_name,
+            "marker_kind": str(ctx.opening_marker_kind or "door").strip().lower() or "door",
+            "template_resref": str(ctx.opening_marker_template_resref or "").strip(),
+            "tag": str(ctx.opening_marker_tag or "").strip(),
+            "linked_to": str(ctx.opening_marker_linked_to or "").strip(),
+            "linked_to_module": str(ctx.opening_marker_linked_to_module or "").strip(),
+            "transition_destination": int(ctx.opening_marker_transition_destination),
+        }
+        if ctx.opening_marker_edge_index is not None:
+            kwargs["edge_index"] = int(ctx.opening_marker_edge_index)
+        return _route(
+            action,
+            focus_component_mode="placement",
+            focus_snap_mode="doorhook",
+            command_method="apply_authored_room_operation",
+            command_kwargs=kwargs,
+            mutates_kmap=True,
+            authoring_context=(
+                "Opening Marker: convert a visual floor-plan wall opening into authored KOTOR door, trigger, "
+                "or waypoint transition data with LinkedTo/LinkedToModule/TransitionDestin readiness checks."
             ),
         )
 

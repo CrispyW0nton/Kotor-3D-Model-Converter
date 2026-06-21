@@ -42,8 +42,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert audit.blocking_messages == ()
     assert audit.total_actions >= 80
     assert audit.implemented_actions == audit.total_actions
-    assert audit.command_backed_actions >= 65
-    assert audit.mutating_command_actions >= 64
+    assert audit.command_backed_actions >= 66
+    assert audit.mutating_command_actions >= 65
     assert audit.query_command_actions >= 1
     assert audit.workflow_focus_actions <= 10
     assert statuses["cube"].contract_kind == "command_mutates_kmap"
@@ -55,6 +55,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["placeable"].command_method == "add_authored_gameplay_placement"
     assert statuses["entry_point"].contract_kind == "command_mutates_kmap"
     assert statuses["entry_point"].command_method == "set_authored_module_entry_point"
+    assert statuses["opening_marker"].contract_kind == "command_mutates_kmap"
+    assert statuses["opening_marker"].command_method == "apply_authored_room_operation"
     assert statuses["sculpt_raise"].contract_kind == "command_mutates_kmap"
     assert statuses["sculpt_raise"].command_method == "apply_authored_terrain_operation"
     assert statuses["terrain"].contract_kind == "workflow_focus"
@@ -194,6 +196,41 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     }
     assert entry_point_route.mutates_kmap is True
     assert "IFO player start" in entry_point_route.authoring_context
+
+    opening_marker_missing = resolve_map_studio_tool_belt_action("opening_marker")
+
+    assert opening_marker_missing.enabled is False
+    assert "authored wall opening selected" in opening_marker_missing.disabled_reason
+
+    opening_marker_route = resolve_map_studio_tool_belt_action(
+        "opening_marker",
+        MapStudioToolActionContext(
+            room_resref="room_a",
+            opening_name="south_door",
+            opening_marker_kind="trigger",
+            opening_marker_template_resref="trg_exit",
+            opening_marker_tag="south_exit_trigger",
+            opening_marker_linked_to="wp_dest",
+            opening_marker_linked_to_module="grnext01",
+            opening_marker_transition_destination=2,
+        ),
+    )
+
+    assert opening_marker_route.enabled is True
+    assert opening_marker_route.command_method == "apply_authored_room_operation"
+    assert opening_marker_route.command_kwargs == {
+        "operation": "opening_transition_marker",
+        "room_resref": "room_a",
+        "opening_name": "south_door",
+        "marker_kind": "trigger",
+        "template_resref": "trg_exit",
+        "tag": "south_exit_trigger",
+        "linked_to": "wp_dest",
+        "linked_to_module": "grnext01",
+        "transition_destination": 2,
+    }
+    assert opening_marker_route.mutates_kmap is True
+    assert "KOTOR door, trigger, or waypoint transition data" in opening_marker_route.authoring_context
 
     snap = resolve_map_studio_tool_belt_action("vertex_snap")
 
@@ -558,6 +595,53 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
 
     restored_entry = controller.project.extra_sections["authored_module"]["placements"]["entry_point"]
     assert restored_entry["position"] != [0.0, -1.75, 0.0]
+
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="gropmk01")
+    opening_room = controller.authored_floor_plan_room_choices()[0]
+    controller.apply_authored_room_operation(
+        operation="wall_opening",
+        room_resref=opening_room.room_resref,
+        name="south_door",
+        edge_index=0,
+        center_fraction=0.5,
+        width=1.5,
+        height=2.0,
+        bottom=0.0,
+    )
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "opening_marker",
+        MapStudioToolActionContext(
+            room_resref=opening_room.room_resref,
+            opening_name="south_door",
+            opening_marker_kind="trigger",
+            opening_marker_template_resref="trg_exit",
+            opening_marker_tag="south_exit_trigger",
+            opening_marker_linked_to="wp_dest",
+            opening_marker_linked_to_module="grnext01",
+            opening_marker_transition_destination=2,
+        ),
+    )
+
+    marker_payload = controller.project.extra_sections["authored_module"]
+    marker_trigger = marker_payload["placements"]["triggers"][-1]
+    marker_metadata = marker_payload["extra"]["last_opening_transition_marker"]
+
+    assert marker_trigger["template_resref"] == "trg_exit"
+    assert marker_trigger["tag"] == "south_exit_trigger"
+    assert marker_trigger["linked_to"] == "wp_dest"
+    assert marker_trigger["linked_to_module"] == "grnext01"
+    assert marker_trigger["transition_destination"] == 2
+    assert marker_metadata["opening_name"] == "south_door"
+    assert marker_metadata["marker_kind"] == "trigger"
+    assert marker_metadata["transition_destination"] == 2
+    assert controller.command_history.undo_label == "Apply room operation opening_transition_marker"
+
+    controller.undo_map_studio_command()
+
+    restored_marker_payload = controller.project.extra_sections["authored_module"]
+    assert all(row.get("tag") != "south_exit_trigger" for row in restored_marker_payload["placements"]["triggers"])
 
     controller.create_authored_room_preset_module(preset_id="octagonal_room", module_root="grbevel01")
     room_before = controller.authored_floor_plan_room_choices()[0]
@@ -969,6 +1053,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert "set_universal_transform_overlay" in window_source
     assert '"duplicate_special",' in window_source
     assert '"shrink_wrap",' in window_source
+    assert '"opening_marker",' in window_source
     assert '"mirror_z",' in window_source
     assert '"bend_tool",' in window_source
     assert '"curve_tool",' in window_source
@@ -994,6 +1079,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert '"boolean_a_minus_b"' in source
         assert '"boolean_b_minus_a"' in source
         assert '"insert_edge_loop"' in source
+        assert '"operation": "opening_transition_marker"' in source
         assert 'command_method="map_studio_universal_transform_overlay"' in source
 
     for source in (scene_overlay, tools_overlay):

@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Routes Opening Marker Belt Action Through Transition Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Doorway transitions
+Intersects: native payload mirror sync for Scene/Tools Map Studio opening-marker routing and Level Editor transition UI context.
+
+- Routed the `Opening Marker` tool-belt action through `apply_authored_room_operation(operation="opening_transition_marker")` so a visible floor-plan wall opening can create authored KOTOR door, trigger, or waypoint transition data instead of only focusing the Builder controls.
+- Added opening marker fields to the shared tool action context and the contract-audit representative context, including marker kind, template resref, tag, `LinkedTo`, `LinkedToModule`, and `TransitionDestin`.
+- Updated the Level Editor tool-belt handler so the action executes through the command spine when a room/opening is selected, while still falling back to the existing transition controls when context is missing.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_contract_audit.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_contract_audit.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_opening_marker_belt`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_opening_marker_ui`.
+
 ### [2026-06-21] Map Studio Routes Terrain Brush Belt Actions Through KMAP Commands
 
 Owner: LordVaderCW
