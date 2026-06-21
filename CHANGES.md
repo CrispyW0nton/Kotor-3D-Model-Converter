@@ -10,6 +10,28 @@ For each completed change, add a dated entry with:
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
 ## 2026-06-21
+### [2026-06-21] Build Dockable Mesh Tools Workbench
+
+Owner: LordVaderCW
+Tasks: T2902, T2903, T2906, T2307
+Subsystem: Mesh Tools / Qt workspace docks / Automation IPC / native Python payloads
+
+- Added a shared Mesh Tools command service for primitive creation, scene-object mesh validation, snap/grid, transform/pivot, material assignment, and conservative generated-topology edit dispatch.
+- Added valid generated Floor, Wall, Cube, Cylinder, Arch, Ramp, and Stairs primitives with stable scene-object IDs, runtime mesh data, material slots, UVs, normals, and validation summaries.
+- Expanded the dockable Qt Mesh Tools panel into a usable modeling workbench with primitive parameters, edit operations, snap/grid controls, transform/pivot controls, material assignment, stable object names, and status reporting.
+- Wired edit operations through existing viewport mesh history when an active edit mesh exists, with a scene-object command fallback for IPC-generated primitives; fixed face extrusion so it replaces selected faces instead of creating nonmanifold duplicate boundaries.
+- Added `/api/mesh_tool_command` IPC routing through Core Automation, marshalled to the GUI thread, returning structured command results, changed object IDs, warnings/errors, and validation summaries.
+- Regenerated Automation, GUI Display, and Tools embedded Python payload manifests/resources and added the new Tools payload files to the Visual Studio project metadata.
+- Added paste-ready Mesh Tools IPC examples to `CHEETSHEET.md`.
+
+Verification:
+- `python -m py_compile src\mesh_tools\__init__.py src\mesh_tools\mesh_primitives.py src\mesh_tools\mesh_editing.py src\mesh_tools\command_service.py native\GhostRigger.Core.Tools\Python\src\mesh_tools\__init__.py native\GhostRigger.Core.Tools\Python\src\mesh_tools\mesh_primitives.py native\GhostRigger.Core.Tools\Python\src\mesh_tools\mesh_editing.py native\GhostRigger.Core.Tools\Python\src\mesh_tools\command_service.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\qt_mesh_tools_panel.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\shared\dependencies.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\selection_mesh.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\qt_main_window.py native\GhostRigger.Core.Automation\Python\src\ipc\server.py`
+- `python -m pytest tests\test_mesh_tools_command_service.py -q -p no:cacheprovider --basetemp .pytest_tmp\mesh_command` -> 8 passed.
+- `python -m pytest tests\test_native_python_payloads.py -q -p no:cacheprovider --basetemp .pytest_tmp\mesh_payload` -> 17 passed.
+- `python -m pytest tests\test_core_contracts.py::test_integration_packages_are_headless_and_classified -q -p no:cacheprovider --basetemp .pytest_tmp\mesh_contract` -> 1 passed.
+- Parsed `native\GhostRigger.Core.Tools\GhostRigger.Core.Tools.vcxproj` and `.vcxproj.filters` as XML.
+- Visible Debug app verification opened the Mesh Tools dock, created cube/floor/cylinder/ramp/stairs/wall/arch, snapped to grid, applied a base pivot, assigned a material override, extruded a cube face with clean validation, confirmed Boolean Cut fails safely with a clear warning, and captured Default, Matrix, Dark, Light, and Classic theme windows under `knowledge_base\test_artifacts\mesh_tools_panel_2026_06_21\`.
+
 ### [2026-06-21] Ignore Generated Test Artifacts
 
 Owner: LordVaderCW

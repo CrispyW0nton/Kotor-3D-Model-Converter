@@ -518,6 +518,36 @@ class GhostRiggerIPCServer:
             payload_result = result if isinstance(result, dict) else {"value": result}
             return jsonify({"status": "ok", "program": _PROGRAM_NAME, "result": payload_result})
 
+        @app.route("/api/mesh_tool_command", methods=["POST"])
+        def route_mesh_tool_command():
+            """Run a Mesh Tools command through the shared command service.
+
+            Payload shape:
+            {
+              "command": "create_cube",
+              "target": {"id": "...", "name": "..."},
+              "selection": {"mode": "face", "ids": [1, 2, 3]},
+              "options": {"dimensions": [1, 1, 1], "grid_snap": true}
+            }
+            """
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            command = str(payload.get("command", payload.get("cmd", body.get("command", ""))) or "").strip()
+            if not command:
+                return jsonify({"status": "error", "message": "missing command"}), 400
+
+            cb = self.callbacks.get("mesh_tool_command")
+            if cb is None:
+                return jsonify({"status": "error", "message": "mesh_tool_command callback unavailable"}), 503
+            ok, result = self._invoke_callback_sync(cb, payload, timeout=30.0)
+            if not ok:
+                return jsonify({"status": "error", "command": command, "message": str(result)}), 504
+            response = result if isinstance(result, dict) else {"status": "ok", "command": command, "result": result}
+            response.setdefault("status", "ok")
+            response.setdefault("command", command)
+            response.setdefault("program", _PROGRAM_NAME)
+            return jsonify(response)
+
         @app.route("/api/select_module_mesh", methods=["POST"])
         def route_select_module_mesh():
             """Select a module mesh by display name in the running viewport/list."""

@@ -91,6 +91,14 @@ from src.mesh_tools.mesh_operations import (
     target_weld_vertex,
     weld_selected_vertices,
 )
+from src.mesh_tools.mesh_editing import (
+    bevel_selected,
+    boolean_cut_selected,
+    boolean_difference_selected,
+    boolean_union_selected,
+    extrude_selected,
+    inset_selected,
+)
 from src.mesh_tools.mesh_selection_convert import convert_selection
 from src.mesh_tools.mesh_selection_state import MeshSelectionState
 from src.mesh_tools.mesh_topology import MeshTopology, normalize_edge

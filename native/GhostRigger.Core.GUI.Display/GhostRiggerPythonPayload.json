@@ -759,7 +759,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_MESH_TOOLS_PANEL",
             "source_path": "src/gui/panels/qt_mesh_tools_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_mesh_tools_panel.py",
-            "sha256": "e95c126caf8dd39581fd50188a56ec82814db4455bf135bb129a7996df491066"
+            "sha256": "906d73175aa29ee6ce7452ca025989133e1c95336e3876e88a6f20e3756fcdbf"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_MODULAR_PANEL",
@@ -1329,7 +1329,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_SHARED_DEPENDENCIES",
             "source_path": "src/gui/viewports/viewport_core/shared/dependencies.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/shared/dependencies.py",
-            "sha256": "42c14a7ae6d89821371469352c672d15756aa1a60bd55f5e5cd1d465664b088c"
+            "sha256": "55822d96f7cd9901bbe4dd6cf0aaa03267a7a4781c65f070fded20f2efb52bf0"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_SHARED_ICONS",
@@ -1455,7 +1455,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_SELECTION_MESH",
             "source_path": "src/gui/viewports/viewport_core/widgets/selection_mesh.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/selection_mesh.py",
-            "sha256": "c3b123882b198cf6c2167131fadbd47df2c48ff66219e1d96c442ac2dc46b37f"
+            "sha256": "2634294c8eb664814dd71f97950c8bea345d5b741c84bda4cb9c1a1f6095a516"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_SNAP_VIEW_BAR",
@@ -1719,7 +1719,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_MAIN_WINDOW",
             "source_path": "src/gui/windows/qt_main_window.py",
             "packaged_path": "Python/src/gui/windows/qt_main_window.py",
-            "sha256": "7473be8fe6eae31989fba70f6f6aa613253e0a3efd7eb8073426c8304032bd4f"
+            "sha256": "fa13f32ec8dbb4c2abb4b11f7490af309a078395b462b6715bbb0e6c40e11d0a"
         }
     ]
 }

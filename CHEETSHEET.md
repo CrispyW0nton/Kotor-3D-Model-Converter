@@ -185,3 +185,24 @@ python scripts/check_grdev01_smoke_status.py --proof-manifest artifacts/map_stud
 Each staged variant produces its own `grdev01.mod`. Copy one variant at a time
 into the KOTOR `Modules` folder, run `warp grdev01`, and record screenshot or
 video evidence before treating it as game-tested.
+
+## Mesh Tools IPC
+
+Create a cube in the active KMAX scene through the mesh tool command route:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:7001/api/mesh_tool_command -ContentType "application/json" -Body '{"command":"create_cube","options":{"name":"IPC_Cube","dimensions":[2,2,2],"position":[0,0,0],"pivot_preset":"center","material":"default","grid_snap":true}}'
+```
+
+Snap the selected object or mesh element to a 0.5-unit grid on X/Y/Z:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:7001/api/mesh_tool_command -ContentType "application/json" -Body '{"command":"snap_to_grid","options":{"grid_size":0.5,"axes":["x","y","z"]}}'
+```
+
+Assign a simple material override and run topology validation:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:7001/api/mesh_tool_command -ContentType "application/json" -Body '{"command":"assign_material","target":{"id":"selected"},"options":{"slot":0,"material":"metal_floor"}}'
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:7001/api/mesh_tool_command -ContentType "application/json" -Body '{"command":"validate_mesh","target":{"id":"selected"}}'
+```

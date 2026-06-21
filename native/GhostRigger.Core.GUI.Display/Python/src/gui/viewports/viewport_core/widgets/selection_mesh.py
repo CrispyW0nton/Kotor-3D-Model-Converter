@@ -282,7 +282,10 @@ class ViewportSelectionMeshMixin:
         return result
 
     def mesh_tool_operation(self, operation: str, options: dict | None = None) -> MeshOperationResult:
-        options_obj = MeshOperationOptions(**(options or {}))
+        option_data = dict(options or {})
+        options_obj = MeshOperationOptions(
+            **{key: value for key, value in option_data.items() if key in MeshOperationOptions.__dataclass_fields__}
+        )
         op = str(operation or "").strip().lower()
         meshes = self.get_selected_meshes()
         mesh = self._active_edit_mesh()
@@ -321,6 +324,38 @@ class ViewportSelectionMeshMixin:
             result = bridge_selected(mesh, self.mesh_selection_state, options_obj)
         elif op == "connect":
             result = connect_selected(mesh, self.mesh_selection_state, options_obj)
+        elif op == "extrude":
+            result = extrude_selected(
+                mesh,
+                self.mesh_selection_state,
+                options_obj,
+                distance=float((options or {}).get("distance", (options or {}).get("amount", 0.25)) or 0.25),
+            )
+        elif op == "bevel":
+            result = bevel_selected(
+                mesh,
+                self.mesh_selection_state,
+                options_obj,
+                amount=float((options or {}).get("amount", 0.08) or 0.08),
+                segments=int((options or {}).get("segments", 1) or 1),
+            )
+        elif op == "inset":
+            result = inset_selected(
+                mesh,
+                self.mesh_selection_state,
+                options_obj,
+                amount=float((options or {}).get("amount", 0.1) or 0.1),
+            )
+        elif op == "boolean_union":
+            result, new_node = boolean_union_selected(meshes)
+            if result.success and new_node is not None:
+                self._replace_meshes_with_combined(meshes, new_node)
+                self.set_selected_meshes([new_node])
+                affected = [new_node]
+        elif op == "boolean_difference":
+            result = boolean_difference_selected(mesh, self.mesh_selection_state, options_obj)
+        elif op == "boolean_cut":
+            result = boolean_cut_selected(mesh, self.mesh_selection_state, options_obj)
         elif op == "cap":
             result = cap_selected_borders(mesh, self.mesh_selection_state, options_obj)
         elif op == "delete":

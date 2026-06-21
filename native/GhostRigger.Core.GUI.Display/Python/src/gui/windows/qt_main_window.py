@@ -561,6 +561,12 @@ class QtGhostRiggerMainWindow(
         def sequence_command(command: str, payload: object = None) -> dict:
             return self._apply_sequence_command_from_ipc(str(command or ""), payload if isinstance(payload, dict) else {})
 
+        def mesh_tool_command(payload: object = None) -> dict:
+            from src.mesh_tools.command_service import execute_mesh_tool_command
+
+            data = payload if isinstance(payload, dict) else {}
+            return execute_mesh_tool_command(self, data)
+
         def get_state() -> dict:
             return self._ipc_application_state_snapshot()
 
@@ -678,6 +684,7 @@ class QtGhostRiggerMainWindow(
                     "appearance": appearance,
                     "animation_command": animation_command,
                     "sequence_command": sequence_command,
+                    "mesh_tool_command": mesh_tool_command,
                     "get_state": get_state,
                     "library_search": library_search,
                     "library_select": library_select,
