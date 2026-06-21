@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Routes Entry Point Belt Action Through IFO Player Start Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Module entry point
+Intersects: native payload mirror sync for Scene/Tools Map Studio entry-point routing and Module Editor UI context.
+
+- Routed the `Entry Point` tool-belt action through `set_authored_module_entry_point` so the visible Map Studio shelf writes authored IFO player-start state instead of only focusing the Builder panel.
+- Added entry-point area resref, KMAP-world position, and facing to the shared tool action context, with the Level Editor collecting those fields from the existing module entry controls.
+- Made authored module entry-point edits participate in Map Studio command history so player-start changes can be undone and export/game-proof readiness stays stale for the right reason.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Tools/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_entry_point_belt`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_entry_point_ui`.
+
 ### [2026-06-21] Map Studio Routes Placement Belt Actions Through KMAP Commands
 
 Owner: LordVaderCW

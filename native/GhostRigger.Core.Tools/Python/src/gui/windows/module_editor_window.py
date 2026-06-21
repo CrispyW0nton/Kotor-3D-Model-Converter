@@ -1413,6 +1413,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         placement_y = getattr(self.builder_tab, "gameplayPosYSpinBox", None)
         placement_z = getattr(self.builder_tab, "gameplayPosZSpinBox", None)
         placement_bearing = getattr(self.builder_tab, "gameplayBearingSpinBox", None)
+        entry_area = str(getattr(getattr(self.builder_tab, "entryPointAreaLineEdit", None), "text", lambda: "")()).strip()
+        entry_x = getattr(self.builder_tab, "entryPointPosXSpinBox", None)
+        entry_y = getattr(self.builder_tab, "entryPointPosYSpinBox", None)
+        entry_z = getattr(self.builder_tab, "entryPointPosZSpinBox", None)
+        entry_facing = getattr(self.builder_tab, "entryPointFacingSpinBox", None)
         return MapStudioToolActionContext(
             room_resref=str(vertex_data.get("room_resref") or primitive_data.get("room_resref") or self._map_studio_current_room_resref()),
             first_room_resref=str(bridge_first.get("room_resref") or union_first.get("room_resref") or ""),
@@ -1434,6 +1439,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 float(placement_z.value()) if placement_z is not None else 0.0,
             ),
             placement_bearing=float(placement_bearing.value()) if placement_bearing is not None else 0.0,
+            entry_area_resref=entry_area,
+            entry_position=(
+                float(entry_x.value()) if entry_x is not None else 0.0,
+                float(entry_y.value()) if entry_y is not None else 0.0,
+                float(entry_z.value()) if entry_z is not None else 0.0,
+            ),
+            entry_facing=float(entry_facing.value()) if entry_facing is not None else 0.0,
             point_index=int(source_point.value()) if source_point is not None else None,
             point_indices=selected_points,
             target_point_index=int(target_point.value()) if target_point is not None else None,
@@ -1790,9 +1802,6 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if key == "terrain_patch":
             self.create_map_studio_starter_terrain()
             return
-        if key == "entry_point":
-            self._focus_map_studio_entry_point_controls()
-            return
         if key == "opening_marker":
             self._focus_map_studio_opening_marker_controls()
             return
@@ -1841,6 +1850,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "flatten",
             "transform_snap_level",
             "place",
+            "entry_point",
             "placeable",
             "creature",
             "door",

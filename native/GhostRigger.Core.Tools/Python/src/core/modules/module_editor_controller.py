@@ -671,6 +671,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -979,6 +980,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -2117,6 +2119,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -2134,6 +2137,16 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Updated Map Studio module entry point {update.area_resref} at {update.position}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.gameplay.set_entry_point",
+            label=f"Set entry point {update.area_resref}",
+            before=before,
+            metadata={
+                "area_resref": update.area_resref,
+                "position": update.position,
+                "facing": update.facing,
+            },
         )
         return self.authored_module_readiness()
 

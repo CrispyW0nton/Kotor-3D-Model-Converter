@@ -725,7 +725,10 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "def _map_studio_export_dry_run_enabled" in window_source
     assert "def _focus_map_studio_export_proof_workspace" in window_source
     assert "def set_authored_module_entry_point" in window_source
-    assert 'if key == "entry_point":' in window_source
+    assert '"entry_point",' in window_source
+    assert "entry_area_resref=entry_area" in window_source
+    assert "entry_position=(" in window_source
+    assert "entry_facing=float(entry_facing.value())" in window_source
     assert 'if key == "opening_marker":' in window_source
     assert "floorPlanOpeningMarkerRoomComboBox" in window_source
     assert "Opening marker: create a KOTOR door, trigger, or waypoint" in window_source

@@ -42,8 +42,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert audit.blocking_messages == ()
     assert audit.total_actions >= 80
     assert audit.implemented_actions == audit.total_actions
-    assert audit.command_backed_actions >= 50
-    assert audit.mutating_command_actions >= 50
+    assert audit.command_backed_actions >= 51
+    assert audit.mutating_command_actions >= 51
     assert audit.query_command_actions >= 1
     assert audit.workflow_focus_actions >= 20
     assert statuses["cube"].contract_kind == "command_mutates_kmap"
@@ -53,6 +53,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["universal_transform"].command_method == "map_studio_universal_transform_overlay"
     assert statuses["placeable"].contract_kind == "command_mutates_kmap"
     assert statuses["placeable"].command_method == "add_authored_gameplay_placement"
+    assert statuses["entry_point"].contract_kind == "command_mutates_kmap"
+    assert statuses["entry_point"].command_method == "set_authored_module_entry_point"
     assert statuses["terrain"].contract_kind == "workflow_focus"
     assert statuses["stage_module"].contract_kind == "studio_workspace"
     assert all(status.in_any_preset for status in audit.statuses)
@@ -133,6 +135,25 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert creature_route.command_method == "add_authored_gameplay_placement"
     assert creature_route.command_kwargs["kind"] == "creature"
     assert creature_route.command_kwargs["template_resref"] == "c_drdmkone"
+
+    entry_point_route = resolve_map_studio_tool_belt_action(
+        "entry_point",
+        MapStudioToolActionContext(
+            entry_area_resref="grentry01",
+            entry_position=(0.5, -2.0, 0.0),
+            entry_facing=180.0,
+        ),
+    )
+
+    assert entry_point_route.enabled is True
+    assert entry_point_route.command_method == "set_authored_module_entry_point"
+    assert entry_point_route.command_kwargs == {
+        "area_resref": "grentry01",
+        "position": (0.5, -2.0, 0.0),
+        "facing": 180.0,
+    }
+    assert entry_point_route.mutates_kmap is True
+    assert "IFO player start" in entry_point_route.authoring_context
 
     snap = resolve_map_studio_tool_belt_action("vertex_snap")
 
@@ -476,6 +497,27 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
 
     restored_placement_payload = controller.project.extra_sections["authored_module"]["placements"]
     assert all(row.get("tag") != "belt_bench" for row in restored_placement_payload["placeables"])
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "entry_point",
+        MapStudioToolActionContext(
+            entry_area_resref="grbelt01",
+            entry_position=(0.0, -1.75, 0.0),
+            entry_facing=90.0,
+        ),
+    )
+
+    entry_payload = controller.project.extra_sections["authored_module"]["placements"]["entry_point"]
+    assert entry_payload["area_resref"] == "grbelt01"
+    assert entry_payload["position"] == [0.0, -1.75, 0.0]
+    assert entry_payload["facing"] == 90.0
+    assert controller.command_history.undo_label == "Set entry point grbelt01"
+
+    controller.undo_map_studio_command()
+
+    restored_entry = controller.project.extra_sections["authored_module"]["placements"]["entry_point"]
+    assert restored_entry["position"] != [0.0, -1.75, 0.0]
 
     controller.create_authored_room_preset_module(preset_id="octagonal_room", module_root="grbevel01")
     room_before = controller.authored_floor_plan_room_choices()[0]

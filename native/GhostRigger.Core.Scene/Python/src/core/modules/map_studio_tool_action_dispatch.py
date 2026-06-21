@@ -35,6 +35,9 @@ class MapStudioToolActionContext:
     placement_tag: str = ""
     placement_position: tuple[float, float, float] = (0.0, 0.0, 0.0)
     placement_bearing: float = 0.0
+    entry_area_resref: str = ""
+    entry_position: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    entry_facing: float = 0.0
     point_index: int | None = None
     point_indices: tuple[int, ...] = ()
     target_point_index: int | None = None
@@ -303,6 +306,24 @@ def resolve_map_studio_tool_belt_action(
             authoring_context=(
                 "Shrink Wrap: project authored entry points, waypoints, and gameplay placements onto the selected "
                 "terrain heightfield; arbitrary mesh/walkmesh shrink-wrap remains planned."
+            ),
+        )
+
+    if key == "entry_point":
+        return _route(
+            action,
+            focus_component_mode="placement",
+            focus_snap_mode="face",
+            command_method="set_authored_module_entry_point",
+            command_kwargs={
+                "area_resref": str(ctx.entry_area_resref or "").strip(),
+                "position": tuple(ctx.entry_position),
+                "facing": float(ctx.entry_facing),
+            },
+            mutates_kmap=True,
+            authoring_context=(
+                "Entry Point: write the authored module IFO player start from the selected KMAP-world position; "
+                "validate that it lands on a reachable WOK before export/game proof."
             ),
         )
 
