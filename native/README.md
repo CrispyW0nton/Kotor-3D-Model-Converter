@@ -82,14 +82,16 @@ such as gizmos, pickers, dummies, transform handles, and snapping guides belong
 inside `GhostRigger.Core.GUI.Helpers`.
 
 Reusable logic shared by multiple tools, GUI packages, renderers, or runtime
-packages belongs in the canonical Core, Systems, Runtime, Native Core, or
-Bridge or Core owner before product-surface packages consume it.
+packages belongs in the canonical Core, Systems, Runtime, Native Core, Qt,
+Rendering, Unreal, or other concrete Core owner before product-surface packages
+consume it.
 
 The first toolbox and window candidates are recorded in
 `knowledge_base/native_toolbox_window_migration_candidates.md`; update that file
 before adding new module folders inside `GhostRigger.Core.Tools`,
 `GhostRigger.Core.GUI.Display`, `GhostRigger.Core.GUI.Helpers`,
-`GhostRigger.Core.Automation`, or `GhostRigger.Core.Bridge`.
+`GhostRigger.Core.Automation`, `GhostRigger.Core.Qt`, or
+`GhostRigger.Core.Unreal`.
 
 `GhostRigger.Core.Tools` is the first native toolbox package boundary.
 It is diagnostic-only in Phase 1: it reports package capabilities, owner
@@ -168,7 +170,7 @@ owns the current implementation until a later migration slice proves parity.
 Python payload sweep. It maps every non-DEBUG native DLL project to packaged
 Python source copies under `native/<Project>/Python/src/...` and builds
 them into the DLL as `RCDATA` resources through `GhostRiggerPythonPayload.rc`.
-The manifest covers all 18 Python-payload DLL projects and 1,145 packaged Python file
+The manifest covers all 18 Python-payload DLL projects and 1,118 packaged Python file
 references; duplicated references are permitted only when separate runtime,
 renderer, window, or shared-runtime package boundaries need the same owner.
 These are packaged copies only; the active Python application still imports the

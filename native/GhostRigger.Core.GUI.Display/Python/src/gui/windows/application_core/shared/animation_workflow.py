@@ -17,6 +17,7 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
 
 from src.gui.qt_lib.panels.qt_animation_panel import animation_row_label
 from src.gui.windows.application_core.application_core_lib.shared.workers import AnimationLibraryScanWorker
+from src.sequence.animation_preview import build_preview_target, iter_scene_preview_targets, tag_pose_for_preview_target
 
 log = logging.getLogger(__name__)
 
@@ -24,9 +25,46 @@ log = logging.getLogger(__name__)
 class AnimationWorkflowMixin:
     """Animation source selection, playback, baking, export, and library scan behavior."""
 
+    def _apply_viewport_animation_pose(
+        self,
+        pose,
+        *,
+        name: str = "",
+        time: float = 0.0,
+        length: float = 0.0,
+        reason: str = "animation playback",
+    ) -> bool:
+        viewport = getattr(self, "viewport", None)
+        if viewport is None:
+            return False
+        if pose is None:
+            clearer = getattr(viewport, "clear_animation_pose", None)
+            if callable(clearer):
+                clearer()
+                return True
+            setter = getattr(viewport, "set_animation_pose", None)
+            if callable(setter):
+                setter(None, name=name, time=time, length=length)
+                return True
+            return False
+        setter = getattr(viewport, "set_animation_pose", None)
+        if callable(setter):
+            setter(pose, name=name, time=time, length=length)
+            return True
+        scoped = getattr(viewport, "set_character_animation_pose", None)
+        character_id = str(getattr(pose, "_gr_animation_character_instance_id", "") or "").strip()
+        if callable(scoped) and character_id:
+            scoped(character_id, pose, name=name, time=time, length=length)
+            return True
+        return False
+
     def _tag_animation_pose_source(self, pose, model, anim_name: str = "", game: str = ""):
         if pose is None:
             return pose
+        target_getter = getattr(self, "_animation_preview_target_for_model", None)
+        target = target_getter(model, fallback_game=game) if callable(target_getter) else None
+        if target is not None:
+            return tag_pose_for_preview_target(pose, target, anim_name=anim_name, game=game)
         try:
             setattr(pose, "_gr_animation_source_model_id", id(model) if model is not None else 0)
             setattr(pose, "_gr_animation_source_model_name", str(getattr(model, "name", "") or ""))
@@ -69,6 +107,113 @@ class AnimationWorkflowMixin:
             if (getattr(obj, "metadata", {}) or {}).get("_runtime_model") is model
         ]
         return matches[0] if len(matches) == 1 else None
+
+    def _scene_animation_preview_objects(self) -> list[object]:
+        scene_manager = getattr(self, "scene_manager", None)
+        if scene_manager is None:
+            return []
+        try:
+            objects = list(scene_manager.get_scene_objects() or [])
+        except Exception:
+            active_scene = getattr(scene_manager, "active_scene", None)
+            objects = list(getattr(active_scene, "objects", []) or [])
+        return [
+            obj for obj in objects
+            if str(getattr(obj, "object_type", "") or "model").lower() == "model"
+        ]
+
+    def _find_animation_preview_scene_object(self, object_id: str):
+        target_id = str(object_id or "").strip()
+        if not target_id:
+            return None
+        for obj in self._scene_animation_preview_objects():
+            if str(getattr(obj, "id", "") or "") == target_id:
+                return obj
+        return None
+
+    def _selected_animation_preview_scene_object(self):
+        panel = getattr(self, "animations_panel", None)
+        object_id = ""
+        selected_target = getattr(panel, "selected_animation_target_id", None)
+        if callable(selected_target):
+            try:
+                object_id = str(selected_target() or "")
+            except Exception:
+                object_id = ""
+        object_id = object_id or str(getattr(self, "_animation_preview_object_id", "") or "")
+        obj = self._find_animation_preview_scene_object(object_id)
+        if obj is not None:
+            return obj
+        selected_getter = getattr(self, "_selected_scene_model_object", None)
+        if callable(selected_getter):
+            try:
+                return selected_getter()
+            except Exception:
+                return None
+        return None
+
+    def _animation_preview_target_for_model(self, model, *, fallback_game: str = ""):
+        obj = self._selected_animation_preview_scene_object()
+        if obj is not None:
+            target = build_preview_target(
+                obj,
+                runtime_model_resolver=getattr(self, "_runtime_model_for_scene_object", None),
+                fallback_game=fallback_game or getattr(self, "_current_game", ""),
+            )
+            if target.model is model:
+                return target
+        scene_object = self._animation_scene_object_for_model(model)
+        if scene_object is not None:
+            return build_preview_target(
+                scene_object,
+                model=model,
+                runtime_model_resolver=getattr(self, "_runtime_model_for_scene_object", None),
+                fallback_game=fallback_game or getattr(self, "_current_game", ""),
+            )
+        return build_preview_target(
+            None,
+            model=model,
+            fallback_model=model,
+            fallback_game=fallback_game or getattr(self, "_current_game", ""),
+        )
+
+    def _refresh_animation_preview_targets(self, prefer_object_id: str = "") -> None:
+        panel = getattr(self, "animations_panel", None)
+        setter = getattr(panel, "set_animation_targets", None)
+        if not callable(setter):
+            return
+        targets = iter_scene_preview_targets(
+            self._scene_animation_preview_objects(),
+            runtime_model_resolver=getattr(self, "_runtime_model_for_scene_object", None),
+            model_filter=getattr(self, "_model_is_animation_browser_source", None),
+            fallback_game=getattr(self, "_current_game", ""),
+        )
+        selected_object = self._selected_animation_preview_scene_object()
+        selected_id = str(getattr(selected_object, "id", "") or "")
+        current_id = str(prefer_object_id or getattr(self, "_animation_preview_object_id", "") or selected_id)
+        setter([target.to_choice() for target in targets], current_id)
+        selected_target = getattr(panel, "selected_animation_target_id", None)
+        if callable(selected_target):
+            try:
+                self._animation_preview_object_id = str(selected_target() or "")
+            except Exception:
+                self._animation_preview_object_id = ""
+
+    def _handle_animation_target_changed(self, object_id: str) -> None:
+        self._animation_preview_object_id = str(object_id or "")
+        self._animation_engine = None
+        obj = self._find_animation_preview_scene_object(self._animation_preview_object_id)
+        model = None
+        if obj is not None:
+            resolver = getattr(self, "_runtime_model_for_scene_object", None)
+            if callable(resolver):
+                try:
+                    model = resolver(obj)
+                except Exception:
+                    model = None
+            if model is not None:
+                self._current_model = model
+        self._load_animation_panel_model(model or getattr(self, "_current_model", None))
 
     def _handle_animation_selected(self, anim_name: str):
         model = self._animation_source_model()
@@ -157,8 +302,7 @@ class AnimationWorkflowMixin:
             self._animation_timer.stop()
             self._animation_last_tick = None
             self._animation_status_last_update = 0.0
-            if hasattr(self, "viewport"):
-                self.viewport.set_animation_pose(pose, name=anim_name, time=0.0, length=length)
+            if self._apply_viewport_animation_pose(pose, name=anim_name, time=0.0, length=length, reason="animation first frame"):
                 if hasattr(self.viewport, "set_animation_playback_active"):
                     self.viewport.set_animation_playback_active(False)
             return True
@@ -175,8 +319,7 @@ class AnimationWorkflowMixin:
                 engine.stop()
             if hasattr(self, "viewport") and hasattr(self.viewport, "set_animation_playback_active"):
                 self.viewport.set_animation_playback_active(False)
-            if hasattr(self, "viewport") and hasattr(self.viewport, "clear_animation_pose"):
-                self.viewport.clear_animation_pose()
+            self._apply_viewport_animation_pose(None)
             if hasattr(self, "animations_panel"):
                 self.animations_panel.info.setPlainText("Animation stopped.")
             return
@@ -245,14 +388,16 @@ class AnimationWorkflowMixin:
             self._log(f"Animation action error: {exc}", "error")
             QtWidgets.QMessageBox.critical(self, "Animations", str(exc))
     def _load_animation_panel_model(self, model, select_name: str = "") -> None:
+        refresh_targets = getattr(self, "_refresh_animation_preview_targets", None)
+        if callable(refresh_targets):
+            refresh_targets()
         source_model = self._animation_source_model(model)
         if source_model is None:
             self._animation_engine = None
             self.animations_panel.load_model(None)
             source = self._animation_source_label()
             self.animations_panel.info.setPlainText(f"No suitable {source.lower()} model selected.")
-            if hasattr(self, "viewport") and hasattr(self.viewport, "clear_animation_pose"):
-                self.viewport.clear_animation_pose()
+            self._apply_viewport_animation_pose(None)
             return
         model = source_model
         model_game = self._animation_model_game(model)
@@ -341,6 +486,14 @@ class AnimationWorkflowMixin:
     def _animation_source_model(self, fallback_model=None):
         source = self._animation_source_key()
         if source == "body":
+            preview_getter = getattr(self, "_selected_animation_preview_scene_object", None)
+            preview_obj = preview_getter() if callable(preview_getter) else None
+            if preview_obj is not None and str(getattr(self, "_animation_preview_object_id", "") or ""):
+                selected_model = None
+                if hasattr(self, "_runtime_model_for_scene_object"):
+                    selected_model = self._runtime_model_for_scene_object(preview_obj)
+                return selected_model if self._model_is_animation_browser_source(selected_model) else None
+
             body_model = getattr(self, "_bas_body_model", None)
             if self._model_is_animation_browser_source(body_model):
                 return body_model
@@ -683,19 +836,29 @@ class AnimationWorkflowMixin:
             was_playing = self._animation_engine.is_playing
             self._animation_engine.seek(t)
             pose = self._tag_animation_pose_source(self._animation_engine.evaluate(), model, anim_name, inheritance_game)
-            if hasattr(self, "viewport"):
-                self.viewport.set_animation_pose(pose, name=anim_name, time=t, length=length)
+            self._apply_viewport_animation_pose(pose, name=anim_name, time=t, length=length, reason="animation seek")
             self.animations_panel.info.setPlainText(f"{anim_name}\n{t:.3f} / {length:.3f} s")
             if not was_playing:
                 self._animation_engine.stop()
         except Exception as exc:
             self._log(f"Animation seek error: {exc}", "error")
-    def _apply_animation_command_from_ipc(self, command: str, anim_name: str = "", *, loop: object = None, seek: object = None, source: str = "") -> bool:
+    def _apply_animation_command_from_ipc(self, command: str, anim_name: str = "", *, loop: object = None, seek: object = None, source: str = "", target_object_id: str = "") -> bool:
         key = str(command or "").strip().lower().replace("-", "_").replace(" ", "_")
         panel = getattr(self, "animations_panel", None)
         if panel is None:
             self._log("IPC animation_command: animations panel unavailable.", "warning")
             return False
+        target_object_id = str(target_object_id or "").strip()
+        if target_object_id:
+            selector = getattr(panel, "select_animation_target", None)
+            if callable(selector):
+                try:
+                    selector(target_object_id)
+                except Exception:
+                    pass
+            handler = getattr(self, "_handle_animation_target_changed", None)
+            if callable(handler):
+                handler(target_object_id)
         if source and hasattr(panel, "set_animation_source"):
             panel.set_animation_source(str(source or "body"))
         if loop is not None:
@@ -747,6 +910,7 @@ class AnimationWorkflowMixin:
         return {
             "selected": panel.selected_animation() if panel is not None and hasattr(panel, "selected_animation") else "",
             "source": panel.selected_animation_source() if panel is not None and hasattr(panel, "selected_animation_source") else "body",
+            "target": panel.selected_animation_target_id() if panel is not None and hasattr(panel, "selected_animation_target_id") else "",
             "loop": bool(getattr(self, "_animation_loop", False)),
             "playing": bool(getattr(engine, "is_playing", False)) if engine is not None else False,
             "current": str(getattr(current, "name", "") or ""),
@@ -780,13 +944,13 @@ class AnimationWorkflowMixin:
                 anim_name=anim_name,
                 game=active_game,
             )
-        if hasattr(self, "viewport"):
-            self.viewport.set_animation_pose(
-                pose,
-                name=anim_name,
-                time=engine.current_time,
-                length=anim_length,
-            )
+        self._apply_viewport_animation_pose(
+            pose,
+            name=anim_name,
+            time=engine.current_time,
+            length=anim_length,
+            reason="animation playback",
+        )
         should_update_status = (
             anim_length > 0
             and hasattr(self, "animations_panel")

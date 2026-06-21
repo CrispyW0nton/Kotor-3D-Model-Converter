@@ -240,6 +240,7 @@ class QtAnimationsPanel(QtWidgets.QWidget):
     animationSelected = QtCore.Signal(str)
     animationActionRequested = QtCore.Signal(str, str)
     animationSourceChanged = QtCore.Signal(str)
+    animationTargetChanged = QtCore.Signal(str)
     inheritanceGameChanged = QtCore.Signal(str)
     inheritanceSupermodelChanged = QtCore.Signal(str)
     seekRequested = QtCore.Signal(int)
@@ -272,6 +273,14 @@ class QtAnimationsPanel(QtWidgets.QWidget):
         self.animation_source_combo.setCurrentIndex(0)
         source_row.addStretch(1)
         root.addLayout(source_row)
+        target_row = QtWidgets.QHBoxLayout()
+        target_row.addWidget(QtWidgets.QLabel("Model"))
+        self.animation_target_combo = QtWidgets.QComboBox()
+        self.animation_target_combo.setObjectName("AnimationBrowserTargetCombo")
+        self.animation_target_combo.setSizeAdjustPolicy(QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.animation_target_combo.currentIndexChanged.connect(lambda _index: self.animationTargetChanged.emit(self.selected_animation_target_id()))
+        target_row.addWidget(self.animation_target_combo, 1)
+        root.addLayout(target_row)
         inheritance_row = QtWidgets.QHBoxLayout()
         inheritance_row.addWidget(QtWidgets.QLabel("Game"))
         self.inheritance_game_label = QtWidgets.QLabel("Auto")
@@ -360,6 +369,43 @@ class QtAnimationsPanel(QtWidgets.QWidget):
             return "body"
         value = self.animation_source_combo.currentData()
         return str(value or "body")
+
+    def selected_animation_target_id(self) -> str:
+        if not hasattr(self, "animation_target_combo"):
+            return ""
+        return str(self.animation_target_combo.currentData() or "")
+
+    def set_animation_targets(self, targets: list[dict], current_id: str = "") -> None:
+        if not hasattr(self, "animation_target_combo"):
+            return
+        previous = self.selected_animation_target_id()
+        self.animation_target_combo.blockSignals(True)
+        self.animation_target_combo.clear()
+        self.animation_target_combo.addItem("Selected", "")
+        for target in targets:
+            label = str(target.get("label") or target.get("name") or target.get("model") or target.get("id") or "Model")
+            self.animation_target_combo.addItem(label, str(target.get("id") or ""))
+        desired = str(current_id or previous or "")
+        target_index = 0
+        for index in range(self.animation_target_combo.count()):
+            if str(self.animation_target_combo.itemData(index) or "") == desired:
+                target_index = index
+                break
+        self.animation_target_combo.setCurrentIndex(target_index)
+        self.animation_target_combo.blockSignals(False)
+
+    def select_animation_target(self, object_id: str) -> bool:
+        if not hasattr(self, "animation_target_combo"):
+            return False
+        desired = str(object_id or "")
+        for index in range(self.animation_target_combo.count()):
+            if str(self.animation_target_combo.itemData(index) or "") == desired:
+                previous = self.selected_animation_target_id()
+                self.animation_target_combo.setCurrentIndex(index)
+                if previous == desired:
+                    self.animationTargetChanged.emit(desired)
+                return True
+        return False
 
     def set_animation_source(self, source: str) -> None:
         target = str(source or "body").strip().lower()

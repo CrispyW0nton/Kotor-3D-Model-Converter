@@ -27,13 +27,13 @@
             "resource_name": "PYTHON_PAYLOAD_IPC_CLIENT",
             "source_path": "src/ipc/client.py",
             "packaged_path": "Python/src/ipc/client.py",
-            "sha256": "3e5727029dc9442cb6efe463c7d125ed3f3c50887c86cb00d3662dc797fc5359"
+            "sha256": "a8e3870df3664d9a0425d560f22a5d8825a79e3dfa8640d690c58c03ce9b3b9a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IPC_SERVER",
             "source_path": "src/ipc/server.py",
             "packaged_path": "Python/src/ipc/server.py",
-            "sha256": "40007744a5a9213eba15a068ad07c44888184bdc9200bd2e20031c530410aaa2"
+            "sha256": "0af9426aae3cc62e48710f07e0e40a1a3b2cd71ac86adf32e69b3b8ce7e99ba2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_INIT",

@@ -206,9 +206,14 @@ def run_ghostrigger_animation_command(
     loop: bool | None = None,
     seek: int | float | None = None,
     source: str = "",
+    target: str = "",
+    object_id: str = "",
 ) -> None:
     """Ask a running GhostRigger instance to select/play/stop/seek an animation."""
     payload: Dict[str, Any] = {"command": command, "animation": animation, "source": source}
+    target_id = str(target or object_id or "")
+    if target_id:
+        payload["target"] = target_id
     if loop is not None:
         payload["loop"] = bool(loop)
     if seek is not None:

@@ -39,45 +39,6 @@
         ]
     },
     {
-        "project": "GhostRigger.Core.Bridge",
-        "python_file_count": 33,
-        "files": [
-            "src\\adapters\\qt_ipc\\__init__.py",
-            "src\\adapters\\qt_ipc\\threading.py",
-            "src\\adapters\\rendering\\__init__.py",
-            "src\\adapters\\rendering\\direct3d_renderer.py",
-            "src\\adapters\\rendering\\gpu_diagnostics_exports.py",
-            "src\\adapters\\rendering\\gpu_renderer_exports.py",
-            "src\\adapters\\rendering\\mesh_render_data.py",
-            "src\\adapters\\rendering\\moderngl_benchmark.py",
-            "src\\adapters\\rendering\\moderngl_cli.py",
-            "src\\adapters\\rendering\\moderngl_legacy_bridge.py",
-            "src\\adapters\\rendering\\moderngl_renderer.py",
-            "src\\adapters\\rendering\\moderngl_renderer_impl.py",
-            "src\\adapters\\rendering\\moderngl_resources.py",
-            "src\\adapters\\rendering\\moderngl_scene_helpers.py",
-            "src\\adapters\\rendering\\native_core\\__init__.py",
-            "src\\adapters\\rendering\\native_core\\binding.py",
-            "src\\adapters\\rendering\\native_core\\renderer.py",
-            "src\\adapters\\rendering\\null_renderer.py",
-            "src\\adapters\\rendering\\pygfx_core\\__init__.py",
-            "src\\adapters\\rendering\\pygfx_core\\backend_env.py",
-            "src\\adapters\\rendering\\pygfx_core\\mesh_cache.py",
-            "src\\adapters\\rendering\\pygfx_core\\renderer.py",
-            "src\\adapters\\rendering\\pygfx_core\\scene_bridge.py",
-            "src\\adapters\\rendering\\pygfx_renderer_exports.py",
-            "src\\adapters\\rendering\\renderer_factory.py",
-            "src\\adapters\\rendering\\wgpu_core\\__init__.py",
-            "src\\adapters\\rendering\\wgpu_core\\renderer.py",
-            "src\\adapters\\rendering\\wgpu_core\\resources.py",
-            "src\\adapters\\rendering\\wgpu_core\\shared.py",
-            "src\\adapters\\rendering\\wgpu_renderer_exports.py",
-            "src\\unreal\\__init__.py",
-            "src\\unreal\\animation_retargeting.py",
-            "src\\unreal\\quinn.py"
-        ]
-    },
-    {
         "project": "GhostRigger.Core.GUI.Display",
         "python_file_count": 286,
         "files": [
@@ -488,10 +449,12 @@
     },
     {
         "project": "GhostRigger.Core.Qt",
-        "python_file_count": 8,
+        "python_file_count": 10,
         "files": [
             "src\\adapters\\qt_autorig\\__init__.py",
             "src\\adapters\\qt_autorig\\cloth_dialogs.py",
+            "src\\adapters\\qt_ipc\\__init__.py",
+            "src\\adapters\\qt_ipc\\threading.py",
             "src\\adapters\\qt_viewport\\__init__.py",
             "src\\adapters\\qt_viewport\\camera_gizmo_renderer.py",
             "src\\adapters\\qt_viewport\\camera_overlays.py",
@@ -734,7 +697,7 @@
     },
     {
         "project": "GhostRigger.Core.Tools",
-        "python_file_count": 304,
+        "python_file_count": 305,
         "files": [
             "src\\adapters\\qt_viewport\\camera_gizmo_renderer.py",
             "src\\adapters\\qt_viewport\\camera_overlays.py",
@@ -1007,6 +970,7 @@
             "src\\resources\\game_detector.py",
             "src\\resources\\game_library.py",
             "src\\sequence\\__init__.py",
+            "src\\sequence\\animation_preview.py",
             "src\\sequence\\sequence_asset.py",
             "src\\sequence\\sequence_binding.py",
             "src\\sequence\\sequence_clipboard.py",
@@ -1040,6 +1004,15 @@
             "src\\systems\\bas\\preview_composer.py",
             "src\\workbench\\__init__.py",
             "src\\workbench\\ue5_rig_export.py"
+        ]
+    },
+    {
+        "project": "GhostRigger.Core.Unreal",
+        "python_file_count": 3,
+        "files": [
+            "src\\unreal\\__init__.py",
+            "src\\unreal\\animation_retargeting.py",
+            "src\\unreal\\quinn.py"
         ]
     },
     {

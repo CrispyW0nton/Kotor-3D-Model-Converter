@@ -2,6 +2,8 @@
 PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
 PYTHON_PAYLOAD_ADAPTERS_QT_AUTORIG_INIT RCDATA "Python/src/adapters/qt_autorig/__init__.py"
 PYTHON_PAYLOAD_ADAPTERS_QT_AUTORIG_CLOTH_DIALOGS RCDATA "Python/src/adapters/qt_autorig/cloth_dialogs.py"
+PYTHON_PAYLOAD_ADAPTERS_QT_IPC_INIT RCDATA "Python/src/adapters/qt_ipc/__init__.py"
+PYTHON_PAYLOAD_ADAPTERS_QT_IPC_THREADING RCDATA "Python/src/adapters/qt_ipc/threading.py"
 PYTHON_PAYLOAD_ADAPTERS_QT_VIEWPORT_INIT RCDATA "Python/src/adapters/qt_viewport/__init__.py"
 PYTHON_PAYLOAD_ADAPTERS_QT_VIEWPORT_CAMERA_GIZMO_RENDERER RCDATA "Python/src/adapters/qt_viewport/camera_gizmo_renderer.py"
 PYTHON_PAYLOAD_ADAPTERS_QT_VIEWPORT_CAMERA_OVERLAYS RCDATA "Python/src/adapters/qt_viewport/camera_overlays.py"

@@ -434,7 +434,7 @@ Current completed foundation:
   `native/<Project>/Python/src/...` and are built into native DLLs as
   `RCDATA` resources through per-project `GhostRiggerPythonPayload.rc` files,
   alongside per-project `GhostRiggerPythonPayload.json` manifests.
-- The manifest contains 1,145 packaged Python file references. Duplicate source
+- The manifest contains 1,118 packaged Python file references. Duplicate source
   references are permitted only when separate runtime, renderer, window, shared
   runtime, or diagnostic native-core boundaries need the same Python owner.
 - Phase 1.5 does not change runtime import behavior. The packaged Python files
@@ -481,7 +481,8 @@ Native project naming foundation:
   `GhostRigger.Core.Session`, `GhostRigger.Core.Workflow.*`,
   `GhostRigger.Systems.*`, `GhostRigger.Core.Tools.*`,
   `GhostRigger.Core.GUI.Display.*`, `GhostRigger.Core.GUI.Helpers.*`, and
-  `GhostRigger.Core.Bridge`.
+  `GhostRigger.Core.Qt`, `GhostRigger.Core.Rendering`,
+  `GhostRigger.Core.IO`, and `GhostRigger.Core.Unreal`.
 - Concrete renderer packages use `GhostRigger.Core.Rendering.{Backend}`
   naming, for example `GhostRigger.Core.Rendering` or the
   diagnostic `GhostRigger.Core.Rendering`.

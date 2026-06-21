@@ -51,9 +51,31 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     }
 
     assert len(entries) == 18
-    assert len(payload_files) == 1145
+    assert len(payload_files) == 1118
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
+
+
+def test_bridge_payload_is_reduced_into_real_owner_packages() -> None:
+    """Bridge is no longer a payload/project owner; Qt IPC and Unreal have real owners."""
+
+    assert not (ROOT / "native" / "GhostRigger.Core.Bridge").exists()
+
+    qt_project = ROOT / "native" / "GhostRigger.Core.Qt"
+    unreal_project = ROOT / "native" / "GhostRigger.Core.Unreal"
+    qt_payload = json.loads((qt_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    unreal_payload = json.loads((unreal_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    qt_packaged = {str(row["packaged_path"]) for row in qt_payload["files"]}
+    unreal_packaged = {str(row["packaged_path"]) for row in unreal_payload["files"]}
+
+    assert "Python/src/adapters/qt_ipc/__init__.py" in qt_packaged
+    assert "Python/src/adapters/qt_ipc/threading.py" in qt_packaged
+    assert unreal_packaged == {
+        "Python/src/unreal/__init__.py",
+        "Python/src/unreal/animation_retargeting.py",
+        "Python/src/unreal/quinn.py",
+    }
+    assert not (unreal_project / "Python" / "src" / "adapters").exists()
 
 
 def test_content_browser_panels_are_owned_by_gui_boundary_panels_only() -> None:

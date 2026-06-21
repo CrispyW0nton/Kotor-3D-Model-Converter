@@ -714,7 +714,7 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         if self.sequence is None or binding is None:
             return False
         browser_entry = self._selected_animation_browser_entry()
-        if browser_entry is not None:
+        if browser_entry is not None and not prompt:
             return self._add_animation_entry_to_track(
                 track,
                 browser_entry,
@@ -724,6 +724,20 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
                 track_name_prefix=track_name_prefix,
             )
         entries = self._character_animation_entries(binding)
+        if browser_entry is not None:
+            browser_name = str(browser_entry.get("name") or "").strip().lower()
+            match_index = next(
+                (index for index, entry in enumerate(entries) if str(entry.get("name") or "").strip().lower() == browser_name),
+                -1,
+            )
+            if match_index >= 0:
+                merged = dict(entries[match_index])
+                for key, value in browser_entry.items():
+                    if value not in (None, ""):
+                        merged[key] = value
+                entries[match_index] = merged
+            elif browser_name:
+                entries.insert(0, browser_entry)
         if not entries:
             self._set_status(f"No animations found for {getattr(binding, 'display_name', 'actor')}.")
             return False
@@ -1005,8 +1019,17 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
                 model.game_version = original_game_version
 
     def _animation_model_for_object(self, obj):
+        runtime_model = None
+        runtime_getter = getattr(self.main_window, "_runtime_model_for_scene_object", None)
+        if callable(runtime_getter) and obj is not None:
+            try:
+                runtime_model = runtime_getter(obj)
+            except Exception:
+                runtime_model = None
+        metadata = getattr(obj, "metadata", None)
         candidates = [
-            getattr(getattr(obj, "metadata", None), "get", lambda *_: None)("_runtime_model") if obj is not None else None,
+            runtime_model,
+            metadata.get("_runtime_model") if isinstance(metadata, dict) else None,
             obj,
             getattr(obj, "model", None) if obj is not None else None,
             getattr(obj, "mdl_model", None) if obj is not None else None,

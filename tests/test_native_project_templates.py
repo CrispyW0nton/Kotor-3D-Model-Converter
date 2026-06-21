@@ -14,7 +14,6 @@ PAYLOAD_MANIFEST = ROOT / "native" / "GhostRigger.PythonPayloadManifest.json"
 
 EXPECTED_PROJECTS = {
     "GhostRigger.Core.Automation",
-    "GhostRigger.Core.Bridge",
     "GhostRigger.Core.GUI.Display",
     "GhostRigger.Core.GUI.Helpers",
     "GhostRigger.Core.IO",
@@ -25,6 +24,7 @@ EXPECTED_PROJECTS = {
     "GhostRigger.Core.Resources",
     "GhostRigger.Core.Scene",
     "GhostRigger.Core.Tools",
+    "GhostRigger.Core.Unreal",
     "GhostRigger.Core.Validation",
     "GhostRigger.Core.Workflow",
     "GhostRigger.Native.Core.Foundation",
@@ -112,7 +112,7 @@ def test_payload_manifest_tracks_aggregate_payload_projects() -> None:
 
     assert len(payload_projects) == 18
     assert payload_projects == EXPECTED_PROJECTS - {"GhostRigger.Native.Core.Host"}
-    assert sum(row["python_file_count"] for row in payload_rows) == 1249
+    assert sum(row["python_file_count"] for row in payload_rows) == 1118
     assert all(not row["project"].endswith(".vcxproj") for row in payload_rows)
 
 
@@ -133,5 +133,6 @@ def test_native_docs_describe_final_collapsed_architecture() -> None:
     assert "GhostRigger.Core.IO" in docs
     assert "GhostRigger.Core.Math" in docs
     assert "GhostRigger.Core.Qt" in docs
-    assert "GhostRigger.Core.Bridge" in docs
+    assert "GhostRigger.Core.Unreal" in docs
+    assert "GhostRigger.Core.Bridge" not in docs
     assert "Do not recreate split DLLs" in docs

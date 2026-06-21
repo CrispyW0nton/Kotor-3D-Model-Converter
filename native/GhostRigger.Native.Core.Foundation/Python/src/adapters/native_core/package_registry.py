@@ -421,11 +421,11 @@ PYTHON_MODULE_PACKAGE_SPECS = (
         capabilities_export="gr_ipc_capabilities_json",
     ),
     NativePackageSpec(
-        name="GhostRigger.Core.Bridge",
-    dll_name="GhostRigger.Core.Bridge.dll",
-        env_var="GHOSTRIGGER_GHOSTRIGGER_CORE_BRIDGE",
-        version_export="gr_core_bridge_ipc_version",
-        capabilities_export="gr_core_bridge_ipc_capabilities_json",
+        name="GhostRigger.Core.Unreal",
+    dll_name="GhostRigger.Core.Unreal.dll",
+        env_var="GHOSTRIGGER_GHOSTRIGGER_CORE_UNREAL",
+        version_export="gr_unreal_version",
+        capabilities_export="gr_unreal_capabilities_json",
     ),
     NativePackageSpec(
         name="GhostRigger.Core.Tools",

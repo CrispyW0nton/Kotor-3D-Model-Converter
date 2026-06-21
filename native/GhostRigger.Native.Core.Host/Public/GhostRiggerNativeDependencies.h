@@ -11,7 +11,7 @@ struct NativeDependencySpec {
 
 inline constexpr NativeDependencySpec kNativeDependencySpecs[] = {
     {L"GhostRigger.Core.Automation", L"GhostRigger.Core.Automation.dll"},
-    {L"GhostRigger.Core.Bridge", L"GhostRigger.Core.Bridge.dll"},
+    {L"GhostRigger.Core.Unreal", L"GhostRigger.Core.Unreal.dll"},
     {L"GhostRigger.Core.GUI.Display", L"GhostRigger.Core.GUI.Display.dll"},
     {L"GhostRigger.Core.GUI.Helpers", L"GhostRigger.Core.GUI.Helpers.dll"},
     {L"GhostRigger.Core.IO", L"GhostRigger.Core.IO.dll"},

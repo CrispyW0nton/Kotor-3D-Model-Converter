@@ -13,15 +13,14 @@ authority for deciding where future behavior belongs.
 - Real C++ projects in `GhostRigger.sln`: 19
 - Solution-folder projects in `GhostRigger.sln`: 0
 - Python-payload DLL projects in `native/GhostRigger.PythonPayloadManifest.json`: 18
-- Packaged Python file references: 1,145
-- Payload regeneration for this collapse was skipped per owner instruction.
+- Packaged Python file references: 1,118
+- Payload regeneration refreshed the moved Qt IPC and Unreal package payloads.
 
 ## Project Manifest
 
 | ProjectName | Owner | ProjectFile | PythonPayload |
 | --- | --- | --- | --- |
 | `GhostRigger.Core.Automation` | IPC, MCP, scripting, and command automation | `native\GhostRigger.Core.Automation\GhostRigger.Core.Automation.vcxproj` | Yes |
-| `GhostRigger.Core.Bridge` | C++/Python, renderer, Unreal, and runtime bridges | `native\GhostRigger.Core.Bridge\GhostRigger.Core.Bridge.vcxproj` | Yes |
 | `GhostRigger.Core.GUI.Display` | Visible GUI display surfaces | `native\GhostRigger.Core.GUI.Display\GhostRigger.Core.GUI.Display.vcxproj` | Yes |
 | `GhostRigger.Core.GUI.Helpers` | Interactive viewport helpers and gizmo surfaces | `native\GhostRigger.Core.GUI.Helpers\GhostRigger.Core.GUI.Helpers.vcxproj` | Yes |
 | `GhostRigger.Core.IO` | File IO, file formats, serialization, conversion, MDL, FBX, GFF, LYT, and 2DA | `native\GhostRigger.Core.IO\GhostRigger.Core.IO.vcxproj` | Yes |
@@ -32,6 +31,7 @@ authority for deciding where future behavior belongs.
 | `GhostRigger.Core.Resources` | Resource discovery, identity, addressing, lifetime, cache, and game library lookup | `native\GhostRigger.Core.Resources\GhostRigger.Core.Resources.vcxproj` | Yes |
 | `GhostRigger.Core.Scene` | Scene objects, transforms, hierarchy, selection, skeleton, modules, level, and walkmesh state | `native\GhostRigger.Core.Scene\GhostRigger.Core.Scene.vcxproj` | Yes |
 | `GhostRigger.Core.Tools` | User-facing product tools and workflow surfaces | `native\GhostRigger.Core.Tools\GhostRigger.Core.Tools.vcxproj` | Yes |
+| `GhostRigger.Core.Unreal` | Unreal integration, Quinn skeleton mapping, and Unreal retarget helpers | `native\GhostRigger.Core.Unreal\GhostRigger.Core.Unreal.vcxproj` | Yes |
 | `GhostRigger.Core.Validation` | Validation gates, checks, and reports | `native\GhostRigger.Core.Validation\GhostRigger.Core.Validation.vcxproj` | Yes |
 | `GhostRigger.Core.Workflow` | Reusable multi-step workflow systems | `native\GhostRigger.Core.Workflow\GhostRigger.Core.Workflow.vcxproj` | Yes |
 | `GhostRigger.Native.Core.Foundation` | Native foundation, diagnostics, package registry payload, and foundation ABI | `native\GhostRigger.Native.Core.Foundation\GhostRigger.Native.Core.Foundation.vcxproj` | Yes |

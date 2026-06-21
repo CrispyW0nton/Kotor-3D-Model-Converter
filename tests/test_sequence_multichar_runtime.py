@@ -138,16 +138,23 @@ class FakeAnimationEngine:
         return pose
 
 
-def _install_fake_animation_engine():
+def _install_fake_animation_engine(monkeypatch):
     import src.core  # noqa: F401
 
+    package_paths = []
+    existing_pkg = sys.modules.get("src.core.animation")
+    package_paths.extend(str(path) for path in getattr(existing_pkg, "__path__", []) or [])
+    workflow_animation_path = ROOT / "native/GhostRigger.Core.Workflow/Python/src/core/animation"
+    if workflow_animation_path.exists():
+        package_paths.append(str(workflow_animation_path))
+
     animation_pkg = types.ModuleType("src.core.animation")
-    animation_pkg.__path__ = []
+    animation_pkg.__path__ = list(dict.fromkeys(package_paths))
     engine_module = types.ModuleType("src.core.animation.animation_engine")
     engine_module.AnimationEngine = FakeAnimationEngine
     engine_module.SuperModelResolver = object
-    sys.modules["src.core.animation"] = animation_pkg
-    sys.modules["src.core.animation.animation_engine"] = engine_module
+    monkeypatch.setitem(sys.modules, "src.core.animation", animation_pkg)
+    monkeypatch.setitem(sys.modules, "src.core.animation.animation_engine", engine_module)
 
 
 def _scene_object(object_id: str, name: str, model: FakeModel):
@@ -172,8 +179,8 @@ def _binding(object_id: str, name: str):
     )
 
 
-def test_multi_character_sequence_evaluation_isolates_runtime_poses():
-    _install_fake_animation_engine()
+def test_multi_character_sequence_evaluation_isolates_runtime_poses(monkeypatch):
+    _install_fake_animation_engine(monkeypatch)
     model_a = FakeModel("SharedRig", "char-a", 101)
     model_b = FakeModel("SharedRig", "char-b", 101)
     obj_a = _scene_object("char-a", "Character A", model_a)
@@ -204,6 +211,38 @@ def test_multi_character_sequence_evaluation_isolates_runtime_poses():
     assert len(evaluator._character_runtime_states) == 2
     assert evaluator._character_runtime_states["char-a"].viewport_interpolation.pose is viewport.character_poses["char-a"]
     assert evaluator._character_runtime_states["char-b"].viewport_interpolation.pose is viewport.character_poses["char-b"]
+
+
+def test_single_character_sequence_uses_main_viewport_animation_dispatch(monkeypatch):
+    _install_fake_animation_engine(monkeypatch)
+    model = FakeModel("SharedRig", "char-a", 101)
+    obj = _scene_object("char-a", "Character A", model)
+    viewport = FakeViewport([obj])
+    calls = []
+
+    class Owner:
+        scene_manager = viewport.scene_manager
+
+        def _apply_viewport_animation_pose(self, pose, *, name="", time=0.0, length=0.0, reason=""):
+            calls.append((pose, name, time, length, reason))
+            return True
+
+    sequence = GhostRiggerLevelSequence(frame_rate=24, end_frame=96)
+    binding = sequence.add_binding(_binding("char-a", "Character A"))
+    track = binding.add_track(CharacterTrack(name="Base Locomotion"))
+    track.add_animation_key(0, "walk", length=2.0, duration_frames=48, character_instance_id="char-a")
+
+    evaluator = SequenceEvaluator(viewport=viewport, owner=Owner())
+    evaluator.evaluate(sequence, frame=12)
+
+    assert calls
+    pose, name, time_value, length, reason = calls[-1]
+    assert name == "walk"
+    assert reason == "sequence playback"
+    assert length == 2.0
+    assert time_value == 0.5
+    assert pose is evaluator._character_runtime_states["char-a"].viewport_interpolation.pose
+    assert viewport.character_poses == {}
 
 
 def test_clip_instance_timing_is_non_destructive_and_duplicate_frame_safe():
@@ -258,8 +297,8 @@ def test_additive_layer_composes_over_base_pose():
     assert composed.nodes["root"].position == (1.0, 1.0, 0.0)
 
 
-def test_transform_track_moves_character_root_without_mutating_clip_instance():
-    _install_fake_animation_engine()
+def test_transform_track_moves_character_root_without_mutating_clip_instance(monkeypatch):
+    _install_fake_animation_engine(monkeypatch)
     model = FakeModel("Rig", "char-a", 101)
     obj = _scene_object("char-a", "Character A", model)
     viewport = FakeViewport([obj])
@@ -295,3 +334,39 @@ def test_scoped_pose_set_prevents_matching_bone_names_from_cross_driving():
 
     assert _pose_node_for_transform(node_a, scoped) is pose_a_node
     assert _pose_node_for_transform(node_b, scoped) is pose_b_node
+
+
+def test_moderngl_scene_animation_uses_node_scoped_skin_and_rigid_transforms():
+    source = (
+        ROOT
+        / "native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_renderer_impl.py"
+    ).read_text(encoding="utf-8")
+
+    assert "animation_pose_for_node" in source
+    assert "_node_anim_pose = animation_pose_for_node(node, anim_pose)" in source
+    assert "_pose_node_for_transform(node, _node_anim_pose)" in source
+    assert "_acheck_pose = animation_pose_for_node(_acheck, anim_pose)" in source
+    assert "compute_skin_node_palette(node, _skin_anim_pose)" in source
+    assert "_skin_uploaders_by_scope" in source
+    assert "item is root or getattr(item, \"_gr_scene_object_root_ref\", None) is root" in source
+    assert "_skin_uploader_for_node(node)" in source
+    assert "scene_gpu_mat is not None and is_animated and not _nd_is_skin" in source
+    assert "vbo_wp = (0.0, 0.0, 0.0)" in source
+    assert "_scene_animated_node_draw_mat" in source
+
+
+def test_animation_ipc_carries_target_scene_object_id():
+    server_source = (
+        ROOT / "native/GhostRigger.Core.Automation/Python/src/ipc/server.py"
+    ).read_text(encoding="utf-8")
+    client_source = (
+        ROOT / "native/GhostRigger.Core.Automation/Python/src/ipc/client.py"
+    ).read_text(encoding="utf-8")
+
+    assert '"target"' in server_source
+    assert '"object_id"' in server_source
+    assert "self._schedule_callback(cb, command, animation, loop, seek, source, target)" in server_source
+    assert '"target": target' in server_source
+    assert "target: str = \"\"" in client_source
+    assert "object_id: str = \"\"" in client_source
+    assert 'payload["target"] = target_id' in client_source

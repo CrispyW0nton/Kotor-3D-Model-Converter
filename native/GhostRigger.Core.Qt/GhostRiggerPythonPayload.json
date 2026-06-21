@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Qt",
-    "file_count": 8,
+    "file_count": 10,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -16,6 +16,18 @@
             "source_path": "src/adapters/qt_autorig/cloth_dialogs.py",
             "packaged_path": "Python/src/adapters/qt_autorig/cloth_dialogs.py",
             "sha256": "4908d28ac6f2061a31f5006fe7363a0a1b51a22e8e2a59525136b7e09dd7b410"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_IPC_INIT",
+            "source_path": "src/adapters/qt_ipc/__init__.py",
+            "packaged_path": "Python/src/adapters/qt_ipc/__init__.py",
+            "sha256": "063fba04c95351dbc394f4772c7aef66f09357d9548e8480ff6c531624efd604"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_IPC_THREADING",
+            "source_path": "src/adapters/qt_ipc/threading.py",
+            "packaged_path": "Python/src/adapters/qt_ipc/threading.py",
+            "sha256": "5bde764de5f7af4d0bf9ac9314623bc9be3da598eb1bda7b1e3ec40b6569e574"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_VIEWPORT_INIT",

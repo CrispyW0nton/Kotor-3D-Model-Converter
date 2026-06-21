@@ -18,7 +18,7 @@ _NATIVE_SOURCE_ROOTS = (
     ROOT / "native" / "GhostRigger.Core.GUI.Display" / "Python",
     ROOT / "native" / "GhostRigger.Core.GUI.Display" / "Python",
     ROOT / "native" / "GhostRigger.GUI.Rendering.Frame" / "Python",
-    ROOT / "native" / "GhostRigger.Core.Bridge" / "Python",
+    ROOT / "native" / "GhostRigger.Core.Unreal" / "Python",
     ROOT / "native" / "GhostRigger.Core.Rendering" / "Python",
     ROOT / "native" / "GhostRigger.Core.Workflow" / "Python",
     ROOT / "native" / "GhostRigger.Core.Workflow" / "Python",

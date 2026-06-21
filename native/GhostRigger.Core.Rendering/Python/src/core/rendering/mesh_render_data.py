@@ -1249,11 +1249,15 @@ def _animation_pose_matches_node_identity(
         node_object_id = _scene_object_id_for_node(node) if node_object_id is None else node_object_id
         if node_object_id and node_object_id != pose_object_id:
             return False
+        if node_object_id:
+            return True
     pose_import_id = str(getattr(anim_pose, "_gr_animation_scene_import_id", "") or "")
     if pose_import_id:
         node_import_id = _scene_import_id_for_node(node) if node_import_id is None else node_import_id
         if node_import_id and node_import_id != pose_import_id:
             return False
+        if node_import_id:
+            return True
     try:
         pose_source_id = int(getattr(anim_pose, "_gr_animation_source_model_id", 0) or 0)
     except Exception:

@@ -548,13 +548,14 @@ class QtGhostRiggerMainWindow(
         def appearance(theme: str = "", layout: str = "", persist: object = True) -> None:
             self._apply_appearance_from_ipc(str(theme or ""), str(layout or ""), persist=bool(persist))
 
-        def animation_command(command: str, animation: str = "", loop: object = None, seek: object = None, source: str = "") -> None:
+        def animation_command(command: str, animation: str = "", loop: object = None, seek: object = None, source: str = "", target: str = "", object_id: str = "") -> None:
             self._apply_animation_command_from_ipc(
                 str(command or ""),
                 str(animation or ""),
                 loop=loop,
                 seek=seek,
                 source=str(source or ""),
+                target_object_id=str(target or object_id or ""),
             )
 
         def sequence_command(command: str, payload: object = None) -> dict:

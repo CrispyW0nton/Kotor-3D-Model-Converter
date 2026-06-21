@@ -92,6 +92,7 @@ from src.core.rendering.mesh_render_data import (
     _animated_node_world_transform,
     _pose_node_for_transform,
     animation_pose_applies_to_node,
+    animation_pose_for_node,
 )
 from src.core.rendering.gpu_shaders import _FRAG_SRC, _GRID_FRAG_SRC, _GRID_VERT_SRC, _VERT_SRC
 
@@ -206,9 +207,11 @@ class GpuRenderer:
         self.max_new_mesh_uploads_per_frame: int = 64
         self.deferred_mesh_uploads: bool = False
         # ── Phase A: GPU Skinning state ──────────────────────────────────────────
-        # MatrixPaletteUploader instance, created per model when skin nodes exist.
-        # Caches inverse bind-pose matrices and computes per-frame bone palettes.
+        # MatrixPaletteUploader instances, scoped by scene object when possible.
+        # The uploader is name-indexed internally, so duplicate scene characters
+        # must not share one palette lookup table.
         self._skin_uploader: Optional['MatrixPaletteUploader'] = None
+        self._skin_uploaders_by_scope: Dict[tuple, tuple[tuple[int, ...], object]] = {}
         self._skin_model_id: int = 0  # id() of model for which bind-pose was built
         self._skin_bone_count: int = 0  # number of bones in the current palette
         self._skin_logged: bool = False  # one-shot log for GPU skinning activation
@@ -1196,6 +1199,7 @@ class GpuRenderer:
             if _model_changed:
                 self._wt_cache.clear()
                 self._wt_model_id = _cur_model_id
+                self._skin_uploaders_by_scope.clear()
 
             # ── Phase A: GPU Skinning — build bone palette for skin models ─────
             # Detect if this model has any skin nodes; if so, build the
@@ -1208,20 +1212,76 @@ class GpuRenderer:
                         _has_skin_nodes = True
                         break
                 if _has_skin_nodes:
-                    if self._skin_model_id != _cur_model_id or self._skin_uploader is None:
-                        self._skin_uploader = MatrixPaletteUploader(max_bones=_SKIN_MAX_BONES)
-                        n_built = self._skin_uploader.build_inverse_bind_pose(model)
-                        self._skin_model_id = _cur_model_id
-                        self._skin_bone_count = n_built
-                        if not self._skin_logged:
-                            log.info(f"GPU-SKINNING: MatrixPaletteUploader built {n_built} "
-                                     f"inverse bind-pose matrices for model "
-                                     f"'{getattr(model, 'name', '?')}'")
-                            self._skin_logged = True
                     # FIX-SKIN-QBONE: Skin palettes are now built per skin node
                     # immediately before the draw call.  qBone/tBone slots are
                     # indexed by the skin node's local bone_map, not the global
                     # model node order, so a single model-wide palette is wrong.
+                    pass
+
+            class _SkinPaletteModelView:
+                def __init__(self, source_model, view_nodes):
+                    self._nodes = tuple(view_nodes)
+                    self.name = str(
+                        getattr(self._nodes[0], "_gr_scene_object_name", "")
+                        or getattr(self._nodes[0], "name", "")
+                        or getattr(source_model, "name", "")
+                        or ""
+                    )
+                    self.supermodel = str(getattr(source_model, "supermodel", "") or "")
+                    if bool(getattr(source_model, "_gr_bas_attachment_palette_model", False)):
+                        self._gr_bas_attachment_palette_model = True
+
+                def all_nodes(self):
+                    return list(self._nodes)
+
+            def _skin_palette_scope_for_node(nd):
+                root = getattr(nd, "_gr_scene_object_root_ref", None)
+                if root is not None and bool(getattr(root, "_gr_scene_object_root", False)):
+                    object_id = str(
+                        getattr(root, "_gr_scene_object_id", "")
+                        or getattr(nd, "_gr_scene_object_id", "")
+                        or ""
+                    )
+                    import_id = str(
+                        getattr(root, "_gr_scene_import_id", "")
+                        or getattr(nd, "_gr_scene_import_id", "")
+                        or ""
+                    )
+                    key = ("scene", object_id or import_id or str(id(root)), id(root))
+                    root_nodes = [
+                        item for item in nodes
+                        if item is root or getattr(item, "_gr_scene_object_root_ref", None) is root
+                    ]
+                    return key, _SkinPaletteModelView(model, root_nodes or [root])
+                return ("model", _cur_model_id), model
+
+            def _skin_uploader_for_node(nd):
+                if MatrixPaletteUploader is None:
+                    return None
+                scope_key, palette_model = _skin_palette_scope_for_node(nd)
+                try:
+                    palette_nodes = list(palette_model.all_nodes())
+                except Exception:
+                    palette_nodes = nodes
+                signature = tuple(id(item) for item in palette_nodes)
+                cached = self._skin_uploaders_by_scope.get(scope_key)
+                if cached is not None and cached[0] == signature:
+                    return cached[1]
+                uploader = MatrixPaletteUploader(max_bones=_SKIN_MAX_BONES)
+                n_built = uploader.build_inverse_bind_pose(palette_model)
+                self._skin_uploaders_by_scope[scope_key] = (signature, uploader)
+                self._skin_uploader = uploader
+                self._skin_model_id = _cur_model_id
+                self._skin_bone_count = n_built
+                if not self._skin_logged:
+                    log.info(
+                        "GPU-SKINNING: MatrixPaletteUploader built %s inverse bind-pose "
+                        "matrices for scope %s",
+                        n_built,
+                        scope_key,
+                    )
+                    self._skin_logged = True
+                return uploader
 
             # PERF: Only stamp model refs and compute proxy IDs when model changes.
             # These are O(N) walks that produce identical results across frames for
@@ -1610,6 +1670,9 @@ class GpuRenderer:
                 wp, wo = _get_world_transform(node)
                 scene_gpu_mat = _scene_gpu_model_matrix(node)
                 vbo_wp, vbo_wo = wp, wo
+                _nd_is_skin = bool(getattr(node, 'is_skin', False))
+                _node_anim_pose = animation_pose_for_node(node, anim_pose) if anim_pose is not None else None
+                _scene_animated_node_draw_mat = None
                 if scene_gpu_mat is not None and anim_pose is None:
                     authored_transform = _scene_authored_world_transform(node)
                     if authored_transform is not None:
@@ -1618,8 +1681,8 @@ class GpuRenderer:
                 node_alpha = float(getattr(node, 'alpha', 1.0))
                 node_alpha = max(0.0, min(1.0, node_alpha))
                 selfillum  = getattr(node, 'selfillum', (0.0, 0.0, 0.0))
-                if anim_pose is not None:
-                    _pn = _pose_node_for_transform(node, anim_pose)
+                if _node_anim_pose is not None:
+                    _pn = _pose_node_for_transform(node, _node_anim_pose)
                     if _pn is not None:
                         if getattr(_pn, 'alpha', None) is not None:
                             node_alpha = max(0.0, min(1.0, float(_pn.alpha)))
@@ -1642,7 +1705,6 @@ class GpuRenderer:
                 # depends on the full parent chain.  Rigid attachments (eyes, horns,
                 # accessories) move when their parent bone is animated even if they
                 # themselves have no animation keys.
-                _nd_is_skin = bool(getattr(node, 'is_skin', False))
                 _bas_root_for_draw = _bas_attachment_root_for_node(node)
                 _bas_skin_draw_mat = None
                 if _nd_is_skin and _bas_root_for_draw is not None:
@@ -1653,26 +1715,37 @@ class GpuRenderer:
                         _bas_root_wo,
                         (1.0, 1.0, 1.0),
                     )
+                _skin_anim_pose = _node_anim_pose
+                _skin_uploader = _skin_uploader_for_node(node) if _nd_is_skin and _has_skin_nodes else None
                 _skin_can_lbs = bool(
                     _nd_is_skin
                     and not bool(getattr(node, "_gr_bas_attachment_layer", False))
                     and _has_skin_nodes
-                    and self._skin_uploader is not None
-                    and anim_pose is not None
-                    and animation_pose_applies_to_node(node, anim_pose)
+                    and _skin_uploader is not None
+                    and _skin_anim_pose is not None
+                    and animation_pose_applies_to_node(node, _skin_anim_pose)
                     and getattr(node, 'bone_map', None)
                     and getattr(node, 'skin_data', None)
                 )
                 _skin_bind_transform = bool(_nd_is_skin and not _skin_can_lbs)
                 is_animated = False
-                if anim_pose is not None and hasattr(anim_pose, 'nodes') and not _nd_is_skin:
+                if _node_anim_pose is not None and hasattr(_node_anim_pose, 'nodes') and not _nd_is_skin:
                     # Check if this node or any ancestor has animation data
                     _acheck = node
                     while _acheck is not None:
-                        if _pose_node_for_transform(_acheck, anim_pose) is not None:
+                        _acheck_pose = animation_pose_for_node(_acheck, anim_pose)
+                        if _acheck_pose is not None and _pose_node_for_transform(_acheck, _acheck_pose) is not None:
                             is_animated = True
                             break
                         _acheck = getattr(_acheck, 'parent', None)
+                if scene_gpu_mat is not None and is_animated and not _nd_is_skin:
+                    vbo_wp = (0.0, 0.0, 0.0)
+                    vbo_wo = (0.0, 0.0, 0.0, 1.0)
+                    _scene_animated_node_draw_mat = _mat4_from_pos_quat_scale(
+                        wp,
+                        wo,
+                        (1.0, 1.0, 1.0),
+                    )
                 _skin_vbo_mode_changed = False
                 if _nd_is_skin and node_id in self._mesh_cache:
                     _gm_existing = self._mesh_cache[node_id]
@@ -2232,11 +2305,11 @@ class GpuRenderer:
                         and 'u_skin_enabled' in _u
                         and 'u_bone_count' in _u):
                     try:
-                        self._skin_uploader.compute_skin_node_palette(node, anim_pose)
+                        _skin_uploader.compute_skin_node_palette(node, _skin_anim_pose)
                         _skin_local_bone_count = len(getattr(node, 'bone_map', []) or [])
                         _skin_local_bone_count = min(_skin_local_bone_count, _SKIN_MAX_BONES)
                         if 'u_bones' in _u and _skin_local_bone_count > 0:
-                            _u['u_bones'].write(self._skin_uploader.as_flat_bytes())
+                            _u['u_bones'].write(_skin_uploader.as_flat_bytes())
                         _u['u_skin_enabled'].value = 1 if _skin_local_bone_count > 0 else 0
                         _u['u_bone_count'].value = _skin_local_bone_count
                     except Exception as e:
@@ -2299,7 +2372,7 @@ class GpuRenderer:
                                 model=model,
                                 node=node,
                                 pass_name=pass_name,
-                                uploader=self._skin_uploader,
+                                uploader=_skin_uploader,
                                 bone_remap=_bone_remap,
                                 uniforms=_u,
                                 gm=gm,
@@ -2311,15 +2384,19 @@ class GpuRenderer:
                         )
 
                 draw_model_mat = model_mat
-                if _bas_skin_draw_mat is not None:
+                if _scene_animated_node_draw_mat is not None:
+                    draw_model_mat = _scene_animated_node_draw_mat
+                elif _bas_skin_draw_mat is not None:
                     draw_model_mat = _bas_skin_draw_mat
-                if scene_gpu_mat is not None:
-                    draw_model_mat = (
-                        _mat4_mul(scene_gpu_mat, draw_model_mat)
-                        if _bas_skin_draw_mat is not None
-                        else scene_gpu_mat
-                    )
-                if scene_gpu_mat is not None or _bas_skin_draw_mat is not None:
+                    if scene_gpu_mat is not None:
+                        draw_model_mat = _mat4_mul(scene_gpu_mat, draw_model_mat)
+                elif scene_gpu_mat is not None:
+                    draw_model_mat = scene_gpu_mat
+                if (
+                    scene_gpu_mat is not None
+                    or _bas_skin_draw_mat is not None
+                    or _scene_animated_node_draw_mat is not None
+                ):
                     _u['u_model'].write(_mat4_tobytes(draw_model_mat))
                     _u['u_normal_mat'].write(_mat3_normal(draw_model_mat).T.astype(np.float32).tobytes())
                 else:

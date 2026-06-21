@@ -191,20 +191,20 @@ Canonical names include:
 - `GhostRigger.Core.Validation.Export`
 - `GhostRigger.Core.Validation.Resources`
 
-### Qt And Bridge
+### Qt, Rendering, IO, And Unreal
 
-Technology-specific glue belongs under Adapters: Qt adapters, GPU adapters,
-filesystem adapters, native host bridges, Python/C++ bridges, renderer
-adapters, and external-library wrappers. Adapters connect GhostRigger to
-external runtimes and must not own durable domain policy.
+Technology-specific glue belongs under concrete adapter owners: Qt adapters in
+Qt, GPU and renderer adapters in Rendering, filesystem adapters in IO, Unreal
+integration in Unreal, and native lifecycle/host bridges in Runtime or Native
+Core. Adapters connect GhostRigger to external runtimes and must not own durable
+domain policy.
 
 Canonical names include:
 
 - `GhostRigger.Core.Qt`
 - `GhostRigger.Core.Rendering`
 - `GhostRigger.Core.IO`
-- `GhostRigger.Core.Bridge.NativeHost`
-- `GhostRigger.Core.Bridge`
+- `GhostRigger.Core.Unreal`
 
 ### Runtime / Native Host
 

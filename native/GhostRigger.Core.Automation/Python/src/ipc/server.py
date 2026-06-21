@@ -477,17 +477,25 @@ class GhostRiggerIPCServer:
                 return jsonify({"error": "missing command"}), 400
             animation = str(payload.get("animation", payload.get("anim", body.get("animation", ""))) or "").strip()
             source = str(payload.get("source", body.get("source", "")) or "").strip()
+            target = str(
+                payload.get(
+                    "target",
+                    payload.get("object_id", body.get("target", body.get("object_id", ""))),
+                )
+                or ""
+            ).strip()
             loop = payload.get("loop", body.get("loop", None))
             seek = payload.get("seek", payload.get("percent", body.get("seek", None)))
 
             cb = self.callbacks.get("animation_command")
             if cb is not None:
-                self._schedule_callback(cb, command, animation, loop, seek, source)
+                self._schedule_callback(cb, command, animation, loop, seek, source, target)
             return jsonify({
                 "status": "ok",
                 "command": command,
                 "animation": animation,
                 "source": source,
+                "target": target,
                 "loop": None if loop is None else bool(loop),
                 "seek": seek,
             })

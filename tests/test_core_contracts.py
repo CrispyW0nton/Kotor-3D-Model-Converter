@@ -8096,6 +8096,237 @@ def test_sequence_editor_lists_inherited_body_clips_with_bound_object_game(monke
     assert body.game_version is None
 
 
+def test_scene_runtime_model_resolves_serialized_object_source_ref() -> None:
+    from src.core.scene.scene_resource_ref import SceneResourceRef
+    from src.gui.windows.application_core.shared.scene_workflow import SceneWorkflowMixin
+
+    runtime_model = SimpleNamespace(name="N_DarthMalak", animations=[SimpleNamespace(name="walk", length=1.0)])
+    scene_object = SimpleNamespace(
+        object_type="model",
+        source_ref=SceneResourceRef(game="K1", resref="n_darthmalak"),
+        metadata={},
+    )
+    window = SimpleNamespace(_scene_texture_dirs=[])
+    window._load_model_for_resource_ref = lambda ref: (runtime_model, "override_textures")
+    window._runtime_model_for_scene_object = MethodType(
+        SceneWorkflowMixin._runtime_model_for_scene_object,
+        window,
+    )
+
+    assert window._runtime_model_for_scene_object(scene_object) is runtime_model
+    assert scene_object.metadata["_runtime_model"] is runtime_model
+    assert scene_object.metadata.get("unresolved") is None
+    assert window._scene_texture_dirs == ["override_textures"]
+
+
+def test_sequence_animation_picker_uses_serialized_scene_runtime_model(monkeypatch) -> None:
+    import src.core.animation.animation_engine as animation_engine
+    from PySide6 import QtWidgets
+
+    from src.gui.sequence_editor.sequence_editor_window import SequenceEditorWindow
+    from src.sequence.sequence_binding import SequenceBinding, SequenceTargetType
+    from src.sequence.sequence_model import GhostRiggerLevelSequence
+    from src.sequence.tracks.character_track import CharacterTrack
+
+    class FakeAnimationEngine:
+        def __init__(self, model) -> None:
+            self.model = model
+
+        def list_all_animations(self) -> list[dict[str, object]]:
+            return [
+                {"name": "walk", "source": "N_DarthMalak", "source_type": "local", "length": 1.0},
+                {"name": "taunt", "source": "S_Male02", "source_type": "inherited", "inherited": True, "length": 2.0},
+            ]
+
+    monkeypatch.setattr(animation_engine, "AnimationEngine", FakeAnimationEngine)
+    monkeypatch.setattr(animation_engine.SuperModelResolver, "configure", lambda _manager: None)
+    selected: dict[str, object] = {}
+
+    def fake_get_item(_parent, title, label, items, current, editable):
+        selected.update({"title": title, "label": label, "items": list(items), "current": current, "editable": editable})
+        return items[1], True
+
+    monkeypatch.setattr(QtWidgets.QInputDialog, "getItem", fake_get_item)
+
+    runtime_model = SimpleNamespace(name="N_DarthMalak", supermodel="S_Male02")
+    scene_object = SimpleNamespace(
+        id="scene-malak",
+        object_type="model",
+        source_ref=SimpleNamespace(game="K1", resref="n_darthmalak"),
+        metadata={},
+    )
+    sequence = GhostRiggerLevelSequence(frame_rate=24, end_frame=96)
+    binding = sequence.add_binding(
+        SequenceBinding(
+            display_name="Malak",
+            target_object_id="scene-malak",
+            target_object_name="Malak",
+            target_type=SequenceTargetType.CHARACTER,
+        )
+    )
+    track = binding.add_track(CharacterTrack(parent_binding_id=binding.binding_id))
+    editor = SequenceEditorWindow.__new__(SequenceEditorWindow)
+    editor.sequence = sequence
+    editor.source_viewport = SimpleNamespace(model=None)
+    editor.main_window = SimpleNamespace(
+        _current_game="K1",
+        _runtime_model_for_scene_object=lambda obj: runtime_model if obj is scene_object else None,
+    )
+    editor.evaluator = SimpleNamespace(resolver=SimpleNamespace(resolve=lambda _binding: scene_object))
+    editor._set_status = lambda text: selected.update({"status": text})
+
+    assert editor._configure_character_track(track, binding, prompt=True) is True
+
+    assert selected["title"] == "Animation Track"
+    assert len(selected["items"]) == 2
+    assert track.keyframes[-1].value["animation"] == "taunt"
+    assert track.keyframes[-1].value["source_model_name"] == "S_Male02"
+
+
+def test_sequence_animation_picker_prompts_even_with_browser_selection(monkeypatch) -> None:
+    import src.core.animation.animation_engine as animation_engine
+    from PySide6 import QtCore, QtWidgets
+
+    from src.gui.sequence_editor.sequence_editor_window import SequenceEditorWindow
+    from src.sequence.sequence_binding import SequenceBinding, SequenceTargetType
+    from src.sequence.sequence_model import GhostRiggerLevelSequence
+    from src.sequence.tracks.character_track import CharacterTrack
+
+    class FakeAnimationEngine:
+        def __init__(self, model) -> None:
+            self.model = model
+
+        def list_all_animations(self) -> list[dict[str, object]]:
+            return [
+                {"name": "walk", "source": "N_DarthMalak", "source_type": "local", "length": 1.0},
+                {"name": "taunt", "source": "S_Male02", "source_type": "inherited", "inherited": True, "length": 2.0},
+            ]
+
+    class FakeItem:
+        def data(self, role):
+            assert role == QtCore.Qt.UserRole + 1
+            return {"entry": {"source": "S_Male02", "source_type": "inherited", "source_model_name": "S_Male02", "length": 2.0}}
+
+    monkeypatch.setattr(animation_engine, "AnimationEngine", FakeAnimationEngine)
+    monkeypatch.setattr(animation_engine.SuperModelResolver, "configure", lambda _manager: None)
+    prompt: dict[str, object] = {}
+    monkeypatch.setattr(
+        QtWidgets.QInputDialog,
+        "getItem",
+        lambda _parent, _title, _label, items, current, _editable: (
+            prompt.update({"items": list(items), "current": current}) or items[current],
+            True,
+        ),
+    )
+
+    runtime_model = SimpleNamespace(name="N_DarthMalak", supermodel="S_Male02")
+    scene_object = SimpleNamespace(
+        id="scene-malak",
+        object_type="model",
+        source_ref=SimpleNamespace(game="K1", resref="n_darthmalak"),
+        metadata={},
+    )
+    sequence = GhostRiggerLevelSequence(frame_rate=24, end_frame=96)
+    binding = sequence.add_binding(
+        SequenceBinding(
+            display_name="Malak",
+            target_object_id="scene-malak",
+            target_object_name="Malak",
+            target_type=SequenceTargetType.CHARACTER,
+        )
+    )
+    track = binding.add_track(CharacterTrack(parent_binding_id=binding.binding_id))
+    panel = SimpleNamespace(
+        selected_animation=lambda: "taunt",
+        selected_animation_source=lambda: "inherited",
+        listbox=SimpleNamespace(currentItem=lambda: FakeItem()),
+    )
+    editor = SequenceEditorWindow.__new__(SequenceEditorWindow)
+    editor.sequence = sequence
+    editor.source_viewport = SimpleNamespace(model=None)
+    editor.main_window = SimpleNamespace(
+        _current_game="K1",
+        _current_model=runtime_model,
+        animations_panel=panel,
+        _runtime_model_for_scene_object=lambda obj: runtime_model if obj is scene_object else None,
+    )
+    editor.evaluator = SimpleNamespace(resolver=SimpleNamespace(resolve=lambda _binding: scene_object))
+    editor._set_status = lambda _text: None
+
+    assert editor._configure_character_track(track, binding, prompt=True) is True
+    assert prompt["current"] == 1
+    assert len(prompt["items"]) == 2
+    assert track.keyframes[-1].value["animation"] == "taunt"
+
+
+def test_sequence_overlapping_picker_adds_overlay_lane_for_serialized_model(monkeypatch) -> None:
+    import src.core.animation.animation_engine as animation_engine
+    from PySide6 import QtWidgets
+
+    from src.gui.sequence_editor.sequence_editor_window import SequenceEditorWindow
+    from src.sequence.sequence_binding import SequenceBinding, SequenceTargetType
+    from src.sequence.sequence_model import GhostRiggerLevelSequence
+    from src.sequence.tracks.character_track import CharacterTrack
+
+    class FakeAnimationEngine:
+        def __init__(self, model) -> None:
+            self.model = model
+
+        def list_all_animations(self) -> list[dict[str, object]]:
+            return [{"name": "chturnl", "source": "N_DarthMalak", "source_type": "local", "length": 1.0}]
+
+    monkeypatch.setattr(animation_engine, "AnimationEngine", FakeAnimationEngine)
+    monkeypatch.setattr(animation_engine.SuperModelResolver, "configure", lambda _manager: None)
+    monkeypatch.setattr(QtWidgets.QInputDialog, "getItem", lambda _parent, _title, _label, items, _current, _editable: (items[0], True))
+
+    runtime_model = SimpleNamespace(name="N_DarthMalak", supermodel="S_Male02")
+    scene_object = SimpleNamespace(
+        id="scene-malak",
+        object_type="model",
+        source_ref=SimpleNamespace(game="K1", resref="n_darthmalak"),
+        metadata={},
+    )
+    sequence = GhostRiggerLevelSequence(frame_rate=24, end_frame=96)
+    binding = sequence.add_binding(
+        SequenceBinding(
+            display_name="Malak",
+            target_object_id="scene-malak",
+            target_object_name="Malak",
+            target_type=SequenceTargetType.CHARACTER,
+        )
+    )
+    base_track = binding.add_track(CharacterTrack(name="Animation: walk", parent_binding_id=binding.binding_id))
+    calls: list[object] = []
+    track_list = SimpleNamespace(
+        selected_track=lambda: base_track,
+        selected_binding=lambda: binding,
+    )
+    editor = SequenceEditorWindow.__new__(SequenceEditorWindow)
+    editor.sequence = sequence
+    editor.source_viewport = SimpleNamespace(model=None)
+    editor.main_window = SimpleNamespace(
+        _current_game="K1",
+        _runtime_model_for_scene_object=lambda obj: runtime_model if obj is scene_object else None,
+    )
+    editor.evaluator = SimpleNamespace(resolver=SimpleNamespace(resolve=lambda _binding: scene_object))
+    editor.outliner = SimpleNamespace(track_list=track_list)
+    editor._set_status = lambda text: calls.append(("status", text))
+    editor._sequence_changed = lambda evaluate=True: calls.append(("changed", evaluate))
+    editor._restore_outliner_selection_key = lambda key: calls.append(("select", key))
+    editor._play_from_current_animation_clip = lambda: calls.append(("play",))
+
+    assert editor._add_overlapping_animation_to_selected_track() is True
+
+    overlay_track = binding.tracks[0]
+    assert overlay_track is not base_track
+    assert overlay_track.metadata["is_overlap_track"] is True
+    assert overlay_track.keyframes[-1].value["animation"] == "chturnl"
+    assert overlay_track.keyframes[-1].value["blend_mode"] == "overlay"
+    assert overlay_track.keyframes[-1].value["priority"] == 1
+    assert ("changed", True) in calls
+    assert ("play",) in calls
+
+
 def test_sequence_editor_playback_stops_animation_browser_preview() -> None:
     from src.gui.sequence_editor.sequence_editor_window import SequenceEditorWindow
 
@@ -8763,6 +8994,33 @@ def test_qt_animations_panel_exposes_animation_source_selector() -> None:
     panel.set_animation_source("attachment")
 
     assert panel.selected_animation_source() == "attachment"
+
+
+def test_qt_animations_panel_exposes_scene_model_target_selector() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationsPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtAnimationsPanel()
+    changes = []
+    panel.animationTargetChanged.connect(changes.append)
+
+    panel.set_animation_targets(
+        [
+            {"id": "obj-a", "label": "Bith A (N_Bith)"},
+            {"id": "obj-b", "label": "Bith B (N_Bith)"},
+        ],
+        "obj-b",
+    )
+
+    assert panel.selected_animation_target_id() == "obj-b"
+    assert panel.animation_target_combo.itemText(panel.animation_target_combo.currentIndex()) == "Bith B (N_Bith)"
+    assert panel.select_animation_target("obj-a") is True
+    assert panel.selected_animation_target_id() == "obj-a"
+    assert changes[-1] == "obj-a"
 
 
 def test_qt_animations_panel_uses_auto_game_label_and_source_icon_buttons() -> None:
@@ -11094,6 +11352,20 @@ def test_scene_animation_pose_only_drives_matching_scene_object() -> None:
     assert animation_pose_applies_to_node(copied_child, pose)
     assert _pose_node_for_transform(copied_child, pose) is pose.nodes["shared_bone"]
 
+    rebuilt_source_child = SimpleNamespace(
+        name="shared_bone",
+        index=1,
+        position=(0.0, 1.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=copied_root,
+        children=[],
+        _gr_scene_object_id="obj-a",
+        _gr_scene_import_id="import-a",
+        _gr_source_model_id=909,
+    )
+    assert animation_pose_applies_to_node(rebuilt_source_child, pose)
+    assert _pose_node_for_transform(rebuilt_source_child, pose) is pose.nodes["shared_bone"]
+
     attachment_root = SimpleNamespace(
         name="head_root",
         index=2,
@@ -11158,6 +11430,46 @@ def test_animation_pose_source_tags_selected_scene_object() -> None:
     assert pose._gr_animation_scene_import_id == "import-1"
     assert pose._gr_animation_name == "walk"
     assert pose._gr_animation_game == "K1"
+
+
+def test_animation_browser_target_selector_scopes_pose_to_chosen_scene_object() -> None:
+    from src.gui.windows.application_core.shared.animation_workflow import AnimationWorkflowMixin
+
+    model = SimpleNamespace(name="N_Bith", animations=[SimpleNamespace(name="walk")])
+    obj_a = SimpleNamespace(id="obj-a", name="Bith A", metadata={"_runtime_model": model, "scene_import_id": "import-a"})
+    obj_b = SimpleNamespace(id="obj-b", name="Bith B", metadata={"_runtime_model": model, "scene_import_id": "import-b"})
+    scene_manager = SimpleNamespace(
+        get_scene_objects=lambda: [obj_a, obj_b],
+        get_selected_objects=lambda: [obj_a],
+        active_scene=SimpleNamespace(objects=[obj_a, obj_b]),
+    )
+    panel = SimpleNamespace(
+        selected_animation_target_id=lambda: "obj-b",
+        set_animation_targets=lambda _targets, _current_id="": None,
+    )
+    window = SimpleNamespace(
+        scene_manager=scene_manager,
+        animations_panel=panel,
+        _animation_preview_object_id="obj-b",
+        _current_game="K2",
+    )
+    for name in (
+        "_scene_animation_preview_objects",
+        "_find_animation_preview_scene_object",
+        "_selected_animation_preview_scene_object",
+        "_animation_preview_target_for_model",
+        "_animation_scene_object_for_model",
+        "_tag_animation_pose_source",
+    ):
+        setattr(window, name, MethodType(getattr(AnimationWorkflowMixin, name), window))
+    window._runtime_model_for_scene_object = lambda obj: (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
+
+    pose = SimpleNamespace()
+    AnimationWorkflowMixin._tag_animation_pose_source(window, pose, model, "walk", "K2")
+
+    assert pose._gr_animation_scene_object_id == "obj-b"
+    assert pose._gr_animation_scene_import_id == "import-b"
+    assert pose._gr_animation_source_model_id == id(model)
 
 
 def test_scene_root_animation_pose_preserves_world_placement() -> None:

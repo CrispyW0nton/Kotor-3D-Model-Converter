@@ -252,7 +252,7 @@ a launcher and native workspace first, not a rewrite of the application.
   Python payload sweep manifest. It maps all 91 non-DEBUG native DLL projects
   to byte-identical packaged Python source copies under
   `native/<Project>/Python/src/...`.
-- The manifest includes 1,145 packaged Python file references and covers every
+- The manifest includes 1,118 packaged Python file references and covers every
   `src/**/*.py` file at least once. Duplicate source references are intentional
   where toolbox, renderer, window, native-core, or runtime-shared package
   boundaries all depend on the same Python owner.
@@ -297,7 +297,8 @@ Native project naming:
 - Toolbox migrations from Python: `GhostRigger.Core.Tools.{Toolname}`.
 - GUI display packages: `GhostRigger.Core.GUI.Display.*`.
 - GUI helper packages: `GhostRigger.Core.GUI.Helpers.*`.
-- Adapter packages: `GhostRigger.Core.Bridge`.
+- Adapter packages: `GhostRigger.Core.Qt`, `GhostRigger.Core.Rendering`,
+  `GhostRigger.Core.IO`, and `GhostRigger.Core.Unreal`.
 
 Current Phase 1 projects such as `GhostRigger.Core.Rendering.*` and
 `GhostRigger.Core.GUI.Display.*` are legacy build targets. Rename or merge them only in

@@ -840,6 +840,9 @@ class SceneWorkflowMixin:
         body_source_active = self._animation_source_key() == "body" if hasattr(self, "_animation_source_key") else True
         preserve_bas_body_animation = bool(is_bas_preview and body_source_active and bas_body is not None)
         self._current_model = bas_body if preserve_bas_body_animation else model
+        refresh_animation_targets = getattr(self, "_refresh_animation_preview_targets", None)
+        if callable(refresh_animation_targets):
+            refresh_animation_targets(str(getattr(obj, "id", "") or ""))
         if hasattr(self, "animations_panel"):
             if not preserve_bas_body_animation:
                 self._load_animation_panel_model(model)
@@ -911,7 +914,42 @@ class SceneWorkflowMixin:
             self.scene_outliner_panel.set_scene(self.scene_manager.active_scene)
 
     def _runtime_model_for_scene_object(self, obj):
-        return (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
+        if obj is None:
+            return None
+        metadata = getattr(obj, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            try:
+                obj.metadata = metadata
+            except Exception:
+                pass
+        model = metadata.get("_runtime_model")
+        if model is not None:
+            return model
+        if getattr(obj, "object_type", "model") != "model":
+            return None
+        ref = getattr(obj, "source_ref", None)
+        if ref is None:
+            return None
+        if not (str(getattr(ref, "resref", "") or "").strip() or str(getattr(ref, "source_path", "") or "").strip()):
+            return None
+        try:
+            model, texture_dir = self._load_model_for_resource_ref(ref)
+        except Exception as exc:
+            metadata["unresolved"] = True
+            metadata["load_error"] = str(exc)
+            log.debug("Could not lazy-load scene object runtime model", exc_info=True)
+            return None
+        if model is None:
+            metadata["unresolved"] = True
+            return None
+        metadata["_runtime_model"] = model
+        metadata.pop("unresolved", None)
+        metadata.pop("load_error", None)
+        texture_dirs = getattr(self, "_scene_texture_dirs", None)
+        if texture_dir and isinstance(texture_dirs, list) and texture_dir not in texture_dirs:
+            texture_dirs.append(texture_dir)
+        return model
 
     def _scene_object_for_runtime_node(self, node):
         if node is None:

@@ -10,6 +10,44 @@ For each completed change, add a dated entry with:
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
 ## 2026-06-21
+### [2026-06-21] Scope Animation Playback And Reduce Bridge Ownership
+
+Owner: LordVaderCW
+Subsystem: Animation Browser / Sequence Editor / ModernGL / native package ownership
+
+- Added a shared sequence/animation preview target helper so Animation Browser and the docked Sequence Editor both tag playback poses with stable scene object, source, import, and character instance identity.
+- Added an Animation Browser model target selector and routed IPC playback through the selected scene object so preview clips can drive one character in a multi-character scene without affecting another character with overlapping skeleton/node names.
+- Reworked docked Sequence Editor playback to use the same serialized scene-object resolver and main-viewport preview dispatch as the Animation Browser, including the restored Add Clip chooser and bound-object clip metadata.
+- Scoped ModernGL skin palette uploaders and rigid animated-node lookup per scene object/root subtree, fixing mesh deformation, rigid attachment drift, and cross-object skeleton interference during overlapping character playback.
+- Reduced `GhostRigger.Core.Bridge` out of the native package set: Qt IPC now belongs to `GhostRigger.Core.Qt`, Unreal bridge code now belongs to `GhostRigger.Core.Unreal`, and the solution, native host dependency table, payload manifests, registry, docs, and ownership tests were updated for the new boundaries.
+
+Intersects: commits `afa607b8`, `b51e7190`, `ac4b4cf2`; native Bridge/Qt/Unreal package ownership; Animation Browser and Sequence Editor playback surfaces.
+
+Verification:
+- `python -m pytest tests\test_sequence_multichar_runtime.py tests\test_core_contracts.py::test_sequence_animation_pose_tags_bound_scene_object tests\test_core_contracts.py::test_scene_runtime_model_resolves_serialized_object_source_ref tests\test_core_contracts.py::test_sequence_animation_picker_uses_serialized_scene_runtime_model tests\test_core_contracts.py::test_sequence_animation_picker_prompts_even_with_browser_selection tests\test_core_contracts.py::test_sequence_overlapping_picker_adds_overlay_lane_for_serialized_model tests\test_core_contracts.py::test_sequence_editor_playback_stops_animation_browser_preview tests\test_core_contracts.py::test_qt_animations_panel_exposes_scene_model_target_selector tests\test_core_contracts.py::test_animation_browser_target_selector_scopes_pose_to_chosen_scene_object -q -p no:cacheprovider --basetemp .pytest_tmp\final_sequence_malak_bith` -> 16 passed.
+- `python -m pytest tests\test_native_python_payloads.py tests\test_native_project_templates.py tests\test_native_module_package_sweep.py tests\test_native_core_package_registry.py -q -p no:cacheprovider --basetemp .pytest_tmp\final_native_bridge_reduce` -> 60 passed.
+- `python -m py_compile native\GhostRigger.Core.Rendering\Python\src\adapters\rendering\moderngl_renderer_impl.py native\GhostRigger.Core.Automation\Python\src\ipc\server.py native\GhostRigger.Core.Automation\Python\src\ipc\client.py tests\test_sequence_multichar_runtime.py`
+- `MSBuild GhostRigger.sln /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` succeeded; existing MSB8028 intermediate-directory warnings remain on Core.IO/Core.Unreal.
+- Visible Debug-app IPC workflow loaded K1 `N_DarthMalak` plus K1 `N_Bith`, separated them in the main ModernGL viewport, and verified Animation Browser target playback both ways: Malak `walk` with Bith still, then Bith `walk` with Malak still. Captures: `knowledge_base\test_artifacts\anim_malak_bith_baseline_2026_06_21.png`, `knowledge_base\test_artifacts\anim_browser_malak_walk_bith_still_2026_06_21.png`, `knowledge_base\test_artifacts\anim_browser_bith_walk_malak_still_2026_06_21.png`.
+- Visible Debug-app dock workflow bound the same K1 Malak and K1 Bith scene objects into the docked Sequence Editor, added overlapping `walk` clips to both character tracks, and confirmed playback uses the main viewport without black-frame glitches or detached mesh/attachment drift. Captures: `knowledge_base\test_artifacts\sequence_dock_malak_bith_walk_viewport_2026_06_21.png`, `knowledge_base\test_artifacts\sequence_dock_malak_bith_walk_window_2026_06_21.png`.
+
+### [2026-06-21] Restore Sequence Animation Clip Selection And Serialized Playback
+
+Owner: LordVaderCW
+Subsystem: Sequence Editor / animation runtime / KMAX scene workflow
+
+- Restored the Sequence Editor animation clip chooser so Add Clip opens the modal selection pop-up even when the Animation Browser already has a selected clip; the browser selection is now used as the default/enriched entry instead of bypassing the chooser.
+- Added lazy runtime-model resolution for serialized KMAX scene objects, rehydrating `_runtime_model` from the stored `SceneResourceRef` when the sequence picker or evaluator needs animation data.
+- Routed sequence animation playback, named-model fallback, and pose tagging through the scene runtime resolver and the same main-viewport animation-pose dispatch used by the Animation Browser.
+- Fixed renderer scene-object animation matching so poses tagged to a serialized/rebuilt scene object still deform that object even when the runtime source-model id differs.
+- Added focused contracts for serialized scene object runtime resolution, picker pop-up behavior, main-viewport Sequence dispatch, renderer scene-object pose matching, and overlapping overlay-lane insertion.
+
+Verification:
+- `python -m pytest tests\test_core_contracts.py::test_scene_animation_pose_only_drives_matching_scene_object tests\test_core_contracts.py::test_animation_pose_source_tags_selected_scene_object tests\test_core_contracts.py::test_sequence_animation_pose_tags_bound_scene_object tests\test_core_contracts.py::test_sequence_editor_lists_inherited_body_clips_with_bound_object_game tests\test_core_contracts.py::test_scene_runtime_model_resolves_serialized_object_source_ref tests\test_core_contracts.py::test_sequence_animation_picker_uses_serialized_scene_runtime_model tests\test_core_contracts.py::test_sequence_animation_picker_prompts_even_with_browser_selection tests\test_core_contracts.py::test_sequence_overlapping_picker_adds_overlay_lane_for_serialized_model tests\test_core_contracts.py::test_sequence_editor_playback_stops_animation_browser_preview -q -p no:cacheprovider`
+- `python -m pytest tests\test_sequence_multichar_runtime.py -q -p no:cacheprovider`
+- `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\animation_workflow.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\scene_workflow.py native\GhostRigger.Core.GUI.Display\Python\src\gui\sequence_editor\sequence_editor_window.py native\GhostRigger.Core.Tools\Python\src\sequence\sequence_evaluator.py native\GhostRigger.Core.Rendering\Python\src\core\rendering\mesh_render_data.py tests\test_core_contracts.py tests\test_sequence_multichar_runtime.py`
+- Visible Debug-app IPC smoke launched `build\vs\x64\Debug\GhostRigger.exe`, opened `sequence_editor_dock`, loaded selected `K2:N_Bith`, added the base `walk` sequence clip, set Sequence frames 0 and 12, and confirmed the main viewport character region changed by 564 pixels / 321,480 summed RGB delta. Captured proof at `knowledge_base\test_artifacts\sequence_frame_00_visible_2026_06_21.png` and `knowledge_base\test_artifacts\sequence_frame_12_visible_2026_06_21.png`.
+
 ### [2026-06-21] Merge Workflow Payload Ownership Out Of Tools
 
 Owner: LordVaderCW

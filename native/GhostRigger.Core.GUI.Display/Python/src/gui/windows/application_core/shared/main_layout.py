@@ -117,6 +117,7 @@ class MainWindowLayoutMixin:
         self.animations_panel.animationSelected.connect(self._handle_animation_selected)
         self.animations_panel.animationActionRequested.connect(self._handle_animation_action)
         self.animations_panel.animationSourceChanged.connect(self._handle_animation_source_changed)
+        self.animations_panel.animationTargetChanged.connect(self._handle_animation_target_changed)
         self.animations_panel.inheritanceGameChanged.connect(self._handle_animation_inheritance_game_changed)
         self.animations_panel.inheritanceSupermodelChanged.connect(self._handle_animation_inheritance_game_changed)
         self.animations_panel.seekRequested.connect(self._handle_animation_seek)

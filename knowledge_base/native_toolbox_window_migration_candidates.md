@@ -22,8 +22,8 @@ toolbox, GUI, renderer, runtime, or adapter package consumes it.
 - Visible UI packages use `GhostRigger.Core.GUI.Display.*`.
 - Interactive helper packages use `GhostRigger.Core.GUI.Helpers.*`.
 - Host-service/native lifecycle surfaces use `GhostRigger.Native.Core.*`,
-  `GhostRigger.Runtime.*`, `GhostRigger.Core.Automation`, or
-  `GhostRigger.Core.Bridge.NativeHost` according to ownership.
+  `GhostRigger.Runtime.*`, or `GhostRigger.Core.Automation` according to
+  ownership.
 - Existing `GhostRigger.Core.GUI.Display.*` packages are legacy Phase 1 compatibility
   projects. Do not add a new generic `GhostRigger.Core.GUI.Display.<Type>.<WindowName>`
   project.
@@ -107,7 +107,8 @@ Current legacy native project: `GhostRigger.Core.GUI.Display`
 Canonical target owner: `GhostRigger.Core.GUI.Display` for visible shell
 composition, `GhostRigger.Core.GUI.Display` for dock/panel display,
 `GhostRigger.Core.Automation.Commands` for command routing, or
-`GhostRigger.Core.Bridge.NativeHost` for native host-service glue.
+`GhostRigger.Native.Core.Host` / `GhostRigger.Runtime.Core.Host` for native
+host-service glue.
 Owner surface: Main window composition shell
 Owner package: `native/GhostRigger.Core.GUI.Display`
 Bridge method: host module or C ABI bridge only after the Python/Qt main window

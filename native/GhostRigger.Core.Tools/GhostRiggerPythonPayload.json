@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Tools",
-    "file_count": 304,
+    "file_count": 305,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -1629,7 +1629,13 @@
             "resource_name": "PYTHON_PAYLOAD_SEQUENCE_INIT",
             "source_path": "src/sequence/__init__.py",
             "packaged_path": "Python/src/sequence/__init__.py",
-            "sha256": "11c9635f4e577ea83b5f19612e26310d3aa6edc0bd65cfc8ffe84eb32aee840f"
+            "sha256": "f175817b2a40c19bec2a181249a33a4862f5a189b912b8f05c29491c11b5f3c1"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_SEQUENCE_ANIMATION_PREVIEW",
+            "source_path": "src/sequence/animation_preview.py",
+            "packaged_path": "Python/src/sequence/animation_preview.py",
+            "sha256": "199d3d2fdd49edd10030cf448082146069b9191ee628f912bbc8d3ebb7f6484d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_SEQUENCE_SEQUENCE_ASSET",
@@ -1653,7 +1659,7 @@
             "resource_name": "PYTHON_PAYLOAD_SEQUENCE_SEQUENCE_EVALUATOR",
             "source_path": "src/sequence/sequence_evaluator.py",
             "packaged_path": "Python/src/sequence/sequence_evaluator.py",
-            "sha256": "537258a648a0a0a1bd5d1d07c6064b203966ec492e82a94dec569d718fe02407"
+            "sha256": "7e7ee7b51bd07a38d19642986b04cf730b97b96b4612b311f6882647fccbf0d3"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_SEQUENCE_SEQUENCE_INTERPOLATION",

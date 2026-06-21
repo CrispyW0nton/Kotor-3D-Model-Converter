@@ -675,7 +675,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_ANIMATION_PANEL",
             "source_path": "src/gui/panels/qt_animation_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_animation_panel.py",
-            "sha256": "6f763e3ccac83f73bc8eed570e29d8bf614188090ab11895bff647f84cb19655"
+            "sha256": "6ef89239d37522a54bad0a52f01b6c7e97f58f847d310c6d6ccc1df13d758c42"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_BODY_ATTACHMENT_PANEL",
@@ -1185,7 +1185,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_EDITOR_WINDOW",
             "source_path": "src/gui/sequence_editor/sequence_editor_window.py",
             "packaged_path": "Python/src/gui/sequence_editor/sequence_editor_window.py",
-            "sha256": "6bf6a3a838c183429501016883f0b1154af43cb401e253a1aa5aecfab0dcedf9"
+            "sha256": "d2b6a505ee6dfc9400708ba8da41d20f674aab2f5dc89703992d8b2c4456584e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_OUTLINER",
@@ -1575,7 +1575,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_ANIMATION_WORKFLOW",
             "source_path": "src/gui/windows/application_core/shared/animation_workflow.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/animation_workflow.py",
-            "sha256": "32f72c998b9d57496583f4eb1dc743ddd60a2f49636caa3198edd35e6b4051a2"
+            "sha256": "c2af8f2e512a8c4d78a526fda64bef364b1660946a93ec36eca9c2f1c2c61d69"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_BAS_WORKFLOW",
@@ -1611,7 +1611,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_MAIN_LAYOUT",
             "source_path": "src/gui/windows/application_core/shared/main_layout.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/main_layout.py",
-            "sha256": "d5b04c98dbe7f7def65f35f51984168a9bfa81f4b82087d3d4169d4de502b190"
+            "sha256": "1f124da56fb4033294a7743782fcaffd52a430441ad2f43c46c6a742a6e86d52"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_MODEL_IO",
@@ -1653,7 +1653,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_SCENE_WORKFLOW",
             "source_path": "src/gui/windows/application_core/shared/scene_workflow.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/scene_workflow.py",
-            "sha256": "d165121f3d3277980eee62d848bf795b6efbff4af7cdccbe43822f6f548e9dfc"
+            "sha256": "de469f7af882ac55892743da506a5c26eb3be234488dec51da49943b22bc107f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_SPLASH",
@@ -1719,7 +1719,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_MAIN_WINDOW",
             "source_path": "src/gui/windows/qt_main_window.py",
             "packaged_path": "Python/src/gui/windows/qt_main_window.py",
-            "sha256": "4a7ad2c4b089fd67a6e07b022cca601beaa4411b03aa059a72edc5142659285b"
+            "sha256": "7473be8fe6eae31989fba70f6f6aa613253e0a3efd7eb8073426c8304032bd4f"
         }
     ]
 }

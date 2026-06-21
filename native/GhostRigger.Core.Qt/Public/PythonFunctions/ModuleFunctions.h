@@ -23,6 +23,7 @@ struct NativeFunctionImplementation {
 const NativeFunctionImplementation& qt_application_running_line_10_869101bf_native();
 const NativeFunctionImplementation& run_cloth_preset_dialog_line_20_6033aef6_native();
 const NativeFunctionImplementation& confirm_cloth_action_line_48_c9074cd3_native();
+const NativeFunctionImplementation& marshal_to_gui_thread_line_9_545a70bd_native();
 
 const NativeFunctionImplementation* modulefunctions_native_functions(std::size_t& count);
 

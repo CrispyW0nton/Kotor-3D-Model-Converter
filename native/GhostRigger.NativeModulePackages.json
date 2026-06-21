@@ -84,11 +84,11 @@
         "symbol_prefix": "ipc"
     },
     {
-        "name": "GhostRigger.Core.Bridge",
-        "source_package": "src/adapters/qt_ipc;src/adapters/rendering;src/adapters/unreal",
+        "name": "GhostRigger.Core.Unreal",
+        "source_package": "src/unreal",
         "owner_surface": "Unreal integration",
         "project_guid": "{CC5E9588-2C52-45F6-B8C9-9E38D3307485}",
-        "symbol_prefix": "core_bridge_ipc"
+        "symbol_prefix": "unreal"
     },
     {
         "name": "GhostRigger.Core.Tools",
@@ -113,8 +113,8 @@
     },
     {
         "name": "GhostRigger.Core.Qt",
-        "source_package": "src/adapters/qt_autorig",
-        "owner_surface": "Qt auto-rig adapters",
+        "source_package": "src/adapters/qt_autorig;src/adapters/qt_ipc",
+        "owner_surface": "Qt auto-rig and IPC adapters",
         "project_guid": "{27500FB7-8EEB-4947-A7F2-DEC5E3261494}",
         "symbol_prefix": "core_qt_autorig"
     },

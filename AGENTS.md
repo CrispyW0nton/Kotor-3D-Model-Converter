@@ -66,7 +66,7 @@ application. Do not treat the repository as a flat Python app.
   scaffolding.
 
 The current root payload manifest covers 18 non-debug native DLL projects and
-1,145 packaged Python file references. Treat the manifest and
+1,118 packaged Python file references. Treat the manifest and
 `tests/test_native_python_payloads.py` as the source of truth if counts drift.
 
 ### Native Package Families
@@ -85,9 +85,8 @@ state and must be migrated deliberately rather than copied into new work.
   consumed by renderer, tools, windows, and runtime packages.
 - `GhostRigger.Core.Automation`: IPC, MCP, scripting bridges, external control
   APIs, command automation, automation events, and machine-facing integrations.
-- `GhostRigger.Core.Bridge`: technology glue for Qt, GPU, filesystem,
-  native-host, Python/C++ bridge, renderer adapter, and external-library
-  boundaries.
+- `GhostRigger.Core.Unreal`: Unreal integration, Quinn skeleton mapping,
+  Unreal retargeting helpers, and Unreal-specific adapter payloads.
 - `GhostRigger.Core.GUI.Display`: presentation, layout, styling, signals,
   widgets, panels, dialogs, toolbars, overlays, labels, menus, visible controls,
   icons, notifications, and display-only view state.
@@ -102,7 +101,8 @@ state and must be migrated deliberately rather than copied into new work.
   measurement, and viewport math.
 - `GhostRigger.Core.Project`: project files, sessions, workspace state, recent
   files, settings, dirty-state policy, and save/load workflow ownership.
-- `GhostRigger.Core.Qt`: Qt-facing integration boundary, not domain ownership.
+- `GhostRigger.Core.Qt`: Qt-facing integration boundary, including Qt IPC,
+  not domain ownership.
 - `GhostRigger.Core.Rendering`: renderer-neutral contracts, render state,
   materials, texture upload policy, renderer resources, backend interfaces, and
   backend implementations.

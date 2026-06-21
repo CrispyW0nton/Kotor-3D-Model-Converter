@@ -9,6 +9,7 @@ from typing import Any
 from src.math.camera_math import euler_degrees_to_quat, quat_to_euler_degrees
 
 from .sequence_binding import SequenceBinding, SequenceTargetType
+from .animation_preview import build_preview_target, tag_pose_for_preview_target
 from .sequence_manager import ensure_sequence_object_id
 from .sequence_model import GhostRiggerLevelSequence
 from .sequence_runtime import CharacterSequenceRuntimeState
@@ -183,6 +184,8 @@ class SequenceEvaluator:
                 dirty.update(self._apply_character_tracks(sequence, binding, obj, character_tracks, frame))
             else:
                 self._clear_character_animation_pose(self._character_instance_id(binding, obj))
+        if not self._sequence_has_active_character_clips(sequence, frame):
+            self._clear_owner_viewport_animation_pose()
         if self._apply_master_tracks(sequence, frame):
             dirty.add("cameras")
         if fire_events and previous_frame is not None:
@@ -326,7 +329,15 @@ class SequenceEvaluator:
                 frame,
                 tuple(str(item.get("clip_instance_id") or "") for item in evaluated),
             )
-            self._set_character_animation_pose(character_id, pose, name=" + ".join(names), time=time_value, length=length)
+            self._set_sequence_animation_pose(
+                sequence,
+                character_id,
+                pose,
+                name=" + ".join(names),
+                time=time_value,
+                length=length,
+                frame=frame,
+            )
             return {"animation"}
         except Exception as exc:
             self.last_warning = f"Animation track failed for {binding.display_name}: {exc}"
@@ -748,6 +759,42 @@ class SequenceEvaluator:
         if callable(legacy):
             legacy(pose, name=name, time=time, length=length)
 
+    def _set_sequence_animation_pose(
+        self,
+        sequence: GhostRiggerLevelSequence,
+        character_id: str,
+        pose,
+        *,
+        name: str,
+        time: float,
+        length: float,
+        frame: int,
+    ) -> None:
+        owner_dispatch = self._owner_viewport_animation_pose_dispatch()
+        if owner_dispatch is not None and self._sequence_active_character_count(sequence, frame) <= 1:
+            if owner_dispatch(pose, name=name, time=time, length=length, reason="sequence playback"):
+                return
+        self._set_character_animation_pose(character_id, pose, name=name, time=time, length=length)
+
+    def _owner_viewport_animation_pose_dispatch(self):
+        owner = self.owner or getattr(self.viewport, "parent", lambda: None)()
+        dispatcher = getattr(owner, "_apply_viewport_animation_pose", None)
+        return dispatcher if callable(dispatcher) else None
+
+    def _clear_owner_viewport_animation_pose(self) -> bool:
+        owner_dispatch = self._owner_viewport_animation_pose_dispatch()
+        if owner_dispatch is None:
+            return False
+        try:
+            return bool(owner_dispatch(None, reason="sequence playback stopped"))
+        except TypeError:
+            try:
+                return bool(owner_dispatch(None))
+            except Exception:
+                return False
+        except Exception:
+            return False
+
     def _clear_character_animation_pose(self, character_id: str) -> bool:
         if not character_id:
             return False
@@ -771,6 +818,27 @@ class SequenceEvaluator:
     def _clear_sequence_animation_poses(self, sequence: GhostRiggerLevelSequence) -> None:
         for binding in sequence.bindings:
             self._clear_character_animation_pose(self._character_instance_id(binding))
+        self._clear_owner_viewport_animation_pose()
+
+    def _sequence_has_active_character_clips(self, sequence: GhostRiggerLevelSequence, frame: int) -> bool:
+        return self._sequence_active_character_count(sequence, frame) > 0
+
+    def _sequence_active_character_count(self, sequence: GhostRiggerLevelSequence, frame: int) -> int:
+        character_ids: set[str] = set()
+        for binding in sequence.bindings:
+            if not binding.active:
+                continue
+            obj = self.resolver.resolve(binding)
+            if obj is None:
+                continue
+            for track in binding.tracks:
+                if track.locked or not track.enabled or track.muted or not isinstance(track, CharacterTrack):
+                    continue
+                keys = track.active_animation_keys(frame) if hasattr(track, "active_animation_keys") else []
+                if keys:
+                    character_ids.add(self._character_instance_id(binding, obj))
+                    break
+        return len(character_ids)
 
     @staticmethod
     def _clip_instance_id(key) -> str:
@@ -794,6 +862,7 @@ class SequenceEvaluator:
         metadata = getattr(obj, "metadata", None)
         runtime_model = metadata.get("_runtime_model") if isinstance(metadata, dict) else None
         candidates = [
+            self._runtime_model_for_scene_object(obj),
             runtime_model,
             obj,
             getattr(obj, "model", None) if obj is not None else None,
@@ -830,12 +899,37 @@ class SequenceEvaluator:
         for obj in self.resolver.all_objects():
             metadata = getattr(obj, "metadata", None)
             runtime_model = metadata.get("_runtime_model") if isinstance(metadata, dict) else None
-            for candidate in (runtime_model, obj, getattr(obj, "model", None), getattr(obj, "mdl_model", None), getattr(obj, "source_model", None)):
+            for candidate in (
+                self._runtime_model_for_scene_object(obj),
+                runtime_model,
+                obj,
+                getattr(obj, "model", None),
+                getattr(obj, "mdl_model", None),
+                getattr(obj, "source_model", None),
+            ):
                 if candidate is None:
                     continue
                 candidate_name = str(getattr(candidate, "name", "") or getattr(obj, "name", "") or "").strip().lower()
                 if candidate_name in names and self._is_animation_model(candidate):
                     return candidate
+        return None
+
+    def _runtime_model_for_scene_object(self, obj):
+        if obj is None:
+            return None
+        for owner in (self.owner, self.viewport, getattr(self.viewport, "parent", lambda: None)()):
+            getter = getattr(owner, "_runtime_model_for_scene_object", None)
+            if not callable(getter):
+                continue
+            try:
+                model = getter(obj)
+            except Exception:
+                model = None
+            if model is not None:
+                return model
+        metadata = getattr(obj, "metadata", None)
+        if isinstance(metadata, dict):
+            return metadata.get("_runtime_model")
         return None
 
     @staticmethod
@@ -941,7 +1035,7 @@ class SequenceEvaluator:
             metadata = getattr(candidate, "metadata", None)
             if not isinstance(metadata, dict):
                 continue
-            if metadata.get("_runtime_model") is model or metadata.get("_runtime_bas_body_model") is model:
+            if self._runtime_model_for_scene_object(candidate) is model:
                 return candidate
         return None
 
@@ -959,22 +1053,28 @@ class SequenceEvaluator:
         if pose is None:
             return
         try:
-            setattr(pose, "_gr_animation_source_model_id", id(model) if model is not None else 0)
-            setattr(pose, "_gr_animation_source_model_name", str(getattr(model, "name", "") or ""))
+            scene_object = self._scene_object_for_animation_pose(model, obj)
+            target = build_preview_target(
+                scene_object or obj,
+                model=model,
+                runtime_model_resolver=self._runtime_model_for_scene_object,
+                fallback_object_id=str(getattr(binding, "target_object_id", "") or ""),
+                fallback_name=str(getattr(binding, "display_name", "") or ""),
+                fallback_game=game,
+                fallback_supermodel=self._animation_inheritance_supermodel(model) if model is not None else "",
+            )
+            if character_instance_id and not target.character_instance_id:
+                target = build_preview_target(
+                    scene_object or obj,
+                    model=model,
+                    runtime_model_resolver=self._runtime_model_for_scene_object,
+                    fallback_object_id=character_instance_id,
+                    fallback_name=str(getattr(binding, "display_name", "") or ""),
+                    fallback_game=game,
+                )
+            tag_pose_for_preview_target(pose, target, anim_name=anim_name, game=game)
             if character_instance_id:
                 setattr(pose, "_gr_animation_character_instance_id", str(character_instance_id))
-            scene_object = self._scene_object_for_animation_pose(model, obj)
-            if scene_object is not None:
-                metadata = getattr(scene_object, "metadata", {}) or {}
-                scene_object_id = str(getattr(scene_object, "id", "") or getattr(binding, "target_object_id", "") or "")
-                if scene_object_id:
-                    setattr(pose, "_gr_animation_scene_object_id", scene_object_id)
-                scene_import_id = str(metadata.get("scene_import_id") or scene_object_id or "")
-                if scene_import_id:
-                    setattr(pose, "_gr_animation_scene_import_id", scene_import_id)
-            setattr(pose, "_gr_animation_name", str(anim_name or ""))
-            if game:
-                setattr(pose, "_gr_animation_game", str(game))
         except Exception:
             pass
 

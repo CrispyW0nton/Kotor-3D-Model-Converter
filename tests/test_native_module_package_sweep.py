@@ -46,7 +46,6 @@ def test_native_module_manifest_uses_collapsed_package_boundaries() -> None:
     assert len(entries) == 19
     assert names == {
         "GhostRigger.Core.Automation",
-        "GhostRigger.Core.Bridge",
         "GhostRigger.Core.GUI.Display",
         "GhostRigger.Core.GUI.Helpers",
         "GhostRigger.Core.IO",
@@ -57,6 +56,7 @@ def test_native_module_manifest_uses_collapsed_package_boundaries() -> None:
         "GhostRigger.Core.Resources",
         "GhostRigger.Core.Scene",
         "GhostRigger.Core.Tools",
+        "GhostRigger.Core.Unreal",
         "GhostRigger.Core.Validation",
         "GhostRigger.Core.Workflow",
         "GhostRigger.Runtime.Core",
