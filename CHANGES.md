@@ -10,6 +10,29 @@ For each completed change, add a dated entry with:
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
 ## 2026-06-21
+### [2026-06-21] Align Animated Scene Bone Overlays With Viewport Meshes
+
+Owner: LordVaderCW
+Subsystem: ModernGL viewport / skeleton overlay / animation preview
+
+- Extracted all 4,040 frames from `G:\Oral\2026-06-21 13-58-42.mp4` and reviewed contact sheets plus focused frames around the broken 108s-126s browser playback interval.
+- Identified the remaining viewport issue: during targeted Animation Browser playback, the yellow bone overlay was evaluated in animated model/source space while the mesh was drawn with the scene object GPU transform, causing skeletons to float between Malak/Bith or remain offset from their meshes after target switches.
+- Updated `FrameRenderer._node_world_transform()` so animated scene-object overlays stop their transform chain at the owning scene root, use the source root transform for authored local space, and apply the scene object transform once after animation accumulation.
+- Added a focused contract proving scoped animated bone overlay positions include the bound scene object offset.
+- Regenerated the `GhostRigger.Core.Rendering` embedded Python payload.
+
+Intersects: User video `G:\Oral\2026-06-21 13-58-42.mp4`; Animation Browser target playback; ModernGL scene-object animation overlay path.
+
+Verification:
+- `ffprobe` confirmed the source video is 1280x720, 30 fps, 134.666667s, 4,040 frames; all frames were extracted under `knowledge_base\test_artifacts\viewport_video_2026_06_21_135842\frames`.
+- Reviewed `knowledge_base\test_artifacts\viewport_video_2026_06_21_135842\overview_1fps.jpg`, `contact_048s_076s_2fps.jpg`, `contact_108s_126s_2fps.jpg`, and `contact_126s_134s_3fps.jpg`; `blackdetect` found no full-screen black intervals.
+- `python -m pytest tests\test_core_contracts.py::test_scene_bone_overlay_applies_scene_offset_during_scoped_animation tests\test_core_contracts.py::test_scene_root_overlay_transform_follows_own_object_offset_only -q -p no:cacheprovider --basetemp .pytest_tmp\video_overlay_scope` -> 2 passed.
+- `python -m pytest tests\test_sequence_multichar_runtime.py tests\test_core_contracts.py::test_scene_bone_overlay_applies_scene_offset_during_scoped_animation tests\test_core_contracts.py::test_animation_browser_target_selector_scopes_pose_to_chosen_scene_object tests\test_core_contracts.py::test_sequence_animation_pose_tags_bound_scene_object -q -p no:cacheprovider --basetemp .pytest_tmp\video_overlay_sequence` -> 11 passed.
+- `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects -q -p no:cacheprovider --basetemp .pytest_tmp\video_overlay_payload` -> 2 passed.
+- `python -m py_compile native\GhostRigger.Core.Rendering\Python\src\core\rendering\frame_core\renderer_geometry.py tests\test_core_contracts.py`
+- `MSBuild GhostRigger.sln /p:Configuration=Debug /p:Platform=x64 /m /v:minimal` succeeded; existing MSB8028 intermediate-directory warnings remain on Core.IO/Core.Unreal.
+- Visible Debug-app repro loaded K1 `N_Bith` plus K1 `N_DarthMalak`, played Bith `activate` and Malak `c2a2` through Animation Browser target IPC, and confirmed skeleton overlays stayed aligned to their own meshes after switching targets. Captures: `knowledge_base\test_artifacts\video_fix_bith_activate_overlay_2026_06_21.png`, `knowledge_base\test_artifacts\video_fix_malak_c2a2_overlay_2026_06_21.png`.
+
 ### [2026-06-21] Scope Animation Playback And Reduce Bridge Ownership
 
 Owner: LordVaderCW

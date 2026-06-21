@@ -5811,6 +5811,38 @@ def test_scene_root_overlay_transform_follows_own_object_offset_only() -> None:
     assert renderer._node_world_transform(other_helper)[0] == pytest.approx((0.0, 0.0, 0.0))
 
 
+def test_scene_bone_overlay_applies_scene_offset_during_scoped_animation() -> None:
+    from src.core.animation.animation_engine import AnimPose, NodePose
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.rendering.frame_core.renderer import FrameRenderer
+
+    scene_root = ModelNode(name="scene_root", flags=int(NodeFlags.HEADER))
+    character_root = ModelNode(name="n_bith", flags=int(NodeFlags.HEADER), parent=scene_root)
+    character_root.position = (10.0, 0.0, 0.0)
+    character_root.rotation = (0.0, 0.0, 0.0, 1.0)
+    character_root._gr_scene_object_id = "bith-a"
+    character_root._gr_scene_object_root = True
+    character_root._gr_scene_gpu_transform = True
+    character_root._gr_scene_source_position = (0.0, 0.0, 0.0)
+    character_root._gr_scene_source_rotation = (0.0, 0.0, 0.0, 1.0)
+    pelvis = ModelNode(name="pelvis", flags=int(NodeFlags.HEADER), parent=character_root)
+    pelvis.position = (2.0, 0.0, 0.0)
+    pelvis.rotation = (0.0, 0.0, 0.0, 1.0)
+    pelvis._gr_scene_object_id = "bith-a"
+    pelvis._gr_scene_object_root_ref = character_root
+    scene_root.children = [character_root]
+    character_root.children = [pelvis]
+
+    renderer = FrameRenderer(ArcBallCamera())
+    renderer.set_model(KotorModel(name="scene", root_node=scene_root))
+    pose = AnimPose(nodes={"pelvis": NodePose(name="pelvis", position=(5.0, 0.0, 0.0))})
+
+    renderer.set_character_animation_pose("bith-a", pose, name="walk", time=0.1, length=1.0)
+
+    assert renderer._node_world_transform(pelvis)[0] == pytest.approx((15.0, 0.0, 0.0))
+
+
 def test_viewport_marquee_drag_only_updates_rubber_band_before_release() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 

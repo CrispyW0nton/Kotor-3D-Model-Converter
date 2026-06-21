@@ -525,7 +525,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER_GEOMETRY",
             "source_path": "src/core/rendering/frame_core/renderer_geometry.py",
             "packaged_path": "Python/src/core/rendering/frame_core/renderer_geometry.py",
-            "sha256": "772cb28845fc8e5c19f458a503df8be0f39262696078fd573841751ef96ad78a"
+            "sha256": "9f571fc31fcdfa4e20f6cc8ed32606579f45d316d7bf16cb689e310697390bdb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER_MESHES",

@@ -133,14 +133,10 @@ class RendererGeometryMixin:
             from core.geometry.model_data import (_quat_rotate as _qr, _quat_normalize_bind,  # type: ignore
                                          _quat_normalize, _quat_mul)
 
-        def _scene_gpu_overlay_transform(target):
+        def _scene_gpu_overlay_transform_for_authored(target, authored_pos, authored_rot):
             scene_root = _scene_gpu_root_for_node(target)
             if scene_root is None:
                 return None
-            authored = _scene_authored_world_transform(target)
-            if authored is None:
-                return None
-            authored_pos, authored_rot = authored
             try:
                 scene_pos = tuple(float(v) for v in getattr(scene_root, "position", (0.0, 0.0, 0.0))[:3])
                 scene_rot = _quat_normalize(getattr(scene_root, "rotation", (0.0, 0.0, 0.0, 1.0)))
@@ -162,6 +158,13 @@ class RendererGeometryMixin:
             except Exception:
                 return None
 
+        def _scene_gpu_overlay_transform(target):
+            authored = _scene_authored_world_transform(target)
+            if authored is None:
+                return None
+            authored_pos, authored_rot = authored
+            return _scene_gpu_overlay_transform_for_authored(target, authored_pos, authored_rot)
+
         bas_root = self._bas_attachment_root_for_node(node)
         if bas_root is not None:
             result = self._bas_attachment_world_transform(node, bas_root, _qr, _quat_normalize_bind, _quat_normalize, _quat_mul)
@@ -173,6 +176,7 @@ class RendererGeometryMixin:
             # Substitute animated values for nodes that have pose entries;
             # use bind-pose local transform for nodes that don't.
             chain = []
+            scene_anim_root = _scene_gpu_root_for_node(node)
             n = node
             _visited_chain: set = set()
             while n is not None:
@@ -181,6 +185,8 @@ class RendererGeometryMixin:
                     break  # cycle guard for corrupted MDL data
                 _visited_chain.add(nid_c)
                 chain.append(n)
+                if scene_anim_root is not None and n is scene_anim_root:
+                    break
                 n = n.parent
             chain.reverse()
 
@@ -196,7 +202,7 @@ class RendererGeometryMixin:
                     # NaN guard: fall back to bind-pose position if animated value is non-finite
                     if not (_math.isfinite(lx) and _math.isfinite(ly) and _math.isfinite(lz)):
                         lx, ly, lz = chain_node.position
-                    if bool(getattr(chain_node, "_gr_scene_object_root", False)):
+                    if bool(getattr(chain_node, "_gr_scene_object_root", False)) and _scene_gpu_root_for_node(chain_node) is None:
                         try:
                             scene_pos = tuple(float(v) for v in getattr(chain_node, "position", (0.0, 0.0, 0.0))[:3])
                             source_pos = tuple(float(v) for v in getattr(chain_node, "_gr_scene_source_position", scene_pos)[:3])
@@ -231,8 +237,12 @@ class RendererGeometryMixin:
                             rot = [rot[0]/l, rot[1]/l, rot[2]/l, rot[3]/l]
                         node_rot = rot
                 else:
-                    lx, ly, lz = chain_node.position
-                    rot = list(chain_node.rotation)
+                    if scene_anim_root is not None and chain_node is scene_anim_root:
+                        lx, ly, lz = getattr(chain_node, "_gr_scene_source_position", chain_node.position)
+                        rot = list(getattr(chain_node, "_gr_scene_source_rotation", chain_node.rotation))
+                    else:
+                        lx, ly, lz = chain_node.position
+                        rot = list(chain_node.rotation)
                     # Bind-pose parent nodes: collapse 180°-about-axis NWN convention
                     # Leaf node: preserve actual rotation for vertex transform
                     if is_leaf:
@@ -264,6 +274,10 @@ class RendererGeometryMixin:
                 wo = (wo[0]*_s, wo[1]*_s, wo[2]*_s, wo[3]*_s)
             wo_rot = _math.sqrt(wo[0]*wo[0] + wo[1]*wo[1] + wo[2]*wo[2])
             is_id  = (wo_rot < 0.001)
+            scene_overlay = _scene_gpu_overlay_transform_for_authored(node, wp, wo)
+            if scene_overlay is not None:
+                self._wt_cache[nid] = scene_overlay
+                return scene_overlay
             result = (wp, wo, is_id)
             self._wt_cache[nid] = result
             return result
