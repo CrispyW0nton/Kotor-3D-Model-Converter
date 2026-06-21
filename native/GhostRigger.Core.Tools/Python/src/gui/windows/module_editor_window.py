@@ -1740,6 +1740,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     str(getattr(result, "message", "") or "Install failed."),
                 )
             self._focus_map_studio_export_proof_workspace()
+        elif action_key == "launch_handoff":
+            summary = str(getattr(result, "summary", "") or status_message)
+            blockers = tuple(getattr(result, "blocking_messages", ()) or ())
+            next_action = str(getattr(result, "next_action", "") or "").strip()
+            status_message = f"{summary} {blockers[0]}" if blockers else summary
+            if next_action and not blockers:
+                status_message = f"{status_message} Next: {next_action}"
+            self._focus_map_studio_export_proof_workspace()
+            self._open_map_studio_launch_handoff_dialog_from_summary(result)
         if action_key == "universal_transform":
             overlay_setter = getattr(self.viewport_panel, "set_universal_transform_overlay", None)
             if callable(overlay_setter):
@@ -2053,10 +2062,6 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         key = str(getattr(action, "key", "") or "")
         workspace_key = str(getattr(action, "workspace_key", "") or "")
         tool_key = str(getattr(action, "tool_key", "") or "")
-        if key == "launch_handoff":
-            self._focus_map_studio_export_proof_workspace()
-            self.open_map_studio_launch_handoff()
-            return
         if key == "record_proof":
             self._focus_map_studio_export_proof_workspace()
             self.record_game_smoke_proof()
@@ -2126,6 +2131,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "validate",
             "stage_module",
             "install_module",
+            "launch_handoff",
             "opening",
             "opening_marker",
             "terrain",
@@ -2731,37 +2737,45 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._refresh_all("Map Studio game proof updated.")
 
     def open_map_studio_launch_handoff(self) -> None:
-        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
-        launcher_path = Path(str(payload.get("elevated_launch_script_path") or ""))
-        proof_path = Path(str(payload.get("proof_manifest_path") or ""))
-        proof_recorder_path = Path(str(payload.get("proof_recording_script_path") or ""))
-        module_root = str(payload.get("module_root") or getattr(self.project, "name", "") or "").strip()
-        warp_command = str(payload.get("warp_command") or (f"warp {module_root}" if module_root else "warp <module>"))
-        launch_helper_command = str(payload.get("launch_helper_command") or "")
-        if launcher_path.is_file() or proof_path.is_file():
-            dialog = _MapStudioLaunchHandoffDialog(
-                self,
-                warp_command=warp_command,
-                launcher_path=str(launcher_path) if launcher_path.is_file() else "",
-                proof_manifest_path=str(proof_path) if proof_path.is_file() else "",
-                proof_recording_script_path=str(proof_recorder_path) if proof_recorder_path.is_file() else "",
-                launch_helper_command=launch_helper_command,
-            )
-            if dialog.exec() != QtWidgets.QDialog.Accepted:
-                return
-            if launcher_path.is_file():
-                QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(launcher_path)))
-                self._log(f"Opened launch handoff: {launcher_path}")
-            elif proof_path.is_file():
-                QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(proof_path.parent)))
-                self._log(f"Opened proof folder: {proof_path.parent}")
-            self._log(f"Map Studio warp command: {warp_command}")
+        try:
+            handoff = self.controller.map_studio_launch_handoff()
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Open Launch Handoff", str(exc))
             return
-        QtWidgets.QMessageBox.information(
+        self._focus_map_studio_export_proof_workspace()
+        self._open_map_studio_launch_handoff_dialog_from_summary(handoff)
+
+    def _open_map_studio_launch_handoff_dialog_from_summary(self, handoff: Any) -> None:
+        """Open the launch/proof handoff dialog from the controller's non-mutating summary."""
+
+        blockers = tuple(getattr(handoff, "blocking_messages", ()) or ())
+        if blockers or not bool(getattr(handoff, "ready", False)):
+            message = "\n".join(blockers) if blockers else "Stage or install an authored module game-test package first."
+            QtWidgets.QMessageBox.information(self, "Open Launch Handoff", message)
+            self._log(f"Launch handoff not ready: {message}")
+            return
+        launcher_path = Path(str(getattr(handoff, "launcher_path", "") or getattr(handoff, "elevated_launch_script_path", "") or ""))
+        proof_path = Path(str(getattr(handoff, "proof_manifest_path", "") or ""))
+        proof_recorder_path = Path(str(getattr(handoff, "proof_recording_script_path", "") or ""))
+        dialog = _MapStudioLaunchHandoffDialog(
             self,
-            "Open Launch Handoff",
-            "Stage or install an authored module game-test package before opening the launch handoff.",
+            warp_command=str(getattr(handoff, "warp_command", "") or "warp <module>"),
+            launcher_path=str(launcher_path) if launcher_path.is_file() else "",
+            proof_manifest_path=str(proof_path) if proof_path.is_file() else "",
+            proof_recording_script_path=str(proof_recorder_path) if proof_recorder_path.is_file() else "",
+            launch_helper_command=str(getattr(handoff, "launch_helper_command", "") or ""),
         )
+        if dialog.exec() != QtWidgets.QDialog.Accepted:
+            return
+        if launcher_path.is_file():
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(launcher_path)))
+            self._log(f"Opened launch handoff: {launcher_path}")
+        elif proof_path.is_file():
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(proof_path.parent)))
+            self._log(f"Opened proof folder: {proof_path.parent}")
+        for warning in tuple(getattr(handoff, "warnings", ()) or ()):
+            self._log(f"Warning: {warning}")
+        self._log(f"Map Studio warp command: {getattr(handoff, 'warp_command', 'warp <module>')}")
 
     def create_authored_room_preset(self, preset_id: str, module_root: str) -> None:
         try:

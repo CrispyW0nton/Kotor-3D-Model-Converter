@@ -298,6 +298,22 @@ def resolve_map_studio_tool_belt_action(
             ),
         )
 
+    if key == "launch_handoff":
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="grid",
+            command_method="map_studio_launch_handoff",
+            mutates_kmap=False,
+            status_message=(
+                "Prepared Map Studio launch handoff summary; live warp proof still must be recorded in-game."
+            ),
+            authoring_context=(
+                "Launch Handoff: inspect the staged proof manifest, launcher script, recorder, and exact warp "
+                "command before opening KOTOR. This is a handoff query, not game-tested proof."
+            ),
+        )
+
     if key == "stage_module":
         output_dir = str(ctx.export_output_dir or "").strip()
         if not output_dir:

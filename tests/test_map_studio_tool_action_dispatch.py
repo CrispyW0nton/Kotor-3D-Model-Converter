@@ -42,9 +42,9 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert audit.blocking_messages == ()
     assert audit.total_actions >= 80
     assert audit.implemented_actions == audit.total_actions
-    assert audit.command_backed_actions >= 79
+    assert audit.command_backed_actions >= 80
     assert audit.mutating_command_actions >= 73
-    assert audit.query_command_actions >= 6
+    assert audit.query_command_actions >= 7
     assert audit.workflow_focus_actions == 0
     assert statuses["cube"].contract_kind == "command_mutates_kmap"
     assert statuses["cube"].command_method == "add_authored_room_primitive"
@@ -90,6 +90,9 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["install_module"].contract_kind == "command_query"
     assert statuses["install_module"].command_method == "stage_authored_module"
     assert statuses["install_module"].mutates_kmap is False
+    assert statuses["launch_handoff"].contract_kind == "command_query"
+    assert statuses["launch_handoff"].command_method == "map_studio_launch_handoff"
+    assert statuses["launch_handoff"].mutates_kmap is False
     assert all(status.in_any_preset for status in audit.statuses)
 
     controller_audit = ModuleEditorController().map_studio_tool_belt_contract_audit()
@@ -220,6 +223,15 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert install_ready.mutates_kmap is False
     assert install_ready.stale_outputs == ()
     assert "manual warp-test checklist" in install_ready.authoring_context
+
+    launch_handoff = resolve_map_studio_tool_belt_action("launch_handoff")
+
+    assert launch_handoff.enabled is True
+    assert launch_handoff.command_method == "map_studio_launch_handoff"
+    assert launch_handoff.command_kwargs == {}
+    assert launch_handoff.mutates_kmap is False
+    assert launch_handoff.stale_outputs == ()
+    assert "staged proof manifest" in launch_handoff.authoring_context
 
     selected_primitive = resolve_map_studio_tool_belt_action(
         "primitive",
@@ -871,6 +883,13 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert isinstance(validation_issues, list)
     assert controller.command_history.undo_label == "Create authored module grterrain"
 
+    launch_missing = execute_map_studio_tool_belt_action(controller, "launch_handoff")
+
+    assert launch_missing.ready is False
+    assert "Stage or install" in " ".join(launch_missing.blocking_messages)
+    assert launch_missing.warp_command == "warp grterrain"
+    assert controller.command_history.undo_label == "Create authored module grterrain"
+
     stage_result = execute_map_studio_tool_belt_action(
         controller,
         "stage_module",
@@ -884,6 +903,18 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert stage_result.export_result.code == "export_candidate"
     assert stage_result.export_result.module_path.endswith(".mod")
     assert "game-tested" not in stage_result.message.lower()
+    assert controller.command_history.undo_label == "Create authored module grterrain"
+
+    launch_ready = execute_map_studio_tool_belt_action(controller, "launch_handoff")
+
+    assert launch_ready.ready is True
+    assert launch_ready.module_root == "grterrain"
+    assert launch_ready.game == "K1"
+    assert launch_ready.warp_command == "warp grterrain"
+    assert launch_ready.proof_manifest_path == stage_result.proof_manifest_path
+    assert launch_ready.launch_helper_command == stage_result.launch_helper_command
+    assert launch_ready.capability_stage == "installed_for_game_test_handoff"
+    assert "screenshot or video proof" in launch_ready.next_action
     assert controller.command_history.undo_label == "Create authored module grterrain"
 
     modules_dir = tmp_path / "Modules"

@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Routes Launch Handoff Belt Action Through Proof Query
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Launch handoff proof query
+Intersects: native Scene/Tools Map Studio action dispatch, Level Editor launch handoff dialog, authored-module proof payloads, and export/proof source contracts.
+
+- Added a non-mutating `map_studio_launch_handoff` controller query that summarizes the staged proof manifest, launcher script, recorder, module root, game, warp command, warnings, blockers, and next action without reading project proof state directly from the UI.
+- Routed the `Launch Handoff` tool-belt action through the shared Map Studio dispatcher as a command query so menus, hotkeys, command search, and the visible belt all share the same proof handoff policy.
+- Updated the Level Editor to open the existing warp-test handoff dialog from the controller summary while preserving the capability distinction between launch handoff, installed-for-test, and recorded in-game proof.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_contract_audit.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_contract_audit.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_tool_action_dispatch.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_launch_handoff_belt`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_launch_handoff_ui`; `git diff --check`; Map Studio tool contract audit now reports 80 command-backed actions, 73 mutating command actions, 7 query actions, 1 studio-workspace action, and 0 workflow-focus actions.
+
 ### [2026-06-21] Map Studio Routes Install Test Belt Action Through Export Command
 
 Owner: LordVaderCW

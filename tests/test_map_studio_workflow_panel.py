@@ -745,8 +745,10 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert '"install_module",' in window_source
     assert 'if action_key == "install_module"' in window_source
     assert "self._last_game_modules_dir = str(route.command_kwargs.get(\"game_modules_dir\")" in window_source
-    assert 'if key == "launch_handoff":' in window_source
-    assert "self.open_map_studio_launch_handoff()" in window_source
+    assert '"launch_handoff",' in window_source
+    assert 'elif action_key == "launch_handoff":' in window_source
+    assert "self._open_map_studio_launch_handoff_dialog_from_summary(result)" in window_source
+    assert "self.controller.map_studio_launch_handoff()" in window_source
     assert 'if key == "record_proof":' in window_source
     assert "self.record_game_smoke_proof()" in window_source
     assert "def _map_studio_belt_placement_kind" in window_source

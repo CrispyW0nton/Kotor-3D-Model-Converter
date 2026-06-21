@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -149,6 +150,30 @@ def _read_json_object(path: str | Path) -> dict[str, Any]:
 
 MAP_STUDIO_MODELING_STALE_OUTPUTS = ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
 MAP_STUDIO_MODELING_READINESS_IMPACT = "Map Studio validation, export, install handoff, and game proof are stale."
+
+
+@dataclass(frozen=True)
+class MapStudioLaunchHandoffSummary:
+    """Non-mutating summary of the current Map Studio in-game launch handoff."""
+
+    ready: bool
+    module_root: str
+    game: str
+    warp_command: str
+    launcher_path: str = ""
+    proof_manifest_path: str = ""
+    proof_recording_script_path: str = ""
+    launch_helper_command: str = ""
+    elevated_launch_script_path: str = ""
+    installed_module_path: str = ""
+    checklist_path: str = ""
+    resolved_modules_dir: str = ""
+    resolved_game_root_dir: str = ""
+    warnings: tuple[str, ...] = ()
+    blocking_messages: tuple[str, ...] = ()
+    summary: str = ""
+    next_action: str = ""
+    capability_stage: str = "installed_for_game_test_handoff"
 
 
 class ModuleEditorController:
@@ -2753,6 +2778,75 @@ class ModuleEditorController:
             self.project.dirty = True
         self.model.log(result.message)
         return result
+
+    def map_studio_launch_handoff(self) -> MapStudioLaunchHandoffSummary:
+        """Describe the current manual KOTOR launch/proof handoff without mutating project state."""
+
+        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
+        module_root = str(payload.get("module_root") or getattr(self.project, "name", "") or "").strip()
+        game = str(payload.get("game") or getattr(self.project, "game", "") or "K1").strip().upper()
+        warp_command = str(payload.get("warp_command") or (f"warp {module_root}" if module_root else "warp <module>")).strip()
+        proof_manifest_path = str(payload.get("proof_manifest_path") or "").strip()
+        proof_recording_script_path = str(payload.get("proof_recording_script_path") or "").strip()
+        launch_helper_command = str(payload.get("launch_helper_command") or "").strip()
+        elevated_launch_script_path = str(payload.get("elevated_launch_script_path") or "").strip()
+        installed_module_path = str(payload.get("installed_module_path") or "").strip()
+        checklist_path = str(payload.get("checklist_path") or "").strip()
+        resolved_modules_dir = str(payload.get("resolved_modules_dir") or "").strip()
+        resolved_game_root_dir = str(payload.get("resolved_game_root_dir") or "").strip()
+
+        blocking: list[str] = []
+        warnings: list[str] = []
+        if not payload:
+            blocking.append("No authored Map Studio module has been staged for a launch handoff.")
+        if proof_manifest_path:
+            if not Path(proof_manifest_path).is_file():
+                blocking.append(f"Proof manifest does not exist: {proof_manifest_path}")
+        elif not elevated_launch_script_path:
+            blocking.append("Stage or install the authored module before opening the launch handoff.")
+        if elevated_launch_script_path and not Path(elevated_launch_script_path).is_file():
+            warnings.append(f"Launch script is not available on disk: {elevated_launch_script_path}")
+        if proof_recording_script_path and not Path(proof_recording_script_path).is_file():
+            warnings.append(f"Proof recorder is not available on disk: {proof_recording_script_path}")
+        if checklist_path and not Path(checklist_path).is_file():
+            warnings.append(f"Game-test checklist is not available on disk: {checklist_path}")
+        if installed_module_path and not Path(installed_module_path).exists():
+            warnings.append(f"Installed module candidate is not present on disk: {installed_module_path}")
+        if not module_root:
+            warnings.append("Module root is unknown; the warp command must be checked before launch.")
+        if not launch_helper_command:
+            warnings.append("No CLI launch helper command was recorded; use the proof manifest and warp command manually.")
+
+        ready = len(blocking) == 0
+        summary = (
+            f"Launch handoff ready for {game}:{module_root or '<module>'}; run {warp_command} and record proof."
+            if ready
+            else "Launch handoff is not ready; stage or install an authored module package first."
+        )
+        next_action = (
+            "Open the launcher/proof folder, run the exact KOTOR warp command, then record screenshot or video proof."
+            if ready
+            else "Stage .mod or Install Test from Map Studio export tools before launching."
+        )
+        return MapStudioLaunchHandoffSummary(
+            ready=ready,
+            module_root=module_root,
+            game=game,
+            warp_command=warp_command,
+            launcher_path=elevated_launch_script_path,
+            proof_manifest_path=proof_manifest_path,
+            proof_recording_script_path=proof_recording_script_path,
+            launch_helper_command=launch_helper_command,
+            elevated_launch_script_path=elevated_launch_script_path,
+            installed_module_path=installed_module_path,
+            checklist_path=checklist_path,
+            resolved_modules_dir=resolved_modules_dir,
+            resolved_game_root_dir=resolved_game_root_dir,
+            warnings=tuple(warnings),
+            blocking_messages=tuple(blocking),
+            summary=summary,
+            next_action=next_action,
+        )
 
     def record_map_studio_game_proof(
         self,
