@@ -2753,6 +2753,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def commit_map_studio_viewport_terrain_brush_stroke(self, brush: str, room_resref: str) -> None:
         """Refresh Map Studio once after a live terrain brush stroke is released."""
 
+        try:
+            self.controller.commit_map_studio_terrain_sculpt_stroke(brush=brush, room_resref=room_resref)
+        except Exception as exc:
+            self._log(f"Terrain brush commit failed: {exc}")
         message = (
             f"Committed terrain brush {brush} on {room_resref}; refreshed terrain walkability, readiness, and export state."
         )

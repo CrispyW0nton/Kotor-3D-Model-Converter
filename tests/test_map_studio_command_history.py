@@ -33,6 +33,11 @@ def _first_floor_plan_point(controller) -> tuple[float, float]:
     return (float(point[0]), float(point[1]))
 
 
+def _first_terrain_height(controller, row: int, column: int) -> float:
+    payload = controller.project.extra_sections["authored_module"]
+    return float(payload["rooms"][0]["primitive"]["heights"][row][column])
+
+
 def test_t2606_command_history_restores_serialized_kmap_project_state() -> None:
     _install_native_payload_paths()
 
@@ -134,6 +139,51 @@ def test_t2606_floor_plan_vertex_move_is_undoable_through_controller() -> None:
     assert _first_floor_plan_point(controller) == (0.5, 0.5)
 
 
+def test_t2606_terrain_sculpt_preview_is_side_effect_free_until_stroke_commit() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grtrn01", game="K1")
+    controller.create_authored_room_preset_module(preset_id="terrain_heightfield", module_root="grtrn01")
+    room_resref = controller.project.extra_sections["authored_module"]["rooms"][0]["room_resref"]
+
+    assert _first_terrain_height(controller, 2, 2) == 0.35
+    frame = controller.prepare_map_studio_terrain_sculpt_frame(
+        room_resref=room_resref,
+        brush="raise",
+        points=((2, 2),),
+        delta=1.0,
+        radius=0,
+    )
+
+    assert frame.operation == "brush_stroke:raise"
+    assert _first_terrain_height(controller, 2, 2) == 0.35
+    assert controller.can_undo_map_studio_command() is False
+
+    result = controller.apply_map_studio_terrain_sculpt_frame(
+        room_resref=room_resref,
+        brush="raise",
+        points=((2, 2),),
+        delta=1.0,
+        radius=0,
+    )
+
+    assert result.applied is True
+    assert _first_terrain_height(controller, 2, 2) == 1.35
+    assert controller.can_undo_map_studio_command() is False
+
+    controller.commit_map_studio_terrain_sculpt_stroke(brush="raise", room_resref=room_resref)
+
+    assert controller.can_undo_map_studio_command() is True
+    assert controller.command_history.undo_label == "Sculpt terrain raise on grtrn01_room01"
+
+    undo = controller.undo_map_studio_command()
+    assert undo is not None
+    assert _first_terrain_height(controller, 2, 2) == 0.35
+
+
 def test_t2606_level_editor_wires_undo_redo_actions_to_map_studio_command_spine() -> None:
     window_source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
     scene_controller = _read("native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py")
@@ -152,3 +202,33 @@ def test_t2606_level_editor_wires_undo_redo_actions_to_map_studio_command_spine(
         assert "def redo_map_studio_command" in source
         assert "MAP_STUDIO_MODELING_STALE_OUTPUTS" in source
         assert "Map Studio validation, export, install handoff, and game proof are stale." in source
+
+
+def test_t2606_map_studio_topology_and_terrain_commands_have_action_keys() -> None:
+    scene_controller = _read("native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py")
+    tools_controller = _read("native/GhostRigger.Core.Tools/Python/src/core/modules/module_editor_controller.py")
+
+    expected_action_keys = (
+        "map_studio.terrain.sculpt_stroke",
+        "map_studio.floor_plan.merge_rooms",
+        "map_studio.floor_plan.bridge_edges",
+        "map_studio.floor_plan.set_extrusion",
+        "map_studio.floor_plan.triangulate_face",
+        "map_studio.floor_plan.split_face",
+        "map_studio.floor_plan.cleanup_normals",
+        "map_studio.floor_plan.mirror_vertices",
+        "map_studio.primitive.set_dimensions",
+        "map_studio.primitive.set_style",
+        "map_studio.primitive.remove",
+        "map_studio.primitive.separate",
+        "map_studio.room.set_style",
+    )
+
+    for source in (scene_controller, tools_controller):
+        for action_key in expected_action_keys:
+            assert f'action_key="{action_key}"' in source
+
+        prepare_body = source.split("def prepare_map_studio_terrain_sculpt_frame", 1)[1].split(
+            "def apply_map_studio_terrain_sculpt_frame", 1
+        )[0]
+        assert "_capture_map_studio_command_state" not in prepare_body

@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Expands Undo Coverage For Topology And Terrain Commands
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Command history / Terrain and topology editing
+
+- Added command-history records for floor-plan merge, bridge, extrusion, triangulate, split, cleanup normals, mirror, room style, primitive dimensions, primitive style, primitive remove, and primitive separate operations.
+- Added a stroke-level terrain sculpt commit boundary so live brush frames can stay lightweight while the released stroke records one undoable KMAP state transition.
+- Kept terrain preview frame preparation side-effect free; it now remains a non-mutating query path while apply/commit handles dirty authored state and undo metadata.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Tools/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_command_history.py`; `python -m pytest tests/test_map_studio_command_history.py -q --basetemp .pytest_tmp_map_studio_command_history_more`.
+
 ### [2026-06-21] Map Studio Adds Command History For Undoable Modeling Edits
 
 Owner: LordVaderCW

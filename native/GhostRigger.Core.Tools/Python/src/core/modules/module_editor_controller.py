@@ -155,6 +155,7 @@ class ModuleEditorController:
         self.validator = KMapValidator()
         self.export_bridge = LevelExportBridge(self.validator)
         self.command_history = MapStudioCommandHistory()
+        self._terrain_sculpt_command_before = None
 
     @property
     def project(self) -> KMapProject:
@@ -207,6 +208,7 @@ class ModuleEditorController:
         self.model.selected_ids = list(result.selected_ids)
         self.model.active_module_id = result.active_module_id
         self.model.active_room_id = result.active_room_id
+        self._terrain_sculpt_command_before = None
         self.model.log(result.message)
         return result
 
@@ -218,6 +220,7 @@ class ModuleEditorController:
         self.model.selected_ids = list(result.selected_ids)
         self.model.active_module_id = result.active_module_id
         self.model.active_room_id = result.active_room_id
+        self._terrain_sculpt_command_before = None
         self.model.log(result.message)
         return result
 
@@ -231,6 +234,7 @@ class ModuleEditorController:
         project_name = normalise_resref(name) or "new_level"
         self.model.set_project(new_kmap_project(name=project_name, game=game_key, author=str(author or "").strip()))
         self.command_history.clear()
+        self._terrain_sculpt_command_before = None
         self.model.project.dirty = True
         self.model.log(f"Created new Map Studio KMAP project {project_name} for {game_key}.")
         return self.model.project
@@ -239,6 +243,7 @@ class ModuleEditorController:
         project = KMapSerializer.load(path)
         self.model.set_project(project)
         self.command_history.clear()
+        self._terrain_sculpt_command_before = None
         self.model.log(f"Opened KMAP {Path(path).name}.")
         return project
 
@@ -745,6 +750,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -880,6 +886,8 @@ class ModuleEditorController:
             )
             self.model.log(message)
             return MapStudioTerrainSculptApplyResult(applied=False, frame=frame, message=message)
+        if self._terrain_sculpt_command_before is None:
+            self._terrain_sculpt_command_before = self._capture_map_studio_command_state()
         updated = apply_authored_terrain_operation(authored, frame.operation, **frame.operation_kwargs)
         self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
         self.project.name = updated.metadata.module_root
@@ -891,6 +899,20 @@ class ModuleEditorController:
         )
         self.model.log(message)
         return MapStudioTerrainSculptApplyResult(applied=True, frame=frame, message=message)
+
+    def commit_map_studio_terrain_sculpt_stroke(self, *, brush: str, room_resref: str):
+        """Record one undo command for all terrain frames applied during a released stroke."""
+
+        before = self._terrain_sculpt_command_before
+        self._terrain_sculpt_command_before = None
+        if before is not None:
+            self._record_map_studio_command(
+                action_key="map_studio.terrain.sculpt_stroke",
+                label=f"Sculpt terrain {brush} on {room_resref}",
+                before=before,
+                metadata={"brush": brush, "room_resref": room_resref},
+            )
+        return self.authored_module_readiness()
 
     def merge_authored_floor_plan_rooms(
         self,
@@ -910,6 +932,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         updated = apply_authored_floor_plan_rectangular_union(
             authored,
             first_room_resref=first_room_resref,
@@ -922,6 +945,16 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Merged Map Studio floor-plan rooms {first_room_resref} and {second_room_resref}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.merge_rooms",
+            label=f"Merge {first_room_resref} and {second_room_resref}",
+            before=before,
+            metadata={
+                "first_room_resref": first_room_resref,
+                "second_room_resref": second_room_resref,
+                "result_room_resref": result_room_resref,
+            },
         )
         return self.authored_module_readiness()
 
@@ -945,6 +978,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         updated = bridge_authored_floor_plan_edges(
             authored,
             first_room_resref=first_room_resref,
@@ -960,6 +994,18 @@ class ModuleEditorController:
         self.model.log(
             f"Bridged Map Studio floor-plan edge {first_edge_index} in {first_room_resref} "
             f"to edge {second_edge_index} in {second_room_resref}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.bridge_edges",
+            label=f"Bridge {first_room_resref}:{int(first_edge_index)} to {second_room_resref}:{int(second_edge_index)}",
+            before=before,
+            metadata={
+                "first_room_resref": first_room_resref,
+                "first_edge_index": int(first_edge_index),
+                "second_room_resref": second_room_resref,
+                "second_edge_index": int(second_edge_index),
+                "result_room_resref": result_room_resref,
+            },
         )
         return self.authored_module_readiness()
 
@@ -983,6 +1029,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         updated = set_authored_floor_plan_extrusion_settings(
             authored,
             room_resref=room_resref,
@@ -997,6 +1044,18 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Updated Map Studio floor-plan extrusion settings for {room_resref or 'the selected room'}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.set_extrusion",
+            label=f"Set {room_resref or 'room'} extrusion",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "z": z,
+                "wall_height": wall_height,
+                "include_walls": include_walls,
+                "floor_surface_id": floor_surface_id,
+            },
         )
         return self.authored_module_readiness()
 
@@ -1308,6 +1367,12 @@ class ModuleEditorController:
         self.model.log(
             f"Triangulated Map Studio room {room_resref or '(first room)'} floor-plan face; previous exports/proofs are now stale."
         )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.triangulate_face",
+            label=f"Triangulate {room_resref or 'room'} floor-plan face",
+            before=before,
+            metadata={"room_resref": room_resref},
+        )
         return self.authored_module_readiness()
 
     def split_authored_floor_plan_face(
@@ -1322,6 +1387,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -1340,6 +1406,12 @@ class ModuleEditorController:
         self.model.log(
             f"Split Map Studio room {room_resref or '(first room)'} floor-plan face between points {indices}; previous exports/proofs are now stale."
         )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.split_face",
+            label=f"Split {room_resref or 'room'} floor-plan face",
+            before=before,
+            metadata={"room_resref": room_resref, "point_indices": indices},
+        )
         return self.authored_module_readiness()
 
     def cleanup_authored_floor_plan_normals(
@@ -1354,6 +1426,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -1371,6 +1444,12 @@ class ModuleEditorController:
         self.model.log(
             f"Cleaned Map Studio room {room_resref or '(first room)'} floor-plan normals; previous exports/proofs are now stale."
         )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.cleanup_normals",
+            label=f"Clean {room_resref or 'room'} floor-plan normals",
+            before=before,
+            metadata={"room_resref": room_resref, "positive_z": bool(positive_z)},
+        )
         return self.authored_module_readiness()
 
     def mirror_authored_floor_plan_vertices(
@@ -1385,6 +1464,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -1401,6 +1481,12 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Mirrored Map Studio room {room_resref or '(first room)'} floor-plan across local {axis}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.mirror_vertices",
+            label=f"Mirror {room_resref or 'room'} floor-plan on {axis}",
+            before=before,
+            metadata={"room_resref": room_resref, "axis": axis},
         )
         return self.authored_module_readiness()
 
@@ -1566,6 +1652,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -1584,6 +1671,12 @@ class ModuleEditorController:
         self.model.log(
             f"Edited Map Studio room primitive dimensions for {primitive_name}; previous exports/proofs are now stale."
         )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.set_dimensions",
+            label=f"Set dimensions for primitive {primitive_name}",
+            before=before,
+            metadata={"room_resref": room_resref, "primitive_name": primitive_name, "dimensions": dimensions},
+        )
         return self.authored_module_readiness()
 
     def set_authored_room_primitive_style(
@@ -1600,6 +1693,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -1619,6 +1713,12 @@ class ModuleEditorController:
         self.model.log(
             f"Styled Map Studio room primitive {primitive_name}; previous exports/proofs are now stale."
         )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.set_style",
+            label=f"Style primitive {primitive_name}",
+            before=before,
+            metadata={"room_resref": room_resref, "primitive_name": primitive_name, "texture": texture, "surface_id": surface_id},
+        )
         return self.authored_module_readiness()
 
     def remove_authored_room_primitive(self, *, room_resref: str, primitive_name: str):
@@ -1628,6 +1728,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -1645,6 +1746,12 @@ class ModuleEditorController:
         self.model.log(
             f"Removed Map Studio room primitive {primitive_name}; previous exports/proofs are now stale."
         )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.remove",
+            label=f"Remove primitive {primitive_name}",
+            before=before,
+            metadata={"room_resref": room_resref, "primitive_name": primitive_name},
+        )
         return self.authored_module_readiness()
 
     def separate_authored_room_primitive(
@@ -1660,6 +1767,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -1679,6 +1787,17 @@ class ModuleEditorController:
         self.model.log(
             f"Separated Map Studio room primitive {primitive_name} into {separated_room}; previous exports/proofs are now stale."
         )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.separate",
+            label=f"Separate primitive {primitive_name}",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "primitive_name": primitive_name,
+                "result_room_resref": result_room_resref,
+                "separated_room": separated_room,
+            },
+        )
         return self.authored_module_readiness()
 
     def apply_authored_room_style(self, *, texture: str = "", floor_surface: Any = 4, room_resref: str = ""):
@@ -1693,6 +1812,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         update = update_authored_room_style(
             authored,
             texture=texture,
@@ -1708,6 +1828,12 @@ class ModuleEditorController:
         )
         for warning in update.warnings:
             self.model.log(f"Warning: {warning}")
+        self._record_map_studio_command(
+            action_key="map_studio.room.set_style",
+            label=f"Style {room_resref or 'room'}",
+            before=before,
+            metadata={"texture": texture, "floor_surface": floor_surface, "room_resref": room_resref},
+        )
         return self.authored_module_readiness()
 
     def set_authored_room_walkmesh_surface(self, *, room_resref: str, floor_surface: Any = 4):
