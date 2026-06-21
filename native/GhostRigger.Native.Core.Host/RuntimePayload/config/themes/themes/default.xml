@@ -7,6 +7,8 @@
     <styles>
         <style name="application.native" value="true"/>
         <style name="splash.surfaceStyle" value="matte"/>
+        <style name="splash.useNativePalette" value="false"/>
+        <style name="splash.useBrandedPalette" value="true"/>
     </styles>
     <colors>
         <color name="window.background" value="#F3F3F3"/>
@@ -79,16 +81,17 @@
         <color name="axis.text" value="#FFFFFF"/>
         <color name="transformBar.background" value="#F3F3F3"/>
         <color name="transformBar.border" value="#C4CBD5"/>
-        <color name="splash.background" value="#F3F3F3"/>
-        <color name="splash.panel" value="#FFFFFF"/>
-        <color name="splash.brandBackground" value="#EEF1F5"/>
-        <color name="splash.progressBackground" value="#F8F9FB"/>
-        <color name="splash.border" value="#B8C0CC"/>
-        <color name="splash.text" value="#20242A"/>
-        <color name="splash.secondaryText" value="#5E6977"/>
-        <color name="splash.accent" value="#1F6FEB"/>
-        <color name="splash.progressTrack" value="#FFFFFF"/>
-        <color name="splash.progressFill" value="#1B8F45"/>
+        <color name="splash.background" value="#030706"/>
+        <color name="splash.panel" value="#07110D"/>
+        <color name="splash.brandBackground" value="#020504"/>
+        <color name="splash.progressBackground" value="#091711"/>
+        <color name="splash.logBackground" value="#010302"/>
+        <color name="splash.border" value="#1EA85E"/>
+        <color name="splash.text" value="#DDFCEB"/>
+        <color name="splash.secondaryText" value="#7FDCA8"/>
+        <color name="splash.accent" value="#4DFF92"/>
+        <color name="splash.progressTrack" value="#020504"/>
+        <color name="splash.progressFill" value="#21E46F"/>
         <color name="matrixBar.background" value="#EAF0F7"/>
         <color name="matrixBar.glyph" value="#1F6FEB"/>
         <color name="matrixBar.text" value="#1F4F8F"/>
@@ -123,6 +126,9 @@
         <metric name="panel.margin" value="4"/>
         <metric name="panel.spacing" value="4"/>
         <metric name="splitter.handleWidth" value="6"/>
+        <metric name="splash.width" value="960"/>
+        <metric name="splash.height" value="540"/>
+        <metric name="splash.logoSize" value="300"/>
         <metric name="tab.height" value="14"/>
     </metrics>
 </theme>

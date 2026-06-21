@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import ctypes
 import json
@@ -8,20 +8,20 @@ from src.adapters.scripts.unavailable_compiler import UnavailableScriptCompiler
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Adapters.Scripting.Core.dll"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Automation.dll"
 
 
 def _load_dll() -> ctypes.CDLL:
     assert DLL_PATH.exists(), f"Build Release first: {DLL_PATH}"
     dll = ctypes.CDLL(str(DLL_PATH))
-    dll.gr_adapters_scripts_capabilities_json.argtypes = []
-    dll.gr_adapters_scripts_capabilities_json.restype = ctypes.c_char_p
-    dll.gr_adapters_scripts_unavailable_default_reason.argtypes = []
-    dll.gr_adapters_scripts_unavailable_default_reason.restype = ctypes.c_char_p
-    dll.gr_adapters_scripts_unavailable_issue_json.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
-    dll.gr_adapters_scripts_unavailable_issue_json.restype = ctypes.c_char_p
-    dll.gr_adapters_scripts_unavailable_compile_result_json.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
-    dll.gr_adapters_scripts_unavailable_compile_result_json.restype = ctypes.c_char_p
+    dll.gr_core_automation_scripting_capabilities_json.argtypes = []
+    dll.gr_core_automation_scripting_capabilities_json.restype = ctypes.c_char_p
+    dll.gr_core_automation_scripting_unavailable_default_reason.argtypes = []
+    dll.gr_core_automation_scripting_unavailable_default_reason.restype = ctypes.c_char_p
+    dll.gr_core_automation_scripting_unavailable_issue_json.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
+    dll.gr_core_automation_scripting_unavailable_issue_json.restype = ctypes.c_char_p
+    dll.gr_core_automation_scripting_unavailable_compile_result_json.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
+    dll.gr_core_automation_scripting_unavailable_compile_result_json.restype = ctypes.c_char_p
     return dll
 
 
@@ -29,7 +29,7 @@ def test_native_unavailable_script_compiler_default_reason_matches_python() -> N
     dll = _load_dll()
     compiler = UnavailableScriptCompiler()
 
-    assert dll.gr_adapters_scripts_unavailable_default_reason().decode("utf-8") == compiler.reason
+    assert dll.gr_core_automation_scripting_unavailable_default_reason().decode("utf-8") == compiler.reason
 
 
 def test_native_unavailable_script_compiler_issue_matches_python_result() -> None:
@@ -41,7 +41,7 @@ def test_native_unavailable_script_compiler_issue_matches_python_result() -> Non
     py_issue = py_result.report.issues[0]
 
     native_issue = json.loads(
-        dll.gr_adapters_scripts_unavailable_issue_json(
+        dll.gr_core_automation_scripting_unavailable_issue_json(
             source.encode("utf-8"),
             game.encode("utf-8"),
             None,
@@ -63,7 +63,7 @@ def test_native_unavailable_script_compiler_result_matches_python_contract() -> 
     reason = "Compiler path is missing."
 
     native_result = json.loads(
-        dll.gr_adapters_scripts_unavailable_compile_result_json(
+        dll.gr_core_automation_scripting_unavailable_compile_result_json(
             source.encode("utf-8"),
             game.encode("utf-8"),
             reason.encode("utf-8"),
@@ -81,9 +81,9 @@ def test_native_unavailable_script_compiler_result_matches_python_contract() -> 
     }
 
 
-def test_native_adapters_scripts_capabilities_document_contract_scope() -> None:
+def test_native_core_automation_scripting_capabilities_document_contract_scope() -> None:
     dll = _load_dll()
-    capabilities = json.loads(dll.gr_adapters_scripts_capabilities_json().decode("utf-8"))
+    capabilities = json.loads(dll.gr_core_automation_scripting_capabilities_json().decode("utf-8"))
     assert capabilities["unavailable_compiler_native"] is True
     assert capabilities["script_compiler_runtime_python_fallback"] is True
     assert capabilities["python_fallback_required"] is True

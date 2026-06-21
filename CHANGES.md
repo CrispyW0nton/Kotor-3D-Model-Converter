@@ -11,6 +11,20 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Merge LordVader Fork Updates Into Map Studio Branch
+
+Owner: LordVaderCW
+Task: T2602 / T2605 / T2902 / T2903 / T2906
+Subsystem: Native package ownership / Mesh Tools / Map Studio / viewport animation overlays
+Intersects: partner/qt-ghostrigger commits `08b2234b`, `90dcd6c6`, `772e17b3`, `55ecbe52`, `b9b19851`; Map Studio authored module systems and Maya primitive reference fixtures.
+
+- Merged LordVaderCW's latest `qt-ghostrigger` branch while preserving the active Map Studio readiness/export gates, terrain/modeling systems, and Maya primitive fixture work.
+- Adopted the newer native package ownership layout, keeping Map Studio module code under `GhostRigger.Core.Scene` and mirrored tools under `GhostRigger.Core.Tools`, with geometry/component editing under `GhostRigger.Core.Math`.
+- Brought in the dockable Mesh Tools workbench, primitive command service, automation IPC route, animated bone overlay fixes, startup/library hydration work, 3ds Max MCP changes, and generated-artifact cleanup.
+- Resolved documentation and knowledge-base routing so the newer `learned/` skill index coexists with the Map Studio-specific skill files.
+- Integrated the Map Studio Level Editor toolbar with a Maya-style Default/Custom tool belt, searchable custom tool picker, and indexed modeling catalog covering usable and planned KOTOR-safe primitive, terrain, component-editing, boolean, lattice, shrink-wrap, curve, and bend tools.
+- Verification: `python -m py_compile native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/module_editor_toolbar.py native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/module_editor_toolbar.py native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/export_panel.py native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/export_panel.py native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/window_chrome.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_modeling_tools.py`; `python -m pytest tests/test_map_studio_workflow_panel.py tests/test_map_studio_level_editor_identity.py -q --basetemp .pytest_tmp_map_studio_toolbar_merge`; `python -m pytest tests/test_native_project_templates.py tests/test_authored_module_metadata.py -q --basetemp .pytest_tmp_partner_merge_contracts`.
+
 ### [2026-06-21] Map Studio Captures Maya Primitive Reference Fixtures
 
 Owner: LordVaderCW

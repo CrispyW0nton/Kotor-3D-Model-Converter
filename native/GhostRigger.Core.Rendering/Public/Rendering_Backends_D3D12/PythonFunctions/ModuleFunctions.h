@@ -1,0 +1,138 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::core::rendering::backends::d3d12 {
+
+#ifndef GHOSTRIGGER_RENDERER_D3D12_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_RENDERER_D3D12_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
+    const char* python_file;
+    const char* qualname;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
+};
+#endif // GHOSTRIGGER_RENDERER_D3D12_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+
+const NativeFunctionImplementation& debug_draw_table_line_42_9ec84b51_native();
+const NativeFunctionImplementation& debug_uv_channel_table_line_95_a1f860e8_native();
+const NativeFunctionImplementation& debug_texture_cache_table_line_179_01c72050_native();
+const NativeFunctionImplementation& debug_material_role_table_line_275_fb8306c6_native();
+const NativeFunctionImplementation& path_from_env_line_19_14f3c397_native();
+const NativeFunctionImplementation& int_env_clamped_line_23_d561e4b4_native();
+const NativeFunctionImplementation& gl_state_trace_path_line_31_dc7a1b70_native();
+const NativeFunctionImplementation& lm_data_dump_path_line_35_42ca528c_native();
+const NativeFunctionImplementation& skin_dump_path_line_39_fe55d8b8_native();
+const NativeFunctionImplementation& debug_visualize_mode_line_43_5b215ffd_native();
+const NativeFunctionImplementation& lm_composite_mode_line_47_d363b831_native();
+const NativeFunctionImplementation& jsonable_gl_value_line_34_1ede079b_native();
+const NativeFunctionImplementation& safe_gl_attr_line_46_f3c09db3_native();
+const NativeFunctionImplementation& uniform_trace_value_line_53_a664db23_native();
+const NativeFunctionImplementation& build_gl_state_trace_record_line_63_661c5f41_native();
+const NativeFunctionImplementation& append_gl_state_trace_line_124_86a67054_native();
+const NativeFunctionImplementation& first_uv_pairs_line_135_da46e2f2_native();
+const NativeFunctionImplementation& first_vbo_uv_pairs_line_145_8a1604a1_native();
+const NativeFunctionImplementation& texture_content_stats_line_155_f01bae93_native();
+const NativeFunctionImplementation& lightmap_role_info_line_209_0ccec99b_native();
+const NativeFunctionImplementation& build_lm_data_dump_record_line_248_50e702ce_native();
+const NativeFunctionImplementation& append_jsonl_record_line_295_860d61fe_native();
+const NativeFunctionImplementation& matrix4_json_line_306_ba4cf4dd_native();
+const NativeFunctionImplementation& matrix4_inverse_json_line_315_0b488bbd_native();
+const NativeFunctionImplementation& matrix4_mul_json_line_324_613234fd_native();
+const NativeFunctionImplementation& matrix4_det_value_line_333_10bbe3a5_native();
+const NativeFunctionImplementation& uploaded_palette_array_from_uploader_line_342_fddf1b89_native();
+const NativeFunctionImplementation& homogeneous_position_json_line_358_ac991133_native();
+const NativeFunctionImplementation& first_divergence_stage_line_369_c7da1b20_native();
+const NativeFunctionImplementation& matrix_max_abs_delta_line_383_59f01372_native();
+const NativeFunctionImplementation& matrix_translation_norm_line_394_e64780c0_native();
+const NativeFunctionImplementation& matrix_rotation_only_line_407_b4c89a01_native();
+const NativeFunctionImplementation& qbone_inverse_bind_json_line_423_dc625269_native();
+const NativeFunctionImplementation& qbone_direct_bind_json_line_452_87c34f93_native();
+const NativeFunctionImplementation& qbone_matrix_np_line_465_e2e68a5e_native();
+const NativeFunctionImplementation& node_world_matrix_for_pose_np_line_485_d8054911_native();
+const NativeFunctionImplementation& node_pose_chain_records_line_513_2a4aab68_native();
+const NativeFunctionImplementation& quat_xyzw_to_mat4_np_line_534_d9a3b5ee_native();
+const NativeFunctionImplementation& xoreos_first_frame_orientation_matrix_line_557_fce39b4e_native();
+const NativeFunctionImplementation& skin_3g_matrix_for_formula_line_618_9cc7f336_native();
+const NativeFunctionImplementation& skin_3g_role_for_bone_line_666_95ed8883_native();
+const NativeFunctionImplementation& skin_3g_role_priority_line_679_301987b6_native();
+const NativeFunctionImplementation& select_skin_3g_probe_vertices_line_704_12e70976_native();
+const NativeFunctionImplementation& skin_bind_equivalence_record_line_732_e3864866_native();
+const NativeFunctionImplementation& skin_3g_candidate_records_line_765_95075d52_native();
+const NativeFunctionImplementation& skin_live_slot_records_line_1233_88a63431_native();
+const NativeFunctionImplementation& build_skin_dump_record_line_1336_1e8ff3a1_native();
+const NativeFunctionImplementation& pose_node_transform_line_1669_c2989b35_native();
+const NativeFunctionImplementation& select_skin_probe_vertex_line_1687_bc6f7e2f_native();
+const NativeFunctionImplementation& node_parent_chain_names_line_1703_3065b3a0_native();
+const NativeFunctionImplementation& node_uses_single_tile_atlas_line_1712_7c035216_native();
+const NativeFunctionImplementation& should_auto_clamp_diffuse_line_1731_1c306c28_native();
+const NativeFunctionImplementation& compute_model_bounds_line_16_cf1ab2a2_native();
+const NativeFunctionImplementation& apply_txi_from_textures_to_model_line_118_3dff2d89_native();
+const NativeFunctionImplementation& split_vbo_attributes_for_gpu_line_21_9cff8882_native();
+const NativeFunctionImplementation& collect_hardware_diagnostics_line_94_5881f1f3_native();
+const NativeFunctionImplementation& cpu_name_line_127_c7716d7e_native();
+const NativeFunctionImplementation& cpu_flags_line_154_660bb9e1_native();
+const NativeFunctionImplementation& physical_core_count_line_162_6f5fbb6e_native();
+const NativeFunctionImplementation& logical_thread_count_line_175_01d8bc20_native();
+const NativeFunctionImplementation& adapter_name_line_181_d50546a1_native();
+const NativeFunctionImplementation& cpuinfo_payload_line_203_2b37f212_native();
+const NativeFunctionImplementation& windows_processor_info_line_214_64580fab_native();
+const NativeFunctionImplementation& architecture_label_line_255_c7c480b1_native();
+const NativeFunctionImplementation& windows_processor_feature_flags_line_275_9ae4f93b_native();
+const NativeFunctionImplementation& windows_gpu_adapter_name_line_299_16f551e4_native();
+const NativeFunctionImplementation& safe_int_line_351_3f7f77a2_native();
+const NativeFunctionImplementation& iter_mesh_render_data_line_65_fa47e988_native();
+const NativeFunctionImplementation& model_nodes_line_211_661ae3a2_native();
+const NativeFunctionImplementation& node_is_renderable_mesh_line_225_e3ba8c3b_native();
+const NativeFunctionImplementation& extract_node_arrays_line_239_41751f47_native();
+const NativeFunctionImplementation& skinned_lbs_vbo_cache_key_line_326_3546a59b_native();
+const NativeFunctionImplementation& static_vbo_cache_key_line_346_d5eafd23_native();
+const NativeFunctionImplementation& get_skinned_lbs_vbo_cache_line_362_d6f98c35_native();
+const NativeFunctionImplementation& set_skinned_lbs_vbo_cache_line_374_25580cd0_native();
+const NativeFunctionImplementation& smooth_render_normals_line_383_3400ba22_native();
+const NativeFunctionImplementation& coerce_normal_array_line_440_fec0c1af_native();
+const NativeFunctionImplementation& area_weighted_normal_accum_line_460_c1f111bb_native();
+const NativeFunctionImplementation& normalize_rows_line_487_a0d58bc1_native();
+const NativeFunctionImplementation& extract_skinning_line_507_5c8210f3_native();
+const NativeFunctionImplementation& bas_attachment_palette_model_for_node_line_552_e008b162_native();
+const NativeFunctionImplementation& mesh_model_matrix_for_node_line_579_7a36d755_native();
+const NativeFunctionImplementation& bas_attachment_subtree_nodes_line_590_c7e0370e_native();
+const NativeFunctionImplementation& texture_image_to_rgba8_line_604_dba24dc9_native();
+const NativeFunctionImplementation& node_uv_array_line_627_f48a4217_native();
+const NativeFunctionImplementation& material_data_line_652_f91a8721_native();
+const NativeFunctionImplementation& texture_data_line_718_f11f351f_native();
+const NativeFunctionImplementation& node_has_lightmap_line_739_ec27445f_native();
+const NativeFunctionImplementation& alpha_mode_line_751_5b17aae8_native();
+const NativeFunctionImplementation& blend_mode_line_770_7ad06fd8_native();
+const NativeFunctionImplementation& sprite_alpha_source_line_788_1fbd6397_native();
+const NativeFunctionImplementation& sprite_glow_line_800_fffe5bfb_native();
+const NativeFunctionImplementation& is_saber_hilt_line_813_8bbed6e1_native();
+const NativeFunctionImplementation& has_sprite_material_override_line_823_ce0579b4_native();
+const NativeFunctionImplementation& node_world_transform_line_832_8a0acaf4_native();
+const NativeFunctionImplementation& node_world_matrix_line_855_b56aeb9c_native();
+const NativeFunctionImplementation& bas_attachment_root_for_node_line_881_fc1375c3_native();
+const NativeFunctionImplementation& bas_attachment_effective_pose_for_node_line_892_2964cc0a_native();
+const NativeFunctionImplementation& bas_attachment_socket_node_line_952_c843adcc_native();
+const NativeFunctionImplementation& bas_attachment_world_transform_line_975_5e5d0edc_native();
+const NativeFunctionImplementation& bas_attachment_pose_mode_for_root_line_1037_ad40b926_native();
+const NativeFunctionImplementation& bas_attachment_pose_applies_to_root_line_1056_fda3d3ac_native();
+const NativeFunctionImplementation& bas_head_attachment_has_inherited_pose_tracks_line_1060_58a53a90_native();
+const NativeFunctionImplementation& bas_inherited_head_pose_node_allowed_line_1086_36e30abb_native();
+const NativeFunctionImplementation& bas_head_attachment_local_pose_node_allowed_name_line_1091_0259f1df_native();
+const NativeFunctionImplementation& pose_node_for_transform_line_1106_d54c4f76_native();
+const NativeFunctionImplementation& bas_attachment_local_transform_line_1124_852c5d58_native();
+const NativeFunctionImplementation& animated_node_world_transform_line_1166_122268f5_native();
+const NativeFunctionImplementation& material_color_line_1252_3c10f578_native();
+const NativeFunctionImplementation& node_revision_line_1263_37f8d7bd_native();
+const NativeFunctionImplementation& clamp01_line_1271_5850941f_native();
+const NativeFunctionImplementation& clean_tex_name_line_1275_04a02cb4_native();
+
+const NativeFunctionImplementation* modulefunctions_native_functions(std::size_t& count);
+
+} // namespace ghostrigger::core::rendering::backends::d3d12

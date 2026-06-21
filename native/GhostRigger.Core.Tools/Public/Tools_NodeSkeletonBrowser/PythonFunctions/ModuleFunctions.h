@@ -1,0 +1,100 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::core::tools::nodeskeletonbrowser {
+
+#ifndef GHOSTRIGGER_TOOLS_NODESSKELETONBROWSER_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_TOOLS_NODESSKELETONBROWSER_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
+    const char* python_file;
+    const char* qualname;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
+};
+#endif // GHOSTRIGGER_TOOLS_NODESSKELETONBROWSER_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+
+const NativeFunctionImplementation& lerp_line_326_ccd49f0b_native();
+const NativeFunctionImplementation& lerp3_line_330_d78b4641_native();
+const NativeFunctionImplementation& slerp_line_338_888e1d94_native();
+const NativeFunctionImplementation& is_fconstructe_vec_line_371_80e75373_native();
+const NativeFunctionImplementation& ensure_quat_sign_consistency_line_376_245dd9e4_native();
+const NativeFunctionImplementation& interp_channel_line_416_30ecba82_native();
+const NativeFunctionImplementation& normalize_quat_xyzw_line_532_5ac44082_native();
+const NativeFunctionImplementation& controller_matches_line_541_deb22beb_native();
+const NativeFunctionImplementation& sample_controller_absolute_line_548_8c8f34d5_native();
+const NativeFunctionImplementation& compose_transform_line_575_69723e71_native();
+const NativeFunctionImplementation& evaluate_aurora_animation_pose_line_593_25410bcc_native();
+const NativeFunctionImplementation& merge_usecomp_animations_line_1737_0f5aa4af_native();
+const NativeFunctionImplementation& build_bone_remap_line_1756_49c68eb2_native();
+const NativeFunctionImplementation& retarget_usecomp_line_1860_e8730c26_native();
+const NativeFunctionImplementation& get_ctrl_line_1916_97e63288_native();
+const NativeFunctionImplementation& batch_export_animations_line_1331_05a3fc02_native();
+const NativeFunctionImplementation& mat4_identity_line_1415_1a0231a6_native();
+const NativeFunctionImplementation& mat4_mul_line_1420_39fc4bfb_native();
+const NativeFunctionImplementation& mat4_from_sqt_line_1432_7eefb660_native();
+const NativeFunctionImplementation& mat4_inverse_trs_line_1481_6714de78_native();
+const NativeFunctionImplementation& build_world_transforms_line_1514_82257b22_native();
+const NativeFunctionImplementation& slerp_quat_line_1548_644ef13a_native();
+const NativeFunctionImplementation& quat_to_euler_xyz_line_1583_d602106e_native();
+const NativeFunctionImplementation& safe_filename_line_1606_7580dfda_native();
+const NativeFunctionImplementation& classify_skinning_species_line_141_a7a903d5_native();
+const NativeFunctionImplementation& explicit_skin_formula_override_line_196_6b278fbf_native();
+const NativeFunctionImplementation& active_skin_formula_line_201_14d466e5_native();
+const NativeFunctionImplementation& quat_to_mat4_line_245_1b945e78_native();
+const NativeFunctionImplementation& mat4_mul_py_line_269_bf3579a4_native();
+const NativeFunctionImplementation& mat4_identity_py_line_281_5178349d_native();
+const NativeFunctionImplementation& mat4_translate_py_line_285_7994369d_native();
+const NativeFunctionImplementation& mat4_to_flat_col_line_289_49386053_native();
+const NativeFunctionImplementation& mat4_rotation_only_py_line_298_2fb6568c_native();
+const NativeFunctionImplementation& mat4_invert_py_line_1323_37f6c614_native();
+const NativeFunctionImplementation& validate_tbn_line_1751_77cb7c15_native();
+const NativeFunctionImplementation& load_profiles_line_79_e95213b9_native();
+const NativeFunctionImplementation& contains_any_line_110_6435d954_native();
+const NativeFunctionImplementation& enum_value_line_114_25301b80_native();
+const NativeFunctionImplementation& node_names_from_model_line_119_6f20dc36_native();
+const NativeFunctionImplementation& has_skin_from_nodes_line_126_58133f04_native();
+const NativeFunctionImplementation& taxonomy_from_model_line_140_dc777ddc_native();
+const NativeFunctionImplementation& context_from_args_line_150_7419fa6f_native();
+const NativeFunctionImplementation& specific_profile_for_context_line_191_c9346b62_native();
+const NativeFunctionImplementation& species_for_context_line_269_9e9e7859_native();
+const NativeFunctionImplementation& profile_matches_line_294_1074b75f_native();
+const NativeFunctionImplementation& resolve_skinning_profile_line_327_fb033e86_native();
+const NativeFunctionImplementation& classify_skinning_species_line_393_21cf51aa_native();
+const NativeFunctionImplementation& bind_imported_meshes_to_skeleton_line_42_8c21e061_native();
+const NativeFunctionImplementation& candidate_bones_line_205_45148d86_native();
+const NativeFunctionImplementation& is_deform_candidate_line_220_5bb32fff_native();
+const NativeFunctionImplementation& imported_mesh_payloads_line_239_7d29b1b1_native();
+const NativeFunctionImplementation& bone_slots_line_252_dd3f0e52_native();
+const NativeFunctionImplementation& weights_for_vertex_line_266_3b24781c_native();
+const NativeFunctionImplementation& weights_for_vertex_with_donor_line_289_465d2469_native();
+const NativeFunctionImplementation& build_donor_vertex_index_line_307_7977e6fa_native();
+const NativeFunctionImplementation& map_donor_influences_to_slots_line_350_61c60ca2_native();
+const NativeFunctionImplementation& nearest_donor_vertex_line_379_543fc617_native();
+const NativeFunctionImplementation& normalize_influences_line_393_f4394482_native();
+const NativeFunctionImplementation& compact_skin_bone_map_to_used_influences_line_419_b8b64074_native();
+const NativeFunctionImplementation& used_influence_indices_line_487_a4a04898_native();
+const NativeFunctionImplementation& filter_parallel_list_line_504_ccc05097_native();
+const NativeFunctionImplementation& mesh_binding_report_line_516_49dd1ef2_native();
+const NativeFunctionImplementation& transform_point_line_574_29b0bdb7_native();
+const NativeFunctionImplementation& quat_rotate_vec_line_587_b17df509_native();
+const NativeFunctionImplementation& make_skin_node_line_606_36ea11ae_native();
+const NativeFunctionImplementation& child_positions_line_613_f85807df_native();
+const NativeFunctionImplementation& node_world_line_628_75cafaa7_native();
+const NativeFunctionImplementation& has_vertices_line_643_c4d17845_native();
+const NativeFunctionImplementation& is_non_deform_hook_line_647_91e659ca_native();
+const NativeFunctionImplementation& vec3_line_652_05721302_native();
+const NativeFunctionImplementation& quat_line_657_7e1d187a_native();
+const NativeFunctionImplementation& distance_line_664_46b727fc_native();
+const NativeFunctionImplementation& distance_point_segment_line_668_6562c54f_native();
+const NativeFunctionImplementation& node_browser_role_line_12_c8466915_native();
+
+const NativeFunctionImplementation* modulefunctions_native_functions(std::size_t& count);
+
+} // namespace ghostrigger::core::tools::nodeskeletonbrowser

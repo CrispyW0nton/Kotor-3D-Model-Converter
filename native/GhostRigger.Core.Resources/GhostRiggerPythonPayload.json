@@ -1,0 +1,105 @@
+{
+    "schema": "ghostrigger_python_payload.v1",
+    "phase": "P1.5 embedded python payload",
+    "project": "GhostRigger.Core.Resources",
+    "file_count": 16,
+    "originals_remain_in_src": true,
+    "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_ASSETS_INIT",
+            "source_path": "src/core/assets/__init__.py",
+            "packaged_path": "Python/src/core/assets/__init__.py",
+            "sha256": "31a2b0975ae548bb30c6193c5d8f42df39ecf73be23b9dbf4dc76d4158bd741d"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_ASSETS_ASSET_PREVIEW",
+            "source_path": "src/core/assets/asset_preview.py",
+            "packaged_path": "Python/src/core/assets/asset_preview.py",
+            "sha256": "b503ffba81bce10c29199f68710d6092481a245415e16e37ea42af0bcda9e588"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_ASSETS_OVERRIDE_LAYER",
+            "source_path": "src/core/assets/override_layer.py",
+            "packaged_path": "Python/src/core/assets/override_layer.py",
+            "sha256": "446065473cd665658dc8b33f9ef59837375a516e488f73426c615e9919cfc1b5"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_ASSETS_RESOURCE_MANAGER",
+            "source_path": "src/core/assets/resource_manager.py",
+            "packaged_path": "Python/src/core/assets/resource_manager.py",
+            "sha256": "a7ec33e2c5817e63c2c81adf84be69c6ba444db172e4b6c9352e972b23520359"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_GAME_INIT",
+            "source_path": "src/core/game/__init__.py",
+            "packaged_path": "Python/src/core/game/__init__.py",
+            "sha256": "796c54db54fe1fed4e2166a2c49c3f1fd37f17b68b5fffc033c36bcfb8b2ecea"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_GAME_GAME_LIBRARY_EXT",
+            "source_path": "src/core/game/game_library_ext.py",
+            "packaged_path": "Python/src/core/game/game_library_ext.py",
+            "sha256": "859fc6a1904c4b2fa18c066e99c4d22062fd3409100c3f188d13926ca3c48fff"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_GAME_IMPORT_NORMALISATION",
+            "source_path": "src/core/game/import_normalisation.py",
+            "packaged_path": "Python/src/core/game/import_normalisation.py",
+            "sha256": "3f69aa958b9efb90d56f97a1205e1dad5940f273d566bbd9b66777779869a2d1"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_GAME_KOTOR_INSTALL",
+            "source_path": "src/core/game/kotor_install.py",
+            "packaged_path": "Python/src/core/game/kotor_install.py",
+            "sha256": "947e855a8fedb8fb2bd2c42277cfec49c068d3b837ee62986e52127864bc16f2"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_GAME_KOTOR_LOADER",
+            "source_path": "src/core/game/kotor_loader.py",
+            "packaged_path": "Python/src/core/game/kotor_loader.py",
+            "sha256": "a54e20a03a02ad366b7d80dbc274365f540e30fad8951d32ff8a58a9b20e9c98"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_GAME_PYKOTOR_BRIDGE",
+            "source_path": "src/core/game/pykotor_bridge.py",
+            "packaged_path": "Python/src/core/game/pykotor_bridge.py",
+            "sha256": "39e373906d37968d202c34f40edbb4861656a2d659191e64d770c8c28918f924"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_GAME_PYKOTOR_MDL_IO_FIX",
+            "source_path": "src/core/game/pykotor_mdl_io_fix.py",
+            "packaged_path": "Python/src/core/game/pykotor_mdl_io_fix.py",
+            "sha256": "b2cce61022a0e8cd15e49ddf5ac24dc25443f974b9f02ee11c83465b770cefe9"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RESOURCES_INIT",
+            "source_path": "src/core/resources/__init__.py",
+            "packaged_path": "Python/src/core/resources/__init__.py",
+            "sha256": "b872fa553676a74f18a232694aea5665a5a1acbeee4a5c8a03a6f58d8829ae76"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RESOURCES_GAME_RESOURCE_PROVIDER",
+            "source_path": "src/core/resources/game_resource_provider.py",
+            "packaged_path": "Python/src/core/resources/game_resource_provider.py",
+            "sha256": "f36cafda7c61df4e11a64dbb3a612384e9f34893bb0741887d17dd37b9cac9c6"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_RESOURCES_INIT",
+            "source_path": "src/resources/__init__.py",
+            "packaged_path": "Python/src/resources/__init__.py",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_RESOURCES_GAME_DETECTOR",
+            "source_path": "src/resources/game_detector.py",
+            "packaged_path": "Python/src/resources/game_detector.py",
+            "sha256": "082f707ced2f16da2dc487d709fd9883edba96b484e6a19301abb041754502ab"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_RESOURCES_GAME_LIBRARY",
+            "source_path": "src/resources/game_library.py",
+            "packaged_path": "Python/src/resources/game_library.py",
+            "sha256": "ba903d7c5b33ab66b52a01e64af9d8d05b1374964d78b401fc6d05eb73044392"
+        }
+    ]
+}

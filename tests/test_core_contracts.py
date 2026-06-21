@@ -3262,7 +3262,7 @@ def test_viewport_render_loop_is_gpu_only() -> None:
 def test_add_model_to_scene_dialog_stays_compact_under_layout_apply() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-    from PySide6 import QtWidgets
+    from PySide6 import QtCore, QtWidgets
 
     from src.gui.qt_lib.dialogs.add_model_to_scene_dialog import AddModelToSceneDialog
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
@@ -3605,6 +3605,13 @@ def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinnin
     root.children.append(skin)
     skin.parent = root
     model = KotorModel(name="N_Bith", root_node=root)
+    body_root = ModelNode(name="N_Bith", flags=int(NodeFlags.HEADER), position=(9.0, 8.0, 7.0))
+    body_head_bone = ModelNode(name="head_g", flags=int(NodeFlags.HEADER))
+    body_skin = ModelNode(name="Head", flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH) | int(NodeFlags.SKIN))
+    body_root.children.extend([body_head_bone, body_skin])
+    body_head_bone.parent = body_root
+    body_skin.parent = body_root
+    body_model = KotorModel(name="N_Bith", root_node=body_root)
 
     fake_viewport = SimpleNamespace()
     fake_viewport._tag_scene_object_nodes = MethodType(QtViewportWidget._tag_scene_object_nodes, fake_viewport)
@@ -3615,7 +3622,7 @@ def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinnin
         id="scene-object-1",
         name="Bith Actor",
         visible=True,
-        metadata={"_runtime_model": model},
+        metadata={"_runtime_model": model, "_runtime_bas_body_model": body_model, "scene_import_id": "import-1"},
         transform=SimpleNamespace(position=(1.0, 2.0, 3.0), rotation=(0.0, 0.0, 0.0)),
     )
 
@@ -3628,8 +3635,16 @@ def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinnin
     assert getattr(placed_root, "_gr_scene_source_position") == (9.0, 8.0, 7.0)
     assert getattr(placed_root, "_gr_scene_gpu_transform") is True
     assert getattr(placed_root, "_gr_scene_object_name") == "Bith Actor"
+    assert getattr(placed_root, "_gr_scene_import_id") == "import-1"
+    assert getattr(placed_root, "_gr_runtime_source_model_id") == id(body_model)
+    assert getattr(placed_skin, "_gr_source_model_id") == id(body_model)
+    assert getattr(placed_root, "_gr_scene_node_key") == "import-1:n_bith"
+    assert getattr(placed_skin, "_gr_scene_node_key") == "import-1:head"
+    assert getattr(placed_root, "_gr_scene_animation_kind") in {"skeletal", "skeletal_static"}
+    assert getattr(placed_root.children[0], "_gr_scene_node_kind") == "joint"
     assert placed_skin.bone_map[0] == placed_root.name
     assert getattr(placed_skin, "_gr_scene_object_id") == "scene-object-1"
+    assert getattr(placed_skin, "_gr_scene_node_kind") == "skin_mesh"
 
     uploader = MatrixPaletteUploader(max_bones=4)
     uploader.build_inverse_bind_pose(composite)
@@ -3639,6 +3654,251 @@ def test_kmax_scene_composite_preserves_authored_root_name_for_animation_skinnin
     assert uploader._model_node_count == 3
     uploader.compute_skin_node_palette(placed_skin, SimpleNamespace(nodes={}))
     assert uploader._skin_inverse_bind_source == "qBone_tBone_dfs_indexed_TR_no_invert"
+
+
+def test_scene_skin_palette_keeps_dragged_root_source_relative() -> None:
+    from src.core.animation.gpu_skinning import MatrixPaletteUploader
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+
+    scene_root = ModelNode(name="scene_root", flags=int(NodeFlags.HEADER))
+    model_root = ModelNode(
+        name="N_Actor",
+        flags=int(NodeFlags.HEADER),
+        parent=scene_root,
+        position=(30.0, -4.0, 1.5),
+    )
+    pelvis = ModelNode(name="pelvis_g", flags=int(NodeFlags.HEADER), parent=model_root, position=(0.0, 1.0, 0.0))
+    skin = ModelNode(
+        name="body",
+        flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH) | int(NodeFlags.SKIN),
+        parent=model_root,
+    )
+    skin.bone_map = ["N_Actor", "pelvis_g"]
+    scene_root.children = [model_root]
+    model_root.children = [pelvis, skin]
+    model_root._gr_scene_object_root = True
+    model_root._gr_scene_gpu_transform = True
+    model_root._gr_scene_source_position = (9.0, 8.0, 7.0)
+
+    model = KotorModel(name="scene", root_node=scene_root)
+    uploader = MatrixPaletteUploader(max_bones=4)
+    uploader.build_inverse_bind_pose(model)
+
+    bind_root = uploader._world_pose_matrix("n_actor", {}, {})
+    bind_pelvis = uploader._world_pose_matrix("pelvis_g", {}, {})
+    assert bind_root[0][3] == pytest.approx(0.0)
+    assert bind_root[1][3] == pytest.approx(0.0)
+    assert bind_root[2][3] == pytest.approx(0.0)
+    assert bind_pelvis[1][3] == pytest.approx(1.0)
+
+    pose = SimpleNamespace(
+        nodes={
+            "n_actor": SimpleNamespace(position=(11.0, 8.0, 7.0), rotation=(0.0, 0.0, 0.0, 1.0)),
+            "pelvis_g": SimpleNamespace(position=(0.0, 1.5, 0.0), rotation=(0.0, 0.0, 0.0, 1.0)),
+        }
+    )
+    pose_root = uploader._world_pose_matrix("n_actor", pose.nodes, {})
+    pose_pelvis = uploader._world_pose_matrix("pelvis_g", pose.nodes, {})
+
+    assert pose_root[0][3] == pytest.approx(2.0)
+    assert pose_root[1][3] == pytest.approx(0.0)
+    assert pose_root[2][3] == pytest.approx(0.0)
+    assert pose_pelvis[0][3] == pytest.approx(2.0)
+    assert pose_pelvis[1][3] == pytest.approx(1.5)
+    assert pose_pelvis[2][3] == pytest.approx(0.0)
+
+
+def test_kmax_scene_manager_records_import_identity_and_model_classification() -> None:
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.scene.kmax_scene_manager import KMaxSceneManager
+    from src.core.scene.scene_resource_ref import SceneResourceRef
+
+    root = ModelNode(name="PLC_barrel1", flags=int(NodeFlags.HEADER))
+    mesh = ModelNode(name="barrel_mesh", flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH), parent=root)
+    root.children.append(mesh)
+    model = KotorModel(name="PLC_barrel1", root_node=root, model_type=32)
+
+    manager = KMaxSceneManager()
+    first = manager.add_model_instance(SceneResourceRef(game="K1", resref="PLC_barrel1"), runtime_model=model)
+    second = manager.add_model_instance(SceneResourceRef(game="K1", resref="PLC_barrel1"), runtime_model=model)
+
+    assert first.id != second.id
+    assert first.name != second.name
+    assert first.metadata["scene_import_id"] == first.id
+    assert second.metadata["scene_import_id"] == second.id
+    assert first.metadata["asset_kind"] == "placeable"
+    assert first.metadata["animation_kind"] == "static"
+    assert first.metadata["joint_names"] == []
+    assert first.metadata["animated_node_names"] == []
+    assert first.metadata["dummy_node_names"] == ["plc_barrel1"]
+
+
+def test_animation_engine_exposes_scene_node_kind_and_import_key() -> None:
+    from src.core.animation.animation_engine import AnimationEngine
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+
+    root = ModelNode(name="N_Test", flags=int(NodeFlags.HEADER))
+    joint = ModelNode(name="head_g", flags=int(NodeFlags.HEADER), parent=root)
+    skin = ModelNode(name="head", flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH) | int(NodeFlags.SKIN), parent=root)
+    animated_dummy = ModelNode(name="rootdummy", flags=int(NodeFlags.HEADER), parent=root)
+    animated_dummy.controllers = [{"controller_type": 8}]
+    skin.bone_map = ["head_g"]
+    root.children.extend([joint, skin, animated_dummy])
+    setattr(joint, "_gr_scene_node_kind", "joint")
+    setattr(joint, "_gr_scene_node_key", "import-a:head_g")
+    model = KotorModel(name="N_Test", root_node=root)
+
+    engine = AnimationEngine(model)
+
+    assert engine.asset_kind == "character"
+    assert engine.animation_kind == "skeletal"
+    assert engine.skeleton_kind == "skin_bone_map"
+    assert engine.is_skeletal_animation is True
+    assert engine.is_rigid_animation is False
+    assert engine.joint_names == frozenset({"head_g"})
+    assert "rootdummy" in engine.animated_node_names
+    assert "rootdummy" in engine.dummy_node_names
+    assert engine.node_kind("head_g") == "joint"
+    assert engine.node_scene_key("head_g") == "import-a:head_g"
+    assert engine.node_kind("head") == "skin_mesh"
+    assert engine.node_kind("rootdummy") == "animated_dummy"
+    assert engine.is_joint_node("head_g") is True
+    assert engine.is_animated_node("rootdummy") is True
+    assert engine.is_dummy_node("rootdummy") is True
+
+
+def test_animation_engine_distinguishes_rigid_animation_from_skeletons() -> None:
+    from src.core.animation.animation_engine import AnimationEngine
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+
+    root = ModelNode(name="PLC_anim", flags=int(NodeFlags.HEADER))
+    mesh = ModelNode(
+        name="animated_mesh",
+        flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH),
+        parent=root,
+    )
+    mesh.controllers = [{"controller_type": 8}]
+    root.children.append(mesh)
+    model = KotorModel(name="PLC_anim", root_node=root, model_type=32)
+
+    engine = AnimationEngine(model)
+
+    assert engine.asset_kind == "placeable"
+    assert engine.animation_kind == "rigid"
+    assert engine.is_skeletal_animation is False
+    assert engine.is_rigid_animation is True
+    assert engine.joint_names == frozenset()
+    assert engine.node_kind("animated_mesh") == "mesh"
+    assert engine.is_animated_node("animated_mesh") is True
+
+
+def test_content_browser_activation_adds_generic_model_rows_without_clear_prompt() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/resource_loading.py"
+    ).read_text(encoding="utf-8")
+    panel_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/qt_content_browser_panel.py"
+    ).read_text(encoding="utf-8")
+
+    assert "self.asset_view.itemDoubleClicked.connect(lambda _item, _column: self._activate_selected())" in panel_source
+    assert 'self.primary_button.setText("Preview" if is_animation else "Add")' in panel_source
+    assert "self.addToCurrentSceneRequested.emit(dict(row))" in panel_source
+    assert "def open_selected_as_new_scene" in panel_source
+    assert "self.primarySceneLoadRequested.emit(row)" in panel_source
+    assert 'import_action="add" if scene_objects else "clear"' in source
+    assert "def _add_content_browser_model_to_current_scene" in source
+    assert 'self._start_resource_load(resref, game, import_action="add")' in source
+
+
+def test_locomotion_disc_overlay_has_size_control_and_ipc_command() -> None:
+    construction_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/construction.py"
+    ).read_text(encoding="utf-8")
+    overlay_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
+    ).read_text(encoding="utf-8")
+    renderer_source = (
+        ROOT
+        / "native/GhostRigger.Core.Rendering/Python/src/core/rendering/frame_core/renderer_overlays.py"
+    ).read_text(encoding="utf-8")
+    viewport_tools_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/viewport_tools.py"
+    ).read_text(encoding="utf-8")
+
+    assert "self.locomotion_disc_size_spin = QtWidgets.QSpinBox(self)" in construction_source
+    assert 'self.locomotion_disc_size_spin.setObjectName("ViewportLocomotionDiscSize")' in construction_source
+    assert "self.locomotion_disc_size_spin.valueChanged.connect(self.set_locomotion_disc_size)" in construction_source
+    assert "self.locomotion_disc_button.customContextMenuRequested.connect(self._show_locomotion_disc_size_dialog)" in construction_source
+    assert "def _show_locomotion_disc_size_dialog" in construction_source
+    assert 'spin.setObjectName("ViewportLocomotionDiscSizeDialogSpin")' in construction_source
+    assert "row.addWidget(self.locomotion_disc_size_spin)" not in construction_source
+    assert "axis_angles = getattr(self._renderer, \"_bone_screen_axis_angles\", {})" in overlay_source
+    assert "disc.rotate(float(angle), resample=Image.BICUBIC, expand=False)" in overlay_source
+    assert "self._bone_screen_axis_angles = {}" in renderer_source
+    assert "self._bone_screen_axis_angles[id(node)]" in renderer_source
+    assert '"locomotion_disc": "toggle_locomotion_discs"' in viewport_tools_source
+    assert '{"locomotion_size", "locomotion_disc_size", "disc_size"}' in viewport_tools_source
+
+
+def test_viewport_hover_refreshes_after_transform_drags() -> None:
+    picking_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/picking_hover.py"
+    ).read_text(encoding="utf-8")
+    drag_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/drag_interactions.py"
+    ).read_text(encoding="utf-8")
+
+    assert "def _refresh_viewport_hover_at" in picking_source
+    assert "self._set_viewport_hover(node, face_bounds, reason=reason)" in picking_source
+    assert 'self._clear_viewport_hover(request=False, reason="gizmo drag hover suppressed")' in drag_source
+    assert 'self._clear_viewport_hover(request=False, reason="gimbal drag hover suppressed")' in drag_source
+    assert 'self._clear_viewport_hover(request=False, reason="joint drag hover suppressed")' in drag_source
+    assert 'self._refresh_viewport_hover_at(x, y, reason="gizmo drag hover refreshed")' in drag_source
+    assert 'self._refresh_viewport_hover_at(x, y, reason="gimbal drag hover refreshed")' in drag_source
+    assert 'self._refresh_viewport_hover_at(x, y, reason="joint drag hover refreshed")' in drag_source
+
+
+def test_viewport_double_click_and_object_hits_promote_attached_nodes_to_scene_root() -> None:
+    event_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/event_navigation.py"
+    ).read_text(encoding="utf-8")
+    selection_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/selection_mesh.py"
+    ).read_text(encoding="utf-8")
+    drag_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/drag_interactions.py"
+    ).read_text(encoding="utf-8")
+
+    assert "QtCore.QEvent.MouseButtonDblClick" in event_source
+    assert "def _double_click_lmb" in drag_source
+    assert "def _scene_object_selection_target_for_node" in selection_source
+    assert "target = self._scene_object_selection_target_for_node(mesh_node)" in drag_source
+    assert "target = self._scene_object_selection_target_for_node(helper_node)" in drag_source
+    assert "force_group=True" in drag_source
+    assert 'node_kind == "joint"' in selection_source
+
+
+def test_scene_root_transform_evicts_child_gpu_nodes() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/resource_cache.py"
+    ).read_text(encoding="utf-8")
+
+    assert "scene_transform_only = bool(getattr(node, \"_gr_scene_gpu_transform\", False))" in source
+    assert "affected_nodes = [node]" in source
+    assert "affected_nodes.append(child)" in source
+    assert "for affected in affected_nodes:" in source
+    assert "self._gpu_renderer.invalidate_node(affected)" in source
 
 
 def test_kmax_scene_composite_keeps_bas_layers_out_of_body_dfs_indices() -> None:
@@ -3738,10 +3998,15 @@ def test_kmax_scene_gpu_transform_uses_authored_vbo_basis() -> None:
 
     authored_pos, _authored_rot = _scene_authored_world_transform(child)
     scene_mat = _scene_gpu_model_matrix(child)
+    child.parent = None
+    child._gr_scene_object_root_ref = root
+    scene_mat_from_ref = _scene_gpu_model_matrix(child)
 
     assert authored_pos == pytest.approx((11.0, 8.0, 7.0))
     assert scene_mat[0, 3] == pytest.approx(100.0)
     assert scene_mat[0, 0] == pytest.approx(3.0)
+    assert scene_mat_from_ref[0, 3] == pytest.approx(100.0)
+    assert scene_mat_from_ref[0, 0] == pytest.approx(3.0)
 
 
 def test_kmax_scene_reload_preserves_selected_object_for_pivot_tools() -> None:
@@ -4638,6 +4903,7 @@ def test_qt_viewport_exposes_mesh_multiselect_box_and_ctrl_a() -> None:
     assert "meshHovered = QtCore.Signal(object)" in source
     assert "def set_selected_meshes" in source
     assert "def select_all_meshes" in source
+    assert "def select_all_visible_viewport_nodes" in source
     assert "QtCore.Qt.Key_A" in source
     assert "def _mesh_nodes_in_rect" in source
     assert "def _all_geometry_nodes" in source
@@ -4928,6 +5194,46 @@ def test_qt_lighting_panel_editor_refresh_preserves_selected_light() -> None:
     assert panel.pos_spins == []
 
 
+def test_qt_lighting_panel_has_min_width_and_selected_light_overflow() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtCore, QtWidgets
+
+    from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
+
+    workspace_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/toolboxes/workspace_docks.py"
+    ).read_text(encoding="utf-8")
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtLightingPanel()
+    try:
+        panel.resize(260, 720)
+        panel.show()
+        app.processEvents()
+
+        assert panel.minimumWidth() >= 320
+        assert panel.tree.minimumWidth() == 0
+        assert panel.tree.horizontalScrollBarPolicy() == QtCore.Qt.ScrollBarAsNeeded
+        assert panel.selected_light_scroll.horizontalScrollBarPolicy() == QtCore.Qt.ScrollBarAsNeeded
+        assert panel.selected_light_scroll.verticalScrollBarPolicy() == QtCore.Qt.ScrollBarAsNeeded
+        assert panel.selected_light_editor.minimumWidth() >= 430
+        assert panel.name_edit.minimumWidth() == 0
+        assert panel.group_edit.minimumWidth() == 0
+        assert panel.type_combo.minimumWidth() == 0
+        assert panel.color_button.minimumWidth() == 0
+        assert panel.name_edit.sizePolicy().horizontalPolicy() == QtWidgets.QSizePolicy.Expanding
+        assert panel.tree.sizePolicy().horizontalPolicy() == QtWidgets.QSizePolicy.Expanding
+        assert any(label.wordWrap() for label in panel.findChildren(QtWidgets.QLabel))
+        assert "minimum_width = max(0, int(widget.minimumWidth()))" in workspace_source
+        assert "scroll_widget.setMinimumWidth(minimum_width)" in workspace_source
+        assert "dock.setMinimumWidth(minimum_width)" in workspace_source
+    finally:
+        panel.deleteLater()
+        app.processEvents()
+
+
 def test_qt_viewport_can_pick_light_gizmos() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -5140,7 +5446,7 @@ def test_moderngl_helper_marker_overlay_draws_and_respects_toggle() -> None:
 def test_viewport_toolbar_exposes_helper_toggle_and_selection_mode_menu() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-    from PySide6 import QtWidgets
+    from PySide6 import QtCore, QtWidgets
 
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
 
@@ -5153,6 +5459,7 @@ def test_viewport_toolbar_exposes_helper_toggle_and_selection_mode_menu() -> Non
 
         assert helper_button is viewport.dummy_helpers_button
         assert light_helper_button is viewport.light_helpers_button
+        assert viewport.viewport_toolbar_scroll.horizontalScrollBarPolicy() == QtCore.Qt.ScrollBarAlwaysOff
         assert viewport.dummy_helpers_button.isCheckable()
         assert viewport.dummy_helpers_button.isChecked() is True
         assert viewport.light_helpers_button.isCheckable()
@@ -5161,7 +5468,15 @@ def test_viewport_toolbar_exposes_helper_toggle_and_selection_mode_menu() -> Non
         assert bool(getattr(viewport._renderer, "show_light_gizmos", False)) is True
         assert bool(getattr(viewport._renderer, "show_light_radius_volumes", False)) is True
         assert mode_button is viewport.selection_mode_button
+        assert viewport.locomotion_disc_size_spin.isHidden()
+        assert viewport.viewport_toolbar.layout().indexOf(viewport.selection_mode_button) >= 0
+        assert viewport.viewport_toolbar.layout().indexOf(viewport.locomotion_disc_size_spin) < 0
+        assert viewport.axis_mode_control.combo.objectName() == "AxisModeComboBox"
+        assert viewport.axis_mode_control.TOOLBAR_VERTICAL_NUDGE == 0
+        assert viewport.axis_mode_control.height() == viewport.gimbal_button.height()
+        assert viewport.axis_mode_control.combo.height() == viewport.gimbal_button.height()
         assert [action.data() for action in mode_button.menu().actions()] == [
+            "any",
             "object",
             "mesh",
             "helpers",
@@ -5173,6 +5488,10 @@ def test_viewport_toolbar_exposes_helper_toggle_and_selection_mode_menu() -> Non
         assert viewport._viewport_selection_mode == "helpers"
         assert mode_button.toolTip() == "Viewport selection mode: Helpers"
         assert not mode_button.icon().isNull()
+
+        viewport.set_viewport_selection_mode("any")
+        assert viewport._viewport_selection_mode == "any"
+        assert mode_button.toolTip() == "Viewport selection mode: Any"
 
         viewport.set_dummy_helper_visibility(False)
         assert viewport.dummy_helpers_button.isChecked() is False
@@ -5228,8 +5547,10 @@ def test_viewport_selection_mode_filters_click_targets() -> None:
         viewport._release_lmb(_Event())
         viewport.set_viewport_selection_mode("mesh")
         viewport._release_lmb(_Event())
+        viewport.set_viewport_selection_mode("any")
+        viewport._release_lmb(_Event())
 
-        assert selected == [helper, light, camera, mesh]
+        assert selected == [helper, light, camera, mesh, mesh]
     finally:
         viewport.deleteLater()
 
@@ -5287,6 +5608,12 @@ def test_viewport_marquee_selection_respects_active_selection_mode() -> None:
         assert helper in viewport._selected_viewport_nodes
         assert light in viewport._selected_viewport_nodes
         assert camera_node not in viewport._selected_viewport_nodes
+
+        viewport.set_viewport_selection_mode("any")
+        viewport._apply_marquee_selection(rect, QtCore.Qt.NoModifier)
+        assert mesh in viewport._selected_viewport_nodes
+        assert helper in viewport._selected_viewport_nodes
+        assert light in viewport._selected_viewport_nodes
     finally:
         viewport.deleteLater()
 
@@ -5339,8 +5666,181 @@ def test_viewport_hover_respects_active_selection_mode() -> None:
         viewport._update_mesh_hover(_Event())
         assert viewport._hovered_mesh_node is mesh
         assert viewport._hovered_camera_node is None
+
+        viewport.set_viewport_selection_mode("any")
+        viewport._update_mesh_hover(_Event())
+        assert viewport._hovered_mesh_node is mesh
     finally:
         viewport.deleteLater()
+
+
+def test_viewport_object_mode_promotes_scene_children_to_object_root() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtCore, QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    class _Position:
+        def x(self) -> int:
+            return 100
+
+        def y(self) -> int:
+            return 100
+
+    class _Event:
+        def position(self):
+            return _Position()
+
+        def modifiers(self):
+            return QtCore.Qt.NoModifier
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    viewport = QtViewportWidget()
+    root = SimpleNamespace(
+        name="c_turret01",
+        children=[],
+        _gr_scene_object_id="obj-turret",
+        _gr_scene_object_root=True,
+    )
+    mesh = SimpleNamespace(
+        name="turret_mesh",
+        is_mesh=True,
+        vertices=[(0, 0, 0)],
+        faces=[(0, 0, 0)],
+        parent=root,
+        _gr_scene_object_id="obj-turret",
+        _gr_scene_object_root_ref=root,
+    )
+    root.children = [mesh]
+    selected: list[object | None] = []
+    viewport.set_selected_node = lambda node, *args, **kwargs: selected.append(node)
+    viewport._mesh_hit_test_detail = lambda *args, **kwargs: (mesh, None)
+    viewport._helper_hit_test = lambda *args, **kwargs: None
+    viewport._light_hit_test = lambda *args, **kwargs: None
+    viewport._camera_hit_test = lambda *args, **kwargs: None
+    viewport._renderer.show_bones = True
+    viewport._renderer.hit_test_bone = lambda *args, **kwargs: mesh
+    viewport._joint_dot_enabled = False
+    try:
+        viewport.set_viewport_selection_mode("object")
+        viewport._release_lmb(_Event())
+        assert selected == [root]
+    finally:
+        viewport.deleteLater()
+
+
+def test_ctrl_a_selects_visible_scene_object_roots_not_hidden_nodes() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    visible = SimpleNamespace(name="Visible", _gr_scene_object_root=True, _gr_scene_object_id="obj-visible")
+    hidden = SimpleNamespace(name="Hidden", _gr_scene_object_root=True, _gr_scene_object_id="obj-hidden", _gr_hidden=True)
+    locked = SimpleNamespace(name="Locked", _gr_scene_object_root=True, _gr_scene_object_id="obj-locked", _gr_scene_object_locked=True)
+    composite_root = SimpleNamespace(name="scene_root", _gr_scene_composite_root=True, children=[visible, hidden, locked])
+    viewport = QtViewportWidget()
+    viewport.model = SimpleNamespace(root_node=composite_root)
+    try:
+        viewport.select_all_visible_viewport_nodes()
+        assert viewport._selected_viewport_nodes == [visible]
+        assert viewport._renderer.selected_node is visible
+    finally:
+        viewport.deleteLater()
+
+
+def test_scene_bone_overlay_uses_scene_world_transform_and_skips_composite_root() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Core.Rendering/Python/src/core/rendering/frame_core/renderer_overlays.py"
+    ).read_text(encoding="utf-8")
+
+    assert 'getattr(node, "_gr_scene_composite_root", False)' in source
+    assert 'getattr(node, "_gr_scene_object_id", "")' in source
+    assert "wp, _, _ = self._node_world_transform(node)" in source
+
+
+def test_scene_root_overlay_transform_follows_own_object_offset_only() -> None:
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.rendering.frame_core.renderer import FrameRenderer
+
+    scene_root = ModelNode(name="scene_root", flags=int(NodeFlags.HEADER))
+    turret_root = ModelNode(name="c_turret01", flags=int(NodeFlags.HEADER), parent=scene_root)
+    turret_root.position = (10.0, 0.0, 0.0)
+    turret_root.rotation = (0.0, 0.0, 0.0, 1.0)
+    turret_root._gr_scene_object_id = "turret-a"
+    turret_root._gr_scene_object_root = True
+    turret_root._gr_scene_gpu_transform = True
+    turret_root._gr_scene_source_position = (3.0, 0.0, 0.0)
+    turret_root._gr_scene_source_rotation = (0.0, 0.0, 0.0, 1.0)
+    turret_helper = ModelNode(name="turret_dummy", flags=int(NodeFlags.HEADER), parent=turret_root)
+    turret_helper.position = (2.0, 0.0, 0.0)
+    turret_helper._gr_scene_object_id = "turret-a"
+    turret_helper._gr_scene_object_root_ref = turret_root
+
+    other_root = ModelNode(name="c_turret02", flags=int(NodeFlags.HEADER), parent=scene_root)
+    other_root.position = (-5.0, 0.0, 0.0)
+    other_root._gr_scene_object_id = "turret-b"
+    other_root._gr_scene_object_root = True
+    other_root._gr_scene_gpu_transform = True
+    other_root._gr_scene_source_position = (1.0, 0.0, 0.0)
+    other_helper = ModelNode(name="other_dummy", flags=int(NodeFlags.HEADER), parent=other_root)
+    other_helper.position = (4.0, 0.0, 0.0)
+    other_helper._gr_scene_object_id = "turret-b"
+    other_helper._gr_scene_object_root_ref = other_root
+    scene_root.children = [turret_root, other_root]
+    turret_root.children = [turret_helper]
+    other_root.children = [other_helper]
+
+    renderer = FrameRenderer(ArcBallCamera())
+    renderer.set_model(KotorModel(name="scene", root_node=scene_root))
+
+    assert renderer._node_world_transform(turret_root)[0] == pytest.approx((13.0, 0.0, 0.0))
+    assert renderer._node_world_transform(turret_helper)[0] == pytest.approx((15.0, 0.0, 0.0))
+    assert renderer._node_world_transform(other_helper)[0] == pytest.approx((0.0, 0.0, 0.0))
+
+    turret_root.position = (20.0, 0.0, 0.0)
+    renderer._wt_cache.clear()
+
+    assert renderer._node_world_transform(turret_root)[0] == pytest.approx((23.0, 0.0, 0.0))
+    assert renderer._node_world_transform(turret_helper)[0] == pytest.approx((25.0, 0.0, 0.0))
+    assert renderer._node_world_transform(other_helper)[0] == pytest.approx((0.0, 0.0, 0.0))
+
+
+def test_scene_bone_overlay_applies_scene_offset_during_scoped_animation() -> None:
+    from src.core.animation.animation_engine import AnimPose, NodePose
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.rendering.frame_core.renderer import FrameRenderer
+
+    scene_root = ModelNode(name="scene_root", flags=int(NodeFlags.HEADER))
+    character_root = ModelNode(name="n_bith", flags=int(NodeFlags.HEADER), parent=scene_root)
+    character_root.position = (10.0, 0.0, 0.0)
+    character_root.rotation = (0.0, 0.0, 0.0, 1.0)
+    character_root._gr_scene_object_id = "bith-a"
+    character_root._gr_scene_object_root = True
+    character_root._gr_scene_gpu_transform = True
+    character_root._gr_scene_source_position = (0.0, 0.0, 0.0)
+    character_root._gr_scene_source_rotation = (0.0, 0.0, 0.0, 1.0)
+    pelvis = ModelNode(name="pelvis", flags=int(NodeFlags.HEADER), parent=character_root)
+    pelvis.position = (2.0, 0.0, 0.0)
+    pelvis.rotation = (0.0, 0.0, 0.0, 1.0)
+    pelvis._gr_scene_object_id = "bith-a"
+    pelvis._gr_scene_object_root_ref = character_root
+    scene_root.children = [character_root]
+    character_root.children = [pelvis]
+
+    renderer = FrameRenderer(ArcBallCamera())
+    renderer.set_model(KotorModel(name="scene", root_node=scene_root))
+    pose = AnimPose(nodes={"pelvis": NodePose(name="pelvis", position=(5.0, 0.0, 0.0))})
+
+    renderer.set_character_animation_pose("bith-a", pose, name="walk", time=0.1, length=1.0)
+
+    assert renderer._node_world_transform(pelvis)[0] == pytest.approx((15.0, 0.0, 0.0))
 
 
 def test_viewport_marquee_drag_only_updates_rubber_band_before_release() -> None:
@@ -5506,7 +6006,7 @@ def test_qt_viewport_preserves_light_node_selection_under_scene_root_tags() -> N
 def test_qt_viewport_preserves_null_helper_selection_under_scene_root_tags() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-    from PySide6 import QtWidgets
+    from PySide6 import QtCore, QtWidgets
 
     from src.core.geometry.model_data import ModelNode
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
@@ -6336,7 +6836,7 @@ def test_wgpu_skinned_mesh_revision_changes_between_bind_and_lbs_modes(monkeypat
     assert animated_row.source_revision[-1] == 1
 
 
-def test_wgpu_animation_queue_key_tracks_pose_time_for_character_builder_skinning() -> None:
+def test_wgpu_animation_queue_key_uses_pose_revision() -> None:
     from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
     from src.core.rendering.viewport_display import ViewportDisplayMode, ViewportDisplayOptions
 
@@ -6346,13 +6846,25 @@ def test_wgpu_animation_queue_key_tracks_pose_time_for_character_builder_skinnin
     renderer._active_textures = {}
     options = ViewportDisplayOptions(display_mode=ViewportDisplayMode.TEXTURED)
 
-    renderer._active_anim_pose = SimpleNamespace(time=0.1)
+    renderer._active_anim_pose = SimpleNamespace(
+        time=0.1,
+        _gr_animation_name="walk",
+        _gr_animation_source_model_id=101,
+        _gr_animation_scene_object_id="scene-a",
+        _gr_animation_scene_import_id="import-a",
+    )
     first = renderer._render_queue_revision_key(
         options,
         force_untextured=False,
         force_no_lightmaps=True,
     )
-    renderer._active_anim_pose = SimpleNamespace(time=0.6)
+    renderer._active_anim_pose = SimpleNamespace(
+        time=0.6,
+        _gr_animation_name="walk",
+        _gr_animation_source_model_id=101,
+        _gr_animation_scene_object_id="scene-a",
+        _gr_animation_scene_import_id="import-a",
+    )
     second = renderer._render_queue_revision_key(
         options,
         force_untextured=False,
@@ -7536,6 +8048,344 @@ def test_sequence_frame_range_edit_keeps_playback_end_tracking_sequence_end() ->
     assert sequence.playback_end_frame == 24
 
 
+def test_sequence_animation_pose_tags_bound_scene_object() -> None:
+    from src.sequence.sequence_evaluator import SequenceEvaluator
+
+    runtime_model = SimpleNamespace(name="N_DarthMalak")
+    scene_object = SimpleNamespace(
+        id="scene-malak",
+        metadata={
+            "_runtime_model": runtime_model,
+            "scene_import_id": "import-malak",
+        },
+    )
+    scene_manager = SimpleNamespace(get_scene_objects=lambda: [scene_object])
+    viewport = SimpleNamespace(parent=lambda: None)
+    evaluator = SequenceEvaluator(viewport, owner=SimpleNamespace(scene_manager=scene_manager))
+    pose = SimpleNamespace()
+    binding = SimpleNamespace(target_object_id="scene-malak")
+
+    evaluator._tag_animation_pose(pose, runtime_model, "walk", binding=binding, obj=scene_object, game="K1")
+
+    assert pose._gr_animation_source_model_id == id(runtime_model)
+    assert pose._gr_animation_source_model_name == "N_DarthMalak"
+    assert pose._gr_animation_scene_object_id == "scene-malak"
+    assert pose._gr_animation_scene_import_id == "import-malak"
+    assert pose._gr_animation_name == "walk"
+    assert pose._gr_animation_game == "K1"
+
+
+def test_sequence_editor_lists_inherited_body_clips_with_bound_object_game(monkeypatch) -> None:
+    import src.core.animation.animation_engine as animation_engine
+    from src.core.geometry.model_data import KotorModel, ModelNode
+    from src.gui.sequence_editor.sequence_editor_window import SequenceEditorWindow
+
+    observed_contexts = []
+
+    class FakeAnimationEngine:
+        def __init__(self, model) -> None:
+            self.model = model
+
+        def list_all_animations(self) -> list[dict[str, object]]:
+            game = getattr(self.model, "game_version", "")
+            game_tag = str(game.value if hasattr(game, "value") else game or "").upper()
+            observed_contexts.append((game_tag, str(getattr(self.model, "supermodel", "") or "")))
+            if game_tag in {"1", "K1"} and str(getattr(self.model, "supermodel", "") or "") == "S_Female03":
+                return [
+                    {
+                        "name": "walk",
+                        "source": "S_Female03",
+                        "source_type": "inherited",
+                        "inherited": True,
+                        "length": 1.0,
+                    }
+                ]
+            return [{"name": "pause1", "source": "P_BastilaBB", "source_type": "local", "length": 0.5}]
+
+    monkeypatch.setattr(animation_engine, "AnimationEngine", FakeAnimationEngine)
+    monkeypatch.setattr(animation_engine.SuperModelResolver, "configure", lambda _manager: None)
+
+    body = KotorModel(name="P_BastilaBB", root_node=ModelNode(name="p_bastilabb"))
+    body.supermodel = "S_Female03"
+    body.game_version = None
+    scene_object = SimpleNamespace(
+        id="bastila-body",
+        source_ref=SimpleNamespace(game="K1"),
+        metadata={"_runtime_model": body},
+    )
+    binding = SimpleNamespace(target_object_id="bastila-body", display_name="P_BastilaBB")
+    editor = SequenceEditorWindow.__new__(SequenceEditorWindow)
+    editor.main_window = SimpleNamespace(_current_game="")
+    editor.source_viewport = SimpleNamespace(model=None)
+    editor.evaluator = SimpleNamespace(resolver=SimpleNamespace(resolve=lambda _binding: scene_object))
+
+    entries = editor._character_animation_entries(binding)
+
+    assert observed_contexts == [("1", "S_Female03")]
+    assert [entry["name"] for entry in entries] == ["walk"]
+    assert entries[0]["source_type"] == "inherited"
+    assert entries[0]["source_model_name"] == "S_Female03"
+    assert body.game_version is None
+
+
+def test_scene_runtime_model_resolves_serialized_object_source_ref() -> None:
+    from src.core.scene.scene_resource_ref import SceneResourceRef
+    from src.gui.windows.application_core.shared.scene_workflow import SceneWorkflowMixin
+
+    runtime_model = SimpleNamespace(name="N_DarthMalak", animations=[SimpleNamespace(name="walk", length=1.0)])
+    scene_object = SimpleNamespace(
+        object_type="model",
+        source_ref=SceneResourceRef(game="K1", resref="n_darthmalak"),
+        metadata={},
+    )
+    window = SimpleNamespace(_scene_texture_dirs=[])
+    window._load_model_for_resource_ref = lambda ref: (runtime_model, "override_textures")
+    window._runtime_model_for_scene_object = MethodType(
+        SceneWorkflowMixin._runtime_model_for_scene_object,
+        window,
+    )
+
+    assert window._runtime_model_for_scene_object(scene_object) is runtime_model
+    assert scene_object.metadata["_runtime_model"] is runtime_model
+    assert scene_object.metadata.get("unresolved") is None
+    assert window._scene_texture_dirs == ["override_textures"]
+
+
+def test_sequence_animation_picker_uses_serialized_scene_runtime_model(monkeypatch) -> None:
+    import src.core.animation.animation_engine as animation_engine
+    from PySide6 import QtWidgets
+
+    from src.gui.sequence_editor.sequence_editor_window import SequenceEditorWindow
+    from src.sequence.sequence_binding import SequenceBinding, SequenceTargetType
+    from src.sequence.sequence_model import GhostRiggerLevelSequence
+    from src.sequence.tracks.character_track import CharacterTrack
+
+    class FakeAnimationEngine:
+        def __init__(self, model) -> None:
+            self.model = model
+
+        def list_all_animations(self) -> list[dict[str, object]]:
+            return [
+                {"name": "walk", "source": "N_DarthMalak", "source_type": "local", "length": 1.0},
+                {"name": "taunt", "source": "S_Male02", "source_type": "inherited", "inherited": True, "length": 2.0},
+            ]
+
+    monkeypatch.setattr(animation_engine, "AnimationEngine", FakeAnimationEngine)
+    monkeypatch.setattr(animation_engine.SuperModelResolver, "configure", lambda _manager: None)
+    selected: dict[str, object] = {}
+
+    def fake_get_item(_parent, title, label, items, current, editable):
+        selected.update({"title": title, "label": label, "items": list(items), "current": current, "editable": editable})
+        return items[1], True
+
+    monkeypatch.setattr(QtWidgets.QInputDialog, "getItem", fake_get_item)
+
+    runtime_model = SimpleNamespace(name="N_DarthMalak", supermodel="S_Male02")
+    scene_object = SimpleNamespace(
+        id="scene-malak",
+        object_type="model",
+        source_ref=SimpleNamespace(game="K1", resref="n_darthmalak"),
+        metadata={},
+    )
+    sequence = GhostRiggerLevelSequence(frame_rate=24, end_frame=96)
+    binding = sequence.add_binding(
+        SequenceBinding(
+            display_name="Malak",
+            target_object_id="scene-malak",
+            target_object_name="Malak",
+            target_type=SequenceTargetType.CHARACTER,
+        )
+    )
+    track = binding.add_track(CharacterTrack(parent_binding_id=binding.binding_id))
+    editor = SequenceEditorWindow.__new__(SequenceEditorWindow)
+    editor.sequence = sequence
+    editor.source_viewport = SimpleNamespace(model=None)
+    editor.main_window = SimpleNamespace(
+        _current_game="K1",
+        _runtime_model_for_scene_object=lambda obj: runtime_model if obj is scene_object else None,
+    )
+    editor.evaluator = SimpleNamespace(resolver=SimpleNamespace(resolve=lambda _binding: scene_object))
+    editor._set_status = lambda text: selected.update({"status": text})
+
+    assert editor._configure_character_track(track, binding, prompt=True) is True
+
+    assert selected["title"] == "Animation Track"
+    assert len(selected["items"]) == 2
+    assert track.keyframes[-1].value["animation"] == "taunt"
+    assert track.keyframes[-1].value["source_model_name"] == "S_Male02"
+
+
+def test_sequence_animation_picker_prompts_even_with_browser_selection(monkeypatch) -> None:
+    import src.core.animation.animation_engine as animation_engine
+    from PySide6 import QtCore, QtWidgets
+
+    from src.gui.sequence_editor.sequence_editor_window import SequenceEditorWindow
+    from src.sequence.sequence_binding import SequenceBinding, SequenceTargetType
+    from src.sequence.sequence_model import GhostRiggerLevelSequence
+    from src.sequence.tracks.character_track import CharacterTrack
+
+    class FakeAnimationEngine:
+        def __init__(self, model) -> None:
+            self.model = model
+
+        def list_all_animations(self) -> list[dict[str, object]]:
+            return [
+                {"name": "walk", "source": "N_DarthMalak", "source_type": "local", "length": 1.0},
+                {"name": "taunt", "source": "S_Male02", "source_type": "inherited", "inherited": True, "length": 2.0},
+            ]
+
+    class FakeItem:
+        def data(self, role):
+            assert role == QtCore.Qt.UserRole + 1
+            return {"entry": {"source": "S_Male02", "source_type": "inherited", "source_model_name": "S_Male02", "length": 2.0}}
+
+    monkeypatch.setattr(animation_engine, "AnimationEngine", FakeAnimationEngine)
+    monkeypatch.setattr(animation_engine.SuperModelResolver, "configure", lambda _manager: None)
+    prompt: dict[str, object] = {}
+    monkeypatch.setattr(
+        QtWidgets.QInputDialog,
+        "getItem",
+        lambda _parent, _title, _label, items, current, _editable: (
+            prompt.update({"items": list(items), "current": current}) or items[current],
+            True,
+        ),
+    )
+
+    runtime_model = SimpleNamespace(name="N_DarthMalak", supermodel="S_Male02")
+    scene_object = SimpleNamespace(
+        id="scene-malak",
+        object_type="model",
+        source_ref=SimpleNamespace(game="K1", resref="n_darthmalak"),
+        metadata={},
+    )
+    sequence = GhostRiggerLevelSequence(frame_rate=24, end_frame=96)
+    binding = sequence.add_binding(
+        SequenceBinding(
+            display_name="Malak",
+            target_object_id="scene-malak",
+            target_object_name="Malak",
+            target_type=SequenceTargetType.CHARACTER,
+        )
+    )
+    track = binding.add_track(CharacterTrack(parent_binding_id=binding.binding_id))
+    panel = SimpleNamespace(
+        selected_animation=lambda: "taunt",
+        selected_animation_source=lambda: "inherited",
+        listbox=SimpleNamespace(currentItem=lambda: FakeItem()),
+    )
+    editor = SequenceEditorWindow.__new__(SequenceEditorWindow)
+    editor.sequence = sequence
+    editor.source_viewport = SimpleNamespace(model=None)
+    editor.main_window = SimpleNamespace(
+        _current_game="K1",
+        _current_model=runtime_model,
+        animations_panel=panel,
+        _runtime_model_for_scene_object=lambda obj: runtime_model if obj is scene_object else None,
+    )
+    editor.evaluator = SimpleNamespace(resolver=SimpleNamespace(resolve=lambda _binding: scene_object))
+    editor._set_status = lambda _text: None
+
+    assert editor._configure_character_track(track, binding, prompt=True) is True
+    assert prompt["current"] == 1
+    assert len(prompt["items"]) == 2
+    assert track.keyframes[-1].value["animation"] == "taunt"
+
+
+def test_sequence_overlapping_picker_adds_overlay_lane_for_serialized_model(monkeypatch) -> None:
+    import src.core.animation.animation_engine as animation_engine
+    from PySide6 import QtWidgets
+
+    from src.gui.sequence_editor.sequence_editor_window import SequenceEditorWindow
+    from src.sequence.sequence_binding import SequenceBinding, SequenceTargetType
+    from src.sequence.sequence_model import GhostRiggerLevelSequence
+    from src.sequence.tracks.character_track import CharacterTrack
+
+    class FakeAnimationEngine:
+        def __init__(self, model) -> None:
+            self.model = model
+
+        def list_all_animations(self) -> list[dict[str, object]]:
+            return [{"name": "chturnl", "source": "N_DarthMalak", "source_type": "local", "length": 1.0}]
+
+    monkeypatch.setattr(animation_engine, "AnimationEngine", FakeAnimationEngine)
+    monkeypatch.setattr(animation_engine.SuperModelResolver, "configure", lambda _manager: None)
+    monkeypatch.setattr(QtWidgets.QInputDialog, "getItem", lambda _parent, _title, _label, items, _current, _editable: (items[0], True))
+
+    runtime_model = SimpleNamespace(name="N_DarthMalak", supermodel="S_Male02")
+    scene_object = SimpleNamespace(
+        id="scene-malak",
+        object_type="model",
+        source_ref=SimpleNamespace(game="K1", resref="n_darthmalak"),
+        metadata={},
+    )
+    sequence = GhostRiggerLevelSequence(frame_rate=24, end_frame=96)
+    binding = sequence.add_binding(
+        SequenceBinding(
+            display_name="Malak",
+            target_object_id="scene-malak",
+            target_object_name="Malak",
+            target_type=SequenceTargetType.CHARACTER,
+        )
+    )
+    base_track = binding.add_track(CharacterTrack(name="Animation: walk", parent_binding_id=binding.binding_id))
+    calls: list[object] = []
+    track_list = SimpleNamespace(
+        selected_track=lambda: base_track,
+        selected_binding=lambda: binding,
+    )
+    editor = SequenceEditorWindow.__new__(SequenceEditorWindow)
+    editor.sequence = sequence
+    editor.source_viewport = SimpleNamespace(model=None)
+    editor.main_window = SimpleNamespace(
+        _current_game="K1",
+        _runtime_model_for_scene_object=lambda obj: runtime_model if obj is scene_object else None,
+    )
+    editor.evaluator = SimpleNamespace(resolver=SimpleNamespace(resolve=lambda _binding: scene_object))
+    editor.outliner = SimpleNamespace(track_list=track_list)
+    editor._set_status = lambda text: calls.append(("status", text))
+    editor._sequence_changed = lambda evaluate=True: calls.append(("changed", evaluate))
+    editor._restore_outliner_selection_key = lambda key: calls.append(("select", key))
+    editor._play_from_current_animation_clip = lambda: calls.append(("play",))
+
+    assert editor._add_overlapping_animation_to_selected_track() is True
+
+    overlay_track = binding.tracks[0]
+    assert overlay_track is not base_track
+    assert overlay_track.metadata["is_overlap_track"] is True
+    assert overlay_track.keyframes[-1].value["animation"] == "chturnl"
+    assert overlay_track.keyframes[-1].value["blend_mode"] == "overlay"
+    assert overlay_track.keyframes[-1].value["priority"] == 1
+    assert ("changed", True) in calls
+    assert ("play",) in calls
+
+
+def test_sequence_editor_playback_stops_animation_browser_preview() -> None:
+    from src.gui.sequence_editor.sequence_editor_window import SequenceEditorWindow
+
+    calls: list[str] = []
+    timer = SimpleNamespace(stop=lambda: calls.append("timer_stop"))
+    engine = SimpleNamespace(stop=lambda: calls.append("engine_stop"))
+    info = SimpleNamespace(setPlainText=lambda text: calls.append(text))
+    editor = SequenceEditorWindow.__new__(SequenceEditorWindow)
+    editor.main_window = SimpleNamespace(
+        _animation_timer=timer,
+        _animation_engine=engine,
+        _animation_last_tick=123.0,
+        _animation_status_last_update=9.0,
+        animations_panel=SimpleNamespace(info=info),
+    )
+
+    editor._stop_animation_browser_preview_for_sequence()
+
+    assert calls == [
+        "timer_stop",
+        "engine_stop",
+        "Animation Browser preview paused for Sequence playback.",
+    ]
+    assert editor.main_window._animation_last_tick is None
+    assert editor.main_window._animation_status_last_update == 0.0
+
+
 def test_scene_camera_light_authoring_state_flows_are_safe_and_sequence_bindable() -> None:
     from types import SimpleNamespace
 
@@ -7913,7 +8763,7 @@ def test_viewport_navigation_profiles_are_available() -> None:
     )
 
     assert set(VIEWPORT_NAVIGATION_PROFILES) == {"3dsmax", "blender", "maya"}
-    assert DEFAULT_VIEWPORT_NAVIGATION_PROFILE == "maya"
+    assert DEFAULT_VIEWPORT_NAVIGATION_PROFILE == "3dsmax"
     assert normalize_viewport_navigation_profile("3ds Max") == "3dsmax"
     assert normalize_viewport_navigation_profile("Blender") == "blender"
     assert normalize_viewport_navigation_profile("Maya") == "maya"
@@ -8087,7 +8937,7 @@ def test_qt_animations_panel_displays_readable_names_with_raw_animation_slots() 
     assert panel.listbox.item(6).text() == "Blaster Set 8 (Assault Cannons: Both Hands) Attack 1 [b8a1]"
     assert panel.listbox.item(7).text() == "Combat Set 10 Block 3 [c10n3]"
     assert panel.listbox.item(8).text() == "Combat Set 2 (Single Hand Melee: Vibrosword, Short Sword) Attack 1 [c2a1]"
-    assert panel.listbox.item(9).text() == "Fists Set 2 Parry 4 Form A [f2p4a]"
+    assert panel.listbox.item(9).text() == "Fists Set 2 Power Attack 4 Form A [f2p4a]"
     assert panel.listbox.item(10).text() == "General Weapon Set 1 (Single Hand Melee: Shortsword) Attack 1 [g1a1]"
     assert panel.listbox.item(11).text() == "General Weapon Set 2 (Single Hand Melee: Lightsaber, Melee) Flurry 1 [g2f1]"
     assert panel.listbox.item(12).text() == "General Weapon Set 2 (Single Hand Melee: Lightsaber, Melee) Idle (On Guard Pose) 1 [g2r1]"
@@ -8132,7 +8982,7 @@ def test_qt_animations_panel_marks_inherited_readable_names_with_raw_slots() -> 
     assert panel.selected_animation() == "pause1"
 
 
-def test_qt_animations_panel_exposes_inheritance_game_selector() -> None:
+def test_qt_animations_panel_exposes_auto_inheritance_game_label() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
     from PySide6 import QtWidgets
@@ -8147,11 +8997,13 @@ def test_qt_animations_panel_exposes_inheritance_game_selector() -> None:
     panel.set_inheritance_game("K2")
 
     assert panel.selected_inheritance_game() == "K2"
+    assert panel.inheritance_game_label.text() == "K2"
     assert changes[-1] == "K2"
 
     panel.set_inheritance_game("")
 
     assert panel.selected_inheritance_game() == ""
+    assert panel.inheritance_game_label.text() == "Auto"
 
 
 def test_qt_animations_panel_exposes_animation_source_selector() -> None:
@@ -8176,6 +9028,74 @@ def test_qt_animations_panel_exposes_animation_source_selector() -> None:
     assert panel.selected_animation_source() == "attachment"
 
 
+def test_qt_animations_panel_exposes_scene_model_target_selector() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationsPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtAnimationsPanel()
+    changes = []
+    panel.animationTargetChanged.connect(changes.append)
+
+    panel.set_animation_targets(
+        [
+            {"id": "obj-a", "label": "Bith A (N_Bith)"},
+            {"id": "obj-b", "label": "Bith B (N_Bith)"},
+        ],
+        "obj-b",
+    )
+
+    assert panel.selected_animation_target_id() == "obj-b"
+    assert panel.animation_target_combo.itemText(panel.animation_target_combo.currentIndex()) == "Bith B (N_Bith)"
+    assert panel.select_animation_target("obj-a") is True
+    assert panel.selected_animation_target_id() == "obj-a"
+    assert changes[-1] == "obj-a"
+
+
+def test_qt_animations_panel_uses_auto_game_label_and_source_icon_buttons() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationsPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtAnimationsPanel()
+
+    assert not hasattr(panel, "inheritance_game_combo")
+    assert panel.inheritance_game_label.text() == "Auto"
+    assert panel.findChild(QtWidgets.QToolButton, "AnimationSourceBodyButton") is not None
+    assert panel.findChild(QtWidgets.QToolButton, "AnimationSourceHeadButton") is not None
+    assert panel.findChild(QtWidgets.QToolButton, "AnimationSourceAttachmentButton") is not None
+
+    panel.load_model(SimpleNamespace(_gr_source_game="K2", animations=[]))
+
+    assert panel.inheritance_game_label.text() == "K2"
+
+
+def test_qt_animations_panel_supermodel_selector_lists_extended_pc_sets() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationsPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtAnimationsPanel()
+
+    values = {
+        str(panel.inheritance_supermodel_combo.itemData(index) or "")
+        for index in range(panel.inheritance_supermodel_combo.count())
+    }
+
+    assert {"S_Female01", "S_Female02", "S_Female03", "S_Male01", "S_Male02", "S_Male03"} <= values
+    panel.set_inheritance_supermodel("S_Custom01")
+    assert panel.selected_inheritance_supermodel() == "S_Custom01"
+
+
 def test_main_window_head_animation_source_accepts_standalone_head() -> None:
     from src.core.geometry.model_data import KotorModel
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
@@ -8192,6 +9112,35 @@ def test_main_window_head_animation_source_accepts_standalone_head() -> None:
     assert window._animation_source_model() is window._current_model
 
     window._current_model = KotorModel(name="PMBAM", supermodel="S_Male02")
+
+    assert window._animation_source_model() is None
+
+
+def test_main_window_animation_browser_clears_for_unsuitable_selected_model() -> None:
+    from src.core.geometry.model_data import KotorModel
+    from src.gui.windows.application_core.shared.animation_workflow import AnimationWorkflowMixin
+
+    class Panel:
+        def selected_animation_source(self) -> str:
+            return "body"
+
+    class Window(AnimationWorkflowMixin):
+        def _selected_scene_model_object(self):
+            return selected_object
+
+        def _runtime_model_for_scene_object(self, obj):
+            return (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
+
+    unsupported = KotorModel(name="PLC_bench", supermodel="NULL")
+    selected_object = SimpleNamespace(object_type="model", metadata={"_runtime_model": unsupported})
+    scene_manager = SimpleNamespace(get_selected_objects=lambda: [selected_object])
+    valid_current = KotorModel(name="PMBAM", supermodel="S_Male02")
+
+    window = Window()
+    window.animations_panel = Panel()
+    window.scene_manager = scene_manager
+    window._current_model = valid_current
+    window._bas_body_model = None
 
     assert window._animation_source_model() is None
 
@@ -9022,6 +9971,76 @@ def test_animation_source_model_keeps_bas_body_as_animation_owner() -> None:
     assert QtGhostRiggerMainWindow._animation_source_model(window) is body
 
 
+def test_animation_source_model_prefers_selected_scene_object_over_composite() -> None:
+    from src.gui.windows.application_core.shared.animation_workflow import AnimationWorkflowMixin
+    from src.gui.windows.application_core.shared.scene_workflow import SceneWorkflowMixin
+
+    selected_model = SimpleNamespace(name="N_Malak")
+    other_model = SimpleNamespace(name="N_Bith")
+    composite = SimpleNamespace(name="Untitled Scene [K1]", _gr_scene_composite_root=True)
+    selected_object = SimpleNamespace(object_type="model", metadata={"_runtime_model": selected_model})
+    scene_manager = SimpleNamespace(
+        get_selected_objects=lambda: [selected_object],
+        active_scene=SimpleNamespace(
+            objects=[
+                SimpleNamespace(object_type="model", metadata={"_runtime_model": other_model}),
+                selected_object,
+            ]
+        ),
+    )
+    window = SimpleNamespace(
+        _bas_body_model=None,
+        _current_model=other_model,
+        scene_manager=scene_manager,
+        animations_panel=SimpleNamespace(selected_animation_source=lambda: "body"),
+    )
+    window._animation_source_key = MethodType(AnimationWorkflowMixin._animation_source_key, window)
+    window._selected_scene_model_object = MethodType(SceneWorkflowMixin._selected_scene_model_object, window)
+    window._runtime_model_for_scene_object = MethodType(SceneWorkflowMixin._runtime_model_for_scene_object, window)
+
+    assert AnimationWorkflowMixin._animation_source_model(window, composite) is selected_model
+
+
+def test_animation_browser_clears_for_selected_static_object() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.panels.qt_animation_panel import QtAnimationsPanel
+    from src.gui.windows.application_core.shared.animation_workflow import AnimationWorkflowMixin
+    from src.gui.windows.application_core.shared.scene_workflow import SceneWorkflowMixin
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    static_model = SimpleNamespace(name="PLC_bench", animations=[], supermodel="NULL")
+    static_object = SimpleNamespace(object_type="model", metadata={"_runtime_model": static_model})
+    scene_manager = SimpleNamespace(
+        get_selected_objects=lambda: [static_object],
+        active_scene=SimpleNamespace(objects=[static_object]),
+    )
+    clear_calls = []
+    window = SimpleNamespace(
+        _bas_body_model=None,
+        _current_model=SimpleNamespace(name="N_DarthMalak", animations=[SimpleNamespace(name="walk")]),
+        _animation_engine=object(),
+        scene_manager=scene_manager,
+        animations_panel=QtAnimationsPanel(),
+        viewport=SimpleNamespace(clear_animation_pose=lambda: clear_calls.append("clear")),
+    )
+    window._animation_source_key = MethodType(AnimationWorkflowMixin._animation_source_key, window)
+    window._animation_source_label = MethodType(AnimationWorkflowMixin._animation_source_label, window)
+    window._animation_source_model = MethodType(AnimationWorkflowMixin._animation_source_model, window)
+    window._model_is_animation_browser_source = MethodType(AnimationWorkflowMixin._model_is_animation_browser_source, window)
+    window._selected_scene_model_object = MethodType(SceneWorkflowMixin._selected_scene_model_object, window)
+    window._runtime_model_for_scene_object = MethodType(SceneWorkflowMixin._runtime_model_for_scene_object, window)
+
+    AnimationWorkflowMixin._load_animation_panel_model(window, window._current_model)
+
+    assert window.animations_panel.listbox.count() == 0
+    assert "No suitable body model selected" in window.animations_panel.info.toPlainText()
+    assert window._animation_engine is None
+    assert clear_calls == ["clear"]
+
+
 def test_bas_animation_engine_returns_to_body_without_losing_time() -> None:
     from src.core.animation.animation_engine import AnimationEngine
     from src.core.geometry.model_data import Animation, KotorModel
@@ -9214,7 +10233,7 @@ def test_qt_animations_panel_exposes_bake_and_binary_export_actions() -> None:
 
     QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     panel = QtAnimationsPanel()
-    labels = {button.text() for button in panel.findChildren(QtWidgets.QPushButton)}
+    labels = {button.text() for button in panel.findChildren(QtWidgets.QAbstractButton)}
 
     assert "Bake Animation" in labels
     assert "Export Binary MDL" in labels
@@ -9263,7 +10282,16 @@ def test_main_window_exposes_module_meshes_as_detachable_dock() -> None:
     assert '"module_meshes"' in layout_source
     assert "self.module_meshes_panel_action" in actions_source
     assert 'self._icon("module_meshes")' in actions_source
+    assert "self.mesh_tools_panel_action" in actions_source
+    assert 'self._icon("mesh_tools")' in actions_source
+    assert "self.output_log_panel_action" in actions_source
+    assert 'self._icon("output_log")' in actions_source
+    assert "self.python_terminal_panel_action" in actions_source
+    assert 'self._icon("python_terminal")' in actions_source
     assert "modules_menu.addAction(self.module_meshes_panel_action)" in menu_source
+    assert "modules_menu.addAction(self.mesh_tools_panel_action)" in menu_source
+    assert "modules_menu.addAction(self.output_log_panel_action)" in menu_source
+    assert "modules_menu.addAction(self.python_terminal_panel_action)" in menu_source
     assert "self.module_geometry_panel.show_model(self._active_viewport_model())" in refresh_source
     assert "self.viewport.meshSelectionChanged.connect(self.module_geometry_panel.select_module_meshes)" in layout_source
     assert "self.viewport.meshVisibilityChanged.connect(self._on_viewport_mesh_visibility_changed)" in layout_source
@@ -9271,7 +10299,12 @@ def test_main_window_exposes_module_meshes_as_detachable_dock() -> None:
     assert "_invalidate_renderer_resources(\"module mesh visibility changed\")" not in layout_source
     assert "_invalidate_renderer_resources(\"mesh visibility changed\")" not in layout_source
     assert "meshHovered.connect(self.module_geometry_panel" not in layout_source
-    assert (Path("src/gui/icons/module_meshes.svg")).exists()
+    icon_root = Path("native/GhostRigger.Native.Core.Host/RuntimePayload/src/gui/icons")
+    assert (icon_root / "module_meshes.svg").exists()
+    assert (icon_root / "mesh_tools.svg").exists()
+    assert (icon_root / "output_log.svg").exists()
+    assert (icon_root / "python_terminal.svg").exists()
+    assert (icon_root / "locomotion_disc.png").exists()
     assert hasattr(QtPropertiesPanel, "set_module_browser_only")
 
 
@@ -9434,11 +10467,30 @@ def test_qt_overflow_helpers_scroll_dense_toolbar_rows() -> None:
     strip.setMinimumWidth(900)
     strip_scroll = make_horizontal_overflow_area(strip, "TestToolbarScroll", height=40)
     strip_scroll.resize(240, 40)
+    QtWidgets.QApplication.processEvents()
 
     assert strip_scroll.widget() is strip
     assert strip_scroll.horizontalScrollBarPolicy() == QtCore.Qt.ScrollBarAsNeeded
     assert strip_scroll.verticalScrollBarPolicy() == QtCore.Qt.ScrollBarAlwaysOff
     assert strip.minimumWidth() >= 900
+    assert hasattr(strip_scroll, "set_base_fixed_height")
+    assert strip_scroll.height() >= 40
+
+    compact_strip = QtWidgets.QWidget()
+    compact_strip.setMinimumWidth(40)
+    compact_scroll = make_horizontal_overflow_area(compact_strip, "TestCompactToolbarScroll", height=40)
+    compact_scroll.resize(240, 40)
+    QtWidgets.QApplication.processEvents()
+    assert compact_scroll.horizontalScrollBar().maximum() == 0
+    assert compact_scroll.height() == 40
+
+    no_scroll_strip = QtWidgets.QWidget()
+    no_scroll_strip.setMinimumWidth(900)
+    no_scroll = make_horizontal_overflow_area(no_scroll_strip, "TestNoScrollToolbar", height=40, show_scrollbar=False)
+    no_scroll.resize(240, 40)
+    QtWidgets.QApplication.processEvents()
+    assert no_scroll.horizontalScrollBarPolicy() == QtCore.Qt.ScrollBarAlwaysOff
+    assert no_scroll.height() == 40
 
     panel = QtWidgets.QWidget()
     panel_scroll = make_scrollable_panel(panel, "TestDockScroll")
@@ -9491,6 +10543,11 @@ def test_viewport_and_character_builder_toolbars_are_scrollable() -> None:
 
     assert "make_horizontal_overflow_area(" in viewport_source
     assert '"ViewportToolbarScroll"' in viewport_source
+    assert "height=34" in viewport_source
+    assert "show_scrollbar=False" in viewport_source
+    assert "toolbar_layout.height + 14" not in viewport_source
+    assert "top_margin = max(0, (toolbar_layout.height - 22) // 2 - 5)" in viewport_source
+    assert "bottom_margin = max(0, toolbar_layout.height - 22 - top_margin)" in viewport_source
     assert "make_horizontal_overflow_area(" in builder_source
     assert '"CharacterBuilderToolbarScroll"' in builder_source
     assert "make_scrollable_panel(self.bottom_strip" in bottom_source
@@ -9570,7 +10627,7 @@ def test_main_window_routes_library_and_animation_library_to_content_browser() -
     assert "self._stack_content_browser_under_scene()" in source
     stack_source = inspect.getsource(QtGhostRiggerMainWindow._stack_content_browser_under_scene)
     assert "self.splitDockWidget(self.scene_dock, self.content_browser_dock, QtCore.Qt.Vertical)" in stack_source
-    assert "vertical_splitter.addWidget(self.viewport)" in source
+    assert "root.addWidget(self.viewport, 1)" in source
     assert "left_tabs.addTab(" not in source
     assert "right_tabs.addTab(" not in source
     assert "self.animation_library_panel = self.content_browser_panel" in source
@@ -9602,6 +10659,8 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
     command_source = inspect.getsource(QtGhostRiggerMainWindow._make_command_bar)
     actions_source = inspect.getsource(QtGhostRiggerMainWindow._build_actions)
     button_source = inspect.getsource(QtGhostRiggerMainWindow._tool_button)
+    label_source = inspect.getsource(QtGhostRiggerMainWindow._command_button_label)
+    profile_combo_source = inspect.getsource(QtGhostRiggerMainWindow._populate_visual_profile_combo)
     menu_source = inspect.getsource(QtGhostRiggerMainWindow._menu_button)
     visibility_source = inspect.getsource(QtGhostRiggerMainWindow._on_detachable_panel_visibility)
 
@@ -9614,11 +10673,14 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
     assert 'layout.addWidget(self._tool_button("Lighting", self.lighting_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Cameras", self.camera_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Module Meshes", self.module_meshes_panel_action' in command_source
+    assert 'layout.addWidget(self._tool_button("Mesh Tools", self.mesh_tools_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Adjust Pivot", self.adjust_pivot_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("2DA Browser", self.twoda_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Resource Browser", self.resources_panel_action' in command_source
+    assert 'layout.addWidget(self._tool_button("Log", self.output_log_panel_action' in command_source
+    assert 'layout.addWidget(self._tool_button("Terminal", self.python_terminal_panel_action' in command_source
     assert 'layout.addWidget(self._tool_button("Diagnostics  Ctrl+D", self.diag_action' in command_source
-    assert actions_source.count("self._configure_dock_toggle_action(") >= 13
+    assert actions_source.count("self._configure_dock_toggle_action(") >= 15
     for action_name in (
         "content_browser_action",
         "scene_panel_action",
@@ -9629,14 +10691,22 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
         "lighting_panel_action",
         "camera_panel_action",
         "module_meshes_panel_action",
+        "mesh_tools_panel_action",
         "adjust_pivot_panel_action",
         "twoda_panel_action",
         "resources_panel_action",
+        "output_log_panel_action",
+        "python_terminal_panel_action",
         "diag_action",
     ):
         assert f"self.{action_name}" in actions_source
     assert "button.setCheckable(True)" in button_source
     assert "action.toggled.connect(button.setChecked)" in button_source
+    assert "display_text = self._command_button_label(text, action)" in button_source
+    assert 'label.split("  ", 1)[0].strip()' in label_source
+    assert "label.endswith(shortcut)" in label_source
+    assert 'combo.addItem(default_layout.name or "Default", "default")' in profile_combo_source
+    assert "combo.setCurrentIndex(index if index >= 0 else 0)" in profile_combo_source
     assert "self._sync_dock_toggle_action(key, visible)" in visibility_source
     workspace_source = inspect.getsource(QtGhostRiggerMainWindow._show_workspace_dock)
     tab_source = inspect.getsource(QtGhostRiggerMainWindow._tab_workspace_dock_with_visible_peer)
@@ -9649,9 +10719,200 @@ def test_main_command_strip_groups_dock_modules_on_right_and_sizes_like_viewport
     assert command_source.index("layout.addStretch(1)") < command_source.index('"Animation Browser"')
     assert command_source.index('"Sequence Editor"') < command_source.index('"Animation Browser"')
     assert command_source.index('"Animation Browser"') < command_source.index('"Nodes"')
+    assert 'button.setText("")' in button_source
+    assert 'button.setProperty("_gr_ignore_layout_button_mode", True)' in button_source
+    assert "button.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)" in button_source
     assert "button.setFixedSize(30, 22)" in button_source
     assert "button.setIconSize(QtCore.QSize(18, 18))" in button_source
+    assert 'button.setText("")' in menu_source
+    assert 'button.setProperty("_gr_ignore_layout_button_mode", True)' in menu_source
+    assert "button.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)" in menu_source
     assert "button.setFixedSize(34, 22)" in menu_source
+
+
+def test_startup_theme_apply_defers_hidden_dock_panel_hooks() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/theme_layout.py"
+    ).read_text(encoding="utf-8")
+    dock_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/toolboxes/workspace_docks.py"
+    ).read_text(encoding="utf-8")
+
+    assert "def _defer_startup_theme_hook" in source
+    assert "primary_widget.isAncestorOf(widget)" in source
+    assert "dock.isVisible()" in source
+    assert "dock.isAncestorOf(widget)" in source
+    assert "def _apply_theme_to_visible_panel" in source
+    assert "self._defer_startup_theme_hook(widget, primary_widget=viewport)" in source
+    assert "apply_theme(widget)" in dock_source
+
+
+def test_main_window_lazily_creates_heavy_animation_workbenches() -> None:
+    layout_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/main_layout.py"
+    ).read_text(encoding="utf-8")
+    workflow_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/retarget_window_workflow.py"
+    ).read_text(encoding="utf-8")
+
+    assert "self.animation_retarget_window = QtAnimationRetargetWindow(self)" not in layout_source
+    assert "self.unreal_animator_window = QtUnrealAnimatorWindow(self)" not in layout_source
+    assert "def _ensure_animation_retarget_window" in workflow_source
+    assert "from src.gui.qt_lib.windows.qt_retarget_window import QtAnimationRetargetWindow" in workflow_source
+    assert "window = QtAnimationRetargetWindow(self)" in workflow_source
+    assert "def _ensure_unreal_animator_window" in workflow_source
+    assert "from src.gui.qt_lib.windows.qt_unreal_animator import QtUnrealAnimatorWindow" in workflow_source
+    assert "window = QtUnrealAnimatorWindow(self)" in workflow_source
+    assert "window = self._ensure_animation_retarget_window()" in workflow_source
+    assert "window = self._ensure_unreal_animator_window()" in workflow_source
+
+
+def test_qt_app_runner_overlaps_startup_scans_on_native_threads() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/functions/app_runner.py"
+    ).read_text(encoding="utf-8")
+    native_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/functions/native_prelaunch.py"
+    ).read_text(encoding="utf-8")
+    cpp_source = (
+        ROOT / "native/GhostRigger.Core.GUI.Display/Private/GhostRiggerWindowsMainWindow.cpp"
+    ).read_text(encoding="utf-8")
+    host_source = (ROOT / "native/GhostRigger.Native.Core.Host/Private/main.cpp").read_text(encoding="utf-8")
+    host_py_source = (ROOT / "native/GhostRigger.Native.Core.Host/main.py").read_text(encoding="utf-8")
+
+    assert "from src.gui.windows.application_core.application_core_lib.functions.native_prelaunch import start_prelaunch_tasks" in source
+    assert "def _install_splash_log_capture" in source
+    assert "GHOSTRIGGER_NATIVE_PREPYTHON_AUDIT" in source
+    assert "GHOSTRIGGER_CURRENT_LOGFILE" in source
+    assert "_SplashStream(original_stdout, emit_line, \"STDOUT\")" in source
+    assert "_SplashStream(original_stderr, emit_line, \"STDERR\")" in source
+    assert "if self._wrapped is not None" in source
+    assert "GHOSTRIGGER_SPLASH_HOLD_MS" in source
+    assert "GHOSTRIGGER_PRELAUNCH_FOREGROUND_MS" in source
+    assert "splash.append_log_line(line)" in source
+    assert "drain_splash_log()" in source
+    assert "settle_prelaunch_queues()" in source
+    assert "status_queue: SimpleQueue[tuple[str, str]] = SimpleQueue()" in source
+    assert "queue_prelaunch_status" in source
+    assert "collect_startup_diagnostics(settings_data, queue_prelaunch_status)" in source
+    assert "build_prelaunch_library_input(root, startup_input, queue_prelaunch_status)" in source
+    assert "prelaunch_deadline = time.monotonic() + _prelaunch_foreground_seconds_from_env()" in source
+    assert "while not prelaunch_run.done() and time.monotonic() < prelaunch_deadline" in source
+    assert "prelaunch_run.task_done(0)" in source
+    assert "prelaunch_run.task_done(1)" in source
+    assert 'prepared_input["_pending_prelaunch_run"] = prelaunch_run' in source
+    assert "Startup library preparation is continuing in the background." in source
+    assert "Library, detection, and renderer pre-launch work is continuing on background workers." in source
+    assert "app.processEvents()" in source
+    assert "win.show()\n    app.processEvents()" in source
+    assert "post_show_startup = getattr(win, \"start_post_show_startup_tasks\", None)" in source
+    assert "post_show_startup()" in source
+    assert "ctypes.CFUNCTYPE(None, ctypes.c_int)" in native_source
+    assert "gr_windows_main_window_run_prelaunch_tasks" in native_source
+    assert "def task_done(self, index: int) -> bool:" in native_source
+    assert "def result(self, index: int, timeout: float | None = None) -> object:" in native_source
+    assert "ThreadPoolExecutor(max_workers=max(1, len(jobs)), thread_name_prefix=\"GRStartup\")" in native_source
+    assert "std::thread" in cpp_source
+    assert "GRWindowsMainPrelaunchStatusCallback" in cpp_source
+    assert "GHOSTRIGGER_NATIVE_PREPYTHON_AUDIT" in host_source
+    assert "record_audit_line" in host_source
+    assert 'if (!env_enabled(L"GHOSTRIGGER_NATIVE_LOG_CONSOLE"))' in host_source
+    assert "if sys.stderr is not None:" in host_py_source
+
+
+def test_main_window_defers_post_show_startup_tasks_until_after_first_paint() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/qt_main_window.py"
+    ).read_text(encoding="utf-8")
+    startup_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/startup_library.py"
+    ).read_text(encoding="utf-8")
+
+    assert "self._post_show_startup_tasks_started = False" in source
+    assert "def start_post_show_startup_tasks(self) -> None:" in source
+    assert "QtCore.QTimer.singleShot(0, self._refresh_startup_layout_after_show)" in source
+    assert "QtCore.QTimer.singleShot(0, self._open_startup_inputs)" in source
+    assert "QtCore.QTimer.singleShot(75, self._apply_deferred_preloaded_library)" in source
+    assert "QtCore.QTimer.singleShot(250, self._start_ipc_server)" in source
+    assert "QtCore.QTimer.singleShot(300, self._finish_pending_prelaunch_after_first_paint)" in source
+    constructor_tail = source.split("def start_post_show_startup_tasks", 1)[0]
+    assert "QtCore.QTimer.singleShot(0, self._open_startup_inputs)" not in constructor_tail
+    assert "self._start_ipc_server()" not in constructor_tail
+    assert "self._apply_preloaded_library()" not in constructor_tail
+    assert "def _apply_deferred_preloaded_library(self) -> None:" in startup_source
+    assert 'preloaded.get("pending")' in startup_source
+    assert "self.library_panel.set_rows_deferred(rows)" in startup_source
+    assert "QtCore.QTimer.singleShot(300, self._finish_preloaded_library_after_first_paint)" in startup_source
+    assert "resource_dock is not None and resource_dock.isVisible()" in startup_source
+    assert "def _finish_pending_prelaunch_after_first_paint(self) -> None:" in startup_source
+    assert "prelaunch_run.task_done(0)" in startup_source
+    assert "prelaunch_run.task_done(1)" in startup_source
+    assert "self._preloaded_renderer_capabilities = list(diagnostics.get(\"renderer_capabilities\") or [])" in startup_source
+    assert "self._preloaded_hardware_diagnostics = dict(diagnostics.get(\"hardware_diagnostics\") or {})" in startup_source
+    assert "self._preloaded_library = dict(payload.get(\"preloaded_library\") or {})" in startup_source
+    assert "QtCore.QTimer.singleShot(250, self._finish_pending_prelaunch_after_first_paint)" in startup_source
+
+
+def test_main_window_reapplies_startup_layout_after_show_for_button_geometry() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/theme_layout.py"
+    ).read_text(encoding="utf-8")
+
+    assert "def _refresh_startup_layout_after_show(self) -> None:" in source
+    assert "self.layout_manager.apply_current_layout(self)" in source
+    assert "self._sync_reserved_top_rows()" in source
+    assert "QtCore.QTimer.singleShot(0, self._sync_reserved_top_rows)" in source
+    assert "QtCore.QTimer.singleShot(75, self._sync_reserved_top_rows)" in source
+
+
+def test_startup_splash_has_launch_log_textblock() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/splash.py"
+    ).read_text(encoding="utf-8")
+
+    assert "self.launch_log = QtWidgets.QPlainTextEdit()" in source
+    assert 'self.launch_log.setObjectName("StartupSplashLog")' in source
+    assert "self.launch_log.setReadOnly(True)" in source
+    assert "self.launch_log.setMaximumBlockCount(1000)" in source
+    assert "def append_log_line" in source
+    assert "def append_log_lines" in source
+    assert "self._last_logged_status" in source
+    assert "QPlainTextEdit#StartupSplashLog" in source
+    assert "STAGE_ROWS" in source
+    assert 'self.stage_list.setObjectName("StartupSplashStages")' in source
+    assert 'self.progress_percent_label.setObjectName("StartupSplashProgressPercent")' in source
+    assert "BRANDED_SPLASH_COLORS" in source
+    assert "splash.useBrandedPalette" in source
+    assert "def _stage_index_for_status" in source
+    assert '"pre-launch worker", "startup threading"' in source
+    assert '"game installs", "detecting game"' in source
+    assert "if finished:\n            return len(self.STAGE_ROWS) - 1\n        haystack" not in source
+    assert "def _set_progress_percent" in source
+
+
+def test_prewindow_diagnostics_parallelizes_renderer_and_hardware_scans() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/functions/startup_library.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from concurrent.futures import ThreadPoolExecutor" in source
+    assert 'ThreadPoolExecutor(max_workers=2, thread_name_prefix="GRStartupDiagnostics")' in source
+    assert "renderer_future = executor.submit(scan_renderer_capabilities)" in source
+    assert "hardware_future = executor.submit(scan_hardware_diagnostics)" in source
+    assert "def _collect_prewindow_startup_diagnostics(settings_data: dict, status_callback=None)" in source
+    assert 'status("Checking renderer backends"' in source
+    assert 'status("Checking graphics hardware"' in source
 
 
 def test_viewport_toolbar_flow_layout_centers_rows() -> None:
@@ -9665,44 +10926,83 @@ def test_viewport_toolbar_flow_layout_centers_rows() -> None:
 
     assert "horizontal_alignment" in flow_source
     assert "QtCore.Qt.AlignHCenter" in viewport_source
+    assert "item.sizeHint().expandedTo(item.minimumSize())" in flow_source
     assert "(max_width - current_width) // 2" in flow_source
+    assert "(current_height - hint.height()) // 2" in flow_source
+    assert "(effective.height() - total_height) // 2" in flow_source
+
+
+def test_viewport_toolbar_keeps_minimum_visible_height() -> None:
+    import inspect
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+
+    viewport_source = inspect.getsource(QtViewportWidget._build)
+    layout_source = inspect.getsource(QtViewportWidget.apply_ghost_layout)
+
+    assert "tb.setMinimumHeight(26)" in viewport_source
+    assert "toolbar_scroll.setMinimumHeight(26)" in viewport_source
+    assert "toolbar_height = max(26, toolbar_layout.height)" in layout_source
+    assert "toolbar_scroll.set_base_fixed_height(toolbar_height)" in layout_source
 
 
 def test_sequence_and_diagnostics_use_detachable_dock_registry() -> None:
-    import inspect
-
-    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
-
-    layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
-    sequence_source = inspect.getsource(QtGhostRiggerMainWindow._show_sequence_editor_dock)
-    diagnostics_source = inspect.getsource(QtGhostRiggerMainWindow._show_diagnostics_panel)
-    default_area_source = inspect.getsource(QtGhostRiggerMainWindow._default_dock_area_for_key)
+    layout_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/main_layout.py"
+    ).read_text(encoding="utf-8")
+    workflow_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/retarget_window_workflow.py"
+    ).read_text(encoding="utf-8")
+    diagnostics_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/viewport_tools.py"
+    ).read_text(encoding="utf-8")
+    default_area_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/toolboxes/workspace_docks.py"
+    ).read_text(encoding="utf-8")
+    chrome_source = (
+        ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/window_chrome.py"
+    ).read_text(encoding="utf-8")
 
     assert '"sequence_editor": (1180, 720)' in layout_source
     assert '"diagnostics": (760, 560)' in layout_source
-    assert "self.sequence_editor_dock = self._create_detachable_panel(" in layout_source
-    assert '"sequence_editor",' in layout_source
+    assert "self.sequence_editor_dock = self._create_detachable_panel(" not in layout_source
+    assert "def _ensure_sequence_editor_dock" in workflow_source
+    assert "self.sequence_editor_dock = dock" in workflow_source
+    assert '"sequence_editor",' in workflow_source
     assert "self.diagnostics_dock = self._create_detachable_panel(" in layout_source
     assert '"diagnostics",' in layout_source
-    assert 'self._show_workspace_dock("sequence_editor")' in sequence_source
+    assert 'self._show_workspace_dock("sequence_editor")' in workflow_source
     assert 'self._show_workspace_dock("diagnostics")' in diagnostics_source
-    assert 'key in {"output_log", "sequence_editor"}' in default_area_source
+    assert 'key in {"output_log", "python_terminal", "sequence_editor"}' in default_area_source
+    assert "if checked and callable(show_callback):" in default_area_source
+    assert "show_callback()" in default_area_source
+    assert "Sequence Editor (Window)" not in chrome_source
+    assert "sequence_editor_window_action" not in chrome_source
 
 
-def test_main_window_bottom_area_is_resizable_splitter() -> None:
+def test_main_window_bottom_area_uses_detachable_log_and_terminal_docks() -> None:
     import inspect
 
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
     source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
-    assert "vertical_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)" in source
-    assert "self.vertical_splitter = vertical_splitter" in source
-    assert "vertical_splitter.addWidget(self.viewport)" in source
-    assert "vertical_splitter.addWidget(self.log_panel)" in source
-    assert "root.addWidget(vertical_splitter, 1)" in source
+    assert "root.addWidget(self.viewport, 1)" in source
+    assert 'self.output_log_dock = self._create_detachable_panel(' in source
+    assert '"output_log",' in source
+    assert 'self.python_terminal_dock = self._create_detachable_panel(' in source
+    assert '"python_terminal",' in source
+    assert "self.output_log_dock.show()" not in source
+    assert "self.python_terminal_dock.show()" not in source
+    assert "self.splitDockWidget(self.output_log_dock, self.python_terminal_dock, QtCore.Qt.Horizontal)" in source
+    assert "vertical_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)" not in source
+    assert "vertical_splitter.addWidget(self.log_panel)" not in source
     assert "main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)" not in source
     assert "root.addWidget(self.log_panel, 0)" not in source
-    assert "vertical_splitter.setSizes([720, 240])" in source
 
 
 def test_main_window_exposes_animation_helpers_to_python_terminal() -> None:
@@ -9978,6 +11278,306 @@ def test_scene_animation_entries_collect_all_runtime_models() -> None:
     assert {entry["resref"] for entry in entries} == {"n_bith", "n_darthmalak"}
 
 
+def test_scene_animation_pose_only_drives_matching_scene_object() -> None:
+    from src.core.rendering.mesh_render_data import (
+        _pose_node_for_transform,
+        animation_pose_applies_to_node,
+        node_world_matrix,
+    )
+
+    root_a = SimpleNamespace(
+        name="root",
+        index=0,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=None,
+        children=[],
+        _gr_scene_object_id="obj-a",
+        _gr_scene_import_id="import-a",
+        _gr_source_model_id=101,
+    )
+    child_a = SimpleNamespace(
+        name="shared_bone",
+        index=1,
+        position=(0.0, 1.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=root_a,
+        children=[],
+        _gr_scene_object_id="obj-a",
+        _gr_scene_import_id="import-a",
+        _gr_source_model_id=101,
+    )
+    root_a.children = [child_a]
+
+    root_b = SimpleNamespace(
+        name="root",
+        index=0,
+        position=(20.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=None,
+        children=[],
+        _gr_scene_object_id="obj-b",
+        _gr_scene_import_id="import-b",
+        _gr_source_model_id=202,
+    )
+    child_b = SimpleNamespace(
+        name="shared_bone",
+        index=1,
+        position=(0.0, 1.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=root_b,
+        children=[],
+        _gr_scene_object_id="obj-b",
+        _gr_scene_import_id="import-b",
+        _gr_source_model_id=202,
+    )
+    root_b.children = [child_b]
+
+    pose = SimpleNamespace(
+        _gr_animation_scene_object_id="obj-a",
+        _gr_animation_scene_import_id="import-a",
+        _gr_animation_source_model_id=101,
+        nodes={
+            "root": SimpleNamespace(position=(1.0, 0.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0)),
+            "shared_bone": SimpleNamespace(position=(0.0, 2.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0)),
+        },
+        nodes_by_index={},
+        duplicate_node_names=set(),
+    )
+
+    assert animation_pose_applies_to_node(child_a, pose)
+    assert not animation_pose_applies_to_node(child_b, pose)
+    assert _pose_node_for_transform(child_a, pose) is pose.nodes["shared_bone"]
+    assert _pose_node_for_transform(child_b, pose) is None
+
+    matrix_a = node_world_matrix(child_a, anim_pose=pose)
+    matrix_b = node_world_matrix(child_b, anim_pose=pose)
+
+    assert matrix_a[0, 3] == pytest.approx(1.0)
+    assert matrix_a[1, 3] == pytest.approx(2.0)
+    assert matrix_b[0, 3] == pytest.approx(20.0)
+    assert matrix_b[1, 3] == pytest.approx(1.0)
+
+    copied_root = SimpleNamespace(
+        name="root",
+        index=0,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=None,
+        children=[],
+        _gr_scene_object_id="obj-a",
+        _gr_scene_import_id="import-a",
+        _gr_runtime_source_model_id=101,
+    )
+    copied_child = SimpleNamespace(
+        name="shared_bone",
+        index=1,
+        position=(0.0, 1.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=copied_root,
+        children=[],
+        _gr_scene_object_id="obj-a",
+        _gr_scene_import_id="import-a",
+    )
+    copied_root.children = [copied_child]
+
+    assert animation_pose_applies_to_node(copied_child, pose)
+    assert _pose_node_for_transform(copied_child, pose) is pose.nodes["shared_bone"]
+
+    rebuilt_source_child = SimpleNamespace(
+        name="shared_bone",
+        index=1,
+        position=(0.0, 1.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=copied_root,
+        children=[],
+        _gr_scene_object_id="obj-a",
+        _gr_scene_import_id="import-a",
+        _gr_source_model_id=909,
+    )
+    assert animation_pose_applies_to_node(rebuilt_source_child, pose)
+    assert _pose_node_for_transform(rebuilt_source_child, pose) is pose.nodes["shared_bone"]
+
+    attachment_root = SimpleNamespace(
+        name="head_root",
+        index=2,
+        position=(0.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=copied_root,
+        children=[],
+        _gr_scene_object_id="obj-a",
+        _gr_scene_import_id="import-a",
+        _gr_bas_attachment_source_model_id=303,
+    )
+    attachment_child = SimpleNamespace(
+        name="head_g",
+        index=3,
+        position=(0.0, 1.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        parent=attachment_root,
+        children=[],
+        _gr_scene_object_id="obj-a",
+        _gr_scene_import_id="import-a",
+    )
+    attachment_root.children = [attachment_child]
+    copied_root.children.append(attachment_root)
+    attachment_pose = SimpleNamespace(
+        _gr_animation_scene_object_id="obj-a",
+        _gr_animation_scene_import_id="import-a",
+        _gr_animation_source_model_id=303,
+        nodes={"head_g": SimpleNamespace(position=(0.0, 2.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0))},
+        nodes_by_index={},
+        duplicate_node_names=set(),
+    )
+
+    assert animation_pose_applies_to_node(attachment_child, attachment_pose)
+    assert _pose_node_for_transform(attachment_child, attachment_pose) is attachment_pose.nodes["head_g"]
+
+
+def test_animation_pose_source_tags_selected_scene_object() -> None:
+    from src.gui.windows.application_core.shared.animation_workflow import AnimationWorkflowMixin
+
+    model = SimpleNamespace(name="N_Bith")
+    selected_object = SimpleNamespace(
+        id="scene-object-1",
+        metadata={"_runtime_model": model, "scene_import_id": "import-1"},
+    )
+    window = SimpleNamespace(
+        scene_manager=SimpleNamespace(
+            get_selected_objects=lambda: [selected_object],
+            active_scene=SimpleNamespace(objects=[selected_object]),
+        )
+    )
+    window._animation_scene_object_for_model = MethodType(
+        AnimationWorkflowMixin._animation_scene_object_for_model,
+        window,
+    )
+    pose = SimpleNamespace()
+
+    tagged = AnimationWorkflowMixin._tag_animation_pose_source(window, pose, model, "walk", "K1")
+
+    assert tagged is pose
+    assert pose._gr_animation_source_model_id == id(model)
+    assert pose._gr_animation_scene_object_id == "scene-object-1"
+    assert pose._gr_animation_scene_import_id == "import-1"
+    assert pose._gr_animation_name == "walk"
+    assert pose._gr_animation_game == "K1"
+
+
+def test_animation_browser_target_selector_scopes_pose_to_chosen_scene_object() -> None:
+    from src.gui.windows.application_core.shared.animation_workflow import AnimationWorkflowMixin
+
+    model = SimpleNamespace(name="N_Bith", animations=[SimpleNamespace(name="walk")])
+    obj_a = SimpleNamespace(id="obj-a", name="Bith A", metadata={"_runtime_model": model, "scene_import_id": "import-a"})
+    obj_b = SimpleNamespace(id="obj-b", name="Bith B", metadata={"_runtime_model": model, "scene_import_id": "import-b"})
+    scene_manager = SimpleNamespace(
+        get_scene_objects=lambda: [obj_a, obj_b],
+        get_selected_objects=lambda: [obj_a],
+        active_scene=SimpleNamespace(objects=[obj_a, obj_b]),
+    )
+    panel = SimpleNamespace(
+        selected_animation_target_id=lambda: "obj-b",
+        set_animation_targets=lambda _targets, _current_id="": None,
+    )
+    window = SimpleNamespace(
+        scene_manager=scene_manager,
+        animations_panel=panel,
+        _animation_preview_object_id="obj-b",
+        _current_game="K2",
+    )
+    for name in (
+        "_scene_animation_preview_objects",
+        "_find_animation_preview_scene_object",
+        "_selected_animation_preview_scene_object",
+        "_animation_preview_target_for_model",
+        "_animation_scene_object_for_model",
+        "_tag_animation_pose_source",
+    ):
+        setattr(window, name, MethodType(getattr(AnimationWorkflowMixin, name), window))
+    window._runtime_model_for_scene_object = lambda obj: (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
+
+    pose = SimpleNamespace()
+    AnimationWorkflowMixin._tag_animation_pose_source(window, pose, model, "walk", "K2")
+
+    assert pose._gr_animation_scene_object_id == "obj-b"
+    assert pose._gr_animation_scene_import_id == "import-b"
+    assert pose._gr_animation_source_model_id == id(model)
+
+
+def test_scene_root_animation_pose_preserves_world_placement() -> None:
+    from src.core.geometry.model_data import ModelNode
+    from src.core.rendering.mesh_render_data import node_world_matrix
+
+    scene_root = ModelNode(name="scene_root")
+    model_root = ModelNode(name="N_Malak", parent=scene_root, position=(10.0, 0.0, 0.0))
+    pelvis = ModelNode(name="pelvis_g", parent=model_root, position=(0.0, 2.0, 0.0))
+    scene_root.children = [model_root]
+    model_root.children = [pelvis]
+    model_root._gr_scene_object_root = True
+    model_root._gr_scene_source_position = (0.08, 0.0, 0.0)
+    model_root._gr_source_model_id = 101
+    pelvis._gr_source_model_id = 101
+
+    pose = SimpleNamespace(
+        _gr_animation_source_model_id=101,
+        nodes={
+            "n_malak": SimpleNamespace(position=(0.08, 0.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0)),
+            "pelvis_g": SimpleNamespace(position=(0.0, 2.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0)),
+        },
+        nodes_by_index={},
+        duplicate_node_names=set(),
+    )
+
+    matrix = node_world_matrix(pelvis, anim_pose=pose)
+
+    assert matrix[0, 3] == pytest.approx(10.0)
+    assert matrix[1, 3] == pytest.approx(2.0)
+
+
+def test_scene_animation_pose_cache_tracks_dragged_nonskin_children() -> None:
+    from src.core.geometry.model_data import ModelNode
+    from src.core.rendering.mesh_render_data import node_world_matrix
+
+    scene_root = ModelNode(name="scene_root")
+    model_root = ModelNode(name="N_DarthMalak", parent=scene_root, position=(10.0, 0.0, 0.0))
+    head = ModelNode(name="head_g", parent=model_root, position=(0.0, 0.0, 1.5))
+    eye = ModelNode(name="f_rlweye_g", parent=head, position=(0.18, -0.05, 0.07))
+    scene_root.children = [model_root]
+    model_root.children = [head]
+    head.children = [eye]
+
+    model_root._gr_scene_object_root = True
+    model_root._gr_scene_source_position = (0.08, 0.0, 0.0)
+    model_root._gr_source_model_id = 101
+    head._gr_source_model_id = 101
+    eye._gr_source_model_id = 101
+
+    pose = SimpleNamespace(
+        _gr_animation_source_model_id=101,
+        nodes={
+            "n_darthmalak": SimpleNamespace(position=(0.08, 0.0, 0.0), rotation=(0.0, 0.0, 0.0, 1.0)),
+            "head_g": SimpleNamespace(position=(0.0, 0.0, 1.75), rotation=(0.0, 0.0, 0.0, 1.0)),
+            "f_rlweye_g": SimpleNamespace(position=(0.2, -0.05, 0.1), rotation=(0.0, 0.0, 0.0, 1.0)),
+        },
+        nodes_by_index={},
+        duplicate_node_names=set(),
+    )
+
+    before = node_world_matrix(eye, anim_pose=pose)
+    model_root.position = (12.5, -1.0, 0.25)
+    after = node_world_matrix(eye, anim_pose=pose)
+
+    assert after[0, 3] == pytest.approx(before[0, 3] + 2.5)
+    assert after[1, 3] == pytest.approx(before[1, 3] - 1.0)
+    assert after[2, 3] == pytest.approx(before[2, 3] + 0.25)
+
+    pose.time = 0.5
+    pose.nodes["f_rlweye_g"].position = (0.45, -0.05, 0.1)
+    next_frame = node_world_matrix(eye, anim_pose=pose)
+
+    assert next_frame[0, 3] == pytest.approx(after[0, 3] + 0.25)
+
+
 def test_quinn_bone_map_loads_as_unreal_target_model() -> None:
     import pytest
 
@@ -10231,6 +11831,76 @@ def test_unreal_viewport_hides_dummy_and_hook_helpers_from_bone_overlay() -> Non
     assert "torso_g" in names
     assert "talkdummy" not in names
     assert "headhook" not in names
+
+
+def test_static_placeable_scene_nodes_do_not_enter_viewport_skeleton_overlay() -> None:
+    import pytest
+
+    pytest.importorskip("PIL")
+
+    from PIL import Image, ImageDraw
+
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.rendering.frame_core.renderer import FrameRenderer
+
+    root = ModelNode(name="PLC_barrel2", flags=int(NodeFlags.HEADER), position=(0.0, 0.0, 0.0))
+    mesh = ModelNode(
+        name="barrel_mesh",
+        flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH),
+        position=(1.0, 0.0, 0.0),
+        parent=root,
+    )
+    root.children.append(mesh)
+    for node in (root, mesh):
+        setattr(node, "_gr_scene_import_id", "import-a")
+        setattr(node, "_gr_scene_asset_kind", "placeable")
+        setattr(node, "_gr_scene_animation_kind", "static")
+        setattr(node, "_gr_scene_node_kind", "mesh" if node is mesh else "node")
+        setattr(node, "_gr_scene_node_key", f"import-a:{node.name.lower()}")
+
+    renderer = FrameRenderer(ArcBallCamera())
+    renderer.set_model(KotorModel(name="PLC_barrel2", root_node=root, model_type=32))
+    renderer._proj = lambda x, y, z, w, h: (int(100 + x * 10), int(100 - z * 10), y)
+
+    img = Image.new("RGB", (240, 240), "black")
+    renderer._draw_bones(ImageDraw.Draw(img), 240, 240)
+
+    assert renderer._bone_screen_positions == []
+
+
+def test_skeletal_bone_overlay_records_local_axis_angles_for_locomotion_discs() -> None:
+    import pytest
+
+    pytest.importorskip("PIL")
+
+    from PIL import Image, ImageDraw
+
+    from src.core.camera.arcball_camera import ArcBallCamera
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.rendering.frame_core.renderer import FrameRenderer
+
+    root = ModelNode(name="N_Test", flags=int(NodeFlags.HEADER))
+    joint = ModelNode(
+        name="pelvis_g",
+        flags=int(NodeFlags.HEADER),
+        position=(0.0, 1.0, 0.0),
+        rotation=(0.0, 0.0, 0.3826834324, 0.9238795325),
+        parent=root,
+    )
+    skin = ModelNode(name="body", flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH) | int(NodeFlags.SKIN), parent=root)
+    skin.bone_map = ["pelvis_g"]
+    root.children.extend([joint, skin])
+    setattr(joint, "_gr_scene_node_kind", "joint")
+    renderer = FrameRenderer(ArcBallCamera())
+    renderer.set_model(KotorModel(name="N_Test", root_node=root, model_type=4))
+    renderer._proj = lambda x, y, z, w, h: (int(100 + x * 20), int(100 - y * 20), z)
+
+    img = Image.new("RGB", (240, 240), "black")
+    renderer._draw_bones(ImageDraw.Draw(img), 240, 240)
+
+    assert id(joint) in renderer._bone_screen_axis_angles
+    assert isinstance(renderer._bone_screen_axis_angles[id(joint)], float)
 
 
 def test_unreal_viewport_hidden_helper_selection_does_not_draw_gimbal() -> None:

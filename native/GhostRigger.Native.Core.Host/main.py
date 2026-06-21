@@ -305,13 +305,16 @@ def _setup_logging() -> str | None:
     except OSError:
         logfile = None
 
-    stream_handler = logging.StreamHandler(sys.stderr)
-    stream_handler.setLevel(logging.INFO)
-    stream_handler.setFormatter(logging.Formatter("%(asctime)s  %(levelname)-8s  %(name)-34.34s  %(message)s", datefmt="%H:%M:%S"))
-    root_logger.addHandler(stream_handler)
+    if sys.stderr is not None:
+        stream_handler = logging.StreamHandler(sys.stderr)
+        stream_handler.setLevel(logging.INFO)
+        stream_handler.setFormatter(logging.Formatter("%(asctime)s  %(levelname)-8s  %(name)-34.34s  %(message)s", datefmt="%H:%M:%S"))
+        root_logger.addHandler(stream_handler)
 
     global _CURRENT_LOGFILE
     _CURRENT_LOGFILE = str(logfile) if logfile is not None else None
+    if _CURRENT_LOGFILE:
+        os.environ["GHOSTRIGGER_CURRENT_LOGFILE"] = _CURRENT_LOGFILE
     return _CURRENT_LOGFILE
 
 

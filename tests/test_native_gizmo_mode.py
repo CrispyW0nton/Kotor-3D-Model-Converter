@@ -9,8 +9,8 @@ from src.core.gizmo.gizmo_mode import GizmoMode, TransformGizmoMode, TransformSp
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_DIR = ROOT / "native" / "GhostRigger.Domain.Core.Gizmo"
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Domain.Core.Gizmo.dll"
+PROJECT_DIR = ROOT / "native" / "GhostRigger.Core.GUI.Helpers"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.GUI.Helpers.dll"
 
 
 def _load_gizmo_dll() -> ctypes.CDLL:
@@ -44,8 +44,8 @@ def _load_gizmo_dll() -> ctypes.CDLL:
 
 
 def test_gizmo_project_declares_mode_files_and_exports() -> None:
-    project = (PROJECT_DIR / "GhostRigger.Domain.Core.Gizmo.vcxproj").read_text(encoding="utf-8")
-    filters = (PROJECT_DIR / "GhostRigger.Domain.Core.Gizmo.vcxproj.filters").read_text(encoding="utf-8")
+    project = (PROJECT_DIR / "GhostRigger.Core.GUI.Helpers.vcxproj").read_text(encoding="utf-8")
+    filters = (PROJECT_DIR / "GhostRigger.Core.GUI.Helpers.vcxproj.filters").read_text(encoding="utf-8")
     package_header = (PROJECT_DIR / "Public" / "GhostRiggerGizmo.h").read_text(encoding="utf-8")
     public_header = (PROJECT_DIR / "Public" / "GizmoMode.h").read_text(encoding="utf-8")
     implementation = (PROJECT_DIR / "Private" / "GizmoMode.cpp").read_text(encoding="utf-8")
@@ -55,8 +55,8 @@ def test_gizmo_project_declares_mode_files_and_exports() -> None:
     assert '<Filter>Public</Filter>' in filters
     assert '<Filter>Private</Filter>' in filters
     assert "gr_gizmo_normalize_mode" in package_header
-    assert "namespace ghostrigger::domain::core::gizmo::core::gizmo::gizmo_mode" in public_header
-    assert "namespace ghostrigger::domain::core::gizmo::core::gizmo::gizmo_mode" in implementation
+    assert "namespace ghostrigger::core::gizmo::core::gizmo::gizmo_mode" in public_header
+    assert "namespace ghostrigger::core::gizmo::core::gizmo::gizmo_mode" in implementation
     assert "phase15" not in public_header
     assert "pyfn_" not in implementation
     assert "using namespace" not in implementation

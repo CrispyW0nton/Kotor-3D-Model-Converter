@@ -31,6 +31,23 @@ def _minimal_gff(file_type: str, fields: dict[str, tuple[str, object]]) -> bytes
     return GffWriter(GffFile(file_type=file_type, root=root)).serialize()
 
 
+class _Fake2DARow(dict):
+    def __init__(self, index: int, **values: object):
+        super().__init__({key.lower(): value for key, value in values.items()})
+        self.index = index
+
+    def get(self, key: str, default: object = "") -> object:
+        return super().get(key.lower(), default)
+
+
+class _Fake2DA:
+    def __init__(self, rows: list[_Fake2DARow]):
+        self._rows = rows
+
+    def __iter__(self):
+        return iter(self._rows)
+
+
 def test_content_browser_merges_models_modules_templates_and_animations() -> None:
     _qapp()
 
@@ -362,7 +379,7 @@ def test_content_browser_refines_kotor_model_categories_and_metadata() -> None:
     assert by_name["n_darthmalak"].category == "NPCs"
     assert by_name["n_darthmalak"].metadata["subcategory"] == "Sith"
     assert by_name["pmbam"].category == "Player Characters"
-    assert by_name["pmbam"].metadata["subcategory"] == "Male Bodies - Class A"
+    assert by_name["pmbam"].metadata["subcategory"] == "Male Base Bodies"
     assert by_name["pmbam"].metadata["player_gender"] == "Male"
     assert by_name["pmbam"].metadata["player_part"] == "Body"
     assert by_name["pmbam"].metadata["player_class"] == "Class A"
@@ -481,9 +498,9 @@ def test_content_browser_sorts_player_characters_by_gender_part_and_class() -> N
     ])
 
     by_name = {asset.name: asset for asset in panel.visible_assets()}
-    assert by_name["pmbam"].metadata["subcategory"] == "Male Bodies - Class A"
+    assert by_name["pmbam"].metadata["subcategory"] == "Male Base Bodies"
     assert by_name["pmbam"].metadata["player_variant"] == "Medium"
-    assert by_name["pfbal"].metadata["subcategory"] == "Female Bodies - Class A"
+    assert by_name["pfbal"].metadata["subcategory"] == "Female Base Bodies"
     assert by_name["pfbal"].metadata["player_variant"] == "Large"
     assert by_name["pmha01"].metadata["subcategory"] == "Male Heads - Class A"
     assert by_name["pmha01"].metadata["player_variant"] == "Head 01"
@@ -497,8 +514,8 @@ def test_content_browser_sorts_player_characters_by_gender_part_and_class() -> N
     ][0]
     players = next(folders.child(index) for index in range(folders.childCount()) if folders.child(index).text(0) == "Player Characters")
     assert [players.child(index).text(0) for index in range(players.childCount())] == [
-        "Male Bodies - Class A",
-        "Female Bodies - Class A",
+        "Male Base Bodies",
+        "Female Base Bodies",
         "Male Heads - Class A",
         "Female Heads - Class C",
     ]
@@ -507,7 +524,7 @@ def test_content_browser_sorts_player_characters_by_gender_part_and_class() -> N
     assert [asset.name for asset in panel.visible_assets()] == ["pfhc02"]
 
     panel.tag_filter.setCurrentText("All Tags")
-    panel._select_navigation("subcategory", "Player Characters\0Male Bodies - Class A")
+    panel._select_navigation("subcategory", "Player Characters\0Male Base Bodies")
     assert [asset.name for asset in panel.visible_assets()] == ["pmbam"]
 
 
@@ -1062,6 +1079,76 @@ def test_content_browser_uses_item_template_metadata_for_subcategories() -> None
     assert by_name["w_generic_001"].metadata["subcategory"] == "Blaster Rifles"
 
 
+def test_content_browser_uses_appearance_and_baseitems_2da_for_player_outfits() -> None:
+    _qapp()
+
+    from src.gui.qt_lib.panels.qt_content_browser_panel import QtContentBrowserPanel
+    from src.gui.qt_lib.panels.qt_library_panel import enrich_library_rows, enrich_library_rows_with_resource_metadata
+
+    class FakeResourceManager:
+        def get_k1(self):
+            return object()
+
+        def get_k2(self):
+            return None
+
+        def get(self, _name: str, _res_type: int, _game: str = "K1"):
+            return None
+
+        def get_2da(self, name: str, game: str = "K1"):
+            assert game == "K1"
+            if name == "appearance":
+                return _Fake2DA([
+                    _Fake2DARow(
+                        0,
+                        label="P_MAL_C_MED",
+                        modeltype="B",
+                        modeld="pmbdm",
+                        normalhead="pmhc",
+                    ),
+                ])
+            if name == "baseitems":
+                return _Fake2DA([
+                    _Fake2DARow(38, label="armor_class_4", bodyvar="C", name="1001"),
+                    _Fake2DARow(39, label="combat_suit", bodyvar="D", name="1000"),
+                ])
+            return None
+
+        def get_tlk_string(self, strref: int, game: str = "K1") -> str:
+            assert game == "K1"
+            return {1000: "Combat Suit", 1001: "Armor Class 4"}.get(strref, "")
+
+    rows = enrich_library_rows(enrich_library_rows_with_resource_metadata([
+        {"game": "K1", "resref": "pmbdm", "source": "swkotor"},
+        {"game": "K1", "resref": "pmbc", "source": "swkotor"},
+        {"game": "K1", "resref": "pmhc", "source": "swkotor"},
+    ], FakeResourceManager()))
+    by_row = {row["resref"]: row for row in rows}
+
+    assert by_row["pmbdm"]["category"] == "Armor"
+    assert by_row["pmbdm"]["subcategory"] == "Light Armor"
+    assert by_row["pmbdm"]["item_display_name"] == "Combat Suit"
+    assert by_row["pmbdm"]["outfit_gender"] == "Male"
+    assert by_row["pmbdm"]["outfit_size"] == "Medium"
+    assert by_row["pmbdm"]["metadata_source"] == "appearance.2da; baseitems.2da"
+    assert by_row["pmbc"]["category"] == "Armor"
+    assert by_row["pmbc"]["subcategory"] == "Light Armor"
+    assert by_row["pmbc"]["metadata_source"] == "baseitems.2da"
+    assert by_row["pmhc"]["category"] == "Player Characters"
+    assert by_row["pmhc"]["metadata_source"] == "appearance.2da"
+
+    panel = QtContentBrowserPanel()
+    panel.set_rows(rows)
+    by_asset = {asset.name: asset for asset in panel.visible_assets()}
+
+    assert by_asset["pmbdm"].category == "Armor"
+    assert by_asset["pmbdm"].display_name == "Combat Suit Male Medium"
+    assert by_asset["pmbdm"].metadata["item"] == "Combat Suit"
+    assert by_asset["pmbdm"].metadata["bodyvar"] == "D"
+    assert by_asset["pmbc"].category == "Armor"
+    assert by_asset["pmbc"].metadata["bodyvar"] == "C"
+
+
 def test_content_browser_sorts_doors_by_level_metadata_and_prefixes() -> None:
     _qapp()
 
@@ -1553,47 +1640,57 @@ def test_prelaunch_library_payload_scans_before_main_window(tmp_path, monkeypatc
 
 
 def test_preloaded_library_skips_post_show_auto_detect_timer() -> None:
-    import inspect
-
-    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
-
-    init_source = inspect.getsource(QtGhostRiggerMainWindow.__init__)
+    source = (
+        _REPO_ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/qt_main_window.py"
+    ).read_text(encoding="utf-8")
+    startup_source = (
+        _REPO_ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/startup_library.py"
+    ).read_text(encoding="utf-8")
+    init_source = source.split("def start_post_show_startup_tasks", 1)[0]
+    post_show_source = source.split("def start_post_show_startup_tasks", 1)[1]
     assert "self._preloaded_library" in init_source
-    assert 'if not self._preloaded_library.get("detection_attempted")' in init_source
-    assert "QtCore.QTimer.singleShot(250, self._auto_detect_dirs_on_startup)" in init_source
-    assert 'preloaded.get("_resource_manager")' in inspect.getsource(
-        QtGhostRiggerMainWindow._apply_preloaded_library
-    )
-    assert "manager = self._get_resource_manager()" in inspect.getsource(
-        QtGhostRiggerMainWindow._populate_resource_panel
-    )
+    assert 'if not self._preloaded_library.get("detection_attempted")' in post_show_source
+    assert "QtCore.QTimer.singleShot(350, self._auto_detect_dirs_on_startup)" in post_show_source
+    assert "QtCore.QTimer.singleShot(75, self._apply_deferred_preloaded_library)" in post_show_source
+    assert 'preloaded.get("_resource_manager")' in startup_source
+    resource_source = (
+        _REPO_ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/resource_panels.py"
+    ).read_text(encoding="utf-8")
+    assert "manager = self._get_resource_manager()" in resource_source
     assert "self._suppress_theme_progress_toast = True" in init_source
-    assert "QtCore.QTimer.singleShot(1200, self._enable_theme_progress_toasts)" in init_source
-    assert "self._suppress_theme_progress_toast = False" in inspect.getsource(
-        QtGhostRiggerMainWindow._enable_theme_progress_toasts
-    )
+    assert "QtCore.QTimer.singleShot(1200, self._enable_theme_progress_toasts)" in post_show_source
+    assert "self._suppress_theme_progress_toast = False" in source
 
 
-def test_startup_renderer_and_hardware_scans_log_before_main_window_not_splash() -> None:
-    import inspect
-
-    from src.gui.qt_lib.windows import qt_main_window
-    from src.gui.qt_lib.windows.qt_main_window import _collect_prewindow_startup_diagnostics
-
-    run_source = inspect.getsource(qt_main_window.run)
-    diagnostics_source = inspect.getsource(_collect_prewindow_startup_diagnostics)
+def test_startup_renderer_and_hardware_scans_stream_through_splash() -> None:
+    run_source = (
+        _REPO_ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/functions/app_runner.py"
+    ).read_text(encoding="utf-8")
+    diagnostics_source = (
+        _REPO_ROOT
+        / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/functions/startup_library.py"
+    ).read_text(encoding="utf-8")
 
     assert "Scanning renderers" not in run_source
     assert "Scanning hardware" not in run_source
-    assert "startup_diagnostics = _collect_prewindow_startup_diagnostics(settings_data)" in run_source
-    assert "splash = QtStartupSplash" in run_source
+    assert "splash = splash_cls(root, theme_manager=startup_theme_manager)" in run_source
+    assert "queue_prelaunch_status" in run_source
+    assert "collect_startup_diagnostics(settings_data, queue_prelaunch_status)" in run_source
+    assert "build_prelaunch_library_input(root, startup_input, queue_prelaunch_status)" in run_source
+    assert "splash.append_log_line(line)" in run_source
     assert "win.show()" in run_source
-    assert run_source.index("_collect_prewindow_startup_diagnostics(settings_data)") < run_source.index("splash = QtStartupSplash")
-    assert run_source.index("_collect_prewindow_startup_diagnostics(settings_data)") < run_source.index("win = QtGhostRiggerMainWindow")
+    assert run_source.index("splash = splash_cls") < run_source.index("collect_startup_diagnostics(settings_data, queue_prelaunch_status)")
+    assert run_source.index("collect_startup_diagnostics(settings_data, queue_prelaunch_status)") < run_source.index("win = window_cls")
     assert "renderer_capabilities_snapshot()" in diagnostics_source
     assert "collect_hardware_diagnostics(" in diagnostics_source
     assert "Startup renderer scan" in diagnostics_source
     assert "before Qt main-window initialization" in diagnostics_source
+    assert 'status("Checking renderer backends"' in diagnostics_source
+    assert 'status("Checking graphics hardware"' in diagnostics_source
 
 
 def test_startup_windows_use_primary_screen_not_cursor_screen() -> None:

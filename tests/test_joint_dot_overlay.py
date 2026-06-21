@@ -383,6 +383,25 @@ def test_t401_toolbar_dot_button_tracks_joint_dot_enabled():
         w.deleteLater()
 
 
+def test_locomotion_disc_button_tracks_overlay_state():
+    app, w = _make_widget()
+    try:
+        assert hasattr(w, "locomotion_disc_button")
+        assert w.locomotion_disc_enabled is False
+        assert w.locomotion_disc_button.isChecked() is False
+
+        w.locomotion_disc_button.click()
+        assert w.locomotion_disc_enabled is True
+        assert w.locomotion_disc_button.isChecked() is True
+
+        w.set_locomotion_disc_size(999)
+        assert w.locomotion_disc_size == 256
+        w.set_locomotion_disc_enabled(False)
+        assert w.locomotion_disc_button.isChecked() is False
+    finally:
+        w.deleteLater()
+
+
 # ── T402 ▸ Joint-dot hit-test ────────────────────────────────────────────────
 class _FakeNode:
     """Minimal stand-in for a ModelNode for hit-test unit tests."""

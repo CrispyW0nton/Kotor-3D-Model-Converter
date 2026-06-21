@@ -14,14 +14,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 _NATIVE_SOURCE_ROOTS = (
-    ROOT / "native" / "GhostRigger.GUI.Boundary.Integration" / "Python",
-    ROOT / "native" / "GhostRigger.GUI.Boundary.Viewports" / "Python",
-    ROOT / "native" / "GhostRigger.GUI.Boundary.Panels" / "Python",
+    ROOT / "native" / "GhostRigger.Core.GUI.Display" / "Python",
+    ROOT / "native" / "GhostRigger.Core.GUI.Display" / "Python",
+    ROOT / "native" / "GhostRigger.Core.GUI.Display" / "Python",
     ROOT / "native" / "GhostRigger.GUI.Rendering.Frame" / "Python",
-    ROOT / "native" / "GhostRigger.Adapters.Rendering.Core" / "Python",
-    ROOT / "native" / "GhostRigger.Domain.Core.Rendering" / "Python",
-    ROOT / "native" / "GhostRigger.Domain.Core.Animation" / "Python",
-    ROOT / "native" / "GhostRigger.Domain.Core.Characters" / "Python",
+    ROOT / "native" / "GhostRigger.Core.Unreal" / "Python",
+    ROOT / "native" / "GhostRigger.Core.Rendering" / "Python",
+    ROOT / "native" / "GhostRigger.Core.Workflow" / "Python",
+    ROOT / "native" / "GhostRigger.Core.Workflow" / "Python",
 )
 
 _VIEWPORT_SOURCE_FILES = (

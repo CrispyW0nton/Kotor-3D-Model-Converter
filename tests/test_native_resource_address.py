@@ -8,8 +8,8 @@ from src.core.project.resource_address import ResourceAddress, SUPPORTED_RESOURC
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_DIR = ROOT / "native" / "GhostRigger.Runtime.Shared.Descriptors"
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Runtime.Shared.Descriptors.dll"
+PROJECT_DIR = ROOT / "native" / "GhostRigger.Runtime.Shared"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Runtime.Shared.dll"
 
 
 def _bytes(value: str | None) -> bytes | None:
@@ -35,8 +35,8 @@ def _load_descriptors_dll() -> ctypes.CDLL:
 
 
 def test_runtime_shared_descriptors_project_declares_native_resource_address_files() -> None:
-    project = (PROJECT_DIR / "GhostRigger.Runtime.Shared.Descriptors.vcxproj").read_text(encoding="utf-8")
-    filters = (PROJECT_DIR / "GhostRigger.Runtime.Shared.Descriptors.vcxproj.filters").read_text(encoding="utf-8")
+    project = (PROJECT_DIR / "GhostRigger.Runtime.Shared.vcxproj").read_text(encoding="utf-8")
+    filters = (PROJECT_DIR / "GhostRigger.Runtime.Shared.vcxproj.filters").read_text(encoding="utf-8")
     header = (PROJECT_DIR / "Public" / "ResourceAddress.h").read_text(encoding="utf-8")
     implementation = (PROJECT_DIR / "Private" / "ResourceAddress.cpp").read_text(encoding="utf-8")
 

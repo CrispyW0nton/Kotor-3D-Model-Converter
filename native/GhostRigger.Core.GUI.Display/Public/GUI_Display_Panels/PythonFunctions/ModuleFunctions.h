@@ -1,0 +1,108 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::core::gui::panels {
+
+#ifndef GHOSTRIGGER_GUI_PANELS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_GUI_PANELS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
+    const char* python_file;
+    const char* qualname;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
+};
+#endif // GHOSTRIGGER_GUI_PANELS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+
+const NativeFunctionImplementation& pathtext_line_118_bc674f7e_native();
+const NativeFunctionImplementation& animation_display_name_line_114_1b1dca2a_native();
+const NativeFunctionImplementation& animation_row_label_line_127_2e7e3436_native();
+const NativeFunctionImplementation& animation_base_display_name_line_138_03aa7c07_native();
+const NativeFunctionImplementation& animation_set_context_line_167_1f7046f6_native();
+const NativeFunctionImplementation& animation_action_label_line_175_bd63af3f_native();
+const NativeFunctionImplementation& humanize_animation_slot_line_182_a124c22c_native();
+const NativeFunctionImplementation& animation_game_label_line_191_9ffeda17_native();
+const NativeFunctionImplementation& game_from_model_line_202_88085dc4_native();
+const NativeFunctionImplementation& severity_to_key_line_74_43c6d655_native();
+const NativeFunctionImplementation& issue_field_line_51_2ed2931c_native();
+const NativeFunctionImplementation& issue_slot_text_line_64_aea04b23_native();
+const NativeFunctionImplementation& attachment_type_from_resref_line_74_fb54eef9_native();
+const NativeFunctionImplementation& import_model_data_line_239_381469b8_native();
+const NativeFunctionImplementation& import_scene_io_line_247_5de8af8c_native();
+const NativeFunctionImplementation& tab_icon_line_52_a54d8dc6_native();
+const NativeFunctionImplementation& display_name_from_library_row_line_118_5539bae8_native();
+const NativeFunctionImplementation& encoded_display_name_line_140_1ee739f0_native();
+const NativeFunctionImplementation& player_display_name_line_199_41174031_native();
+const NativeFunctionImplementation& party_display_name_line_219_ceed43bb_native();
+const NativeFunctionImplementation& npc_display_name_line_240_75e1c40f_native();
+const NativeFunctionImplementation& droid_display_name_line_273_d3645255_native();
+const NativeFunctionImplementation& species_gender_display_name_line_284_37d95e21_native();
+const NativeFunctionImplementation& party_variant_line_313_b078fc58_native();
+const NativeFunctionImplementation& letter_or_number_variant_line_325_a22744e6_native();
+const NativeFunctionImplementation& npc_variant_line_340_d2228373_native();
+const NativeFunctionImplementation& with_variant_line_354_ccb0f27d_native();
+const NativeFunctionImplementation& humanize_asset_name_line_364_1bad8caf_native();
+const NativeFunctionImplementation& descriptor_from_library_row_line_417_7b1074c1_native();
+const NativeFunctionImplementation& descriptor_from_animation_entry_line_473_6a4ce035_native();
+const NativeFunctionImplementation& looks_like_minigame_line_706_52da16d2_native();
+const NativeFunctionImplementation& category_sort_key_line_710_cf24a25a_native();
+const NativeFunctionImplementation& looks_like_party_member_line_717_ca92f23e_native();
+const NativeFunctionImplementation& looks_like_droid_line_721_3657b726_native();
+const NativeFunctionImplementation& looks_like_gui_or_menu_model_line_725_412b3e69_native();
+const NativeFunctionImplementation& looks_like_module_geometry_line_735_13bfdb98_native();
+const NativeFunctionImplementation& looks_like_module_minigame_piece_line_741_1acc9e03_native();
+const NativeFunctionImplementation& infer_model_category_line_745_cd03150d_native();
+const NativeFunctionImplementation& stripped_resource_token_line_885_e5cdb09e_native();
+const NativeFunctionImplementation& metadata_int_line_893_e73882a8_native();
+const NativeFunctionImplementation& subcategory_from_item_metadata_line_901_d8c23b50_native();
+const NativeFunctionImplementation& category_from_item_metadata_line_934_5068412a_native();
+const NativeFunctionImplementation& subcategory_from_door_metadata_line_941_d6219d40_native();
+const NativeFunctionImplementation& player_character_metadata_line_958_9d32c1ff_native();
+const NativeFunctionImplementation& party_member_metadata_line_997_c1c247a8_native();
+const NativeFunctionImplementation& commoner_metadata_line_1027_339c9395_native();
+const NativeFunctionImplementation& npc_metadata_line_1040_f6daba89_native();
+const NativeFunctionImplementation& droid_metadata_line_1138_6da28921_native();
+const NativeFunctionImplementation& creature_metadata_line_1155_2d01bbbd_native();
+const NativeFunctionImplementation& supermodel_metadata_line_1204_dd432d41_native();
+const NativeFunctionImplementation& turret_metadata_line_1217_e34f11de_native();
+const NativeFunctionImplementation& engine_item_metadata_line_1230_e7999c9e_native();
+const NativeFunctionImplementation& environment_metadata_line_1247_6cdb985e_native();
+const NativeFunctionImplementation& gui_metadata_line_1264_b7c2e2dc_native();
+const NativeFunctionImplementation& hologram_metadata_line_1289_221875cb_native();
+const NativeFunctionImplementation& level_asset_metadata_line_1304_9da927bf_native();
+const NativeFunctionImplementation& minigame_metadata_line_1327_d5293595_native();
+const NativeFunctionImplementation& menu_metadata_line_1342_fee6079d_native();
+const NativeFunctionImplementation& visual_fx_metadata_line_1351_eb94436c_native();
+const NativeFunctionImplementation& visual_metadata_line_1374_70b5a553_native();
+const NativeFunctionImplementation& planet_metadata_line_1397_319cabb3_native();
+const NativeFunctionImplementation& misc_model_metadata_line_1404_2cde7b2b_native();
+const NativeFunctionImplementation& stunt_metadata_line_1419_f3ad83c5_native();
+const NativeFunctionImplementation& infer_model_subcategory_line_1434_335a1205_native();
+const NativeFunctionImplementation& subcategory_sort_key_line_1645_e1868f2d_native();
+const NativeFunctionImplementation& content_browser_metadata_for_resref_line_1653_82928a38_native();
+const NativeFunctionImplementation& module_info_for_row_line_1729_04499754_native();
+const NativeFunctionImplementation& as_gff_dict_line_1738_67b9acc7_native();
+const NativeFunctionImplementation& template_field_text_line_1750_9ffe08e3_native();
+const NativeFunctionImplementation& template_model_candidates_line_1755_f89306d9_native();
+const NativeFunctionImplementation& door_model_candidates_line_1786_1b78da41_native();
+const NativeFunctionImplementation& template_metadata_index_for_game_line_1810_9ecd4628_native();
+const NativeFunctionImplementation& enrich_library_rows_with_resource_metadata_line_1893_d76cdcd1_native();
+const NativeFunctionImplementation& enrich_library_rows_line_1910_e1a3e5ac_native();
+const NativeFunctionImplementation& normalise_log_level_line_26_c676b4ca_native();
+const NativeFunctionImplementation& detect_log_level_line_45_0e6b106a_native();
+const NativeFunctionImplementation& make_log_tool_button_line_152_aaed0568_native();
+const NativeFunctionImplementation& role_text_line_273_f07acd64_native();
+const NativeFunctionImplementation& as_iter_line_282_aeff2e47_native();
+const NativeFunctionImplementation& node_browser_role_line_12_c8466915_native();
+const NativeFunctionImplementation& fmt_ratio_line_192_464fc7b2_native();
+const NativeFunctionImplementation& steps_for_mode_line_93_1e189d9f_native();
+
+const NativeFunctionImplementation* modulefunctions_native_functions(std::size_t& count);
+
+} // namespace ghostrigger::core::gui::panels

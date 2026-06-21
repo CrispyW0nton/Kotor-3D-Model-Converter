@@ -7,15 +7,15 @@ import sys
 def _install_native_payload_paths() -> None:
     repo = Path(__file__).resolve().parents[1]
     for rel in (
-        "native/GhostRigger.Domain.Core.Modules/Python",
-        "native/GhostRigger.Domain.Core.Level/Python",
-        "native/GhostRigger.Domain.Core.Game/Python",
-        "native/GhostRigger.Domain.Core.Scene/Python",
-        "native/GhostRigger.Domain.Core.Walkmesh/Python",
-        "native/GhostRigger.Domain.Core.Geometry/Python",
-        "native/GhostRigger.Domain.Core.Camera/Python",
-        "native/GhostRigger.Domain.Core.Math/Python",
-        "native/GhostRigger.Domain.Core.Lighting/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Resources/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Math/Python",
+        "native/GhostRigger.Core.Math/Python",
+        "native/GhostRigger.Core.Math/Python",
+        "native/GhostRigger.Core.Rendering/Python",
         ".",
     ):
         path = str((repo / rel).resolve())
@@ -47,10 +47,10 @@ def test_t2641_controller_stages_grdev01_smoke_module(tmp_path: Path) -> None:
 
 def test_t2641_export_panel_exposes_dev_test_stage_action() -> None:
     panel_source = Path(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/export_panel.py"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/export_panel.py"
     ).read_text(encoding="utf-8")
     window_source = Path(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py"
     ).read_text(encoding="utf-8")
 
     assert "devTestModuleRequested" in panel_source
@@ -62,10 +62,10 @@ def test_t2641_export_panel_exposes_dev_test_stage_action() -> None:
 
 def test_t2642_builder_tab_exposes_authored_dev_room_action() -> None:
     builder_source = Path(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/builder_tab.py"
     ).read_text(encoding="utf-8")
     window_source = Path(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py"
     ).read_text(encoding="utf-8")
 
     assert "Create grdev01 Dev Room" in builder_source

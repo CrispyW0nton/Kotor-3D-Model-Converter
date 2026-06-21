@@ -1,0 +1,56 @@
+#include "../../GhostRigger.Native.Core.Foundation/Public/GhostRiggerPythonPayloadResource.h"
+#include "IO_File_Write/GhostRiggerCoreIOFiles.h"
+
+namespace {
+
+constexpr const char* kVersion = "0.1.0";
+constexpr const char* kOwnerBoundary =
+    R"({"schema":"core_io_files_owner_boundary.v1",)"
+    R"("module_package":"GhostRigger.Core.IO",)"
+    R"("source_package":"src/adapters/files",)"
+    R"("owner_surface":"File adapters",)"
+    R"("owner_package":"native/GhostRigger.Core.IO",)"
+    R"("bridge_method":"C ABI DLL",)"
+    R"("diagnostic_only":true,)"
+    R"("cpp_owns":["module_boundary_metadata","dependency_scan_metadata","native_readiness_diagnostics"],)"
+    R"("python_owns":["current_implementation","object_lifetime","workflow_policy","ui_state","runtime_behavior"],)"
+    R"("native_implementation_enabled":true})";
+constexpr const char* kDependencySchema =
+    R"({"schema":"core_io_files_dependency_schema.v1",)"
+    R"("module_package":"GhostRigger.Core.IO",)"
+    R"("source_package":"src/adapters/files",)"
+    R"("diagnostic_only":true,)"
+    R"("dependency_scan_complete":true,)"
+    R"("native_dependencies_declared":[],)"
+    R"("python_owner_active":true,)"
+    R"("native_implementation_enabled":true})";
+
+} // namespace
+
+extern "C" {
+
+GHOSTRIGGER_CORE_IO_FILES_API const char* gr_core_io_files_version() {
+    return kVersion;
+}
+
+GHOSTRIGGER_CORE_IO_FILES_API const char* gr_core_io_files_capabilities_json() {
+    return R"({"name":"GhostRigger.Core.IO","version":"0.1.0",)"
+           R"("phase":"P1 module sweep","module_package":true,)"
+           R"("source_package":"src/adapters/files",)"
+           R"("owner_surface":"File adapters","bridge_method":"C ABI DLL",)"
+           R"("diagnostic_only":false,"native_implementation_enabled":true,)"
+           R"("local_file_writer_native":true,"local_file_writer_utf8_only":true,)"
+           R"("capabilities":["owner_boundary","dependency_schema","native_readiness_diagnostics","local_file_writer"],)"
+           R"("python_fallback_required":true})";
+}
+
+GHOSTRIGGER_CORE_IO_FILES_API const char* gr_core_io_files_owner_boundary_json() {
+    return kOwnerBoundary;
+}
+
+GHOSTRIGGER_CORE_IO_FILES_API const char* gr_core_io_files_dependency_schema_json() {
+    return kDependencySchema;
+}
+
+}
+

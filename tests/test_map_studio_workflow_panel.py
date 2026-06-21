@@ -12,7 +12,7 @@ def _read(rel: str) -> str:
 
 def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     panel_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/workflow_panel.py"
     )
 
@@ -145,19 +145,19 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
 
 def test_t2600_map_studio_new_project_dialog_exposes_module_identity() -> None:
     panel_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/workflow_panel.py"
     )
     window_source = _read(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
         "module_editor_window.py"
     )
     controller_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "module_editor_controller.py"
     )
     mirror_controller_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/"
         "module_editor_controller.py"
     )
 
@@ -207,11 +207,11 @@ def test_t2600_map_studio_new_project_dialog_exposes_module_identity() -> None:
 
 def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None:
     window_source = _read(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
         "module_editor_window.py"
     )
     init_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/__init__.py"
     )
 
@@ -294,19 +294,19 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
 
 def test_t2600_level_editor_exposes_map_studio_workspace_switcher() -> None:
     window_source = _read(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
         "module_editor_window.py"
     )
     controller_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "module_editor_controller.py"
     )
     mirror_controller_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/"
         "module_editor_controller.py"
     )
     model_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "module_editor_model.py"
     )
 
@@ -366,63 +366,63 @@ def test_t2600_level_editor_exposes_map_studio_workspace_switcher() -> None:
 
 def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt() -> None:
     builder_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/builder_tab.py"
     )
     builder_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/builder_tab.py"
     )
     window_source = _read(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
         "module_editor_window.py"
     )
     controller_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "module_editor_controller.py"
     )
     controller_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/"
         "module_editor_controller.py"
     )
     tools_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "map_studio_modeling_tools.py"
     )
     tools_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/"
         "map_studio_modeling_tools.py"
     )
     preferences_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "map_studio_tool_belt_preferences.py"
     )
     preferences_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/"
         "map_studio_tool_belt_preferences.py"
     )
     export_objects_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "map_studio_export_objects.py"
     )
     export_objects_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/"
         "map_studio_export_objects.py"
     )
     readiness_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "authored_module_readiness.py"
     )
     readiness_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/"
         "authored_module_readiness.py"
     )
     readiness_panel_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/readiness_panel.py"
     )
     readiness_panel_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/readiness_panel.py"
     )
 
@@ -860,15 +860,15 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
 
 def test_t2600_map_studio_builder_exposes_script_hook_controls() -> None:
     builder_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/builder_tab.py"
     )
     builder_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/builder_tab.py"
     )
     window_source = _read(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
         "module_editor_window.py"
     )
 
@@ -924,31 +924,31 @@ def test_t2600_map_studio_builder_exposes_script_hook_controls() -> None:
 
 def test_t2601_map_studio_builder_exposes_modeling_mode_and_snap_palette() -> None:
     builder_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/builder_tab.py"
     )
     builder_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/builder_tab.py"
     )
     controller_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "module_editor_controller.py"
     )
     controller_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/"
         "module_editor_controller.py"
     )
     policy_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "map_studio_modeling_tools.py"
     )
     policy_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/"
         "map_studio_modeling_tools.py"
     )
     window_source = _read(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
         "module_editor_window.py"
     )
 
@@ -1004,15 +1004,15 @@ def test_t2601_map_studio_builder_exposes_modeling_mode_and_snap_palette() -> No
 
 def test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes() -> None:
     toolbar_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/module_editor_toolbar.py"
     )
     toolbar_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/module_editor_toolbar.py"
     )
     window_source = _read(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
         "module_editor_window.py"
     )
 
@@ -1024,8 +1024,21 @@ def test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes() -> None:
             assert f'"{mode}"' in source
         assert "snap, weld, flatten, mirror, and cleanup" in source
         assert "stage, install, hand off, warp-test, and record game proof" in source
+        assert "MAP_STUDIO_TOOL_BELT_ACTIONS" in source
+        assert "mapStudioMainToolbarModelingLabel" in source
+        assert "mapStudioMainToolBeltButton_" in source
+        assert "self.actionRequested.emit(f\"tool_belt:{name}\")" in source
         assert "self.selection_mode.currentTextChanged.connect(self.selectionModeChanged.emit)" in source
 
+    assert "mapStudioToolBeltTabs" in window_source
+    assert "mapStudioToolBeltDefaultTab" in window_source
+    assert "mapStudioToolBeltCustomTab" in window_source
+    assert "mapStudioCustomToolComboBox" in window_source
+    assert "mapStudioCustomToolAddButton" in window_source
+    assert "mapStudioCustomToolBeltWidget" in window_source
+    assert "def _refresh_map_studio_tool_index" in window_source
+    assert "def _add_selected_map_studio_custom_tool" in window_source
+    assert "str(action or \"\").startswith(\"tool_belt:\")" in window_source
     assert "self.toolbar.selectionModeChanged.connect(self._handle_map_studio_edit_mode_changed)" in window_source
     assert "def _handle_map_studio_edit_mode_changed" in window_source
     assert "def _sync_map_studio_tool_belt_preset_for_edit_mode" in window_source
@@ -1060,19 +1073,19 @@ def test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes() -> None:
 
 def test_t2605_map_studio_edit_mode_context_is_headless_policy() -> None:
     model_tools_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "map_studio_modeling_tools.py"
     )
     model_tools_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/"
         "map_studio_modeling_tools.py"
     )
     controller_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "module_editor_controller.py"
     )
     controller_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/"
         "module_editor_controller.py"
     )
 
@@ -1084,6 +1097,23 @@ def test_t2605_map_studio_edit_mode_context_is_headless_policy() -> None:
         assert "room mesh vertices and WOK vertices" in source
         assert "ARE/GIT/IFO/LYT/VIS/PTH/WOK/MDL/MDX and staged .mod proof" in source
         assert "live KOTOR warp proof" in source
+        for key in (
+            "boolean_a_minus_b",
+            "boolean_b_minus_a",
+            "insert_edge_loop",
+            "cut_slice_insert_edges",
+            "fill_hole",
+            "merge_components",
+            "lattice",
+            "shrink_wrap",
+            "reverse_normals",
+            "soften_edges",
+            "harden_edges",
+            "duplicate_special",
+            "curve_tool",
+            "bend_tool",
+        ):
+            assert f'"{key}"' in source
 
     for source in (controller_source, controller_mirror_source):
         assert "available_map_studio_edit_mode_contexts" in source
@@ -1094,39 +1124,39 @@ def test_t2605_map_studio_edit_mode_context_is_headless_policy() -> None:
 
 def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
     builder_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/builder_tab.py"
     )
     builder_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/builder_tab.py"
     )
     controller_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "module_editor_controller.py"
     )
     controller_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/"
         "module_editor_controller.py"
     )
     sculpt_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "map_studio_terrain_sculpt_session.py"
     )
     sculpt_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/"
         "map_studio_terrain_sculpt_session.py"
     )
     window_source = _read(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
         "module_editor_window.py"
     )
     viewport_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/module_editor_viewport_panel.py"
     )
     viewport_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/module_editor_viewport_panel.py"
     )
 
@@ -1204,11 +1234,11 @@ def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
 
 def test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proof() -> None:
     export_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/export_panel.py"
     )
     export_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/export_panel.py"
     )
 
@@ -1264,11 +1294,11 @@ def test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proo
 
 def test_t2600_map_studio_asset_browser_explains_library_import_scope() -> None:
     asset_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/module_editor_asset_browser.py"
     )
     asset_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/module_editor_asset_browser.py"
     )
 
@@ -1291,11 +1321,11 @@ def test_t2600_map_studio_asset_browser_explains_library_import_scope() -> None:
 
 def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
     readiness_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/readiness_panel.py"
     )
     readiness_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/readiness_panel.py"
     )
 
@@ -1360,11 +1390,11 @@ def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
 
 def test_t2600_map_studio_readiness_panel_lists_gameplay_template_references() -> None:
     readiness_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/readiness_panel.py"
     )
     readiness_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/readiness_panel.py"
     )
 
@@ -1383,11 +1413,11 @@ def test_t2600_map_studio_readiness_panel_lists_gameplay_template_references() -
 
 def test_t2600_map_studio_readiness_panel_lists_transition_and_script_references() -> None:
     readiness_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/readiness_panel.py"
     )
     readiness_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/readiness_panel.py"
     )
 
@@ -1410,23 +1440,23 @@ def test_t2600_map_studio_readiness_panel_lists_transition_and_script_references
 
 def test_t2600_map_studio_walkmesh_tab_explains_wok_workflow() -> None:
     walkmesh_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/walkmesh_tab.py"
     )
     walkmesh_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/walkmesh_tab.py"
     )
     window_source = _read(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
         "module_editor_window.py"
     )
     controller_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "module_editor_controller.py"
     )
     mirror_controller_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/"
         "module_editor_controller.py"
     )
 
@@ -1474,11 +1504,11 @@ def test_t2600_map_studio_walkmesh_tab_explains_wok_workflow() -> None:
 
 def test_t2600_map_studio_rooms_tab_explains_room_graph_workflow() -> None:
     rooms_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/rooms_tab.py"
     )
     rooms_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/rooms_tab.py"
     )
 
@@ -1504,11 +1534,11 @@ def test_t2600_map_studio_rooms_tab_explains_room_graph_workflow() -> None:
 
 def test_t2600_map_studio_blueprints_tab_explains_template_workflow() -> None:
     blueprints_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/blueprints_tab.py"
     )
     blueprints_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/blueprints_tab.py"
     )
 
@@ -1532,11 +1562,11 @@ def test_t2600_map_studio_blueprints_tab_explains_template_workflow() -> None:
 
 def test_t2600_map_studio_validation_panel_explains_actionable_fixes() -> None:
     validation_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/validation_panel.py"
     )
     validation_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/validation_panel.py"
     )
 
@@ -1556,11 +1586,11 @@ def test_t2600_map_studio_validation_panel_explains_actionable_fixes() -> None:
 
 def test_t2600_map_studio_outliner_explains_selection_editing_workflow() -> None:
     outliner_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/module_editor_outliner.py"
     )
     outliner_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/module_editor_outliner.py"
     )
 
@@ -1582,7 +1612,7 @@ def test_t2600_map_studio_outliner_explains_selection_editing_workflow() -> None
 
 def test_t2600_map_studio_outliner_add_camera_and_light_are_wired_to_services() -> None:
     window_source = _read(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
         "module_editor_window.py"
     )
 
@@ -1603,15 +1633,15 @@ def test_t2600_map_studio_outliner_add_camera_and_light_are_wired_to_services() 
 
 def test_t2600_map_studio_properties_exposes_transition_controls() -> None:
     properties_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/module_editor_properties.py"
     )
     properties_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/module_editor_properties.py"
     )
     window_source = _read(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
         "module_editor_window.py"
     )
 
@@ -1634,15 +1664,15 @@ def test_t2600_map_studio_properties_exposes_transition_controls() -> None:
 
 def test_t2600_map_studio_properties_exposes_selected_room_light_controls() -> None:
     properties_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/module_editor_properties.py"
     )
     properties_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/module_editor_properties.py"
     )
     window_source = _read(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
         "module_editor_window.py"
     )
 
@@ -1666,23 +1696,23 @@ def test_t2600_map_studio_properties_exposes_selected_room_light_controls() -> N
 
 def test_t2600_map_studio_properties_exposes_selected_camera_controls() -> None:
     properties_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/module_editor_properties.py"
     )
     properties_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/module_editor_properties.py"
     )
     window_source = _read(
-        "native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
         "module_editor_window.py"
     )
     controller_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "module_editor_controller.py"
     )
     placement_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "authored_module_placements.py"
     )
 
@@ -1709,19 +1739,19 @@ def test_t2600_map_studio_properties_exposes_selected_camera_controls() -> None:
 
 def test_t2600_map_studio_viewport_skips_non_spatial_store_rows() -> None:
     viewport_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/module_editor_viewport_panel.py"
     )
     viewport_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/module_editor_viewport_panel.py"
     )
     preview_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "authored_gameplay_preview.py"
     )
     preview_mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/"
         "authored_gameplay_preview.py"
     )
 
@@ -1736,11 +1766,11 @@ def test_t2600_map_studio_viewport_skips_non_spatial_store_rows() -> None:
 
 def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/workflow_panel.py"
     )
     mirror_init = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/__init__.py"
     )
 
@@ -1829,11 +1859,11 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
 
 def test_t2600_map_studio_workflow_panel_guides_first_playable_smoke_test() -> None:
     panel_source = _read(
-        "native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/"
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
         "module_editor/workflow_panel.py"
     )
     mirror_source = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/"
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/workflow_panel.py"
     )
 
@@ -1857,19 +1887,19 @@ def test_t2600_map_studio_workflow_panel_guides_first_playable_smoke_test() -> N
 
 def test_t2600_map_studio_readiness_validation_projection_is_mirrored() -> None:
     source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "authored_module_validation_projection.py"
     )
     mirror = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/"
         "authored_module_validation_projection.py"
     )
     controller_source = _read(
-        "native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/"
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/"
         "module_editor_controller.py"
     )
     controller_mirror = _read(
-        "native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/"
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/"
         "module_editor_controller.py"
     )
 
@@ -1891,3 +1921,4 @@ def test_t2600_map_studio_readiness_validation_projection_is_mirrored() -> None:
         assert "from .authored_module_validation_projection import authored_module_readiness_validation_issues" in text
         assert "issues.extend(" in text
         assert "bridge_warnings=readiness_result.warnings" in text
+

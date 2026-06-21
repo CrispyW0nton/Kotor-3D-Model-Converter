@@ -37,6 +37,10 @@ game_data/
 *.bif
 *.key
 *.mdl
+!native/GhostRigger.Core.IO.MDL/
+!native/GhostRigger.Core.IO.MDL/**
+native/GhostRigger.Core.IO.MDL/**/__pycache__/
+native/GhostRigger.Core.IO.MDL/**/*.py[cod]
 *.mdx
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -81,6 +85,7 @@ game_data/
 !/tests/test_animation_export_slot_gate.py
 !/tests/test_aurora_animation_controller_semantics.py
 !/tests/test_mdl_animation_override_roundtrip.py
+!/tests/test_sequence_multichar_runtime.py
 !/tests/test_ue_fbx_source_import.py
 !/tests/test_retarget_mapping_profile.py
 !/tests/test_retarget_reference_pose.py
@@ -101,6 +106,7 @@ game_data/
 !/tests/test_character_builder_override_package.py
 !/tests/test_map_studio_level_editor_identity.py
 !/tests/test_map_studio_workflow_panel.py
+!/tests/test_native_skeleton_snapshot.py
 !/tests/test_game_resource_provider.py
 !/tests/test_qt_resource_browser_model.py
 !/tests/test_sampler.py
@@ -222,6 +228,14 @@ knowledge_base/reference/spreadsheets/
 # ── Demo / capture artefacts ──────────────────────────────────────────────────
 *.mp4
 capture_demo_video.py
+test_artifacts/
+test_artificates/
+knowledge_base/test_artifacts/
+knowledge_base/test_artificates/
+docs/knowledgebase/test_artifacts/
+docs/knowledgebase/test_artificates/
+docs/knowledge_base/test_artifacts/
+docs/knowledge_base/test_artificates/
 
 # ── OS noise ──────────────────────────────────────────────────────────────────
 .DS_Store
@@ -234,6 +248,7 @@ Thumbs.db
 !src/gui/icons/*.png
 !src/gui/icons/branded_controls/*.png
 !src/gui/icons/gpu_branding/*.png
+!native/GhostRigger.Native.Core.Host/RuntimePayload/src/gui/icons/locomotion_disc.png
 !tests/golden/screens/*.png
 
 # ── Spreadsheets / audit scripts (inessential) ──────────────────────────────
@@ -310,3 +325,14 @@ knowledge_base/test_artifacts/*.zip
 !/tests/test_compare_grdev01_stock_metadata_script.py
 !/tests/test_prepare_grdev01_renamed_stock_area_clone_script.py
 /knowledge_base/books
+/docs/architecture
+/docs
+!/docs/
+/.codex_deps/
+/docs/*
+!/docs/knowledgebase/
+!/docs/knowledgebase/*.md
+!/docs/knowledgebase/skills.md
+!/docs/knowledgebase/learned/
+!/docs/knowledgebase/learned/*.md
+/native/GhostRigger.Core.IO.MDL/build

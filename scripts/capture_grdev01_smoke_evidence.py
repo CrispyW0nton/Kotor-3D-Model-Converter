@@ -33,14 +33,14 @@ MAX_PROOF_DARK_RATIO = 0.90
 PROOF_DARK_LUMA_THRESHOLD = 8.0
 PROOF_VISIBLE_LUMA_THRESHOLD = 12.0
 PAYLOAD_PATHS = (
-    "native/GhostRigger.Domain.Core.Modules/Python",
-    "native/GhostRigger.Domain.Core.Game/Python",
-    "native/GhostRigger.Domain.Core.Scene/Python",
-    "native/GhostRigger.Domain.Core.Walkmesh/Python",
-    "native/GhostRigger.Domain.Core.Geometry/Python",
-    "native/GhostRigger.Domain.Core.Camera/Python",
-    "native/GhostRigger.Domain.Core.Math/Python",
-    "native/GhostRigger.Domain.Core.Lighting/Python",
+    "native/GhostRigger.Core.Scene/Python",
+    "native/GhostRigger.Core.Resources/Python",
+    "native/GhostRigger.Core.Scene/Python",
+    "native/GhostRigger.Core.Scene/Python",
+    "native/GhostRigger.Core.Math/Python",
+    "native/GhostRigger.Core.Math/Python",
+    "native/GhostRigger.Core.Math/Python",
+    "native/GhostRigger.Core.Rendering/Python",
     ".",
 )
 

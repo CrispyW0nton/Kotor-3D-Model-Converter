@@ -1,0 +1,88 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::core::io {
+
+#ifndef GHOSTRIGGER_IO_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_IO_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
+    const char* python_file;
+    const char* qualname;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
+};
+#endif // GHOSTRIGGER_IO_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+
+const NativeFunctionImplementation& build_fbx_diagnostic_report_line_17_11aebfa4_native();
+const NativeFunctionImplementation& export_fbx_line_44_c8e1a250_native();
+const NativeFunctionImplementation& validate_output_path_line_82_82cddbaa_native();
+const NativeFunctionImplementation& create_sdk_scene_line_91_10c128b6_native();
+const NativeFunctionImplementation& configure_scene_line_105_b6389ebf_native();
+const NativeFunctionImplementation& add_payload_to_scene_line_128_fb55d6ef_native();
+const NativeFunctionImplementation& models_from_payload_line_142_698e116f_native();
+const NativeFunctionImplementation& copy_model_with_instance_transform_line_172_dc0162f9_native();
+const NativeFunctionImplementation& create_mesh_node_line_182_5ce9b1e0_native();
+const NativeFunctionImplementation& new_node_line_199_bd784fd4_native();
+const NativeFunctionImplementation& set_node_transform_line_204_c09a8d53_native();
+const NativeFunctionImplementation& choose_writer_format_line_216_0804c3f4_native();
+const NativeFunctionImplementation& set_io_bool_line_231_3587f7c5_native();
+const NativeFunctionImplementation& sdk_error_line_240_f743e51e_native();
+const NativeFunctionImplementation& destroy_line_249_ff344015_native();
+const NativeFunctionImplementation& import_fbx_line_25_f871e4c8_native();
+const NativeFunctionImplementation& validate_fbx_path_line_69_5ac44ef0_native();
+const NativeFunctionImplementation& create_sdk_scene_line_78_e2b5c126_native();
+const NativeFunctionImplementation& triangulate_scene_if_possible_line_92_84755a48_native();
+const NativeFunctionImplementation& scene_to_model_line_103_750d64be_native();
+const NativeFunctionImplementation& convert_node_recursive_line_130_0a8cdcfc_native();
+const NativeFunctionImplementation& safe_node_name_line_148_18ccf31b_native();
+const NativeFunctionImplementation& apply_local_transform_line_157_229199d9_native();
+const NativeFunctionImplementation& is_mesh_attribute_line_169_fc6a1c9e_native();
+const NativeFunctionImplementation& count_skeleton_nodes_line_187_434f0484_native();
+const NativeFunctionImplementation& sdk_error_line_203_4ec44863_native();
+const NativeFunctionImplementation& destroy_line_212_3a6705e2_native();
+const NativeFunctionImplementation& sdk_class_line_46_29991def_native();
+const NativeFunctionImplementation& triple_from_fbx_line_51_0b2f928f_native();
+const NativeFunctionImplementation& name_line_58_2feeb152_native();
+const NativeFunctionImplementation& clean_name_line_66_88239ce4_native();
+const NativeFunctionImplementation& euler_degrees_to_quat_xyz_line_71_594df07a_native();
+const NativeFunctionImplementation& quat_xyzw_to_euler_degrees_line_83_157fe9df_native();
+const NativeFunctionImplementation& fbx_matrix_to_gr_matrix_line_96_8e665a63_native();
+const NativeFunctionImplementation& gr_transform_to_fbx_matrix_line_104_893aa93b_native();
+const NativeFunctionImplementation& fbx_material_to_gr_material_line_120_7b61e66b_native();
+const NativeFunctionImplementation& fbx_mesh_to_gr_mesh_line_140_2ebe32fe_native();
+const NativeFunctionImplementation& polygon_material_index_line_225_1272b42f_native();
+const NativeFunctionImplementation& gr_material_to_fbx_material_line_241_12a86f4a_native();
+const NativeFunctionImplementation& gr_mesh_to_fbx_mesh_line_272_02cbe32f_native();
+const NativeFunctionImplementation& iter_renderable_mesh_nodes_line_315_fe26c4aa_native();
+const NativeFunctionImplementation& count_bone_like_nodes_line_323_2c989b58_native();
+const NativeFunctionImplementation& import_optional_module_line_30_35fb0ecc_native();
+const NativeFunctionImplementation& get_fbx_modules_line_37_6143f4fb_native();
+const NativeFunctionImplementation& configure_fbx_sdk_paths_line_48_cac58998_native();
+const NativeFunctionImplementation& is_fbx_sdk_available_line_59_fe40de6e_native();
+const NativeFunctionImplementation& get_fbx_sdk_status_line_64_c20dd245_native();
+const NativeFunctionImplementation& detect_sdk_version_line_93_18d673d3_native();
+const NativeFunctionImplementation& normalize_fbx_sdk_settings_line_46_5e24f92c_native();
+const NativeFunctionImplementation& configured_sdk_paths_line_54_32f15dc4_native();
+const NativeFunctionImplementation& apply_configured_sdk_paths_line_76_21c90f8a_native();
+const NativeFunctionImplementation& temporary_sys_path_line_87_4323835c_native();
+const NativeFunctionImplementation& get_python_runtime_info_line_98_decb3ae1_native();
+const NativeFunctionImplementation& test_fbx_sdk_configuration_line_122_2e1efdc2_native();
+const NativeFunctionImplementation& likely_sdk_files_line_167_de5458c8_native();
+const NativeFunctionImplementation& load_fbx_settings_from_file_line_188_04266fb0_native();
+const NativeFunctionImplementation& site_packages_line_196_c596da0a_native();
+const NativeFunctionImplementation& recommended_fix_line_208_0de9a1f8_native();
+const NativeFunctionImplementation& compatibility_guidance_line_27_6a1b5460_native();
+const NativeFunctionImplementation& open_autodesk_fbx_download_page_line_56_616ad088_native();
+const NativeFunctionImplementation& save_successful_configuration_line_62_30e9954d_native();
+const NativeFunctionImplementation& validate_and_prepare_line_83_5329b90a_native();
+
+const NativeFunctionImplementation* modulefunctions_native_functions(std::size_t& count);
+
+} // namespace ghostrigger::core::io

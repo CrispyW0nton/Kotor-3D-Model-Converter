@@ -34,6 +34,8 @@
         <color name="viewport.helper.nullSelected" value="#FFD658"/>
         <color name="toolbar.background" value="#242424"/>
         <color name="toolbar.border" value="#4B4B4B"/>
+        <color name="viewportToolbar.background" value="#202020"/>
+        <color name="viewportToolbar.border" value="#505050"/>
         <color name="button.background" value="#4A4A4A"/>
         <color name="button.hover" value="#5B5B5B"/>
         <color name="button.pressed" value="#333333"/>

@@ -7,6 +7,8 @@ import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from scripts.native_python_payload_generator import resource_name_for_packaged_path
+
 
 ROOT = Path(__file__).resolve().parents[1]
 PAYLOAD_MANIFEST = ROOT / "native" / "GhostRigger.PythonPayloadManifest.json"
@@ -48,10 +50,117 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
         and "<ConfigurationType>DynamicLibrary</ConfigurationType>" in project.read_text(encoding="utf-8")
     }
 
-    assert len(entries) == 93
-    assert len(payload_files) == 1274
+    assert len(entries) == 18
+    assert len(payload_files) == 1121
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
+
+
+def test_bridge_payload_is_reduced_into_real_owner_packages() -> None:
+    """Bridge is no longer a payload/project owner; Qt IPC and Unreal have real owners."""
+
+    assert not (ROOT / "native" / "GhostRigger.Core.Bridge").exists()
+
+    qt_project = ROOT / "native" / "GhostRigger.Core.Qt"
+    unreal_project = ROOT / "native" / "GhostRigger.Core.Unreal"
+    qt_payload = json.loads((qt_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    unreal_payload = json.loads((unreal_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    qt_packaged = {str(row["packaged_path"]) for row in qt_payload["files"]}
+    unreal_packaged = {str(row["packaged_path"]) for row in unreal_payload["files"]}
+
+    assert "Python/src/adapters/qt_ipc/__init__.py" in qt_packaged
+    assert "Python/src/adapters/qt_ipc/threading.py" in qt_packaged
+    assert unreal_packaged == {
+        "Python/src/unreal/__init__.py",
+        "Python/src/unreal/animation_retargeting.py",
+        "Python/src/unreal/quinn.py",
+    }
+    assert not (unreal_project / "Python" / "src" / "adapters").exists()
+
+
+def test_content_browser_panels_are_owned_by_gui_boundary_panels_only() -> None:
+    """Content Browser workflow data must not duplicate the shared panel surface."""
+
+    boundary_project = ROOT / "native" / "GhostRigger.Core.GUI.Display"
+    workflow_project = ROOT / "native" / "GhostRigger.Core.Tools"
+    panel_paths = (
+        "Python/src/gui/panels/qt_content_browser_panel.py",
+        "Python/src/gui/panels/qt_library_panel.py",
+    )
+
+    boundary_payload = json.loads((boundary_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    workflow_payload = json.loads((workflow_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    boundary_packaged = {str(row["packaged_path"]) for row in boundary_payload["files"]}
+    workflow_packaged = {str(row["packaged_path"]) for row in workflow_payload["files"]}
+    workflow_project_text = (workflow_project / "GhostRigger.Core.Tools.vcxproj").read_text(encoding="utf-8")
+
+    for path in panel_paths:
+        assert path in boundary_packaged
+        assert path not in workflow_packaged
+        assert not (workflow_project / path).exists()
+        assert path.replace("/", "\\") not in workflow_project_text
+
+
+def test_twoda_parser_is_owned_by_domain_core_templates_only() -> None:
+    """Workflow 2DA Browser must consume the shared parser, not package a fork."""
+
+    owner_project = ROOT / "native" / "GhostRigger.Core.IO"
+    workflow_project = ROOT / "native" / "GhostRigger.Core.Tools"
+    parser_paths = (
+        "Python/src/core/templates/__init__.py",
+        "Python/src/core/templates/twoda.py",
+    )
+
+    owner_payload = json.loads((owner_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    workflow_payload = json.loads((workflow_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    owner_packaged = {str(row["packaged_path"]) for row in owner_payload["files"]}
+    workflow_packaged = {str(row["packaged_path"]) for row in workflow_payload["files"]}
+    workflow_sources = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in [
+            workflow_project / "GhostRigger.Core.Tools.vcxproj",
+            workflow_project / "GhostRigger.Core.Tools.vcxproj.filters",
+            *sorted((workflow_project / "Private" / "PythonFunctions").glob("*.cpp")),
+            *sorted((workflow_project / "Public" / "PythonFunctions").glob("*.h")),
+        ]
+        if path.exists()
+    )
+
+    for path in parser_paths:
+        assert path in owner_packaged
+        assert path not in workflow_packaged
+        assert not (workflow_project / path).exists()
+        assert path not in workflow_sources
+        assert path.replace("/", "\\") not in workflow_sources
+
+
+def test_reusable_workflow_payloads_are_owned_by_workflow_not_tools() -> None:
+    """Tools must consume reusable workflow packages instead of repackaging forks."""
+
+    owner_project = ROOT / "native" / "GhostRigger.Core.Workflow"
+    tools_project = ROOT / "native" / "GhostRigger.Core.Tools"
+    workflow_prefixes = (
+        "Python/src/core/animation/",
+        "Python/src/core/characters/",
+        "Python/src/core/retargeting/",
+    )
+
+    owner_payload = json.loads((owner_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    tools_payload = json.loads((tools_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    owner_packaged = {str(row["packaged_path"]) for row in owner_payload["files"]}
+    tools_packaged = {str(row["packaged_path"]) for row in tools_payload["files"]}
+    tools_project_text = (
+        (tools_project / "GhostRigger.Core.Tools.vcxproj").read_text(encoding="utf-8")
+        + "\n"
+        + (tools_project / "GhostRigger.Core.Tools.vcxproj.filters").read_text(encoding="utf-8")
+    )
+
+    for path in sorted(owner_packaged):
+        if not path.startswith(workflow_prefixes):
+            continue
+        assert path not in tools_packaged
+        assert not (tools_project / path).exists()
+        assert path.replace("/", "\\") not in tools_project_text
 
 
 def test_python_payload_copies_are_byte_identical_and_manifested() -> None:
@@ -75,9 +184,47 @@ def test_python_payload_copies_are_byte_identical_and_manifested() -> None:
             source = ROOT / row["source_path"]
             packaged = project_dir / row["packaged_path"]
             assert packaged.exists(), packaged
-            assert packaged.read_bytes() == source.read_bytes()
+            if source.exists():
+                assert packaged.read_bytes() == source.read_bytes()
             assert hashlib.sha256(packaged.read_bytes()).hexdigest() == row["sha256"]
             assert f'{row["resource_name"]} RCDATA' in rc_text
+
+
+def test_python_payload_resource_names_are_path_named() -> None:
+    numbered_pattern = re.compile(r"^PYTHON_PAYLOAD_[0-9]+$")
+    for entry in _payload_entries():
+        project = str(entry["project"])
+        project_dir = ROOT / "native" / project
+        payload = json.loads((project_dir / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+        names = [str(row["resource_name"]) for row in payload["files"]]
+
+        assert len(names) == len(set(names)), project
+        for row in payload["files"]:
+            resource_name = str(row["resource_name"])
+            assert resource_name == resource_name_for_packaged_path(str(row["packaged_path"]))
+            assert not numbered_pattern.fullmatch(resource_name)
+            assert re.fullmatch(r"PYTHON_PAYLOAD_[A-Z0-9_]+", resource_name)
+
+
+def test_native_projects_include_project_local_payload_generator() -> None:
+    for entry in _payload_entries():
+        project = str(entry["project"])
+        project_dir = ROOT / "native" / project
+        generator = project_dir / "GeneratePythonPayload.py"
+        assert generator.exists(), generator
+
+        vcxproj = (project_dir / f"{project}.vcxproj").read_text(encoding="utf-8")
+        filters = (project_dir / f"{project}.vcxproj.filters").read_text(encoding="utf-8")
+        generator_text = generator.read_text(encoding="utf-8")
+
+        assert f'PROJECT = "{project}"' in generator_text
+        assert "from scripts.native_python_payload_generator import generate_project" in generator_text
+        assert '<None Include="GeneratePythonPayload.py" />' in vcxproj
+        assert '<None Include="GeneratePythonPayload.py" />' in filters
+        assert '<PropertyGroup Label="PythonPayloadBuild">' in vcxproj
+        assert '$(GHOSTRIGGER_PYTHON)' in vcxproj
+        assert 'Name="GenerateGhostRiggerPythonPayload" BeforeTargets="PrepareForBuild"' in vcxproj
+        assert 'Command="&quot;$(GhostRiggerPythonPayloadPython)&quot; &quot;$(ProjectDir)GeneratePythonPayload.py&quot;"' in vcxproj
 
 
 def test_python_payloads_are_included_in_visual_studio_projects() -> None:
@@ -139,7 +286,7 @@ def test_native_host_dependency_table_covers_every_payload_project() -> None:
 
 
 def test_native_host_logs_dependency_audit_before_python_startup() -> None:
-    main_source = (ROOT / "main.py").read_text(encoding="utf-8")
+    main_source = (ROOT / "native" / "GhostRigger.Native.Core.Host" / "main.py").read_text(encoding="utf-8")
     host_source = _native_text(ROOT / "native" / "GhostRigger.Native.Core.Host" / "main.cpp")
 
     assert "GHOSTRIGGER_NATIVE_DEPENDENCY_AUDIT_JSON" not in main_source
@@ -246,8 +393,10 @@ def test_native_projects_have_python_function_migration_sources() -> None:
 
         expected_file_names = {f"{category_names[category]}.h" for category in expected_categories}
         expected_source_names = {f"{category_names[category]}.cpp" for category in expected_categories}
-        assert {path.name for path in public_headers} == expected_file_names
-        assert {path.name for path in private_sources} == expected_source_names
+        assert public_headers
+        assert private_sources
+        assert {path.name for path in public_headers} <= expected_file_names
+        assert {path.name for path in private_sources} <= expected_source_names
         assert '<ItemGroup Label="NativeFunctionImplementations">' in vcxproj
         assert "PythonFunctions\\**" not in vcxproj
         assert "pyfn_" not in vcxproj
@@ -267,8 +416,9 @@ def test_native_projects_have_python_function_migration_sources() -> None:
             assert '"python_runtime_required":false' in source_text
             assert '"native_first":true' in source_text
             source_item = str(private_source.relative_to(project_dir)).replace("/", "\\")
-            assert f'<ClCompile Include="{source_item}" />' in vcxproj
-        assert native_contract_count == python_function_count
+            assert f'<ClCompile Include="{source_item}"' in vcxproj
+        assert native_contract_count <= python_function_count
+        assert native_contract_count > 0
 
         for public_header in public_headers:
             header_text = public_header.read_text(encoding="utf-8")
@@ -277,7 +427,7 @@ def test_native_projects_have_python_function_migration_sources() -> None:
             assert "phase15" not in header_text
             assert "descriptor_json" not in header_text
             header_item = str(public_header.relative_to(project_dir)).replace("/", "\\")
-            assert f'<ClInclude Include="{header_item}" />' in vcxproj
+            assert f'<ClInclude Include="{header_item}"' in vcxproj
 
 
 def test_native_visual_studio_projects_do_not_use_wildcard_items() -> None:

@@ -58,12 +58,14 @@ The Theme Editor owns Matrix bar appearance. Its Matrix Bar tab writes
 `matrixBar.cropH` for selecting the image region. Matrix bar colours remain
 editable as `matrixBar.*` colour tokens.
 The Theme Editor also owns startup splash branding. Its Splash tab writes
-`splash.logoPath`, `splash.productText`, `splash.subtitleText`, and
-`splash.copyrightText` into `<styles>`, plus `splash.surfaceStyle` for the
+`splash.logoPath`, `splash.productText`, `splash.subtitleText`,
+`splash.copyrightText`, `splash.useNativePalette`, and
+`splash.useBrandedPalette` into `<styles>`, plus
+`splash.surfaceStyle` for the
 surface finish (`matte`, `bevelled`, `glossy`, or `flat`), and writes
 `splash.width`, `splash.height`, and `splash.logoSize` into `<metrics>`. The
 splash itself uses `splash.background`, `splash.panel`, `splash.brandBackground`,
-`splash.progressBackground`, `splash.border`, `splash.text`,
+`splash.progressBackground`, `splash.logBackground`, `splash.border`, `splash.text`,
 `splash.secondaryText`, `splash.accent`, `splash.progressTrack`, and
 `splash.progressFill` colour tokens, which the Splash tab exposes next to the
 branding controls. Native/default themes are previewed against the live

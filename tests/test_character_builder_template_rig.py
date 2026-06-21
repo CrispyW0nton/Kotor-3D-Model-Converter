@@ -209,29 +209,45 @@ def test_apply_template_rig_strips_imported_armature_and_clears_old_skin() -> No
     assert rigged_mesh.vertices[0] == (11.0, 2.0, 3.0)
     bind = rigged.metadata["character_builder_bind"]
     assert bind["status"] == "bound_to_native_kotor_skeleton"
-    assert bind["native_base"] == {
-        "source_resref": "n_mandalorian",
-        "model_name": "n_mandalorian",
-        "game": "K1",
-        "supermodel": "S_Female02",
-        "dag_authority": "native_kotor_base",
-        "replaced_render_payload_nodes": [
-            {
-                "name": "template_body_mesh",
-                "path": ["N_Mandalorian", "template_body_mesh"],
-                "is_mesh": True,
-                "is_skin": False,
-                "vertex_count": 0,
-                "face_count": 0,
-                "texture": "",
-                "replacement": "imported_mesh_payload",
-            }
-        ],
-        "replaced_render_payload_count": 1,
-    }
+    assert bind["native_base"]["source_resref"] == "n_mandalorian"
+    assert bind["native_base"]["model_name"] == "n_mandalorian"
+    assert bind["native_base"]["game"] == "K1"
+    assert bind["native_base"]["supermodel"] == "S_Female02"
+    assert bind["native_base"]["dag_authority"] == "native_kotor_base"
+    assert len(bind["native_base"]["dag_fingerprint"]) == 64
+    assert bind["native_base"]["dag_fingerprint_algorithm"] == "sha256"
+    assert bind["native_base"]["replaced_render_payload_nodes"] == [
+        {
+            "name": "template_body_mesh",
+            "path": ["N_Mandalorian", "template_body_mesh"],
+            "is_mesh": True,
+            "is_skin": False,
+            "vertex_count": 0,
+            "face_count": 0,
+            "texture": "",
+            "replacement": "imported_mesh_payload",
+        }
+    ]
+    assert bind["native_base"]["replaced_render_payload_count"] == 1
     assert bind["imported_payload"]["model_name"] == "bendak"
     assert bind["imported_payload"]["mesh_role"] == "payload_guest"
     assert bind["imported_payload"]["mesh_names"] == ["Bendak"]
+    structural_diff = bind["native_structural_diff"]
+    assert result["native_structural_diff"] == structural_diff
+    assert structural_diff["summary"]["missing_node_count"] == 1
+    assert structural_diff["summary"]["added_node_count"] == 1
+    assert structural_diff["missing_nodes"][0]["name"] == "template_body_mesh"
+    assert structural_diff["added_nodes"][0]["name"] == "Bendak"
+    assert structural_diff["skin_row_counts"] == [
+        {
+            "name": "Bendak",
+            "path": ["N_Mandalorian", "Bendak"],
+            "payload_mesh": True,
+            "vertices": 1,
+            "skin_rows": 1,
+            "bone_map_count": 1,
+        }
+    ]
     state = get_character_rig_state(rigged)
     assert state is not None
     assert state.native_base_resref == "n_mandalorian"

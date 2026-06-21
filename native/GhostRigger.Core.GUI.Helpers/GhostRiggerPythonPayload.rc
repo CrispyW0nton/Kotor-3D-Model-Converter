@@ -1,0 +1,12 @@
+// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
+PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
+PYTHON_PAYLOAD_CORE_GIZMO_INIT RCDATA "Python/src/core/gizmo/__init__.py"
+PYTHON_PAYLOAD_CORE_GIZMO_GIZMO_DRAW_DATA RCDATA "Python/src/core/gizmo/gizmo_draw_data.py"
+PYTHON_PAYLOAD_CORE_GIZMO_GIZMO_MODE RCDATA "Python/src/core/gizmo/gizmo_mode.py"
+PYTHON_PAYLOAD_CORE_GIZMO_GIZMO_PICKER RCDATA "Python/src/core/gizmo/gizmo_picker.py"
+PYTHON_PAYLOAD_CORE_GIZMO_GIZMO_RENDERER RCDATA "Python/src/core/gizmo/gizmo_renderer.py"
+PYTHON_PAYLOAD_CORE_GIZMO_TRANSFORM_CONTROLLER RCDATA "Python/src/core/gizmo/transform_controller.py"
+PYTHON_PAYLOAD_CORE_GIZMO_TRANSFORM_GIZMO RCDATA "Python/src/core/gizmo/transform_gizmo.py"
+PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_GIZMO_RENDERER RCDATA "Python/src/gui/camera/camera_gizmo_renderer.py"
+PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_PICKER RCDATA "Python/src/gui/camera/camera_picker.py"
+PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_SELECTION RCDATA "Python/src/gui/camera/camera_selection.py"

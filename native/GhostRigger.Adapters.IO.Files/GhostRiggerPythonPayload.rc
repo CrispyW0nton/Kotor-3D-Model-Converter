@@ -1,4 +1,0 @@
-// Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
-PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
-PYTHON_PAYLOAD_0001 RCDATA "Python/src/adapters/files/__init__.py"
-PYTHON_PAYLOAD_0002 RCDATA "Python/src/adapters/files/local_file_writer.py"

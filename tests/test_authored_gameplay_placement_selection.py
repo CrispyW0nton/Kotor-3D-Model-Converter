@@ -7,15 +7,15 @@ from pathlib import Path
 def _install_native_payload_paths() -> None:
     repo = Path(__file__).resolve().parents[1]
     for rel in (
-        "native/GhostRigger.Domain.Core.Modules/Python",
-        "native/GhostRigger.Domain.Core.Level/Python",
-        "native/GhostRigger.Domain.Core.Game/Python",
-        "native/GhostRigger.Domain.Core.Scene/Python",
-        "native/GhostRigger.Domain.Core.Walkmesh/Python",
-        "native/GhostRigger.Domain.Core.Geometry/Python",
-        "native/GhostRigger.Domain.Core.Camera/Python",
-        "native/GhostRigger.Domain.Core.Math/Python",
-        "native/GhostRigger.Domain.Core.Lighting/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Resources/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Math/Python",
+        "native/GhostRigger.Core.Math/Python",
+        "native/GhostRigger.Core.Math/Python",
+        "native/GhostRigger.Core.Rendering/Python",
         ".",
     ):
         path = str((repo / rel).resolve())
@@ -298,7 +298,7 @@ def test_t2655_module_editor_projects_authored_placements_into_selection_surface
     viewport_source = (
         repo
         / "native"
-        / "GhostRigger.GUI.Boundary.Panels"
+        / "GhostRigger.Core.GUI.Display"
         / "Python"
         / "src"
         / "gui"
@@ -309,7 +309,7 @@ def test_t2655_module_editor_projects_authored_placements_into_selection_surface
     outliner_source = (
         repo
         / "native"
-        / "GhostRigger.GUI.Boundary.Panels"
+        / "GhostRigger.Core.GUI.Display"
         / "Python"
         / "src"
         / "gui"
@@ -320,7 +320,7 @@ def test_t2655_module_editor_projects_authored_placements_into_selection_surface
     properties_source = (
         repo
         / "native"
-        / "GhostRigger.GUI.Boundary.Panels"
+        / "GhostRigger.Core.GUI.Display"
         / "Python"
         / "src"
         / "gui"
@@ -331,7 +331,7 @@ def test_t2655_module_editor_projects_authored_placements_into_selection_surface
     window_source = (
         repo
         / "native"
-        / "GhostRigger.Windows.Editor.Level"
+        / "GhostRigger.Core.Tools"
         / "Python"
         / "src"
         / "gui"

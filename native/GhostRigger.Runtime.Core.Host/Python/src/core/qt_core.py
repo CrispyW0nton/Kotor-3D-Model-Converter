@@ -389,7 +389,7 @@ __all__ = [
     "SceneObjectType",
     "Severity",
     "SuperModelResolver",
-    "TwoDA",
+    "2DA",
     "ValidationIssue",
     "ValidationService",
     "VertexSkinData",

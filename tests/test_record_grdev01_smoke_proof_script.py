@@ -12,14 +12,14 @@ SCRIPT = ROOT / "scripts" / "record_grdev01_smoke_proof.py"
 
 def _install_native_payload_paths() -> None:
     for rel in (
-        "native/GhostRigger.Domain.Core.Modules/Python",
-        "native/GhostRigger.Domain.Core.Game/Python",
-        "native/GhostRigger.Domain.Core.Scene/Python",
-        "native/GhostRigger.Domain.Core.Walkmesh/Python",
-        "native/GhostRigger.Domain.Core.Geometry/Python",
-        "native/GhostRigger.Domain.Core.Camera/Python",
-        "native/GhostRigger.Domain.Core.Math/Python",
-        "native/GhostRigger.Domain.Core.Lighting/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Resources/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Scene/Python",
+        "native/GhostRigger.Core.Math/Python",
+        "native/GhostRigger.Core.Math/Python",
+        "native/GhostRigger.Core.Math/Python",
+        "native/GhostRigger.Core.Rendering/Python",
         ".",
     ):
         path = str((ROOT / rel).resolve())

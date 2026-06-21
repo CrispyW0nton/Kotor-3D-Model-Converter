@@ -1,0 +1,77 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::core::geometry {
+
+#ifndef GHOSTRIGGER_GEOMETRY_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_GEOMETRY_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
+    const char* python_file;
+    const char* qualname;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
+};
+#endif // GHOSTRIGGER_GEOMETRY_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+
+const NativeFunctionImplementation& clean_line_76_f321d73c_native();
+const NativeFunctionImplementation& fconstructe_vertex3_line_80_03c6de23_native();
+const NativeFunctionImplementation& context_text_line_90_d00ccc79_native();
+const NativeFunctionImplementation& lightsaber_blade_color_choices_line_104_5528abd2_native();
+const NativeFunctionImplementation& normalize_color_id_line_110_4e936914_native();
+const NativeFunctionImplementation& iter_model_nodes_line_124_a7b9943e_native();
+const NativeFunctionImplementation& is_lightsaber_model_line_149_18b9cc63_native();
+const NativeFunctionImplementation& lightsaber_blade_color_override_line_160_6643984f_native();
+const NativeFunctionImplementation& set_lightsaber_blade_color_override_line_177_e97c18d0_native();
+const NativeFunctionImplementation& is_lightsaber_blade_node_line_200_9393d26d_native();
+const NativeFunctionImplementation& lightsaber_blade_emissive_rgb_line_217_dc1263cd_native();
+const NativeFunctionImplementation& lightsaber_blade_diffuse_rgb_line_235_4c91e4e2_native();
+const NativeFunctionImplementation& lightsaber_blade_texture_cache_key_line_242_cd61c4d8_native();
+const NativeFunctionImplementation& should_use_procedural_lightsaber_blade_texture_line_249_dc275bb1_native();
+const NativeFunctionImplementation& lightsaber_blade_procedural_rgba8_line_264_1fd5beb6_native();
+const NativeFunctionImplementation& synthetic_lightsaber_blade_uvs_line_326_8da84fa2_native();
+const NativeFunctionImplementation& lightsaber_blade_preview_quad_line_368_d623df31_native();
+const NativeFunctionImplementation& import_lyt_room_graph_line_84_4b8a864f_native();
+const NativeFunctionImplementation& normalise_resref_line_91_4cad19d1_native();
+const NativeFunctionImplementation& module_from_input_line_95_d90f927c_native();
+const NativeFunctionImplementation& distance_line_99_74569af9_native();
+const NativeFunctionImplementation& sub_line_106_38fcd35b_native();
+const NativeFunctionImplementation& add_line_110_163b327d_native();
+const NativeFunctionImplementation& round_to_grid_line_114_641a32df_native();
+const NativeFunctionImplementation& snap_position_to_grid_line_120_a3575454_native();
+const NativeFunctionImplementation& build_graph_line_134_66aba17d_native();
+const NativeFunctionImplementation& room_by_id_line_138_2b64950c_native();
+const NativeFunctionImplementation& set_room_position_line_146_548aa17f_native();
+const NativeFunctionImplementation& build_snap_anchors_line_154_0cb5005c_native();
+const NativeFunctionImplementation& find_snap_candidates_line_198_8b7a6173_native();
+const NativeFunctionImplementation& snap_room_to_anchor_line_230_750c31c8_native();
+const NativeFunctionImplementation& snap_room_to_nearest_anchor_line_272_6d03b028_native();
+const NativeFunctionImplementation& snap_room_to_grid_line_292_56e76528_native();
+const NativeFunctionImplementation& git_raw_line_315_e4107e5d_native();
+const NativeFunctionImplementation& raw_list_line_322_43dfd95d_native();
+const NativeFunctionImplementation& object_row_line_330_0f5464e1_native();
+const NativeFunctionImplementation& object_position_line_340_1b26a8a5_native();
+const NativeFunctionImplementation& set_object_position_line_349_05d4547c_native();
+const NativeFunctionImplementation& nearest_room_id_line_356_18fefe90_native();
+const NativeFunctionImplementation& align_object_to_room_line_363_d7ad92b7_native();
+const NativeFunctionImplementation& snap_object_to_grid_line_401_6a4d2586_native();
+const NativeFunctionImplementation& is_animation_supermodel_line_35_fc362fb6_native();
+const NativeFunctionImplementation& classify_kotor_model_line_337_83251b23_native();
+const NativeFunctionImplementation& detect_character_mode_line_494_a6e0eadd_native();
+const NativeFunctionImplementation& quat_mul_line_528_786b5f7e_native();
+const NativeFunctionImplementation& quat_conjugate_line_549_046e1a0a_native();
+const NativeFunctionImplementation& quat_rotate_line_559_6fd74838_native();
+const NativeFunctionImplementation& quat_normalize_line_587_e360c2d9_native();
+const NativeFunctionImplementation& quat_normalize_bind_line_597_e3c28ffe_native();
+const NativeFunctionImplementation& make_asset_id_line_1745_d18b3908_native();
+const NativeFunctionImplementation& compute_vertex_space_line_51_d74e1ec7_native();
+
+const NativeFunctionImplementation* modulefunctions_native_functions(std::size_t& count);
+
+} // namespace ghostrigger::core::geometry

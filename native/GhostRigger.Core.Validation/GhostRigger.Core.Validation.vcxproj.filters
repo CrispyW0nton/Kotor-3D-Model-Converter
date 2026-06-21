@@ -1,0 +1,109 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <ItemGroup>
+    <Filter Include="Private">
+      <UniqueIdentifier>{3791f370-5d23-b560-8d89-4b9019900dd5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Private\PythonFunctions">
+      <UniqueIdentifier>{822cd6ce-77d5-04eb-b5c4-da35037c0583}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public">
+      <UniqueIdentifier>{c3379f61-a1c6-bfb8-1b65-ae73e2327677}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Public\PythonFunctions">
+      <UniqueIdentifier>{4eac9c8d-ddeb-2af8-86ff-eef6b049e734}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python">
+      <UniqueIdentifier>{0841b309-22f9-a5df-45ff-8f509ca2c409}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src">
+      <UniqueIdentifier>{608951dd-679d-0143-6ebe-36e91cec0930}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core">
+      <UniqueIdentifier>{66c29541-e190-f805-7c9f-28765d815642}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Python\src\core\validation">
+      <UniqueIdentifier>{3f3340c3-d1fc-1f96-f8a8-0013bfb51438}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Private\GhostRiggerValidation.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\ValidationBus.cpp">
+      <Filter>Private</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\InstanceMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\ModuleFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\NestedFunctions.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\Properties.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+    <ClCompile Include="Private\PythonFunctions\StaticMethods.cpp">
+      <Filter>Private\PythonFunctions</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Public\GhostRiggerValidation.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\ValidationBus.h">
+      <Filter>Public</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\InstanceMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\ModuleFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\NestedFunctions.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\Properties.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+    <ClInclude Include="Public\PythonFunctions\StaticMethods.h">
+      <Filter>Public\PythonFunctions</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="GhostRiggerPythonPayload.json" />
+    <None Include="GeneratePythonPayload.py" />
+    <None Include="Python\src\core\validation\__init__.py">
+      <Filter>Python\src\core\validation</Filter>
+    </None>
+    <None Include="Python\src\core\validation\_native.py">
+      <Filter>Python\src\core\validation</Filter>
+    </None>
+    <None Include="Python\src\core\validation\animation_block_validator.py">
+      <Filter>Python\src\core\validation</Filter>
+    </None>
+    <None Include="Python\src\core\validation\animation_roundtrip_validator.py">
+      <Filter>Python\src\core\validation</Filter>
+    </None>
+    <None Include="Python\src\core\validation\capture_specs.py">
+      <Filter>Python\src\core\validation</Filter>
+    </None>
+    <None Include="Python\src\core\validation\validation_adapters.py">
+      <Filter>Python\src\core\validation</Filter>
+    </None>
+    <None Include="Python\src\core\validation\validation_bus.py">
+      <Filter>Python\src\core\validation</Filter>
+    </None>
+    <None Include="Python\src\core\validation\viewport_validator.py">
+      <Filter>Python\src\core\validation</Filter>
+    </None>
+    <None Include="Python\src\core\geometry\component_editing.py">
+      <Filter>Python\src\core\geometry</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
+  </ItemGroup>
+</Project>

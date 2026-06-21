@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
-_SRC_DIR = _REPO_ROOT / "native" / "GhostRigger.Domain.Core.Modules" / "Python" / "src"
+_SRC_DIR = _REPO_ROOT / "native" / "GhostRigger.Core.Scene" / "Python" / "src"
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
 if str(_REPO_ROOT) not in sys.path:

@@ -22,6 +22,13 @@ DEFAULT_K2_PATH = (
 def _configure_mcp_pythonpath() -> None:
     """Mirror the KotorMCP PYTHONPATH from .cursor/mcp.json for pytest runs."""
     configured = []
+    try:
+        from scripts.mcp.start_kotormcp_stdio import _python_roots
+
+        configured.extend(_python_roots(ROOT))
+    except Exception:
+        configured.extend([ROOT / "src", ROOT])
+
     if MCP_CONFIG_PATH.exists():
         data = json.loads(MCP_CONFIG_PATH.read_text(encoding="utf-8"))
         env = data.get("mcpServers", {}).get("kotormcp", {}).get("env", {})
@@ -33,16 +40,15 @@ def _configure_mcp_pythonpath() -> None:
     os.environ.setdefault("K1_PATH", DEFAULT_K1_PATH)
     os.environ.setdefault("K2_PATH", DEFAULT_K2_PATH)
 
-    if not configured:
-        workspaces = ROOT.parent
-        configured = [
-            str(ROOT / "src"),
-            str(ROOT),
-            str(workspaces / "KotorMCP" / "src"),
-            str(workspaces / "PyKotor" / "Libraries" / "PyKotor" / "src"),
-            str(workspaces / "PyKotor" / "Libraries" / "PyKotorGL" / "src"),
-            str(workspaces / "PyKotor" / "Libraries" / "Utility" / "src"),
+    workspaces = ROOT.parent
+    configured.extend(
+        [
+            workspaces / "KotorMCP" / "src",
+            workspaces / "PyKotor" / "Libraries" / "PyKotor" / "src",
+            workspaces / "PyKotor" / "Libraries" / "PyKotorGL" / "src",
+            workspaces / "PyKotor" / "Libraries" / "Utility" / "src",
         ]
+    )
 
     for item in reversed(configured):
         path = Path(item)

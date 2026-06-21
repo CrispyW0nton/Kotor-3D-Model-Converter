@@ -1,0 +1,63 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::core::validation {
+
+#ifndef GHOSTRIGGER_VALIDATION_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_VALIDATION_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
+    const char* python_file;
+    const char* qualname;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
+};
+#endif // GHOSTRIGGER_VALIDATION_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+
+const NativeFunctionImplementation& animationvalidationreport_add_error_line_44_579fec1b_native();
+const NativeFunctionImplementation& animationvalidationreport_raise_for_errors_line_62_d5d018af_native();
+const NativeFunctionImplementation& rawanimationfootprintreport_add_error_line_103_7d83d5ae_native();
+const NativeFunctionImplementation& animationroundtripreport_add_error_line_41_81ef342f_native();
+const NativeFunctionImplementation& animationroundtripreport_add_warning_line_45_e7835240_native();
+const NativeFunctionImplementation& animationroundtripreport_raise_for_errors_line_48_6b7aba91_native();
+const NativeFunctionImplementation& viewportcapturespec_post_construct_line_41_b935d8fe_native();
+const NativeFunctionImplementation& viewportvalidationresult_to_dict_line_91_9bff6744_native();
+const NativeFunctionImplementation& validationnavigationtarget_post_construct_line_53_a50f7298_native();
+const NativeFunctionImplementation& validationissue_post_construct_line_70_c7a7d6bb_native();
+const NativeFunctionImplementation& validationreport_by_severity_line_96_fbbc013b_native();
+const NativeFunctionImplementation& validationreport_by_subsystem_line_100_5f82b91c_native();
+const NativeFunctionImplementation& validationreport_add_line_104_0f66274b_native();
+const NativeFunctionImplementation& validationbus_construct_line_111_33bd54c1_native();
+const NativeFunctionImplementation& validationbus_publish_line_115_a13983cd_native();
+const NativeFunctionImplementation& validationbus_clear_line_126_38ee04bd_native();
+const NativeFunctionImplementation& validationbus_snapshot_line_146_f4f08ed3_native();
+const NativeFunctionImplementation& validationbus_issues_line_149_14aea9ba_native();
+const NativeFunctionImplementation& validationbus_has_blocking_line_152_7a17f5f2_native();
+const NativeFunctionImplementation& validationbus_subscribe_line_155_fc8162cd_native();
+const NativeFunctionImplementation& validationbus_notify_line_166_230e5af8_native();
+const NativeFunctionImplementation& viewportvalidator_construct_line_42_8a1ebaba_native();
+const NativeFunctionImplementation& viewportvalidator_compute_sha256_line_48_b6e16108_native();
+const NativeFunctionImplementation& viewportvalidator_load_mdl_line_77_3c344e38_native();
+const NativeFunctionImplementation& viewportvalidator_configure_fixture_supermodels_line_112_3a72701f_native();
+const NativeFunctionImplementation& viewportvalidator_construct_renderer_line_133_633da9eb_native();
+const NativeFunctionImplementation& viewportvalidator_construct_animation_engine_line_140_51342a43_native();
+const NativeFunctionImplementation& viewportvalidator_available_animation_names_line_146_43cf9ba7_native();
+const NativeFunctionImplementation& viewportvalidator_set_animation_pose_line_153_47092ef2_native();
+const NativeFunctionImplementation& viewportvalidator_camera_angles_line_187_edf2a2c6_native();
+const NativeFunctionImplementation& viewportvalidator_capture_filename_line_190_5e0520c7_native();
+const NativeFunctionImplementation& viewportvalidator_capture_frame_line_200_12a2e033_native();
+const NativeFunctionImplementation& viewportvalidator_extract_bone_positions_line_255_9fe391ae_native();
+const NativeFunctionImplementation& viewportvalidator_compute_ssim_line_294_474bdda2_native();
+const NativeFunctionImplementation& viewportvalidator_reference_path_line_320_9ea5687b_native();
+const NativeFunctionImplementation& viewportvalidator_validate_mdl_line_337_c4398153_native();
+const NativeFunctionImplementation& viewportvalidator_calibrate_against_ingame_line_435_d73d17fe_native();
+
+const NativeFunctionImplementation* instancemethods_native_functions(std::size_t& count);
+
+} // namespace ghostrigger::core::validation

@@ -1,62 +1,38 @@
-# Roadmap 2026-05 — Qt Character Builder Re-design
+# GhostRigger Roadmaps
 
-This folder contains the post-Qt-migration roadmap for GhostRigger, derived from:
+This folder contains active and historical planning documents for the
+`qt-ghostrigger` branch.
 
-- Reallusion AccuRig HUD reference (user-supplied screenshot + video `e9AMHU_Dgf0`)
-- Facial rigging tutorial (`pLRxzsPAqrE`)
-- Stewart Jones, *Digital Creature Rigging: Wings, Tails & Tentacles* (CRC Press, 2019)
-- A full audit of the `qt-ghostrigger` branch (last refreshed 2026-05-16, post-M6 launch-gap audit)
-- The pre-existing `knowledge_base/reference/specs/character_builder_spec.md`
+## Active Entry Point
+
+Read `02_roadmap_2026_05.md` first. Despite the filename, it has been
+regenerated as the 2026-06 active roadmap and now reflects the current hybrid
+Visual Studio C++ host plus embedded Python Qt application, the four-studio
+product shape, current native package ownership, and the June suite blockers.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `01_qt_branch_audit.md` | Audit of the current Qt branch: Tk-vs-Qt status, module map, KOTOR model-type taxonomy, HUD design notes, Stewart Jones takeaways, gaps |
-| `02_roadmap_2026_05.md` | Live launch roadmap with task IDs, hours, acceptance criteria, commit-message templates. **Last revised 2026-05-16** after M12/M10 local Character Builder launch work plus the broader product-pillar audit for Unity MCP transfer, Asset Viewer, Module Editor, and Map Builder |
-| `03_character_builder_native_kotor_pipeline.md` | Native KOTOR Character Builder correction: mesh-objects-as-bones, exact Odyssey node DAG preservation, skin binding, supermodel animation assignment, hook preview, and export-readiness gates. **Use this as the next Character Builder execution plan.** |
-| `04_full_suite_completion_roadmap_20260522.md` | Suite-level completion roadmap after the retargeting foundation landed: Character Studio, Retarget Studio, Module Studio, Map Studio, shared project/session architecture, and milestone plan through beta. |
+| `01_qt_branch_audit.md` | Historical Qt branch audit that produced the original post-Tk roadmap. Keep for background only. |
+| `02_roadmap_2026_05.md` | **Active roadmap.** Regenerated 2026-06-21 with current status, critical path, task IDs, and beta gates. |
+| `03_character_builder_native_kotor_pipeline.md` | Detailed Character Studio native KOTOR DAG and export-correctness plan. Use with active roadmap M25/M26. |
+| `04_full_suite_completion_roadmap_20260522.md` | Suite-level four-studio roadmap from 2026-05-22. Useful background for M23-M32, but superseded by the active roadmap where statuses differ. |
 
-## Headline
+## Current Headline
 
-1. **Qt is the only supported front-end.** Tk frozen and removed in M3 (✅ done; CI-guarded).
-2. **Character Builder window matches the AccuRig HUD** (top toolbar / left rail / center viewport / right inspector / bottom strip). ✅ Shipped in M2.
-3. **Four model-type modes** matching KOTOR's actual asset shapes:
-   - Headless Body — **✅ DONE** (M5, PR #53)
-   - Head — **✅ DONE** (M6, PR #54)
-   - Supermodel (Head + Headless composite snapped at `headhook`) — M7 partial
-   - Creature — M8 (only mostly-greenfield milestone)
-4. **Stewart Jones playbook** drives Creature mode: 3-Stage Asset Build, spline-IK chains, wing rig with FLAP/FOLD/LINK/CTRL layers, ROM test files. — M8
-5. **Validation surfaces live** through the bottom-strip banner. — M5 partial; M9 debounces.
-6. **Unity/MCP transfer, Asset Viewer, Module Editor, and Map Builder** now have explicit milestone gates instead of being treated as vague future work.
+GhostRigger is now planned as four authoring studios over shared project,
+resource, validation, export, scene, and native-runtime foundations:
 
-## Status (post-M12 launch-proof update, 2026-05-16)
+1. Character Studio.
+2. Retarget Studio.
+3. Module Studio.
+4. Map Studio.
 
-| Milestone | Status | Effort |
-|-----------|--------|--------|
-| M0–M6 | ✅ DONE (7 of 12) | shipped |
-| M7 Supermodel | 🟡 partial | ~3 d |
-| M8 Creature | 🔴 greenfield | ~7 d |
-| M9 Live validation | ✅ done locally | T901-T904 done locally |
-| M10 Export polish | ✅ done locally | awaiting review/PR |
-| M12 External Mesh Launch Path | ✅ done locally | awaiting review/PR |
-| M11 Visual regression | 🟡 started | T1101-T1103 done locally; T1104 remains |
-| M13 Unity MCP transfer | 🟡 started | ~4 d |
-| M14 Asset Viewer | ✅ done locally | awaiting review/PR |
-| M15 Module Editor | ✅ done locally | T1501-T1505 done locally |
-| M16 Map Builder | ✅ done locally | T1601-T1605 done locally |
-| **Character Builder launch remaining** | | **~8 d** |
-| **Full suite foundation remaining** | | **~32 d** |
+The near-term critical path is shared foundation productization, Character
+Studio native KOTOR DAG correctness, Retarget Studio parity across all three
+directions, real `grdev01` Map Studio game proof, visible Module/Map authoring
+consolidation, and suite QA/beta packaging.
 
-## Critical path remaining
-
-`M13 → M14 → M11`, with M8 Creature work deferred until the humanoid/head pipeline polish is locked.
-
-Shortest path to feature-complete v7 Character Builder now starts with
-`03_character_builder_native_kotor_pipeline.md` M17, because the Build Skeleton
-step must preserve KOTOR's native mesh-object-as-bone DAG before animation,
-preview, and export polish can be trusted. A public modder beta also needs
-M13/M14 so exported characters can be transferred and previewed outside the
-game. M8 ships after unless Creature is explicitly prioritized.
-
-Supersedes `knowledge_base/reference/ROADMAP_legacy_2026_04.md` for the Qt branch. The older roadmap is kept for historical reference only.
+Supersedes `knowledge_base/reference/ROADMAP_legacy_2026_04.md` for active Qt
+branch planning. Older roadmaps are retained for historical reference only.

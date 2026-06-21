@@ -12,8 +12,8 @@ from src.core.scene.scene_resource_ref import SceneResourceRef
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_DIR = ROOT / "native" / "GhostRigger.Domain.Core.Scene"
-DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Domain.Core.Scene.dll"
+PROJECT_DIR = ROOT / "native" / "GhostRigger.Core.Scene"
+DLL_PATH = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Scene.dll"
 
 
 Double3 = ctypes.c_double * 3
@@ -59,8 +59,8 @@ def _tuple3(values: Double3) -> tuple[float, float, float]:
 
 
 def test_scene_project_declares_scene_primitive_files_and_exports() -> None:
-    project = (PROJECT_DIR / "GhostRigger.Domain.Core.Scene.vcxproj").read_text(encoding="utf-8")
-    filters = (PROJECT_DIR / "GhostRigger.Domain.Core.Scene.vcxproj.filters").read_text(encoding="utf-8")
+    project = (PROJECT_DIR / "GhostRigger.Core.Scene.vcxproj").read_text(encoding="utf-8")
+    filters = (PROJECT_DIR / "GhostRigger.Core.Scene.vcxproj.filters").read_text(encoding="utf-8")
     package_header = (PROJECT_DIR / "Public" / "GhostRiggerScene.h").read_text(encoding="utf-8")
     public_header = (PROJECT_DIR / "Public" / "ScenePrimitives.h").read_text(encoding="utf-8")
     implementation = (PROJECT_DIR / "Private" / "ScenePrimitives.cpp").read_text(encoding="utf-8")
@@ -70,8 +70,8 @@ def test_scene_project_declares_scene_primitive_files_and_exports() -> None:
     assert '<Filter>Public</Filter>' in filters
     assert '<Filter>Private</Filter>' in filters
     assert "gr_scene_sanitize_vec3" in package_header
-    assert "namespace ghostrigger::domain::core::scene::core::scene::scene_primitives" in public_header
-    assert "namespace ghostrigger::domain::core::scene::core::scene::scene_primitives" in implementation
+    assert "namespace ghostrigger::core::scene::core::scene::scene_primitives" in public_header
+    assert "namespace ghostrigger::core::scene::core::scene::scene_primitives" in implementation
     assert "phase15" not in public_header
     assert "pyfn_" not in implementation
     assert "using namespace" not in implementation

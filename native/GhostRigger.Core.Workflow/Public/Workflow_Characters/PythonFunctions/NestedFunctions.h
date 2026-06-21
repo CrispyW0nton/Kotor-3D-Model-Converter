@@ -1,0 +1,48 @@
+#pragma once
+
+#include <cstddef>
+
+namespace ghostrigger::core::characters {
+
+#ifndef GHOSTRIGGER_CHARACTERS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+#define GHOSTRIGGER_CHARACTERS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+struct NativeFunctionImplementation {
+    const char* project;
+    const char* native_namespace;
+    const char* python_file;
+    const char* qualname;
+    const char* callable_type;
+    const char* implementation_status;
+    bool native_first;
+    bool python_runtime_required;
+    bool python_fallback_allowed;
+    const char* contract_json;
+};
+#endif // GHOSTRIGGER_CHARACTERS_NATIVE_FUNCTION_IMPLEMENTATION_DEFINED
+
+const NativeFunctionImplementation& rebuild_templates_strip_line_631_7ecc14ab_native();
+const NativeFunctionImplementation& export_character_mdl_mdx_transaction_writer_line_148_6e96dd53_native();
+const NativeFunctionImplementation& export_character_mdl_mdx_transaction_verifier_line_161_538f2514_native();
+const NativeFunctionImplementation& package_character_override_candidate_writer_line_167_3a137123_native();
+const NativeFunctionImplementation& package_character_override_candidate_verifier_line_186_fe0af2f4_native();
+const NativeFunctionImplementation& merge_supermodel_is_bone_or_dummy_line_518_e06daae3_native();
+const NativeFunctionImplementation& merge_supermodel_deep_copy_subtree_line_525_77665d97_native();
+const NativeFunctionImplementation& creatureassembly_from_resrefs_load_line_1284_29e801d6_native();
+const NativeFunctionImplementation& snap_head_onto_body_scale_verts_line_1593_21984514_native();
+const NativeFunctionImplementation& ground_snapped_target_origin_mapped_line_2011_8a0fe80f_native();
+const NativeFunctionImplementation& apply_external_model_fit_adjustment_transform_point_line_2309_3b6f063d_native();
+const NativeFunctionImplementation& normalize_external_model_for_kotor_transform_point_line_2575_98ab7fce_native();
+const NativeFunctionImplementation& normalize_external_model_for_kotor_transform_direction_line_2579_9f227abd_native();
+const NativeFunctionImplementation& normalize_external_model_for_kotor_transform_node_position_line_2583_bf5207e2_native();
+const NativeFunctionImplementation& normalize_external_model_for_kotor_transform_point_line_2692_be866f18_native();
+const NativeFunctionImplementation& normalize_external_model_for_kotor_transform_direction_line_2700_d3af9a5d_native();
+const NativeFunctionImplementation& normalize_external_model_for_kotor_transform_node_position_line_2706_3aa6f982_native();
+const NativeFunctionImplementation& with_supermodel_resource_manager_resolvercontext_construct_line_5113_fc886da7_native();
+const NativeFunctionImplementation& with_supermodel_resource_manager_resolvercontext_enter_line_5118_e5652f36_native();
+const NativeFunctionImplementation& with_supermodel_resource_manager_resolvercontext_exit_line_5131_fed9154f_native();
+const NativeFunctionImplementation& model_nodes_walk_line_5184_c22f7bba_native();
+const NativeFunctionImplementation& export_single_format_reload_exported_line_5841_aa70b842_native();
+
+const NativeFunctionImplementation* nestedfunctions_native_functions(std::size_t& count);
+
+} // namespace ghostrigger::core::characters
