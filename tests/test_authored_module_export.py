@@ -67,6 +67,15 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert authored_manifest["room_lights"][0]["name"] == "grdev01_key_light"
     assert authored_manifest["room_lights"][0]["room_resref"] == "grdev01_room01"
     assert authored_manifest["room_lights"][0]["metadata"]["purpose"] == "canonical_smoke_visibility"
+    assert authored_manifest["lighting"]["ready"] is False
+    assert authored_manifest["lighting"]["status"] == "Viewport lit only"
+    assert authored_manifest["lighting"]["light_count"] == 1
+    assert authored_manifest["lighting"]["rooms_with_lights"] == ["grdev01_room01"]
+    assert authored_manifest["lighting"]["rooms_without_lights"] == []
+    assert authored_manifest["lighting"]["lightmap_status"] == "viewport_lit_only"
+    assert authored_manifest["lighting"]["lightmap_manifest_path"] == ""
+    assert authored_manifest["lighting"]["game_tested_lighting"] is False
+    assert any("viewport/editor intent" in warning for warning in authored_manifest["lighting"]["warnings"])
     assert authored_manifest["visibility"]["vis_resource"] == "grdev01.vis"
     assert authored_manifest["visibility"]["ready"] is True
     assert authored_manifest["visibility"]["status"] == "Ready"
@@ -193,6 +202,48 @@ def test_t2606_authored_build_metadata_records_multi_room_vis_links() -> None:
     assert visibility["isolated_rooms"] == []
     assert visibility["missing_targets"] == []
     assert ("grvis01", "vis") in build.resources
+
+
+def test_t2606_authored_build_metadata_records_lightmap_export_candidate() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grlight01",
+        game="K1",
+    )
+    project = replace(
+        project,
+        metadata=replace(
+            project.metadata,
+            metadata={
+                **dict(project.metadata.metadata),
+                "lightmap": {
+                    "status": "baked",
+                    "manifest_path": "C:/tmp/grlight01_lightmap_manifest.json",
+                    "rooms": ["grlight01_room01"],
+                },
+            },
+        ),
+    )
+
+    build = build_authored_module(project)
+
+    lighting = build.metadata["lighting"]
+    assert lighting["ready"] is True
+    assert lighting["status"] == "Lightmap export candidate"
+    assert lighting["light_count"] == 1
+    assert lighting["rooms_with_lights"] == ["grlight01_room01"]
+    assert lighting["rooms_without_lights"] == []
+    assert lighting["lightmap_status"] == "export_candidate"
+    assert lighting["lightmap_manifest_path"].endswith("grlight01_lightmap_manifest.json")
+    assert lighting["lightmap_rooms"] == ["grlight01_room01"]
+    assert lighting["game_tested_lighting"] is False
 
 
 def test_t2643_exports_diagnostic_kmap_authored_module_without_optional_placed_content(tmp_path: Path) -> None:

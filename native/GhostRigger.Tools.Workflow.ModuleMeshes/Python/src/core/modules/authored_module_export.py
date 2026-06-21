@@ -466,6 +466,110 @@ def _visibility_to_manifest(project: AuthoredModuleProject, layout: Any | None) 
     }
 
 
+def _lightmap_metadata(project: AuthoredModuleProject) -> dict[str, Any]:
+    metadata = getattr(getattr(project, "metadata", None), "metadata", {})
+    metadata = dict(metadata) if isinstance(metadata, dict) else {}
+    source = metadata.get("lightmap")
+    if source is None:
+        source = metadata.get("lightmap_status")
+    if isinstance(source, dict):
+        return dict(source)
+    if isinstance(source, str) and source.strip():
+        return {"status": source.strip()}
+    return {}
+
+
+def _lightmap_rooms(value: Any) -> tuple[str, ...]:
+    if isinstance(value, str):
+        values = (value,)
+    elif isinstance(value, (list, tuple, set)):
+        values = tuple(value)
+    else:
+        values = ()
+    return tuple(dict.fromkeys(normalise_resref(item) for item in values if normalise_resref(item)))
+
+
+def _lighting_to_manifest(project: AuthoredModuleProject, room_lights: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return explicit lighting/lightmap proof state for export manifests."""
+
+    room_resrefs = tuple(
+        normalise_resref(getattr(room, "room_resref", ""))
+        for room in tuple(project.rooms or ())
+        if normalise_resref(getattr(room, "room_resref", ""))
+    )
+    lit_room_set = {
+        normalise_resref(row.get("room_resref", ""))
+        for row in room_lights
+        if isinstance(row, dict) and normalise_resref(row.get("room_resref", ""))
+    }
+    rooms_with_lights = tuple(room for room in room_resrefs if room in lit_room_set)
+    rooms_without_lights = tuple(room for room in room_resrefs if room not in lit_room_set)
+    lightmap = _lightmap_metadata(project)
+    raw_status = str(lightmap.get("status") or "not_started").strip().lower().replace("-", "_").replace(" ", "_")
+    manifest_path = str(lightmap.get("manifest_path") or lightmap.get("path") or lightmap.get("proof_manifest_path") or "")
+    lightmap_rooms = _lightmap_rooms(
+        lightmap.get("rooms")
+        or lightmap.get("baked_rooms")
+        or lightmap.get("lightmapped_rooms")
+        or lightmap.get("room_resrefs")
+    )
+    game_tested_lighting = bool(lightmap.get("game_tested") or raw_status in {"game_tested", "game_tested_lighting"})
+    warnings: list[str] = []
+    if rooms_without_lights and room_lights:
+        warnings.append(f"{len(rooms_without_lights)} room(s) have no authored lights yet: {', '.join(rooms_without_lights)}.")
+    if lightmap_rooms:
+        missing_lightmap_rooms = tuple(room for room in room_resrefs if room not in set(lightmap_rooms))
+        if missing_lightmap_rooms:
+            warnings.append(f"Lightmap coverage is missing {len(missing_lightmap_rooms)} room(s): {', '.join(missing_lightmap_rooms)}.")
+
+    if not room_resrefs:
+        ready = False
+        status = "Needs authored rooms"
+        lightmap_status = "not_started"
+        fix_hint = "Create authored rooms before planning room lights or lightmaps."
+    elif game_tested_lighting:
+        ready = True
+        status = "Game-tested lighting"
+        lightmap_status = "game_tested"
+        fix_hint = "Keep the lighting proof manifest and in-game screenshot/video with the staged package."
+    elif raw_status in {"baked", "export_candidate", "ready"} and manifest_path:
+        ready = True
+        status = "Lightmap export candidate"
+        lightmap_status = "export_candidate"
+        fix_hint = "Install the module and verify lighting/lightmap appearance in-game before calling it game-tested."
+    elif room_lights:
+        ready = False
+        status = "Viewport lit only"
+        lightmap_status = raw_status if raw_status != "not_started" else "viewport_lit_only"
+        warnings.append(
+            "Authored room lights are viewport/editor intent only until a baked lightmap manifest or in-game lighting proof is recorded."
+        )
+        fix_hint = "Bake or attach a lightmap manifest, then run an in-game lighting proof pass."
+    else:
+        ready = False
+        status = "Lighting not planned"
+        lightmap_status = raw_status
+        warnings.append("No authored room lights or lightmap plan exists yet; viewport lighting is not game-tested module lighting.")
+        fix_hint = "Add key/fill/ambient room lights and record lightmap planning before packaging a visual-quality map."
+
+    return {
+        "source": "map_studio:authored:lighting",
+        "ready": ready,
+        "status": status,
+        "light_count": len(room_lights),
+        "room_count": len(room_resrefs),
+        "rooms_with_lights": list(rooms_with_lights),
+        "rooms_without_lights": list(rooms_without_lights),
+        "lightmap_status": lightmap_status,
+        "lightmap_manifest_path": manifest_path,
+        "lightmap_room_count": len(lightmap_rooms),
+        "lightmap_rooms": list(lightmap_rooms),
+        "game_tested_lighting": game_tested_lighting,
+        "warnings": warnings,
+        "fix_hint": fix_hint,
+    }
+
+
 def _positioned_expectations(kind: str, items: Any) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for index, item in enumerate(tuple(items or ())):
@@ -733,6 +837,7 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
         pathing=pathing_metadata,
     )
     room_lights = [authored_room_light_payload(light) for light in tuple(getattr(project, "lights", ()) or ())]
+    lighting_metadata = _lighting_to_manifest(project, room_lights)
     packaged_keys = set(resources)
     template_dependencies = _template_dependency_rows(project.placements, packaged_keys=packaged_keys)
     packaged_template_count = sum(1 for row in template_dependencies if row["packaged"])
@@ -759,6 +864,7 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
             "gameplay_external_template_dependency_count": external_template_count,
             "lighting_count": len(room_lights),
             "room_lights": room_lights,
+            "lighting": lighting_metadata,
             "visibility": visibility_metadata,
             "walkability": walkability_metadata,
             "pathing": pathing_metadata,
@@ -819,6 +925,7 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
         "gameplay_external_template_dependency_count": int(build.metadata.get("gameplay_external_template_dependency_count", 0) or 0),
         "lighting_count": int(build.metadata.get("lighting_count", 0) or 0),
         "room_lights": list(build.metadata.get("room_lights", []) or []),
+        "lighting": dict(build.metadata.get("lighting", {}) or {}),
         "visibility": dict(build.metadata.get("visibility", {}) or {}),
         "walkability": dict(build.metadata.get("walkability", {})),
         "pathing": dict(build.metadata.get("pathing", {})),
