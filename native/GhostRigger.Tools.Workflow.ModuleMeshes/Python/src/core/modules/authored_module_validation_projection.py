@@ -109,6 +109,37 @@ def authored_module_readiness_validation_issues(
             )
         )
 
+    visibility = dict(metadata.get("visibility", {}) or {})
+    visibility_blocking_messages = tuple(
+        str(message) for message in tuple(visibility.get("blocking_messages") or ()) if str(message).strip()
+    )
+    visibility_warnings = tuple(str(message) for message in tuple(visibility.get("warnings") or ()) if str(message).strip())
+    visibility_blocking_tails = {_message_tail(message) for message in visibility_blocking_messages}
+    visibility_warning_tails = {_message_tail(message) for message in visibility_warnings}
+    visibility_fix = str(visibility.get("fix_hint") or "").strip() or (
+        "Open the VIS visibility controls and connect rooms that should render together."
+    )
+    for index, message in enumerate(visibility_blocking_messages):
+        issues.append(
+            KMapValidationIssue(
+                "Error",
+                "MAP_STUDIO_VISIBILITY_BLOCKER",
+                message,
+                f"authored_vis_visibility:blocker:{index}",
+                visibility_fix,
+            )
+        )
+    for index, message in enumerate(visibility_warnings):
+        issues.append(
+            KMapValidationIssue(
+                "Warning",
+                "MAP_STUDIO_VISIBILITY_WARNING",
+                message,
+                f"authored_vis_visibility:warning:{index}",
+                visibility_fix,
+            )
+        )
+
     for item in tuple(getattr(readiness, "inputs", ()) or ()):
         if bool(getattr(item, "present", False)):
             continue
@@ -129,6 +160,8 @@ def authored_module_readiness_validation_issues(
         if _message_tail(str(message)) in geometry_blocking_tails:
             continue
         if _message_tail(str(message)) in pathing_blocking_tails:
+            continue
+        if _message_tail(str(message)) in visibility_blocking_tails:
             continue
         issues.append(
             KMapValidationIssue(
@@ -228,6 +261,8 @@ def authored_module_readiness_validation_issues(
         if _message_tail(str(message)) in geometry_warning_tails:
             continue
         if _message_tail(str(message)) in pathing_warning_tails:
+            continue
+        if _message_tail(str(message)) in visibility_warning_tails:
             continue
         issues.append(
             KMapValidationIssue(

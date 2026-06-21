@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Surfaces VIS Visibility Readiness
+
+Owner: LordVaderCW
+Task: T2604
+Subsystem: Map Studio / VIS, layout, and export readiness
+Intersects: Domain Core Modules readiness/projection services and ModuleMeshes mirror package.
+
+- Added a headless authored VIS readiness contract that checks final authored room visibility links, missing target rooms, cross-room link counts, and isolated multi-room visibility planning gaps.
+- Exposed VIS visibility as its own Map Studio toolchain row and readiness metadata so modders can distinguish broken VIS targets from missing runtime resources or pathing blockers.
+- Projected VIS blockers and warnings into the Level Editor validation table with KOTOR-specific fix guidance.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_validation_projection.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_validation_projection.py`; `python -m pytest tests/test_authored_module_readiness.py tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_validation_projection_is_mirrored -q --basetemp .pytest_tmp_map_studio_vis_contract`; `python -m pytest tests/test_authored_module_layout.py tests/test_authored_module_readiness.py -q --basetemp .pytest_tmp_map_studio_vis_layout`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Validates Multi-Room Pathing Against Module WOK
 
 Owner: LordVaderCW

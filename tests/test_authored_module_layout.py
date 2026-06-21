@@ -54,7 +54,8 @@ def test_t2606_compiles_single_room_layout_and_visibility() -> None:
     assert layout.metadata["source"] == "src.core.modules.authored_module_layout"
     assert layout.lyt.rooms[0].model == "grdev01_room01"
     assert layout.lyt.rooms[0].x == 1.0
-    assert layout.lyt.to_text().startswith("roomcount 1")
+    assert layout.lyt.to_text().startswith("#MAXLAYOUT ASCII")
+    assert "roomcount 1" in layout.lyt.to_text()
     assert layout.vis.visibility == {"grdev01_room01": ["grdev01_room01"]}
     assert "grdev01_room01" in layout.vis.to_text()
 

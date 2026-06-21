@@ -129,6 +129,31 @@ def _floor_plan_project_with_all_resources():
     )
 
 
+def _two_room_visibility_project(*, room_a_visible=(), room_b_visible=()):
+    from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+    from src.core.modules.authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject, AuthoredRoomSpec
+    from src.core.modules.authored_room_geometry import RectangularRoomPrimitive
+
+    return AuthoredModuleProject(
+        metadata=AuthoredModuleMetadata(module_root="grdev01"),
+        rooms=(
+            AuthoredRoomSpec(
+                room_resref="grdev01_a",
+                primitive=RectangularRoomPrimitive(room_resref="grdev01_a"),
+                position=(0.0, 0.0, 0.0),
+                visible_rooms=tuple(room_a_visible),
+            ),
+            AuthoredRoomSpec(
+                room_resref="grdev01_b",
+                primitive=RectangularRoomPrimitive(room_resref="grdev01_b"),
+                position=(10.0, 0.0, 0.0),
+                visible_rooms=tuple(room_b_visible),
+            ),
+        ),
+        placements=AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref="grdev01")),
+    )
+
+
 def _runtime_keys():
     return (
         ("grdev01", "are"),
@@ -220,6 +245,7 @@ def test_t2692_readiness_reports_full_map_studio_toolchain_scope() -> None:
         "Floor-plan validation",
         "Walkmesh",
         "PTH pathing",
+        "VIS visibility",
         "Lighting",
         "Resource placement",
         "Gameplay layout",
@@ -237,6 +263,7 @@ def test_t2692_readiness_reports_full_map_studio_toolchain_scope() -> None:
     assert preview_steps["Floor-plan validation"].ready is True
     assert preview_steps["Walkmesh"].ready is True
     assert preview_steps["PTH pathing"].ready is True
+    assert preview_steps["VIS visibility"].ready is True
     assert preview_steps["Lighting"].ready is True
     assert preview_steps["Lighting"].status == "Optional"
     assert preview_steps["Resource placement"].ready is True
@@ -256,6 +283,53 @@ def test_t2692_readiness_reports_full_map_studio_toolchain_scope() -> None:
     assert export_steps["In-game proof"].ready is False
     assert export_steps["In-game proof"].status == "Recorder ready after warp test"
     assert export_candidate.metadata["toolchain"][0]["name"] == "Geometry authoring"
+
+
+def test_t2606_readiness_reports_multi_room_vis_visibility_gaps() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+
+    readiness = build_authored_module_readiness(_two_room_visibility_project())
+    visibility = readiness.metadata["visibility"]
+    visibility_status = {step.name: step for step in readiness.toolchain}["VIS visibility"]
+
+    assert visibility_status.ready is False
+    assert visibility_status.status == "Needs visibility links"
+    assert visibility["ready"] is False
+    assert visibility["room_count"] == 2
+    assert visibility["cross_room_link_count"] == 0
+    assert visibility["isolated_rooms"] == ["grdev01_a", "grdev01_b"]
+    assert any("no cross-room VIS links" in warning for warning in readiness.warnings)
+
+
+def test_t2606_broken_vis_target_blocks_export_candidate() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+
+    readiness = build_authored_module_readiness(
+        _two_room_visibility_project(
+            room_a_visible=("grdev01_a", "missing_room"),
+            room_b_visible=("grdev01_b",),
+        ),
+        packaged_resources=(
+            *_runtime_keys(),
+            ("grdev01_a", "mdl"),
+            ("grdev01_a", "mdx"),
+            ("grdev01_a", "wok"),
+            ("grdev01_b", "mdl"),
+            ("grdev01_b", "mdx"),
+            ("grdev01_b", "wok"),
+        ),
+    )
+    visibility = readiness.metadata["visibility"]
+
+    assert readiness.can_export_candidate is False
+    assert readiness.export_status == "VIS visibility blocked"
+    assert visibility["status"] == "Blocked: 1 broken VIS target(s)"
+    assert visibility["missing_targets"] == [{"room": "grdev01_a", "target": "missing_room"}]
+    assert "Room grdev01_a references missing visible room missing_room." in readiness.blocking_messages
 
 
 def test_t2600_readiness_reports_resource_placement_palette_and_counts() -> None:

@@ -161,6 +161,23 @@ class AuthoredModulePathingReadiness:
 
 
 @dataclass(frozen=True)
+class AuthoredModuleVisibilityReadiness:
+    """Modder-facing summary of authored VIS room visibility intent."""
+
+    ready: bool
+    status: str
+    room_count: int = 0
+    vis_entry_count: int = 0
+    link_count: int = 0
+    cross_room_link_count: int = 0
+    isolated_rooms: tuple[str, ...] = ()
+    missing_targets: tuple[dict[str, str], ...] = ()
+    warnings: tuple[str, ...] = ()
+    blocking_messages: tuple[str, ...] = ()
+    fix_hint: str = ""
+
+
+@dataclass(frozen=True)
 class AuthoredComponentEditReadiness:
     """Latest component-edit risk summary for Map Studio readiness UI."""
 
@@ -227,6 +244,9 @@ class AuthoredModuleReadiness:
     )
     doorway_transition: AuthoredDoorwayTransitionReadiness = field(
         default_factory=lambda: AuthoredDoorwayTransitionReadiness(True, "No wall openings")
+    )
+    visibility: AuthoredModuleVisibilityReadiness = field(
+        default_factory=lambda: AuthoredModuleVisibilityReadiness(True, "No authored rooms")
     )
     component_edit: AuthoredComponentEditReadiness = field(
         default_factory=lambda: AuthoredComponentEditReadiness(True, "No component edits")
@@ -958,6 +978,88 @@ def _lighting_room_coverage(project: AuthoredModuleProject, rooms: tuple[Authore
     return rooms_with_lights, rooms_without_lights
 
 
+def _visibility_readiness(project: AuthoredModuleProject) -> AuthoredModuleVisibilityReadiness:
+    """Audit authored VIS intent against the final room set."""
+
+    room_names = tuple(
+        normalise_resref(getattr(room, "room_resref", ""))
+        for room in tuple(getattr(project, "rooms", ()) or ())
+        if normalise_resref(getattr(room, "room_resref", ""))
+    )
+    room_set = set(room_names)
+    if not room_names:
+        return AuthoredModuleVisibilityReadiness(
+            ready=False,
+            status="Needs authored rooms",
+            fix_hint="Create at least one room before Map Studio can compile LYT/VIS data.",
+        )
+
+    missing_targets: list[dict[str, str]] = []
+    warnings: list[str] = []
+    explicit_entry_count = 0
+    link_count = 0
+    cross_room_link_count = 0
+    isolated_rooms: list[str] = []
+    for room in tuple(project.rooms or ()):
+        room_name = normalise_resref(room.room_resref)
+        if not room_name:
+            continue
+        explicit_targets = tuple(normalise_resref(target) for target in tuple(room.visible_rooms or ()) if normalise_resref(target))
+        if explicit_targets:
+            explicit_entry_count += 1
+            targets = explicit_targets
+            if room_name not in targets:
+                warnings.append(f"Room {room_name} VIS does not include itself; add {room_name} to its visible rooms.")
+        else:
+            targets = (room_name,)
+
+        for target in targets:
+            if target not in room_set:
+                missing_targets.append({"room": room_name, "target": target})
+                continue
+            link_count += 1
+            if target != room_name:
+                cross_room_link_count += 1
+        if len(room_names) > 1 and not any(target in room_set and target != room_name for target in targets):
+            isolated_rooms.append(room_name)
+
+    blocking = tuple(
+        f"Room {item['room']} references missing visible room {item['target']}."
+        for item in missing_targets
+    )
+    if isolated_rooms:
+        warnings.append(
+            f"{len(isolated_rooms)} room(s) have no cross-room VIS links: {', '.join(isolated_rooms)}. "
+            "Add visibility links between rooms that should render together."
+        )
+    ready = not blocking and not isolated_rooms and not warnings
+    if blocking:
+        status = f"Blocked: {len(blocking)} broken VIS target(s)"
+        fix_hint = "Remove missing VIS targets or add the referenced authored rooms before export."
+    elif isolated_rooms:
+        status = "Needs visibility links"
+        fix_hint = "Connect adjacent rooms in the VIS editor so KOTOR can render the intended room set."
+    elif warnings:
+        status = f"Warnings: {len(warnings)} issue(s)"
+        fix_hint = "Review authored visible-room lists before packaging the module."
+    else:
+        status = "Ready"
+        fix_hint = "VIS room visibility intent is ready for staged export; verify culling in game."
+    return AuthoredModuleVisibilityReadiness(
+        ready=ready,
+        status=status,
+        room_count=len(room_names),
+        vis_entry_count=explicit_entry_count or len(room_names),
+        link_count=link_count,
+        cross_room_link_count=cross_room_link_count,
+        isolated_rooms=tuple(isolated_rooms),
+        missing_targets=tuple(missing_targets),
+        warnings=tuple(warnings),
+        blocking_messages=blocking,
+        fix_hint=fix_hint,
+    )
+
+
 def _game_executable_name(game: str) -> str:
     return "swkotor2.exe" if str(game or "").upper() == "K2" else "swkotor.exe"
 
@@ -1097,6 +1199,7 @@ def _toolchain_statuses(
     proof_recording_script_path: str,
     geometry_validation: AuthoredFloorPlanGeometryReadiness,
     doorway_transition: AuthoredDoorwayTransitionReadiness,
+    visibility: AuthoredModuleVisibilityReadiness,
     component_edit: AuthoredComponentEditReadiness,
 ) -> tuple[AuthoredModuleToolchainStatus, ...]:
     """Summarize the full Map Studio path from geometry intent to game proof."""
@@ -1217,6 +1320,17 @@ def _toolchain_statuses(
                 f"anchors: {', '.join(pathing.anchor_labels) or 'walkmesh center only'}"
             ),
             pathing.fix_hint or "Fix walkability/path anchors before export.",
+        ),
+        AuthoredModuleToolchainStatus(
+            "VIS visibility",
+            visibility.ready,
+            visibility.status,
+            (
+                f"{visibility.vis_entry_count} VIS entr{'y' if visibility.vis_entry_count == 1 else 'ies'}; "
+                f"{visibility.link_count} link(s), {visibility.cross_room_link_count} cross-room; "
+                f"{len(visibility.isolated_rooms)} isolated room(s), {len(visibility.missing_targets)} missing target(s)"
+            ),
+            visibility.fix_hint,
         ),
         AuthoredModuleToolchainStatus(
             "Lighting",
@@ -1341,6 +1455,7 @@ def build_authored_module_readiness(
     transition_references = _transition_references(project)
     script_references = _script_references(project, present=present_set)
     pathing = _pathing_readiness(project)
+    visibility = _visibility_readiness(project)
     component_edit = _component_edit_readiness(project)
     geometry_validation = _floor_plan_geometry_readiness(project)
     doorway_transition = _doorway_transition_readiness(
@@ -1356,7 +1471,8 @@ def build_authored_module_readiness(
     room_blocking = tuple(message for room in rooms for message in room.blocking_messages)
     preview_blocking = tuple(validation.blocking_issues) + room_blocking + geometry_validation.blocking_messages
     pathing_blocking = tuple(pathing.blocking_messages or ())
-    blocking = preview_blocking + pathing_blocking
+    visibility_blocking = tuple(visibility.blocking_messages or ())
+    blocking = preview_blocking + pathing_blocking + visibility_blocking
     template_warnings: tuple[str, ...] = ()
     if external_template_count:
         template_warnings = (
@@ -1380,6 +1496,7 @@ def build_authored_module_readiness(
         + room_warnings
         + geometry_validation.warnings
         + tuple(pathing.warnings or ())
+        + tuple(visibility.warnings or ())
         + doorway_transition.warnings
         + template_warnings
         + transition_warnings
@@ -1387,7 +1504,7 @@ def build_authored_module_readiness(
         + component_warnings
     )
     can_preview = not preview_blocking and bool(rooms) and all(room.can_preview_geometry for room in rooms)
-    can_export_candidate = can_preview and not missing and pathing.ready
+    can_export_candidate = can_preview and not missing and pathing.ready and not visibility_blocking
     proof_game_tested = can_export_candidate and _recorded_game_proof_complete(proof)
     ready_for_game_test = can_export_candidate and not proof_game_tested
     proof_manifest_path = str(proof.get("proof_manifest_path") or "")
@@ -1449,6 +1566,9 @@ def build_authored_module_readiness(
         if not pathing.ready:
             export_status = "Pathing blocked"
             next_action = pathing.fix_hint or "Move the module entry point and gameplay anchors onto generated walkable WOK before export."
+        elif visibility_blocking:
+            export_status = "VIS visibility blocked"
+            next_action = visibility.fix_hint or "Fix broken VIS room links before staging the module."
         else:
             export_status = "Missing runtime resources"
             next_action = "Generate or stage ARE/GIT/IFO/PTH/LYT/VIS, room WOK, and matching room MDL/MDX resources before export."
@@ -1472,6 +1592,7 @@ def build_authored_module_readiness(
         proof_recording_script_path=proof_recording_script_path,
         geometry_validation=geometry_validation,
         doorway_transition=doorway_transition,
+        visibility=visibility,
         component_edit=component_edit,
     )
     return AuthoredModuleReadiness(
@@ -1483,6 +1604,7 @@ def build_authored_module_readiness(
         toolchain=toolchain,
         geometry_validation=geometry_validation,
         doorway_transition=doorway_transition,
+        visibility=visibility,
         component_edit=component_edit,
         can_preview=can_preview,
         can_export_candidate=can_export_candidate,
@@ -1520,6 +1642,19 @@ def build_authored_module_readiness(
                 "blocking_messages": list(pathing.blocking_messages),
                 "blocking_targets": list(pathing.blocking_targets),
                 "fix_hint": pathing.fix_hint,
+            },
+            "visibility": {
+                "ready": visibility.ready,
+                "status": visibility.status,
+                "room_count": visibility.room_count,
+                "vis_entry_count": visibility.vis_entry_count,
+                "link_count": visibility.link_count,
+                "cross_room_link_count": visibility.cross_room_link_count,
+                "isolated_rooms": list(visibility.isolated_rooms),
+                "missing_targets": [dict(item) for item in visibility.missing_targets],
+                "warnings": list(visibility.warnings),
+                "blocking_messages": list(visibility.blocking_messages),
+                "fix_hint": visibility.fix_hint,
             },
             "geometry_validation": {
                 "ready": geometry_validation.ready,
@@ -1678,6 +1813,7 @@ __all__ = [
     "AuthoredModuleReadiness",
     "AuthoredModuleScriptReference",
     "AuthoredModuleToolchainStatus",
+    "AuthoredModuleVisibilityReadiness",
     "AuthoredRoomReadiness",
     "RuntimeResourceKey",
     "build_authored_module_readiness",
