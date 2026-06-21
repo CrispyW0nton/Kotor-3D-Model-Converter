@@ -96,6 +96,7 @@ from .authored_room_operations import (
     available_authored_composition_primitive_kinds,
     authored_floor_plan_room_choices,
     authored_floor_plan_vertex_snap_candidates,
+    authored_room_composition_primitive_universal_transform,
     authored_terrain_room_choices,
     authored_room_composition_primitives,
     bridge_authored_floor_plan_edges,
@@ -655,6 +656,24 @@ class ModuleEditorController:
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
         return authored_room_composition_primitives(authored)
+
+    def authored_room_primitive_universal_transform(self, *, room_resref: str, primitive_name: str):
+        """Return exact selected primitive bounds for the Universal Manipulator."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_room_composition_primitive_universal_transform(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+        )
 
     def map_studio_export_object_boundaries(self):
         """Return exportable authored room/object boundaries for the current KMAP."""

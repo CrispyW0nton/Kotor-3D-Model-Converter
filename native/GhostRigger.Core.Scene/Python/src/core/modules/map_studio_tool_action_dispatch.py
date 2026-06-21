@@ -233,6 +233,31 @@ def resolve_map_studio_tool_belt_action(
             ),
         )
 
+    if key == "universal_transform":
+        if not ctx.primitive_name:
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="grid",
+                enabled=False,
+                disabled_reason="Universal Manipulator needs a selected authored room primitive.",
+            )
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="grid",
+            command_method="authored_room_primitive_universal_transform",
+            command_kwargs={
+                "room_resref": ctx.room_resref,
+                "primitive_name": ctx.primitive_name,
+            },
+            mutates_kmap=False,
+            authoring_context=(
+                "Universal Manipulator: query exact KMAP-world selected primitive bounds, center, "
+                "width/depth/height, transform, and export-stale impact before committing any edit."
+            ),
+        )
+
     if key == "shrink_wrap":
         return _route(
             action,

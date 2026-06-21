@@ -31,7 +31,7 @@ from src.core.geometry.component_editing import (
 from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, authored_resref_blocking_issue, normalise_resref
 from .authored_module_objects import AuthoredGameplayPlacement
 from .authored_module_placements import add_authored_gameplay_placement, update_authored_gameplay_transition
-from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, PrimitiveTransform
+from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, PrimitiveTransform, primitive_to_mesh
 from .authored_room_floorplan import (
     FloorPlanAxisSplitOperation,
     FloorPlanBevelOperation,
@@ -97,6 +97,38 @@ class AuthoredCompositionPrimitiveTransform:
     surface_name: str = ""
     supports_walkmesh_surface: bool = False
     dimensions: tuple["AuthoredCompositionPrimitiveDimension", ...] = ()
+
+
+@dataclass(frozen=True)
+class AuthoredUniversalTransformSelection:
+    """Exact selected-primitive bounds for the Map Studio Universal Manipulator."""
+
+    room_resref: str
+    primitive_name: str
+    primitive_type: str
+    coordinate_space: str
+    bounds_min: tuple[float, float, float]
+    bounds_max: tuple[float, float, float]
+    center: tuple[float, float, float]
+    dimensions: tuple[float, float, float]
+    translation: tuple[float, float, float]
+    rotation_degrees_z: float
+    scale: tuple[float, float, float]
+    pivot: tuple[float, float, float]
+    vertex_count: int
+    face_count: int
+    texture: str = ""
+    surface_id: int | None = None
+    surface_name: str = ""
+    committed_edit_stale_outputs: tuple[str, ...] = ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+    readiness_impact: str = (
+        "Committing transform or dimension edits invalidates Map Studio validation, export, install handoff, and game proof."
+    )
+    metadata: dict[str, Any] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.metadata is None:
+            object.__setattr__(self, "metadata", {})
 
 
 @dataclass(frozen=True)
@@ -612,6 +644,97 @@ def _primitive_surface_id(primitive: Any) -> int | None:
 
 def _primitive_supports_walkmesh_surface(primitive: Any) -> bool:
     return _primitive_surface_id(primitive) is not None
+
+
+def _primitive_world_vertices(room: AuthoredRoomSpec, primitive: Any) -> tuple[tuple[float, float, float], ...]:
+    mesh = primitive_to_mesh(primitive)
+    offset = _room_offset(room)
+    return tuple(
+        (
+            float(vertex[0]) + offset[0],
+            float(vertex[1]) + offset[1],
+            float(vertex[2]) + offset[2],
+        )
+        for vertex in tuple(mesh.vertices or ())
+    )
+
+
+def _vec_bounds(vertices: tuple[tuple[float, float, float], ...]) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    if not vertices:
+        raise ValueError("Universal Manipulator needs a selected primitive with renderable vertices.")
+    xs = tuple(float(vertex[0]) for vertex in vertices)
+    ys = tuple(float(vertex[1]) for vertex in vertices)
+    zs = tuple(float(vertex[2]) for vertex in vertices)
+    return (min(xs), min(ys), min(zs)), (max(xs), max(ys), max(zs))
+
+
+def _vec_center(
+    bounds_min: tuple[float, float, float],
+    bounds_max: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    return tuple((float(bounds_min[index]) + float(bounds_max[index])) * 0.5 for index in range(3))  # type: ignore[return-value]
+
+
+def _vec_dimensions(
+    bounds_min: tuple[float, float, float],
+    bounds_max: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    return tuple(max(0.0, float(bounds_max[index]) - float(bounds_min[index])) for index in range(3))  # type: ignore[return-value]
+
+
+def authored_room_composition_primitive_universal_transform(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+) -> AuthoredUniversalTransformSelection:
+    """Return exact KMAP-world bounds for one selected composition primitive.
+
+    This is the headless contract behind Ctrl+T / Universal Manipulator.  The
+    UI draws handles and dimension labels from this data; transform and
+    dimension edits still commit through the existing authored-room commands.
+    """
+
+    room_index = _target_room_index(project, room_resref)
+    room = project.rooms[room_index]
+    composition = _composition_for_room(room)
+    target = str(primitive_name or "").strip()
+    if not target:
+        raise ValueError("Universal Manipulator needs a selected authored primitive.")
+    for primitive in tuple(composition.primitives or ()):
+        if _primitive_name(primitive) != target:
+            continue
+        mesh = primitive_to_mesh(primitive)
+        vertices = _primitive_world_vertices(room, primitive)
+        bounds_min, bounds_max = _vec_bounds(vertices)
+        transform = _primitive_transform(primitive)
+        surface_id = _primitive_surface_id(primitive)
+        material = _primitive_material_value(primitive)
+        return AuthoredUniversalTransformSelection(
+            room_resref=normalise_resref(room.room_resref),
+            primitive_name=target,
+            primitive_type=_primitive_type(primitive),
+            coordinate_space="kmap_world",
+            bounds_min=bounds_min,
+            bounds_max=bounds_max,
+            center=_vec_center(bounds_min, bounds_max),
+            dimensions=_vec_dimensions(bounds_min, bounds_max),
+            translation=tuple(float(value) for value in transform.translation),
+            rotation_degrees_z=float(transform.rotation_degrees_z),
+            scale=tuple(float(value) for value in transform.scale),
+            pivot=tuple(float(value) for value in transform.pivot),
+            vertex_count=len(tuple(mesh.vertices or ())),
+            face_count=len(tuple(mesh.faces or ())),
+            texture=str(material.texture or ""),
+            surface_id=surface_id,
+            surface_name=walkmesh_surface_name(surface_id) if surface_id is not None else "",
+            metadata={
+                "source": "map_studio:universal_transform",
+                "selection_space": "authored_room_composition_primitive",
+                "room_offset": list(_room_offset(room)),
+            },
+        )
+    raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'.")
 
 
 def _primitive_kind(value: Any) -> str:
@@ -3201,6 +3324,7 @@ __all__ = [
     "AuthoredCompositionPrimitiveKind",
     "AuthoredCompositionPrimitiveDimension",
     "AuthoredCompositionPrimitiveTransform",
+    "AuthoredUniversalTransformSelection",
     "AuthoredFloorPlanVertexSnapCandidate",
     "AuthoredFloorPlanRoomChoice",
     "AuthoredTerrainRoomChoice",
@@ -3220,6 +3344,7 @@ __all__ = [
     "authored_floor_plan_room_choices",
     "authored_terrain_room_choices",
     "authored_room_composition_primitives",
+    "authored_room_composition_primitive_universal_transform",
     "bridge_authored_floor_plan_edges",
     "cleanup_authored_floor_plan_normals",
     "cleanup_authored_floor_plan_vertices",

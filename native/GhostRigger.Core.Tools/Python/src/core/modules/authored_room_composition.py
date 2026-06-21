@@ -205,6 +205,16 @@ def _primitive_to_mesh(primitive: RoomPrimitive) -> PrimitiveMesh:
     raise TypeError(f"Unsupported authored room primitive: {type(primitive)!r}")
 
 
+def primitive_to_mesh(primitive: RoomPrimitive) -> PrimitiveMesh:
+    """Return the compiled mesh for one authored primitive instance.
+
+    Map Studio tools such as the Universal Manipulator need exact selected
+    bounds without owning primitive-specific mesh math in the UI layer.
+    """
+
+    return _primitive_to_mesh(primitive)
+
+
 def _append_wok(base: WOKData, extra: WOKData) -> WOKData:
     """Append one primitive WOK to another while preserving local adjacency."""
 
@@ -451,6 +461,7 @@ __all__ = [
     "build_composition_wok",
     "compile_authored_room_composition",
     "create_rectangular_room_composition",
+    "primitive_to_mesh",
     "transform_primitive_mesh",
     "transform_wok_data",
     "validate_authored_room_composition",

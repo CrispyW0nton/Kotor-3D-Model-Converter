@@ -1453,12 +1453,24 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._log(f"Map Studio action not ready: {route.disabled_reason}")
             return False
         try:
-            execute_map_studio_tool_belt_action(self.controller, action_key, context)
+            result = execute_map_studio_tool_belt_action(self.controller, action_key, context)
         except Exception as exc:
             self.statusBar().showMessage(str(exc), 6000)
             self._log(f"Map Studio action failed: {exc}")
             return False
-        self._refresh_all(route.status_message or f"{route.label} complete.")
+        status_message = route.status_message or f"{route.label} complete."
+        if action_key == "universal_transform":
+            dimensions = tuple(getattr(result, "dimensions", ()) or ())
+            center = tuple(getattr(result, "center", ()) or ())
+            if len(dimensions) == 3:
+                status_message = (
+                    f"Universal Transform: {getattr(result, 'primitive_name', '')} "
+                    f"W {dimensions[0]:.3f} / D {dimensions[1]:.3f} / H {dimensions[2]:.3f} m"
+                )
+                if len(center) == 3:
+                    status_message += f"; center {center[0]:.3f}, {center[1]:.3f}, {center[2]:.3f}."
+            self._log(status_message)
+        self._refresh_all(status_message)
         self.workflow_panel.set_active_authoring_context(
             route.authoring_context or route.readiness_impact or route.status_message or route.label
         )
@@ -1775,6 +1787,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "cylinder",
             "door_frame",
             "arch",
+            "universal_transform",
             "cleanup",
             "triangulate",
             "normals",

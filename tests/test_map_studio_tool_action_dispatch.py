@@ -47,6 +47,23 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert cube.stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
     assert "game proof" in cube.readiness_impact
 
+    universal_missing = resolve_map_studio_tool_belt_action("universal_transform")
+
+    assert universal_missing.enabled is False
+    assert "selected authored room primitive" in universal_missing.disabled_reason
+
+    universal_ready = resolve_map_studio_tool_belt_action(
+        "universal_transform",
+        MapStudioToolActionContext(room_resref="room_a", primitive_name="room_a_cube"),
+    )
+
+    assert universal_ready.enabled is True
+    assert universal_ready.command_method == "authored_room_primitive_universal_transform"
+    assert universal_ready.command_kwargs == {"room_resref": "room_a", "primitive_name": "room_a_cube"}
+    assert universal_ready.mutates_kmap is False
+    assert universal_ready.stale_outputs == ()
+    assert "KMAP-world selected primitive bounds" in universal_ready.authoring_context
+
     snap = resolve_map_studio_tool_belt_action("vertex_snap")
 
     assert snap.enabled is False
@@ -334,6 +351,26 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
     assert len(after) == before_count + 1
     assert after[-1].primitive_type == "cube"
     assert controller.can_undo_map_studio_command() is True
+    assert controller.command_history.undo_label == "Add cube primitive"
+
+    universal = execute_map_studio_tool_belt_action(
+        controller,
+        "universal_transform",
+        MapStudioToolActionContext(
+            room_resref=after[-1].room_resref,
+            primitive_name=after[-1].primitive_name,
+        ),
+    )
+
+    assert universal.primitive_name == after[-1].primitive_name
+    assert universal.primitive_type == "cube"
+    assert universal.coordinate_space == "kmap_world"
+    assert universal.dimensions == (1.0, 1.0, 1.0)
+    assert universal.center == (0.0, 0.0, 0.5)
+    assert universal.vertex_count == 8
+    assert universal.face_count == 12
+    assert universal.committed_edit_stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+    assert "validation" in universal.readiness_impact
     assert controller.command_history.undo_label == "Add cube primitive"
 
     undo = controller.undo_map_studio_command()

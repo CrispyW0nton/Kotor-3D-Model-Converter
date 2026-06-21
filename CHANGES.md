@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Adds Universal Transform Selection Contract
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Universal Manipulator / Tool belt
+
+- Added a headless Universal Manipulator selection summary for authored room primitives, reporting exact KMAP-world bounds, center, width/depth/height, transform, material, vertex/face counts, and export-stale impact.
+- Routed the `universal_transform` tool-belt action through the shared dispatcher/controller query path when a primitive is selected while keeping no-selection behavior actionable.
+- Updated the Level Editor action path so Ctrl+T/tool-belt activation can report selected primitive dimensions without putting bounds math in the Qt window or mutating KMAP state.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/authored_room_composition.py native/GhostRigger.Core.Tools/Python/src/core/modules/authored_room_composition.py native/GhostRigger.Core.Scene/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Core.Tools/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Tools/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_universal_transform`.
+
 ### [2026-06-21] Map Studio Adds Terrain Lattice Command
 
 Owner: LordVaderCW
