@@ -46,6 +46,9 @@ class MapStudioToolActionContext:
     light_radius: float = 8.0
     light_intensity: float = 1.0
     light_type: str = "point"
+    script_scope: str = "area"
+    script_field_name: str = ""
+    script_resref: str = ""
     wall_opening_name: str = ""
     wall_opening_edge_index: int = 0
     wall_opening_center_fraction: float = 0.5
@@ -479,6 +482,38 @@ def resolve_map_studio_tool_belt_action(
             authoring_context=(
                 "Lighting: add authored room-light intent to KMAP state for later room MDL/lightmap/export checks. "
                 "Viewport lighting is previewable only until an in-game module test proves the result."
+            ),
+        )
+
+    if key == "script":
+        field_name = str(ctx.script_field_name or "").strip()
+        if not field_name:
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="grid",
+                enabled=False,
+                disabled_reason="Script hook assignment needs an ARE/IFO script field selection first.",
+            )
+        script_resref = str(ctx.script_resref or "").strip()
+        command_method = "set_authored_script_hook" if script_resref else "remove_authored_script_hook"
+        command_kwargs = {
+            "scope": str(ctx.script_scope or "area").strip().lower() or "area",
+            "field_name": field_name,
+        }
+        if script_resref:
+            command_kwargs["script_resref"] = script_resref
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="grid",
+            command_method=command_method,
+            command_kwargs=command_kwargs,
+            mutates_kmap=True,
+            status_message="Updated authored script hook; export, install handoff, and game proof are stale.",
+            authoring_context=(
+                "Scripts: assign or clear ARE/IFO script-hook resrefs in KMAP metadata. "
+                "Referenced .ncs files must resolve from the module package, Override, or base game before game proof."
             ),
         )
 

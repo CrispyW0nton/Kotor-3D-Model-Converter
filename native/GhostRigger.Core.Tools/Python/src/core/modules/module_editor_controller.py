@@ -2576,6 +2576,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         update = set_authored_script_hook(
             authored,
             scope=scope,
@@ -2588,6 +2589,16 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Assigned Map Studio {update.scope} script hook {update.field_name} -> {update.script_resref}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.script.set_hook",
+            label=f"Set {update.scope} script {update.field_name}",
+            before=before,
+            metadata={
+                "scope": update.scope,
+                "field_name": update.field_name,
+                "script_resref": update.script_resref,
+            },
         )
         return update
 
@@ -2603,6 +2614,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         update = remove_authored_script_hook(
             authored,
             scope=scope,
@@ -2614,6 +2626,16 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Cleared Map Studio {update.scope} script hook {update.field_name}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.script.remove_hook",
+            label=f"Clear {update.scope} script {update.field_name}",
+            before=before,
+            metadata={
+                "scope": update.scope,
+                "field_name": update.field_name,
+                "script_resref": update.script_resref,
+            },
         )
         return update
 

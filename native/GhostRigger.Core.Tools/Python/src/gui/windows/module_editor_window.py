@@ -1445,6 +1445,20 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         light_b = getattr(self.builder_tab, "roomLightColorBSpinBox", None)
         light_radius = getattr(self.builder_tab, "roomLightRadiusSpinBox", None)
         light_intensity = getattr(self.builder_tab, "roomLightIntensitySpinBox", None)
+        script_scope_combo = getattr(self.builder_tab, "scriptHookScopeComboBox", None)
+        script_field_combo = getattr(self.builder_tab, "scriptHookFieldComboBox", None)
+        script_scope = str(script_scope_combo.currentData() or "area") if script_scope_combo is not None else "area"
+        script_field = str(
+            (
+                script_field_combo.currentData()
+                if script_field_combo is not None and script_field_combo.currentData()
+                else script_field_combo.currentText()
+                if script_field_combo is not None
+                else ""
+            )
+            or ""
+        ).strip()
+        script_resref = str(getattr(getattr(self.builder_tab, "scriptHookResrefLineEdit", None), "text", lambda: "")()).strip()
         wall_opening_name = str(getattr(getattr(self.builder_tab, "floorPlanOpeningNameLineEdit", None), "text", lambda: "")()).strip()
         wall_opening_edge = getattr(self.builder_tab, "floorPlanOpeningEdgeSpinBox", None)
         wall_opening_center = getattr(self.builder_tab, "floorPlanOpeningCenterSpinBox", None)
@@ -1534,6 +1548,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             light_radius=float(light_radius.value()) if light_radius is not None else 8.0,
             light_intensity=float(light_intensity.value()) if light_intensity is not None else 1.0,
             light_type=light_type,
+            script_scope=script_scope,
+            script_field_name=script_field,
+            script_resref=script_resref,
             wall_opening_name=wall_opening_name,
             wall_opening_edge_index=int(wall_opening_edge.value()) if wall_opening_edge is not None else 0,
             wall_opening_center_fraction=float(wall_opening_center.value()) if wall_opening_center is not None else 0.5,
@@ -1633,6 +1650,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self.validation_panel.set_issues(issues)
             self.bottom_tabs.setCurrentWidget(self.validation_panel)
             self._set_map_studio_workspace_combo_key("export")
+        elif action_key == "script":
+            scope = str(getattr(result, "scope", "") or "").strip()
+            field_name = str(getattr(result, "field_name", "") or "").strip()
+            script_resref = str(getattr(result, "script_resref", "") or "").strip()
+            if bool(getattr(result, "removed", False)):
+                status_message = f"Cleared {scope} script hook {field_name}; export, install handoff, and game proof are stale."
+            else:
+                status_message = (
+                    f"Assigned {scope} script hook {field_name} -> {script_resref}; "
+                    "export, install handoff, and game proof are stale."
+                )
+            self.show_map_studio_script_tools()
         if action_key == "universal_transform":
             overlay_setter = getattr(self.viewport_panel, "set_universal_transform_overlay", None)
             if callable(overlay_setter):
@@ -2023,6 +2052,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "camera",
             "store",
             "light",
+            "script",
             "validate",
             "opening",
             "opening_marker",

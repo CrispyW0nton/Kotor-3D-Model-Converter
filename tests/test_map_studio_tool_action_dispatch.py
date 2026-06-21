@@ -42,8 +42,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert audit.blocking_messages == ()
     assert audit.total_actions >= 80
     assert audit.implemented_actions == audit.total_actions
-    assert audit.command_backed_actions >= 76
-    assert audit.mutating_command_actions >= 71
+    assert audit.command_backed_actions >= 77
+    assert audit.mutating_command_actions >= 73
     assert audit.query_command_actions >= 4
     assert audit.workflow_focus_actions == 0
     assert statuses["cube"].contract_kind == "command_mutates_kmap"
@@ -66,6 +66,9 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["light"].contract_kind == "command_mutates_kmap"
     assert statuses["light"].command_method == "add_authored_room_light"
     assert statuses["light"].mutates_kmap is True
+    assert statuses["script"].contract_kind == "command_mutates_kmap"
+    assert statuses["script"].command_method == "set_authored_script_hook"
+    assert statuses["script"].mutates_kmap is True
     assert statuses["opening"].contract_kind == "command_mutates_kmap"
     assert statuses["opening"].command_method == "apply_authored_room_operation"
     assert statuses["cut"].contract_kind == "command_mutates_kmap"
@@ -311,6 +314,38 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     }
     assert light_route.mutates_kmap is True
     assert "room-light intent" in light_route.authoring_context
+
+    script_route = resolve_map_studio_tool_belt_action(
+        "script",
+        MapStudioToolActionContext(
+            script_scope="area",
+            script_field_name="OnEnter",
+            script_resref="gr_onenter",
+        ),
+    )
+
+    assert script_route.enabled is True
+    assert script_route.command_method == "set_authored_script_hook"
+    assert script_route.command_kwargs == {
+        "scope": "area",
+        "field_name": "OnEnter",
+        "script_resref": "gr_onenter",
+    }
+    assert script_route.mutates_kmap is True
+    assert "ARE/IFO script-hook resrefs" in script_route.authoring_context
+
+    clear_script_route = resolve_map_studio_tool_belt_action(
+        "script",
+        MapStudioToolActionContext(script_scope="module", script_field_name="OnModLoad"),
+    )
+
+    assert clear_script_route.enabled is True
+    assert clear_script_route.command_method == "remove_authored_script_hook"
+    assert clear_script_route.command_kwargs == {
+        "scope": "module",
+        "field_name": "OnModLoad",
+    }
+    assert clear_script_route.mutates_kmap is True
 
     opening_missing = resolve_map_studio_tool_belt_action("opening")
 
@@ -807,6 +842,43 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
     controller.undo_map_studio_command()
 
     assert all(row.name != "belt_key_light" for row in controller.authored_room_lights())
+
+    script_update = execute_map_studio_tool_belt_action(
+        controller,
+        "script",
+        MapStudioToolActionContext(
+            script_scope="area",
+            script_field_name="OnEnter",
+            script_resref="gr_onenter",
+        ),
+    )
+
+    assert script_update.scope == "area"
+    assert script_update.field_name == "OnEnter"
+    assert script_update.script_resref == "gr_onenter"
+    assert controller.authored_script_hooks()["area"]["OnEnter"] == "gr_onenter"
+    assert controller.command_history.undo_label == "Set area script OnEnter"
+
+    clear_script_update = execute_map_studio_tool_belt_action(
+        controller,
+        "script",
+        MapStudioToolActionContext(
+            script_scope="area",
+            script_field_name="OnEnter",
+        ),
+    )
+
+    assert clear_script_update.removed is True
+    assert "OnEnter" not in controller.authored_script_hooks()["area"]
+    assert controller.command_history.undo_label == "Clear area script OnEnter"
+
+    controller.undo_map_studio_command()
+
+    assert controller.authored_script_hooks()["area"]["OnEnter"] == "gr_onenter"
+
+    controller.undo_map_studio_command()
+
+    assert "OnEnter" not in controller.authored_script_hooks()["area"]
 
     execute_map_studio_tool_belt_action(
         controller,
@@ -1348,6 +1420,13 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert "light_room_resref=light_room" in window_source
     assert "light_position=(" in window_source
     assert "light_color=(" in window_source
+    assert "scriptHookScopeComboBox" in window_source
+    assert "scriptHookFieldComboBox" in window_source
+    assert "scriptHookResrefLineEdit" in window_source
+    assert '"script",' in window_source
+    assert "script_scope=script_scope" in window_source
+    assert "script_field_name=script_field" in window_source
+    assert "script_resref=script_resref" in window_source
     assert 'MapStudioToolBeltAction(\n        "triangulate",' in scene_catalog
     assert 'MapStudioToolBeltAction(\n        "triangulate",' in tools_catalog
 
@@ -1364,6 +1443,9 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'if key == "light":' in source
         assert "light_room_resref" in source
         assert 'command_method="add_authored_room_light"' in source
+        assert 'if key == "script":' in source
+        assert "script_field_name" in source
+        assert 'command_method = "set_authored_script_hook" if script_resref else "remove_authored_script_hook"' in source
         assert 'command_method="apply_authored_room_operation"' in source
         assert 'command_method="duplicate_authored_room_primitive"' in source
         assert 'command_method="set_authored_room_edge_normal_policy"' in source

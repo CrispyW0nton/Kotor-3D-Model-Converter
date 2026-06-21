@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Routes Script Belt Action Through KMAP Hook Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / ARE-IFO script hooks
+Intersects: native Scene/Tools Map Studio action dispatch, script-hook controller commands, and Level Editor Builder context routing.
+
+- Routed the `Script` tool-belt action through the shared Map Studio dispatcher so it assigns or clears authored ARE/IFO script-hook resrefs in KMAP metadata instead of only focusing the script panel.
+- Added script scope, field, and resref fields to the shared tool action context and Level Editor context builder, preserving the existing Builder controls as the UI input surface.
+- Added undo/redo command history recording for script-hook assignment and clearing, with export/install/game-proof readiness marked stale through the command route.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_contract_audit.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_contract_audit.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_script_belt`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_script_ui`; Map Studio tool contract audit now reports 77 command-backed actions, 73 mutating command actions, 4 query actions, 4 studio-workspace actions, and 0 workflow-focus actions.
+
 ### [2026-06-21] Map Studio Routes Validate Belt Action Through Readiness Command
 
 Owner: LordVaderCW
