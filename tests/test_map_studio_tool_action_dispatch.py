@@ -248,6 +248,33 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert "Arbitrary mesh/component bending remains planned" in bend.authoring_context
     assert tool_by_key["bend_tool"].implemented is True
 
+    curve = resolve_map_studio_tool_belt_action(
+        "curve_tool",
+        MapStudioToolActionContext(
+            room_resref="room_a",
+            operation_distance=0.5,
+            metadata={
+                "curve_name": "main_path",
+                "curve_purpose": "pth_planning",
+                "points": ((0.0, 0.0, 0.0), (1.0, 0.5, 0.0), (2.0, 0.5, 0.0)),
+            },
+        ),
+    )
+
+    assert curve.enabled is True
+    assert curve.command_method == "add_authored_curve_guide"
+    assert curve.command_kwargs == {
+        "name": "main_path",
+        "points": ((0.0, 0.0, 0.0), (1.0, 0.5, 0.0), (2.0, 0.5, 0.0)),
+        "purpose": "pth_planning",
+        "room_resref": "room_a",
+        "coordinate_space": "kmap_world",
+        "metadata": {"source_action": "curve_tool"},
+    }
+    assert curve.mutates_kmap is True
+    assert "previewable guide data" in curve.authoring_context
+    assert tool_by_key["curve_tool"].implemented is True
+
     shrink_wrap = resolve_map_studio_tool_belt_action(
         "shrink_wrap",
         MapStudioToolActionContext(room_resref="terrain01"),
@@ -561,6 +588,44 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
     restored_bend_payload = controller.project.extra_sections["authored_module"]
     assert restored_bend_payload["rooms"][0]["primitive"]["heights"] == source_bend_heights
 
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grcurve01")
+    curve_room = controller.authored_floor_plan_room_choices()[0]
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "curve_tool",
+        MapStudioToolActionContext(
+            room_resref=curve_room.room_resref,
+            metadata={
+                "curve_name": "main_path",
+                "curve_purpose": "terrain_ridge",
+                "points": ((0.0, 0.0, 0.0), (1.0, 0.5, 0.0), (2.0, 0.5, 0.0)),
+            },
+        ),
+    )
+
+    curve_payload = controller.project.extra_sections["authored_module"]
+    curve_guides = curve_payload["extra"]["map_studio_curve_guides"]
+    curve_guide = curve_guides[0]
+
+    assert len(curve_guides) == 1
+    assert curve_payload["extra"]["last_curve_guide"] == "main_path"
+    assert curve_payload["extra"]["last_map_studio_operation"] == "curve_guide"
+    assert curve_guide["name"] == "main_path"
+    assert curve_guide["purpose"] == "terrain_ridge"
+    assert curve_guide["room_resref"] == curve_room.room_resref
+    assert curve_guide["coordinate_space"] == "kmap_world"
+    assert curve_guide["points"] == [[0.0, 0.0, 0.0], [1.0, 0.5, 0.0], [2.0, 0.5, 0.0]]
+    assert curve_guide["metadata"]["source"] == "map_studio:curve_tool"
+    assert curve_guide["metadata"]["export_state"] == "guide_only_not_runtime_geometry"
+    assert controller.authored_curve_guides()[0].name == "main_path"
+    assert controller.command_history.undo_label == "Add curve guide main_path"
+
+    controller.undo_map_studio_command()
+
+    restored_curve_payload = controller.project.extra_sections["authored_module"]
+    assert "map_studio_curve_guides" not in restored_curve_payload.get("extra", {})
+
 
 def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -> None:
     window_source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
@@ -576,6 +641,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert '"shrink_wrap",' in window_source
     assert '"mirror_z",' in window_source
     assert '"bend_tool",' in window_source
+    assert '"curve_tool",' in window_source
     assert 'MapStudioToolBeltAction(\n        "triangulate",' in scene_catalog
     assert 'MapStudioToolBeltAction(\n        "triangulate",' in tools_catalog
 
@@ -590,7 +656,9 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="duplicate_authored_room_primitive"' in source
         assert 'command_method="set_authored_room_edge_normal_policy"' in source
         assert 'command_method="apply_authored_terrain_operation"' in source
+        assert 'command_method="add_authored_curve_guide"' in source
         assert '"operation": "bend"' in source
+        assert '"curve_tool"' in source
         assert '"boolean_a_minus_b"' in source
         assert '"boolean_b_minus_a"' in source
         assert '"insert_edge_loop"' in source

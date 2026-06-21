@@ -386,6 +386,31 @@ def resolve_map_studio_tool_belt_action(
             ),
         )
 
+    if key == "curve_tool":
+        points = ctx.metadata.get("points")
+        if points is None:
+            distance = max(1.0, abs(float(ctx.operation_distance)) * 4.0)
+            points = ((0.0, 0.0, 0.0), (distance, 0.0, 0.0), (distance, distance * 0.5, 0.0))
+        return _route(
+            action,
+            focus_component_mode="vertex",
+            focus_snap_mode="grid",
+            command_method="add_authored_curve_guide",
+            command_kwargs={
+                "name": str(ctx.metadata.get("curve_name") or ""),
+                "points": tuple(points),
+                "purpose": str(ctx.metadata.get("curve_purpose") or "path_guide"),
+                "room_resref": ctx.room_resref,
+                "coordinate_space": str(ctx.metadata.get("coordinate_space") or "kmap_world"),
+                "metadata": {"source_action": "curve_tool"},
+            },
+            mutates_kmap=True,
+            authoring_context=(
+                "Curve: add a durable KMAP construction guide for roads, terrain ridges, placement paths, "
+                "or later sweep/PTH tools. This is previewable guide data, not baked KOTOR runtime geometry yet."
+            ),
+        )
+
     if key in {"mirror", "mirror_x", "mirror_y"}:
         axis = {"mirror_y": "y", "mirror_x": "x"}.get(key, _clean_axis(ctx.axis))
         return _route(

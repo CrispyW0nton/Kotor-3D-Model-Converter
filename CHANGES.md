@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Adds Authored Curve Guide Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Curve guides / Tool belt
+
+- Added a headless KMAP curve-guide command that stores finite non-zero 3D guide polylines in authored module extra state with purpose, coordinate space, bounds, length, and capability-honest metadata.
+- Routed the Curve tool-belt action through the shared dispatcher and controller command spine so it records undo/redo history and marks MDL/MDX/WOK/LYT/VIS/PTH/.mod readiness/proof stale.
+- Marked Curve implemented in the Scene and Tools catalogs as previewable construction-guide authoring while clearly avoiding claims that it is baked KOTOR runtime geometry or PTH data yet.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_curve_guides.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_curve_guides.py native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Tools/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py tests/test_map_studio_command_history.py -q --basetemp .pytest_tmp_map_studio_curve_tool`.
+
 ### [2026-06-21] Map Studio Adds Terrain Bend Command
 
 Owner: LordVaderCW

@@ -52,6 +52,8 @@ from .map_studio_tool_belt_preferences import (
     normalise_map_studio_tool_belt_preferences,
 )
 from .map_studio_command_history import MapStudioCommandHistory, MapStudioCommandRestoreResult
+from .map_studio_curve_guides import add_authored_curve_guide as add_curve_guide_to_project
+from .map_studio_curve_guides import authored_curve_guides
 from .authored_gameplay_marker_geometry import (
     AuthoredGameplayMarkerGeometry,
     authored_gameplay_marker_geometry_for_project,
@@ -513,6 +515,20 @@ class ModuleEditorController:
             snap_key=snap_key,
         )
 
+    def authored_curve_guides(self):
+        """Return KMAP-authored curve guides for road, path, terrain, and PTH planning."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return ()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_curve_guides(authored)
+
     def authored_gameplay_palette_entries(self, rows, *, query: str = "", kind: str = ""):
         """Return game-library-backed resources that can seed gameplay placements."""
 
@@ -796,6 +812,58 @@ class ModuleEditorController:
             label=f"Apply terrain operation {operation}",
             before=before,
             metadata={"operation": operation, "kwargs": dict(kwargs)},
+        )
+        return self.authored_module_readiness()
+
+    def add_authored_curve_guide(
+        self,
+        *,
+        name: str = "",
+        points: Any = (),
+        purpose: str = "path_guide",
+        room_resref: str = "",
+        coordinate_space: str = "kmap_world",
+        metadata: dict[str, Any] | None = None,
+    ):
+        """Add a Map Studio authoring curve guide to the current KMAP module."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = add_curve_guide_to_project(
+            authored,
+            name=name,
+            points=points,
+            purpose=purpose,
+            room_resref=room_resref,
+            coordinate_space=coordinate_space,
+            metadata=metadata,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        guide_name = str(updated.extra.get("last_curve_guide") or name or "curve")
+        self.model.log(
+            f"Added Map Studio curve guide {guide_name}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.curve_guide.add",
+            label=f"Add curve guide {guide_name}",
+            before=before,
+            metadata={
+                "name": name,
+                "purpose": purpose,
+                "room_resref": room_resref,
+                "coordinate_space": coordinate_space,
+            },
         )
         return self.authored_module_readiness()
 
