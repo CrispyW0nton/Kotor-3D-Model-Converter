@@ -414,6 +414,52 @@ def _normalise_stroke_points(points: tuple[TerrainBrushStrokePoint | tuple[int, 
     return tuple(normalised)
 
 
+def _terrain_symmetry_axes(symmetry_axis: str | None) -> tuple[str, ...]:
+    axis = str(symmetry_axis or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if axis in {"", "none", "off", "false"}:
+        return ()
+    if axis in {"row", "rows", "y", "depth"}:
+        return ("row",)
+    if axis in {"column", "columns", "col", "x", "width"}:
+        return ("column",)
+    if axis in {"both", "all", "xy", "x_y", "row_column", "column_row"}:
+        return ("row", "column")
+    raise ValueError("Terrain brush symmetry_axis must be one of none, row/y, column/x, or both/xy.")
+
+
+def _expand_stroke_points_for_symmetry(
+    primitive: TerrainHeightfieldPrimitive,
+    validation: TerrainHeightfieldValidation,
+    points: tuple[TerrainBrushStrokePoint, ...],
+    *,
+    symmetry_axis: str | None = None,
+) -> tuple[TerrainBrushStrokePoint, ...]:
+    axes = _terrain_symmetry_axes(symmetry_axis)
+    if not axes:
+        return points
+    ordered: list[tuple[int, int]] = []
+    strengths: dict[tuple[int, int], float] = {}
+    for point in points:
+        row, column = _sample_indices(primitive, point.row_index, point.column_index)
+        mirrored: list[tuple[int, int]] = [(row, column)]
+        mirror_row = validation.row_count - 1 - row
+        mirror_column = validation.column_count - 1 - column
+        if "row" in axes:
+            mirrored.append((mirror_row, column))
+        if "column" in axes:
+            mirrored.append((row, mirror_column))
+        if "row" in axes and "column" in axes:
+            mirrored.append((mirror_row, mirror_column))
+        strength = max(0.0, min(1.0, float(point.strength)))
+        for candidate in mirrored:
+            if candidate not in strengths:
+                ordered.append(candidate)
+                strengths[candidate] = strength
+            else:
+                strengths[candidate] = max(strengths[candidate], strength)
+    return tuple(TerrainBrushStrokePoint(row, column, strengths[(row, column)]) for row, column in ordered)
+
+
 def _brush_cells(
     *,
     validation: TerrainHeightfieldValidation,
@@ -462,13 +508,20 @@ def audit_terrain_brush_stroke_interaction(
     brush: str = "raise",
     iterations: int = 1,
     budget_ms: float = 8.0,
+    symmetry_axis: str | None = None,
 ) -> TerrainBrushPerformanceAudit:
     """Estimate whether a terrain brush stroke can stay inside the live interaction budget."""
 
     validation = validate_terrain_heightfield_primitive(primitive)
     if not validation.ok:
         raise ValueError("; ".join(validation.blocking_issues))
-    stroke_points = _normalise_stroke_points(points)
+    input_points = _normalise_stroke_points(points)
+    stroke_points = _expand_stroke_points_for_symmetry(
+        primitive,
+        validation,
+        input_points,
+        symmetry_axis=symmetry_axis,
+    )
     brush_radius = max(0, int(radius))
     affected_cells: set[tuple[int, int]] = set()
     for point in stroke_points:
@@ -519,13 +572,20 @@ def apply_terrain_brush_stroke(
     iterations: int = 1,
     strength: float = 0.5,
     preserve_boundary: bool = True,
+    symmetry_axis: str | None = None,
 ) -> TerrainHeightfieldPrimitive:
     """Apply a local, batch terrain brush stroke and record dirty sample bounds."""
 
     validation = validate_terrain_heightfield_primitive(primitive)
     if not validation.ok:
         raise ValueError("; ".join(validation.blocking_issues))
-    stroke_points = _normalise_stroke_points(points)
+    input_points = _normalise_stroke_points(points)
+    stroke_points = _expand_stroke_points_for_symmetry(
+        primitive,
+        validation,
+        input_points,
+        symmetry_axis=symmetry_axis,
+    )
     op = str(brush or "").strip().lower()
     if op not in {"raise", "lower", "offset", "flatten", "smooth", "terrace", "noise", "plateau", "pinch", "ramp", "slope", "erode", "erase", "reset"}:
         raise ValueError(f"Unsupported terrain brush stroke '{brush}'.")
@@ -664,10 +724,11 @@ def apply_terrain_brush_stroke(
         )
     performance = audit_terrain_brush_stroke_interaction(
         primitive,
-        points=stroke_points,
+        points=input_points,
         radius=brush_radius,
         brush=op,
         iterations=iterations,
+        symmetry_axis=symmetry_axis,
     )
     return _replace_height_rows(
         primitive,
@@ -679,6 +740,7 @@ def apply_terrain_brush_stroke(
             "last_brush_delta": float(delta),
             "last_brush_height": float(height),
             "last_brush_strength": blend,
+            "last_brush_symmetry_axis": str(symmetry_axis or "").strip().lower(),
             "last_brush_slope_report": {
                 "max_slope_degrees": float(slope_report.max_slope_degrees),
                 "walkable_triangle_count": int(slope_report.walkable_triangle_count),
@@ -686,6 +748,7 @@ def apply_terrain_brush_stroke(
                 "warnings": slope_warnings,
             },
             "last_stroke_point_count": len(stroke_points),
+            "last_input_stroke_point_count": len(input_points),
             "last_dirty_region": dirty.to_metadata(),
             "last_changed_sample_count": dirty.changed_sample_count,
             "last_brush_performance": performance.to_metadata(),

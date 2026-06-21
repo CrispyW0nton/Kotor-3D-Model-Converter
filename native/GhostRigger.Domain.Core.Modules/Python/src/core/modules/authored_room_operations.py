@@ -2772,6 +2772,7 @@ def apply_authored_terrain_operation(project: AuthoredModuleProject, operation: 
             iterations=int(kwargs.get("iterations", 1)),
             strength=float(kwargs.get("strength", 0.5)),
             preserve_boundary=bool(kwargs.get("preserve_boundary", True)),
+            symmetry_axis=str(kwargs.get("symmetry_axis", kwargs.get("mirror_axis", ""))),
         )
     elif op in {"shape_preset", "shape"}:
         updated_primitive = apply_terrain_shape_preset(

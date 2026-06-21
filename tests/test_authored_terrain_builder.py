@@ -233,6 +233,43 @@ def test_t2603_terrain_slope_brush_creates_controlled_local_grade() -> None:
     assert sloped.metadata["defer_full_rebuild_until_stroke_end"] is True
 
 
+def test_t2603_terrain_brush_symmetry_mirrors_sample_edits() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_terrain_builder import TerrainHeightfieldPrimitive, apply_terrain_brush_stroke
+
+    terrain = TerrainHeightfieldPrimitive(
+        room_resref="grsym_room01",
+        heights=tuple(tuple(0.0 for _column in range(5)) for _row in range(5)),
+    )
+
+    mirrored = apply_terrain_brush_stroke(
+        terrain,
+        brush="raise",
+        points=((1, 0, 1.0),),
+        radius=0,
+        delta=0.25,
+        strength=1.0,
+        symmetry_axis="column",
+    )
+
+    assert mirrored.heights[1][0] == 0.25
+    assert mirrored.heights[1][4] == 0.25
+    assert mirrored.heights[1][2] == 0.0
+    assert mirrored.metadata["last_brush_symmetry_axis"] == "column"
+    assert mirrored.metadata["last_input_stroke_point_count"] == 1
+    assert mirrored.metadata["last_stroke_point_count"] == 2
+    assert mirrored.metadata["last_dirty_region"] == {
+        "min_row": 1,
+        "max_row": 1,
+        "min_column": 0,
+        "max_column": 4,
+        "changed_sample_count": 2,
+    }
+    assert mirrored.metadata["last_brush_performance"]["sample_point_count"] == 2
+    assert mirrored.metadata["dirty_region_only"] is True
+
+
 def test_t2907_terrain_shape_presets_create_readable_heightfields() -> None:
     _install_native_payload_paths()
 

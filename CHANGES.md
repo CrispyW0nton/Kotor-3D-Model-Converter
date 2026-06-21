@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Adds Terrain Brush Symmetry
+
+Owner: LordVaderCW
+Task: T2603 / T2908
+Subsystem: Map Studio / Terrain Builder sculpting workflow
+Intersects: Domain Core Modules terrain service, ModuleMeshes mirror package, and Windows Editor Level terrain brush routing.
+
+- Added optional row/Y, column/X, and both/XY symmetry expansion to terrain brush strokes so mirrored terrain edits share the same dirty-region and WOK-slope feedback path as normal strokes.
+- Passed `symmetry_axis` through the Map Studio terrain operation dispatcher and recorded input versus expanded stroke counts in terrain brush metadata.
+- Updated terrain tool-belt text and contracts so modders can see that terrain brushes support optional X/Y symmetry.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_authored_terrain_builder.py tests/test_authored_room_operations.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_authored_terrain_builder.py::test_t2603_terrain_brush_symmetry_mirrors_sample_edits -q --basetemp .pytest_tmp_map_studio_terrain_symmetry`; `python -m pytest tests/test_authored_room_operations.py::test_t2603_controller_applies_plateau_ramp_pinch_and_erode_terrain_brushes -q --basetemp .pytest_tmp_map_studio_terrain_symmetry_controller`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_terrain_symmetry_belt`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Adds Terrain Slope Brush
 
 Owner: LordVaderCW

@@ -1493,11 +1493,14 @@ def test_t2603_controller_applies_plateau_ramp_pinch_and_erode_terrain_brushes()
         height=0.9,
         radius=0,
         strength=1.0,
+        symmetry_axis="column",
     )
     sloped = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
     sloped_terrain = sloped.rooms[0].primitive
     assert sloped_terrain.metadata["last_brush"] == "slope"
-    assert sloped_terrain.metadata["last_dirty_region"]["changed_sample_count"] == 3
+    assert sloped_terrain.metadata["last_brush_symmetry_axis"] == "column"
+    assert sloped_terrain.metadata["last_input_stroke_point_count"] == 3
+    assert sloped_terrain.metadata["last_dirty_region"]["changed_sample_count"] == 5
     assert sloped_terrain.metadata["last_brush_slope_report"]["walkable_triangle_count"] > 0
 
     controller.apply_authored_terrain_operation(

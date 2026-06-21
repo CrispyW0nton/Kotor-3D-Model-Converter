@@ -534,6 +534,7 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert '"sculpt_plateau"' in source
         assert '"sculpt_ramp"' in source
         assert '"sculpt_slope"' in source
+        assert "optional X/Y symmetry" in source
         assert '"sculpt_terrace"' in source
         assert '"sculpt_pinch"' in source
         assert '"sculpt_erode"' in source
@@ -799,6 +800,7 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "def _select_map_studio_modeling_tool" in window_source
     assert '"door_frame": "door_frame"' in window_source
     assert '"arch": "arch"' in window_source
+    assert '"sculpt_slope": "slope"' in window_source
     assert 'if key == "corridor":' in window_source
     assert "self.create_map_studio_corridor()" in window_source
     assert 'if key == "terrain_patch":' in window_source
