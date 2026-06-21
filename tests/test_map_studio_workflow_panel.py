@@ -723,6 +723,7 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "def _focus_map_studio_entry_point_controls" in window_source
     assert "def _focus_map_studio_opening_marker_controls" in window_source
     assert "def _map_studio_export_dry_run_enabled" in window_source
+    assert "def _ensure_map_studio_export_output_dir" in window_source
     assert "def _focus_map_studio_export_proof_workspace" in window_source
     assert "def set_authored_module_entry_point" in window_source
     assert '"entry_point",' in window_source
@@ -732,8 +733,12 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert 'if key == "opening_marker":' in window_source
     assert "floorPlanOpeningMarkerRoomComboBox" in window_source
     assert "Opening marker: create a KOTOR door, trigger, or waypoint" in window_source
-    assert 'if key == "stage_module":' in window_source
-    assert "self.stage_authored_module(self._map_studio_export_dry_run_enabled())" in window_source
+    assert '"stage_module",' in window_source
+    assert 'if action_key == "stage_module"' in window_source
+    assert "execute_map_studio_tool_belt_action(self.controller, action_key, context)" in window_source
+    assert "self._log_authored_module_stage_result(result)" in window_source
+    assert "export_output_dir=str(getattr(self, \"_last_output_dir\", \"\") or \"\").strip()" in window_source
+    assert "export_dry_run=self._map_studio_export_dry_run_enabled()" in window_source
     assert 'if key == "install_module":' in window_source
     assert "self.install_authored_module(self._map_studio_export_dry_run_enabled())" in window_source
     assert 'if key == "launch_handoff":' in window_source

@@ -110,6 +110,9 @@ def _rich_context() -> MapStudioToolActionContext:
         cut_center=(0.5, 0.5),
         cut_size=(0.25, 0.25),
         duplicate_count=2,
+        export_output_dir=".pytest_tmp_map_studio_stage",
+        export_dry_run=True,
+        export_overwrite=True,
         metadata={
             "edge_indices": (0, 1),
             "position_policy": "target",

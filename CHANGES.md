@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Routes Stage Module Belt Action Through Export Candidate Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Staged module export
+Intersects: native Scene/Tools Map Studio action dispatch, Level Editor export/proof workflow, and authored-module staging service.
+
+- Routed the `Stage .mod` tool-belt action through the shared Map Studio dispatcher as a non-mutating `stage_authored_module` export-candidate command instead of a window-only export workspace shortcut.
+- Added export output, dry-run, and overwrite fields to the shared tool action context, with the Level Editor prompting for an output folder only when the command route needs one.
+- Updated the Level Editor command execution path to log staged package, manifest, checklist, proof, warning, and blocker details through the same result flow used by the Export panel.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_contract_audit.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_contract_audit.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_tool_action_dispatch.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_stage_belt`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_stage_ui`; `git diff --check`; Map Studio tool contract audit now reports 78 command-backed actions, 73 mutating command actions, 5 query actions, 3 studio-workspace actions, and 0 workflow-focus actions.
+
 ### [2026-06-21] Map Studio Routes Script Belt Action Through KMAP Hook Command
 
 Owner: LordVaderCW

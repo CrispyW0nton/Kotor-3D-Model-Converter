@@ -1607,12 +1607,32 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 float(cut_width.value()) if cut_width is not None else 1.0,
                 float(cut_depth.value()) if cut_depth is not None else 1.0,
             ),
+            export_output_dir=str(getattr(self, "_last_output_dir", "") or "").strip(),
+            export_dry_run=self._map_studio_export_dry_run_enabled(),
+            export_overwrite=False,
             metadata=metadata,
         )
+
+    def _ensure_map_studio_export_output_dir(self, title: str) -> bool:
+        """Prompt once for an export/staging folder when the belt route needs it."""
+
+        if str(getattr(self, "_last_output_dir", "") or "").strip():
+            return True
+        path = QtWidgets.QFileDialog.getExistingDirectory(self, title, "")
+        if not path:
+            return False
+        self._last_output_dir = path
+        return True
 
     def _execute_map_studio_tool_belt_command(self, action_key: str) -> bool:
         """Execute a tool-belt action when the core dispatcher has a command."""
 
+        if action_key == "stage_module" and not self._ensure_map_studio_export_output_dir(
+            "Stage authored module for game test"
+        ):
+            self._focus_map_studio_export_proof_workspace()
+            self.statusBar().showMessage("Stage .mod canceled; choose an output folder to create a package candidate.", 5000)
+            return False
         context = self._map_studio_tool_action_context(action_key)
         route = resolve_map_studio_tool_belt_action(action_key, context)
         if not route.command_method:
@@ -1662,6 +1682,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     "export, install handoff, and game proof are stale."
                 )
             self.show_map_studio_script_tools()
+        elif action_key == "stage_module":
+            status_message = str(getattr(result, "message", "") or status_message)
+            self._last_output_dir = str(route.command_kwargs.get("output_dir") or self._last_output_dir or "")
+            self._log_authored_module_stage_result(result)
+            self._focus_map_studio_export_proof_workspace()
         if action_key == "universal_transform":
             overlay_setter = getattr(self.viewport_panel, "set_universal_transform_overlay", None)
             if callable(overlay_setter):
@@ -1975,10 +2000,6 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         key = str(getattr(action, "key", "") or "")
         workspace_key = str(getattr(action, "workspace_key", "") or "")
         tool_key = str(getattr(action, "tool_key", "") or "")
-        if key == "stage_module":
-            self._focus_map_studio_export_proof_workspace()
-            self.stage_authored_module(self._map_studio_export_dry_run_enabled())
-            return
         if key == "install_module":
             self._focus_map_studio_export_proof_workspace()
             self.install_authored_module(self._map_studio_export_dry_run_enabled())
@@ -2054,6 +2075,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "light",
             "script",
             "validate",
+            "stage_module",
             "opening",
             "opening_marker",
             "terrain",
@@ -2561,6 +2583,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(self, "Stage Authored Module", str(exc))
             return
         self._last_output_dir = path
+        self._log_authored_module_stage_result(result)
+        self._refresh_all("Authored module game-test staging updated.")
+
+    def _log_authored_module_stage_result(self, result: Any) -> None:
+        """Log staged authored-module export, checklist, and proof handoff details."""
+
         self._log(result.message)
         export_result = result.export_result
         if export_result is not None:
@@ -2581,7 +2609,6 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._log(f"Warning: {warning}")
         for issue in result.blocking_issues:
             self._log(f"Blocking: {issue}")
-        self._refresh_all("Authored module game-test staging updated.")
 
     def install_authored_module(self, dry_run: bool = False) -> None:
         path = QtWidgets.QFileDialog.getExistingDirectory(self, "Stage authored module package and proof files", self._last_output_dir or "")

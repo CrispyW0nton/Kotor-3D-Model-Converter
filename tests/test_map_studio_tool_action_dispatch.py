@@ -42,9 +42,9 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert audit.blocking_messages == ()
     assert audit.total_actions >= 80
     assert audit.implemented_actions == audit.total_actions
-    assert audit.command_backed_actions >= 77
+    assert audit.command_backed_actions >= 78
     assert audit.mutating_command_actions >= 73
-    assert audit.query_command_actions >= 4
+    assert audit.query_command_actions >= 5
     assert audit.workflow_focus_actions == 0
     assert statuses["cube"].contract_kind == "command_mutates_kmap"
     assert statuses["cube"].command_method == "add_authored_room_primitive"
@@ -84,7 +84,9 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["validate"].contract_kind == "command_query"
     assert statuses["validate"].command_method == "validate"
     assert statuses["validate"].mutates_kmap is False
-    assert statuses["stage_module"].contract_kind == "studio_workspace"
+    assert statuses["stage_module"].contract_kind == "command_query"
+    assert statuses["stage_module"].command_method == "stage_authored_module"
+    assert statuses["stage_module"].mutates_kmap is False
     assert all(status.in_any_preset for status in audit.statuses)
 
     controller_audit = ModuleEditorController().map_studio_tool_belt_contract_audit()
@@ -159,6 +161,27 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert validate_route.mutates_kmap is False
     assert validate_route.stale_outputs == ()
     assert "KMAP/authored-module readiness checks" in validate_route.authoring_context
+
+    stage_missing = resolve_map_studio_tool_belt_action("stage_module")
+
+    assert stage_missing.enabled is False
+    assert "output directory" in stage_missing.disabled_reason
+
+    stage_ready = resolve_map_studio_tool_belt_action(
+        "stage_module",
+        MapStudioToolActionContext(export_output_dir=".pytest_tmp_stage", export_dry_run=True),
+    )
+
+    assert stage_ready.enabled is True
+    assert stage_ready.command_method == "stage_authored_module"
+    assert stage_ready.command_kwargs == {
+        "output_dir": ".pytest_tmp_stage",
+        "dry_run": True,
+        "overwrite": False,
+    }
+    assert stage_ready.mutates_kmap is False
+    assert stage_ready.stale_outputs == ()
+    assert "export candidate" in stage_ready.authoring_context
 
     selected_primitive = resolve_map_studio_tool_belt_action(
         "primitive",
@@ -696,7 +719,7 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert "arbitrary mesh/walkmesh shrink-wrap remains planned" in shrink_wrap.authoring_context
 
 
-def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo() -> None:
+def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(tmp_path) -> None:
     _install_native_payload_paths()
 
     from src.core.modules.map_studio_tool_action_dispatch import (
@@ -808,6 +831,21 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
     validation_issues = execute_map_studio_tool_belt_action(controller, "validate")
 
     assert isinstance(validation_issues, list)
+    assert controller.command_history.undo_label == "Create authored module grterrain"
+
+    stage_result = execute_map_studio_tool_belt_action(
+        controller,
+        "stage_module",
+        MapStudioToolActionContext(export_output_dir=str(tmp_path), export_dry_run=True),
+    )
+
+    assert stage_result.ok is True
+    assert stage_result.code == "dry_run"
+    assert stage_result.export_result is not None
+    assert stage_result.export_result.ok is True
+    assert stage_result.export_result.code == "export_candidate"
+    assert stage_result.export_result.module_path.endswith(".mod")
+    assert "game-tested" not in stage_result.message.lower()
     assert controller.command_history.undo_label == "Create authored module grterrain"
 
     controller.undo_map_studio_command()

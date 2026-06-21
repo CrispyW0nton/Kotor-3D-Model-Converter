@@ -89,6 +89,9 @@ class MapStudioToolActionContext:
     duplicate_translation_offset: tuple[float, float, float] = (1.0, 0.0, 0.0)
     duplicate_rotation_offset_degrees_z: float = 0.0
     duplicate_scale_multiplier: tuple[float, float, float] = (1.0, 1.0, 1.0)
+    export_output_dir: str = ""
+    export_dry_run: bool = True
+    export_overwrite: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -291,6 +294,37 @@ def resolve_map_studio_tool_belt_action(
             authoring_context=(
                 "Validation: run the headless KMAP/authored-module readiness checks and surface actionable "
                 "KOTOR resource issues before export, install handoff, or in-game proof."
+            ),
+        )
+
+    if key == "stage_module":
+        output_dir = str(ctx.export_output_dir or "").strip()
+        if not output_dir:
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="grid",
+                enabled=False,
+                disabled_reason="Stage .mod needs an output directory before it can stage an authored KOTOR module package candidate.",
+            )
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="grid",
+            command_method="stage_authored_module",
+            command_kwargs={
+                "output_dir": output_dir,
+                "dry_run": bool(ctx.export_dry_run),
+                "overwrite": bool(ctx.export_overwrite),
+            },
+            mutates_kmap=False,
+            status_message=(
+                "Staged authored module package candidate; install handoff and live warp proof are still required "
+                "before calling it game-ready."
+            ),
+            authoring_context=(
+                "Stage .mod: compile the authored KMAP module through the staged export/proof service. "
+                "This creates an export candidate and test checklist, not game-tested proof."
             ),
         )
 
