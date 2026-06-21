@@ -1,0 +1,44 @@
+{
+  "bounds": {
+    "max": [
+      0.5,
+      0.25,
+      0.4999999701976776
+    ],
+    "min": [
+      -0.5,
+      -0.25,
+      -0.5
+    ],
+    "size": [
+      1.0,
+      0.5,
+      0.9999999701976776
+    ]
+  },
+  "edges": 128,
+  "exports": {
+    "fbx": true,
+    "maya_ascii": true,
+    "obj": true
+  },
+  "face_degree_histogram": {
+    "4": 64
+  },
+  "faces": 64,
+  "maya_command": "polyPipe",
+  "maya_options": {
+    "h": 1.0,
+    "r": 0.5,
+    "sa": 16,
+    "sh": 1,
+    "t": 0.1
+  },
+  "maya_shape": "maya_pipeShape",
+  "maya_transform": "maya_pipe",
+  "primitive_id": "pipe",
+  "shells": 1,
+  "triangles": 128,
+  "uvs": 85,
+  "vertices": 64
+}

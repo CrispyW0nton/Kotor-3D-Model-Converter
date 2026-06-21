@@ -1,0 +1,42 @@
+{
+  "bounds": {
+    "max": [
+      0.7071067690849304,
+      0.3535533845424652,
+      0.7071067690849304
+    ],
+    "min": [
+      -0.7071067690849304,
+      -0.3535533845424652,
+      -0.7071067690849304
+    ],
+    "size": [
+      1.4142135381698608,
+      0.7071067690849304,
+      1.4142135381698608
+    ]
+  },
+  "edges": 8,
+  "exports": {
+    "fbx": true,
+    "maya_ascii": true,
+    "obj": true
+  },
+  "face_degree_histogram": {
+    "3": 4,
+    "4": 1
+  },
+  "faces": 5,
+  "maya_command": "polyPyramid",
+  "maya_options": {
+    "ns": 4,
+    "w": 1.0
+  },
+  "maya_shape": "maya_pyramidShape",
+  "maya_transform": "maya_pyramid",
+  "primitive_id": "pyramid",
+  "shells": 1,
+  "triangles": 6,
+  "uvs": 10,
+  "vertices": 5
+}

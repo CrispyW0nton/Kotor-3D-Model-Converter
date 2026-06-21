@@ -1,0 +1,43 @@
+{
+  "bounds": {
+    "max": [
+      0.4699999690055847,
+      0.11999998986721039,
+      0.4699999690055847
+    ],
+    "min": [
+      -0.4699999690055847,
+      -0.11999998241662979,
+      -0.46999993920326233
+    ],
+    "size": [
+      0.9399999380111694,
+      0.23999997228384018,
+      0.939999908208847
+    ]
+  },
+  "edges": 256,
+  "exports": {
+    "fbx": true,
+    "maya_ascii": true,
+    "obj": true
+  },
+  "face_degree_histogram": {
+    "4": 128
+  },
+  "faces": 128,
+  "maya_command": "polyTorus",
+  "maya_options": {
+    "r": 0.35,
+    "sr": 0.12,
+    "sx": 16,
+    "sy": 8
+  },
+  "maya_shape": "maya_torusShape",
+  "maya_transform": "maya_torus",
+  "primitive_id": "torus",
+  "shells": 1,
+  "triangles": 256,
+  "uvs": 153,
+  "vertices": 128
+}

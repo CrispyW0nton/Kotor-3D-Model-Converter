@@ -1,0 +1,43 @@
+{
+  "bounds": {
+    "max": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "min": [
+      -0.5,
+      -0.5,
+      -0.4999999701976776
+    ],
+    "size": [
+      1.0,
+      1.0,
+      0.9999999701976776
+    ]
+  },
+  "edges": 240,
+  "exports": {
+    "fbx": true,
+    "maya_ascii": true,
+    "obj": true
+  },
+  "face_degree_histogram": {
+    "3": 32,
+    "4": 96
+  },
+  "faces": 128,
+  "maya_command": "polySphere",
+  "maya_options": {
+    "r": 0.5,
+    "sx": 16,
+    "sy": 8
+  },
+  "maya_shape": "maya_sphereShape",
+  "maya_transform": "maya_sphere",
+  "primitive_id": "sphere",
+  "shells": 1,
+  "triangles": 224,
+  "uvs": 151,
+  "vertices": 114
+}

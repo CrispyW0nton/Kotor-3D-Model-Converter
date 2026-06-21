@@ -1,0 +1,43 @@
+{
+  "bounds": {
+    "max": [
+      0.5773502588272095,
+      0.5,
+      0.4999999701976776
+    ],
+    "min": [
+      -0.2886751592159271,
+      -0.5,
+      -0.5000000596046448
+    ],
+    "size": [
+      0.8660254180431366,
+      1.0,
+      1.0000000298023224
+    ]
+  },
+  "edges": 51,
+  "exports": {
+    "fbx": true,
+    "maya_ascii": true,
+    "obj": true
+  },
+  "face_degree_histogram": {
+    "3": 6,
+    "4": 21
+  },
+  "faces": 27,
+  "maya_command": "polyPrism",
+  "maya_options": {
+    "l": 1.0,
+    "sc": 4,
+    "w": 1.0
+  },
+  "maya_shape": "maya_prismShape",
+  "maya_transform": "maya_prism",
+  "primitive_id": "prism",
+  "shells": 1,
+  "triangles": 48,
+  "uvs": 34,
+  "vertices": 26
+}

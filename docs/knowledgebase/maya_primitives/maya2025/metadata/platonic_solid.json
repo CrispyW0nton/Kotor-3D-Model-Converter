@@ -1,0 +1,40 @@
+{
+  "bounds": {
+    "max": [
+      0.46708616614341736,
+      0.46708616614341736,
+      0.46708616614341736
+    ],
+    "min": [
+      -0.46708616614341736,
+      -0.46708616614341736,
+      -0.46708616614341736
+    ],
+    "size": [
+      0.9341723322868347,
+      0.9341723322868347,
+      0.9341723322868347
+    ]
+  },
+  "edges": 30,
+  "exports": {
+    "fbx": true,
+    "maya_ascii": true,
+    "obj": true
+  },
+  "face_degree_histogram": {
+    "5": 12
+  },
+  "faces": 12,
+  "maya_command": "polyPlatonicSolid",
+  "maya_options": {
+    "r": 0.5
+  },
+  "maya_shape": "maya_platonic_solidShape",
+  "maya_transform": "maya_platonic_solid",
+  "primitive_id": "platonic_solid",
+  "shells": 1,
+  "triangles": 36,
+  "uvs": 38,
+  "vertices": 20
+}

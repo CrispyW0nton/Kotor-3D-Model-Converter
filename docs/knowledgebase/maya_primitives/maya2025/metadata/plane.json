@@ -1,0 +1,43 @@
+{
+  "bounds": {
+    "max": [
+      0.5,
+      0.0,
+      0.5
+    ],
+    "min": [
+      -0.5,
+      0.0,
+      -0.5
+    ],
+    "size": [
+      1.0,
+      0.0,
+      1.0
+    ]
+  },
+  "edges": 4,
+  "exports": {
+    "fbx": true,
+    "maya_ascii": true,
+    "obj": true
+  },
+  "face_degree_histogram": {
+    "4": 1
+  },
+  "faces": 1,
+  "maya_command": "polyPlane",
+  "maya_options": {
+    "h": 1.0,
+    "sx": 1,
+    "sy": 1,
+    "w": 1.0
+  },
+  "maya_shape": "maya_planeShape",
+  "maya_transform": "maya_plane",
+  "primitive_id": "plane",
+  "shells": 1,
+  "triangles": 2,
+  "uvs": 4,
+  "vertices": 4
+}

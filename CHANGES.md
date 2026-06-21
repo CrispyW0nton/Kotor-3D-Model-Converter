@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Captures Maya Primitive Reference Fixtures
+
+Owner: LordVaderCW
+Task: T2602
+Subsystem: Map Studio / Primitive modeling reference fixtures
+Intersects: Map Studio primitive builders, knowledge base, Maya reference tooling, and future modeling tool belt work.
+
+- Added a repeatable Maya 2025 `mayapy` exporter that creates one polygon reference fixture for each available Maya polygon primitive relevant to Map Studio: cube, sphere, cylinder, cone, torus, plane, platonic solid, pyramid, prism, pipe, and helix.
+- Exported individual FBX/OBJ/Maya ASCII fixtures plus JSON topology metadata and a combined reference scene under `docs/knowledgebase/maya_primitives/maya2025`.
+- Documented Maya Y-up/centimeter assumptions, topology counts, excluded unavailable commands, and the Map Studio implications for KOTOR-safe primitive parity.
+- Verification: `python -m py_compile tools/maya/export_maya_polygon_primitives.py`; `"C:\Program Files\Autodesk\Maya2025\bin\mayapy.exe" tools\maya\export_maya_polygon_primitives.py --output docs\knowledgebase\maya_primitives\maya2025`.
+
 ### [2026-06-21] Map Studio Blocks Export When Generated Outputs Are Stale
 
 Owner: LordVaderCW

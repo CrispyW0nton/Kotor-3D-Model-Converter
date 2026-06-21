@@ -1,0 +1,44 @@
+{
+  "bounds": {
+    "max": [
+      0.5,
+      0.5,
+      0.5
+    ],
+    "min": [
+      -0.5,
+      -0.5,
+      -0.4999999701976776
+    ],
+    "size": [
+      1.0,
+      1.0,
+      0.9999999701976776
+    ]
+  },
+  "edges": 32,
+  "exports": {
+    "fbx": true,
+    "maya_ascii": true,
+    "obj": true
+  },
+  "face_degree_histogram": {
+    "16": 1,
+    "3": 16
+  },
+  "faces": 17,
+  "maya_command": "polyCone",
+  "maya_options": {
+    "h": 1.0,
+    "r": 0.5,
+    "sx": 16,
+    "sy": 1
+  },
+  "maya_shape": "maya_coneShape",
+  "maya_transform": "maya_cone",
+  "primitive_id": "cone",
+  "shells": 1,
+  "triangles": 30,
+  "uvs": 34,
+  "vertices": 17
+}

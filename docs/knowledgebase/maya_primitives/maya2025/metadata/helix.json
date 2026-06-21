@@ -1,0 +1,46 @@
+{
+  "bounds": {
+    "max": [
+      0.6499999761581421,
+      0.8499999642372131,
+      0.6499999761581421
+    ],
+    "min": [
+      -0.6499999761581421,
+      -0.8499999642372131,
+      -0.6499999761581421
+    ],
+    "size": [
+      1.2999999523162842,
+      1.6999999284744263,
+      1.2999999523162842
+    ]
+  },
+  "edges": 528,
+  "exports": {
+    "fbx": true,
+    "maya_ascii": true,
+    "obj": true
+  },
+  "face_degree_histogram": {
+    "16": 2,
+    "4": 256
+  },
+  "faces": 258,
+  "maya_command": "polyHelix",
+  "maya_options": {
+    "c": 2,
+    "h": 1.0,
+    "r": 0.35,
+    "sa": 16,
+    "sco": 8,
+    "w": 0.1
+  },
+  "maya_shape": "maya_helixShape",
+  "maya_transform": "maya_helix",
+  "primitive_id": "helix",
+  "shells": 1,
+  "triangles": 540,
+  "uvs": 321,
+  "vertices": 272
+}
