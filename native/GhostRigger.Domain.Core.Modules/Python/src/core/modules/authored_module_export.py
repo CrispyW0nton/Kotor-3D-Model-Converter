@@ -149,9 +149,11 @@ class AuthoredModuleGameProofRequest:
     tester: str = ""
     notes: str = ""
     module_loads_in_game: bool = False
+    module_identity_matches_authored_resref: bool = False
     player_spawns_on_floor: bool = False
     test_placeable_visible: bool = False
     player_can_walk_on_floor: bool = False
+    no_inherited_base_game_geometry_or_scripted_movers: bool = False
     allow_missing_evidence: bool = False
 
 
@@ -446,7 +448,39 @@ def _smoke_expectations_from_build_parts(
     }
     expected_placeables = _positioned_expectations("placeable", placements.placeables)
     expected_waypoints = _positioned_expectations("waypoint", placements.waypoints)
+    project_metadata = dict(getattr(getattr(project, "metadata", None), "metadata", {}) or {})
+    source_module = normalise_resource_resref(project_metadata.get("source_module_resref") or "")
+    copied_from_base_game = bool(project_metadata.get("copied_from_base_game_module", False))
+    inherited_content = bool(project_metadata.get("inherited_base_game_module_content", copied_from_base_game))
+    content_origin = str(
+        project_metadata.get("content_origin")
+        or ("base_game_derived" if copied_from_base_game else "map_studio_original")
+    )
+    authored_original = content_origin == "map_studio_original" and not copied_from_base_game and not inherited_content
+    expected_absent = {
+        "base_game_module_geometry": bool(authored_original),
+        "inherited_scripted_moving_test_objects": bool(authored_original),
+        "forbidden_source_module_resrefs": ["PLCaa", "tar_m02aa"],
+        "forbidden_object_descriptions": [
+            "PLCaa scripted moving spheres",
+            "PLCaa scripted moving cones",
+            "PLCaa scripted moving rectangles",
+            "Taris fallback room geometry",
+        ],
+    }
     return {
+        "content_origin": content_origin,
+        "authored_from_scratch": bool(authored_original),
+        "copied_from_base_game_module": copied_from_base_game,
+        "source_module_resref": source_module,
+        "inherited_base_game_module_content": inherited_content,
+        "source_identity": {
+            "content_origin": content_origin,
+            "authored_from_scratch": bool(authored_original),
+            "copied_from_base_game_module": copied_from_base_game,
+            "source_module_resref": source_module,
+            "inherited_base_game_module_content": inherited_content,
+        },
         "expected_entry_point": expected_entry,
         "expected_placeables": expected_placeables,
         "expected_waypoints": expected_waypoints,
@@ -455,7 +489,10 @@ def _smoke_expectations_from_build_parts(
             "player_start_position": expected_entry["position"],
             "test_placeable_tags": [row["tag"] for row in expected_placeables if row["tag"]],
             "waypoint_tags": [row["tag"] for row in expected_waypoints if row["tag"]],
+            "module_identity_resref": project.module_root,
+            "no_inherited_base_game_geometry_or_scripted_movers": bool(authored_original),
         },
+        "expected_absent_runtime_observations": expected_absent,
         "walkability": walkability,
         "all_walkability_checks_passed": bool(walkability.get("ok", False)),
         "pathing": pathing,
@@ -647,11 +684,20 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
         "Capture screenshot or video evidence and record it in the proof manifest.",
     ]
     smoke_contract = _authored_smoke_contract(build, verification)
+    source_identity = dict(smoke_contract.get("source_identity") or {})
     data["map_studio_authored_module"] = {
         "task": "T2643",
         "module_root": build.module_root,
         "game": build.game,
-        "authored_from_scratch": True,
+        "content_origin": str(smoke_contract.get("content_origin") or source_identity.get("content_origin") or "map_studio_original"),
+        "authored_from_scratch": bool(smoke_contract.get("authored_from_scratch", source_identity.get("authored_from_scratch", True))),
+        "copied_from_base_game_module": bool(smoke_contract.get("copied_from_base_game_module", source_identity.get("copied_from_base_game_module", False))),
+        "source_module_resref": str(smoke_contract.get("source_module_resref") or source_identity.get("source_module_resref") or ""),
+        "inherited_base_game_module_content": bool(
+            smoke_contract.get("inherited_base_game_module_content", source_identity.get("inherited_base_game_module_content", False))
+        ),
+        "source_identity": source_identity,
+        "expected_absent_runtime_observations": dict(smoke_contract.get("expected_absent_runtime_observations") or {}),
         "capability_stage": "export_candidate",
         "game_tested": False,
         "warp_command": f"warp {build.module_root}",
@@ -979,6 +1025,7 @@ def _authored_game_test_steps(module_root: str, *, include_test_placeable: bool 
         "Launch the matching KOTOR game.",
         f"Open the console and run `warp {module_root}`.",
         "Confirm the module loads without crashing or falling back to another area.",
+        f"Confirm the area identity is the authored `{module_root}` smoke map, not a copied Taris/PLCaa/base-game module.",
         "Confirm the player appears on the generated floor, not in the void.",
     ]
     if include_test_placeable:
@@ -986,6 +1033,7 @@ def _authored_game_test_steps(module_root: str, *, include_test_placeable: bool 
     steps.extend(
         [
             "Walk across the generated floor and confirm movement is not blocked unexpectedly.",
+            "Confirm there are no inherited PLCaa scripted moving spheres, cones, rectangles, or other base-game test-room movers.",
             "Capture a screenshot or short clip as proof.",
         ]
     )
@@ -995,6 +1043,7 @@ def _authored_game_test_steps(module_root: str, *, include_test_placeable: bool 
 def _authored_acceptance_checks(*, include_test_placeable: bool = True) -> list[str]:
     checks = [
         "module_loads_in_game",
+        "module_identity_matches_authored_resref",
         "player_spawns_on_floor",
     ]
     if include_test_placeable:
@@ -1002,6 +1051,7 @@ def _authored_acceptance_checks(*, include_test_placeable: bool = True) -> list[
     checks.extend(
         [
             "player_can_walk_on_floor",
+            "no_inherited_base_game_geometry_or_scripted_movers",
             "screenshot_or_video_captured",
         ]
     )
@@ -1041,6 +1091,7 @@ def _authored_modder_test_plan(
         "required_resources": list(smoke_contract.get("required_resources") or ()),
         "missing_required_resources": list(smoke_contract.get("missing_required_resources") or ()),
         "expected_runtime_observations": dict(smoke_contract.get("expected_runtime_observations") or {}),
+        "expected_absent_runtime_observations": dict(smoke_contract.get("expected_absent_runtime_observations") or {}),
         "expected_entry_point": dict(smoke_contract.get("expected_entry_point") or {}),
         "expected_placeables": list(smoke_contract.get("expected_placeables") or ()),
         "expected_waypoints": list(smoke_contract.get("expected_waypoints") or ()),
@@ -1213,11 +1264,13 @@ def _capture_evidence_command(*, proof_manifest_path: Path, module_root: str, in
         "--kotor-window-only",
         "--record-proof",
         "--module-loads-in-game",
+        "--module-identity-matches-authored-resref",
         "--player-spawns-on-floor",
     ]
     if include_test_placeable:
         flags.append("--test-placeable-visible")
     flags.append("--player-can-walk-on-floor")
+    flags.append("--no-inherited-base-game-geometry-or-scripted-movers")
     return f'python "{capture_path}" --proof-manifest "{proof_manifest_path}" ' + " ".join(flags)
 
 
@@ -1240,7 +1293,7 @@ def _write_authored_proof_recording_script(
         f"echo Proof manifest: {proof_path}",
         "echo.",
         f"echo Run this only after KOTOR has loaded the module with: warp {module_root}",
-        f"echo Confirm the player spawns on the generated floor, {placeable_text}and walking works.",
+        f"echo Confirm the module identity is {module_root}, the player spawns on the generated floor, {placeable_text}walking works, and no PLCaa/base-game scripted movers are present.",
         "echo.",
         "set /p EVIDENCE=Drag or paste screenshot/video evidence path here, then press Enter: ",
         "set \"EVIDENCE=%EVIDENCE:\"=%\"",
@@ -1252,8 +1305,8 @@ def _write_authored_proof_recording_script(
         (
             f'python "{recorder_path}" --proof-manifest "{proof_path}" '
             '--evidence "%EVIDENCE%" --tester "%USERNAME%" '
-            "--module-loads-in-game --player-spawns-on-floor "
-            f"{placeable_flag}--player-can-walk-on-floor"
+            "--module-loads-in-game --module-identity-matches-authored-resref --player-spawns-on-floor "
+            f"{placeable_flag}--player-can-walk-on-floor --no-inherited-base-game-geometry-or-scripted-movers"
         ),
         "if errorlevel 1 (",
         "  echo Proof recording did not complete. Check the message above.",
@@ -1533,9 +1586,13 @@ def prepare_authored_module_install(request: AuthoredModuleInstallPrepRequest) -
 def _proof_request_checks(request: AuthoredModuleGameProofRequest) -> dict[str, bool]:
     return {
         "module_loads_in_game": bool(request.module_loads_in_game),
+        "module_identity_matches_authored_resref": bool(request.module_identity_matches_authored_resref),
         "player_spawns_on_floor": bool(request.player_spawns_on_floor),
         "test_placeable_visible": bool(request.test_placeable_visible),
         "player_can_walk_on_floor": bool(request.player_can_walk_on_floor),
+        "no_inherited_base_game_geometry_or_scripted_movers": bool(
+            request.no_inherited_base_game_geometry_or_scripted_movers
+        ),
         "screenshot_or_video_captured": _valid_proof_evidence_path(request.evidence_path),
     }
 

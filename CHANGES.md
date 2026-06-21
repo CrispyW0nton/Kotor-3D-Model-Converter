@@ -11,6 +11,19 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Hardens Authored Smoke-Map Proof Contract
+
+Owner: LordVaderCW
+Task: T2605 / T2601
+Subsystem: Map Studio / Authored module export, install handoff, and game-proof contract
+Intersects: Domain Core Modules export/readiness services, ModuleMeshes mirror package, and grdev01 proof helper scripts.
+
+- Marked the generated `grdev01` authored KMAP as original Map Studio content, not copied base-game module geometry, and carried that source identity through readiness metadata and export manifests.
+- Added explicit smoke-test expectations that no PLCaa/Taris/base-game scripted moving test objects should appear in the authored map.
+- Expanded authored-module proof recording so a package cannot become `game_smoke_tested` unless the tester confirms module identity, spawn/walkability, optional test placeables, no inherited base-game movers, and screenshot/video evidence.
+- Updated the generated proof recorder, evidence capture helper, and smoke status/prep command builders to include the new proof flags.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_export.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_kmap_bridge.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_export.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_kmap_bridge.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py scripts/record_authored_module_game_proof.py scripts/capture_grdev01_smoke_evidence.py scripts/prepare_grdev01_authored_smoke.py scripts/check_grdev01_smoke_status.py`; `python -m pytest tests/test_authored_module_export.py tests/test_authored_module_kmap_bridge.py -q --basetemp .pytest_tmp_map_studio_authored_contract_files`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Adds Terrain Brush Symmetry
 
 Owner: LordVaderCW

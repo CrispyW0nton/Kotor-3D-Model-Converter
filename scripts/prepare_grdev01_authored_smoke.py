@@ -210,9 +210,11 @@ def _summary(
         next_actions.append(f"After capturing evidence, run `{proof_recorder}` and paste the screenshot/video path.")
     proof_flags = {
         "module_loads_in_game": "--module-loads-in-game",
+        "module_identity_matches_authored_resref": "--module-identity-matches-authored-resref",
         "player_spawns_on_floor": "--player-spawns-on-floor",
         "test_placeable_visible": "--test-placeable-visible",
         "player_can_walk_on_floor": "--player-can-walk-on-floor",
+        "no_inherited_base_game_geometry_or_scripted_movers": "--no-inherited-base-game-geometry-or-scripted-movers",
     }
     selected_flags = " ".join(proof_flags[check] for check in acceptance_checks if check in proof_flags)
     next_actions.append(

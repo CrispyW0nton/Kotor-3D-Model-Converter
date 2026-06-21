@@ -51,6 +51,7 @@ def _runtime_resources():
         "grdev01.are",
         "grdev01.git",
         "module.ifo",
+        "grdev01.pth",
         "grdev01.lyt",
         "grdev01.vis",
         "grdev01_room01.wok",
@@ -152,6 +153,9 @@ def test_t2642_dev_test_payload_roundtrips_placeable_and_waypoint() -> None:
     restored = authored_project_to_kmap_payload(project)
 
     assert payload["module_root"] == "grdev01"
+    assert payload["metadata"]["content_origin"] == "map_studio_original"
+    assert payload["metadata"]["authored_from_scratch"] is True
+    assert payload["metadata"]["copied_from_base_game_module"] is False
     assert payload["rooms"][0]["primitive"]["type"] == "rectangular"
     assert project.placements.entry_point.position == (0.0, -3.0, 0.0)
     assert project.placements.placeables[0].template_resref == "plc_bench"
@@ -176,6 +180,8 @@ def test_t2642_controller_creates_authored_dev_room_in_kmap() -> None:
     assert result.readiness is not None
     assert result.readiness.capability_stage == "previewable"
     assert result.readiness.can_preview is True
+    assert result.readiness.metadata["source_identity"]["content_origin"] == "map_studio_original"
+    assert result.readiness.metadata["source_identity"]["authored_from_scratch"] is True
 
 
 def test_t2667_kmap_round_trips_composition_room_primitives() -> None:

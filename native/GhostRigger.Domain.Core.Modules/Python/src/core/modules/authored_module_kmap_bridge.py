@@ -839,6 +839,12 @@ def create_dev_test_authored_module_payload(
         metadata={
             "task": "T2601",
             "source": "map_studio:kmap_authored_module",
+            "content_origin": "map_studio_original",
+            "authored_from_scratch": True,
+            "copied_from_base_game_module": False,
+            "source_module_resref": "",
+            "inherited_base_game_module_content": False,
+            "inherited_scripted_movers_expected": False,
             "room_geometry_mode": "rectangular_composition",
             "include_doorway_marker": bool(include_doorway_marker),
         },

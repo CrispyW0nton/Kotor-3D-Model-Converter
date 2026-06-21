@@ -53,6 +53,11 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     manifest = json.loads(Path(result.manifest_path).read_text(encoding="utf-8"))
     authored_manifest = manifest["map_studio_authored_module"]
     assert authored_manifest["module_root"] == "grdev01"
+    assert authored_manifest["content_origin"] == "map_studio_original"
+    assert authored_manifest["authored_from_scratch"] is True
+    assert authored_manifest["copied_from_base_game_module"] is False
+    assert authored_manifest["source_module_resref"] == ""
+    assert authored_manifest["inherited_base_game_module_content"] is False
     assert authored_manifest["capability_stage"] == "export_candidate"
     assert authored_manifest["game_tested"] is False
     assert authored_manifest["warp_command"] == "warp grdev01"
@@ -62,6 +67,12 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     contract = authored_manifest["t2601_smoke_contract"]
     assert contract["task"] == "T2601"
     assert contract["warp_command"] == "warp grdev01"
+    assert contract["content_origin"] == "map_studio_original"
+    assert contract["authored_from_scratch"] is True
+    assert contract["copied_from_base_game_module"] is False
+    assert contract["expected_absent_runtime_observations"]["base_game_module_geometry"] is True
+    assert contract["expected_absent_runtime_observations"]["inherited_scripted_moving_test_objects"] is True
+    assert "PLCaa" in contract["expected_absent_runtime_observations"]["forbidden_source_module_resrefs"]
     assert contract["all_required_resources_present"] is True
     assert contract["pre_game_package_readback_ok"] is True
     assert {row["filename"] for row in contract["required_resources"]} >= {
@@ -77,6 +88,8 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     }
     assert contract["expected_entry_point"]["area_resref"] == "grdev01"
     assert contract["expected_entry_point"]["position"] == [0.0, -3.0, 0.0]
+    assert contract["expected_runtime_observations"]["module_identity_resref"] == "grdev01"
+    assert contract["expected_runtime_observations"]["no_inherited_base_game_geometry_or_scripted_movers"] is True
     assert contract["expected_placeables"] == [
         {
             "kind": "placeable",
@@ -104,6 +117,8 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert test_plan["warp_command"] == "warp grdev01"
     assert test_plan["expected_entry_point"]["position"] == [0.0, -3.0, 0.0]
     assert test_plan["expected_runtime_observations"]["test_placeable_tags"] == ["grdev01_test_placeable"]
+    assert test_plan["expected_runtime_observations"]["module_identity_resref"] == "grdev01"
+    assert test_plan["expected_absent_runtime_observations"]["inherited_scripted_moving_test_objects"] is True
     assert "screenshot" in test_plan["evidence"]["accepted_kinds"]
     assert test_plan["missing_acceptance_checks"] == contract["in_game_acceptance_checks"]
     template_dependencies = authored_manifest["gameplay_template_dependencies"]
@@ -423,6 +438,8 @@ def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manife
     proof_recorder = Path(result.proof_recording_script_path).read_text(encoding="utf-8")
     assert "record_authored_module_game_proof.py" in proof_recorder
     assert "--module-loads-in-game" in proof_recorder
+    assert "--module-identity-matches-authored-resref" in proof_recorder
+    assert "--no-inherited-base-game-geometry-or-scripted-movers" in proof_recorder
     assert "Drag or paste screenshot/video evidence path" in proof_recorder
     proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
     assert proof["task"] == "T2644"
@@ -432,6 +449,8 @@ def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manife
     assert proof["package"]["verification"]["ok"] is True
     assert "capture_grdev01_smoke_evidence.py" in proof["launch_handoff"]["evidence_capture_command"]
     assert "--record-proof" in proof["launch_handoff"]["evidence_capture_command"]
+    assert "--module-identity-matches-authored-resref" in proof["launch_handoff"]["evidence_capture_command"]
+    assert "--no-inherited-base-game-geometry-or-scripted-movers" in proof["launch_handoff"]["evidence_capture_command"]
     test_plan = proof["modder_test_plan"]
     assert test_plan["task"] == "T2605"
     assert test_plan["game_ready"] is False
@@ -475,8 +494,10 @@ def test_t2644_room_only_authored_install_omits_placeable_proof_requirement(tmp_
     assert "--test-placeable-visible" not in proof["launch_handoff"]["evidence_capture_command"]
     assert proof["acceptance_checks"] == [
         "module_loads_in_game",
+        "module_identity_matches_authored_resref",
         "player_spawns_on_floor",
         "player_can_walk_on_floor",
+        "no_inherited_base_game_geometry_or_scripted_movers",
         "screenshot_or_video_captured",
     ]
     assert proof["t2601_smoke_contract"]["expected_placeables"] == []
@@ -569,9 +590,11 @@ def test_t2644_records_authored_module_game_proof(tmp_path: Path) -> None:
             evidence_path=str(evidence),
             tester="pytest",
             module_loads_in_game=True,
+            module_identity_matches_authored_resref=True,
             player_spawns_on_floor=True,
             test_placeable_visible=True,
             player_can_walk_on_floor=True,
+            no_inherited_base_game_geometry_or_scripted_movers=True,
         )
     )
 
@@ -593,7 +616,9 @@ def test_t2644_records_authored_module_game_proof(tmp_path: Path) -> None:
     authored = pack_manifest["map_studio_authored_module"]
     assert authored["game_tested"] is True
     assert authored["capability_stage"] == "game_smoke_tested"
+    assert authored["in_game_proof"]["checks"]["module_identity_matches_authored_resref"] is True
     assert authored["in_game_proof"]["checks"]["player_can_walk_on_floor"] is True
+    assert authored["in_game_proof"]["checks"]["no_inherited_base_game_geometry_or_scripted_movers"] is True
     assert authored["t2601_smoke_contract"]["capability_stage"] == "game_smoke_tested"
     assert authored["modder_test_plan"]["game_ready"] is True
     assert authored["modder_test_plan"]["proof_state"] == "game_smoke_tested"
@@ -619,9 +644,11 @@ def test_t2644_allow_missing_evidence_keeps_authored_module_unproven(tmp_path: P
             evidence_path=str(missing_evidence),
             tester="pytest",
             module_loads_in_game=True,
+            module_identity_matches_authored_resref=True,
             player_spawns_on_floor=True,
             test_placeable_visible=True,
             player_can_walk_on_floor=True,
+            no_inherited_base_game_geometry_or_scripted_movers=True,
             allow_missing_evidence=True,
         )
     )
@@ -654,9 +681,11 @@ def test_t2601_authored_module_rejects_unsupported_game_proof_evidence(tmp_path:
             evidence_path=str(evidence),
             tester="pytest",
             module_loads_in_game=True,
+            module_identity_matches_authored_resref=True,
             player_spawns_on_floor=True,
             test_placeable_visible=True,
             player_can_walk_on_floor=True,
+            no_inherited_base_game_geometry_or_scripted_movers=True,
         )
     )
 

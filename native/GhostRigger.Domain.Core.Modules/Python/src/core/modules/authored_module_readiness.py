@@ -1585,6 +1585,21 @@ def build_authored_module_readiness(
     """Build a capability-honest readiness summary for Map Studio UI/export."""
 
     proof = dict(proof_metadata or {})
+    project_metadata = dict(getattr(getattr(project, "metadata", None), "metadata", {}) or {})
+    copied_from_base_game = bool(project_metadata.get("copied_from_base_game_module", False))
+    inherited_content = bool(project_metadata.get("inherited_base_game_module_content", copied_from_base_game))
+    content_origin = str(
+        project_metadata.get("content_origin")
+        or ("base_game_derived" if copied_from_base_game else "map_studio_original")
+    )
+    source_identity = {
+        "content_origin": content_origin,
+        "authored_from_scratch": content_origin == "map_studio_original" and not copied_from_base_game and not inherited_content,
+        "copied_from_base_game_module": copied_from_base_game,
+        "source_module_resref": str(project_metadata.get("source_module_resref") or ""),
+        "inherited_base_game_module_content": inherited_content,
+        "inherited_scripted_movers_expected": bool(project_metadata.get("inherited_scripted_movers_expected", False)),
+    }
     validation = validate_authored_module_project(project)
     rooms = _room_readiness(project)
     gameplay_counts = _gameplay_counts(project)
@@ -1766,6 +1781,12 @@ def build_authored_module_readiness(
         blocking_messages=blocking,
         metadata={
             "source": "src.core.modules.authored_module_readiness",
+            "source_identity": source_identity,
+            "content_origin": source_identity["content_origin"],
+            "authored_from_scratch": source_identity["authored_from_scratch"],
+            "copied_from_base_game_module": source_identity["copied_from_base_game_module"],
+            "source_module_resref": source_identity["source_module_resref"],
+            "inherited_base_game_module_content": source_identity["inherited_base_game_module_content"],
             "room_count": len(rooms),
             "export_object_count": len(export_object_boundaries),
             "export_object_boundaries": [boundary.to_metadata() for boundary in export_object_boundaries],

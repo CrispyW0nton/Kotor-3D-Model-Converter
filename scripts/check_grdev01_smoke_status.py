@@ -860,9 +860,11 @@ def _proof_summary(proof: dict[str, Any]) -> dict[str, Any]:
 def _proof_command_flags(required_checks: list[str]) -> str:
     flag_by_check = {
         "module_loads_in_game": "--module-loads-in-game",
+        "module_identity_matches_authored_resref": "--module-identity-matches-authored-resref",
         "player_spawns_on_floor": "--player-spawns-on-floor",
         "test_placeable_visible": "--test-placeable-visible",
         "player_can_walk_on_floor": "--player-can-walk-on-floor",
+        "no_inherited_base_game_geometry_or_scripted_movers": "--no-inherited-base-game-geometry-or-scripted-movers",
     }
     return " ".join(flag_by_check[name] for name in required_checks if name in flag_by_check)
 

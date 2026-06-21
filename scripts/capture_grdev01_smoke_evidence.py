@@ -109,9 +109,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Allow proof recording without confirming a running KOTOR process. Intended only for scripted diagnostics.",
     )
     parser.add_argument("--module-loads-in-game", action="store_true", help="Confirm `warp grdev01` loads the generated module.")
+    parser.add_argument(
+        "--module-identity-matches-authored-resref",
+        action="store_true",
+        help="Confirm the loaded area is the authored smoke map resref, not a copied or fallback base-game module.",
+    )
     parser.add_argument("--player-spawns-on-floor", action="store_true", help="Confirm the player appears on the generated floor.")
     parser.add_argument("--test-placeable-visible", action="store_true", help="Confirm the smoke-test placeable appears.")
     parser.add_argument("--player-can-walk-on-floor", action="store_true", help="Confirm the player can walk across the generated floor.")
+    parser.add_argument(
+        "--no-inherited-base-game-geometry-or-scripted-movers",
+        action="store_true",
+        help="Confirm no PLCaa/Taris/base-game geometry or scripted moving test objects are present.",
+    )
     parser.add_argument("--json", action="store_true", help="Print a machine-readable summary.")
     return parser
 
@@ -531,9 +541,11 @@ def _record_proof(
     tester: str,
     notes: str,
     module_loads_in_game: bool,
+    module_identity_matches_authored_resref: bool,
     player_spawns_on_floor: bool,
     test_placeable_visible: bool,
     player_can_walk_on_floor: bool,
+    no_inherited_base_game_geometry_or_scripted_movers: bool,
 ) -> dict[str, Any]:
     _install_payload_paths()
     proof = _load_proof(proof_manifest)
@@ -563,9 +575,11 @@ def _record_proof(
                 tester=tester,
                 notes=notes,
                 module_loads_in_game=module_loads_in_game,
+                module_identity_matches_authored_resref=module_identity_matches_authored_resref,
                 player_spawns_on_floor=player_spawns_on_floor,
                 test_placeable_visible=test_placeable_visible,
                 player_can_walk_on_floor=player_can_walk_on_floor,
+                no_inherited_base_game_geometry_or_scripted_movers=no_inherited_base_game_geometry_or_scripted_movers,
             )
         )
 
@@ -600,8 +614,9 @@ def _summary(
     ok = bool(capture.get("ok")) and not process_blocking and not quality_blocking and (record is None or bool(record.get("ok")))
     next_action = (
         "Review the screenshot, verify the smoke-test checklist in-game, then rerun with "
-        "`--record-proof --module-loads-in-game --player-spawns-on-floor --test-placeable-visible "
-        "--player-can-walk-on-floor` to mark the package game-tested."
+        "`--record-proof --module-loads-in-game --module-identity-matches-authored-resref "
+        "--player-spawns-on-floor --test-placeable-visible --player-can-walk-on-floor "
+        "--no-inherited-base-game-geometry-or-scripted-movers` to mark the package game-tested."
     )
     if process_blocking:
         next_action = "Launch KOTOR, run `warp grdev01`, verify the smoke-test checklist, then rerun evidence capture."
@@ -700,9 +715,13 @@ def main(argv: list[str] | None = None) -> int:
                 tester=str(args.tester),
                 notes=str(args.notes),
                 module_loads_in_game=bool(args.module_loads_in_game),
+                module_identity_matches_authored_resref=bool(args.module_identity_matches_authored_resref),
                 player_spawns_on_floor=bool(args.player_spawns_on_floor),
                 test_placeable_visible=bool(args.test_placeable_visible),
                 player_can_walk_on_floor=bool(args.player_can_walk_on_floor),
+                no_inherited_base_game_geometry_or_scripted_movers=bool(
+                    args.no_inherited_base_game_geometry_or_scripted_movers
+                ),
             )
     summary = _summary(
         proof_manifest=proof_manifest,

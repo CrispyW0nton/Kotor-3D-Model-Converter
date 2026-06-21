@@ -46,9 +46,19 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tester", default="", help="Name or handle of the tester recording proof.")
     parser.add_argument("--notes", default="", help="Optional notes about the KOTOR build, install path, or result.")
     parser.add_argument("--module-loads-in-game", action="store_true", help="Confirm the warp command loads the generated module.")
+    parser.add_argument(
+        "--module-identity-matches-authored-resref",
+        action="store_true",
+        help="Confirm the loaded area is the authored module resref, not a copied or fallback base-game module.",
+    )
     parser.add_argument("--player-spawns-on-floor", action="store_true", help="Confirm the player appears on the generated floor, not in void.")
     parser.add_argument("--test-placeable-visible", action="store_true", help="Confirm authored test placeables appear where expected.")
     parser.add_argument("--player-can-walk-on-floor", action="store_true", help="Confirm the player can walk across the generated floor.")
+    parser.add_argument(
+        "--no-inherited-base-game-geometry-or-scripted-movers",
+        action="store_true",
+        help="Confirm no PLCaa/Taris/base-game room geometry or scripted moving test objects are present.",
+    )
     parser.add_argument(
         "--allow-missing-evidence",
         action="store_true",
@@ -113,9 +123,13 @@ def main(argv: list[str] | None = None) -> int:
             tester=str(args.tester),
             notes=str(args.notes),
             module_loads_in_game=bool(args.module_loads_in_game),
+            module_identity_matches_authored_resref=bool(args.module_identity_matches_authored_resref),
             player_spawns_on_floor=bool(args.player_spawns_on_floor),
             test_placeable_visible=bool(args.test_placeable_visible),
             player_can_walk_on_floor=bool(args.player_can_walk_on_floor),
+            no_inherited_base_game_geometry_or_scripted_movers=bool(
+                args.no_inherited_base_game_geometry_or_scripted_movers
+            ),
             allow_missing_evidence=bool(args.allow_missing_evidence),
         )
     )
