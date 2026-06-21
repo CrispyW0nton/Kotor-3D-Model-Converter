@@ -364,6 +364,115 @@ def bend_terrain_heightfield(
     )
 
 
+def _lattice_control_rows(control_deltas: Any) -> tuple[tuple[float, ...], ...]:
+    if not isinstance(control_deltas, (list, tuple)):
+        raise ValueError("Terrain Lattice control deltas must be a 2D sequence of finite height offsets.")
+    rows: list[tuple[float, ...]] = []
+    expected_columns = 0
+    for row_index, row in enumerate(control_deltas):
+        if not isinstance(row, (list, tuple)):
+            raise ValueError(f"Terrain Lattice control row {row_index} must be a sequence.")
+        values: list[float] = []
+        for column_index, value in enumerate(row):
+            delta = float(value)
+            if not math.isfinite(delta):
+                raise ValueError(f"Terrain Lattice control delta {row_index},{column_index} must be finite.")
+            values.append(delta)
+        if row_index == 0:
+            expected_columns = len(values)
+        if len(values) != expected_columns:
+            raise ValueError("Terrain Lattice control grid must be rectangular.")
+        rows.append(tuple(values))
+    if len(rows) < 2 or expected_columns < 2:
+        raise ValueError("Terrain Lattice requires at least a 2x2 control grid.")
+    return tuple(rows)
+
+
+def _sample_lattice_delta(control_rows: tuple[tuple[float, ...], ...], *, u: float, v: float) -> float:
+    row_count = len(control_rows)
+    column_count = len(control_rows[0])
+    x = max(0.0, min(1.0, float(u))) * float(column_count - 1)
+    y = max(0.0, min(1.0, float(v))) * float(row_count - 1)
+    column0 = int(math.floor(x))
+    row0 = int(math.floor(y))
+    column1 = min(column_count - 1, column0 + 1)
+    row1 = min(row_count - 1, row0 + 1)
+    tx = x - float(column0)
+    ty = y - float(row0)
+    h00 = float(control_rows[row0][column0])
+    h10 = float(control_rows[row0][column1])
+    h01 = float(control_rows[row1][column0])
+    h11 = float(control_rows[row1][column1])
+    h0 = (h00 * (1.0 - tx)) + (h10 * tx)
+    h1 = (h01 * (1.0 - tx)) + (h11 * tx)
+    return (h0 * (1.0 - ty)) + (h1 * ty)
+
+
+def lattice_terrain_heightfield(
+    primitive: TerrainHeightfieldPrimitive,
+    *,
+    control_deltas: Any = ((0.0, 0.0), (0.0, 0.25)),
+    strength: float = 1.0,
+) -> TerrainHeightfieldPrimitive:
+    """Bake a terrain lattice control cage into heightfield samples.
+
+    This is a terrain-heightfield authoring command.  KOTOR has no runtime
+    lattice primitive, so arbitrary mesh/object lattice deformation still needs
+    a separate bake pipeline before it can be claimed as implemented.
+    """
+
+    validation = validate_terrain_heightfield_primitive(primitive)
+    if not validation.ok:
+        raise ValueError("; ".join(validation.blocking_issues))
+    control_rows = _lattice_control_rows(control_deltas)
+    lattice_strength = float(strength)
+    if not math.isfinite(lattice_strength):
+        raise ValueError("Terrain Lattice strength must be finite.")
+    rows = _height_rows(primitive)
+    updated_rows: list[tuple[float, ...]] = []
+    for row_index, row in enumerate(rows):
+        v = row_index / max(1, validation.row_count - 1)
+        updated_row: list[float] = []
+        for column_index, height in enumerate(row):
+            u = column_index / max(1, validation.column_count - 1)
+            updated_row.append(float(height) + (_sample_lattice_delta(control_rows, u=u, v=v) * lattice_strength))
+        updated_rows.append(tuple(updated_row))
+    min_height, max_height = terrain_height_range(primitive)
+    flat_controls = [value for row in control_rows for value in row]
+    latticed = _replace_height_rows(
+        primitive,
+        tuple(updated_rows),
+        operation="lattice",
+        metadata={
+            "lattice_mode": "terrain_heightfield_control_cage",
+            "lattice_control_rows": len(control_rows),
+            "lattice_control_columns": len(control_rows[0]),
+            "lattice_control_deltas": [list(row) for row in control_rows],
+            "lattice_strength": lattice_strength,
+            "lattice_min_delta": float(min(flat_controls)),
+            "lattice_max_delta": float(max(flat_controls)),
+            "height_min_before": float(min_height),
+            "height_max_before": float(max_height),
+            "source": "map_studio:terrain_lattice",
+            "capability_stage": "baked_terrain_heightfield",
+            "arbitrary_mesh_lattice": "planned",
+        },
+    )
+    slope_report = analyse_terrain_slopes(latticed)
+    return replace(
+        latticed,
+        metadata={
+            **dict(latticed.metadata),
+            "lattice_slope_report": {
+                "max_slope_degrees": float(slope_report.max_slope_degrees),
+                "walkable_triangle_count": int(slope_report.walkable_triangle_count),
+                "non_walk_triangle_count": int(slope_report.non_walk_triangle_count),
+                "warnings": list(slope_report.warnings),
+            },
+        },
+    )
+
+
 def available_terrain_shape_presets() -> tuple[TerrainShapePreset, ...]:
     """Return named terrain forms available to Map Studio."""
 
@@ -1159,6 +1268,7 @@ __all__ = [
     "build_terrain_wok",
     "compile_terrain_room_geometry",
     "flatten_terrain_heightfield",
+    "lattice_terrain_heightfield",
     "mirror_terrain_heightfield_z",
     "offset_terrain_heightfield_samples",
     "sample_terrain_height",

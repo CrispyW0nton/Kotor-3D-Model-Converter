@@ -59,6 +59,7 @@ from .authored_terrain_builder import (
     apply_terrain_shape_preset,
     bend_terrain_heightfield,
     flatten_terrain_heightfield,
+    lattice_terrain_heightfield,
     mirror_terrain_heightfield_z,
     offset_terrain_heightfield_samples,
     sample_terrain_height,
@@ -3129,6 +3130,12 @@ def apply_authored_terrain_operation(project: AuthoredModuleProject, operation: 
             amplitude=float(kwargs.get("amplitude", kwargs.get("distance", 0.25))),
             center=None if center is None else float(center),
             span=None if span is None else float(span),
+        )
+    elif op in {"lattice", "terrain_lattice", "lattice_terrain"}:
+        updated_primitive = lattice_terrain_heightfield(
+            primitive,
+            control_deltas=kwargs.get("control_deltas", ((0.0, 0.0), (0.0, kwargs.get("amplitude", kwargs.get("distance", 0.25))))),
+            strength=float(kwargs.get("strength", 1.0)),
         )
     elif op in {"brush_stroke", "terrain_brush_stroke"}:
         updated_primitive = apply_terrain_brush_stroke(

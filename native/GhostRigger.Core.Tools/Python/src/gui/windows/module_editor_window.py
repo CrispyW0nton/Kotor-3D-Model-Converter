@@ -1798,6 +1798,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "shrink_wrap",
             "bend_tool",
             "curve_tool",
+            "lattice",
             "combine",
             "separate",
             "duplicate_special",

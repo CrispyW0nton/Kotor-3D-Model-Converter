@@ -248,6 +248,31 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert "Arbitrary mesh/component bending remains planned" in bend.authoring_context
     assert tool_by_key["bend_tool"].implemented is True
 
+    lattice = resolve_map_studio_tool_belt_action(
+        "lattice",
+        MapStudioToolActionContext(
+            room_resref="terrain01",
+            operation_distance=0.3,
+            metadata={
+                "control_deltas": ((0.0, 0.0), (0.0, 0.6)),
+                "strength": 0.5,
+            },
+        ),
+    )
+
+    assert lattice.enabled is True
+    assert lattice.command_method == "apply_authored_terrain_operation"
+    assert lattice.command_kwargs == {
+        "operation": "lattice",
+        "room_resref": "terrain01",
+        "strength": 0.5,
+        "control_deltas": ((0.0, 0.0), (0.0, 0.6)),
+    }
+    assert lattice.mutates_kmap is True
+    assert "heightfield control cage" in lattice.authoring_context
+    assert "Arbitrary mesh/object lattice deformation remains planned" in lattice.authoring_context
+    assert tool_by_key["lattice"].implemented is True
+
     curve = resolve_map_studio_tool_belt_action(
         "curve_tool",
         MapStudioToolActionContext(
@@ -588,6 +613,50 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
     restored_bend_payload = controller.project.extra_sections["authored_module"]
     assert restored_bend_payload["rooms"][0]["primitive"]["heights"] == source_bend_heights
 
+    controller.create_authored_room_preset_module(preset_id="terrain_heightfield", module_root="grlattice")
+    lattice_room = controller.authored_terrain_room_choices()[0]
+    lattice_payload = controller.project.extra_sections["authored_module"]
+    source_lattice_heights = [[0.0 for _column in row] for row in lattice_payload["rooms"][0]["primitive"]["heights"]]
+    lattice_payload["rooms"][0]["primitive"]["heights"] = copy.deepcopy(source_lattice_heights)
+    controller.project.extra_sections["authored_module"] = lattice_payload
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "lattice",
+        MapStudioToolActionContext(
+            room_resref=lattice_room.room_resref,
+            metadata={
+                "control_deltas": ((0.0, 0.0), (0.0, 0.6)),
+                "strength": 0.5,
+            },
+        ),
+    )
+
+    latticed_payload = controller.project.extra_sections["authored_module"]
+    latticed_room = latticed_payload["rooms"][0]
+    latticed_heights = latticed_room["primitive"]["heights"]
+    latticed_values = [round(float(value), 6) for row in latticed_heights for value in row]
+
+    assert max(latticed_values) == 0.3
+    assert round(float(latticed_heights[0][0]), 6) == 0.0
+    assert round(float(latticed_heights[-1][-1]), 6) == 0.3
+    assert latticed_room["primitive"]["metadata"]["last_operation"] == "lattice"
+    assert latticed_room["primitive"]["metadata"]["lattice_mode"] == "terrain_heightfield_control_cage"
+    assert latticed_room["primitive"]["metadata"]["lattice_control_rows"] == 2
+    assert latticed_room["primitive"]["metadata"]["lattice_control_columns"] == 2
+    assert latticed_room["primitive"]["metadata"]["lattice_strength"] == 0.5
+    assert latticed_room["primitive"]["metadata"]["source"] == "map_studio:terrain_lattice"
+    assert latticed_room["primitive"]["metadata"]["arbitrary_mesh_lattice"] == "planned"
+    assert "lattice_slope_report" in latticed_room["primitive"]["metadata"]
+    assert latticed_room["metadata"]["last_operation"] == "terrain_lattice"
+    assert latticed_payload["placements"]["metadata"]["terrain_height_repaired_after_operation"] == "terrain_lattice"
+    assert controller.command_history.undo_label == "Apply terrain operation lattice"
+
+    controller.undo_map_studio_command()
+
+    restored_lattice_payload = controller.project.extra_sections["authored_module"]
+    assert restored_lattice_payload["rooms"][0]["primitive"]["heights"] == source_lattice_heights
+
     controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grcurve01")
     curve_room = controller.authored_floor_plan_room_choices()[0]
 
@@ -642,6 +711,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert '"mirror_z",' in window_source
     assert '"bend_tool",' in window_source
     assert '"curve_tool",' in window_source
+    assert '"lattice",' in window_source
     assert 'MapStudioToolBeltAction(\n        "triangulate",' in scene_catalog
     assert 'MapStudioToolBeltAction(\n        "triangulate",' in tools_catalog
 
@@ -658,6 +728,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="apply_authored_terrain_operation"' in source
         assert 'command_method="add_authored_curve_guide"' in source
         assert '"operation": "bend"' in source
+        assert '"operation": "lattice"' in source
         assert '"curve_tool"' in source
         assert '"boolean_a_minus_b"' in source
         assert '"boolean_b_minus_a"' in source

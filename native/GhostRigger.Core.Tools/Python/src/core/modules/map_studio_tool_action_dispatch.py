@@ -386,6 +386,29 @@ def resolve_map_studio_tool_belt_action(
             ),
         )
 
+    if key == "lattice":
+        kwargs: dict[str, Any] = {
+            "operation": "lattice",
+            "room_resref": ctx.room_resref,
+            "strength": float(ctx.metadata.get("strength", 1.0)),
+        }
+        if "control_deltas" in ctx.metadata:
+            kwargs["control_deltas"] = ctx.metadata["control_deltas"]
+        else:
+            kwargs["amplitude"] = float(ctx.metadata.get("amplitude", ctx.operation_distance))
+        return _route(
+            action,
+            focus_component_mode="terrain",
+            focus_snap_mode="surface",
+            command_method="apply_authored_terrain_operation",
+            command_kwargs=kwargs,
+            mutates_kmap=True,
+            authoring_context=(
+                "Lattice: bake a heightfield control cage into the selected terrain, then revalidate WOK slope, "
+                "placements, and export readiness. Arbitrary mesh/object lattice deformation remains planned."
+            ),
+        )
+
     if key == "curve_tool":
         points = ctx.metadata.get("points")
         if points is None:
