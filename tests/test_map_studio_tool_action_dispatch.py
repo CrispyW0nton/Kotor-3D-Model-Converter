@@ -28,6 +28,38 @@ def _read(rel: str) -> str:
     return (ROOT / rel).read_text(encoding="utf-8")
 
 
+def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_tool_contract_audit import audit_map_studio_tool_belt_contract
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    audit = audit_map_studio_tool_belt_contract()
+    statuses = {status.action_key: status for status in audit.statuses}
+
+    assert audit.capability_stage == "previewable_tool_contract_audit"
+    assert audit.has_blockers is False
+    assert audit.blocking_messages == ()
+    assert audit.total_actions >= 80
+    assert audit.implemented_actions == audit.total_actions
+    assert audit.command_backed_actions >= 40
+    assert audit.mutating_command_actions >= 40
+    assert audit.query_command_actions >= 1
+    assert audit.workflow_focus_actions >= 30
+    assert statuses["cube"].contract_kind == "command_mutates_kmap"
+    assert statuses["cube"].command_method == "add_authored_room_primitive"
+    assert statuses["cube"].mutates_kmap is True
+    assert statuses["universal_transform"].contract_kind == "command_query"
+    assert statuses["universal_transform"].command_method == "map_studio_universal_transform_overlay"
+    assert statuses["terrain"].contract_kind == "workflow_focus"
+    assert statuses["stage_module"].contract_kind == "studio_workspace"
+    assert all(status.in_any_preset for status in audit.statuses)
+
+    controller_audit = ModuleEditorController().map_studio_tool_belt_contract_audit()
+    assert controller_audit.total_actions == audit.total_actions
+    assert controller_audit.blocking_messages == ()
+
+
 def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> None:
     _install_native_payload_paths()
 
@@ -745,6 +777,10 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     tools_dispatcher = _read("native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py")
     scene_overlay = _read("native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_universal_transform_overlay.py")
     tools_overlay = _read("native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_universal_transform_overlay.py")
+    scene_tool_audit = _read("native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_contract_audit.py")
+    tools_tool_audit = _read("native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_contract_audit.py")
+    scene_controller = _read("native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py")
+    tools_controller = _read("native/GhostRigger.Core.Tools/Python/src/core/modules/module_editor_controller.py")
     viewport_panel = _read("native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py")
     viewport_scene_models = _read("native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/scene_models.py")
     viewport_overlay_layers = _read("native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py")
@@ -791,6 +827,17 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert "class MapStudioUniversalTransformDimensionLabel" in source
         assert "def build_map_studio_universal_transform_overlay" in source
         assert "previewable_overlay" in source
+
+    for source in (scene_tool_audit, tools_tool_audit):
+        assert "class MapStudioToolContractAudit" in source
+        assert "class MapStudioToolContractStatus" in source
+        assert "def audit_map_studio_tool_belt_contract" in source
+        assert "previewable_tool_contract_audit" in source
+        assert "command_or_workflow_classification" in source
+
+    for source in (scene_controller, tools_controller):
+        assert "audit_map_studio_tool_belt_contract" in source
+        assert "def map_studio_tool_belt_contract_audit" in source
 
     assert "def set_universal_transform_overlay" in viewport_panel
     assert "def _sync_universal_transform_overlay" in viewport_panel

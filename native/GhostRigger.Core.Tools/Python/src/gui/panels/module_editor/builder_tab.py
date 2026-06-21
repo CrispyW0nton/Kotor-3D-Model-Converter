@@ -65,7 +65,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.modelingModeGuideLabel = QtWidgets.QLabel(
             "Manual modeling workspace: switch between Object, Vertex, Edge, Face, and Walkmesh editing. "
             "Use these controls to choose the tool intent before editing primitives, terrain, or WOK surfaces; "
-            "Ctrl+T shows Universal Manipulator dimensions, hold V snaps vertices, and hold J aligns transforms to one level."
+            "Ctrl+T shows Universal Manipulator dimensions, Hold V snaps vertices, and Hold J aligns transforms to one level."
         )
         self.modelingModeGuideLabel.setObjectName("mapStudioModelingModeGuideLabel")
         self.modelingModeGuideLabel.setWordWrap(True)

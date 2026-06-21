@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Adds Tool-Belt Contract Audit
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Command contract audit
+Intersects: native payload mirror sync for Scene/Tools Map Studio tool-belt and workflow contracts.
+
+- Added a headless Map Studio tool-belt contract audit that classifies every visible action as a mutating KMAP command, non-mutating query, workflow focus, studio workspace action, or blocker.
+- Exposed the audit through the Module Editor controller so the Level Editor can sanity-check that Maya-like shelf actions remain backed by core routing instead of becoming decorative UI.
+- Tightened adjacent Map Studio source contracts for Hold-V/Hold-J snap wording and live terrain sculpt frame readiness boundaries.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_contract_audit.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_contract_audit.py native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Tools/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/builder_tab.py tests/test_map_studio_tool_action_dispatch.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_tool_contract_audit`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_tool_contract_ui`.
+
 ### [2026-06-21] Map Studio Adds Universal Transform Overlay Contract
 
 Owner: LordVaderCW

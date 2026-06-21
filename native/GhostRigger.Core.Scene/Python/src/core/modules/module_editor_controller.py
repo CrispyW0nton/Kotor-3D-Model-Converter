@@ -51,6 +51,7 @@ from .map_studio_tool_belt_preferences import (
     MAP_STUDIO_TOOL_BELT_SECTION,
     normalise_map_studio_tool_belt_preferences,
 )
+from .map_studio_tool_contract_audit import audit_map_studio_tool_belt_contract
 from .map_studio_command_history import MapStudioCommandHistory, MapStudioCommandRestoreResult
 from .map_studio_curve_guides import add_authored_curve_guide as add_curve_guide_to_project
 from .map_studio_curve_guides import authored_curve_guides
@@ -478,6 +479,11 @@ class ModuleEditorController:
             preset_key,
             custom_action_keys=custom_action_keys,
         )
+
+    def map_studio_tool_belt_contract_audit(self):
+        """Return a headless audit of visible Map Studio tool-belt action contracts."""
+
+        return audit_map_studio_tool_belt_contract()
 
     def map_studio_tool_belt_preferences(self):
         """Return KMAP-persisted Map Studio tool-belt preferences."""
@@ -937,6 +943,20 @@ class ModuleEditorController:
             budget_ms=budget_ms,
         )
 
+    def commit_map_studio_terrain_sculpt_stroke(self, *, brush: str, room_resref: str):
+        """Record one undo command for all terrain frames applied during a released stroke."""
+
+        before = self._terrain_sculpt_command_before
+        self._terrain_sculpt_command_before = None
+        if before is not None:
+            self._record_map_studio_command(
+                action_key="map_studio.terrain.sculpt_stroke",
+                label=f"Sculpt terrain {brush} on {room_resref}",
+                before=before,
+                metadata={"brush": brush, "room_resref": room_resref},
+            )
+        return self.authored_module_readiness()
+
     def apply_map_studio_terrain_sculpt_frame(
         self,
         *,
@@ -998,20 +1018,6 @@ class ModuleEditorController:
         )
         self.model.log(message)
         return MapStudioTerrainSculptApplyResult(applied=True, frame=frame, message=message)
-
-    def commit_map_studio_terrain_sculpt_stroke(self, *, brush: str, room_resref: str):
-        """Record one undo command for all terrain frames applied during a released stroke."""
-
-        before = self._terrain_sculpt_command_before
-        self._terrain_sculpt_command_before = None
-        if before is not None:
-            self._record_map_studio_command(
-                action_key="map_studio.terrain.sculpt_stroke",
-                label=f"Sculpt terrain {brush} on {room_resref}",
-                before=before,
-                metadata={"brush": brush, "room_resref": room_resref},
-            )
-        return self.authored_module_readiness()
 
     def merge_authored_floor_plan_rooms(
         self,
