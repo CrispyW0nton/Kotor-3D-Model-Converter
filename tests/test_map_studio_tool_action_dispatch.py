@@ -42,10 +42,10 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert audit.blocking_messages == ()
     assert audit.total_actions >= 80
     assert audit.implemented_actions == audit.total_actions
-    assert audit.command_backed_actions >= 72
+    assert audit.command_backed_actions >= 74
     assert audit.mutating_command_actions >= 71
-    assert audit.query_command_actions >= 1
-    assert audit.workflow_focus_actions <= 10
+    assert audit.query_command_actions >= 3
+    assert audit.workflow_focus_actions == 0
     assert statuses["cube"].contract_kind == "command_mutates_kmap"
     assert statuses["cube"].command_method == "add_authored_room_primitive"
     assert statuses["cube"].mutates_kmap is True
@@ -71,7 +71,10 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["opening_marker"].command_method == "apply_authored_room_operation"
     assert statuses["sculpt_raise"].contract_kind == "command_mutates_kmap"
     assert statuses["sculpt_raise"].command_method == "apply_authored_terrain_operation"
-    assert statuses["terrain"].contract_kind == "workflow_focus"
+    assert statuses["terrain"].contract_kind == "command_query"
+    assert statuses["terrain"].command_method == "authored_terrain_status"
+    assert statuses["walkmesh"].contract_kind == "command_query"
+    assert statuses["walkmesh"].command_method == "authored_walkmesh_status"
     assert statuses["stage_module"].contract_kind == "studio_workspace"
     assert all(status.in_any_preset for status in audit.statuses)
 
@@ -123,6 +126,22 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert terrain_patch.command_method == "create_authored_room_preset_module"
     assert terrain_patch.command_kwargs == {"preset_id": "terrain_heightfield", "module_root": "grterrain"}
     assert terrain_patch.mutates_kmap is True
+
+    terrain_status_route = resolve_map_studio_tool_belt_action("terrain")
+
+    assert terrain_status_route.enabled is True
+    assert terrain_status_route.command_method == "authored_terrain_status"
+    assert terrain_status_route.mutates_kmap is False
+    assert terrain_status_route.stale_outputs == ()
+    assert "walkability overlay counts" in terrain_status_route.authoring_context
+
+    walkmesh_status_route = resolve_map_studio_tool_belt_action("walkmesh")
+
+    assert walkmesh_status_route.enabled is True
+    assert walkmesh_status_route.command_method == "authored_walkmesh_status"
+    assert walkmesh_status_route.mutates_kmap is False
+    assert walkmesh_status_route.stale_outputs == ()
+    assert "generated WOK walkability" in walkmesh_status_route.authoring_context
 
     selected_primitive = resolve_map_studio_tool_belt_action(
         "primitive",
@@ -694,6 +713,22 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
     assert terrain_payload["rooms"][0]["primitive"]["metadata"]["preset_id"] == "terrain_heightfield"
     assert controller.command_history.undo_label == "Create authored module grterrain"
 
+    terrain_status = execute_map_studio_tool_belt_action(controller, "terrain")
+
+    assert terrain_status["ready"] is True
+    assert terrain_status["terrain_room_count"] == 1
+    assert terrain_status["walkable_triangle_count"] > 0
+    assert terrain_status["capability_stage"] == "previewable_status_query"
+    assert controller.command_history.undo_label == "Create authored module grterrain"
+
+    walkmesh_status = execute_map_studio_tool_belt_action(controller, "walkmesh")
+
+    assert walkmesh_status.ready is True
+    assert walkmesh_status.terrain_room_count == 1
+    assert walkmesh_status.walkable_triangle_count > 0
+    assert "Walkmesh:" in walkmesh_status.summary
+    assert controller.command_history.undo_label == "Create authored module grterrain"
+
     controller.undo_map_studio_command()
 
     assert controller.project.name == "grbelt01"
@@ -1213,6 +1248,8 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert '"create_room",' in window_source
     assert '"corridor",' in window_source
     assert '"terrain_patch",' in window_source
+    assert '"terrain",' in window_source
+    assert '"walkmesh",' in window_source
     assert '"primitive",' in window_source
     assert '"cut",' in window_source
     assert '"opening_marker",' in window_source
@@ -1235,6 +1272,8 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="duplicate_authored_room_primitive"' in source
         assert 'command_method="set_authored_room_edge_normal_policy"' in source
         assert 'command_method="apply_authored_terrain_operation"' in source
+        assert 'command_method="authored_terrain_status"' in source
+        assert 'command_method="authored_walkmesh_status"' in source
         assert 'command_method="add_authored_curve_guide"' in source
         assert '"operation": "bend"' in source
         assert '"operation": "lattice"' in source
@@ -1263,6 +1302,8 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     for source in (scene_controller, tools_controller):
         assert "audit_map_studio_tool_belt_contract" in source
         assert "def map_studio_tool_belt_contract_audit" in source
+        assert "def authored_terrain_status" in source
+        assert "previewable_status_query" in source
 
     assert "def set_universal_transform_overlay" in viewport_panel
     assert "def _sync_universal_transform_overlay" in viewport_panel

@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Routes Terrain And Walkmesh Belt Actions Through Status Queries
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Terrain and walkmesh readiness
+Intersects: native payload mirror sync for Scene/Tools Map Studio action routing, terrain status, and Level Editor belt command execution.
+
+- Routed the generic `Terrain` and `WOK Paint` tool-belt actions through headless status query commands instead of leaving them as UI-only workspace focus buttons.
+- Added `authored_terrain_status()` so Map Studio can report terrain room count, walkability overlay counts, max slope, warnings, and next action without mutating KMAP state.
+- Updated the Level Editor command path so Terrain/Walkmesh belt clicks execute the query, focus the correct workspace, and refresh the workflow/status text while preserving undo history.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_contract_audit.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_contract_audit.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Tools/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_status_query_belt`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_status_query_ui`; Map Studio tool contract audit now reports 74 command-backed actions, 71 mutating command actions, 3 query actions, and 0 workflow-focus actions.
+
 ### [2026-06-21] Map Studio Routes Starter Room Belt Actions Through KMAP Commands
 
 Owner: LordVaderCW

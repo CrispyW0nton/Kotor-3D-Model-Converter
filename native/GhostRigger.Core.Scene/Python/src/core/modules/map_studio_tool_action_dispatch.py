@@ -270,6 +270,34 @@ def resolve_map_studio_tool_belt_action(
     if not bool(action.implemented):
         return _disabled(action, key, f"{action.label} is planned and not implemented for command execution yet.")
 
+    if key == "terrain":
+        return _route(
+            action,
+            focus_component_mode="terrain",
+            focus_snap_mode="surface",
+            command_method="authored_terrain_status",
+            mutates_kmap=False,
+            status_message="Terrain status refreshed; choose a brush or create a terrain patch before sculpting.",
+            authoring_context=(
+                "Terrain: query authored terrain room choices, walkability overlay counts, slope risk, and next actions "
+                "without mutating KMAP state. Brush actions commit dirty-region heightfield edits."
+            ),
+        )
+
+    if key == "walkmesh":
+        return _route(
+            action,
+            focus_component_mode="walkmesh",
+            focus_snap_mode="face",
+            command_method="authored_walkmesh_status",
+            mutates_kmap=False,
+            status_message="Walkmesh status refreshed; paint WOK surfaces or fix traversal blockers before export.",
+            authoring_context=(
+                "Walkmesh: query generated WOK walkability, disconnected islands, invalid/degenerate faces, "
+                "and gameplay-anchor readiness without mutating KMAP state."
+            ),
+        )
+
     preset = _ROOM_PRESET_ACTIONS.get(key)
     if preset is not None:
         preset_id, fallback_root = preset

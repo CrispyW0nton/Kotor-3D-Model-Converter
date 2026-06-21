@@ -748,6 +748,53 @@ class ModuleEditorController:
         )
         return authored_terrain_walkability_overlay_for_project(authored)
 
+    def authored_terrain_status(self):
+        """Return modder-facing terrain authoring status for the current KMAP."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return {
+                "ready": False,
+                "terrain_room_count": 0,
+                "walkable_triangle_count": 0,
+                "non_walk_triangle_count": 0,
+                "max_slope_degrees": 0.0,
+                "summary": "Terrain: no authored Map Studio module is loaded.",
+                "next_action": "Create a Terrain Patch, then choose a brush before sculpting.",
+                "warnings": (),
+                "capability_stage": "previewable_status_query",
+            }
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        choices = tuple(authored_terrain_room_choices(authored))
+        overlay = authored_terrain_walkability_overlay_for_project(authored)
+        ready = bool(choices)
+        summary = (
+            f"Terrain: {len(choices)} terrain room(s), {int(overlay.walkable_triangle_count)} walkable triangle(s), "
+            f"{int(overlay.non_walk_triangle_count)} blocked triangle(s), max slope {float(overlay.max_slope_degrees):.1f} deg."
+            if ready
+            else "Terrain: no terrain heightfield rooms exist in this authored module."
+        )
+        return {
+            "ready": ready,
+            "terrain_room_count": len(choices),
+            "walkable_triangle_count": int(overlay.walkable_triangle_count),
+            "non_walk_triangle_count": int(overlay.non_walk_triangle_count),
+            "max_slope_degrees": float(overlay.max_slope_degrees),
+            "summary": summary,
+            "next_action": (
+                "Select a terrain room, apply a brush stroke, then validate WOK slope/walkability before staging."
+                if ready
+                else "Create a Terrain Patch or convert a room to terrain before sculpting."
+            ),
+            "warnings": tuple(overlay.warnings),
+            "capability_stage": "previewable_status_query",
+        }
+
     def authored_walkmesh_status(self):
         """Return modder-facing walkmesh status for the current KMAP."""
 

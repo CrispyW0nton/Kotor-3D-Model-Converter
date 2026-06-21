@@ -1575,6 +1575,17 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._log(f"Map Studio action failed: {exc}")
             return False
         status_message = route.status_message or f"{route.label} complete."
+        if action_key == "terrain" and isinstance(result, dict):
+            status_message = str(result.get("summary") or status_message)
+            next_action = str(result.get("next_action") or "").strip()
+            if next_action:
+                status_message = f"{status_message} Next: {next_action}"
+            self.show_map_studio_terrain_tools()
+        elif action_key == "walkmesh":
+            summary = str(getattr(result, "summary", "") or status_message)
+            next_action = str(getattr(result, "next_action", "") or "").strip()
+            status_message = f"{summary} Next: {next_action}" if next_action else summary
+            self.show_map_studio_walkmesh_tools()
         if action_key == "universal_transform":
             overlay_setter = getattr(self.viewport_panel, "set_universal_transform_overlay", None)
             if callable(overlay_setter):
@@ -1945,6 +1956,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "store",
             "opening",
             "opening_marker",
+            "terrain",
+            "walkmesh",
             "sculpt_raise",
             "sculpt_lower",
             "sculpt_smooth",
