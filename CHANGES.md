@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Blocks Export When Generated Outputs Are Stale
+
+Owner: LordVaderCW
+Task: T2605
+Subsystem: Map Studio / Authored module readiness export gates
+Intersects: Domain Core Modules authored readiness, ModuleMeshes mirror package, authored module readiness tests, and authored room operation tests.
+
+- Updated authored-module readiness so component edits that mark MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs stale keep preview available but block export-candidate and game-test readiness.
+- Added the explicit `Stale runtime resources` export status and routed the next action to the component-edit regeneration guidance.
+- Added regressions proving packaged runtime files no longer make a module export-ready after vertex snap or weld operations mark generated resources stale.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py tests/test_authored_module_readiness.py tests/test_authored_room_operations.py`; `python -m pytest tests/test_authored_module_readiness.py::test_t2639_runtime_resources_promote_project_to_export_candidate tests/test_authored_module_readiness.py::test_t2605_kmap_bridge_reports_stale_component_edit_outputs_for_ui tests/test_authored_room_operations.py::test_t2908_controller_snaps_floor_plan_vertex_to_cross_room_vertex tests/test_authored_room_operations.py::test_t2908_controller_welds_floor_plan_vertices_and_remains_exportable -q --basetemp .pytest_tmp_map_studio_stale_export_gate`.
+
 ### [2026-06-21] Map Studio Shows Stale Runtime Outputs In Readiness UI
 
 Owner: LordVaderCW

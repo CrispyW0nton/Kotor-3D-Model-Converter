@@ -520,6 +520,8 @@ def test_t2908_controller_snaps_floor_plan_vertex_to_cross_room_vertex() -> None
     assert "Review WOK surface intent before exporting the module." in audit["validation_messages"]
     assert result.readiness is not None
     assert result.readiness.can_preview is True
+    assert result.readiness.can_export_candidate is False
+    assert result.readiness.export_status == "Stale runtime resources"
     assert result.readiness.component_edit.ready is False
     assert result.readiness.component_edit.status == "Needs WOK/export review"
     assert result.readiness.component_edit.latest_room_resref == "grsnapv_room01"
@@ -707,6 +709,8 @@ def test_t2908_controller_welds_floor_plan_vertices_and_remains_exportable() -> 
     assert "Re-run MDL/MDX/WOK generation and inspect LYT/VIS/PTH readiness before packaging." in audit["validation_messages"]
     assert result.readiness is not None
     assert result.readiness.can_preview is True
+    assert result.readiness.can_export_candidate is False
+    assert result.readiness.export_status == "Stale runtime resources"
     assert result.readiness.component_edit.ready is False
     assert result.readiness.component_edit.latest_room_resref == "grweldv_room01"
     assert result.readiness.component_edit.latest_operation == "weld_vertices"

@@ -1701,7 +1701,8 @@ def build_authored_module_readiness(
         + component_warnings
     )
     can_preview = not preview_blocking and bool(rooms) and all(room.can_preview_geometry for room in rooms)
-    can_export_candidate = can_preview and not missing and pathing.ready and not visibility_blocking
+    component_export_blocking = not component_edit.ready
+    can_export_candidate = can_preview and not missing and pathing.ready and not visibility_blocking and not component_export_blocking
     proof_game_tested = can_export_candidate and _recorded_game_proof_complete(proof)
     ready_for_game_test = can_export_candidate and not proof_game_tested
     proof_manifest_path = str(proof.get("proof_manifest_path") or "")
@@ -1766,6 +1767,13 @@ def build_authored_module_readiness(
         elif visibility_blocking:
             export_status = "VIS visibility blocked"
             next_action = visibility.fix_hint or "Fix broken VIS room links before staging the module."
+        elif component_export_blocking:
+            export_status = "Stale runtime resources"
+            next_action = (
+                component_edit.next_action
+                or component_edit.fix_hint
+                or "Regenerate stale MDL/MDX/WOK/LYT/VIS/PTH resources before packaging the .mod."
+            )
         else:
             export_status = "Missing runtime resources"
             next_action = "Generate or stage ARE/GIT/IFO/PTH/LYT/VIS, room WOK, and matching room MDL/MDX resources before export."

@@ -319,6 +319,12 @@ def test_t2605_kmap_bridge_reports_stale_component_edit_outputs_for_ui() -> None
 
     status = result.metadata["runtime_output_status"]
     assert result.readiness is not None
+    assert result.readiness.can_preview is True
+    assert result.readiness.can_export_candidate is False
+    assert result.readiness.ready_for_game_test is False
+    assert result.readiness.capability_stage == "previewable"
+    assert result.readiness.export_status == "Stale runtime resources"
+    assert "Regenerate room MDL/MDX/WOK" in result.readiness.next_action
     assert result.readiness.metadata["runtime_output_status"] == status
     impacts = {row["resource"]: row for row in status["resource_impacts"]}
     assert status["status"] == "Stale generated resources"
