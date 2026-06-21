@@ -804,10 +804,14 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert '"door_frame": "door_frame"' in window_source
     assert '"arch": "arch"' in window_source
     assert '"sculpt_slope": "slope"' in window_source
-    assert 'if key == "corridor":' in window_source
-    assert "self.create_map_studio_corridor()" in window_source
-    assert 'if key == "terrain_patch":' in window_source
-    assert "self.create_map_studio_starter_terrain()" in window_source
+    assert '"create_room",' in window_source
+    assert '"corridor",' in window_source
+    assert '"terrain_patch",' in window_source
+    assert "resolve_map_studio_tool_belt_action(key, route_context)" in window_source
+    assert "execute_map_studio_tool_belt_action(self.controller, action_key, context)" in window_source
+    assert "module_root=str(getattr(module_root_line, \"text\", lambda: \"\")()).strip()" in window_source
+    assert "def create_map_studio_corridor" in window_source
+    assert "def create_map_studio_starter_terrain" in window_source
     assert '"fill"' in window_source
     assert '"triangulate"' in window_source
     assert '"normals"' in window_source

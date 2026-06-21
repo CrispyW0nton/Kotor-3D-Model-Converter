@@ -784,6 +784,7 @@ class ModuleEditorController:
         """Store an authored module created from a named primitive room preset."""
 
         root = str(module_root or "grdev01").strip() or "grdev01"
+        before = self._capture_map_studio_command_state()
         authored = create_authored_module_from_room_preset(
             preset_id=preset_id,
             module_root=root,
@@ -795,6 +796,12 @@ class ModuleEditorController:
         self.project.game = authored.game
         self.project.dirty = True
         self.model.log(f"Created authored Map Studio module {self.project.name} from primitive preset {preset_id}.")
+        self._record_map_studio_command(
+            action_key="map_studio.room_preset.create",
+            label=f"Create authored module {authored.metadata.module_root}",
+            before=before,
+            metadata={"preset_id": preset_id, "module_root": root},
+        )
         return self.authored_module_readiness()
 
     def apply_authored_room_operation(self, *, operation: str, **kwargs: Any):

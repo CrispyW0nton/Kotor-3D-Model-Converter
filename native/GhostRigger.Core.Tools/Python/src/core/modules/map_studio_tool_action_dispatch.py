@@ -24,6 +24,7 @@ MAP_STUDIO_TOOL_ACTION_READINESS_IMPACT = (
 class MapStudioToolActionContext:
     """Current selection/context facts needed to resolve one tool-belt action."""
 
+    module_root: str = ""
     room_resref: str = ""
     first_room_resref: str = ""
     second_room_resref: str = ""
@@ -115,6 +116,12 @@ _PRIMITIVE_ACTIONS: dict[str, str] = {
     "cylinder": "cylinder",
     "door_frame": "door_frame",
     "arch": "arch",
+}
+
+_ROOM_PRESET_ACTIONS: dict[str, tuple[str, str]] = {
+    "create_room": ("rectangular_dev_room", "grdev01"),
+    "corridor": ("wide_hall", "grhall"),
+    "terrain_patch": ("terrain_heightfield", "grterrain"),
 }
 
 _PLACEMENT_ACTIONS: dict[str, str] = {
@@ -262,6 +269,23 @@ def resolve_map_studio_tool_belt_action(
     ctx = context or MapStudioToolActionContext()
     if not bool(action.implemented):
         return _disabled(action, key, f"{action.label} is planned and not implemented for command execution yet.")
+
+    preset = _ROOM_PRESET_ACTIONS.get(key)
+    if preset is not None:
+        preset_id, fallback_root = preset
+        module_root = str(ctx.module_root or fallback_root).strip() or fallback_root
+        return _route(
+            action,
+            focus_component_mode="object" if key != "terrain_patch" else "terrain",
+            focus_snap_mode="grid" if key != "terrain_patch" else "surface",
+            command_method="create_authored_room_preset_module",
+            command_kwargs={"preset_id": preset_id, "module_root": module_root},
+            mutates_kmap=True,
+            authoring_context=(
+                f"{action.label}: create a KMAP-authored module from the {preset_id} preset; "
+                "room geometry, placements, walkmesh intent, validation, export, and game proof become stale."
+            ),
+        )
 
     if key in _PRIMITIVE_ACTIONS:
         primitive_kind = ctx.primitive_kind or _PRIMITIVE_ACTIONS[key]

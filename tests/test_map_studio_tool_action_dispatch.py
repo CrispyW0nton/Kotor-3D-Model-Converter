@@ -42,8 +42,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert audit.blocking_messages == ()
     assert audit.total_actions >= 80
     assert audit.implemented_actions == audit.total_actions
-    assert audit.command_backed_actions >= 69
-    assert audit.mutating_command_actions >= 68
+    assert audit.command_backed_actions >= 72
+    assert audit.mutating_command_actions >= 71
     assert audit.query_command_actions >= 1
     assert audit.workflow_focus_actions <= 10
     assert statuses["cube"].contract_kind == "command_mutates_kmap"
@@ -51,6 +51,12 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["cube"].mutates_kmap is True
     assert statuses["primitive"].contract_kind == "command_mutates_kmap"
     assert statuses["primitive"].command_method == "add_authored_room_primitive"
+    assert statuses["create_room"].contract_kind == "command_mutates_kmap"
+    assert statuses["create_room"].command_method == "create_authored_room_preset_module"
+    assert statuses["corridor"].contract_kind == "command_mutates_kmap"
+    assert statuses["corridor"].command_method == "create_authored_room_preset_module"
+    assert statuses["terrain_patch"].contract_kind == "command_mutates_kmap"
+    assert statuses["terrain_patch"].command_method == "create_authored_room_preset_module"
     assert statuses["universal_transform"].contract_kind == "command_query"
     assert statuses["universal_transform"].command_method == "map_studio_universal_transform_overlay"
     assert statuses["placeable"].contract_kind == "command_mutates_kmap"
@@ -92,6 +98,31 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert cube.mutates_kmap is True
     assert cube.stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
     assert "game proof" in cube.readiness_impact
+
+    starter_room = resolve_map_studio_tool_belt_action(
+        "create_room",
+        MapStudioToolActionContext(module_root="grroom42"),
+    )
+
+    assert starter_room.enabled is True
+    assert starter_room.command_method == "create_authored_room_preset_module"
+    assert starter_room.command_kwargs == {"preset_id": "rectangular_dev_room", "module_root": "grroom42"}
+    assert starter_room.mutates_kmap is True
+    assert "rectangular_dev_room" in starter_room.authoring_context
+
+    corridor = resolve_map_studio_tool_belt_action("corridor")
+
+    assert corridor.enabled is True
+    assert corridor.command_method == "create_authored_room_preset_module"
+    assert corridor.command_kwargs == {"preset_id": "wide_hall", "module_root": "grhall"}
+    assert corridor.mutates_kmap is True
+
+    terrain_patch = resolve_map_studio_tool_belt_action("terrain_patch")
+
+    assert terrain_patch.enabled is True
+    assert terrain_patch.command_method == "create_authored_room_preset_module"
+    assert terrain_patch.command_kwargs == {"preset_id": "terrain_heightfield", "module_root": "grterrain"}
+    assert terrain_patch.mutates_kmap is True
 
     selected_primitive = resolve_map_studio_tool_belt_action(
         "primitive",
@@ -582,6 +613,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
     controller = ModuleEditorController()
     controller.new_project(name="grbelt01", game="K1")
     controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grbelt01")
+    assert controller.command_history.undo_label == "Create authored module grbelt01"
 
     before_count = len(controller.authored_room_primitive_transforms())
 
@@ -639,6 +671,32 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
     controller.undo_map_studio_command()
 
     assert len(controller.authored_room_primitive_transforms()) == before_count
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "corridor",
+        MapStudioToolActionContext(module_root="grbelt_hall"),
+    )
+
+    assert controller.project.name == "grbelt_hall"
+    hall_payload = controller.project.extra_sections["authored_module"]
+    assert hall_payload["rooms"][0]["primitive"]["metadata"]["preset_id"] == "wide_hall"
+    assert controller.command_history.undo_label == "Create authored module grbelt_hall"
+
+    controller.undo_map_studio_command()
+
+    assert controller.project.name == "grbelt01"
+
+    execute_map_studio_tool_belt_action(controller, "terrain_patch")
+
+    assert controller.project.name == "grterrain"
+    terrain_payload = controller.project.extra_sections["authored_module"]
+    assert terrain_payload["rooms"][0]["primitive"]["metadata"]["preset_id"] == "terrain_heightfield"
+    assert controller.command_history.undo_label == "Create authored module grterrain"
+
+    controller.undo_map_studio_command()
+
+    assert controller.project.name == "grbelt01"
 
     execute_map_studio_tool_belt_action(
         controller,
@@ -1152,6 +1210,9 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert "set_universal_transform_overlay" in window_source
     assert '"duplicate_special",' in window_source
     assert '"shrink_wrap",' in window_source
+    assert '"create_room",' in window_source
+    assert '"corridor",' in window_source
+    assert '"terrain_patch",' in window_source
     assert '"primitive",' in window_source
     assert '"cut",' in window_source
     assert '"opening_marker",' in window_source
@@ -1168,6 +1229,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert "def resolve_map_studio_tool_belt_action" in source
         assert "def execute_map_studio_tool_belt_action" in source
         assert 'command_method="add_authored_room_primitive"' in source
+        assert 'command_method="create_authored_room_preset_module"' in source
         assert 'command_method="snap_authored_floor_plan_vertex"' in source
         assert 'command_method="apply_authored_room_operation"' in source
         assert 'command_method="duplicate_authored_room_primitive"' in source

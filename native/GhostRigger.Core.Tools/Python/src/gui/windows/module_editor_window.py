@@ -1440,6 +1440,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             terrain_context = {}
         terrain_row = getattr(self.builder_tab, "terrainRowSpinBox", None)
         terrain_column = getattr(self.builder_tab, "terrainColumnSpinBox", None)
+        module_root_line = getattr(self.builder_tab, "moduleRootLineEdit", None)
         primitive_kind_combo = getattr(self.builder_tab, "compositionPrimitiveKindComboBox", None)
         primitive_name_line = getattr(self.builder_tab, "compositionPrimitiveNameLineEdit", None)
         primitive_kind_data = primitive_kind_combo.currentData() if primitive_kind_combo is not None else {}
@@ -1465,6 +1466,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 or self._map_studio_current_room_resref()
             ).strip()
         return MapStudioToolActionContext(
+            module_root=str(getattr(module_root_line, "text", lambda: "")()).strip(),
             room_resref=current_room_resref,
             first_room_resref=str(bridge_first.get("room_resref") or union_first.get("room_resref") or ""),
             second_room_resref=str(bridge_second.get("room_resref") or union_second.get("room_resref") or ""),
@@ -1881,12 +1883,6 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._focus_map_studio_export_proof_workspace()
             self.record_game_smoke_proof()
             return
-        if key == "corridor":
-            self.create_map_studio_corridor()
-            return
-        if key == "terrain_patch":
-            self.create_map_studio_starter_terrain()
-            return
         route_context = self._map_studio_tool_action_context(key)
         route = resolve_map_studio_tool_belt_action(key, route_context)
         direct_command_actions = {
@@ -1914,6 +1910,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "boolean",
             "boolean_a_minus_b",
             "boolean_b_minus_a",
+            "create_room",
+            "corridor",
+            "terrain_patch",
             "primitive",
             "cut",
             "cut_slice_insert_edges",

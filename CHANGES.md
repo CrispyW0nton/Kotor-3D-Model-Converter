@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Routes Starter Room Belt Actions Through KMAP Commands
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Starter room presets
+Intersects: native payload mirror sync for Scene/Tools Map Studio preset routing and Level Editor starter room actions.
+
+- Routed the `Room`, `Corridor`, and `Terrain Patch` tool-belt actions through `create_authored_room_preset_module` so starter module construction is command-backed instead of bypassing the core dispatcher.
+- Added undo/readiness command checkpoints to authored room preset creation so generated starter modules can be restored through the Map Studio command history.
+- Passed the Level Editor module-root field into the shared tool action context so the tool belt preserves the user's chosen KOTOR module resref when creating starter maps.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_contract_audit.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_contract_audit.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Tools/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_room_preset_belt`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_room_preset_ui`; Map Studio tool contract audit now reports 72 command-backed actions, 71 mutating command actions, and 2 workflow-focus actions remaining.
+
 ### [2026-06-21] Map Studio Routes Generic Primitive Belt Action Through KMAP Command
 
 Owner: LordVaderCW
