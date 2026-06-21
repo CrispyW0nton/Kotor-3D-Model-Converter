@@ -791,6 +791,8 @@ def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manife
     assert "Drag or paste screenshot/video evidence path" in proof_recorder
     proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
     assert proof["task"] == "T2644"
+    assert proof["capability_stage"] == "export_candidate"
+    assert proof["proof_state"] == "requires_live_warp_proof"
     assert proof["manual_proof_required"] is True
     assert proof["game_tested"] is False
     assert proof["install"]["installed"] is False
@@ -801,8 +803,10 @@ def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manife
     assert "--no-inherited-base-game-geometry-or-scripted-movers" in proof["launch_handoff"]["evidence_capture_command"]
     test_plan = proof["modder_test_plan"]
     assert test_plan["task"] == "T2605"
+    assert test_plan["capability_stage"] == "export_candidate"
     assert test_plan["game_ready"] is False
     assert test_plan["proof_state"] == "requires_live_warp_proof"
+    assert test_plan["install"]["installed"] is False
     assert test_plan["install"]["proof_manifest_path"] == result.proof_manifest_path
     assert test_plan["install"]["dry_run"] is False
     assert test_plan["acceptance_checks"] == proof["acceptance_checks"]
@@ -879,8 +883,14 @@ def test_t2644_prepare_authored_module_install_copies_to_modules_with_backup(tmp
     assert backup.read_bytes() == b"existing"
     assert installed.read_bytes() != b"existing"
     proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
+    assert proof["capability_stage"] == "installed_test_build"
+    assert proof["proof_state"] == "installed_requires_live_warp_proof"
     assert proof["install"]["installed_module_path"] == str(installed)
+    assert proof["install"]["installed"] is True
     assert proof["install"]["backup_module_path"] == str(backup)
+    assert proof["modder_test_plan"]["capability_stage"] == "installed_test_build"
+    assert proof["modder_test_plan"]["proof_state"] == "installed_requires_live_warp_proof"
+    assert proof["modder_test_plan"]["install"]["installed"] is True
 
 
 def test_t2644_prepare_authored_module_install_refreshes_stale_currentgame_cache(tmp_path: Path) -> None:
@@ -914,6 +924,8 @@ def test_t2644_prepare_authored_module_install_refreshes_stale_currentgame_cache
     assert stale_backup.read_bytes() == b"old cached runtime module"
     assert any("currentgame cache" in warning for warning in result.warnings)
     proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
+    assert proof["capability_stage"] == "installed_test_build"
+    assert proof["proof_state"] == "installed_requires_live_warp_proof"
     assert proof["install"]["installed"] is True
     assert any("currentgame cache" in warning for warning in proof["warnings"])
 
@@ -949,6 +961,8 @@ def test_t2644_records_authored_module_game_proof(tmp_path: Path) -> None:
     assert result.ok is True
     assert result.code == "game_proof_recorded"
     proof = json.loads(Path(prep.proof_manifest_path).read_text(encoding="utf-8"))
+    assert proof["capability_stage"] == "game_smoke_tested"
+    assert proof["proof_state"] == "game_smoke_tested"
     assert proof["manual_proof_required"] is False
     assert proof["game_tested"] is True
     assert proof["game_test"]["accepted"] is True
@@ -1110,9 +1124,14 @@ def test_t2683_controller_installs_authored_module_to_modules_folder_with_backup
     assert payload["proof_recording_script_path"] == result.proof_recording_script_path
     assert payload["backup_module_path"] == result.backup_module_path
     assert payload["proof_manifest_path"] == result.proof_manifest_path
+    assert payload["modder_test_plan"]["capability_stage"] == "installed_test_build"
+    assert payload["modder_test_plan"]["proof_state"] == "installed_requires_live_warp_proof"
+    assert payload["modder_test_plan"]["install"]["installed"] is True
     assert payload["modder_test_plan"]["install"]["installed_module_path"] == str(installed)
     assert payload["modder_test_plan"]["install"]["proof_manifest_path"] == result.proof_manifest_path
     proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
+    assert proof["capability_stage"] == "installed_test_build"
+    assert proof["proof_state"] == "installed_requires_live_warp_proof"
     assert proof["launch_handoff"]["resolved_game_root_dir"] == str(modules_dir.parent)
     assert proof["launch_handoff"]["expected_executable_path"].endswith("swkotor.exe")
     assert proof["launch_handoff"]["elevated_launch_script_path"] == result.elevated_launch_script_path

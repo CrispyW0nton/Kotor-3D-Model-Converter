@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Labels Installed Test Builds Separately From Export Candidates
+
+Owner: LordVaderCW
+Task: T2605 / T2644
+Subsystem: Map Studio / Authored module install prep and game-proof lifecycle
+Intersects: Domain Core Modules authored export/install proof service, ModuleMeshes mirror package, and authored module export tests.
+
+- Added an `installed_test_build` capability stage for authored modules copied into a KOTOR `Modules` folder but not yet verified in-game.
+- Updated proof manifests and modder test plans to distinguish `export_candidate`, `installed_test_build`, and `game_smoke_tested` instead of flattening installed modules back into export candidates.
+- Preserved existing staged export, install, backup, currentgame refresh, and proof-recording behavior while making the lifecycle labels match the Map Studio roadmap.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_export.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_export.py tests/test_authored_module_export.py`; `python -m pytest tests/test_authored_module_export.py::test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest tests/test_authored_module_export.py::test_t2644_prepare_authored_module_install_copies_to_modules_with_backup tests/test_authored_module_export.py::test_t2644_prepare_authored_module_install_refreshes_stale_currentgame_cache tests/test_authored_module_export.py::test_t2644_records_authored_module_game_proof tests/test_authored_module_export.py::test_t2644_controller_stages_current_authored_module -q --basetemp .pytest_tmp_map_studio_installed_state`; `python -m pytest tests/test_authored_module_export.py::test_t2683_controller_installs_authored_module_to_modules_folder_with_backup -q --basetemp .pytest_tmp_map_studio_installed_state_controller`.
+
 ### [2026-06-21] Map Studio Records Lighting Proof State In Export Manifests
 
 Owner: LordVaderCW

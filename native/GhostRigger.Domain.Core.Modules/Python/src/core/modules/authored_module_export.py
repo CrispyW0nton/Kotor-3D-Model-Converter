@@ -1274,13 +1274,21 @@ def _authored_modder_test_plan(
     accepted: bool = False,
     missing_checks: list[str] | None = None,
     dry_run: bool = False,
+    installed: bool = False,
 ) -> dict[str, Any]:
     """Build the durable game-proof checklist consumed by UI and scripts."""
 
     acceptance_checks = list(smoke_contract.get("in_game_acceptance_checks") or _authored_acceptance_checks())
     missing = list(missing_checks if missing_checks is not None else ([] if accepted else acceptance_checks))
-    capability_stage = "game_smoke_tested" if accepted else str(smoke_contract.get("capability_stage") or "export_candidate")
-    proof_state = "game_smoke_tested" if accepted else "requires_live_warp_proof"
+    if accepted:
+        capability_stage = "game_smoke_tested"
+        proof_state = "game_smoke_tested"
+    elif installed:
+        capability_stage = "installed_test_build"
+        proof_state = "installed_requires_live_warp_proof"
+    else:
+        capability_stage = str(smoke_contract.get("capability_stage") or "export_candidate")
+        proof_state = "requires_live_warp_proof"
     return {
         "task": "T2605",
         "module_root": str(smoke_contract.get("module_root") or ""),
@@ -1291,6 +1299,7 @@ def _authored_modder_test_plan(
         "module_path": module_path,
         "install": {
             "installed_module_path": install_path,
+            "installed": bool(installed),
             "dry_run": bool(dry_run),
             "proof_manifest_path": proof_manifest_path,
         },
@@ -1606,10 +1615,20 @@ def _write_authored_install_proof_files(
         ]
     )
     checklist_path.write_text("\n".join(checklist_lines), encoding="utf-8")
+    modder_test_plan = _authored_modder_test_plan(
+        smoke_contract=smoke_contract,
+        module_path=export_result.module_path,
+        install_path=install_path,
+        proof_manifest_path=str(proof_manifest_path),
+        dry_run=dry_run,
+        installed=installed,
+    )
     proof_manifest = {
         "task": "T2644",
         "module_root": module_root,
         "game": str(game or "K1").upper(),
+        "capability_stage": modder_test_plan["capability_stage"],
+        "proof_state": modder_test_plan["proof_state"],
         "package": {
             "module_path": export_result.module_path,
             "pack_manifest_path": export_result.manifest_path,
@@ -1637,13 +1656,7 @@ def _write_authored_install_proof_files(
             "warp_command": f"warp {module_root}",
         },
         "acceptance_checks": list(smoke_contract.get("in_game_acceptance_checks") or ()),
-        "modder_test_plan": _authored_modder_test_plan(
-            smoke_contract=smoke_contract,
-            module_path=export_result.module_path,
-            install_path=install_path,
-            proof_manifest_path=str(proof_manifest_path),
-            dry_run=dry_run,
-        ),
+        "modder_test_plan": modder_test_plan,
         "t2601_smoke_contract": smoke_contract,
         "steps": steps,
         "warnings": warnings,
@@ -1927,6 +1940,8 @@ def record_authored_module_game_proof(request: AuthoredModuleGameProofRequest) -
     proof["manual_proof_required"] = not accepted
     proof["game_tested"] = accepted
     contract = proof.get("t2601_smoke_contract")
+    install = proof.get("install") if isinstance(proof.get("install"), dict) else {}
+    installed = bool(install.get("installed") or str(install.get("installed_module_path") or "").strip())
     if isinstance(contract, dict):
         contract["game_tested"] = accepted
         contract["proof_required"] = not accepted
@@ -1940,8 +1955,11 @@ def record_authored_module_game_proof(request: AuthoredModuleGameProofRequest) -
             evidence_path=request.evidence_path,
             accepted=accepted,
             missing_checks=missing,
-            dry_run=bool((proof.get("install") or {}).get("dry_run")),
+            dry_run=bool(install.get("dry_run")),
+            installed=installed,
         )
+        proof["capability_stage"] = proof["modder_test_plan"]["capability_stage"]
+        proof["proof_state"] = proof["modder_test_plan"]["proof_state"]
     if accepted:
         proof["completed_at"] = tested_at
     proof_manifest_path.write_text(json.dumps(proof, indent=2), encoding="utf-8")
