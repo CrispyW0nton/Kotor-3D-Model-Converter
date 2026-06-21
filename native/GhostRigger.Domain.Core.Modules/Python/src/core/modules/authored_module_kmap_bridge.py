@@ -460,7 +460,17 @@ def _transform_payload(transform: PrimitiveTransform) -> dict[str, Any]:
     }
 
 
-def _base_primitive_payload(primitive: FloorPrimitive | WallPrimitive | CubePrimitive | RampPrimitive | StairsPrimitive | CylinderPrimitive | ArchPrimitive | PlacedRoomPrimitive) -> dict[str, Any]:
+def _base_primitive_payload(
+    primitive: FloorPrimitive
+    | WallPrimitive
+    | CubePrimitive
+    | RampPrimitive
+    | StairsPrimitive
+    | CylinderPrimitive
+    | DoorFramePrimitive
+    | ArchPrimitive
+    | PlacedRoomPrimitive,
+) -> dict[str, Any]:
     transform: PrimitiveTransform | None = None
     instance_name = ""
     if isinstance(primitive, PlacedRoomPrimitive):
@@ -526,6 +536,18 @@ def _base_primitive_payload(primitive: FloorPrimitive | WallPrimitive | CubePrim
             "radius": float(primitive.radius),
             "height": float(primitive.height),
             "segments": int(primitive.segments),
+            "center": _vec3_payload(primitive.center),
+            "material": _material_payload(primitive.material),
+        }
+    elif isinstance(primitive, DoorFramePrimitive):
+        payload = {
+            "type": "door_frame",
+            "name": primitive.name,
+            "width": float(primitive.width),
+            "height": float(primitive.height),
+            "jamb_width": float(primitive.jamb_width),
+            "lintel_height": float(primitive.lintel_height),
+            "depth": float(primitive.depth),
             "center": _vec3_payload(primitive.center),
             "material": _material_payload(primitive.material),
         }

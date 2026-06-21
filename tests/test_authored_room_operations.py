@@ -1842,7 +1842,7 @@ def test_t2908_controller_adds_plane_composition_primitive_and_generates_wok() -
     assert not build.blocking_issues
 
 
-def test_t2908_controller_adds_door_frame_shelf_alias_as_arch_primitive() -> None:
+def test_t2908_controller_adds_door_frame_and_arch_as_separate_primitives() -> None:
     _install_native_payload_paths()
 
     from src.core.modules.authored_module_export import build_authored_module
@@ -1858,20 +1858,31 @@ def test_t2908_controller_adds_door_frame_shelf_alias_as_arch_primitive() -> Non
         primitive_name="grdoor_room01_frame",
         translation=(0.0, 4.0, 0.0),
     )
+    arch_result = controller.add_authored_room_primitive(
+        primitive_kind="arch",
+        primitive_name="grdoor_room01_curved_entry",
+        translation=(0.0, -4.0, 0.0),
+    )
     payload = controller.project.extra_sections["authored_module"]
     authored = authored_project_from_kmap_payload(payload)
     build = build_authored_module(authored)
     primitive_payload = payload["rooms"][0]["primitive"]
     frame_payload = next(item for item in primitive_payload["primitives"] if item["name"] == "grdoor_room01_frame")
+    arch_payload = next(item for item in primitive_payload["primitives"] if item["name"] == "grdoor_room01_curved_entry")
     frame_row = next(row for row in controller.authored_room_primitive_transforms() if row.primitive_name == "grdoor_room01_frame")
+    arch_row = next(row for row in controller.authored_room_primitive_transforms() if row.primitive_name == "grdoor_room01_curved_entry")
 
     assert result.readiness is not None
-    assert result.readiness.can_preview is True
-    assert frame_payload["type"] == "arch"
+    assert arch_result.readiness is not None
+    assert frame_payload["type"] == "door_frame"
     assert frame_payload["transform"]["translation"] == [0.0, 4.0, 0.0]
-    assert frame_row.primitive_type == "arch"
+    assert frame_row.primitive_type == "door_frame"
     assert frame_row.supports_walkmesh_surface is False
-    assert {dimension.key for dimension in frame_row.dimensions} == {"width", "height", "frame_thickness", "depth", "segments"}
+    assert {dimension.key for dimension in frame_row.dimensions} == {"width", "height", "jamb_width", "lintel_height", "depth"}
+    assert arch_payload["type"] == "arch"
+    assert arch_payload["transform"]["translation"] == [0.0, -4.0, 0.0]
+    assert arch_row.primitive_type == "arch"
+    assert {dimension.key for dimension in arch_row.dimensions} == {"width", "height", "frame_thickness", "depth", "segments"}
     assert not build.blocking_issues
     assert ("grdoor_room01", "mdl") in build.resources
 

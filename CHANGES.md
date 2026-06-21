@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Serializes Door Frame Tool Additions
+
+Owner: LordVaderCW
+Task: T2601 / T2908
+Subsystem: Map Studio / KMAP primitive serialization and controller contracts
+Intersects: Domain Core Modules KMAP bridge, ModuleMeshes mirror package, and authored room operations tests.
+
+- Added `DoorFramePrimitive` serialization to the authored KMAP bridge so the Level Editor/controller path can persist rectangular door frames created from the Map Studio tool belt.
+- Updated the controller contract test to verify rectangular `door_frame` and curved `arch` primitives remain separate after adding them through the workflow controller.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_kmap_bridge.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_kmap_bridge.py tests/test_authored_room_operations.py`; `python -m pytest tests/test_authored_room_operations.py::test_t2908_controller_adds_door_frame_and_arch_as_separate_primitives -q --basetemp .pytest_tmp_map_studio_door_frame_controller`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Splits Door Frames And Arches
 
 Owner: LordVaderCW
