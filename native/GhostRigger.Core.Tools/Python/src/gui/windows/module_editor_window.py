@@ -1460,6 +1460,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return False
         status_message = route.status_message or f"{route.label} complete."
         if action_key == "universal_transform":
+            overlay_setter = getattr(self.viewport_panel, "set_universal_transform_overlay", None)
+            if callable(overlay_setter):
+                overlay_setter(result)
             dimensions = tuple(getattr(result, "dimensions", ()) or ())
             center = tuple(getattr(result, "center", ()) or ())
             if len(dimensions) == 3:

@@ -92,6 +92,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._placement_markers: dict[str, object] = {}
         self._placement_marker_geometry: object | None = None
         self._terrain_walkability_overlay: object | None = None
+        self._universal_transform_overlay: object | None = None
         self._marker_drag: dict[str, object] | None = None
         self._room_outline_point_drag: dict[str, object] | None = None
         self._room_outline_vertex_snap_candidates: dict[tuple[str, int], tuple[object, ...]] = {}
@@ -442,6 +443,12 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
 
         self._terrain_walkability_overlay = authored_terrain_walkability_overlay
         self._sync_terrain_walkability_overlay(authored_terrain_walkability_overlay)
+
+    def set_universal_transform_overlay(self, overlay=None) -> None:
+        """Refresh the Universal Manipulator overlay for the selected primitive."""
+
+        self._universal_transform_overlay = overlay
+        self._sync_universal_transform_overlay(overlay)
 
     def _toggle_terrain_brush_interaction(self, enabled: bool) -> None:
         self._terrain_brush_context["enabled"] = bool(enabled)
@@ -1210,6 +1217,20 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         triangles = tuple(getattr(authored_terrain_walkability_overlay, "triangles", ()) or ())
         if authored_terrain_walkability_overlay is not None and triangles and callable(setter):
             setter(authored_terrain_walkability_overlay)
+            return
+        if callable(clearer):
+            clearer()
+        elif callable(setter):
+            setter(None)
+
+    def _sync_universal_transform_overlay(self, overlay=None) -> None:
+        setter = getattr(self.viewport, "set_map_studio_universal_transform_overlay", None)
+        clearer = getattr(self.viewport, "clear_map_studio_universal_transform_overlay", None)
+        lines = tuple(getattr(overlay, "edge_lines", ()) or ())
+        handles = tuple(getattr(overlay, "handles", ()) or ())
+        labels = tuple(getattr(overlay, "dimension_labels", ()) or ())
+        if overlay is not None and (lines or handles or labels) and callable(setter):
+            setter(overlay)
             return
         if callable(clearer):
             clearer()

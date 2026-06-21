@@ -58,11 +58,11 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     )
 
     assert universal_ready.enabled is True
-    assert universal_ready.command_method == "authored_room_primitive_universal_transform"
+    assert universal_ready.command_method == "map_studio_universal_transform_overlay"
     assert universal_ready.command_kwargs == {"room_resref": "room_a", "primitive_name": "room_a_cube"}
     assert universal_ready.mutates_kmap is False
     assert universal_ready.stale_outputs == ()
-    assert "KMAP-world selected primitive bounds" in universal_ready.authoring_context
+    assert "transform handles" in universal_ready.authoring_context
 
     snap = resolve_map_studio_tool_belt_action("vertex_snap")
 
@@ -367,6 +367,12 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
     assert universal.coordinate_space == "kmap_world"
     assert universal.dimensions == (1.0, 1.0, 1.0)
     assert universal.center == (0.0, 0.0, 0.5)
+    assert len(universal.corner_points) == 8
+    assert len(universal.edge_lines) == 12
+    assert {label.key for label in universal.dimension_labels} == {"width", "depth", "height"}
+    assert {handle.key for handle in universal.handles} >= {"center", "axis_x", "axis_y", "axis_z"}
+    assert universal.metadata["source"] == "map_studio:universal_transform_overlay"
+    assert universal.metadata["capability_stage"] == "previewable_overlay"
     assert universal.vertex_count == 8
     assert universal.face_count == 12
     assert universal.committed_edit_stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
@@ -737,12 +743,19 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     window_source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
     scene_dispatcher = _read("native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py")
     tools_dispatcher = _read("native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py")
+    scene_overlay = _read("native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_universal_transform_overlay.py")
+    tools_overlay = _read("native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_universal_transform_overlay.py")
+    viewport_panel = _read("native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py")
+    viewport_scene_models = _read("native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/scene_models.py")
+    viewport_overlay_layers = _read("native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py")
+    viewport_rendering = _read("native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py")
     scene_catalog = _read("native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_modeling_tools.py")
     tools_catalog = _read("native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_modeling_tools.py")
 
     assert "from src.core.modules.map_studio_tool_action_dispatch import" in window_source
     assert "resolve_map_studio_tool_belt_action(key, route_context)" in window_source
     assert "execute_map_studio_tool_belt_action(self.controller, action_key, context)" in window_source
+    assert "set_universal_transform_overlay" in window_source
     assert '"duplicate_special",' in window_source
     assert '"shrink_wrap",' in window_source
     assert '"mirror_z",' in window_source
@@ -770,3 +783,18 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert '"boolean_a_minus_b"' in source
         assert '"boolean_b_minus_a"' in source
         assert '"insert_edge_loop"' in source
+        assert 'command_method="map_studio_universal_transform_overlay"' in source
+
+    for source in (scene_overlay, tools_overlay):
+        assert "class MapStudioUniversalTransformOverlay" in source
+        assert "class MapStudioUniversalTransformHandle" in source
+        assert "class MapStudioUniversalTransformDimensionLabel" in source
+        assert "def build_map_studio_universal_transform_overlay" in source
+        assert "previewable_overlay" in source
+
+    assert "def set_universal_transform_overlay" in viewport_panel
+    assert "def _sync_universal_transform_overlay" in viewport_panel
+    assert "def set_map_studio_universal_transform_overlay" in viewport_scene_models
+    assert "def clear_map_studio_universal_transform_overlay" in viewport_scene_models
+    assert "def _draw_map_studio_universal_transform_overlay" in viewport_overlay_layers
+    assert "self._draw_map_studio_universal_transform_overlay(draw, w, h)" in viewport_rendering

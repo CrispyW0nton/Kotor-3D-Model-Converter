@@ -658,6 +658,17 @@ class ViewportSceneModelMixin:
 
         self.set_map_studio_room_outline_edge_highlight(None)
 
+    def set_map_studio_universal_transform_overlay(self, overlay: object | None) -> None:
+        """Display Map Studio Universal Manipulator bounds and dimensions."""
+
+        self._map_studio_universal_transform_overlay = overlay
+        self._request_render(fast=True, reason="map studio universal transform changed", overlay=True)
+
+    def clear_map_studio_universal_transform_overlay(self) -> None:
+        """Remove Map Studio Universal Manipulator bounds and dimensions."""
+
+        self.set_map_studio_universal_transform_overlay(None)
+
     def set_map_studio_terrain_walkability_overlay(self, overlay: object | None) -> None:
         """Display Map Studio terrain WOK walkability classification."""
 

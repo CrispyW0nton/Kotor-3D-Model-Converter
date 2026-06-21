@@ -54,6 +54,7 @@ from .map_studio_tool_belt_preferences import (
 from .map_studio_command_history import MapStudioCommandHistory, MapStudioCommandRestoreResult
 from .map_studio_curve_guides import add_authored_curve_guide as add_curve_guide_to_project
 from .map_studio_curve_guides import authored_curve_guides
+from .map_studio_universal_transform_overlay import build_map_studio_universal_transform_overlay
 from .authored_gameplay_marker_geometry import (
     AuthoredGameplayMarkerGeometry,
     authored_gameplay_marker_geometry_for_project,
@@ -674,6 +675,15 @@ class ModuleEditorController:
             room_resref=room_resref,
             primitive_name=primitive_name,
         )
+
+    def map_studio_universal_transform_overlay(self, *, room_resref: str, primitive_name: str):
+        """Return viewport-ready Universal Manipulator overlay geometry."""
+
+        selection = self.authored_room_primitive_universal_transform(
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+        )
+        return build_map_studio_universal_transform_overlay(selection)
 
     def map_studio_export_object_boundaries(self):
         """Return exportable authored room/object boundaries for the current KMAP."""

@@ -246,7 +246,7 @@ def resolve_map_studio_tool_belt_action(
             action,
             focus_component_mode="object",
             focus_snap_mode="grid",
-            command_method="authored_room_primitive_universal_transform",
+            command_method="map_studio_universal_transform_overlay",
             command_kwargs={
                 "room_resref": ctx.room_resref,
                 "primitive_name": ctx.primitive_name,
@@ -254,7 +254,7 @@ def resolve_map_studio_tool_belt_action(
             mutates_kmap=False,
             authoring_context=(
                 "Universal Manipulator: query exact KMAP-world selected primitive bounds, center, "
-                "width/depth/height, transform, and export-stale impact before committing any edit."
+                "width/depth/height, transform handles, dimension labels, and export-stale impact before committing any edit."
             ),
         )
 

@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Adds Universal Transform Overlay Contract
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Universal Manipulator / Viewport overlay
+Intersects: native payload mirror sync for Scene/Tools/GUI Display Map Studio overlay contract.
+
+- Added a headless Universal Transform overlay model for selected authored room primitives, including KMAP-world corner points, edge lines, handles, and width/depth/height labels derived from the selection contract.
+- Routed the `universal_transform` tool-belt action through the overlay query path so the Level Editor can display Ctrl+T-style transform bounds without mutating KMAP state or hiding geometry math in the window.
+- Wired the overlay into the Map Studio viewport panel and viewport overlay draw layer while keeping the viewport as a renderer of core-authored overlay data.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_universal_transform_overlay.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_universal_transform_overlay.py native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Tools/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/scene_models.py native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py tests/test_map_studio_command_history.py -q --basetemp .pytest_tmp_map_studio_universal_overlay_smoke`.
+
 ### [2026-06-21] Map Studio Adds Universal Transform Selection Contract
 
 Owner: LordVaderCW

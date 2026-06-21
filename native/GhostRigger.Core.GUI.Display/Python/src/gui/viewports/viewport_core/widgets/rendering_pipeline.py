@@ -562,6 +562,7 @@ class ViewportRenderingPipelineMixin:
             self._draw_map_studio_terrain_walkability(draw, w, h)
             self._draw_map_studio_terrain_brush_cursor(draw, w, h)
             self._draw_map_studio_room_outlines(draw, w, h)
+            self._draw_map_studio_universal_transform_overlay(draw, w, h)
             self._draw_map_studio_placement_markers(draw, w, h)
             self._draw_wgpu_helper_markers(draw, w, h)
             if self._ensure_renderer_gimbal_state() and not self._gpu_renderer_supports_native_gizmo_drawing():

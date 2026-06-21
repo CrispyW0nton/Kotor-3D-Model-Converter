@@ -494,6 +494,83 @@ class ViewportOverlayLayersMixin:
             if label:
                 draw.text((cx + 8, cy - 8), label, fill=color)
 
+    def _draw_map_studio_universal_transform_overlay(self, draw, w: int, h: int) -> None:
+        overlay = getattr(self, "_map_studio_universal_transform_overlay", None)
+        if overlay is None:
+            return
+        edge_lines = tuple(getattr(overlay, "edge_lines", ()) or ())
+        handles = tuple(getattr(overlay, "handles", ()) or ())
+        labels = tuple(getattr(overlay, "dimension_labels", ()) or ())
+        if not edge_lines and not handles and not labels:
+            return
+        try:
+            for line in edge_lines:
+                start = self._map_studio_project_point(getattr(line, "start", ()), w, h)
+                end = self._map_studio_project_point(getattr(line, "end", ()), w, h)
+                if start is None or end is None:
+                    continue
+                color = self._map_studio_marker_rgba(getattr(line, "color", "#00e5ff"), 235)
+                points = [(float(start[0]), float(start[1])), (float(end[0]), float(end[1]))]
+                draw.line(points, fill=(0, 0, 0, 190), width=5)
+                draw.line(points, fill=color, width=2)
+
+            for label in labels:
+                start = self._map_studio_project_point(getattr(label, "start", ()), w, h)
+                end = self._map_studio_project_point(getattr(label, "end", ()), w, h)
+                midpoint = self._map_studio_project_point(getattr(label, "midpoint", ()), w, h)
+                if start is None or end is None or midpoint is None:
+                    continue
+                color = self._map_studio_marker_rgba(getattr(label, "color", "#ffd84a"), 245)
+                line_points = [(float(start[0]), float(start[1])), (float(end[0]), float(end[1]))]
+                self._draw_map_studio_dashed_line(draw, line_points[0], line_points[1], color=color, width=2)
+                text = str(getattr(label, "label", "") or "")
+                if text:
+                    text_pos = (float(midpoint[0]) + 8.0, float(midpoint[1]) - 10.0)
+                    try:
+                        text_box = draw.textbbox(text_pos, text)
+                        draw.rectangle(
+                            (text_box[0] - 4, text_box[1] - 2, text_box[2] + 4, text_box[3] + 2),
+                            fill=(0, 0, 0, 175),
+                            outline=(color[0], color[1], color[2], 185),
+                        )
+                    except Exception:
+                        pass
+                    draw.text(text_pos, text, fill=color)
+
+            room_resref = getattr(overlay, "room_resref", "")
+            primitive_name = getattr(overlay, "primitive_name", "")
+            for handle in handles:
+                projected = self._map_studio_project_point(getattr(handle, "position", ()), w, h)
+                if projected is None:
+                    continue
+                cx, cy = float(projected[0]), float(projected[1])
+                color = self._map_studio_marker_rgba(getattr(handle, "color", "#00ff7a"), 245)
+                role = str(getattr(handle, "role", "") or "")
+                radius = 7.0 if role == "translate" else 5.0
+                if role == "corner_scale":
+                    diamond = [(cx, cy - radius), (cx + radius, cy), (cx, cy + radius), (cx - radius, cy)]
+                    draw.polygon(diamond, fill=color, outline=(0, 0, 0, 220))
+                else:
+                    draw.ellipse(
+                        [cx - radius, cy - radius, cx + radius, cy + radius],
+                        fill=color,
+                        outline=(0, 0, 0, 220),
+                        width=2,
+                    )
+                self._add_map_studio_room_primitive_hit_zone(
+                    room_resref,
+                    primitive_name,
+                    kind="circle",
+                    center=(cx, cy),
+                    radius=13.0,
+                    world_center=getattr(overlay, "center", (0.0, 0.0, 0.0)),
+                )
+                label_text = str(getattr(handle, "label", "") or "")
+                if label_text and role != "corner_scale":
+                    draw.text((cx + 8.0, cy - 8.0), label_text, fill=color)
+        except Exception as exc:
+            log.debug("Map Studio universal transform overlay failed: %s", exc)
+
     def _draw_map_studio_room_outline_edge_highlight(self, draw, w: int, h: int) -> None:
         highlight = getattr(self, "_map_studio_room_outline_edge_highlight", None)
         if not isinstance(highlight, dict):
