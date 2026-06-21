@@ -1069,6 +1069,8 @@ def test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes() -> None:
         assert "stage, install, hand off, warp-test, and record game proof" in source
         assert "MAP_STUDIO_TOOL_BELT_ACTIONS" in source
         assert "universal_transform" in source
+        assert "grid_snap" in source
+        assert "Grid Snap" in source
         assert "transform_snap_level" in source
         assert "Ctrl+T" in source
         assert "Hold J" in source

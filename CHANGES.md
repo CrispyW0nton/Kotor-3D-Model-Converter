@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Adds Grid Snap Floor-Plan Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Component editing / Tool belt dispatch
+Intersects: native Scene/Tools authored room operations, ModuleEditorController mirrors, Map Studio tool catalog/dispatcher, Level Editor window, and Map Studio toolbar mirrors.
+
+- Added a distinct `grid_snap_authored_floor_plan_vertices` authored-room operation that snaps selected floor-plan X/Y points to the authored Map Studio grid without welding topology.
+- Routed the `grid_snap` tool-belt action through the controller/dispatcher path with KMAP metadata, component-edit audit payloads, undo labels, readiness/export-stale impact, command search, and visible toolbar exposure.
+- Added focused regression coverage for KMAP geometry changes, topology-safe audit metadata, disabled/ready dispatcher routes, command search, and source contracts for the Level Editor and toolbar.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\module_editor_toolbar.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\module_editor_toolbar.py tests\test_authored_room_operations.py tests\test_map_studio_tool_action_dispatch.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests/test_authored_room_operations.py::test_t2606_controller_grid_snaps_floor_plan_vertices_without_welding tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests/test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher tests/test_map_studio_workflow_panel.py::test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes -q --basetemp .pytest_tmp_map_studio_grid_snap`; `python -m pytest tests/test_authored_room_operations.py::test_t2606_controller_grid_snaps_floor_plan_vertices_without_welding tests/test_authored_room_operations.py::test_t2606_controller_transform_level_snap_records_distinct_kmap_metadata tests/test_map_studio_tool_action_dispatch.py tests/test_map_studio_workflow_panel.py::test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes -q --basetemp .pytest_tmp_map_studio_grid_snap_smoke`.
+
 ### [2026-06-21] Map Studio Promotes Hold-J Transform Level Snap To Headless Command
 
 Owner: LordVaderCW

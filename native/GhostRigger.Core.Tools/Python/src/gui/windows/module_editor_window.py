@@ -1553,7 +1553,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             axis = "x"
         elif key in {"cut", "cut_slice_insert_edges", "insert_edge_loop"} and operation_combo is not None:
             axis = "y" if str(operation_combo.currentData() or "") == "split_y" else "x"
-        elif key in {"mirror", "flatten", "transform_snap_level"}:
+        elif key in {"mirror", "flatten", "grid_snap", "transform_snap_level"}:
             axis_combo = mirror_axis if key == "mirror" else flatten_axis
             if axis_combo is not None:
                 axis = str(axis_combo.currentData() or "x")
@@ -1978,6 +1978,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         key = str(action_key or "").strip()
         tool_by_action = {
             "vertex_snap": "snap_vertices",
+            "grid_snap": "snap_vertices",
             "transform_snap_level": "transform_snap_level",
             "weld": "weld_vertices",
             "flatten": "flatten_vertices",
@@ -1986,6 +1987,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         }
         snap_by_action = {
             "vertex_snap": "vertex",
+            "grid_snap": "grid",
             "transform_snap_level": "level",
             "weld": "vertex",
             "flatten": "grid",
@@ -1997,6 +1999,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 "Vertex snap: move one floor-plan point to another point or room handle "
                 "without welding topology. Hold V previews point snapping; commit through "
                 "Snap Vertex so KMAP, WOK, readiness, and export-stale state update together."
+            ),
+            "grid_snap": (
+                "Grid snap: move selected floor-plan points to the authored Map Studio grid "
+                "without welding topology. Validate room seams, WOK, staged export, and game "
+                "proof after snapping."
             ),
             "weld": (
                 "Weld vertices: merge selected floor-plan points into one topology point "
@@ -2014,6 +2021,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "vertex_snap": (
                 "Map Studio Vertex Snap focused. This moves a point to another point; it does "
                 "not merge topology. Use Weld when the points should become one vertex."
+            ),
+            "grid_snap": (
+                "Map Studio Grid Snap focused. This moves selected floor-plan points to the "
+                "grid; it does not weld topology."
             ),
             "weld": "Map Studio Weld focused. Welding merges topology and can change WOK/room face references.",
             "flatten": "Map Studio Flatten focused. Align selected points before validating room seams and WOK output.",
@@ -2257,6 +2268,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "separate",
             "duplicate_special",
             "vertex_snap",
+            "grid_snap",
             "weld",
             "merge_components",
             "flatten",
@@ -2333,6 +2345,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "fill",
             "fill_hole",
             "vertex_snap",
+            "grid_snap",
             "transform_snap_level",
             "weld",
             "merge_components",
@@ -2419,7 +2432,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 )
                 if tool is not None:
                     tool.setFocus()
-            if key in {"vertex_snap", "transform_snap_level", "weld", "merge_components", "flatten", "mirror", "mirror_x", "mirror_y", "mirror_z", "cleanup"}:
+            if key in {"vertex_snap", "grid_snap", "transform_snap_level", "weld", "merge_components", "flatten", "mirror", "mirror_x", "mirror_y", "mirror_z", "cleanup"}:
                 self._focus_map_studio_vertex_workflow({
                     "merge_components": "weld",
                     "mirror_x": "mirror",

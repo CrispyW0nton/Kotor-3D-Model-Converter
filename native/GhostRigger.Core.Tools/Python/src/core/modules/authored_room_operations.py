@@ -24,6 +24,7 @@ from src.core.geometry.component_editing import (
     mirror_vertices,
     split_face_with_edge,
     snap_vertex_to_vertex,
+    snap_vertices_to_grid,
     transform_snap_vertices_to_level,
     triangulate_faces,
     weld_vertices,
@@ -2730,6 +2731,66 @@ def snap_authored_floor_plan_vertex_to_vertex(
     )
 
 
+def grid_snap_authored_floor_plan_vertices(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    point_indices: tuple[int, ...] | list[int],
+    grid_size: float = 0.1,
+    axes: tuple[str, ...] | list[str] = ("x", "y"),
+) -> AuthoredModuleProject:
+    """Snap selected floor-plan vertices to the authored Map Studio grid.
+
+    Floor-plan vertices are authored in local X/Y room space, so this command
+    intentionally ignores Z even if a caller passes it.  Welding remains a
+    separate topology-changing operation.
+    """
+
+    room_index = _target_room_index(project, room_resref)
+    room = project.rooms[room_index]
+    primitive = _floor_plan_for_room(room)
+    selected = tuple(dict.fromkeys(int(index) for index in point_indices))
+    if len(selected) < 1:
+        raise ValueError("Grid snap requires at least one floor-plan point index.")
+    safe_grid = float(grid_size)
+    if safe_grid <= 0:
+        raise ValueError("Grid snap size must be greater than zero.")
+    axes_tuple = tuple(str(axis or "").strip().lower() for axis in tuple(axes or ("x", "y")))
+    axes_xy = tuple(axis for axis in axes_tuple if axis in {"x", "y"}) or ("x", "y")
+    result = snap_vertices_to_grid(
+        _floor_plan_component_mesh(primitive),
+        selected,
+        grid_size=safe_grid,
+        axes=axes_xy,
+    )
+    audit = audit_component_edit_result(result, component_kind="floor_plan_vertex", affects_walkmesh=True)
+    updated_primitive = replace(
+        primitive,
+        points=_floor_plan_points_from_component_vertices(result.mesh.vertices),
+        metadata={
+            **dict(primitive.metadata),
+            "last_operation": "grid_snap_floor_plan_vertices",
+            "grid_snap_vertices": list(selected),
+            "grid_snap_size": safe_grid,
+            "grid_snap_axes": list(axes_xy),
+            "source": "map_studio:floor_plan_grid_snap",
+            "last_component_edit_audit": _component_edit_audit_payload(audit),
+        },
+    )
+    return _replace_floor_plan_room(
+        project,
+        room_index,
+        updated_primitive,
+        operation="grid_snap_floor_plan_vertices",
+        room_metadata={
+            "grid_snap_vertices": list(selected),
+            "grid_snap_size": safe_grid,
+            "grid_snap_axes": list(axes_xy),
+            "last_component_edit_audit": _component_edit_audit_payload(audit),
+        },
+    )
+
+
 def weld_authored_floor_plan_vertices(
     project: AuthoredModuleProject,
     *,
@@ -3420,6 +3481,7 @@ __all__ = [
     "duplicate_authored_room_composition_primitive",
     "fill_authored_floor_plan_face",
     "flatten_authored_floor_plan_vertices",
+    "grid_snap_authored_floor_plan_vertices",
     "mirror_authored_floor_plan_vertices",
     "move_authored_floor_plan_point",
     "move_authored_room_composition_primitive",

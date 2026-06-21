@@ -180,6 +180,7 @@ _TERRAIN_BRUSH_ACTIONS: dict[str, str] = {
 
 _VERTEX_FOCUS: dict[str, tuple[str, str, str]] = {
     "vertex_snap": ("vertex", "snap_vertices", "vertex"),
+    "grid_snap": ("vertex", "snap_vertices", "grid"),
     "weld": ("vertex", "weld_vertices", "vertex"),
     "merge_components": ("vertex", "weld_vertices", "vertex"),
     "flatten": ("vertex", "flatten_vertices", "grid"),
@@ -734,6 +735,36 @@ def resolve_map_studio_tool_belt_action(
                 "target_room_resref": ctx.target_room_resref,
             },
             mutates_kmap=True,
+        )
+
+    if key == "grid_snap":
+        indices = _clean_indices(ctx.point_indices)
+        if len(indices) < 1:
+            return _route(
+                action,
+                focus_component_mode="vertex",
+                focus_snap_mode="grid",
+                enabled=False,
+                disabled_reason="Grid Snap needs at least one selected floor-plan vertex.",
+            )
+        axes_raw = ctx.metadata.get("axes") or ("x", "y")
+        axes = tuple(str(axis or "").strip().lower() for axis in tuple(axes_raw))
+        return _route(
+            action,
+            focus_component_mode="vertex",
+            focus_snap_mode="grid",
+            command_method="grid_snap_authored_floor_plan_vertices",
+            command_kwargs={
+                "room_resref": ctx.room_resref,
+                "point_indices": indices,
+                "grid_size": float(ctx.metadata.get("grid_size") or 0.1),
+                "axes": axes,
+            },
+            mutates_kmap=True,
+            authoring_context=(
+                "Grid Snap: move selected floor-plan vertices to the authored grid without welding topology; "
+                "KMAP geometry, WOK readiness, staged export, and game proof become stale."
+            ),
         )
 
     if key in {"weld", "merge_components"}:

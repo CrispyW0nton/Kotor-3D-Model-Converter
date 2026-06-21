@@ -524,6 +524,33 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert ready_snap.command_method == "snap_authored_floor_plan_vertex"
     assert ready_snap.command_kwargs["target_room_resref"] == "room_b"
 
+    grid_snap = resolve_map_studio_tool_belt_action("grid_snap")
+
+    assert grid_snap.enabled is False
+    assert "at least one selected" in grid_snap.disabled_reason
+    assert grid_snap.command_method == ""
+
+    ready_grid_snap = resolve_map_studio_tool_belt_action(
+        "grid_snap",
+        MapStudioToolActionContext(
+            room_resref="room_a",
+            point_indices=(1, 2),
+            metadata={"grid_size": 0.25, "axes": ("x", "y", "z")},
+        ),
+    )
+
+    assert ready_grid_snap.enabled is True
+    assert ready_grid_snap.focus_snap_mode == "grid"
+    assert ready_grid_snap.command_method == "grid_snap_authored_floor_plan_vertices"
+    assert ready_grid_snap.command_kwargs == {
+        "room_resref": "room_a",
+        "point_indices": (1, 2),
+        "grid_size": 0.25,
+        "axes": ("x", "y", "z"),
+    }
+    assert ready_grid_snap.mutates_kmap is True
+    assert "without welding topology" in ready_grid_snap.authoring_context
+
     level_snap = resolve_map_studio_tool_belt_action(
         "transform_snap_level",
         MapStudioToolActionContext(
@@ -812,12 +839,14 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     search_all = map_studio_tool_command_search("", limit=0)
     search_walkmesh = map_studio_tool_command_search("walkmesh", limit=5)
     search_v = map_studio_tool_command_search("snap vtx", limit=3)
+    search_grid = map_studio_tool_command_search("grid snap", limit=3)
 
     assert len(search_all) >= 81
     assert search_walkmesh
     assert search_walkmesh[0].key == "walkmesh"
     assert search_walkmesh[0].display_label == "WOK Paint [walkmesh]"
     assert any(result.key == "vertex_snap" for result in search_v)
+    assert any(result.key == "grid_snap" for result in search_grid)
     assert all(result.implemented for result in search_all)
 
 
@@ -1588,6 +1617,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert "execute_map_studio_tool_belt_action(self.controller, action_key, context)" in window_source
     assert "mapStudioVertexSnapShortcut" in window_source
     assert "mapStudioTransformLevelSnapShortcut" in window_source
+    assert '"grid_snap",' in window_source
     assert 'QtGui.QKeySequence("V")' in window_source
     assert 'QtGui.QKeySequence("J")' in window_source
     assert "QtCore.Qt.WidgetWithChildrenShortcut" in window_source
@@ -1637,6 +1667,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="add_authored_room_primitive"' in source
         assert 'command_method="create_authored_room_preset_module"' in source
         assert 'command_method="snap_authored_floor_plan_vertex"' in source
+        assert 'command_method="grid_snap_authored_floor_plan_vertices"' in source
         assert 'command_method="transform_snap_authored_floor_plan_vertices"' in source
         assert 'if key == "light":' in source
         assert "light_room_resref" in source

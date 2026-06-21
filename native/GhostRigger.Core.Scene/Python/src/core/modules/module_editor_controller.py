@@ -109,6 +109,7 @@ from .authored_room_operations import (
     duplicate_authored_room_composition_primitive,
     fill_authored_floor_plan_face,
     flatten_authored_floor_plan_vertices,
+    grid_snap_authored_floor_plan_vertices,
     mirror_authored_floor_plan_vertices,
     move_authored_floor_plan_point,
     move_authored_room_composition_primitive,
@@ -1389,6 +1390,50 @@ class ModuleEditorController:
                 "target_point_index": int(target_point_index),
                 "target_room_resref": target_room_resref,
             },
+        )
+        return self.authored_module_readiness()
+
+    def grid_snap_authored_floor_plan_vertices(
+        self,
+        *,
+        room_resref: str,
+        point_indices: Any,
+        grid_size: float = 0.1,
+        axes: Any = ("x", "y"),
+    ):
+        """Snap authored floor-plan vertices to grid through the domain operation."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        indices = tuple(int(index) for index in tuple(point_indices or ()))
+        axes_tuple = tuple(str(axis or "").strip().lower() for axis in tuple(axes or ("x", "y")))
+        updated = grid_snap_authored_floor_plan_vertices(
+            authored,
+            room_resref=room_resref,
+            point_indices=indices,
+            grid_size=float(grid_size),
+            axes=axes_tuple,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Grid-snapped Map Studio room {room_resref or '(first room)'} floor-plan vertices {indices} to {float(grid_size):g}m; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.grid_snap_vertices",
+            label=f"Grid snap {room_resref or 'room'} vertices",
+            before=before,
+            metadata={"room_resref": room_resref, "point_indices": indices, "grid_size": float(grid_size), "axes": axes_tuple},
         )
         return self.authored_module_readiness()
 

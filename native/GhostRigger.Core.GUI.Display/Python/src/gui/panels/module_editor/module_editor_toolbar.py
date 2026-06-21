@@ -44,6 +44,7 @@ class ModuleEditorToolbar(QtWidgets.QWidget):
         ("bevel", "Bevel", "Focus bevel/inset tools for blockout cleanup."),
         ("bridge", "Bridge", "Focus edge bridge tools for corridors and room joins."),
         ("vertex_snap", "Snap Vtx", "Focus vertex snapping. Hold V previews snap targets."),
+        ("grid_snap", "Grid Snap", "Move selected floor-plan vertices to the authored Map Studio grid without welding topology."),
         ("transform_snap_level", "Level Snap", "Focus transform snapping. Hold J aligns selected vertices or edges to one level."),
         ("weld", "Weld", "Focus topology welding for floor-plan vertices."),
         ("terrain_patch", "Terrain", "Create or focus a terrain patch for sculpting."),
