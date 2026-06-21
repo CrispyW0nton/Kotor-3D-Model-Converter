@@ -314,6 +314,22 @@ def resolve_map_studio_tool_belt_action(
             ),
         )
 
+    if key == "record_proof":
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="grid",
+            command_method="map_studio_game_proof_recording_handoff",
+            mutates_kmap=False,
+            status_message=(
+                "Prepared Map Studio proof-recording defaults; actual game-tested proof requires accepted evidence."
+            ),
+            authoring_context=(
+                "Record Proof: query the staged proof manifest and default acceptance checks before the user "
+                "attaches screenshot or video evidence from an actual KOTOR warp test."
+            ),
+        )
+
     if key == "stage_module":
         output_dir = str(ctx.export_output_dir or "").strip()
         if not output_dir:

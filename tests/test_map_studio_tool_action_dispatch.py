@@ -42,9 +42,10 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert audit.blocking_messages == ()
     assert audit.total_actions >= 80
     assert audit.implemented_actions == audit.total_actions
-    assert audit.command_backed_actions >= 80
+    assert audit.command_backed_actions >= 81
     assert audit.mutating_command_actions >= 73
-    assert audit.query_command_actions >= 7
+    assert audit.query_command_actions >= 8
+    assert audit.studio_workspace_actions == 0
     assert audit.workflow_focus_actions == 0
     assert statuses["cube"].contract_kind == "command_mutates_kmap"
     assert statuses["cube"].command_method == "add_authored_room_primitive"
@@ -93,6 +94,9 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["launch_handoff"].contract_kind == "command_query"
     assert statuses["launch_handoff"].command_method == "map_studio_launch_handoff"
     assert statuses["launch_handoff"].mutates_kmap is False
+    assert statuses["record_proof"].contract_kind == "command_query"
+    assert statuses["record_proof"].command_method == "map_studio_game_proof_recording_handoff"
+    assert statuses["record_proof"].mutates_kmap is False
     assert all(status.in_any_preset for status in audit.statuses)
 
     controller_audit = ModuleEditorController().map_studio_tool_belt_contract_audit()
@@ -232,6 +236,15 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert launch_handoff.mutates_kmap is False
     assert launch_handoff.stale_outputs == ()
     assert "staged proof manifest" in launch_handoff.authoring_context
+
+    record_proof = resolve_map_studio_tool_belt_action("record_proof")
+
+    assert record_proof.enabled is True
+    assert record_proof.command_method == "map_studio_game_proof_recording_handoff"
+    assert record_proof.command_kwargs == {}
+    assert record_proof.mutates_kmap is False
+    assert record_proof.stale_outputs == ()
+    assert "screenshot or video evidence" in record_proof.authoring_context
 
     selected_primitive = resolve_map_studio_tool_belt_action(
         "primitive",
@@ -890,6 +903,14 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert launch_missing.warp_command == "warp grterrain"
     assert controller.command_history.undo_label == "Create authored module grterrain"
 
+    proof_missing = execute_map_studio_tool_belt_action(controller, "record_proof")
+
+    assert proof_missing.ready is False
+    assert "proof manifest" in " ".join(proof_missing.blocking_messages)
+    assert proof_missing.warp_command == "warp grterrain"
+    assert proof_missing.required_checks[-1] == "Screenshot or video evidence is attached"
+    assert controller.command_history.undo_label == "Create authored module grterrain"
+
     stage_result = execute_map_studio_tool_belt_action(
         controller,
         "stage_module",
@@ -915,6 +936,17 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert launch_ready.launch_helper_command == stage_result.launch_helper_command
     assert launch_ready.capability_stage == "installed_for_game_test_handoff"
     assert "screenshot or video proof" in launch_ready.next_action
+    assert controller.command_history.undo_label == "Create authored module grterrain"
+
+    proof_ready = execute_map_studio_tool_belt_action(controller, "record_proof")
+
+    assert proof_ready.ready is True
+    assert proof_ready.module_root == "grterrain"
+    assert proof_ready.game == "K1"
+    assert proof_ready.warp_command == "warp grterrain"
+    assert proof_ready.proof_manifest_path == stage_result.proof_manifest_path
+    assert proof_ready.capability_stage == "installed_for_game_test_recording_handoff"
+    assert "screenshot or video evidence" in proof_ready.summary
     assert controller.command_history.undo_label == "Create authored module grterrain"
 
     modules_dir = tmp_path / "Modules"

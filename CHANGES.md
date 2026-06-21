@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Routes Record Proof Belt Action Through Proof Defaults Query
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Game proof recording handoff
+Intersects: native Scene/Tools Map Studio action dispatch, Level Editor proof dialog, authored-module proof payloads, and export/proof source contracts.
+
+- Added a non-mutating `map_studio_game_proof_recording_handoff` controller query that provides proof-manifest defaults, module/game/warp context, required in-game checks, warnings, blockers, and next action before the UI records proof.
+- Routed the `Record Proof` tool-belt action through the shared Map Studio dispatcher as a command query while preserving the existing dialog path that records proof only after the modder attaches screenshot or video evidence.
+- Updated the Level Editor so both the tool belt and existing proof buttons use the controller defaults instead of reading proof payload details directly from the UI layer.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_contract_audit.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_contract_audit.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_tool_action_dispatch.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_record_proof_belt`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_record_proof_ui`; `git diff --check`; Map Studio tool contract audit now reports 81 command-backed actions, 73 mutating command actions, 8 query actions, 0 studio-workspace actions, and 0 workflow-focus actions.
+
 ### [2026-06-21] Map Studio Routes Launch Handoff Belt Action Through Proof Query
 
 Owner: LordVaderCW

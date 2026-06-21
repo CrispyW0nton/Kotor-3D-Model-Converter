@@ -1749,6 +1749,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 status_message = f"{status_message} Next: {next_action}"
             self._focus_map_studio_export_proof_workspace()
             self._open_map_studio_launch_handoff_dialog_from_summary(result)
+        elif action_key == "record_proof":
+            summary = str(getattr(result, "summary", "") or status_message)
+            blockers = tuple(getattr(result, "blocking_messages", ()) or ())
+            next_action = str(getattr(result, "next_action", "") or "").strip()
+            status_message = f"{summary} {blockers[0]}" if blockers else summary
+            if next_action and not blockers:
+                status_message = f"{status_message} Next: {next_action}"
+            self._focus_map_studio_export_proof_workspace()
+            self._record_game_smoke_proof_from_summary(result)
         if action_key == "universal_transform":
             overlay_setter = getattr(self.viewport_panel, "set_universal_transform_overlay", None)
             if callable(overlay_setter):
@@ -2062,10 +2071,6 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         key = str(getattr(action, "key", "") or "")
         workspace_key = str(getattr(action, "workspace_key", "") or "")
         tool_key = str(getattr(action, "tool_key", "") or "")
-        if key == "record_proof":
-            self._focus_map_studio_export_proof_workspace()
-            self.record_game_smoke_proof()
-            return
         route_context = self._map_studio_tool_action_context(key)
         route = resolve_map_studio_tool_belt_action(key, route_context)
         direct_command_actions = {
@@ -2132,6 +2137,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "stage_module",
             "install_module",
             "launch_handoff",
+            "record_proof",
             "opening",
             "opening_marker",
             "terrain",
@@ -2708,18 +2714,33 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._refresh_all("Authored module game-test install updated.")
 
     def record_game_smoke_proof(self) -> None:
-        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
-        default_manifest = str(payload.get("proof_manifest_path") or "")
+        try:
+            proof_defaults = self.controller.map_studio_game_proof_recording_handoff()
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Record Game Smoke Proof", str(exc))
+            return
+        self._focus_map_studio_export_proof_workspace()
+        self._record_game_smoke_proof_from_summary(proof_defaults)
+
+    def _record_game_smoke_proof_from_summary(self, proof_defaults: Any) -> bool:
+        """Open the proof dialog using the controller's proof-recording defaults."""
+
+        blockers = tuple(getattr(proof_defaults, "blocking_messages", ()) or ())
+        for blocker in blockers:
+            self._log(f"Proof recording setup: {blocker}")
+        for warning in tuple(getattr(proof_defaults, "warnings", ()) or ()):
+            self._log(f"Warning: {warning}")
+        default_manifest = str(getattr(proof_defaults, "proof_manifest_path", "") or "")
         dialog = _MapStudioGameProofDialog(self, proof_manifest_path=default_manifest)
         if dialog.exec() != QtWidgets.QDialog.Accepted:
-            return
+            return False
         values = dialog.values()
         if not values["proof_manifest_path"]:
             QtWidgets.QMessageBox.warning(self, "Record Game Smoke Proof", "Choose the proof manifest written by the Map Studio stage action.")
-            return
+            return False
         if not values["evidence_path"] and not values["allow_missing_evidence"]:
             QtWidgets.QMessageBox.warning(self, "Record Game Smoke Proof", "Choose screenshot or video evidence from the actual KOTOR test.")
-            return
+            return False
         result = self.controller.record_map_studio_game_proof(**values)
         self._log(result.message)
         if getattr(result, "proof_manifest_path", ""):
@@ -2734,7 +2755,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._log(f"Blocking: {issue}")
         if not getattr(result, "ok", False):
             QtWidgets.QMessageBox.warning(self, "Record Game Smoke Proof", result.message)
+            return False
         self._refresh_all("Map Studio game proof updated.")
+        return True
 
     def open_map_studio_launch_handoff(self) -> None:
         try:

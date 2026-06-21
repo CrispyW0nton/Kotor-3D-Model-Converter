@@ -176,6 +176,24 @@ class MapStudioLaunchHandoffSummary:
     capability_stage: str = "installed_for_game_test_handoff"
 
 
+@dataclass(frozen=True)
+class MapStudioGameProofRecordingSummary:
+    """Non-mutating defaults for recording Map Studio in-game proof."""
+
+    ready: bool
+    module_root: str
+    game: str
+    warp_command: str
+    proof_manifest_path: str = ""
+    default_evidence_path: str = ""
+    required_checks: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+    blocking_messages: tuple[str, ...] = ()
+    summary: str = ""
+    next_action: str = ""
+    capability_stage: str = "installed_for_game_test_recording_handoff"
+
+
 class ModuleEditorController:
     def __init__(self, model: ModuleEditorModel | None = None) -> None:
         self.model = model or ModuleEditorModel()
@@ -2842,6 +2860,49 @@ class ModuleEditorController:
             checklist_path=checklist_path,
             resolved_modules_dir=resolved_modules_dir,
             resolved_game_root_dir=resolved_game_root_dir,
+            warnings=tuple(warnings),
+            blocking_messages=tuple(blocking),
+            summary=summary,
+            next_action=next_action,
+        )
+
+    def map_studio_game_proof_recording_handoff(self) -> MapStudioGameProofRecordingSummary:
+        """Return default proof-recording inputs without mutating project state."""
+
+        launch = self.map_studio_launch_handoff()
+        proof_manifest_path = str(getattr(launch, "proof_manifest_path", "") or "").strip()
+        warnings = list(getattr(launch, "warnings", ()) or ())
+        blocking = list(getattr(launch, "blocking_messages", ()) or ())
+        if proof_manifest_path and not Path(proof_manifest_path).is_file():
+            if not any(proof_manifest_path in item for item in blocking):
+                blocking.append(f"Proof manifest does not exist: {proof_manifest_path}")
+        if not proof_manifest_path:
+            blocking.append("Choose the proof manifest written by Stage .mod or Install Test before recording game proof.")
+        required_checks = (
+            "`warp` loads the generated module in KOTOR",
+            "Player appears on the generated floor, not in void",
+            "Authored/test placeable appears where expected",
+            "Player can walk across the generated floor",
+            "Screenshot or video evidence is attached",
+        )
+        ready = len(blocking) == 0
+        summary = (
+            f"Proof recording ready for {launch.game}:{launch.module_root or '<module>'}; attach screenshot or video evidence."
+            if ready
+            else "Proof recording needs a staged Map Studio proof manifest before it can mark the module game-tested."
+        )
+        next_action = (
+            "Select the KOTOR screenshot/video evidence, confirm the in-game checks, then record proof."
+            if ready
+            else "Use Stage .mod or Install Test first, or browse to an existing proof manifest in the Record Proof dialog."
+        )
+        return MapStudioGameProofRecordingSummary(
+            ready=ready,
+            module_root=launch.module_root,
+            game=launch.game,
+            warp_command=launch.warp_command,
+            proof_manifest_path=proof_manifest_path,
+            required_checks=required_checks,
             warnings=tuple(warnings),
             blocking_messages=tuple(blocking),
             summary=summary,
