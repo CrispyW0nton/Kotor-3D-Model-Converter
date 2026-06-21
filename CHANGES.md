@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Routes Install Test Belt Action Through Export Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Safe install handoff
+Intersects: native Scene/Tools Map Studio action dispatch, Level Editor install workflow, authored-module staging service, and export/proof source contracts.
+
+- Routed the `Install Test` tool-belt action through the shared Map Studio dispatcher as a non-mutating `stage_authored_module` install-candidate command instead of a window-only shortcut.
+- Added the target KOTOR Modules folder to the shared export action context and preserved the existing user-facing overwrite/backup confirmation before an install candidate is prepared.
+- Reused the authored-module staging log path so package, manifest, install, backup, checklist, proof manifest, warning, and blocker details are reported consistently from both the tool belt and Export panel.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_contract_audit.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_contract_audit.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_tool_action_dispatch.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_install_belt`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_install_ui`; Map Studio tool contract audit now reports 79 command-backed actions, 73 mutating command actions, 6 query actions, 2 studio-workspace actions, and 0 workflow-focus actions.
+
 ### [2026-06-21] Map Studio Routes Stage Module Belt Action Through Export Candidate Command
 
 Owner: LordVaderCW

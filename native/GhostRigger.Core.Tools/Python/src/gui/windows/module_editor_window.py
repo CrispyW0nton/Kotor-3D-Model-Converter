@@ -383,6 +383,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.theme_manager = theme_manager or getattr(parent, "theme_manager", None)
         self.layout_manager = layout_manager or getattr(parent, "layout_manager", None)
         self._last_output_dir = ""
+        self._last_game_modules_dir = ""
+        self._last_map_studio_install_overwrite = False
         self._library_rows: list[dict[str, Any]] = []
         self._map_studio_workspace_modes: dict[str, Any] = {}
         self._map_studio_custom_belt_keys: tuple[str, ...] = ()
@@ -1609,7 +1611,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             ),
             export_output_dir=str(getattr(self, "_last_output_dir", "") or "").strip(),
             export_dry_run=self._map_studio_export_dry_run_enabled(),
-            export_overwrite=False,
+            export_overwrite=bool(getattr(self, "_last_map_studio_install_overwrite", False))
+            if key == "install_module"
+            else False,
+            export_game_modules_dir=str(getattr(self, "_last_game_modules_dir", "") or "").strip(),
             metadata=metadata,
         )
 
@@ -1624,14 +1629,50 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._last_output_dir = path
         return True
 
+    def _map_studio_authored_module_root_for_install(self) -> str:
+        """Return the authored module root used for install overwrite checks."""
+
+        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
+        return str(payload.get("module_root") or getattr(self.project, "name", "") or "authored").strip().lower()
+
+    def _ensure_map_studio_game_modules_dir(self) -> bool:
+        """Prompt for the target KOTOR Modules folder when Install Test needs it."""
+
+        modules_path = str(getattr(self, "_last_game_modules_dir", "") or "").strip()
+        if not modules_path:
+            modules_path = QtWidgets.QFileDialog.getExistingDirectory(self, "Select KOTOR Modules folder", "")
+            if not modules_path:
+                return False
+            self._last_game_modules_dir = modules_path
+        module_root = self._map_studio_authored_module_root_for_install()
+        destination = Path(modules_path) / f"{module_root}.mod"
+        self._last_map_studio_install_overwrite = False
+        if destination.exists():
+            answer = QtWidgets.QMessageBox.question(
+                self,
+                "Install Authored Module",
+                f"{destination.name} already exists in the selected Modules folder.\n\n"
+                "GhostRigger will create a .bak backup before replacing it. Continue?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No,
+            )
+            if answer != QtWidgets.QMessageBox.Yes:
+                return False
+            self._last_map_studio_install_overwrite = True
+        return True
+
     def _execute_map_studio_tool_belt_command(self, action_key: str) -> bool:
         """Execute a tool-belt action when the core dispatcher has a command."""
 
-        if action_key == "stage_module" and not self._ensure_map_studio_export_output_dir(
+        if action_key in {"stage_module", "install_module"} and not self._ensure_map_studio_export_output_dir(
             "Stage authored module for game test"
         ):
             self._focus_map_studio_export_proof_workspace()
-            self.statusBar().showMessage("Stage .mod canceled; choose an output folder to create a package candidate.", 5000)
+            self.statusBar().showMessage("Map Studio export command canceled; choose an output folder to create a package candidate.", 5000)
+            return False
+        if action_key == "install_module" and not self._ensure_map_studio_game_modules_dir():
+            self._focus_map_studio_export_proof_workspace()
+            self.statusBar().showMessage("Install Test canceled; choose a KOTOR Modules folder to prepare an install candidate.", 5000)
             return False
         context = self._map_studio_tool_action_context(action_key)
         route = resolve_map_studio_tool_belt_action(action_key, context)
@@ -1686,6 +1727,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             status_message = str(getattr(result, "message", "") or status_message)
             self._last_output_dir = str(route.command_kwargs.get("output_dir") or self._last_output_dir or "")
             self._log_authored_module_stage_result(result)
+            self._focus_map_studio_export_proof_workspace()
+        elif action_key == "install_module":
+            status_message = str(getattr(result, "message", "") or status_message)
+            self._last_output_dir = str(route.command_kwargs.get("output_dir") or self._last_output_dir or "")
+            self._last_game_modules_dir = str(route.command_kwargs.get("game_modules_dir") or self._last_game_modules_dir or "")
+            self._log_authored_module_stage_result(result)
+            if not bool(getattr(result, "ok", False)):
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Install Authored Module",
+                    str(getattr(result, "message", "") or "Install failed."),
+                )
             self._focus_map_studio_export_proof_workspace()
         if action_key == "universal_transform":
             overlay_setter = getattr(self.viewport_panel, "set_universal_transform_overlay", None)
@@ -2000,10 +2053,6 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         key = str(getattr(action, "key", "") or "")
         workspace_key = str(getattr(action, "workspace_key", "") or "")
         tool_key = str(getattr(action, "tool_key", "") or "")
-        if key == "install_module":
-            self._focus_map_studio_export_proof_workspace()
-            self.install_authored_module(self._map_studio_export_dry_run_enabled())
-            return
         if key == "launch_handoff":
             self._focus_map_studio_export_proof_workspace()
             self.open_map_studio_launch_handoff()
@@ -2076,6 +2125,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "script",
             "validate",
             "stage_module",
+            "install_module",
             "opening",
             "opening_marker",
             "terrain",
@@ -2598,6 +2648,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 self._log(f"Manifest: {export_result.manifest_path}")
         if result.installed_module_path:
             self._log(f"Installed module: {result.installed_module_path}")
+        if result.backup_module_path:
+            self._log(f"Backup module: {result.backup_module_path}")
         if result.checklist_path:
             self._log(f"Game-test checklist: {result.checklist_path}")
         if result.proof_manifest_path:
@@ -2617,8 +2669,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         modules_path = QtWidgets.QFileDialog.getExistingDirectory(self, "Select KOTOR Modules folder", "")
         if not modules_path:
             return
-        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
-        module_root = str(payload.get("module_root") or getattr(self.project, "name", "") or "authored").strip().lower()
+        module_root = self._map_studio_authored_module_root_for_install()
         destination = Path(modules_path) / f"{module_root}.mod"
         overwrite = False
         if destination.exists():
@@ -2644,28 +2695,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(self, "Install Authored Module", str(exc))
             return
         self._last_output_dir = path
-        self._log(result.message)
-        export_result = result.export_result
-        if export_result is not None:
-            if export_result.module_path:
-                self._log(f"Package: {export_result.module_path}")
-            if export_result.manifest_path:
-                self._log(f"Manifest: {export_result.manifest_path}")
-        if result.installed_module_path:
-            self._log(f"Installed module: {result.installed_module_path}")
-        if result.backup_module_path:
-            self._log(f"Backup module: {result.backup_module_path}")
-        if result.checklist_path:
-            self._log(f"Game-test checklist: {result.checklist_path}")
-        if result.proof_manifest_path:
-            self._log(f"Proof manifest: {result.proof_manifest_path}")
-        if export_result is not None:
-            for line in authored_module_smoke_summary_lines(export_result):
-                self._log(line)
-        for warning in result.warnings:
-            self._log(f"Warning: {warning}")
-        for issue in result.blocking_issues:
-            self._log(f"Blocking: {issue}")
+        self._last_game_modules_dir = modules_path
+        self._log_authored_module_stage_result(result)
         if not result.ok:
             QtWidgets.QMessageBox.warning(self, "Install Authored Module", result.message)
         self._refresh_all("Authored module game-test install updated.")

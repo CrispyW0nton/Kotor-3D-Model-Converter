@@ -724,6 +724,8 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "def _focus_map_studio_opening_marker_controls" in window_source
     assert "def _map_studio_export_dry_run_enabled" in window_source
     assert "def _ensure_map_studio_export_output_dir" in window_source
+    assert "def _ensure_map_studio_game_modules_dir" in window_source
+    assert "def _map_studio_authored_module_root_for_install" in window_source
     assert "def _focus_map_studio_export_proof_workspace" in window_source
     assert "def set_authored_module_entry_point" in window_source
     assert '"entry_point",' in window_source
@@ -739,8 +741,10 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "self._log_authored_module_stage_result(result)" in window_source
     assert "export_output_dir=str(getattr(self, \"_last_output_dir\", \"\") or \"\").strip()" in window_source
     assert "export_dry_run=self._map_studio_export_dry_run_enabled()" in window_source
-    assert 'if key == "install_module":' in window_source
-    assert "self.install_authored_module(self._map_studio_export_dry_run_enabled())" in window_source
+    assert "export_game_modules_dir=str(getattr(self, \"_last_game_modules_dir\", \"\") or \"\").strip()" in window_source
+    assert '"install_module",' in window_source
+    assert 'if action_key == "install_module"' in window_source
+    assert "self._last_game_modules_dir = str(route.command_kwargs.get(\"game_modules_dir\")" in window_source
     assert 'if key == "launch_handoff":' in window_source
     assert "self.open_map_studio_launch_handoff()" in window_source
     assert 'if key == "record_proof":' in window_source

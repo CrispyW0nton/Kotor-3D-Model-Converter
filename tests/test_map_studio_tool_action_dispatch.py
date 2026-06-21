@@ -42,9 +42,9 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert audit.blocking_messages == ()
     assert audit.total_actions >= 80
     assert audit.implemented_actions == audit.total_actions
-    assert audit.command_backed_actions >= 78
+    assert audit.command_backed_actions >= 79
     assert audit.mutating_command_actions >= 73
-    assert audit.query_command_actions >= 5
+    assert audit.query_command_actions >= 6
     assert audit.workflow_focus_actions == 0
     assert statuses["cube"].contract_kind == "command_mutates_kmap"
     assert statuses["cube"].command_method == "add_authored_room_primitive"
@@ -87,6 +87,9 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["stage_module"].contract_kind == "command_query"
     assert statuses["stage_module"].command_method == "stage_authored_module"
     assert statuses["stage_module"].mutates_kmap is False
+    assert statuses["install_module"].contract_kind == "command_query"
+    assert statuses["install_module"].command_method == "stage_authored_module"
+    assert statuses["install_module"].mutates_kmap is False
     assert all(status.in_any_preset for status in audit.statuses)
 
     controller_audit = ModuleEditorController().map_studio_tool_belt_contract_audit()
@@ -182,6 +185,41 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert stage_ready.mutates_kmap is False
     assert stage_ready.stale_outputs == ()
     assert "export candidate" in stage_ready.authoring_context
+
+    install_missing_output = resolve_map_studio_tool_belt_action("install_module")
+
+    assert install_missing_output.enabled is False
+    assert "staging output directory" in install_missing_output.disabled_reason
+
+    install_missing_modules = resolve_map_studio_tool_belt_action(
+        "install_module",
+        MapStudioToolActionContext(export_output_dir=".pytest_tmp_stage", export_dry_run=True),
+    )
+
+    assert install_missing_modules.enabled is False
+    assert "KOTOR Modules folder" in install_missing_modules.disabled_reason
+
+    install_ready = resolve_map_studio_tool_belt_action(
+        "install_module",
+        MapStudioToolActionContext(
+            export_output_dir=".pytest_tmp_stage",
+            export_dry_run=True,
+            export_overwrite=True,
+            export_game_modules_dir=".pytest_tmp_modules",
+        ),
+    )
+
+    assert install_ready.enabled is True
+    assert install_ready.command_method == "stage_authored_module"
+    assert install_ready.command_kwargs == {
+        "output_dir": ".pytest_tmp_stage",
+        "dry_run": True,
+        "overwrite": True,
+        "game_modules_dir": ".pytest_tmp_modules",
+    }
+    assert install_ready.mutates_kmap is False
+    assert install_ready.stale_outputs == ()
+    assert "manual warp-test checklist" in install_ready.authoring_context
 
     selected_primitive = resolve_map_studio_tool_belt_action(
         "primitive",
@@ -846,6 +884,25 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert stage_result.export_result.code == "export_candidate"
     assert stage_result.export_result.module_path.endswith(".mod")
     assert "game-tested" not in stage_result.message.lower()
+    assert controller.command_history.undo_label == "Create authored module grterrain"
+
+    modules_dir = tmp_path / "Modules"
+    modules_dir.mkdir()
+    install_result = execute_map_studio_tool_belt_action(
+        controller,
+        "install_module",
+        MapStudioToolActionContext(
+            export_output_dir=str(tmp_path),
+            export_dry_run=True,
+            export_game_modules_dir=str(modules_dir),
+        ),
+    )
+
+    assert install_result.ok is True
+    assert install_result.code == "dry_run"
+    assert install_result.resolved_modules_dir == str(modules_dir)
+    assert install_result.installed_module_path == ""
+    assert any("Dry run:" in warning for warning in install_result.warnings)
     assert controller.command_history.undo_label == "Create authored module grterrain"
 
     controller.undo_map_studio_command()

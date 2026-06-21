@@ -92,6 +92,7 @@ class MapStudioToolActionContext:
     export_output_dir: str = ""
     export_dry_run: bool = True
     export_overwrite: bool = False
+    export_game_modules_dir: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -325,6 +326,46 @@ def resolve_map_studio_tool_belt_action(
             authoring_context=(
                 "Stage .mod: compile the authored KMAP module through the staged export/proof service. "
                 "This creates an export candidate and test checklist, not game-tested proof."
+            ),
+        )
+
+    if key == "install_module":
+        output_dir = str(ctx.export_output_dir or "").strip()
+        modules_dir = str(ctx.export_game_modules_dir or "").strip()
+        if not output_dir:
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="grid",
+                enabled=False,
+                disabled_reason="Install Test needs a staging output directory before it can prepare a module install candidate.",
+            )
+        if not modules_dir:
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="grid",
+                enabled=False,
+                disabled_reason="Install Test needs the target KOTOR Modules folder before it can copy or dry-run an authored .mod.",
+            )
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="grid",
+            command_method="stage_authored_module",
+            command_kwargs={
+                "output_dir": output_dir,
+                "dry_run": bool(ctx.export_dry_run),
+                "overwrite": bool(ctx.export_overwrite),
+                "game_modules_dir": modules_dir,
+            },
+            mutates_kmap=False,
+            status_message=(
+                "Prepared authored module install candidate; live warp proof must still be recorded before calling it game-ready."
+            ),
+            authoring_context=(
+                "Install Test: stage the authored KMAP module, copy or dry-run copy to a chosen KOTOR Modules folder, "
+                "and write the manual warp-test checklist. This is not the same as recorded in-game proof."
             ),
         )
 

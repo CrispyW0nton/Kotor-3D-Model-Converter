@@ -113,6 +113,7 @@ def _rich_context() -> MapStudioToolActionContext:
         export_output_dir=".pytest_tmp_map_studio_stage",
         export_dry_run=True,
         export_overwrite=True,
+        export_game_modules_dir=".pytest_tmp_map_studio_modules",
         metadata={
             "edge_indices": (0, 1),
             "position_policy": "target",
