@@ -382,13 +382,15 @@ def resolve_map_studio_tool_belt_action(
             ),
         )
 
-    if key in {"boolean", "cut_slice_insert_edges"}:
-        operation = "rectangular_cut" if key == "boolean" else "split_x"
+    if key in {"boolean", "cut_slice_insert_edges", "insert_edge_loop"}:
+        operation = "rectangular_cut" if key == "boolean" else "axis_split"
         kwargs: dict[str, Any] = {"operation": operation, "room_resref": ctx.room_resref}
         if operation == "rectangular_cut":
             kwargs.update({"center": tuple(ctx.cut_center), "size": tuple(ctx.cut_size)})
         else:
-            kwargs.update({"axis": _clean_axis(ctx.axis), "coordinate": float(ctx.cut_center[0])})
+            axis = _clean_axis(ctx.axis)
+            coordinate = float(ctx.cut_center[1] if axis == "y" else ctx.cut_center[0])
+            kwargs.update({"axis": axis, "coordinate": coordinate})
         return _route(
             action,
             focus_component_mode="face",
@@ -397,7 +399,10 @@ def resolve_map_studio_tool_belt_action(
             command_kwargs=kwargs,
             mutates_kmap=True,
             authoring_context=(
-                "Cut/boolean: split or subtract simple floor-plan geometry, then cleanup and validate before export."
+                "Cut/Slice/Edge Loop: split simple floor-plan geometry into explicit KOTOR room/export boundaries, "
+                "then cleanup and validate before export."
+                if operation == "axis_split"
+                else "Cut/boolean: split or subtract simple floor-plan geometry, then cleanup and validate before export."
             ),
         )
 

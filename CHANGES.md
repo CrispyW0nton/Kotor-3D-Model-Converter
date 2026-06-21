@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Promotes Insert Edge Loop To Floor-Plan Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Modeling commands / Floor-plan topology
+
+- Marked Insert Edge Loop implemented in the Scene and Tools modeling catalogs and routed the Level Editor action through the shared tool-belt dispatcher.
+- Backed Insert Edge Loop with the existing conservative floor-plan axis-split kernel so it creates two KOTOR-safe authored room/export boundaries, records undo metadata, and marks MDL/MDX/WOK/LYT/VIS/PTH/.mod readiness/proof stale.
+- Updated Slice routing to share the axis-split command path and use the correct X or Y split coordinate from the current Builder context.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py tests/test_map_studio_command_history.py -q --basetemp .pytest_tmp_map_studio_insert_edge_loop`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Adds Duplicate Special Primitive Command
 
 Owner: LordVaderCW

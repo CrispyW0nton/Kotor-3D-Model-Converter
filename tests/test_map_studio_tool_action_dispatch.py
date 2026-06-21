@@ -89,6 +89,35 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert boolean.command_kwargs["center"] == (1.0, 2.0)
     assert boolean.command_kwargs["size"] == (3.0, 4.0)
 
+    slice_y = resolve_map_studio_tool_belt_action(
+        "cut_slice_insert_edges",
+        MapStudioToolActionContext(room_resref="room_a", axis="y", cut_center=(1.0, 2.0)),
+    )
+
+    assert slice_y.enabled is True
+    assert slice_y.command_method == "apply_authored_room_operation"
+    assert slice_y.command_kwargs == {
+        "operation": "axis_split",
+        "room_resref": "room_a",
+        "axis": "y",
+        "coordinate": 2.0,
+    }
+
+    edge_loop = resolve_map_studio_tool_belt_action(
+        "insert_edge_loop",
+        MapStudioToolActionContext(room_resref="room_a", axis="x", cut_center=(1.25, 2.5)),
+    )
+
+    assert edge_loop.enabled is True
+    assert edge_loop.command_method == "apply_authored_room_operation"
+    assert edge_loop.command_kwargs == {
+        "operation": "axis_split",
+        "room_resref": "room_a",
+        "axis": "x",
+        "coordinate": 1.25,
+    }
+    assert "KOTOR room/export boundaries" in edge_loop.authoring_context
+
     duplicate_missing = resolve_map_studio_tool_belt_action("duplicate_special")
 
     assert duplicate_missing.enabled is False
@@ -193,6 +222,32 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
 
     assert len(controller.authored_room_primitive_transforms()) == count_before
 
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="gredge01")
+    room_before_split = controller.authored_floor_plan_room_choices()[0]
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "insert_edge_loop",
+        MapStudioToolActionContext(
+            room_resref=room_before_split.room_resref,
+            axis="x",
+            cut_center=(0.0, 0.0),
+        ),
+    )
+
+    split_rooms = controller.authored_floor_plan_room_choices()
+
+    assert len(split_rooms) == 2
+    assert {room.room_resref for room in split_rooms} == {"gredge01_room_l1", "gredge01_room_r2"}
+    assert controller.can_undo_map_studio_command() is True
+    assert controller.command_history.undo_label == "Apply room operation axis_split"
+
+    controller.undo_map_studio_command()
+
+    restored_rooms = controller.authored_floor_plan_room_choices()
+    assert len(restored_rooms) == 1
+    assert restored_rooms[0].room_resref == room_before_split.room_resref
+
 
 def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -> None:
     window_source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
@@ -217,3 +272,4 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="snap_authored_floor_plan_vertex"' in source
         assert 'command_method="apply_authored_room_operation"' in source
         assert 'command_method="duplicate_authored_room_primitive"' in source
+        assert '"insert_edge_loop"' in source

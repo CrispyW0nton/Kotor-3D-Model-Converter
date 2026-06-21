@@ -408,7 +408,7 @@ _MODELING_TOOLS: tuple[MapStudioModelingTool, ...] = (
         ("edge", "face"),
         "Insert a loop through compatible room or primitive faces for cleaner cuts and bevel support.",
         "Inserted loops must not create sliver WOK faces or broken room seams.",
-        implemented=False,
+        implemented=True,
     ),
     MapStudioModelingTool(
         "cut_slice_insert_edges",
@@ -997,7 +997,7 @@ _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
         "insert_edge_loop",
         "Insert an edge loop through compatible room or primitive faces.",
         "Loop insertion must avoid sliver WOK faces and broken seams.",
-        implemented=False,
+        implemented=True,
     ),
     MapStudioToolBeltAction(
         "cut_slice_insert_edges",
