@@ -1052,6 +1052,16 @@ def test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes() -> None:
     assert "def _activate_map_studio_universal_transform_shortcut" in window_source
     assert "def _focus_map_studio_universal_transform" in window_source
     assert "Universal Manipulator: Ctrl+T displays selected component bounds" in window_source
+    assert "mapStudioVertexSnapShortcut" in window_source
+    assert "mapStudioTransformLevelSnapShortcut" in window_source
+    assert 'QtGui.QKeySequence("V")' in window_source
+    assert 'QtGui.QKeySequence("J")' in window_source
+    assert "QtCore.Qt.WidgetWithChildrenShortcut" in window_source
+    assert 'self._activate_map_studio_modifier_shortcut("vertex_snap")' in window_source
+    assert 'self._activate_map_studio_modifier_shortcut("transform_snap_level")' in window_source
+    assert "def _activate_map_studio_modifier_shortcut" in window_source
+    assert "Hold V: vertex snap mode focused" in window_source
+    assert "Hold J: transform level snap focused" in window_source
     assert "def _refresh_map_studio_tool_index" in window_source
     assert "def _add_selected_map_studio_custom_tool" in window_source
     assert "str(action or \"\").startswith(\"tool_belt:\")" in window_source

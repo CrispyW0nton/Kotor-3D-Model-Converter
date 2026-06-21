@@ -690,6 +690,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.map_studio_universal_transform_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+T"), self)
         self.map_studio_universal_transform_shortcut.setObjectName("mapStudioUniversalTransformShortcut")
         self.map_studio_universal_transform_shortcut.activated.connect(self._activate_map_studio_universal_transform_shortcut)
+        self.map_studio_vertex_snap_shortcut = QtGui.QShortcut(QtGui.QKeySequence("V"), self.viewport_panel)
+        self.map_studio_vertex_snap_shortcut.setObjectName("mapStudioVertexSnapShortcut")
+        self.map_studio_vertex_snap_shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        self.map_studio_vertex_snap_shortcut.activated.connect(
+            lambda: self._activate_map_studio_modifier_shortcut("vertex_snap")
+        )
+        self.map_studio_transform_level_snap_shortcut = QtGui.QShortcut(QtGui.QKeySequence("J"), self.viewport_panel)
+        self.map_studio_transform_level_snap_shortcut.setObjectName("mapStudioTransformLevelSnapShortcut")
+        self.map_studio_transform_level_snap_shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        self.map_studio_transform_level_snap_shortcut.activated.connect(
+            lambda: self._activate_map_studio_modifier_shortcut("transform_snap_level")
+        )
         self.toolbar.actionRequested.connect(self._toolbar_action)
         self.toolbar.viewModeChanged.connect(self.viewport_panel.set_view_mode)
         self.toolbar.selectionModeChanged.connect(self._handle_map_studio_edit_mode_changed)
@@ -1728,6 +1740,30 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 self._handle_map_studio_tool_belt_action(action)
                 return
         self._focus_map_studio_universal_transform()
+
+    def _activate_map_studio_modifier_shortcut(self, action_key: str) -> None:
+        """Route Maya-style viewport modifier shortcuts through Map Studio tools."""
+
+        key = str(action_key or "").strip()
+        if self._execute_map_studio_tool_belt_command(key):
+            return
+        if key == "vertex_snap":
+            self._focus_map_studio_vertex_workflow("vertex_snap")
+            message = (
+                "Hold V: vertex snap mode focused. Select a source and target "
+                "floor-plan vertex, then drag/snap in the viewport."
+            )
+        elif key == "transform_snap_level":
+            self._focus_map_studio_vertex_workflow("transform_snap_level")
+            message = (
+                "Hold J: transform level snap focused. Select two or more "
+                "vertices/edges to align to a shared level."
+            )
+        else:
+            message = f"Map Studio shortcut {key} is not mapped."
+        self.workflow_panel.set_active_authoring_context(message)
+        self.statusBar().showMessage(message, 5000)
+        self._log(message)
 
     def _focus_map_studio_universal_transform(self) -> None:
         """Focus the selected-component Universal Manipulator workflow."""

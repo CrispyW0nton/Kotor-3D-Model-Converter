@@ -1242,6 +1242,14 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert "from src.core.modules.map_studio_tool_action_dispatch import" in window_source
     assert "resolve_map_studio_tool_belt_action(key, route_context)" in window_source
     assert "execute_map_studio_tool_belt_action(self.controller, action_key, context)" in window_source
+    assert "mapStudioVertexSnapShortcut" in window_source
+    assert "mapStudioTransformLevelSnapShortcut" in window_source
+    assert 'QtGui.QKeySequence("V")' in window_source
+    assert 'QtGui.QKeySequence("J")' in window_source
+    assert "QtCore.Qt.WidgetWithChildrenShortcut" in window_source
+    assert 'self._activate_map_studio_modifier_shortcut("vertex_snap")' in window_source
+    assert 'self._activate_map_studio_modifier_shortcut("transform_snap_level")' in window_source
+    assert "def _activate_map_studio_modifier_shortcut" in window_source
     assert "set_universal_transform_overlay" in window_source
     assert '"duplicate_special",' in window_source
     assert '"shrink_wrap",' in window_source

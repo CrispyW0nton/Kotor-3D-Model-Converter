@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Wires Viewport Modifier Shortcuts Through Tool Dispatcher
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Level Editor / Modifier shortcuts
+Intersects: native Tools Level Editor Map Studio shortcut routing and tool-belt source contracts.
+
+- Added viewport-scoped `V` and `J` shortcuts for the Map Studio `Snap Vtx` and `Level Snap` tools, matching the catalog's `Hold V` and `Hold J` Maya-style gestures without stealing keystrokes from text fields.
+- Routed both shortcuts through the shared tool-belt dispatcher first, then focused the vertex workflow with actionable guidance when the selected source/target vertex context is not ready.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_workflow_panel.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_modifier_shortcuts_ui`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_modifier_shortcuts_dispatch`.
+
 ### [2026-06-21] Map Studio Routes Terrain And Walkmesh Belt Actions Through Status Queries
 
 Owner: LordVaderCW
