@@ -108,6 +108,7 @@ from .authored_room_operations import (
     remove_authored_room_composition_primitive,
     separate_authored_room_composition_primitive,
     set_authored_floor_plan_extrusion_settings,
+    set_authored_room_edge_normal_policy,
     set_authored_room_composition_primitive_dimensions,
     set_authored_room_composition_primitive_style,
     set_authored_room_composition_primitive_transform,
@@ -1772,6 +1773,55 @@ class ModuleEditorController:
             label=f"Style primitive {primitive_name}",
             before=before,
             metadata={"room_resref": room_resref, "primitive_name": primitive_name, "texture": texture, "surface_id": surface_id},
+        )
+        return self.authored_module_readiness()
+
+    def set_authored_room_edge_normal_policy(
+        self,
+        *,
+        room_resref: str = "",
+        policy: str,
+        primitive_name: str = "",
+        edge_indices: Any = None,
+    ):
+        """Record soft/hard edge-normal intent for authored Map Studio geometry."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = set_authored_room_edge_normal_policy(
+            authored,
+            room_resref=room_resref,
+            policy=policy,
+            primitive_name=primitive_name,
+            edge_indices=edge_indices,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        normal_policy = str(policy or "").strip().lower()
+        label_word = "Soften" if normal_policy.startswith("soft") else "Harden"
+        self.model.log(
+            f"{label_word}ed Map Studio visual edge-normal policy for {room_resref or '(first room)'}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.edge_normals.set_policy",
+            label=f"{label_word} edges",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "policy": policy,
+                "primitive_name": primitive_name,
+                "edge_indices": tuple(edge_indices or ()),
+            },
         )
         return self.authored_module_readiness()
 

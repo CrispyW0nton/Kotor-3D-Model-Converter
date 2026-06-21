@@ -1060,7 +1060,7 @@ _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
         "soften_edges",
         "Soften selected visual edges.",
         "Softened normals are planned for visual export, not WOK traversal.",
-        implemented=False,
+        implemented=True,
     ),
     MapStudioToolBeltAction(
         "harden_edges",
@@ -1069,7 +1069,7 @@ _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
         "harden_edges",
         "Harden selected visual edges.",
         "Hardened normals are planned for visual export and lightmap seams.",
-        implemented=False,
+        implemented=True,
     ),
     MapStudioToolBeltAction(
         "duplicate_special",

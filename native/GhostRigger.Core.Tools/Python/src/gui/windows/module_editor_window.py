@@ -1779,6 +1779,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "triangulate",
             "normals",
             "reverse_normals",
+            "soften_edges",
+            "harden_edges",
             "mirror",
             "mirror_x",
             "mirror_y",

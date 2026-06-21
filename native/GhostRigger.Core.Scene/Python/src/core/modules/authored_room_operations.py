@@ -1063,6 +1063,117 @@ def set_authored_room_composition_primitive_style(
     raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'.")
 
 
+def _edge_normal_policy_payload(
+    *,
+    policy: str,
+    primitive_name: str = "",
+    edge_indices: Any = None,
+) -> dict[str, Any]:
+    raw_policy = str(policy or "").strip().lower()
+    aliases = {
+        "soft": "soft",
+        "soften": "soft",
+        "soften_edges": "soft",
+        "smooth": "soft",
+        "hard": "hard",
+        "harden": "hard",
+        "harden_edges": "hard",
+        "flat": "hard",
+    }
+    normal_policy = aliases.get(raw_policy)
+    if normal_policy is None:
+        raise ValueError("Edge normal policy must be 'soft' or 'hard'.")
+    target = str(primitive_name or "").strip()
+    indices = [int(index) for index in tuple(edge_indices or ())]
+    scope = "selected_edges" if indices else ("primitive" if target else "all")
+    operation = "soften_edges" if normal_policy == "soft" else "harden_edges"
+    return {
+        "edge_normal_policy": normal_policy,
+        "edge_normal_policy_operation": operation,
+        "edge_normal_policy_scope": scope,
+        "edge_normal_policy_target": target or "all",
+        "edge_normal_policy_edges": indices,
+        "edge_normal_policy_source": "map_studio_tool_belt",
+    }
+
+
+def set_authored_room_edge_normal_policy(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str = "",
+    policy: str,
+    primitive_name: str = "",
+    edge_indices: Any = None,
+) -> AuthoredModuleProject:
+    """Record soft/hard visual edge-normal intent for authored room geometry.
+
+    This is an authored policy command, not a renderer-only toggle.  Later MDL
+    export and viewport-normal baking can consume this metadata while WOK
+    traversal remains validated separately.
+    """
+
+    room_index = _target_room_index(project, room_resref)
+    rooms = list(project.rooms)
+    room = rooms[room_index]
+    payload = _edge_normal_policy_payload(policy=policy, primitive_name=primitive_name, edge_indices=edge_indices)
+    operation = str(payload["edge_normal_policy_operation"])
+    target = str(payload["edge_normal_policy_target"])
+
+    if isinstance(room.primitive, AuthoredRoomComposition) or room.composition is not None:
+        composition = _composition_for_room(room)
+        by_target = dict(composition.metadata.get("edge_normal_policy_by_target") or {})
+        by_target[target] = dict(payload)
+        updated_composition = replace(
+            composition,
+            metadata={
+                **dict(composition.metadata),
+                **payload,
+                "edge_normal_policy_by_target": by_target,
+                "last_operation": operation,
+            },
+        )
+        rooms[room_index] = replace(
+            room,
+            primitive=updated_composition if isinstance(room.primitive, AuthoredRoomComposition) else room.primitive,
+            composition=updated_composition if room.composition is not None else room.composition,
+            metadata={
+                **dict(room.metadata),
+                **payload,
+                "last_operation": operation,
+            },
+        )
+        return _replace_rooms(project, tuple(rooms), operation=f"{operation}:{target}")
+
+    try:
+        primitive = _floor_plan_for_room(room)
+    except ValueError as exc:
+        raise ValueError(
+            "Edge normal policy currently supports authored floor-plan and primitive-composition rooms; "
+            "terrain normals are derived from the heightfield brush pipeline."
+        ) from exc
+
+    updated_primitive = replace(
+        primitive,
+        metadata={
+            **dict(primitive.metadata),
+            **payload,
+            "last_operation": operation,
+        },
+    )
+    rooms[room_index] = replace(
+        room,
+        primitive=updated_primitive,
+        composition=None,
+        metadata={
+            **dict(room.metadata),
+            "primitive": "floor_plan_extrusion",
+            **payload,
+            "last_operation": operation,
+        },
+    )
+    return _replace_rooms(project, tuple(rooms), operation=f"{operation}:{target}")
+
+
 def remove_authored_room_composition_primitive(
     project: AuthoredModuleProject,
     *,
@@ -2933,6 +3044,7 @@ __all__ = [
     "set_authored_floor_plan_wall_opening",
     "set_authored_floor_plan_extrusion_settings",
     "set_authored_room_composition_primitive_dimensions",
+    "set_authored_room_edge_normal_policy",
     "set_authored_room_composition_primitive_style",
     "set_authored_room_composition_primitive_transform",
     "split_authored_floor_plan_face",

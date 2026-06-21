@@ -346,6 +346,26 @@ def resolve_map_studio_tool_belt_action(
             mutates_kmap=True,
         )
 
+    if key in {"soften_edges", "harden_edges"}:
+        policy = "soft" if key == "soften_edges" else "hard"
+        return _route(
+            action,
+            focus_component_mode="edge",
+            focus_snap_mode="grid",
+            command_method="set_authored_room_edge_normal_policy",
+            command_kwargs={
+                "room_resref": ctx.room_resref,
+                "policy": policy,
+                "primitive_name": ctx.primitive_name,
+                "edge_indices": tuple(ctx.metadata.get("edge_indices") or ()),
+            },
+            mutates_kmap=True,
+            authoring_context=(
+                "Edge normals: record visual soft/hard edge intent in authored KMAP state; "
+                "WOK traversal remains validated separately."
+            ),
+        )
+
     if key == "extrude":
         return _route(
             action,

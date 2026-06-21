@@ -147,6 +147,31 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     }
     assert duplicate.mutates_kmap is True
 
+    soften = resolve_map_studio_tool_belt_action(
+        "soften_edges",
+        MapStudioToolActionContext(room_resref="room_a", primitive_name="room_a_wall", metadata={"edge_indices": (1, 2)}),
+    )
+
+    assert soften.enabled is True
+    assert soften.command_method == "set_authored_room_edge_normal_policy"
+    assert soften.command_kwargs == {
+        "room_resref": "room_a",
+        "policy": "soft",
+        "primitive_name": "room_a_wall",
+        "edge_indices": (1, 2),
+    }
+    assert soften.mutates_kmap is True
+    assert "WOK traversal remains validated separately" in soften.authoring_context
+
+    harden = resolve_map_studio_tool_belt_action(
+        "harden_edges",
+        MapStudioToolActionContext(room_resref="room_a"),
+    )
+
+    assert harden.enabled is True
+    assert harden.command_method == "set_authored_room_edge_normal_policy"
+    assert harden.command_kwargs["policy"] == "hard"
+
 
 def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo() -> None:
     _install_native_payload_paths()
@@ -248,6 +273,44 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
     assert len(restored_rooms) == 1
     assert restored_rooms[0].room_resref == room_before_split.room_resref
 
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grnorm01")
+    room_for_normals = controller.authored_floor_plan_room_choices()[0]
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "soften_edges",
+        MapStudioToolActionContext(room_resref=room_for_normals.room_resref, metadata={"edge_indices": (0, 1)}),
+    )
+
+    authored_payload = controller.project.extra_sections["authored_module"]
+    room_payload = authored_payload["rooms"][0]
+    primitive_metadata = room_payload["primitive"]["metadata"]
+
+    assert primitive_metadata["edge_normal_policy"] == "soft"
+    assert primitive_metadata["edge_normal_policy_operation"] == "soften_edges"
+    assert primitive_metadata["edge_normal_policy_scope"] == "selected_edges"
+    assert primitive_metadata["edge_normal_policy_edges"] == [0, 1]
+    assert room_payload["metadata"]["edge_normal_policy"] == "soft"
+    assert controller.command_history.undo_label == "Soften edges"
+
+    controller.undo_map_studio_command()
+
+    restored_payload = controller.project.extra_sections["authored_module"]
+    restored_metadata = restored_payload["rooms"][0]["primitive"]["metadata"]
+    assert "edge_normal_policy" not in restored_metadata
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "harden_edges",
+        MapStudioToolActionContext(room_resref=room_for_normals.room_resref),
+    )
+
+    hard_payload = controller.project.extra_sections["authored_module"]
+    hard_metadata = hard_payload["rooms"][0]["primitive"]["metadata"]
+    assert hard_metadata["edge_normal_policy"] == "hard"
+    assert hard_metadata["edge_normal_policy_operation"] == "harden_edges"
+    assert controller.command_history.undo_label == "Harden edges"
+
 
 def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -> None:
     window_source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
@@ -272,4 +335,5 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="snap_authored_floor_plan_vertex"' in source
         assert 'command_method="apply_authored_room_operation"' in source
         assert 'command_method="duplicate_authored_room_primitive"' in source
+        assert 'command_method="set_authored_room_edge_normal_policy"' in source
         assert '"insert_edge_loop"' in source

@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Adds Edge Normal Policy Commands
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Modeling commands / Edge-normal intent
+
+- Marked Soften and Harden implemented in the Scene and Tools modeling catalogs and routed both Level Editor tool-belt actions through the shared command dispatcher.
+- Added a headless authored edge-normal policy command for floor-plan and primitive-composition rooms, recording soft/hard visual edge intent in KMAP metadata without pretending WOK traversal changes.
+- Wrapped the edge-normal policy command in the Map Studio controller command spine so it records undo metadata and marks MDL/MDX/WOK/LYT/VIS/PTH/.mod readiness/proof stale.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Core.Tools/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Tools/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py tests/test_map_studio_command_history.py -q --basetemp .pytest_tmp_map_studio_edge_normal_policy`.
+
 ### [2026-06-21] Map Studio Promotes Insert Edge Loop To Floor-Plan Command
 
 Owner: LordVaderCW
