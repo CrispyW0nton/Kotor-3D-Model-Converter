@@ -9,6 +9,20 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-21
+
+### [2026-06-21] Map Studio Adds Local Terrain Erase Brush
+
+Owner: LordVaderCW
+Task: T2603 / T2908
+Subsystem: Map Studio / Terrain Builder sculpting workflow
+Intersects: Domain Core Modules terrain service, ModuleMeshes mirror package, Windows Editor Level tool-belt routing.
+
+- Added an implemented Erase / Reset terrain brush that locally blends heightfield samples back toward a baseline height while preserving dirty-region-only live sculpt metadata.
+- Exposed the brush through the Map Studio terrain tool catalog and terrain tool belt so modders can select it like the existing raise, lower, smooth, flatten, plateau, ramp, terrace, pinch, erode, and noise brushes.
+- Updated the Level Editor tool-belt routing and native Python payload manifests so packaged builds can select the erase brush and execute the headless terrain operation.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_terrain_builder.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_authored_terrain_builder.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_authored_terrain_builder.py::test_t2603_terrain_erase_brush_resets_local_dirty_region tests/test_authored_terrain_builder.py::test_t2908_terrain_heightfield_sample_edit_operations tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_terrain_erase`; payload manifest JSON parse; `git diff --check`.
+
 ## 2026-06-20
 
 ### [2026-06-20] Map Studio Selects Floor-Plan Edges In Viewport

@@ -440,6 +440,14 @@ _TERRAIN_BRUSHES: tuple[MapStudioTerrainBrush, ...] = (
         implemented=True,
     ),
     MapStudioTerrainBrush(
+        "erase",
+        "Erase / Reset",
+        "erase",
+        "Brush samples back toward the base terrain height without clearing the whole patch.",
+        "Erase/reset is local and dirty-region scoped; validate WOK slopes again before calling the terrain playable.",
+        implemented=True,
+    ),
+    MapStudioTerrainBrush(
         "plateau",
         "Plateau",
         "plateau",
@@ -802,6 +810,15 @@ _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
         implemented=True,
     ),
     MapStudioToolBeltAction(
+        "sculpt_erase",
+        "Erase",
+        "terrain",
+        "terrain_sculpt",
+        "Select the erase/reset brush to return terrain samples toward the base height.",
+        "Erase is local and safe for live sculpting, but the resulting WOK still needs validation before game proof.",
+        implemented=True,
+    ),
+    MapStudioToolBeltAction(
         "sculpt_plateau",
         "Plateau",
         "terrain",
@@ -1082,6 +1099,7 @@ _TOOL_BELT_PRESETS: tuple[MapStudioToolBeltPreset, ...] = (
             "sculpt_lower",
             "sculpt_smooth",
             "sculpt_flatten",
+            "sculpt_erase",
             "sculpt_plateau",
             "sculpt_ramp",
             "sculpt_terrace",

@@ -261,7 +261,7 @@
       "resource_name": "PYTHON_PAYLOAD_0043",
       "source_path": "src/core/modules/authored_terrain_builder.py",
       "packaged_path": "Python/src/core/modules/authored_terrain_builder.py",
-      "sha256": "3ce2d483d9fb8c53891190812d31b0fef7ef7817a20c3298244b59a7d24152db"
+      "sha256": "74f70738848a8b826d0770ac5e247d4ffceabe09ffb54d4435177b7f2882c500"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0044",
@@ -285,7 +285,7 @@
       "resource_name": "PYTHON_PAYLOAD_0047",
       "source_path": "src/core/modules/map_studio_modeling_tools.py",
       "packaged_path": "Python/src/core/modules/map_studio_modeling_tools.py",
-      "sha256": "fef207bf465df29474e5bf75e2993f37f36315d0c3aa6a7c68681ce90c4c3115"
+      "sha256": "7428f2df994efb6c29cd9c9130e9dd6ff7a1520add85dc07266d36e44f4b3026"
     },
     {
       "resource_name": "PYTHON_PAYLOAD_0048",

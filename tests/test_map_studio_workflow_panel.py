@@ -520,6 +520,7 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert '"sculpt_lower"' in source
         assert '"sculpt_smooth"' in source
         assert '"sculpt_flatten"' in source
+        assert '"sculpt_erase"' in source
         assert '"sculpt_plateau"' in source
         assert '"sculpt_ramp"' in source
         assert '"sculpt_terrace"' in source
@@ -741,6 +742,7 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert '"sculpt_lower": "lower"' in window_source
     assert '"sculpt_smooth": "smooth"' in window_source
     assert '"sculpt_flatten": "flatten"' in window_source
+    assert '"sculpt_erase": "erase"' in window_source
     assert '"sculpt_plateau": "plateau"' in window_source
     assert '"sculpt_ramp": "ramp"' in window_source
     assert '"sculpt_terrace": "terrace"' in window_source

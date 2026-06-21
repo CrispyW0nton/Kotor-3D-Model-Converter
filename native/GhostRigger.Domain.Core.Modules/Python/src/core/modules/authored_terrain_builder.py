@@ -485,7 +485,7 @@ def audit_terrain_brush_stroke_interaction(
 
     op = str(brush or "").strip().lower()
     iteration_multiplier = max(1, int(iterations)) if op in {"smooth", "erode"} else 1
-    if op in {"terrace", "noise", "plateau", "pinch", "ramp"}:
+    if op in {"terrace", "noise", "plateau", "pinch", "ramp", "erase", "reset"}:
         iteration_multiplier = max(1, iteration_multiplier)
     operation_count = max(1, len(affected_cells) * iteration_multiplier)
     estimated_apply_ms = round((operation_count * 0.01) + (len(stroke_points) * 0.02), 3)
@@ -527,14 +527,14 @@ def apply_terrain_brush_stroke(
         raise ValueError("; ".join(validation.blocking_issues))
     stroke_points = _normalise_stroke_points(points)
     op = str(brush or "").strip().lower()
-    if op not in {"raise", "lower", "offset", "flatten", "smooth", "terrace", "noise", "plateau", "pinch", "ramp", "erode"}:
+    if op not in {"raise", "lower", "offset", "flatten", "smooth", "terrace", "noise", "plateau", "pinch", "ramp", "erode", "erase", "reset"}:
         raise ValueError(f"Unsupported terrain brush stroke '{brush}'.")
     rows = [list(item) for item in _height_rows(primitive)]
     dirty_cells: set[tuple[int, int]] = set()
     brush_radius = max(0, int(radius))
     blend = max(0.0, min(1.0, float(strength)))
 
-    if op in {"raise", "lower", "offset", "flatten", "terrace", "noise", "plateau", "pinch", "ramp"}:
+    if op in {"raise", "lower", "offset", "flatten", "terrace", "noise", "plateau", "pinch", "ramp", "erase", "reset"}:
         signed_delta = float(delta)
         if op == "raise":
             signed_delta = abs(signed_delta)
@@ -566,6 +566,11 @@ def apply_terrain_brush_stroke(
                 if op == "flatten":
                     local_blend = max(0.0, min(1.0, blend * weight))
                     rows[row_cursor][column_cursor] = float(rows[row_cursor][column_cursor]) * (1.0 - local_blend) + float(height) * local_blend
+                elif op in {"erase", "reset"}:
+                    local_blend = max(0.0, min(1.0, blend * weight))
+                    current = float(rows[row_cursor][column_cursor])
+                    baseline = float(height) if abs(float(height)) > 1e-6 else 0.0
+                    rows[row_cursor][column_cursor] = current * (1.0 - local_blend) + baseline * local_blend
                 elif op == "terrace":
                     local_blend = max(0.0, min(1.0, blend * weight))
                     current = float(rows[row_cursor][column_cursor])

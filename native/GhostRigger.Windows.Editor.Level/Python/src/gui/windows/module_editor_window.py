@@ -1150,6 +1150,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "sculpt_lower": "lower",
             "sculpt_smooth": "smooth",
             "sculpt_flatten": "flatten",
+            "sculpt_erase": "erase",
             "sculpt_plateau": "plateau",
             "sculpt_ramp": "ramp",
             "sculpt_terrace": "terrace",

@@ -165,6 +165,39 @@ def test_t2908_terrain_heightfield_sample_edit_operations() -> None:
     assert terrain_height_range(flattened) == (0.25, 0.25)
 
 
+def test_t2603_terrain_erase_brush_resets_local_dirty_region() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_terrain_builder import TerrainHeightfieldPrimitive, apply_terrain_brush_stroke
+
+    terrain = TerrainHeightfieldPrimitive(
+        room_resref="grerase_room01",
+        heights=((0.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 0.0)),
+    )
+
+    erased = apply_terrain_brush_stroke(
+        terrain,
+        brush="erase",
+        points=((1, 1, 1.0),),
+        radius=0,
+        height=0.0,
+        strength=1.0,
+    )
+
+    assert erased.heights[1][1] == 0.0
+    assert erased.heights[0][0] == 0.0
+    assert erased.metadata["last_brush"] == "erase"
+    assert erased.metadata["last_dirty_region"] == {
+        "min_row": 1,
+        "max_row": 1,
+        "min_column": 1,
+        "max_column": 1,
+        "changed_sample_count": 1,
+    }
+    assert erased.metadata["dirty_region_only"] is True
+    assert erased.metadata["defer_full_rebuild_until_stroke_end"] is True
+
+
 def test_t2907_terrain_shape_presets_create_readable_heightfields() -> None:
     _install_native_payload_paths()
 
