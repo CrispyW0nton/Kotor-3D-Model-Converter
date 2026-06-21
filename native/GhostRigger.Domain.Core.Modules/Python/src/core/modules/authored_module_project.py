@@ -58,6 +58,41 @@ def authored_resref_blocking_issue(label: str, value: Any) -> str | None:
     return None
 
 
+def _local_transition_tags(placements: AuthoredGameplayPlacement) -> set[str]:
+    tags: set[str] = set()
+    for items in (
+        tuple(getattr(placements, "doors", ()) or ()),
+        tuple(getattr(placements, "triggers", ()) or ()),
+        tuple(getattr(placements, "waypoints", ()) or ()),
+    ):
+        for item in items:
+            tag = str(getattr(item, "tag", "") or "").strip()
+            if tag:
+                tags.add(tag)
+    return tags
+
+
+def _validate_local_transition_targets(placements: AuthoredGameplayPlacement, blocking: list[str]) -> None:
+    local_tags = _local_transition_tags(placements)
+    for kind, items in (
+        ("Door", tuple(getattr(placements, "doors", ()) or ())),
+        ("Trigger", tuple(getattr(placements, "triggers", ()) or ())),
+        ("Waypoint", tuple(getattr(placements, "waypoints", ()) or ())),
+    ):
+        for item in items:
+            linked_to = str(getattr(item, "linked_to", "") or "").strip()
+            linked_module = normalise_resref(getattr(item, "linked_to_module", ""))
+            if not linked_to or linked_module:
+                continue
+            if linked_to in local_tags:
+                continue
+            label = str(getattr(item, "tag", "") or getattr(item, "template_resref", "") or "(unnamed)").strip()
+            blocking.append(
+                f"{kind} {label} links to local destination {linked_to}, but no authored local door, "
+                "trigger, or waypoint has that tag. Add a matching waypoint or set LinkedToModule for a cross-module transition."
+            )
+
+
 @dataclass(frozen=True)
 class AuthoredModuleMetadata:
     """Module-level data that compiles into ARE/IFO/package metadata."""
@@ -175,6 +210,7 @@ def validate_authored_module_project(project: AuthoredModuleProject) -> Authored
     placement_validation = validate_authored_gameplay_placement(project.placements)
     warnings.extend(placement_validation.warnings)
     blocking.extend(placement_validation.blocking_issues)
+    _validate_local_transition_targets(project.placements, blocking)
     lighting_validation = validate_authored_room_lights(project.lights, room_resrefs=seen_rooms)
     warnings.extend(lighting_validation.warnings)
     blocking.extend(lighting_validation.blocking_issues)

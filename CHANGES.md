@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Validates Local Transition Targets
+
+Owner: LordVaderCW
+Task: T2605
+Subsystem: Map Studio / Authored module project validation and transition readiness
+Intersects: Domain Core Modules project validation, ModuleMeshes mirror package, and authored module export tests.
+
+- Added project-level validation for local `LinkedTo` transitions so doors, triggers, and waypoints must point at an authored local door/trigger/waypoint tag unless they explicitly name a destination module.
+- Kept raw GIT serialization and cross-module transition authoring unchanged; this gate only runs when Map Studio validates or export-builds a full authored module project.
+- Added export/readiness regressions proving a missing local transition target blocks export while a matching authored waypoint keeps the module an export candidate.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_project.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_project.py tests/test_authored_module_export.py`; `python -m pytest tests/test_authored_module_export.py::test_t2605_incomplete_door_transition_blocks_authored_export tests/test_authored_module_export.py::test_t2605_complete_door_module_transition_is_export_candidate tests/test_authored_module_export.py::test_t2605_local_door_transition_requires_authored_destination_tag tests/test_authored_module_export.py::test_t2605_local_door_transition_accepts_matching_authored_waypoint -q --basetemp .pytest_tmp_map_studio_local_transition_validation`; `python -m pytest tests/test_authored_gameplay_placements.py::test_t2600_readiness_reports_authored_transitions tests/test_authored_room_operations.py::test_t2601_wall_opening_can_create_linked_transition_marker tests/test_authored_module_export.py::test_t2680_pathing_includes_walkable_spatial_gameplay_anchors -q --basetemp .pytest_tmp_map_studio_local_transition_regression`.
+
 ### [2026-06-21] Map Studio Blocks Incomplete Door Transitions
 
 Owner: LordVaderCW

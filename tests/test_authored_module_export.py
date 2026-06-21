@@ -326,6 +326,78 @@ def test_t2605_complete_door_module_transition_is_export_candidate() -> None:
     assert readiness.can_export_candidate is True
 
 
+def test_t2605_local_door_transition_requires_authored_destination_tag() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_placements import add_authored_gameplay_placement
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grloc01",
+        game="K1",
+    )
+    project = add_authored_gameplay_placement(
+        project,
+        kind="door",
+        template_resref="door_t01",
+        tag="grloc_exit",
+        position=(0.0, 1.0, 0.0),
+        linked_to="wp_missing",
+    ).project
+
+    build = build_authored_module(project)
+    readiness = build_authored_module_readiness(project, packaged_resources=build.resource_summaries)
+
+    joined_blockers = "\n".join(build.blocking_issues + list(readiness.blocking_messages))
+    assert "links to local destination wp_missing" in joined_blockers
+    assert "no authored local door, trigger, or waypoint has that tag" in joined_blockers
+    assert readiness.can_export_candidate is False
+    assert readiness.metadata["transition_references"][0]["status"] == "local_transition"
+
+
+def test_t2605_local_door_transition_accepts_matching_authored_waypoint() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_placements import add_authored_gameplay_placement
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grloc02",
+        game="K1",
+    )
+    project = add_authored_gameplay_placement(
+        project,
+        kind="door",
+        template_resref="door_t01",
+        tag="grloc_exit",
+        position=(0.0, 1.0, 0.0),
+        linked_to="wp_arrive",
+    ).project
+    project = add_authored_gameplay_placement(
+        project,
+        kind="waypoint",
+        template_resref="wp_test",
+        tag="wp_arrive",
+        position=(0.0, 2.0, 0.0),
+    ).project
+
+    build = build_authored_module(project)
+    readiness = build_authored_module_readiness(project, packaged_resources=build.resource_summaries)
+
+    assert not build.blocking_issues
+    assert readiness.metadata["transition_count"] == 1
+    assert readiness.metadata["transition_complete_count"] == 1
+    assert readiness.metadata["transition_incomplete_count"] == 0
+    assert readiness.metadata["transition_references"][0]["status"] == "local_transition"
+    assert readiness.can_export_candidate is True
+
+
 def test_t2907_terrain_preset_exports_walkable_wok_pathing_and_lighting(tmp_path: Path) -> None:
     _install_native_payload_paths()
 
