@@ -259,6 +259,73 @@ def test_t2680_pathing_includes_walkable_spatial_gameplay_anchors() -> None:
     assert ("stm_shop", "utm", "store") in template_keys
 
 
+def test_t2605_incomplete_door_transition_blocks_authored_export() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_placements import add_authored_gameplay_placement
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grtran01",
+        game="K1",
+    )
+    project = add_authored_gameplay_placement(
+        project,
+        kind="door",
+        template_resref="door_t01",
+        tag="grtran_exit",
+        position=(0.0, 1.0, 0.0),
+        linked_to_module="grnext01",
+    ).project
+
+    build = build_authored_module(project)
+    readiness = build_authored_module_readiness(project, packaged_resources=build.resource_summaries)
+
+    joined_blockers = "\n".join(build.blocking_issues + list(readiness.blocking_messages))
+    assert "incomplete transition" in joined_blockers
+    assert "LinkedToModule is set to grnext01" in joined_blockers
+    assert readiness.can_export_candidate is False
+    assert readiness.metadata["transition_incomplete_count"] == 1
+    assert readiness.metadata["transition_references"][0]["status"] == "missing_destination"
+
+
+def test_t2605_complete_door_module_transition_is_export_candidate() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_placements import add_authored_gameplay_placement
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grtran02",
+        game="K1",
+    )
+    project = add_authored_gameplay_placement(
+        project,
+        kind="door",
+        template_resref="door_t01",
+        tag="grtran_exit",
+        position=(0.0, 1.0, 0.0),
+        linked_to="wp_arrive",
+        linked_to_module="grnext01",
+    ).project
+
+    build = build_authored_module(project)
+    readiness = build_authored_module_readiness(project, packaged_resources=build.resource_summaries)
+
+    assert not build.blocking_issues
+    assert readiness.metadata["transition_count"] == 1
+    assert readiness.metadata["transition_complete_count"] == 1
+    assert readiness.metadata["transition_incomplete_count"] == 0
+    assert readiness.metadata["transition_references"][0]["status"] == "module_transition"
+    assert readiness.can_export_candidate is True
+
+
 def test_t2907_terrain_preset_exports_walkable_wok_pathing_and_lighting(tmp_path: Path) -> None:
     _install_native_payload_paths()
 

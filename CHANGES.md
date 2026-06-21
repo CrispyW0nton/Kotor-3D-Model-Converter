@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Blocks Incomplete Door Transitions
+
+Owner: LordVaderCW
+Task: T2605
+Subsystem: Map Studio / Gameplay placement validation and authored module export readiness
+Intersects: Domain Core Modules placement validation, ModuleMeshes mirror package, and authored module export tests.
+
+- Added KOTOR transition validation for authored doors and triggers so partial transition intent blocks export before a broken GIT can be staged.
+- Preserved existing behavior for unlinked door/trigger markers and local `LinkedTo` transitions while blocking `LinkedToModule` or `TransitionDestin` values that have no destination tag/waypoint.
+- Added export/readiness regressions proving incomplete module transitions block `can_export_candidate`, while complete module transitions remain valid export candidates.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_objects.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_objects.py tests/test_authored_module_export.py`; `python -m pytest tests/test_authored_module_export.py::test_t2605_incomplete_door_transition_blocks_authored_export tests/test_authored_module_export.py::test_t2605_complete_door_module_transition_is_export_candidate tests/test_authored_module_export.py::test_t2680_pathing_includes_walkable_spatial_gameplay_anchors -q --basetemp .pytest_tmp_map_studio_transition_validation_final`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Proves Terrain Preset Export Path
 
 Owner: LordVaderCW

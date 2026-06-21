@@ -214,6 +214,30 @@ def _validate_template(kind: str, template_resref: str, blocking: list[str]) -> 
         blocking.append(f"{kind} placement requires a template resref.")
 
 
+def _validate_transition_intent(kind: str, item: Any, blocking: list[str]) -> None:
+    label = str(getattr(item, "tag", "") or getattr(item, "template_resref", "") or "(unnamed)").strip()
+    linked_to = str(getattr(item, "linked_to", "") or "").strip()
+    linked_module = normalise_resource_resref(getattr(item, "linked_to_module", ""))
+    try:
+        destination_type = int(getattr(item, "transition_destination", 0) or 0)
+    except (TypeError, ValueError):
+        blocking.append(f"{kind} {label} has an invalid TransitionDestin value.")
+        return
+    if destination_type < 0:
+        blocking.append(f"{kind} {label} has an invalid negative TransitionDestin value.")
+        return
+    if not linked_to and linked_module:
+        blocking.append(
+            f"{kind} {label} has an incomplete transition: LinkedToModule is set to {linked_module}, "
+            "but LinkedTo/destination tag is missing."
+        )
+    if not linked_to and destination_type:
+        blocking.append(
+            f"{kind} {label} has an incomplete transition: TransitionDestin is set, "
+            "but LinkedTo/destination tag is missing."
+        )
+
+
 def validate_authored_gameplay_placement(placement: AuthoredGameplayPlacement) -> AuthoredGameplayPlacementValidation:
     """Validate authored placement intent before compiling GIT/IFO bytes."""
 
@@ -231,10 +255,12 @@ def validate_authored_gameplay_placement(placement: AuthoredGameplayPlacement) -
         _validate_template("Door", door.template_resref, blocking)
         if not _position_ok(door.position):
             blocking.append(f"Door {door.template_resref or '(missing)'} has an invalid position.")
+        _validate_transition_intent("Door", door, blocking)
     for trigger in placement.triggers:
         _validate_template("Trigger", trigger.template_resref, blocking)
         if not _position_ok(trigger.position):
             blocking.append(f"Trigger {trigger.template_resref or '(missing)'} has an invalid position.")
+        _validate_transition_intent("Trigger", trigger, blocking)
         if not trigger.geometry:
             warnings.append(f"Trigger {trigger.template_resref or trigger.tag or '(unnamed)'} has no polygon geometry yet.")
         for point in trigger.geometry:
