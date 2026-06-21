@@ -159,7 +159,7 @@
             "resource_name": "PYTHON_PAYLOAD_0026",
             "source_path": "src/gui/viewports/viewport_core/widgets/overlay_layers.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py",
-            "sha256": "367f58a2532055ac4bb762b30bb281a31da081a448274f50d2a78754074ea3a8"
+            "sha256": "a7232a111ec5d214dec9c405c94042157555d6c21251e38f3ec1efae4c106dcc"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_0027",
@@ -183,7 +183,7 @@
             "resource_name": "PYTHON_PAYLOAD_0030",
             "source_path": "src/gui/viewports/viewport_core/widgets/scene_models.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/scene_models.py",
-            "sha256": "f919ccbf1731f3c1f354b000baf352e3d265b47997594ba0fa08844e87bb9471"
+            "sha256": "c8e9b6e23d0fb92ce2b392e489dcf150c256cbc549e1a8286fc3a3f88e8ecec0"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_0031",
@@ -219,7 +219,7 @@
             "resource_name": "PYTHON_PAYLOAD_0036",
             "source_path": "src/gui/viewports/viewport_core/widgets/viewport_widget.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py",
-            "sha256": "41d43eb22869060557de4fca1178d8f6a9e475206eef91b9f6801134b53365ea"
+            "sha256": "2ddd7f7fa1b8c255afdff8668d64681e9aca831b07e2deffde2d6e3b47e114a2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_0037",

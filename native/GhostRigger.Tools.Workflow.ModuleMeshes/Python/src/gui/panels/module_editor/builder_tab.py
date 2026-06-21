@@ -1306,6 +1306,56 @@ class BuilderTab(QtWidgets.QWidget):
             return str(data.get("room_resref") or "").strip()
         return ""
 
+    @staticmethod
+    def _select_combo_room_resref(combo: QtWidgets.QComboBox, room_resref: str) -> bool:
+        room = str(room_resref or "").strip()
+        if not room:
+            return False
+        for index in range(combo.count()):
+            data = combo.itemData(index)
+            if isinstance(data, dict) and str(data.get("room_resref") or "").strip() == room:
+                combo.setCurrentIndex(index)
+                return True
+        return False
+
+    @staticmethod
+    def _set_spinbox_clamped(spinbox: QtWidgets.QSpinBox, value: int) -> None:
+        spinbox.setValue(max(int(spinbox.minimum()), min(int(value), int(spinbox.maximum()))))
+
+    def select_floor_plan_edge(self, room_resref: str, edge_index: int) -> bool:
+        """Select a floor-plan edge across bridge, opening, and edge-extrude tools."""
+
+        room = str(room_resref or "").strip()
+        edge = int(edge_index)
+        if not room or edge < 0:
+            return False
+
+        opening_selected = self._select_combo_room_resref(self.floorPlanOpeningRoomComboBox, room)
+        bridge_selected = self._select_combo_room_resref(self.floorPlanBridgeFirstRoomComboBox, room)
+        operation_index = self.roomOperationComboBox.findData("edge_extrude")
+        operation_selected = operation_index >= 0
+        if operation_selected:
+            self.roomOperationComboBox.setCurrentIndex(operation_index)
+
+        self._update_floor_plan_opening_controls()
+        self._update_floor_plan_bridge_controls()
+        self._update_operation_controls()
+        self._set_spinbox_clamped(self.floorPlanOpeningEdgeSpinBox, edge)
+        self._set_spinbox_clamped(self.floorPlanBridgeFirstEdgeSpinBox, edge)
+        self._set_spinbox_clamped(self.operationEdgeIndexSpinBox, edge)
+        self._update_floor_plan_opening_controls()
+        self._update_floor_plan_bridge_controls()
+        self._update_operation_controls()
+
+        message = (
+            f"Selected edge {edge} in {room}. Bridge, Wall Opening, and Edge Extrude now target this floor-plan edge."
+        )
+        self.modelingStatusLabel.setText(message)
+        self.modelingContextChanged.emit(
+            f"Edge mode: selected {room} edge {edge} for bridge/opening/extrude workflows."
+        )
+        return bool(opening_selected or bridge_selected or operation_selected)
+
     def set_floor_plan_room_choices(self, rooms) -> None:
         """Populate floor-plan room choices for Builder boolean operations."""
 

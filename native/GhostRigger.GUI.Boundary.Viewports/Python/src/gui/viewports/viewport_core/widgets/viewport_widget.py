@@ -252,11 +252,13 @@ class QtViewportWidget(
         self._skip_overlay_pixmap_update = False
         self._map_studio_room_outline_geometry = None
         self._map_studio_room_outline_snap_highlight = None
+        self._map_studio_room_outline_edge_highlight = None
         self._map_studio_marker_geometry = None
         self._map_studio_terrain_walkability_overlay = None
         self._map_studio_terrain_brush_cursor = None
         self._map_studio_marker_hit_zones: list[dict[str, object]] = []
         self._map_studio_room_outline_hit_zones: list[dict[str, object]] = []
+        self._map_studio_room_outline_edge_hit_zones: list[dict[str, object]] = []
         self._map_studio_room_primitive_hit_zones: list[dict[str, object]] = []
         self._gpu_texture_snapshot_key = None
         self._gpu_texture_snapshot_cache: dict = {}

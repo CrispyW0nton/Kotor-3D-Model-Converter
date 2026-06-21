@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-20
 
+### [2026-06-20] Map Studio Selects Floor-Plan Edges In Viewport
+
+Owner: LordVaderCW
+Task: T2601 / T2908
+Subsystem: Map Studio / Level Editor viewport and Builder edge workflow
+Intersects: GUI Boundary Viewports, GUI Boundary Panels, Windows Editor Level, and ModuleMeshes mirror package.
+
+- Added clickable authored room floor-plan edge hit zones in the Level Editor viewport, including a visible selected-edge highlight overlay.
+- Routed selected floor-plan edges into the Builder tab so Bridge, Wall Opening, and Edge Extrude controls target the same room edge the modder clicked in the viewport.
+- Mirrored the edge-selection UI contracts through the packaged GUI Boundary and ModuleMeshes payloads so native builds receive the same behavior.
+- Verification: `python -m py_compile native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/scene_models.py native/GhostRigger.GUI.Boundary.Viewports/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/builder_tab.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_room_outline_overlay.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_room_outline_overlay.py tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt tests/test_map_studio_workflow_panel.py::test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract -q --basetemp .pytest_tmp_map_studio_edge_select`; payload manifest JSON parse; `git diff --check`.
+
 ### [2026-06-20] Map Studio Highlights Hold-V Vertex Snap Targets
 
 Owner: LordVaderCW

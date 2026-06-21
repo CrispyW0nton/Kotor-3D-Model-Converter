@@ -65,6 +65,18 @@ class ViewportOverlayLayersMixin:
         zone["point_index"] = int(point_index)
         zones.append(zone)
 
+    def _add_map_studio_room_outline_edge_hit_zone(self, room_resref: object, edge_index: int, **zone: object) -> None:
+        room = str(room_resref or "")
+        if not room:
+            return
+        zones = getattr(self, "_map_studio_room_outline_edge_hit_zones", None)
+        if zones is None:
+            zones = []
+            self._map_studio_room_outline_edge_hit_zones = zones
+        zone["room_resref"] = room
+        zone["edge_index"] = int(edge_index)
+        zones.append(zone)
+
     def _add_map_studio_room_primitive_hit_zone(self, room_resref: object, primitive_name: object, **zone: object) -> None:
         room = str(room_resref or "")
         primitive = str(primitive_name or "")
@@ -122,6 +134,35 @@ class ViewportOverlayLayersMixin:
                     int(zone.get("point_index", -1)),
                     (float(point[0]), float(point[1]), float(point[2])),
                 )
+        return ()
+
+    def map_studio_room_outline_edge_at_screen(
+        self,
+        x: float,
+        y: float,
+    ) -> tuple[str, int, tuple[float, float, float], tuple[float, float, float]] | tuple[()]:
+        """Return the authored room outline edge under a viewport screen point."""
+
+        px = float(x)
+        py = float(y)
+        for zone in reversed(tuple(getattr(self, "_map_studio_room_outline_edge_hit_zones", ()) or ())):
+            ax, ay = zone.get("start", (0.0, 0.0))
+            bx, by = zone.get("end", (0.0, 0.0))
+            tolerance = float(zone.get("tolerance", 0.0) or 0.0)
+            if self._map_studio_distance_to_segment(px, py, float(ax), float(ay), float(bx), float(by)) > tolerance:
+                continue
+            world_start = tuple(zone.get("world_start", (0.0, 0.0, 0.0)))
+            world_end = tuple(zone.get("world_end", (0.0, 0.0, 0.0)))
+            if len(world_start) < 3:
+                world_start = (0.0, 0.0, 0.0)
+            if len(world_end) < 3:
+                world_end = (0.0, 0.0, 0.0)
+            return (
+                str(zone.get("room_resref", "") or ""),
+                int(zone.get("edge_index", -1)),
+                (float(world_start[0]), float(world_start[1]), float(world_start[2])),
+                (float(world_end[0]), float(world_end[1]), float(world_end[2])),
+            )
         return ()
 
     def map_studio_marker_at_screen(self, x: float, y: float) -> str:
@@ -245,6 +286,7 @@ class ViewportOverlayLayersMixin:
 
     def _draw_map_studio_room_outlines(self, draw, w: int, h: int) -> None:
         self._map_studio_room_outline_hit_zones = []
+        self._map_studio_room_outline_edge_hit_zones = []
         self._map_studio_room_primitive_hit_zones = []
         geometry = getattr(self, "_map_studio_room_outline_geometry", None)
         if geometry is None:
@@ -281,6 +323,18 @@ class ViewportOverlayLayersMixin:
                     draw.line(closed, fill=color, width=width)
                 if role == "floor":
                     room_resref = getattr(polygon, "room_resref", "")
+                    for edge_index, (start_point, end_point, screen_start, screen_end) in enumerate(
+                        zip(points, points[1:] + points[:1], projected, projected[1:] + projected[:1])
+                    ):
+                        self._add_map_studio_room_outline_edge_hit_zone(
+                            room_resref,
+                            edge_index,
+                            start=(float(screen_start[0]), float(screen_start[1])),
+                            end=(float(screen_end[0]), float(screen_end[1])),
+                            tolerance=8.0,
+                            world_start=start_point,
+                            world_end=end_point,
+                        )
                     for index, (point, projected_point) in enumerate(zip(points, projected)):
                         sx, sy = float(projected_point[0]), float(projected_point[1])
                         self._add_map_studio_room_outline_hit_zone(
@@ -310,6 +364,7 @@ class ViewportOverlayLayersMixin:
                 else:
                     draw.line([(start[0], start[1]), (end[0], end[1])], fill=(0, 0, 0, 150), width=width + 2)
                     draw.line([(start[0], start[1]), (end[0], end[1])], fill=color, width=width)
+            self._draw_map_studio_room_outline_edge_highlight(draw, w, h)
             self._draw_map_studio_room_primitive_handles(draw, primitive_handles, w, h)
             self._draw_map_studio_room_outline_snap_highlight(draw, w, h)
         except Exception as exc:
@@ -438,6 +493,46 @@ class ViewportOverlayLayersMixin:
             label = str(getattr(handle, "primitive_type", "") or "")
             if label:
                 draw.text((cx + 8, cy - 8), label, fill=color)
+
+    def _draw_map_studio_room_outline_edge_highlight(self, draw, w: int, h: int) -> None:
+        highlight = getattr(self, "_map_studio_room_outline_edge_highlight", None)
+        if not isinstance(highlight, dict):
+            return
+        start = self._map_studio_project_point(highlight.get("world_start", ()), w, h)
+        end = self._map_studio_project_point(highlight.get("world_end", ()), w, h)
+        if start is None or end is None:
+            return
+        try:
+            sx, sy = float(start[0]), float(start[1])
+            ex, ey = float(end[0]), float(end[1])
+            color = self._map_studio_marker_rgba(highlight.get("color", "#00e5ff"), 245)
+            draw.line([(sx, sy), (ex, ey)], fill=(0, 0, 0, 220), width=8)
+            draw.line([(sx, sy), (ex, ey)], fill=color, width=4)
+            radius = 5.0
+            for px, py in ((sx, sy), (ex, ey)):
+                draw.ellipse(
+                    [px - radius, py - radius, px + radius, py + radius],
+                    fill=color,
+                    outline=(0, 0, 0, 215),
+                    width=1,
+                )
+            label = str(highlight.get("label", "") or "")
+            if label:
+                mx = (sx + ex) * 0.5
+                my = (sy + ey) * 0.5
+                text_pos = (mx + 8.0, my - 10.0)
+                try:
+                    text_box = draw.textbbox(text_pos, label)
+                    draw.rectangle(
+                        (text_box[0] - 4, text_box[1] - 2, text_box[2] + 4, text_box[3] + 2),
+                        fill=(0, 0, 0, 165),
+                        outline=(color[0], color[1], color[2], 175),
+                    )
+                except Exception:
+                    pass
+                draw.text(text_pos, label, fill=color)
+        except Exception as exc:
+            log.debug("Map Studio room outline edge highlight failed: %s", exc)
 
     def _draw_map_studio_room_outline_snap_highlight(self, draw, w: int, h: int) -> None:
         highlight = getattr(self, "_map_studio_room_outline_snap_highlight", None)

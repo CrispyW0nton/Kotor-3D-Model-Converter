@@ -16,6 +16,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     roomOutlinePointEdited = QtCore.Signal(str, int, object)
     roomOutlinePointSnapPreviewRequested = QtCore.Signal(str, int)
     roomOutlinePointSnapped = QtCore.Signal(str, int, int, str)
+    roomOutlineEdgeSelected = QtCore.Signal(str, int)
     roomPrimitiveSelected = QtCore.Signal(str, str)
     roomPrimitiveMoved = QtCore.Signal(str, str, object)
     terrainBrushFrameRequested = QtCore.Signal(str, str, object)
@@ -252,6 +253,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     if room_point is not None:
                         self._begin_room_outline_point_drag(room_point, event)
                         return True
+                    room_edge = self._room_outline_edge_at_event(event)
+                    if room_edge is not None:
+                        self._select_room_outline_edge(room_edge)
+                        return True
             if event_type == QtCore.QEvent.MouseMove and self._marker_drag is not None:
                 buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
                 if not (buttons & QtCore.Qt.LeftButton):
@@ -348,6 +353,28 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if not room_resref or point_index < 0 or len(world_point) < 3:
             return None
         return (room_resref, point_index, world_point)
+
+    def _room_outline_edge_at_event(
+        self,
+        event: QtCore.QEvent,
+    ) -> tuple[str, int, tuple[float, float, float], tuple[float, float, float]] | None:
+        edge_at_screen = getattr(self.viewport, "map_studio_room_outline_edge_at_screen", None)
+        if not callable(edge_at_screen):
+            return None
+        pos_fn = getattr(event, "position", None)
+        pos = pos_fn() if callable(pos_fn) else getattr(event, "pos", lambda: None)()
+        if pos is None:
+            return None
+        hit = edge_at_screen(float(pos.x()), float(pos.y()))
+        if not hit or len(hit) < 4:
+            return None
+        room_resref = str(hit[0] or "")
+        edge_index = int(hit[1])
+        world_start = tuple(float(value) for value in tuple(hit[2])[:3])
+        world_end = tuple(float(value) for value in tuple(hit[3])[:3])
+        if not room_resref or edge_index < 0 or len(world_start) < 3 or len(world_end) < 3:
+            return None
+        return (room_resref, edge_index, world_start, world_end)
 
     def _room_primitive_at_event(self, event: QtCore.QEvent) -> tuple[str, str, tuple[float, float, float]] | None:
         primitive_at_screen = getattr(self.viewport, "map_studio_room_primitive_at_screen", None)
@@ -833,6 +860,33 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             clearer()
         elif callable(setter):
             setter(None)
+
+    def _select_room_outline_edge(
+        self,
+        hit: tuple[str, int, tuple[float, float, float], tuple[float, float, float]],
+    ) -> bool:
+        room_resref, edge_index, world_start, world_end = hit
+        room = str(room_resref or "").strip()
+        edge = int(edge_index)
+        if not room or edge < 0:
+            return False
+        setter = getattr(self.viewport, "set_map_studio_room_outline_edge_highlight", None)
+        if callable(setter):
+            setter(
+                {
+                    "room_resref": room,
+                    "edge_index": edge,
+                    "world_start": tuple(float(value) for value in world_start[:3]),
+                    "world_end": tuple(float(value) for value in world_end[:3]),
+                    "label": f"{room} edge {edge}",
+                    "color": "#00e5ff",
+                }
+            )
+        self.marker_summary_label.setText(
+            f"Selected floor-plan edge {edge} in {room}. Use Bridge, Wall Opening, or Edge Extrude for KOTOR room seams."
+        )
+        self.roomOutlineEdgeSelected.emit(room, edge)
+        return True
 
     def _begin_room_primitive_drag(self, hit: tuple[str, str, tuple[float, float, float]], event: QtCore.QEvent) -> bool:
         start_screen = self._event_position(event)

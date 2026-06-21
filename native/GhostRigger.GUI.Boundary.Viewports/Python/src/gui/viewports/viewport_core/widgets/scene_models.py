@@ -621,6 +621,17 @@ class ViewportSceneModelMixin:
 
         self.set_map_studio_room_outline_snap_highlight(None)
 
+    def set_map_studio_room_outline_edge_highlight(self, highlight: object | None) -> None:
+        """Display the selected Map Studio floor-plan edge."""
+
+        self._map_studio_room_outline_edge_highlight = highlight if isinstance(highlight, dict) else None
+        self._request_render(fast=True, reason="map studio room outline edge changed", overlay=True)
+
+    def clear_map_studio_room_outline_edge_highlight(self) -> None:
+        """Remove the selected Map Studio floor-plan edge highlight."""
+
+        self.set_map_studio_room_outline_edge_highlight(None)
+
     def set_map_studio_terrain_walkability_overlay(self, overlay: object | None) -> None:
         """Display Map Studio terrain WOK walkability classification."""
 

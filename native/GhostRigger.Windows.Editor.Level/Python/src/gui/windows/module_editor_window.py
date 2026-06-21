@@ -654,6 +654,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.viewport_panel.roomOutlinePointEdited.connect(self._set_authored_room_outline_point)
         self.viewport_panel.roomOutlinePointSnapPreviewRequested.connect(self.preview_authored_floor_plan_vertex_snap_candidates)
         self.viewport_panel.roomOutlinePointSnapped.connect(self.snap_authored_floor_plan_vertex)
+        self.viewport_panel.roomOutlineEdgeSelected.connect(self._select_authored_room_outline_edge)
         self.viewport_panel.roomPrimitiveSelected.connect(self._select_authored_room_primitive)
         self.viewport_panel.roomPrimitiveMoved.connect(self._move_authored_room_primitive)
         self.viewport_panel.terrainBrushFrameRequested.connect(self.apply_map_studio_viewport_terrain_brush_frame)
@@ -1327,6 +1328,30 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._log(
             "Map Studio opening transition marker controls focused. Choose an authored opening, marker kind, template/tag, and transition destination."
         )
+
+    def _select_authored_room_outline_edge(self, room_resref: str, edge_index: int) -> None:
+        """Focus Builder edge tools after a floor-plan edge is selected in the viewport."""
+
+        room = str(room_resref or "").strip()
+        edge = int(edge_index)
+        if not room or edge < 0:
+            return
+        self.show_map_studio_geometry_tools()
+        self._select_map_studio_component_mode("edge")
+        self._select_map_studio_modeling_tool("bridge")
+        selector = getattr(self.builder_tab, "select_floor_plan_edge", None)
+        selected = bool(selector(room, edge)) if callable(selector) else False
+        context = (
+            f"Edge mode: selected {room} edge {edge}. Use Bridge, Wall Opening, or Edge Extrude for KOTOR room seams."
+        )
+        self.workflow_panel.set_active_authoring_context(context)
+        self.statusBar().showMessage(context)
+        if selected:
+            self._log(f"Map Studio selected floor-plan edge {edge} in {room}; Builder edge tools were synchronized.")
+        else:
+            self._log(
+                f"Map Studio selected floor-plan edge {edge} in {room}, but Builder has no matching floor-plan room choice."
+            )
 
     def _map_studio_export_dry_run_enabled(self) -> bool:
         """Return the current export dry-run preference from the Export panel."""

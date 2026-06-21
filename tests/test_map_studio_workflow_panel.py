@@ -429,6 +429,10 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "mapStudioFloorPlanBridgeSecondRoomComboBox" in source
         assert "mapStudioFloorPlanBridgeSecondEdgeSpinBox" in source
         assert "mapStudioBridgeFloorPlanEdgesButton" in source
+        assert "def select_floor_plan_edge(self, room_resref: str, edge_index: int) -> bool" in source
+        assert "Bridge, Wall Opening, and Edge Extrude now target this floor-plan edge." in source
+        assert "self._select_combo_room_resref(self.floorPlanOpeningRoomComboBox, room)" in source
+        assert "self._select_combo_room_resref(self.floorPlanBridgeFirstRoomComboBox, room)" in source
         assert "floorPlanOpeningRequested = QtCore.Signal" in source
         assert "floorPlanOpeningMarkerRequested = QtCore.Signal" in source
         assert "Floor-Plan Wall Opening" in source
@@ -790,6 +794,10 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "self.add_authored_room_primitive(primitive_kind, \"\")" in window_source
     assert "floorPlanBridgeRequested.connect(self.bridge_authored_floor_plan_edges)" in window_source
     assert "floorPlanOpeningRequested.connect(self.set_authored_floor_plan_wall_opening)" in window_source
+    assert "roomOutlineEdgeSelected.connect(self._select_authored_room_outline_edge)" in window_source
+    assert "def _select_authored_room_outline_edge" in window_source
+    assert 'getattr(self.builder_tab, "select_floor_plan_edge", None)' in window_source
+    assert "Use Bridge, Wall Opening, or Edge Extrude for KOTOR room seams." in window_source
     assert "floorPlanOpeningMarkerRequested.connect(self.create_authored_opening_transition_marker)" in window_source
     assert "floorPlanVertexSnapPreviewRequested.connect(self.preview_authored_floor_plan_vertex_snap_candidates)" in window_source
     assert "def preview_authored_floor_plan_vertex_snap_candidates" in window_source
@@ -1131,6 +1139,10 @@ def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
     for source in (viewport_source, viewport_mirror_source):
         assert "roomOutlinePointSnapPreviewRequested = QtCore.Signal(str, int)" in source
         assert "roomOutlinePointSnapped = QtCore.Signal(str, int, int, str)" in source
+        assert "roomOutlineEdgeSelected = QtCore.Signal(str, int)" in source
+        assert "def _room_outline_edge_at_event" in source
+        assert "def _select_room_outline_edge" in source
+        assert "self.roomOutlineEdgeSelected.emit(room, edge)" in source
         assert "QtCore.Qt.Key_V" in source
         assert "set_room_outline_vertex_snap_candidates" in source
         assert "set_map_studio_room_outline_snap_highlight" in source
