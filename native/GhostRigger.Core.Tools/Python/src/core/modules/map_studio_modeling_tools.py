@@ -106,6 +106,23 @@ class MapStudioToolBeltPreset:
     action_keys: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class MapStudioToolCommandSearchResult:
+    """One searchable Map Studio command entry for command palettes and pickers."""
+
+    key: str
+    label: str
+    workspace_key: str
+    tool_key: str
+    description: str
+    kotor_guardrail: str
+    hotkey: str
+    implemented: bool
+    score: int
+    display_label: str
+    match_text: str
+
+
 _COMPONENT_MODES: tuple[MapStudioComponentMode, ...] = (
     MapStudioComponentMode(
         "object",
@@ -1684,6 +1701,75 @@ def map_studio_tool_belt_actions_for_preset(
         if action is not None and action not in actions:
             actions.append(action)
     return tuple(actions)
+
+
+def map_studio_tool_command_search(
+    query: str = "",
+    *,
+    limit: int = 50,
+    include_planned: bool = False,
+) -> tuple[MapStudioToolCommandSearchResult, ...]:
+    """Return a deterministic searchable command index for Map Studio tools."""
+
+    raw_query = str(query or "").strip().lower()
+    tokens = tuple(token for token in raw_query.replace("_", " ").split() if token)
+    results: list[MapStudioToolCommandSearchResult] = []
+    for action in _TOOL_BELT_ACTIONS:
+        if not include_planned and not action.implemented:
+            continue
+        workspace = str(action.workspace_key or "map").replace("_", " ")
+        searchable = " ".join(
+            (
+                action.key,
+                action.label,
+                workspace,
+                action.tool_key,
+                action.description,
+                action.kotor_guardrail,
+                action.hotkey,
+            )
+        ).lower()
+        if tokens and not all(token in searchable for token in tokens):
+            continue
+        score = 1
+        label_lower = action.label.lower()
+        key_lower = action.key.lower()
+        if raw_query:
+            if raw_query == key_lower or raw_query == label_lower:
+                score += 100
+            if key_lower.startswith(raw_query) or label_lower.startswith(raw_query):
+                score += 50
+            if raw_query in key_lower or raw_query in label_lower:
+                score += 25
+            for token in tokens:
+                if key_lower.startswith(token) or label_lower.startswith(token):
+                    score += 10
+                elif token in searchable:
+                    score += 3
+        if action.implemented:
+            score += 5
+        display_label = f"{action.label} [{workspace}]"
+        if action.hotkey:
+            display_label = f"{display_label} - {action.hotkey}"
+        results.append(
+            MapStudioToolCommandSearchResult(
+                key=action.key,
+                label=action.label,
+                workspace_key=action.workspace_key,
+                tool_key=action.tool_key,
+                description=action.description,
+                kotor_guardrail=action.kotor_guardrail,
+                hotkey=action.hotkey,
+                implemented=action.implemented,
+                score=score,
+                display_label=display_label,
+                match_text=searchable,
+            )
+        )
+    ordered = sorted(results, key=lambda item: (-item.score, item.label.lower(), item.key))
+    if limit <= 0:
+        return tuple(ordered)
+    return tuple(ordered[: int(limit)])
 
 
 def map_studio_modeling_tool_summary(

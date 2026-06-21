@@ -40,6 +40,7 @@ from .map_studio_modeling_tools import (
     available_map_studio_tool_belt_presets,
     map_studio_edit_mode_context,
     map_studio_modeling_tool_summary,
+    map_studio_tool_command_search,
     map_studio_tool_belt_actions_for_preset,
     map_studio_viewport_performance_policy,
 )
@@ -521,6 +522,21 @@ class ModuleEditorController:
         return map_studio_tool_belt_actions_for_preset(
             preset_key,
             custom_action_keys=custom_action_keys,
+        )
+
+    def map_studio_tool_command_search(
+        self,
+        query: str = "",
+        *,
+        limit: int = 50,
+        include_planned: bool = False,
+    ):
+        """Return searchable Map Studio command entries for command palettes and custom belts."""
+
+        return map_studio_tool_command_search(
+            query,
+            limit=limit,
+            include_planned=include_planned,
         )
 
     def map_studio_tool_belt_contract_audit(self):

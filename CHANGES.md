@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Adds Command Search To Tool Belt
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Command search
+Intersects: native Scene/Tools Map Studio action catalog/controller mirrors, Level Editor tool belt, and command-search UI source contracts.
+
+- Added a headless `map_studio_tool_command_search` index over the shared Map Studio tool catalog so command lookup is driven by implemented tool metadata, labels, workspace, hotkeys, descriptions, and KOTOR guardrails instead of window-local button text.
+- Exposed command search through the Map Studio controller mirrors and added a Level Editor command-search combo, Run button, and `Ctrl+K` action that all route selected commands back through the shared tool-belt dispatcher.
+- Kept the custom tool belt population on the same catalog search path so default and custom command selection stay aligned with the command-backed action contract.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_tool_action_dispatch.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_command_search_belt`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_command_search_ui`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Routes Record Proof Belt Action Through Proof Defaults Query
 
 Owner: LordVaderCW

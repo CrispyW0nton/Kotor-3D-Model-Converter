@@ -111,7 +111,10 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
         MapStudioToolActionContext,
         resolve_map_studio_tool_belt_action,
     )
-    from src.core.modules.map_studio_modeling_tools import available_map_studio_modeling_tools
+    from src.core.modules.map_studio_modeling_tools import (
+        available_map_studio_modeling_tools,
+        map_studio_tool_command_search,
+    )
 
     cube = resolve_map_studio_tool_belt_action("cube")
     tool_by_key = {tool.key: tool for tool in available_map_studio_modeling_tools()}
@@ -780,6 +783,17 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert shrink_wrap.mutates_kmap is True
     assert "gameplay placements" in shrink_wrap.authoring_context
     assert "arbitrary mesh/walkmesh shrink-wrap remains planned" in shrink_wrap.authoring_context
+
+    search_all = map_studio_tool_command_search("", limit=0)
+    search_walkmesh = map_studio_tool_command_search("walkmesh", limit=5)
+    search_v = map_studio_tool_command_search("snap vtx", limit=3)
+
+    assert len(search_all) >= 81
+    assert search_walkmesh
+    assert search_walkmesh[0].key == "walkmesh"
+    assert search_walkmesh[0].display_label == "WOK Paint [walkmesh]"
+    assert any(result.key == "vertex_snap" for result in search_v)
+    assert all(result.implemented for result in search_all)
 
 
 def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(tmp_path) -> None:

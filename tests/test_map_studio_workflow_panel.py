@@ -517,6 +517,8 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "available_map_studio_tool_belt_actions" in source
         assert "available_map_studio_tool_belt_presets" in source
         assert "map_studio_tool_belt_actions_for_preset" in source
+        assert "MapStudioToolCommandSearchResult" in source
+        assert "map_studio_tool_command_search" in source
         assert '"blockout"' in source
         assert '"component"' in source
         assert '"terrain"' in source
@@ -619,6 +621,7 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "available_map_studio_terrain_brushes" in source
         assert "map_studio_viewport_performance_policy" in source
         assert "map_studio_tool_belt_actions_for_preset" in source
+        assert "map_studio_tool_command_search" in source
         assert "map_studio_tool_belt_preferences" in source
         assert "set_map_studio_tool_belt_preferences" in source
         assert "MAP_STUDIO_TOOL_BELT_SECTION" in source
@@ -627,6 +630,7 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "def available_map_studio_terrain_brushes" in source
         assert "def map_studio_viewport_performance_policy" in source
         assert "def map_studio_tool_belt_actions_for_preset" in source
+        assert "def map_studio_tool_command_search" in source
         assert "bridge_authored_floor_plan_edges" in source
         assert "cleanup_authored_floor_plan_vertices" in source
         assert "fill_authored_floor_plan_face" in source
@@ -876,6 +880,13 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "self.controller.map_studio_tool_belt_actions_for_preset" in window_source
     assert "self.map_studio_tool_belt_preset_combo.currentIndexChanged.connect" in window_source
     assert "self.map_studio_customize_tool_belt_button.clicked.connect" in window_source
+    assert "mapStudioCommandSearchComboBox" in window_source
+    assert "mapStudioCommandSearchRunButton" in window_source
+    assert "mapStudioCommandSearchAction" in window_source
+    assert 'QtGui.QKeySequence("Ctrl+K")' in window_source
+    assert "self.controller.map_studio_tool_command_search" in window_source
+    assert "def _run_selected_map_studio_command_search" in window_source
+    assert "self._handle_map_studio_tool_belt_action(action)" in window_source
 
 
 def test_t2600_map_studio_builder_exposes_script_hook_controls() -> None:

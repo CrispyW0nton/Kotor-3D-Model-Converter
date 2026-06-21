@@ -529,11 +529,22 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.map_studio_tool_belt_layout = QtWidgets.QHBoxLayout(self.map_studio_tool_belt_widget)
         self.map_studio_tool_belt_layout.setContentsMargins(0, 0, 0, 0)
         self.map_studio_tool_belt_layout.setSpacing(4)
+        self.map_studio_command_search_combo = QtWidgets.QComboBox()
+        self.map_studio_command_search_combo.setObjectName("mapStudioCommandSearchComboBox")
+        self.map_studio_command_search_combo.setEditable(True)
+        self.map_studio_command_search_combo.setInsertPolicy(QtWidgets.QComboBox.NoInsert)
+        self.map_studio_command_search_combo.setMinimumWidth(220)
+        self.map_studio_command_search_combo.setToolTip("Search and run any command-backed Map Studio tool. Shortcut: Ctrl+K.")
+        self.map_studio_command_run_button = QtWidgets.QPushButton("Run")
+        self.map_studio_command_run_button.setObjectName("mapStudioCommandSearchRunButton")
+        self.map_studio_command_run_button.setToolTip("Run the selected Map Studio command through the shared tool action dispatcher.")
         self.map_studio_customize_tool_belt_button = QtWidgets.QPushButton("Customize Belt...")
         self.map_studio_customize_tool_belt_button.setObjectName("mapStudioCustomizeToolBeltButton")
         belt_row.addWidget(self.map_studio_tool_belt_label)
         belt_row.addWidget(self.map_studio_tool_belt_preset_combo)
         belt_row.addWidget(self.map_studio_tool_belt_widget, 1)
+        belt_row.addWidget(self.map_studio_command_search_combo)
+        belt_row.addWidget(self.map_studio_command_run_button)
         belt_row.addWidget(self.map_studio_customize_tool_belt_button)
         self.map_studio_tool_belt_tabs.addTab(self.map_studio_tool_belt_default_tab, "Default")
 
@@ -689,6 +700,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.map_studio_tool_belt_preset_combo.currentIndexChanged.connect(self._handle_map_studio_tool_belt_preset_changed)
         self.map_studio_customize_tool_belt_button.clicked.connect(self._customize_map_studio_tool_belt)
         self.map_studio_custom_tool_add_button.clicked.connect(self._add_selected_map_studio_custom_tool)
+        self.map_studio_command_run_button.clicked.connect(self._run_selected_map_studio_command_search)
+        self.map_studio_command_search_action = QtGui.QAction("Map Studio Command Search", self)
+        self.map_studio_command_search_action.setObjectName("mapStudioCommandSearchAction")
+        self.map_studio_command_search_action.setShortcut(QtGui.QKeySequence("Ctrl+K"))
+        self.map_studio_command_search_action.triggered.connect(self._focus_map_studio_command_search)
+        self.addAction(self.map_studio_command_search_action)
         self.map_studio_universal_transform_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+T"), self)
         self.map_studio_universal_transform_shortcut.setObjectName("mapStudioUniversalTransformShortcut")
         self.map_studio_universal_transform_shortcut.activated.connect(self._activate_map_studio_universal_transform_shortcut)
@@ -1140,32 +1157,52 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             for action in self.controller.available_map_studio_tool_belt_actions()
             if str(getattr(action, "key", "") or "")
         }
+        search_results = self.controller.map_studio_tool_command_search("", limit=0, include_planned=True)
         combo = getattr(self, "map_studio_custom_tool_combo", None)
-        if combo is None:
-            return
-        previous_text = combo.currentText()
-        combo.blockSignals(True)
-        try:
-            combo.clear()
-            for key, action in sorted(
-                self._map_studio_tool_action_index.items(),
-                key=lambda item: str(getattr(item[1], "label", item[0]) or item[0]).lower(),
-            ):
-                label = str(getattr(action, "label", key) or key)
-                workspace = str(getattr(action, "workspace_key", "") or "map").replace("_", " ")
-                state = "usable" if bool(getattr(action, "implemented", False)) else "planned"
-                combo.addItem(f"{label} [{workspace}; {state}]", key)
-                index = combo.count() - 1
-                combo.setItemData(index, str(getattr(action, "description", "") or ""), QtCore.Qt.ToolTipRole)
-            if previous_text:
-                combo.setEditText(previous_text)
-        finally:
-            combo.blockSignals(False)
-        completer = combo.completer()
-        if completer is not None:
-            completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
-            completer.setFilterMode(QtCore.Qt.MatchContains)
-            completer.setCompletionMode(QtWidgets.QCompleter.PopupCompletion)
+        if combo is not None:
+            previous_text = combo.currentText()
+            combo.blockSignals(True)
+            try:
+                combo.clear()
+                for result in search_results:
+                    state = "usable" if bool(getattr(result, "implemented", False)) else "planned"
+                    combo.addItem(f"{result.display_label} [{state}]", result.key)
+                    index = combo.count() - 1
+                    combo.setItemData(index, str(getattr(result, "description", "") or ""), QtCore.Qt.ToolTipRole)
+                if previous_text:
+                    combo.setEditText(previous_text)
+            finally:
+                combo.blockSignals(False)
+            completer = combo.completer()
+            if completer is not None:
+                completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
+                completer.setFilterMode(QtCore.Qt.MatchContains)
+                completer.setCompletionMode(QtWidgets.QCompleter.PopupCompletion)
+        command_combo = getattr(self, "map_studio_command_search_combo", None)
+        if command_combo is not None:
+            previous_text = command_combo.currentText()
+            command_combo.blockSignals(True)
+            try:
+                command_combo.clear()
+                for result in search_results:
+                    if not bool(getattr(result, "implemented", False)):
+                        continue
+                    command_combo.addItem(result.display_label, result.key)
+                    index = command_combo.count() - 1
+                    tooltip = str(getattr(result, "description", "") or "")
+                    guardrail = str(getattr(result, "kotor_guardrail", "") or "")
+                    if guardrail:
+                        tooltip = f"{tooltip}\nKOTOR: {guardrail}" if tooltip else f"KOTOR: {guardrail}"
+                    command_combo.setItemData(index, tooltip, QtCore.Qt.ToolTipRole)
+                if previous_text:
+                    command_combo.setEditText(previous_text)
+            finally:
+                command_combo.blockSignals(False)
+            completer = command_combo.completer()
+            if completer is not None:
+                completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
+                completer.setFilterMode(QtCore.Qt.MatchContains)
+                completer.setCompletionMode(QtWidgets.QCompleter.PopupCompletion)
 
     def _clear_map_studio_tool_belt_layout(self, layout: QtWidgets.QLayout | None = None) -> None:
         target_layout = layout or self.map_studio_tool_belt_layout
@@ -1228,6 +1265,37 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             button.clicked.connect(lambda _checked=False, tool_action=action: self._handle_map_studio_tool_belt_action(tool_action))
             layout.addWidget(button)
         layout.addStretch(1)
+
+    def _focus_map_studio_command_search(self) -> None:
+        """Focus the command-search field without changing the active Map Studio workspace."""
+
+        combo = getattr(self, "map_studio_command_search_combo", None)
+        if combo is None:
+            return
+        combo.setFocus()
+        line_edit = combo.lineEdit()
+        if line_edit is not None:
+            line_edit.selectAll()
+        self.statusBar().showMessage("Map Studio command search focused. Type a tool name and press Run.", 4000)
+
+    def _run_selected_map_studio_command_search(self) -> None:
+        """Run the selected/typed command-search action through the shared dispatcher."""
+
+        combo = getattr(self, "map_studio_command_search_combo", None)
+        if combo is None:
+            return
+        key = str(combo.currentData() or "").strip()
+        if not key:
+            query = combo.currentText().strip()
+            matches = self.controller.map_studio_tool_command_search(query, limit=1)
+            if matches:
+                key = matches[0].key
+        action = self._map_studio_tool_action_index.get(key)
+        if action is None:
+            self._log("Choose a Map Studio command from the command search before running it.")
+            self.statusBar().showMessage("Choose a Map Studio command before running it.", 4000)
+            return
+        self._handle_map_studio_tool_belt_action(action)
 
     def _add_selected_map_studio_custom_tool(self) -> None:
         """Add the currently selected indexed tool to the custom Map Studio belt."""
