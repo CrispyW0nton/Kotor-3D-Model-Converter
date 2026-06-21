@@ -887,6 +887,18 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "self.controller.map_studio_tool_command_search" in window_source
     assert "def _run_selected_map_studio_command_search" in window_source
     assert "self._handle_map_studio_tool_belt_action(action)" in window_source
+    assert "mapStudioToolContextMenu" in window_source
+    assert "mapStudioToolContextMenuCommandSearchAction" in window_source
+    assert "mapStudioToolContextMenuCustomizeAction" in window_source
+    assert "mapStudioToolContextMenuCurrentBeltMenu" in window_source
+    assert "mapStudioToolContextMenuSearchResultsMenu" in window_source
+    assert "def _open_map_studio_tool_context_menu" in window_source
+    assert "def _add_map_studio_context_menu_action" in window_source
+    assert "self.map_studio_tool_belt_widget.customContextMenuRequested.connect" in window_source
+    assert "self.map_studio_custom_tool_belt_widget.customContextMenuRequested.connect" in window_source
+    assert "self.viewport_panel.customContextMenuRequested.connect" in window_source
+    assert "resolve_map_studio_tool_belt_action(key, self._map_studio_tool_action_context(key))" in window_source
+    assert "menu_action.triggered.connect(lambda _checked=False, tool_action=action: self._handle_map_studio_tool_belt_action(tool_action))" in window_source
 
 
 def test_t2600_map_studio_builder_exposes_script_hook_controls() -> None:

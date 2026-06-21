@@ -526,6 +526,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self.map_studio_tool_belt_preset_combo.addItem(str(getattr(preset, "label", "") or preset.key), str(preset.key))
         self.map_studio_tool_belt_widget = QtWidgets.QWidget()
         self.map_studio_tool_belt_widget.setObjectName("mapStudioToolBeltWidget")
+        self.map_studio_tool_belt_widget.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.map_studio_tool_belt_layout = QtWidgets.QHBoxLayout(self.map_studio_tool_belt_widget)
         self.map_studio_tool_belt_layout.setContentsMargins(0, 0, 0, 0)
         self.map_studio_tool_belt_layout.setSpacing(4)
@@ -570,6 +571,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         custom_add_row.addWidget(self.map_studio_custom_tool_add_button)
         self.map_studio_custom_tool_belt_widget = QtWidgets.QWidget()
         self.map_studio_custom_tool_belt_widget.setObjectName("mapStudioCustomToolBeltWidget")
+        self.map_studio_custom_tool_belt_widget.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.map_studio_custom_tool_belt_layout = QtWidgets.QHBoxLayout(self.map_studio_custom_tool_belt_widget)
         self.map_studio_custom_tool_belt_layout.setContentsMargins(0, 0, 0, 0)
         self.map_studio_custom_tool_belt_layout.setSpacing(4)
@@ -630,6 +632,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         center_layout = QtWidgets.QVBoxLayout(center)
         center_layout.setContentsMargins(0, 0, 0, 0)
         self.viewport_panel = ModuleEditorViewportPanel(center)
+        self.viewport_panel.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         center_layout.addWidget(self.viewport_panel, 1)
         self.main_splitter.addWidget(center)
 
@@ -701,6 +704,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.map_studio_customize_tool_belt_button.clicked.connect(self._customize_map_studio_tool_belt)
         self.map_studio_custom_tool_add_button.clicked.connect(self._add_selected_map_studio_custom_tool)
         self.map_studio_command_run_button.clicked.connect(self._run_selected_map_studio_command_search)
+        self.map_studio_tool_belt_widget.customContextMenuRequested.connect(
+            lambda pos: self._open_map_studio_tool_context_menu(self.map_studio_tool_belt_widget, pos)
+        )
+        self.map_studio_custom_tool_belt_widget.customContextMenuRequested.connect(
+            lambda pos: self._open_map_studio_tool_context_menu(self.map_studio_custom_tool_belt_widget, pos)
+        )
+        self.viewport_panel.customContextMenuRequested.connect(
+            lambda pos: self._open_map_studio_tool_context_menu(self.viewport_panel, pos)
+        )
         self.map_studio_command_search_action = QtGui.QAction("Map Studio Command Search", self)
         self.map_studio_command_search_action.setObjectName("mapStudioCommandSearchAction")
         self.map_studio_command_search_action.setShortcut(QtGui.QKeySequence("Ctrl+K"))
@@ -1265,6 +1277,67 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             button.clicked.connect(lambda _checked=False, tool_action=action: self._handle_map_studio_tool_belt_action(tool_action))
             layout.addWidget(button)
         layout.addStretch(1)
+
+    def _add_map_studio_context_menu_action(self, menu: QtWidgets.QMenu, action: Any) -> None:
+        """Add one dispatcher-backed Map Studio action to a context menu."""
+
+        key = str(getattr(action, "key", "") or "")
+        if not key:
+            return
+        route = resolve_map_studio_tool_belt_action(key, self._map_studio_tool_action_context(key))
+        menu_action = menu.addAction(str(getattr(action, "label", key) or key))
+        menu_action.setObjectName(f"mapStudioToolContextAction_{key}")
+        menu_action.setData(key)
+        menu_action.setEnabled(bool(route.enabled))
+        tooltip = str(route.disabled_reason or route.authoring_context or route.status_message or getattr(action, "description", "") or "")
+        if tooltip:
+            menu_action.setToolTip(tooltip)
+            menu_action.setStatusTip(tooltip)
+        menu_action.triggered.connect(lambda _checked=False, tool_action=action: self._handle_map_studio_tool_belt_action(tool_action))
+
+    def _open_map_studio_tool_context_menu(self, widget: QtWidgets.QWidget, pos: QtCore.QPoint) -> None:
+        """Open a context command surface backed by the shared Map Studio dispatcher."""
+
+        menu = QtWidgets.QMenu(widget)
+        menu.setObjectName("mapStudioToolContextMenu")
+        focus_search_action = menu.addAction("Command Search...")
+        focus_search_action.setObjectName("mapStudioToolContextMenuCommandSearchAction")
+        focus_search_action.triggered.connect(self._focus_map_studio_command_search)
+        customize_action = menu.addAction("Customize Tool Belt...")
+        customize_action.setObjectName("mapStudioToolContextMenuCustomizeAction")
+        customize_action.triggered.connect(self._customize_map_studio_tool_belt)
+
+        current_actions = self.controller.map_studio_tool_belt_actions_for_preset(
+            self._selected_map_studio_tool_belt_preset_key(),
+            custom_action_keys=self._map_studio_custom_belt_keys,
+        )
+        if current_actions:
+            current_menu = menu.addMenu("Current Belt")
+            current_menu.setObjectName("mapStudioToolContextMenuCurrentBeltMenu")
+            for action in current_actions:
+                self._add_map_studio_context_menu_action(current_menu, action)
+
+        query = ""
+        combo = getattr(self, "map_studio_command_search_combo", None)
+        if combo is not None:
+            query = str(combo.currentText() or "").strip()
+        search_results = self.controller.map_studio_tool_command_search(query, limit=18)
+        if search_results:
+            search_menu = menu.addMenu("Matching Commands" if query else "Common Commands")
+            search_menu.setObjectName("mapStudioToolContextMenuSearchResultsMenu")
+            added: set[str] = set()
+            for result in search_results:
+                key = str(getattr(result, "key", "") or "")
+                if not key or key in added:
+                    continue
+                action = self._map_studio_tool_action_index.get(key)
+                if action is None:
+                    continue
+                self._add_map_studio_context_menu_action(search_menu, action)
+                added.add(key)
+
+        if menu.actions():
+            menu.exec(widget.mapToGlobal(pos))
 
     def _focus_map_studio_command_search(self) -> None:
         """Focus the command-search field without changing the active Map Studio workspace."""

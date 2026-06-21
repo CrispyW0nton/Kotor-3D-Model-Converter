@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Adds Dispatcher-Backed Context Menu Commands
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Level Editor / Tool belt context menus
+Intersects: native Tools Level Editor command search, Map Studio tool-belt dispatcher, and workflow-panel source contracts.
+
+- Added right-click command menus to the Map Studio default tool belt, custom tool belt, and viewport panel so modders can invoke current-belt tools and searched commands without relying only on shelf buttons.
+- Kept the context menu thin by resolving enabled/disabled state through `resolve_map_studio_tool_belt_action` and executing through the existing shared `_handle_map_studio_tool_belt_action` route.
+- Added menu entries for command search and tool-belt customization so context menus, `Ctrl+K`, command search, custom belts, and visible buttons all share the same command surface.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_context_menu_ui`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_context_menu_dispatch`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Adds Command Search To Tool Belt
 
 Owner: LordVaderCW
