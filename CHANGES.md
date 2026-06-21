@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Distinguishes Lighting and Lightmap Readiness
+
+Owner: LordVaderCW
+Task: T2604
+Subsystem: Map Studio / Lighting, lightmap readiness, and validation projection
+Intersects: Domain Core Modules readiness/projection services and ModuleMeshes mirror package.
+
+- Added a headless authored lighting readiness contract that distinguishes no lighting plan, viewport-lit-only authored lights, lightmap export-candidate metadata, and game-tested lighting proof.
+- Updated the Map Studio Lighting toolchain row and readiness metadata so missing lightmap data is an explicit warning instead of an implied-ready optional state.
+- Projected lighting/lightmap warnings into the Level Editor validation table with KOTOR-focused fix guidance.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_validation_projection.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_validation_projection.py`; `python -m pytest tests/test_authored_module_readiness.py::test_t2692_readiness_reports_full_map_studio_toolchain_scope tests/test_authored_module_readiness.py::test_t2600_readiness_reports_authored_room_light_coverage tests/test_authored_module_readiness.py::test_t2600_readiness_distinguishes_lightmap_export_candidate_and_game_tested_lighting tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_validation_projection_is_mirrored -q --basetemp .pytest_tmp_map_studio_lighting_readiness`; `python -m pytest tests/test_authored_module_readiness.py tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_validation_projection_is_mirrored -q --basetemp .pytest_tmp_map_studio_lighting_contract`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Surfaces VIS Visibility Readiness
 
 Owner: LordVaderCW

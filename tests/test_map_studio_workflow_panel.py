@@ -1838,8 +1838,10 @@ def test_t2600_map_studio_readiness_validation_projection_is_mirrored() -> None:
         assert "MAP_STUDIO_FLOOR_PLAN_GEOMETRY_WARNING" in text
         assert "MAP_STUDIO_VISIBILITY_BLOCKER" in text
         assert "MAP_STUDIO_VISIBILITY_WARNING" in text
+        assert "MAP_STUDIO_LIGHTING_WARNING" in text
         assert "geometry_validation" in text
         assert "visibility" in text
+        assert "lighting" in text
         assert "Suggested" not in text
 
     for text in (controller_source, controller_mirror):

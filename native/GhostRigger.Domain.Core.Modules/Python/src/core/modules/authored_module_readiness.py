@@ -178,6 +178,24 @@ class AuthoredModuleVisibilityReadiness:
 
 
 @dataclass(frozen=True)
+class AuthoredModuleLightingReadiness:
+    """Modder-facing summary of authored lighting and lightmap proof state."""
+
+    ready: bool
+    status: str
+    light_count: int = 0
+    room_count: int = 0
+    rooms_with_lights: tuple[str, ...] = ()
+    rooms_without_lights: tuple[str, ...] = ()
+    lightmap_status: str = "not_started"
+    lightmap_manifest_path: str = ""
+    lightmap_room_count: int = 0
+    game_tested_lighting: bool = False
+    warnings: tuple[str, ...] = ()
+    fix_hint: str = ""
+
+
+@dataclass(frozen=True)
 class AuthoredComponentEditReadiness:
     """Latest component-edit risk summary for Map Studio readiness UI."""
 
@@ -247,6 +265,9 @@ class AuthoredModuleReadiness:
     )
     visibility: AuthoredModuleVisibilityReadiness = field(
         default_factory=lambda: AuthoredModuleVisibilityReadiness(True, "No authored rooms")
+    )
+    lighting: AuthoredModuleLightingReadiness = field(
+        default_factory=lambda: AuthoredModuleLightingReadiness(False, "Lighting not planned")
     )
     component_edit: AuthoredComponentEditReadiness = field(
         default_factory=lambda: AuthoredComponentEditReadiness(True, "No component edits")
@@ -978,6 +999,134 @@ def _lighting_room_coverage(project: AuthoredModuleProject, rooms: tuple[Authore
     return rooms_with_lights, rooms_without_lights
 
 
+def _project_metadata(project: AuthoredModuleProject) -> dict[str, Any]:
+    metadata = getattr(getattr(project, "metadata", None), "metadata", {})
+    return dict(metadata) if isinstance(metadata, dict) else {}
+
+
+def _lightmap_metadata(project: AuthoredModuleProject) -> dict[str, Any]:
+    metadata = _project_metadata(project)
+    source = metadata.get("lightmap")
+    if source is None:
+        source = metadata.get("lightmap_status")
+    if isinstance(source, dict):
+        return dict(source)
+    if isinstance(source, str) and source.strip():
+        return {"status": source.strip()}
+    return {}
+
+
+def _lightmap_rooms(value: Any) -> tuple[str, ...]:
+    if isinstance(value, str):
+        values = (value,)
+    else:
+        values = tuple(value or ()) if isinstance(value, (list, tuple, set)) else ()
+    return tuple(dict.fromkeys(normalise_resref(item) for item in values if normalise_resref(item)))
+
+
+def _lighting_readiness(project: AuthoredModuleProject, rooms: tuple[AuthoredRoomReadiness, ...]) -> AuthoredModuleLightingReadiness:
+    """Summarize room-light and lightmap proof state without baking anything."""
+
+    room_resrefs = tuple(room.room_resref for room in rooms if room.room_resref)
+    light_count = _lighting_count(project)
+    rooms_with_lights, rooms_without_lights = _lighting_room_coverage(project, rooms)
+    lightmap = _lightmap_metadata(project)
+    raw_status = str(lightmap.get("status") or "not_started").strip().lower().replace("-", "_").replace(" ", "_")
+    manifest_path = str(lightmap.get("manifest_path") or lightmap.get("path") or lightmap.get("proof_manifest_path") or "")
+    lightmap_rooms = _lightmap_rooms(
+        lightmap.get("rooms")
+        or lightmap.get("baked_rooms")
+        or lightmap.get("lightmapped_rooms")
+        or lightmap.get("room_resrefs")
+    )
+    game_tested_lighting = bool(lightmap.get("game_tested") or raw_status in {"game_tested", "game_tested_lighting"})
+    warnings: list[str] = []
+
+    if not room_resrefs:
+        return AuthoredModuleLightingReadiness(
+            ready=False,
+            status="Needs authored rooms",
+            light_count=light_count,
+            lightmap_status="not_started",
+            fix_hint="Create authored rooms before planning room lights or lightmaps.",
+        )
+
+    if rooms_without_lights and light_count:
+        warnings.append(
+            f"{len(rooms_without_lights)} room(s) have no authored lights yet: {', '.join(rooms_without_lights)}."
+        )
+    if lightmap_rooms:
+        missing_lightmap_rooms = tuple(room for room in room_resrefs if room not in set(lightmap_rooms))
+        if missing_lightmap_rooms:
+            warnings.append(
+                f"Lightmap coverage is missing {len(missing_lightmap_rooms)} room(s): {', '.join(missing_lightmap_rooms)}."
+            )
+
+    if game_tested_lighting:
+        return AuthoredModuleLightingReadiness(
+            ready=True,
+            status="Game-tested lighting",
+            light_count=light_count,
+            room_count=len(room_resrefs),
+            rooms_with_lights=rooms_with_lights,
+            rooms_without_lights=rooms_without_lights,
+            lightmap_status="game_tested",
+            lightmap_manifest_path=manifest_path,
+            lightmap_room_count=len(lightmap_rooms),
+            game_tested_lighting=True,
+            warnings=tuple(warnings),
+            fix_hint="Keep the lighting proof manifest and in-game screenshot/video with the staged package.",
+        )
+
+    if raw_status in {"baked", "export_candidate", "ready"} and manifest_path:
+        return AuthoredModuleLightingReadiness(
+            ready=True,
+            status="Lightmap export candidate",
+            light_count=light_count,
+            room_count=len(room_resrefs),
+            rooms_with_lights=rooms_with_lights,
+            rooms_without_lights=rooms_without_lights,
+            lightmap_status="export_candidate",
+            lightmap_manifest_path=manifest_path,
+            lightmap_room_count=len(lightmap_rooms),
+            warnings=tuple(warnings),
+            fix_hint="Install the module and verify lighting/lightmap appearance in-game before calling it game-tested.",
+        )
+
+    if light_count:
+        warnings.append(
+            "Authored room lights are viewport/editor intent only until a baked lightmap manifest or in-game lighting proof is recorded."
+        )
+        return AuthoredModuleLightingReadiness(
+            ready=False,
+            status="Viewport lit only",
+            light_count=light_count,
+            room_count=len(room_resrefs),
+            rooms_with_lights=rooms_with_lights,
+            rooms_without_lights=rooms_without_lights,
+            lightmap_status=raw_status if raw_status != "not_started" else "viewport_lit_only",
+            lightmap_manifest_path=manifest_path,
+            lightmap_room_count=len(lightmap_rooms),
+            warnings=tuple(warnings),
+            fix_hint="Bake or attach a lightmap manifest, then run an in-game lighting proof pass.",
+        )
+
+    warnings.append("No authored room lights or lightmap plan exists yet; viewport lighting is not game-tested module lighting.")
+    return AuthoredModuleLightingReadiness(
+        ready=False,
+        status="Lighting not planned",
+        light_count=0,
+        room_count=len(room_resrefs),
+        rooms_with_lights=(),
+        rooms_without_lights=room_resrefs,
+        lightmap_status=raw_status,
+        lightmap_manifest_path=manifest_path,
+        lightmap_room_count=len(lightmap_rooms),
+        warnings=tuple(warnings),
+        fix_hint="Add key/fill/ambient room lights and record lightmap planning before packaging a visual-quality map.",
+    )
+
+
 def _visibility_readiness(project: AuthoredModuleProject) -> AuthoredModuleVisibilityReadiness:
     """Audit authored VIS intent against the final room set."""
 
@@ -1200,6 +1349,7 @@ def _toolchain_statuses(
     geometry_validation: AuthoredFloorPlanGeometryReadiness,
     doorway_transition: AuthoredDoorwayTransitionReadiness,
     visibility: AuthoredModuleVisibilityReadiness,
+    lighting: AuthoredModuleLightingReadiness,
     component_edit: AuthoredComponentEditReadiness,
 ) -> tuple[AuthoredModuleToolchainStatus, ...]:
     """Summarize the full Map Studio path from geometry intent to game proof."""
@@ -1221,17 +1371,6 @@ def _toolchain_statuses(
         if template_references
         else "; no template refs"
     )
-    light_count = _lighting_count(project)
-    rooms_with_lights, rooms_without_lights = _lighting_room_coverage(project, rooms)
-    if light_count:
-        lighting_status = f"{light_count} authored light(s)"
-        lighting_value = (
-            f"{light_count} authored light(s) across {len(rooms_with_lights)} room(s); "
-            f"{len(rooms_without_lights)} room(s) still need lighting/lightmap planning"
-        )
-    else:
-        lighting_status = "Optional"
-        lighting_value = "No authored room lights yet; lightmap planning not started"
     packaged_count = len(expected_runtime_resources) - len(missing_runtime_resources)
     package_ready = bool(expected_runtime_resources) and not missing_runtime_resources and not blocking_messages
     proof_ready = bool(game_tested)
@@ -1334,10 +1473,13 @@ def _toolchain_statuses(
         ),
         AuthoredModuleToolchainStatus(
             "Lighting",
-            True,
-            lighting_status,
-            lighting_value,
-            "Add key/fill/ambient room lights before baking or exporting lighting-sensitive modules.",
+            lighting.ready,
+            lighting.status,
+            (
+                f"{lighting.light_count} authored light(s), {len(lighting.rooms_with_lights)}/{lighting.room_count} room(s) lit; "
+                f"lightmap: {lighting.lightmap_status}; manifest: {lighting.lightmap_manifest_path or '(none)'}"
+            ),
+            lighting.fix_hint,
         ),
         AuthoredModuleToolchainStatus(
             "Resource placement",
@@ -1448,6 +1590,7 @@ def build_authored_module_readiness(
     gameplay_counts = _gameplay_counts(project)
     lighting_count = _lighting_count(project)
     rooms_with_lights, rooms_without_lights = _lighting_room_coverage(project, rooms)
+    lighting = _lighting_readiness(project, rooms)
     present = _present_keys(packaged_resources)
     expected = _expected_keys(project.module_root, rooms)
     present_set = set(present)
@@ -1497,6 +1640,7 @@ def build_authored_module_readiness(
         + geometry_validation.warnings
         + tuple(pathing.warnings or ())
         + tuple(visibility.warnings or ())
+        + tuple(lighting.warnings or ())
         + doorway_transition.warnings
         + template_warnings
         + transition_warnings
@@ -1593,6 +1737,7 @@ def build_authored_module_readiness(
         geometry_validation=geometry_validation,
         doorway_transition=doorway_transition,
         visibility=visibility,
+        lighting=lighting,
         component_edit=component_edit,
     )
     return AuthoredModuleReadiness(
@@ -1605,6 +1750,7 @@ def build_authored_module_readiness(
         geometry_validation=geometry_validation,
         doorway_transition=doorway_transition,
         visibility=visibility,
+        lighting=lighting,
         component_edit=component_edit,
         can_preview=can_preview,
         can_export_candidate=can_export_candidate,
@@ -1751,7 +1897,21 @@ def build_authored_module_readiness(
             "lighting_room_count": len(rooms_with_lights),
             "rooms_with_authored_lights": list(rooms_with_lights),
             "rooms_without_authored_lights": list(rooms_without_lights),
-            "lightmap_planning_status": "planned" if lighting_count else "not_started",
+            "lightmap_planning_status": lighting.lightmap_status,
+            "lighting": {
+                "ready": lighting.ready,
+                "status": lighting.status,
+                "light_count": lighting.light_count,
+                "room_count": lighting.room_count,
+                "rooms_with_lights": list(lighting.rooms_with_lights),
+                "rooms_without_lights": list(lighting.rooms_without_lights),
+                "lightmap_status": lighting.lightmap_status,
+                "lightmap_manifest_path": lighting.lightmap_manifest_path,
+                "lightmap_room_count": lighting.lightmap_room_count,
+                "game_tested_lighting": lighting.game_tested_lighting,
+                "warnings": list(lighting.warnings),
+                "fix_hint": lighting.fix_hint,
+            },
             "room_lights": [
                 {
                     "name": light.name,
@@ -1809,6 +1969,7 @@ __all__ = [
     "AuthoredFloorPlanGeometryReadiness",
     "AuthoredModuleTransitionReference",
     "AuthoredModuleInputStatus",
+    "AuthoredModuleLightingReadiness",
     "AuthoredModulePathingReadiness",
     "AuthoredModuleReadiness",
     "AuthoredModuleScriptReference",

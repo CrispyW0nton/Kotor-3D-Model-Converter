@@ -140,6 +140,23 @@ def authored_module_readiness_validation_issues(
             )
         )
 
+    lighting = dict(metadata.get("lighting", {}) or {})
+    lighting_warnings = tuple(str(message) for message in tuple(lighting.get("warnings") or ()) if str(message).strip())
+    lighting_warning_tails = {_message_tail(message) for message in lighting_warnings}
+    lighting_fix = str(lighting.get("fix_hint") or "").strip() or (
+        "Add authored room lights, bake or attach lightmap output, then verify lighting in game."
+    )
+    for index, message in enumerate(lighting_warnings):
+        issues.append(
+            KMapValidationIssue(
+                "Warning",
+                "MAP_STUDIO_LIGHTING_WARNING",
+                message,
+                f"authored_lighting:warning:{index}",
+                lighting_fix,
+            )
+        )
+
     for item in tuple(getattr(readiness, "inputs", ()) or ()):
         if bool(getattr(item, "present", False)):
             continue
@@ -263,6 +280,8 @@ def authored_module_readiness_validation_issues(
         if _message_tail(str(message)) in pathing_warning_tails:
             continue
         if _message_tail(str(message)) in visibility_warning_tails:
+            continue
+        if _message_tail(str(message)) in lighting_warning_tails:
             continue
         issues.append(
             KMapValidationIssue(

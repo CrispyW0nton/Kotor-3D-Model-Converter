@@ -264,8 +264,9 @@ def test_t2692_readiness_reports_full_map_studio_toolchain_scope() -> None:
     assert preview_steps["Walkmesh"].ready is True
     assert preview_steps["PTH pathing"].ready is True
     assert preview_steps["VIS visibility"].ready is True
-    assert preview_steps["Lighting"].ready is True
-    assert preview_steps["Lighting"].status == "Optional"
+    assert preview_steps["Lighting"].ready is False
+    assert preview_steps["Lighting"].status == "Lighting not planned"
+    assert "lightmap: not_started" in preview_steps["Lighting"].value_label
     assert preview_steps["Resource placement"].ready is True
     assert preview_steps["Resource placement"].status == "Optional"
     assert "No extra KOTOR resources placed yet" in preview_steps["Resource placement"].value_label
@@ -447,15 +448,89 @@ def test_t2600_readiness_reports_authored_room_light_coverage() -> None:
     readiness = build_authored_module_readiness(project)
     lighting = {step.name: step for step in readiness.toolchain}["Lighting"]
 
-    assert lighting.ready is True
-    assert lighting.status == "1 authored light(s)"
-    assert "1 authored light(s) across 1 room(s)" in lighting.value_label
+    assert lighting.ready is False
+    assert lighting.status == "Viewport lit only"
+    assert "1 authored light(s), 1/1 room(s) lit" in lighting.value_label
     assert readiness.metadata["lighting_count"] == 1
     assert readiness.metadata["lighting_room_count"] == 1
     assert readiness.metadata["rooms_with_authored_lights"] == ["grdev01_room01"]
     assert readiness.metadata["rooms_without_authored_lights"] == []
-    assert readiness.metadata["lightmap_planning_status"] == "planned"
+    assert readiness.metadata["lightmap_planning_status"] == "viewport_lit_only"
+    assert readiness.metadata["lighting"]["status"] == "Viewport lit only"
+    assert readiness.metadata["lighting"]["game_tested_lighting"] is False
+    assert any("viewport/editor intent" in warning for warning in readiness.warnings)
     assert readiness.metadata["room_lights"][0]["name"] == "key_light"
+
+
+def test_t2600_readiness_distinguishes_lightmap_export_candidate_and_game_tested_lighting() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_lighting import AuthoredRoomLight
+    from src.core.modules.authored_module_project import AuthoredModuleMetadata
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+
+    base = replace(
+        _floor_plan_project(),
+        lights=(
+            AuthoredRoomLight(
+                name="key_light",
+                room_resref="grdev01_room01",
+                position=(0.0, -1.5, 2.5),
+                color=(1.0, 0.86, 0.62),
+                radius=9.5,
+                intensity=1.2,
+            ),
+        ),
+    )
+    export_candidate = replace(
+        base,
+        metadata=AuthoredModuleMetadata(
+            module_root=base.metadata.module_root,
+            game=base.metadata.game,
+            display_name=base.metadata.display_name,
+            tag=base.metadata.tag,
+            description=base.metadata.description,
+            capability_stage=base.metadata.capability_stage,
+            metadata={
+                **dict(base.metadata.metadata),
+                "lightmap": {
+                    "status": "baked",
+                    "manifest_path": "C:/tmp/grdev01_lightmap_manifest.json",
+                    "rooms": ["grdev01_room01"],
+                },
+            },
+        ),
+    )
+    game_tested = replace(
+        export_candidate,
+        metadata=replace(
+            export_candidate.metadata,
+            metadata={
+                **dict(export_candidate.metadata.metadata),
+                "lightmap": {
+                    "status": "game_tested",
+                    "manifest_path": "C:/tmp/grdev01_lightmap_manifest.json",
+                    "rooms": ["grdev01_room01"],
+                    "game_tested": True,
+                },
+            },
+        ),
+    )
+
+    candidate_readiness = build_authored_module_readiness(export_candidate)
+    proven_readiness = build_authored_module_readiness(game_tested)
+    candidate_lighting = {step.name: step for step in candidate_readiness.toolchain}["Lighting"]
+    proven_lighting = {step.name: step for step in proven_readiness.toolchain}["Lighting"]
+
+    assert candidate_lighting.ready is True
+    assert candidate_lighting.status == "Lightmap export candidate"
+    assert candidate_readiness.metadata["lighting"]["lightmap_status"] == "export_candidate"
+    assert candidate_readiness.metadata["lighting"]["lightmap_manifest_path"].endswith("grdev01_lightmap_manifest.json")
+    assert candidate_readiness.metadata["lighting"]["game_tested_lighting"] is False
+    assert proven_lighting.ready is True
+    assert proven_lighting.status == "Game-tested lighting"
+    assert proven_readiness.metadata["lighting"]["lightmap_status"] == "game_tested"
+    assert proven_readiness.metadata["lighting"]["game_tested_lighting"] is True
 
 
 def test_t2700_packaged_gameplay_template_references_are_marked_as_packaged() -> None:
