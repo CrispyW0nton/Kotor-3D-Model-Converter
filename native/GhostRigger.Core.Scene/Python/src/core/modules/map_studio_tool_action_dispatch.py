@@ -1032,9 +1032,8 @@ def resolve_map_studio_tool_belt_action(
             action,
             focus_component_mode="face",
             focus_snap_mode="grid",
-            command_method="apply_authored_room_operation",
+            command_method="rectangular_cut_authored_floor_plan_room",
             command_kwargs={
-                "operation": "rectangular_cut",
                 "room_resref": ctx.room_resref,
                 "center": tuple(ctx.cut_center),
                 "size": tuple(ctx.cut_size),

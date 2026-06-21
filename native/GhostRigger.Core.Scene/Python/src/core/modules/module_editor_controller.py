@@ -96,6 +96,7 @@ from .authored_room_operations import (
     add_authored_room_composition_primitive,
     apply_authored_floor_plan_axis_split,
     apply_authored_floor_plan_boolean_difference,
+    apply_authored_floor_plan_rectangular_cut,
     apply_authored_terrain_operation,
     apply_authored_floor_plan_rectangular_union,
     apply_authored_floor_plan_operation,
@@ -938,6 +939,57 @@ class ModuleEditorController:
             label=f"Apply room operation {operation}",
             before=before,
             metadata={"operation": operation, "kwargs": dict(kwargs)},
+        )
+        return self.authored_module_readiness()
+
+    def rectangular_cut_authored_floor_plan_room(
+        self,
+        *,
+        room_resref: str = "",
+        center: Any,
+        size: Any,
+        room_resref_prefix: str | None = None,
+    ):
+        """Cut one authored floor-plan room with a rectangular cutter and record explicit command metadata."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        cut_center = tuple(float(value) for value in tuple(center or (0.0, 0.0))[:2])
+        cut_size = tuple(float(value) for value in tuple(size or (1.0, 1.0))[:2])
+        if len(cut_center) != 2 or len(cut_size) != 2:
+            raise ValueError("Rectangular cut requires a 2D center and size in floor-plan local space.")
+        updated = apply_authored_floor_plan_rectangular_cut(
+            authored,
+            room_resref=room_resref,
+            center=(cut_center[0], cut_center[1]),
+            size=(cut_size[0], cut_size[1]),
+            room_resref_prefix=room_resref_prefix,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Rectangular-cut Map Studio room {room_resref or '(first room)'} at {cut_center} size {cut_size}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.rectangular_cut",
+            label=f"Rectangular cut {room_resref or 'room'}",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "center": cut_center,
+                "size": cut_size,
+                "room_resref_prefix": room_resref_prefix or "",
+            },
         )
         return self.authored_module_readiness()
 

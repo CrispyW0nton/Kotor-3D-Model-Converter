@@ -74,6 +74,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["opening"].command_method == "apply_authored_room_operation"
     assert statuses["cut"].contract_kind == "command_mutates_kmap"
     assert statuses["cut"].command_method == "axis_split_authored_floor_plan_room"
+    assert statuses["boolean"].contract_kind == "command_mutates_kmap"
+    assert statuses["boolean"].command_method == "rectangular_cut_authored_floor_plan_room"
     assert statuses["boolean_a_minus_b"].contract_kind == "command_mutates_kmap"
     assert statuses["boolean_a_minus_b"].command_method == "boolean_difference_authored_floor_plan_rooms"
     assert statuses["opening_marker"].contract_kind == "command_mutates_kmap"
@@ -598,8 +600,7 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     )
 
     assert boolean.enabled is True
-    assert boolean.command_method == "apply_authored_room_operation"
-    assert boolean.command_kwargs["operation"] == "rectangular_cut"
+    assert boolean.command_method == "rectangular_cut_authored_floor_plan_room"
     assert boolean.command_kwargs["center"] == (1.0, 2.0)
     assert boolean.command_kwargs["size"] == (3.0, 4.0)
 
@@ -1252,6 +1253,31 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
 
     assert len(controller.authored_room_primitive_transforms()) == count_before
 
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grcutcmd")
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "boolean",
+        MapStudioToolActionContext(
+            room_resref="grcutcmd_room01",
+            cut_center=(0.0, 0.0),
+            cut_size=(2.0, 1.0),
+        ),
+    )
+
+    cut_payload = controller.project.extra_sections["authored_module"]
+    cut_rooms = controller.authored_floor_plan_room_choices()
+
+    assert len(cut_rooms) == 4
+    assert {room.room_resref for room in cut_rooms} == {"grcutcmd_room_l1", "grcutcmd_room_r2", "grcutcmd_room_b3", "grcutcmd_room_t4"}
+    assert cut_payload["rooms"][0]["primitive"]["metadata"]["operation"] == "rectangular_cut_difference"
+    assert controller.can_undo_map_studio_command() is True
+    assert controller.command_history.undo_label == "Rectangular cut grcutcmd_room01"
+
+    controller.undo_map_studio_command()
+
+    assert [room.room_resref for room in controller.authored_floor_plan_room_choices()] == ["grcutcmd_room01"]
+
     controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="gredge01")
     room_before_split = controller.authored_floor_plan_room_choices()[0]
 
@@ -1674,6 +1700,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert "script_field_name" in source
         assert 'command_method = "set_authored_script_hook" if script_resref else "remove_authored_script_hook"' in source
         assert 'command_method="apply_authored_room_operation"' in source
+        assert 'command_method="rectangular_cut_authored_floor_plan_room"' in source
         assert 'command_method="axis_split_authored_floor_plan_room"' in source
         assert 'command_method="boolean_difference_authored_floor_plan_rooms"' in source
         assert 'command_method="duplicate_authored_room_primitive"' in source
