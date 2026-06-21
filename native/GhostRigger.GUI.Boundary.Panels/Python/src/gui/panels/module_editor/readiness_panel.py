@@ -302,7 +302,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.floor_plan_geometry_label.setText("Floor-plan geometry: Not checked")
             self.doorway_transition_label.setText("Doorway/transition intent: Not checked")
             self.component_edit_label.setText("Component edits: Not checked")
-            self._set_runtime_resource_rows((), (), ())
+            self._set_runtime_resource_rows((), (), (), {})
             self.proof_label.setText("Game proof: Not staged")
             self.proof_recorder_label.setText("Proof recorder: Not ready")
             self.launch_label.setText("Launch handoff: Not ready")
@@ -335,6 +335,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         blocking = tuple(getattr(readiness, "blocking_messages", ()) or ())
         warnings = tuple(getattr(readiness, "warnings", ()) or ())
         metadata = dict(getattr(readiness, "metadata", {}) or {})
+        runtime_output_status = dict(metadata.get("runtime_output_status") or {})
 
         self.header_label.setText(f"Module: {module_root} ({game})")
         self.stage_label.setText(f"Stage: {stage}")
@@ -352,7 +353,16 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.preview_label.setText(f"Preview: {getattr(readiness, 'preview_status', 'Not ready')}")
         self.export_label.setText(f"Export: {getattr(readiness, 'export_status', 'Not ready')}")
         if expected:
-            self.runtime_label.setText(f"Runtime resources: {len(expected) - len(missing)}/{len(expected)} present")
+            status = str(runtime_output_status.get("status") or "").strip()
+            stale_outputs = [
+                str(output)
+                for output in list(runtime_output_status.get("stale_outputs") or [])
+                if str(output).strip()
+            ]
+            suffix = f"; stale: {', '.join(stale_outputs)}" if stale_outputs else ""
+            self.runtime_label.setText(
+                f"Runtime resources: {status or 'Checked'}. {len(expected) - len(missing)}/{len(expected)} present{suffix}"
+            )
         else:
             self.runtime_label.setText("Runtime resources: Not checked")
         self._set_pathing_summary(dict(metadata.get("pathing", {}) or {}))
@@ -361,7 +371,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self._set_floor_plan_geometry_summary(dict(metadata.get("geometry_validation", {}) or {}))
         self._set_doorway_transition_summary(dict(metadata.get("doorway_transition", {}) or {}))
         self._set_component_edit_summary(dict(metadata.get("component_edit", {}) or {}))
-        self._set_runtime_resource_rows(expected, present, missing)
+        self._set_runtime_resource_rows(expected, present, missing, runtime_output_status)
         proof_status = str(metadata.get("proof_status") or "not_ready")
         installed_path = str(metadata.get("installed_module_path") or "")
         proof_manifest = str(metadata.get("proof_manifest_path") or "")
@@ -821,11 +831,28 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             return f"{resref}.{restype}"
         return resref or "(unknown resource)"
 
-    def _set_runtime_resource_rows(self, expected: tuple[Any, ...], present: tuple[Any, ...], missing: tuple[Any, ...]) -> None:
+    @staticmethod
+    def _normalise_stale_output(value: Any) -> str:
+        return str(value or "").strip().lower().lstrip(".")
+
+    def _set_runtime_resource_rows(
+        self,
+        expected: tuple[Any, ...],
+        present: tuple[Any, ...],
+        missing: tuple[Any, ...],
+        runtime_output_status: dict[str, Any] | None = None,
+    ) -> None:
         """Show which KOTOR runtime files are expected, present, or missing."""
 
         present_keys = {self._normalise_resource_key(item) for item in present}
         missing_keys = {self._normalise_resource_key(item) for item in missing}
+        status = dict(runtime_output_status or {})
+        stale_outputs = {self._normalise_stale_output(output) for output in list(status.get("stale_outputs") or [])}
+        impact_by_output = {
+            self._normalise_stale_output(row.get("resource")): dict(row)
+            for row in list(status.get("resource_impacts") or [])
+            if isinstance(row, dict)
+        }
         resources = tuple(expected or ())
         if not resources:
             self.runtime_resource_table.setRowCount(1)
@@ -841,15 +868,20 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         for row, resource in enumerate(resources):
             key = self._normalise_resource_key(resource)
             if key in present_keys:
-                status = "Present"
+                resource_status = "Present"
                 fix = "Ready for packaging/staging."
             elif key in missing_keys:
-                status = "Missing"
+                resource_status = "Missing"
                 fix = "Generate or stage this runtime file before export/install."
             else:
-                status = "Expected"
+                resource_status = "Expected"
                 fix = "Expected by the module contract; validate/export to confirm."
-            for column, text in enumerate((self._format_resource_key(resource), status, fix)):
+            restype = key[1] if len(key) > 1 else ""
+            if resource_status != "Missing" and restype in stale_outputs:
+                resource_status = "Stale"
+                impact = impact_by_output.get(restype, {})
+                fix = str(impact.get("fix") or "Regenerate this resource before packaging/installing the module.")
+            for column, text in enumerate((self._format_resource_key(resource), resource_status, fix)):
                 self.runtime_resource_table.setItem(row, column, self._table_item(text))
 
     @staticmethod

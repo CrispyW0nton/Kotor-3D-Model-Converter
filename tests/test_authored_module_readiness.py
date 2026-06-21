@@ -208,6 +208,10 @@ def test_t2639_floor_plan_project_is_previewable_but_not_export_candidate_withou
     assert "ARE/GIT/IFO/PTH/LYT/VIS" in readiness.next_action
     assert readiness.rooms[0].can_preview_geometry is True
     assert readiness.rooms[0].walkable_face_count == 2
+    runtime_status = readiness.metadata["runtime_output_status"]
+    assert runtime_status["status"] == "Missing generated resources"
+    assert runtime_status["regenerate_required"] is True
+    assert "grdev01_room01.mdl" in runtime_status["missing"]
 
 
 def test_t2639_runtime_resources_promote_project_to_export_candidate() -> None:
@@ -223,6 +227,10 @@ def test_t2639_runtime_resources_promote_project_to_export_candidate() -> None:
     assert readiness.ready_for_game_test is True
     assert readiness.missing_runtime_resources == ()
     assert "warp grdev01" in readiness.next_action
+    runtime_status = readiness.metadata["runtime_output_status"]
+    assert runtime_status["status"] == "Current"
+    assert runtime_status["regenerate_required"] is False
+    assert runtime_status["missing"] == []
 
 
 def test_t2605_kmap_bridge_reports_missing_runtime_outputs_for_ui() -> None:
@@ -243,6 +251,8 @@ def test_t2605_kmap_bridge_reports_missing_runtime_outputs_for_ui() -> None:
     result = build_kmap_authored_module_readiness(kmap)
 
     status = result.metadata["runtime_output_status"]
+    assert result.readiness is not None
+    assert result.readiness.metadata["runtime_output_status"] == status
     assert status["status"] == "Missing generated resources"
     assert status["regenerate_required"] is True
     assert "grdev01.are" in status["missing"]
@@ -268,6 +278,8 @@ def test_t2605_kmap_bridge_reports_current_runtime_outputs_for_ui() -> None:
     result = build_kmap_authored_module_readiness(kmap)
 
     status = result.metadata["runtime_output_status"]
+    assert result.readiness is not None
+    assert result.readiness.metadata["runtime_output_status"] == status
     assert status["status"] == "Current"
     assert status["regenerate_required"] is False
     assert status["missing"] == []
@@ -306,6 +318,8 @@ def test_t2605_kmap_bridge_reports_stale_component_edit_outputs_for_ui() -> None
     result = build_kmap_authored_module_readiness(kmap)
 
     status = result.metadata["runtime_output_status"]
+    assert result.readiness is not None
+    assert result.readiness.metadata["runtime_output_status"] == status
     impacts = {row["resource"]: row for row in status["resource_impacts"]}
     assert status["status"] == "Stale generated resources"
     assert status["regenerate_required"] is True

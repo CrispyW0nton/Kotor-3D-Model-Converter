@@ -1338,6 +1338,11 @@ def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
         assert "mapStudioReadinessRuntimeResourceTable" in source
         assert 'setHorizontalHeaderLabels(("Resource", "Status", "Fix / meaning"))' in source
         assert "def _set_runtime_resource_rows" in source
+        assert "runtime_output_status" in source
+        assert "def _normalise_stale_output" in source
+        assert "stale_outputs" in source
+        assert 'resource_status = "Stale"' in source
+        assert "Regenerate this resource before packaging/installing the module." in source
         assert "expected_runtime_resources" in source
         assert "present_runtime_resources" in source
         assert "missing_runtime_resources" in source

@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Shows Stale Runtime Outputs In Readiness UI
+
+Owner: LordVaderCW
+Task: T2605
+Subsystem: Map Studio / Runtime-output readiness and Level Editor panels
+Intersects: Domain Core Modules authored readiness, ModuleMeshes mirror package, GUI Boundary readiness panel, and Map Studio workflow panel source tests.
+
+- Promoted `runtime_output_status` into the core `AuthoredModuleReadiness.metadata` contract so both direct readiness calls and KMAP bridge results expose the same generated-output truth.
+- Updated mirrored Map Studio readiness panels to render stale generated outputs distinctly from present/current files, including stale MDL/MDX/WOK/LYT/VIS/PTH rows and regeneration fixes.
+- Added regressions proving previewable, export-candidate, and component-edit-stale readiness all carry runtime-output status, and source-contract coverage that the panels consume it.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_readiness.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_kmap_bridge.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_kmap_bridge.py native/GhostRigger.GUI.Boundary.Panels/Python/src/gui/panels/module_editor/readiness_panel.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/gui/panels/module_editor/readiness_panel.py tests/test_authored_module_readiness.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_authored_module_readiness.py::test_t2639_floor_plan_project_is_previewable_but_not_export_candidate_without_runtime_resources tests/test_authored_module_readiness.py::test_t2639_runtime_resources_promote_project_to_export_candidate tests/test_authored_module_readiness.py::test_t2605_kmap_bridge_reports_missing_runtime_outputs_for_ui tests/test_authored_module_readiness.py::test_t2605_kmap_bridge_reports_current_runtime_outputs_for_ui tests/test_authored_module_readiness.py::test_t2605_kmap_bridge_reports_stale_component_edit_outputs_for_ui tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_runtime_resources -q --basetemp .pytest_tmp_map_studio_runtime_status_ui`.
+
 ### [2026-06-21] Map Studio Reports Runtime Output Regeneration Status
 
 Owner: LordVaderCW

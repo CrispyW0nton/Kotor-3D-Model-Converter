@@ -309,6 +309,44 @@ def _present_keys(resources: Iterable[Any]) -> tuple[RuntimeResourceKey, ...]:
     return tuple(sorted(keys))
 
 
+def _resource_label(key: RuntimeResourceKey) -> str:
+    resref, restype = key
+    return f"{resref}.{str(restype).strip().lower().lstrip('.')}"
+
+
+def _runtime_output_status(
+    *,
+    expected: tuple[RuntimeResourceKey, ...],
+    present: tuple[RuntimeResourceKey, ...],
+    missing: tuple[RuntimeResourceKey, ...],
+    component_edit: AuthoredComponentEditReadiness,
+) -> dict[str, Any]:
+    stale_outputs = tuple(component_edit.stale_outputs)
+    regenerate_required = bool(missing or stale_outputs)
+    if stale_outputs:
+        status = "Stale generated resources"
+        fix_hint = component_edit.next_action or component_edit.fix_hint
+    elif missing:
+        status = "Missing generated resources"
+        fix_hint = "Build/export the authored module to regenerate missing KOTOR runtime resources."
+    else:
+        status = "Current"
+        fix_hint = "Runtime resources are current for this authored KMAP state."
+    return {
+        "status": status,
+        "regenerate_required": regenerate_required,
+        "expected": [_resource_label(key) for key in expected],
+        "present": [_resource_label(key) for key in present],
+        "missing": [_resource_label(key) for key in missing],
+        "stale_outputs": list(stale_outputs),
+        "resource_impacts": [dict(row) for row in component_edit.resource_impacts],
+        "edited_resource": component_edit.latest_room_resref,
+        "latest_operation": component_edit.latest_operation,
+        "next_action": component_edit.next_action,
+        "fix_hint": fix_hint,
+    }
+
+
 def _expected_keys(module_root: str, rooms: Iterable[AuthoredRoomReadiness]) -> tuple[RuntimeResourceKey, ...]:
     root = normalise_resref(module_root)
     keys: set[RuntimeResourceKey] = {
@@ -1863,6 +1901,12 @@ def build_authored_module_readiness(
                 "validation_messages": list(component_edit.validation_messages),
                 "fix_hint": component_edit.fix_hint,
             },
+            "runtime_output_status": _runtime_output_status(
+                expected=expected,
+                present=present,
+                missing=missing,
+                component_edit=component_edit,
+            ),
             "gameplay_counts": gameplay_counts,
             "gameplay_placement_count": sum(gameplay_counts.values()),
             "resource_placement_summary": _resource_placement_summary(gameplay_counts),
