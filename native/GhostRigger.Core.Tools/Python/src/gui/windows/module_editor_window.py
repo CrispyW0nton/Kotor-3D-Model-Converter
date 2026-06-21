@@ -1791,6 +1791,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "bridge",
             "combine",
             "separate",
+            "duplicate_special",
             "vertex_snap",
             "weld",
             "merge_components",

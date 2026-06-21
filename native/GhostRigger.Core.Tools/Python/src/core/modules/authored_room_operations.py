@@ -1357,6 +1357,101 @@ def move_authored_room_composition_primitive(
     raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'.")
 
 
+def _duplicate_primitive_name(existing: set[str], source_name: str, duplicate_index: int) -> str:
+    base = str(source_name or "primitive").strip() or "primitive"
+    for suffix_index in range(duplicate_index, duplicate_index + 1000):
+        suffix = f"_dup_{suffix_index:02d}"
+        candidate = f"{base[: max(1, 32 - len(suffix))]}{suffix}"[:32]
+        if candidate not in existing:
+            existing.add(candidate)
+            return candidate
+    raise ValueError(f"Could not create a unique duplicate name for primitive '{source_name}'.")
+
+
+def duplicate_authored_room_composition_primitive(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+    duplicate_count: int = 1,
+    translation_offset: Any = (1.0, 0.0, 0.0),
+    rotation_offset_degrees_z: float = 0.0,
+    scale_multiplier: Any = (1.0, 1.0, 1.0),
+) -> AuthoredModuleProject:
+    """Duplicate one authored composition primitive with repeatable transform offsets."""
+
+    count = int(duplicate_count)
+    if count <= 0:
+        raise ValueError("Duplicate Special requires at least one duplicate.")
+    if count > 64:
+        raise ValueError("Duplicate Special is limited to 64 duplicates per command to keep Map Studio responsive.")
+    offset = _vec3_or_existing(translation_offset, (1.0, 0.0, 0.0))
+    multiplier = _vec3_or_existing(scale_multiplier, (1.0, 1.0, 1.0))
+    if any(float(value) <= 0.0 for value in multiplier):
+        raise ValueError("Duplicate Special scale multipliers must be positive.")
+    target = str(primitive_name or "").strip()
+    if not target:
+        raise ValueError("Duplicate Special requires a selected authored composition primitive.")
+    index = _target_room_index(project, room_resref)
+    room = project.rooms[index]
+    composition = _composition_for_room(room)
+    existing_names = {
+        _primitive_name(item)
+        for item in tuple(composition.primitives or ())
+        if _primitive_name(item)
+    }
+    source = None
+    for primitive in tuple(composition.primitives or ()):
+        if _primitive_name(primitive) == target:
+            source = primitive
+            break
+    if source is None:
+        known = ", ".join(sorted(existing_names))
+        raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'. Known primitives: {known or '(none)'}.")
+    source_transform = _primitive_transform(source)
+    source_base = source.primitive if isinstance(source, PlacedRoomPrimitive) else source
+    duplicates: list[PlacedRoomPrimitive] = []
+    for step in range(1, count + 1):
+        scale = tuple(float(source_transform.scale[i]) * (float(multiplier[i]) ** step) for i in range(3))
+        if any(float(value) <= 0.0 for value in scale):
+            raise ValueError("Duplicate Special would create a primitive with non-positive scale.")
+        duplicates.append(
+            PlacedRoomPrimitive(
+                primitive=source_base,
+                name=_duplicate_primitive_name(existing_names, target, step),
+                transform=PrimitiveTransform(
+                    translation=tuple(float(source_transform.translation[i]) + (float(offset[i]) * step) for i in range(3)),
+                    rotation_degrees_z=float(source_transform.rotation_degrees_z) + (float(rotation_offset_degrees_z) * step),
+                    scale=scale,
+                    pivot=source_transform.pivot,
+                ),
+            )
+        )
+    updated_composition = replace(
+        composition,
+        primitives=tuple(composition.primitives or ()) + tuple(duplicates),
+        metadata={
+            **dict(composition.metadata),
+            "last_operation": "duplicate_special",
+            "last_duplicated_primitive": target,
+            "duplicate_count": count,
+        },
+    )
+    updated = replace(
+        room,
+        primitive=updated_composition,
+        composition=None,
+        metadata={
+            **dict(room.metadata),
+            "primitive": "authored_room_composition",
+            "last_operation": "duplicate_special",
+            "last_duplicated_primitive": target,
+        },
+    )
+    rooms = tuple(project.rooms[:index] + (updated,) + project.rooms[index + 1 :])
+    return _replace_rooms(project, rooms, operation="duplicate_special")
+
+
 def apply_authored_floor_plan_inset(
     project: AuthoredModuleProject,
     *,
@@ -2827,6 +2922,7 @@ __all__ = [
     "bridge_authored_floor_plan_edges",
     "cleanup_authored_floor_plan_normals",
     "cleanup_authored_floor_plan_vertices",
+    "duplicate_authored_room_composition_primitive",
     "fill_authored_floor_plan_face",
     "flatten_authored_floor_plan_vertices",
     "mirror_authored_floor_plan_vertices",

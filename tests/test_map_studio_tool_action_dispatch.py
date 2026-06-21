@@ -89,6 +89,35 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert boolean.command_kwargs["center"] == (1.0, 2.0)
     assert boolean.command_kwargs["size"] == (3.0, 4.0)
 
+    duplicate_missing = resolve_map_studio_tool_belt_action("duplicate_special")
+
+    assert duplicate_missing.enabled is False
+    assert "primitive selection" in duplicate_missing.disabled_reason
+
+    duplicate = resolve_map_studio_tool_belt_action(
+        "duplicate_special",
+        MapStudioToolActionContext(
+            room_resref="room_a",
+            primitive_name="room_a_cube",
+            duplicate_count=3,
+            duplicate_translation_offset=(0.5, 0.25, 0.0),
+            duplicate_rotation_offset_degrees_z=15.0,
+            duplicate_scale_multiplier=(1.0, 1.0, 1.2),
+        ),
+    )
+
+    assert duplicate.enabled is True
+    assert duplicate.command_method == "duplicate_authored_room_primitive"
+    assert duplicate.command_kwargs == {
+        "room_resref": "room_a",
+        "primitive_name": "room_a_cube",
+        "duplicate_count": 3,
+        "translation_offset": (0.5, 0.25, 0.0),
+        "rotation_offset_degrees_z": 15.0,
+        "scale_multiplier": (1.0, 1.0, 1.2),
+    }
+    assert duplicate.mutates_kmap is True
+
 
 def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo() -> None:
     _install_native_payload_paths()
@@ -131,6 +160,39 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
     assert controller.can_undo_map_studio_command() is True
     assert controller.command_history.undo_label == "Apply room operation bevel"
 
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grdupsp")
+    primitive_before = controller.authored_room_primitive_transforms()[0]
+    count_before = len(controller.authored_room_primitive_transforms())
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "duplicate_special",
+        MapStudioToolActionContext(
+            room_resref=primitive_before.room_resref,
+            primitive_name=primitive_before.primitive_name,
+            duplicate_count=2,
+            duplicate_translation_offset=(0.5, 0.0, 0.0),
+        ),
+    )
+
+    duplicated = controller.authored_room_primitive_transforms()
+    duplicate_names = {item.primitive_name for item in duplicated}
+    first_duplicate = next(item for item in duplicated if item.primitive_name == f"{primitive_before.primitive_name}_dup_01"[:32])
+    second_duplicate = next(item for item in duplicated if item.primitive_name == f"{primitive_before.primitive_name}_dup_02"[:32])
+
+    assert len(duplicated) == count_before + 2
+    assert f"{primitive_before.primitive_name}_dup_01"[:32] in duplicate_names
+    assert f"{primitive_before.primitive_name}_dup_02"[:32] in duplicate_names
+    assert first_duplicate.primitive_type == primitive_before.primitive_type
+    assert first_duplicate.translation[0] == primitive_before.translation[0] + 0.5
+    assert second_duplicate.translation[0] == primitive_before.translation[0] + 1.0
+    assert controller.can_undo_map_studio_command() is True
+    assert controller.command_history.undo_label == f"Duplicate primitive {primitive_before.primitive_name}"
+
+    controller.undo_map_studio_command()
+
+    assert len(controller.authored_room_primitive_transforms()) == count_before
+
 
 def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -> None:
     window_source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
@@ -142,6 +204,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert "from src.core.modules.map_studio_tool_action_dispatch import" in window_source
     assert "resolve_map_studio_tool_belt_action(key, route_context)" in window_source
     assert "execute_map_studio_tool_belt_action(self.controller, action_key, context)" in window_source
+    assert '"duplicate_special",' in window_source
     assert 'MapStudioToolBeltAction(\n        "triangulate",' in scene_catalog
     assert 'MapStudioToolBeltAction(\n        "triangulate",' in tools_catalog
 
@@ -153,3 +216,4 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="add_authored_room_primitive"' in source
         assert 'command_method="snap_authored_floor_plan_vertex"' in source
         assert 'command_method="apply_authored_room_operation"' in source
+        assert 'command_method="duplicate_authored_room_primitive"' in source

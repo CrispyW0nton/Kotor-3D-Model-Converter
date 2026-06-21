@@ -43,6 +43,10 @@ class MapStudioToolActionContext:
     operation_edge_index: int = 0
     cut_center: tuple[float, float] = (0.0, 0.0)
     cut_size: tuple[float, float] = (1.0, 1.0)
+    duplicate_count: int = 1
+    duplicate_translation_offset: tuple[float, float, float] = (1.0, 0.0, 0.0)
+    duplicate_rotation_offset_degrees_z: float = 0.0
+    duplicate_scale_multiplier: tuple[float, float, float] = (1.0, 1.0, 1.0)
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -492,6 +496,35 @@ def resolve_map_studio_tool_belt_action(
                 "result_room_resref": ctx.result_room_resref,
             },
             mutates_kmap=True,
+        )
+
+    if key == "duplicate_special":
+        if not ctx.primitive_name:
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="grid",
+                enabled=False,
+                disabled_reason="Duplicate Special needs an authored composition primitive selection first.",
+            )
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="grid",
+            command_method="duplicate_authored_room_primitive",
+            command_kwargs={
+                "room_resref": ctx.room_resref,
+                "primitive_name": ctx.primitive_name,
+                "duplicate_count": int(ctx.duplicate_count),
+                "translation_offset": tuple(ctx.duplicate_translation_offset),
+                "rotation_offset_degrees_z": float(ctx.duplicate_rotation_offset_degrees_z),
+                "scale_multiplier": tuple(ctx.duplicate_scale_multiplier),
+            },
+            mutates_kmap=True,
+            authoring_context=(
+                "Duplicate Special: repeat the selected modular primitive with a deterministic transform offset; "
+                "MDL/MDX/WOK/LYT/VIS/PTH/.mod proof becomes stale."
+            ),
         )
 
     focus = _VERTEX_FOCUS.get(key)

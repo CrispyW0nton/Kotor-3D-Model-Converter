@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Adds Duplicate Special Primitive Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Modeling commands / Primitive composition
+
+- Added a headless Duplicate Special operation for authored room composition primitives, including bounded duplicate counts, positive scale validation, deterministic duplicate names, repeatable translation/rotation/scale offsets, and authored KMAP metadata.
+- Wrapped the operation in the Map Studio controller command spine so Duplicate Special records undo metadata and marks MDL/MDX/WOK/LYT/VIS/PTH/.mod readiness/proof stale.
+- Marked Duplicate Special implemented in the Scene and Tools modeling catalogs and routed the Level Editor tool-belt action through the shared dispatcher instead of leaving it as a focus-only planned tool.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Core.Tools/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Tools/Python/src/core/modules/module_editor_controller.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py tests/test_map_studio_command_history.py -q --basetemp .pytest_tmp_map_studio_duplicate_special`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Promotes Modeling Belt Operations To Executable Routes
 
 Owner: LordVaderCW

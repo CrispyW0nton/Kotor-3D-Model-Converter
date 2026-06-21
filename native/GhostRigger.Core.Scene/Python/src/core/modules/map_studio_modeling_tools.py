@@ -489,7 +489,7 @@ _MODELING_TOOLS: tuple[MapStudioModelingTool, ...] = (
         ("object",),
         "Duplicate selected objects with repeatable transform offsets for columns, walls, stairs, or trim kits.",
         "Duplicated outputs must keep stable KMAP ids and export-object ownership.",
-        implemented=False,
+        implemented=True,
     ),
     MapStudioModelingTool(
         "curve_tool",
@@ -1078,7 +1078,7 @@ _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
         "duplicate_special",
         "Duplicate selected objects with repeatable transform offsets.",
         "Duplicate Special must preserve stable KMAP ids and export ownership.",
-        implemented=False,
+        implemented=True,
     ),
     MapStudioToolBeltAction(
         "curve_tool",
