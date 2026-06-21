@@ -206,6 +206,18 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert harden.command_method == "set_authored_room_edge_normal_policy"
     assert harden.command_kwargs["policy"] == "hard"
 
+    shrink_wrap = resolve_map_studio_tool_belt_action(
+        "shrink_wrap",
+        MapStudioToolActionContext(room_resref="terrain01"),
+    )
+
+    assert shrink_wrap.enabled is True
+    assert shrink_wrap.command_method == "apply_authored_terrain_operation"
+    assert shrink_wrap.command_kwargs == {"operation": "shrink_wrap", "room_resref": "terrain01"}
+    assert shrink_wrap.mutates_kmap is True
+    assert "gameplay placements" in shrink_wrap.authoring_context
+    assert "arbitrary mesh/walkmesh shrink-wrap remains planned" in shrink_wrap.authoring_context
+
 
 def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo() -> None:
     _install_native_payload_paths()
@@ -399,6 +411,44 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
     restored_boolean_rooms = controller.authored_floor_plan_room_choices()
     assert {room.room_resref for room in restored_boolean_rooms} == {"grbool01_room01", "grbool01_cut"}
 
+    controller.create_authored_room_preset_module(preset_id="terrain_heightfield", module_root="grwrap01")
+    terrain_room = controller.authored_terrain_room_choices()[0]
+    terrain_payload = controller.project.extra_sections["authored_module"]
+    entry_position = list(terrain_payload["placements"]["entry_point"]["position"])
+    placeable_position = list(terrain_payload["placements"]["placeables"][0]["position"])
+    waypoint_position = list(terrain_payload["placements"]["waypoints"][0]["position"])
+    terrain_payload["placements"]["entry_point"]["position"] = [entry_position[0], entry_position[1], 9.0]
+    terrain_payload["placements"]["placeables"][0]["position"] = [placeable_position[0], placeable_position[1], -7.0]
+    terrain_payload["placements"]["waypoints"][0]["position"] = [waypoint_position[0], waypoint_position[1], 8.0]
+    controller.project.extra_sections["authored_module"] = terrain_payload
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "shrink_wrap",
+        MapStudioToolActionContext(room_resref=terrain_room.room_resref),
+    )
+
+    wrapped_payload = controller.project.extra_sections["authored_module"]
+    wrapped_placements = wrapped_payload["placements"]
+    wrapped_room = wrapped_payload["rooms"][0]
+
+    assert wrapped_placements["entry_point"]["position"] == entry_position
+    assert wrapped_placements["placeables"][0]["position"] == placeable_position
+    assert wrapped_placements["waypoints"][0]["position"] == waypoint_position
+    assert wrapped_placements["metadata"]["terrain_height_repaired_after_operation"] == "terrain_shrink_wrap"
+    assert wrapped_room["primitive"]["metadata"]["last_operation"] == "terrain_shrink_wrap"
+    assert wrapped_room["primitive"]["metadata"]["shrink_wrap_target"] == "authored_gameplay_placements"
+    assert wrapped_room["metadata"]["shrink_wrap_surface"] == "terrain_heightfield"
+    assert controller.command_history.undo_label == "Apply terrain operation shrink_wrap"
+
+    controller.undo_map_studio_command()
+
+    restored_terrain_payload = controller.project.extra_sections["authored_module"]
+    restored_placements = restored_terrain_payload["placements"]
+    assert restored_placements["entry_point"]["position"][2] == 9.0
+    assert restored_placements["placeables"][0]["position"][2] == -7.0
+    assert restored_placements["waypoints"][0]["position"][2] == 8.0
+
 
 def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -> None:
     window_source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
@@ -411,6 +461,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert "resolve_map_studio_tool_belt_action(key, route_context)" in window_source
     assert "execute_map_studio_tool_belt_action(self.controller, action_key, context)" in window_source
     assert '"duplicate_special",' in window_source
+    assert '"shrink_wrap",' in window_source
     assert 'MapStudioToolBeltAction(\n        "triangulate",' in scene_catalog
     assert 'MapStudioToolBeltAction(\n        "triangulate",' in tools_catalog
 
@@ -424,6 +475,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="apply_authored_room_operation"' in source
         assert 'command_method="duplicate_authored_room_primitive"' in source
         assert 'command_method="set_authored_room_edge_normal_policy"' in source
+        assert 'command_method="apply_authored_terrain_operation"' in source
         assert '"boolean_a_minus_b"' in source
         assert '"boolean_b_minus_a"' in source
         assert '"insert_edge_loop"' in source

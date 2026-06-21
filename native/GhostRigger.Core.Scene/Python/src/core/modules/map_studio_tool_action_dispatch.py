@@ -233,6 +233,23 @@ def resolve_map_studio_tool_belt_action(
             ),
         )
 
+    if key == "shrink_wrap":
+        return _route(
+            action,
+            focus_component_mode="walkmesh",
+            focus_snap_mode="surface",
+            command_method="apply_authored_terrain_operation",
+            command_kwargs={
+                "operation": "shrink_wrap",
+                "room_resref": ctx.room_resref,
+            },
+            mutates_kmap=True,
+            authoring_context=(
+                "Shrink Wrap: project authored entry points, waypoints, and gameplay placements onto the selected "
+                "terrain heightfield; arbitrary mesh/walkmesh shrink-wrap remains planned."
+            ),
+        )
+
     placement_kind = _PLACEMENT_ACTIONS.get(key)
     if placement_kind:
         return _route(

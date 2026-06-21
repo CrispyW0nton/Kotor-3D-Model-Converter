@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Adds Terrain Shrink Wrap Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Terrain / Placement projection
+
+- Marked Shrink Wrap implemented in the Scene and Tools modeling catalogs as a KOTOR-scoped terrain projection command instead of an arbitrary mesh shrink-wrap claim.
+- Routed the Level Editor Shrink Wrap tool-belt action through the shared dispatcher to `apply_authored_terrain_operation`, recording KMAP metadata for terrain heightfield projection and marking MDL/MDX/WOK/LYT/VIS/PTH/.mod readiness/proof stale through the existing command spine.
+- Added headless terrain operation behavior that projects authored entry points, waypoints, and gameplay placements onto the selected terrain heightfield while preserving undo/redo.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Core.Tools/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py tests/test_map_studio_command_history.py -q --basetemp .pytest_tmp_map_studio_shrink_wrap`.
+
 ### [2026-06-21] Map Studio Adds Floor-Plan Boolean Difference Commands
 
 Owner: LordVaderCW

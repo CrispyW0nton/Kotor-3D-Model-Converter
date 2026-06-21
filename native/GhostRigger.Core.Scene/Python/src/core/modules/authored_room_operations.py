@@ -3071,6 +3071,7 @@ def apply_authored_terrain_operation(project: AuthoredModuleProject, operation: 
     """Dispatch a named Map Studio terrain heightfield operation."""
 
     op = str(operation or "").strip().lower()
+    shrink_wrap_ops = {"shrink_wrap", "shrink_wrap_to_terrain", "snap_placements_to_terrain"}
     shape_preset_id = str(kwargs.get("preset_id", "") or "").strip().lower()
     brush_name = str(kwargs.get("brush", "") or "").strip().lower()
     if op.startswith("shape_preset:"):
@@ -3130,17 +3131,36 @@ def apply_authored_terrain_operation(project: AuthoredModuleProject, operation: 
             preset_id=shape_preset_id,
             height=float(kwargs.get("height", 0.0)),
         )
+    elif op in shrink_wrap_ops:
+        updated_primitive = replace(
+            primitive,
+            metadata={
+                **dict(primitive.metadata),
+                "last_operation": "terrain_shrink_wrap",
+                "shrink_wrap_target": "authored_gameplay_placements",
+                "shrink_wrap_surface": "terrain_heightfield",
+                "source": "map_studio:terrain_shrink_wrap",
+            },
+        )
     else:
         raise ValueError(f"Unsupported authored terrain operation: {operation}.")
+    room_metadata = {
+        **dict(room.metadata),
+        "primitive": "terrain_heightfield",
+        "last_operation": f"terrain_{op}",
+    }
+    if op in shrink_wrap_ops:
+        room_metadata.update(
+            {
+                "shrink_wrap_target": "authored_gameplay_placements",
+                "shrink_wrap_surface": "terrain_heightfield",
+            }
+        )
     updated = replace(
         room,
         primitive=updated_primitive,
         composition=None,
-        metadata={
-            **dict(room.metadata),
-            "primitive": "terrain_heightfield",
-            "last_operation": f"terrain_{op}",
-        },
+        metadata=room_metadata,
     )
     rooms = tuple(project.rooms[:index] + (updated,) + project.rooms[index + 1 :])
     placements = _repair_placements_for_terrain(
