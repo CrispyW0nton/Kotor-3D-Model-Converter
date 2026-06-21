@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Adds Floor-Plan Boolean Difference Commands
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Modeling commands / Boolean Difference
+
+- Added a conservative headless Boolean Difference operation for compatible rectangular floor-plan rooms, subtracting one authored room footprint from another and emitting the remaining A-B pieces as deterministic KOTOR room/export boundaries.
+- Marked Boolean A-B and Boolean B-A implemented in the Scene and Tools modeling catalogs and routed both actions through the shared Map Studio tool-belt dispatcher.
+- Kept capability honest by limiting this first pass to axis-aligned rectangular floor-plan rooms, consuming the cutter operand through undoable KMAP state, and marking MDL/MDX/WOK/LYT/VIS/PTH/.mod readiness/proof stale through the existing command spine.
+- Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Core.Tools/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py tests/test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py tests/test_map_studio_command_history.py -q --basetemp .pytest_tmp_map_studio_boolean_difference`.
+
 ### [2026-06-21] Map Studio Adds Edge Normal Policy Commands
 
 Owner: LordVaderCW

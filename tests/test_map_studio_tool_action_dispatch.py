@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import sys
 from pathlib import Path
 
@@ -88,6 +89,39 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert boolean.command_kwargs["operation"] == "rectangular_cut"
     assert boolean.command_kwargs["center"] == (1.0, 2.0)
     assert boolean.command_kwargs["size"] == (3.0, 4.0)
+
+    boolean_diff_missing = resolve_map_studio_tool_belt_action("boolean_a_minus_b")
+
+    assert boolean_diff_missing.enabled is False
+    assert "two selected rectangular floor-plan rooms" in boolean_diff_missing.disabled_reason
+
+    boolean_a_minus_b = resolve_map_studio_tool_belt_action(
+        "boolean_a_minus_b",
+        MapStudioToolActionContext(
+            first_room_resref="room_a",
+            second_room_resref="room_b",
+            result_room_resref="bool_out",
+        ),
+    )
+
+    assert boolean_a_minus_b.enabled is True
+    assert boolean_a_minus_b.command_method == "apply_authored_room_operation"
+    assert boolean_a_minus_b.command_kwargs == {
+        "operation": "boolean_difference",
+        "first_room_resref": "room_a",
+        "second_room_resref": "room_b",
+        "result_room_resref": "bool_out",
+    }
+    assert "consume the cutter operand" in boolean_a_minus_b.authoring_context
+
+    boolean_b_minus_a = resolve_map_studio_tool_belt_action(
+        "boolean_b_minus_a",
+        MapStudioToolActionContext(first_room_resref="room_a", second_room_resref="room_b"),
+    )
+
+    assert boolean_b_minus_a.enabled is True
+    assert boolean_b_minus_a.command_kwargs["first_room_resref"] == "room_b"
+    assert boolean_b_minus_a.command_kwargs["second_room_resref"] == "room_a"
 
     slice_y = resolve_map_studio_tool_belt_action(
         "cut_slice_insert_edges",
@@ -311,6 +345,60 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
     assert hard_metadata["edge_normal_policy_operation"] == "harden_edges"
     assert controller.command_history.undo_label == "Harden edges"
 
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grbool01")
+    boolean_payload = controller.project.extra_sections["authored_module"]
+    base_room = boolean_payload["rooms"][0]
+    cutter_room = copy.deepcopy(base_room)
+    cutter_room["room_resref"] = "grbool01_cut"
+    cutter_room["primitive"]["room_resref"] = "grbool01_cut"
+    cutter_room["primitive"]["points"] = [
+        [-1.0, -1.0],
+        [1.0, -1.0],
+        [1.0, 1.0],
+        [-1.0, 1.0],
+    ]
+    cutter_room["primitive"]["metadata"] = {
+        **dict(cutter_room["primitive"].get("metadata", {})),
+        "source": "test:boolean_cutter",
+        "shape": "rectangle_cutter",
+    }
+    cutter_room["metadata"] = {
+        **dict(cutter_room.get("metadata", {})),
+        "source": "test:boolean_cutter",
+        "primitive": "floor_plan_extrusion",
+    }
+    boolean_payload["rooms"] = [base_room, cutter_room]
+    for room in boolean_payload["rooms"]:
+        room["visible_rooms"] = ["grbool01_room01", "grbool01_cut"]
+    controller.project.extra_sections["authored_module"] = boolean_payload
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "boolean_a_minus_b",
+        MapStudioToolActionContext(
+            first_room_resref="grbool01_room01",
+            second_room_resref="grbool01_cut",
+            result_room_resref="grboolout",
+        ),
+    )
+
+    boolean_rooms = controller.authored_floor_plan_room_choices()
+    boolean_room_names = {room.room_resref for room in boolean_rooms}
+    boolean_payload_after = controller.project.extra_sections["authored_module"]
+
+    assert len(boolean_rooms) == 4
+    assert boolean_room_names == {"grboolout_l1", "grboolout_r2", "grboolout_b3", "grboolout_t4"}
+    assert "grbool01_cut" not in boolean_room_names
+    assert boolean_payload_after["rooms"][0]["primitive"]["metadata"]["operation"] == "boolean_difference"
+    assert boolean_payload_after["rooms"][0]["primitive"]["metadata"]["boolean_cutter_consumed"] is True
+    assert boolean_payload_after["rooms"][0]["primitive"]["metadata"]["boolean_cutter_room_resref"] == "grbool01_cut"
+    assert controller.command_history.undo_label == "Apply room operation boolean_difference"
+
+    controller.undo_map_studio_command()
+
+    restored_boolean_rooms = controller.authored_floor_plan_room_choices()
+    assert {room.room_resref for room in restored_boolean_rooms} == {"grbool01_room01", "grbool01_cut"}
+
 
 def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -> None:
     window_source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
@@ -336,4 +424,6 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="apply_authored_room_operation"' in source
         assert 'command_method="duplicate_authored_room_primitive"' in source
         assert 'command_method="set_authored_room_edge_normal_policy"' in source
+        assert '"boolean_a_minus_b"' in source
+        assert '"boolean_b_minus_a"' in source
         assert '"insert_edge_loop"' in source

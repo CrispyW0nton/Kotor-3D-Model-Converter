@@ -390,7 +390,7 @@ _MODELING_TOOLS: tuple[MapStudioModelingTool, ...] = (
         ("object", "face"),
         "Subtract the second selected authored object/primitive from the first selected object.",
         "Subtraction must be cleaned for manifold geometry before KOTOR MDL/WOK export.",
-        implemented=False,
+        implemented=True,
     ),
     MapStudioModelingTool(
         "boolean_b_minus_a",
@@ -399,7 +399,7 @@ _MODELING_TOOLS: tuple[MapStudioModelingTool, ...] = (
         ("object", "face"),
         "Subtract the first selected authored object/primitive from the second selected object.",
         "Subtraction must be cleaned for manifold geometry before KOTOR MDL/WOK export.",
-        implemented=False,
+        implemented=True,
     ),
     MapStudioModelingTool(
         "insert_edge_loop",
@@ -952,7 +952,7 @@ _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
         "boolean_a_minus_b",
         "Subtract selected object B from selected object A.",
         "Boolean subtraction needs manifold cleanup before MDL/WOK export.",
-        implemented=False,
+        implemented=True,
     ),
     MapStudioToolBeltAction(
         "boolean_b_minus_a",
@@ -961,7 +961,7 @@ _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
         "boolean_b_minus_a",
         "Subtract selected object A from selected object B.",
         "Boolean subtraction needs manifold cleanup before MDL/WOK export.",
-        implemented=False,
+        implemented=True,
     ),
     MapStudioToolBeltAction(
         "mirror_x",

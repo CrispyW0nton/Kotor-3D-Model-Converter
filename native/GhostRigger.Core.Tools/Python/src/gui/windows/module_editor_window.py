@@ -1787,6 +1787,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "extrude",
             "bevel",
             "boolean",
+            "boolean_a_minus_b",
+            "boolean_b_minus_a",
             "cut_slice_insert_edges",
             "insert_edge_loop",
             "fill",

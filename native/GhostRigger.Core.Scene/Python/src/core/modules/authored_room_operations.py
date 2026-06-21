@@ -1961,6 +1961,143 @@ def apply_authored_floor_plan_rectangular_cut(
     return _replace_rooms(project, rooms, operation="rectangular_cut", placements=_placements_for_cut(project, pieces[0]))
 
 
+def _floor_plan_rect_bounds(primitive: FloorPlanRoomPrimitive) -> tuple[float, float, float, float]:
+    points = tuple(primitive.points or ())
+    if len(points) != 4:
+        raise ValueError("Boolean Difference currently requires axis-aligned rectangular floor-plan rooms.")
+    xs = sorted({round(float(point[0]), 9) for point in points})
+    ys = sorted({round(float(point[1]), 9) for point in points})
+    if len(xs) != 2 or len(ys) != 2:
+        raise ValueError("Boolean Difference currently requires axis-aligned rectangular floor-plan rooms.")
+    expected = {(xs[0], ys[0]), (xs[1], ys[0]), (xs[1], ys[1]), (xs[0], ys[1])}
+    actual = {(round(float(x), 9), round(float(y), 9)) for x, y in points}
+    if actual != expected:
+        raise ValueError("Boolean Difference currently requires axis-aligned rectangular floor-plan rooms.")
+    return (xs[0], ys[0], xs[1], ys[1])
+
+
+def _room_position_3(room: AuthoredRoomSpec) -> tuple[float, float, float]:
+    position = tuple(room.position or (0.0, 0.0, 0.0))
+    if len(position) < 3:
+        return (0.0, 0.0, 0.0)
+    return (float(position[0]), float(position[1]), float(position[2]))
+
+
+def _floor_plan_world_rect_bounds(
+    room: AuthoredRoomSpec,
+    primitive: FloorPlanRoomPrimitive,
+) -> tuple[float, float, float, float]:
+    x0, y0, x1, y1 = _floor_plan_rect_bounds(primitive)
+    px, py, _pz = _room_position_3(room)
+    return (x0 + px, y0 + py, x1 + px, y1 + py)
+
+
+def _boolean_cut_from_room_bounds(
+    *,
+    minuend_room: AuthoredRoomSpec,
+    minuend: FloorPlanRoomPrimitive,
+    cutter_room: AuthoredRoomSpec,
+    cutter: FloorPlanRoomPrimitive,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    minuend_z = _room_position_3(minuend_room)[2] + float(minuend.z)
+    cutter_z = _room_position_3(cutter_room)[2] + float(cutter.z)
+    if abs(minuend_z - cutter_z) > 1.0e-7:
+        raise ValueError("Boolean Difference requires floor-plan rooms on the same floor plane.")
+    cx0, cy0, cx1, cy1 = _floor_plan_world_rect_bounds(cutter_room, cutter)
+    mx, my, _mz = _room_position_3(minuend_room)
+    local_x0 = cx0 - mx
+    local_x1 = cx1 - mx
+    local_y0 = cy0 - my
+    local_y1 = cy1 - my
+    return (
+        ((local_x0 + local_x1) * 0.5, (local_y0 + local_y1) * 0.5),
+        (max(local_x1 - local_x0, 0.0), max(local_y1 - local_y0, 0.0)),
+    )
+
+
+def apply_authored_floor_plan_boolean_difference(
+    project: AuthoredModuleProject,
+    *,
+    first_room_resref: str,
+    second_room_resref: str,
+    result_room_resref: str = "",
+) -> AuthoredModuleProject:
+    """Subtract the second rectangular floor-plan room from the first room.
+
+    This first-pass boolean consumes the cutter operand and emits the remaining
+    A-B pieces as separate rectangular room/export boundaries.  That keeps MDL
+    and WOK output deterministic while arbitrary mesh booleans remain planned.
+    """
+
+    first_index = _target_room_index(project, first_room_resref)
+    second_index = _target_room_index(project, second_room_resref)
+    if first_index == second_index:
+        raise ValueError("Boolean Difference requires two different floor-plan rooms.")
+    first_room = project.rooms[first_index]
+    second_room = project.rooms[second_index]
+    first_primitive = _floor_plan_for_room(first_room)
+    second_primitive = _floor_plan_for_room(second_room)
+    center, size = _boolean_cut_from_room_bounds(
+        minuend_room=first_room,
+        minuend=first_primitive,
+        cutter_room=second_room,
+        cutter=second_primitive,
+    )
+    prefix = normalise_resref(result_room_resref) or normalise_resref(
+        f"{normalise_resref(first_room.room_resref)}_minus_{normalise_resref(second_room.room_resref)}"
+    )
+    pieces = apply_floor_plan_rectangular_cut(
+        first_primitive,
+        FloorPlanRectangularCutOperation(
+            center=center,
+            size=size,
+            room_resref_prefix=prefix,
+            metadata={
+                "source": "map_studio:project_operation",
+                "operation": "boolean_difference",
+                "boolean_minuend_room_resref": normalise_resref(first_room.room_resref),
+                "boolean_cutter_room_resref": normalise_resref(second_room.room_resref),
+                "boolean_cutter_consumed": True,
+            },
+        ),
+    )
+    piece_rooms = tuple(
+        replace(
+            first_room,
+            room_resref=piece.room_resref,
+            primitive=piece,
+            composition=None,
+            visible_rooms=(),
+            metadata={
+                **dict(first_room.metadata),
+                "last_operation": "boolean_difference",
+                "boolean_minuend_room_resref": normalise_resref(first_room.room_resref),
+                "boolean_cutter_room_resref": normalise_resref(second_room.room_resref),
+                "boolean_cutter_consumed": True,
+                "cut_piece_role": piece.metadata.get("piece_role", ""),
+            },
+        )
+        for piece in pieces
+    )
+    rooms: list[AuthoredRoomSpec] = []
+    for index, room in enumerate(project.rooms):
+        if index == first_index:
+            rooms.extend(piece_rooms)
+        elif index == second_index:
+            continue
+        else:
+            rooms.append(room)
+    room_tuple = tuple(rooms)
+    visible = _all_room_names(room_tuple)
+    room_tuple = tuple(replace(item, visible_rooms=visible) for item in room_tuple)
+    return _replace_rooms(
+        project,
+        room_tuple,
+        operation="boolean_difference",
+        placements=_placements_for_floor_plan_piece(project, pieces[0], operation="boolean_difference"),
+    )
+
+
 def apply_authored_floor_plan_axis_split(
     project: AuthoredModuleProject,
     *,
@@ -2878,6 +3015,13 @@ def apply_authored_floor_plan_operation(project: AuthoredModuleProject, operatio
             room_resref=str(kwargs.get("room_resref", "")),
             room_resref_prefix=kwargs.get("room_resref_prefix"),
         )
+    if op in {"boolean_difference", "boolean_a_minus_b", "boolean_subtract"}:
+        return apply_authored_floor_plan_boolean_difference(
+            project,
+            first_room_resref=str(kwargs.get("first_room_resref", kwargs.get("room_resref", ""))),
+            second_room_resref=str(kwargs.get("second_room_resref", kwargs.get("target_room_resref", ""))),
+            result_room_resref=str(kwargs.get("result_room_resref", "")),
+        )
     if op in {"axis_split", "split", "knife_split", "split_x", "split_y"}:
         axis = str(kwargs.get("axis", "") or "").strip().lower()
         if op == "split_x":
@@ -3019,6 +3163,7 @@ __all__ = [
     "add_authored_room_composition_primitive",
     "apply_authored_terrain_operation",
     "apply_authored_floor_plan_axis_split",
+    "apply_authored_floor_plan_boolean_difference",
     "apply_authored_floor_plan_rectangular_union",
     "apply_authored_floor_plan_bevel",
     "apply_authored_floor_plan_edge_extrude",

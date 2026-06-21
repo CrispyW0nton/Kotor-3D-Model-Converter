@@ -426,6 +426,37 @@ def resolve_map_studio_tool_belt_action(
             ),
         )
 
+    if key in {"boolean_a_minus_b", "boolean_b_minus_a"}:
+        first = ctx.first_room_resref
+        second = ctx.second_room_resref
+        if not first or not second:
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="grid",
+                enabled=False,
+                disabled_reason="Boolean Difference needs two selected rectangular floor-plan rooms.",
+            )
+        minuend = first if key == "boolean_a_minus_b" else second
+        cutter = second if key == "boolean_a_minus_b" else first
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="grid",
+            command_method="apply_authored_room_operation",
+            command_kwargs={
+                "operation": "boolean_difference",
+                "first_room_resref": minuend,
+                "second_room_resref": cutter,
+                "result_room_resref": ctx.result_room_resref,
+            },
+            mutates_kmap=True,
+            authoring_context=(
+                "Boolean Difference: subtract one compatible rectangular floor-plan room from another, "
+                "consume the cutter operand, and emit KOTOR-safe room/export pieces."
+            ),
+        )
+
     if key == "triangulate":
         return _route(
             action,
