@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Aligns Direct Smoke Builder Lighting
+
+Owner: LordVaderCW
+Task: T2605 / T2601
+Subsystem: Map Studio / Direct dev smoke-module builder and authored lighting manifests
+Intersects: Domain Core Modules smoke builder, ModuleMeshes mirror package, and `grdev01` smoke tests.
+
+- Added the same authored key-light intent to the direct `DevModuleSmokeRequest` builder path that the KMAP smoke payload uses, keeping both canonical `grdev01` creation routes consistent.
+- Extended floor-plan, composition, and terrain single-room project factories to accept authored lights so lighting is not locked to only one room authoring mode.
+- Added direct-smoke manifest lighting metadata with clear capability honesty: authored lights are viewport/export intent until lightmaps or in-game lighting proof are recorded.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_project.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/dev_module_smoke.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_project.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/dev_module_smoke.py tests/test_dev_module_smoke.py`; `python -m pytest tests/test_dev_module_smoke.py::test_t2601_builds_from_scratch_dev_module_resources tests/test_dev_module_smoke.py::test_t2614_exports_floor_plan_smoke_manifest_with_opening_metadata tests/test_dev_module_smoke.py::test_t2601_exports_staged_mod_and_manifest -q --basetemp .pytest_tmp_map_studio_direct_smoke_lighting`; `python -m pytest tests/test_dev_module_smoke.py -q --basetemp .pytest_tmp_map_studio_direct_smoke_lighting_file`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Seeds Smoke Map Lighting
 
 Owner: LordVaderCW

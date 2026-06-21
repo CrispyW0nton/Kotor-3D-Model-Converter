@@ -57,6 +57,9 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     assert authored.project.rooms[0].normalised_resref() == "grdev01_room01"
     assert authored.project.rooms[0].composition is not None
     assert authored.project.metadata.metadata["task"] == "T2601"
+    assert authored.project.lights[0].name == "grdev01_key_light"
+    assert authored.project.lights[0].room_resref == "grdev01_room01"
+    assert authored.project.lights[0].metadata["purpose"] == "canonical_smoke_visibility"
     assert ("grdev01", "are") in keys
     assert ("grdev01", "git") in keys
     assert ("module", "ifo") in keys
@@ -275,6 +278,12 @@ def test_t2614_exports_floor_plan_smoke_manifest_with_opening_metadata(tmp_path:
     assert smoke["contains"]["simple_doorway_marker"] is False
     assert smoke["contains"]["wall_opening"] is True
     assert smoke["contains"]["walkmesh_boundary_walls"] is True
+    assert smoke["contains"]["simple_authored_lighting"] is True
+    assert smoke["authored_project"]["light_count"] == 1
+    assert smoke["authored_lighting"]["lighting_count"] == 1
+    assert smoke["authored_lighting"]["room_lights"][0]["name"] == "grdev01_key_light"
+    assert smoke["authored_lighting"]["lightmap_status"] == "viewport_lit_only"
+    assert smoke["authored_lighting"]["game_tested_lighting"] is False
     assert smoke["authored_project"]["metadata"]["room_geometry_mode"] == "floor_plan"
     assert smoke["authored_geometry"]["source"] == "src.core.modules.authored_room_floorplan"
     assert smoke["authored_geometry"]["primitive"] == "floor_plan_extrusion"
@@ -344,10 +353,17 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     assert smoke["contains"]["primitive_composition_room"] is True
     assert smoke["contains"]["simple_doorway_marker"] is True
     assert smoke["contains"]["walkmesh_boundary_walls"] is True
+    assert smoke["contains"]["simple_authored_lighting"] is True
     assert smoke["authored_project"]["source"] == "src.core.modules.authored_module_project"
     assert smoke["authored_project"]["module_root"] == "grdev01"
     assert smoke["authored_project"]["room_count"] == 1
+    assert smoke["authored_project"]["light_count"] == 1
     assert smoke["authored_project"]["metadata"]["task"] == "T2601"
+    assert smoke["authored_lighting"]["lighting_count"] == 1
+    assert smoke["authored_lighting"]["room_lights"][0]["room_resref"] == "grdev01_room01"
+    assert smoke["authored_lighting"]["room_lights"][0]["metadata"]["purpose"] == "canonical_smoke_visibility"
+    assert smoke["authored_lighting"]["lightmap_status"] == "viewport_lit_only"
+    assert smoke["authored_lighting"]["game_tested_lighting"] is False
     assert smoke["authored_layout"]["source"] == "src.core.modules.authored_module_layout"
     assert smoke["authored_layout"]["room_count"] == 1
     assert smoke["authored_layout"]["rooms"] == [

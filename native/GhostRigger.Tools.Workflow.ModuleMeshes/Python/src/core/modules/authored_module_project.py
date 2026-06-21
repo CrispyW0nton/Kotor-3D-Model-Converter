@@ -244,6 +244,7 @@ def create_floor_plan_room_project(
     display_name: str,
     floor_plan: FloorPlanRoomPrimitive,
     placements: AuthoredGameplayPlacement,
+    lights: tuple[AuthoredRoomLight, ...] = (),
     notes: tuple[str, ...] = (),
     metadata: dict[str, Any] | None = None,
 ) -> AuthoredModuleProject:
@@ -270,7 +271,7 @@ def create_floor_plan_room_project(
         ),
         rooms=(room,),
         placements=placements,
-        lights=(),
+        lights=tuple(lights or ()),
         notes=notes,
     )
 
@@ -282,6 +283,7 @@ def create_composition_room_project(
     display_name: str,
     composition: AuthoredRoomComposition,
     placements: AuthoredGameplayPlacement,
+    lights: tuple[AuthoredRoomLight, ...] = (),
     notes: tuple[str, ...] = (),
     metadata: dict[str, Any] | None = None,
 ) -> AuthoredModuleProject:
@@ -309,7 +311,7 @@ def create_composition_room_project(
         ),
         rooms=(room,),
         placements=placements,
-        lights=(),
+        lights=tuple(lights or ()),
         notes=notes,
     )
 
@@ -321,6 +323,7 @@ def create_terrain_room_project(
     display_name: str,
     terrain: TerrainHeightfieldPrimitive,
     placements: AuthoredGameplayPlacement,
+    lights: tuple[AuthoredRoomLight, ...] = (),
     notes: tuple[str, ...] = (),
     metadata: dict[str, Any] | None = None,
 ) -> AuthoredModuleProject:
@@ -347,7 +350,7 @@ def create_terrain_room_project(
         ),
         rooms=(room,),
         placements=placements,
-        lights=(),
+        lights=tuple(lights or ()),
         notes=notes,
     )
 

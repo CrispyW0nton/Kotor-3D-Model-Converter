@@ -39,6 +39,7 @@ from .authored_room_geometry import (
     PrimitiveMesh,
     RectangularRoomPrimitive,
 )
+from .authored_module_lighting import AuthoredRoomLight, authored_room_light_payload
 from .authored_walkmesh_surfaces import resolve_walkmesh_surface_id
 from .authored_module_project import (
     AuthoredModuleProject,
@@ -92,6 +93,7 @@ class DevModuleSmokeRequest:
     player_facing: float = 0.0
     include_test_placeable: bool = True
     include_start_waypoint: bool = True
+    include_basic_light: bool = True
     test_placeable_resref: str = "plc_bench"
     test_placeable_position: tuple[float, float, float] = (1.75, 1.5, 0.0)
     test_placeable_facing: float = 0.0
@@ -475,7 +477,30 @@ def _make_gameplay_placement(request: DevModuleSmokeRequest) -> AuthoredGameplay
             "waypoint_count": len(waypoints),
             "include_test_placeable": bool(request.include_test_placeable),
             "include_start_waypoint": bool(request.include_start_waypoint),
+            "include_basic_light": bool(request.include_basic_light),
         },
+    )
+
+
+def _make_room_lights(request: DevModuleSmokeRequest) -> tuple[AuthoredRoomLight, ...]:
+    if not request.include_basic_light:
+        return ()
+    root = _normalise_resref(request.module_root)
+    room_resref = _normalise_resref(request.room_resref or f"{root}_room01")
+    return (
+        AuthoredRoomLight(
+            name=f"{root}_key_light"[:32],
+            room_resref=room_resref,
+            position=(0.0, -1.5, 2.45),
+            color=(1.0, 0.92, 0.76),
+            radius=8.0,
+            intensity=1.0,
+            light_type="point",
+            metadata={
+                "source": "map_studio:dev_test_smoke_light",
+                "purpose": "canonical_smoke_visibility",
+            },
+        ),
     )
 
 
@@ -488,6 +513,7 @@ def _make_authored_project(request: DevModuleSmokeRequest) -> AuthoredModuleProj
             display_name="GhostRigger Dev Test",
             floor_plan=_floor_plan_room_primitive(request),
             placements=_make_gameplay_placement(request),
+            lights=_make_room_lights(request),
             notes=(
                 "T2601 from-scratch smoke module.",
                 "Generated from authored floor-plan extrusion geometry and authored gameplay placements.",
@@ -506,6 +532,7 @@ def _make_authored_project(request: DevModuleSmokeRequest) -> AuthoredModuleProj
         display_name="GhostRigger Dev Test",
         room_primitive=_room_primitive(request),
         placements=_make_gameplay_placement(request),
+        lights=_make_room_lights(request),
         notes=(
             "T2601 from-scratch smoke module.",
             "Generated from authored primitive geometry and authored gameplay placements.",
@@ -1219,6 +1246,7 @@ def _augment_manifest(
             "room_mdl_mdx": True,
             "floor_walkmesh": True,
             "walkmesh_boundary_walls": int(geometry_metadata.get("walkmesh_boundary_wall_faces") or 0) > 0,
+            "simple_authored_lighting": bool(authored.project and authored.project.lights),
             "player_start": True,
             "test_placeable_template": request.test_placeable_resref,
         },
@@ -1228,6 +1256,7 @@ def _augment_manifest(
             "game": authored.project.game if authored.project else authored.game,
             "display_name": authored.project.metadata.display_name if authored.project else "",
             "room_count": len(authored.project.rooms) if authored.project else 0,
+            "light_count": len(authored.project.lights) if authored.project else 0,
             "notes": list(authored.project.notes) if authored.project else [],
             "metadata": dict(authored.project.metadata.metadata) if authored.project else {},
         },
@@ -1360,6 +1389,18 @@ def _augment_manifest(
                 for item in (authored.module.placements.waypoints if authored.module.placements else ())
             ],
             "metadata": dict(authored.module.placements.metadata) if authored.module.placements else {},
+        },
+        "authored_lighting": {
+            "source": "src.core.modules.authored_module_lighting",
+            "lighting_count": len(authored.project.lights) if authored.project else 0,
+            "room_lights": [authored_room_light_payload(light) for light in (authored.project.lights if authored.project else ())],
+            "lightmap_status": "viewport_lit_only" if authored.project and authored.project.lights else "not_started",
+            "game_tested_lighting": False,
+            "message": (
+                "Authored room lights are editor/export intent; bake or verify lighting in-game before calling this game-tested."
+                if authored.project and authored.project.lights
+                else "No authored room lights are present in this smoke build."
+            ),
         },
         "pre_game_checks": {
             "gameplay_anchors_on_walkmesh": all(check.ok for check in authored.walkability_checks),
