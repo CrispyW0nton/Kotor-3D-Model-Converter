@@ -1625,6 +1625,14 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             next_action = str(getattr(result, "next_action", "") or "").strip()
             status_message = f"{summary} Next: {next_action}" if next_action else summary
             self.show_map_studio_walkmesh_tools()
+        elif action_key == "validate":
+            issues = list(result or ())
+            errors = sum(1 for issue in issues if str(getattr(issue, "severity", "")).lower() == "error")
+            warnings = sum(1 for issue in issues if str(getattr(issue, "severity", "")).lower() == "warning")
+            status_message = f"Validation complete: {len(issues)} issue(s), {errors} error(s), {warnings} warning(s)."
+            self.validation_panel.set_issues(issues)
+            self.bottom_tabs.setCurrentWidget(self.validation_panel)
+            self._set_map_studio_workspace_combo_key("export")
         if action_key == "universal_transform":
             overlay_setter = getattr(self.viewport_panel, "set_universal_transform_overlay", None)
             if callable(overlay_setter):
@@ -1938,9 +1946,6 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         key = str(getattr(action, "key", "") or "")
         workspace_key = str(getattr(action, "workspace_key", "") or "")
         tool_key = str(getattr(action, "tool_key", "") or "")
-        if key == "validate":
-            self.validate_kmap()
-            return
         if key == "stage_module":
             self._focus_map_studio_export_proof_workspace()
             self.stage_authored_module(self._map_studio_export_dry_run_enabled())
@@ -2018,6 +2023,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "camera",
             "store",
             "light",
+            "validate",
             "opening",
             "opening_marker",
             "terrain",

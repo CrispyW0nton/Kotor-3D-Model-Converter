@@ -42,9 +42,9 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert audit.blocking_messages == ()
     assert audit.total_actions >= 80
     assert audit.implemented_actions == audit.total_actions
-    assert audit.command_backed_actions >= 74
+    assert audit.command_backed_actions >= 76
     assert audit.mutating_command_actions >= 71
-    assert audit.query_command_actions >= 3
+    assert audit.query_command_actions >= 4
     assert audit.workflow_focus_actions == 0
     assert statuses["cube"].contract_kind == "command_mutates_kmap"
     assert statuses["cube"].command_method == "add_authored_room_primitive"
@@ -78,6 +78,9 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["terrain"].command_method == "authored_terrain_status"
     assert statuses["walkmesh"].contract_kind == "command_query"
     assert statuses["walkmesh"].command_method == "authored_walkmesh_status"
+    assert statuses["validate"].contract_kind == "command_query"
+    assert statuses["validate"].command_method == "validate"
+    assert statuses["validate"].mutates_kmap is False
     assert statuses["stage_module"].contract_kind == "studio_workspace"
     assert all(status.in_any_preset for status in audit.statuses)
 
@@ -145,6 +148,14 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert walkmesh_status_route.mutates_kmap is False
     assert walkmesh_status_route.stale_outputs == ()
     assert "generated WOK walkability" in walkmesh_status_route.authoring_context
+
+    validate_route = resolve_map_studio_tool_belt_action("validate")
+
+    assert validate_route.enabled is True
+    assert validate_route.command_method == "validate"
+    assert validate_route.mutates_kmap is False
+    assert validate_route.stale_outputs == ()
+    assert "KMAP/authored-module readiness checks" in validate_route.authoring_context
 
     selected_primitive = resolve_map_studio_tool_belt_action(
         "primitive",
@@ -759,6 +770,11 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
     assert "Walkmesh:" in walkmesh_status.summary
     assert controller.command_history.undo_label == "Create authored module grterrain"
 
+    validation_issues = execute_map_studio_tool_belt_action(controller, "validate")
+
+    assert isinstance(validation_issues, list)
+    assert controller.command_history.undo_label == "Create authored module grterrain"
+
     controller.undo_map_studio_command()
 
     assert controller.project.name == "grbelt01"
@@ -1317,6 +1333,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert '"terrain_patch",' in window_source
     assert '"terrain",' in window_source
     assert '"walkmesh",' in window_source
+    assert '"validate",' in window_source
     assert '"primitive",' in window_source
     assert '"cut",' in window_source
     assert '"opening_marker",' in window_source
@@ -1339,6 +1356,8 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert "class MapStudioToolActionRoute" in source
         assert "def resolve_map_studio_tool_belt_action" in source
         assert "def execute_map_studio_tool_belt_action" in source
+        assert 'if key == "validate":' in source
+        assert 'command_method="validate"' in source
         assert 'command_method="add_authored_room_primitive"' in source
         assert 'command_method="create_authored_room_preset_module"' in source
         assert 'command_method="snap_authored_floor_plan_vertex"' in source

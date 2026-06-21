@@ -277,6 +277,20 @@ def resolve_map_studio_tool_belt_action(
     if not bool(action.implemented):
         return _disabled(action, key, f"{action.label} is planned and not implemented for command execution yet.")
 
+    if key == "validate":
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="grid",
+            command_method="validate",
+            mutates_kmap=False,
+            status_message="Map Studio validation refreshed; review blocking issues before staging or game proof.",
+            authoring_context=(
+                "Validation: run the headless KMAP/authored-module readiness checks and surface actionable "
+                "KOTOR resource issues before export, install handoff, or in-game proof."
+            ),
+        )
+
     if key == "terrain":
         return _route(
             action,

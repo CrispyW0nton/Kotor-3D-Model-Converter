@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Routes Validate Belt Action Through Readiness Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Validation readiness
+Intersects: native Scene/Tools Map Studio action dispatch and Level Editor validation panel routing.
+
+- Routed the `Validate` tool-belt action through the shared Map Studio dispatcher as a non-mutating `validate` command query instead of a window-only special case.
+- Updated the Level Editor command execution path so validation results populate the existing validation panel, focus the export/proof workspace, and preserve undo history.
+- Updated tool-belt contract coverage so `Validate` is classified as a command-backed query and the audit now tracks five remaining studio-workspace actions.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_validate_belt`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_validate_ui`; Map Studio tool contract audit now reports 76 command-backed actions, 72 mutating command actions, 4 query actions, 5 studio-workspace actions, and 0 workflow-focus actions.
+
 ### [2026-06-21] Map Studio Routes Light Belt Action Through KMAP Command
 
 Owner: LordVaderCW
