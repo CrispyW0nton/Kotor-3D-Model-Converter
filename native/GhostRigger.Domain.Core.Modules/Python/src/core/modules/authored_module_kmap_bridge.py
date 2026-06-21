@@ -45,6 +45,7 @@ from .authored_room_primitives import (
     ArchPrimitive,
     CubePrimitive,
     CylinderPrimitive,
+    DoorFramePrimitive,
     FloorPrimitive,
     PrimitiveMaterial,
     RampPrimitive,
@@ -145,7 +146,10 @@ def _floor_primitive(data: Any, room_resref: str) -> FloorPrimitive:
     )
 
 
-def _base_room_primitive(data: Any, room_resref: str) -> FloorPrimitive | WallPrimitive | CubePrimitive | RampPrimitive | StairsPrimitive | CylinderPrimitive | ArchPrimitive:
+def _base_room_primitive(
+    data: Any,
+    room_resref: str,
+) -> FloorPrimitive | WallPrimitive | CubePrimitive | RampPrimitive | StairsPrimitive | CylinderPrimitive | DoorFramePrimitive | ArchPrimitive:
     source = _dict(data)
     primitive_type = str(source.get("type") or source.get("primitive") or "").strip().lower()
     name = str(source.get("name") or f"{room_resref}_{primitive_type or 'primitive'}")
@@ -203,6 +207,17 @@ def _base_room_primitive(data: Any, room_resref: str) -> FloorPrimitive | WallPr
             height=_float(source.get("height"), 1.0),
             segments=int(_float(source.get("segments"), 16.0)),
             center=_vec3(source.get("center"), (0.0, 0.0, 0.5)),
+            material=material,
+        )
+    if primitive_type in {"door_frame", "doorframe", "doorway_frame"}:
+        return DoorFramePrimitive(
+            name=name,
+            width=_float(source.get("width"), 2.2),
+            height=_float(source.get("height"), 3.0),
+            jamb_width=_float(source.get("jamb_width"), 0.22),
+            lintel_height=_float(source.get("lintel_height"), 0.28),
+            depth=_float(source.get("depth"), 0.25),
+            center=_vec3(source.get("center"), (0.0, 0.0, 1.5)),
             material=material,
         )
     if primitive_type == "arch":

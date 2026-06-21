@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Splits Door Frames And Arches
+
+Owner: LordVaderCW
+Task: T2601 / T2908
+Subsystem: Map Studio / Production geometry workflow and tool belt
+Intersects: Domain Core Modules authored room primitives, ModuleMeshes mirror package, and Windows Editor Level tool-belt routing.
+
+- Added a rectangular `DoorFramePrimitive` for KOTOR doorway/transition blockouts while preserving `ArchPrimitive` as the curved visual entrance primitive.
+- Wired door frames through authored room composition, validation, KMAP deserialization, dimension editing, and primitive metadata without contributing accidental WOK faces.
+- Exposed `Arch` as a separate Map Studio tool-belt action and preset item so modders can choose rectangular door frames or curved arches deliberately.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_primitives.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_composition.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_kmap_bridge.py native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_primitives.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_composition.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_room_operations.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_kmap_bridge.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/map_studio_modeling_tools.py native/GhostRigger.Windows.Editor.Level/Python/src/gui/windows/module_editor_window.py tests/test_authored_room_composition.py tests/test_map_studio_workflow_panel.py`; `python -m pytest tests/test_authored_room_composition.py::test_t2624_composition_adds_rectangular_door_frame_without_wok_faces tests/test_authored_room_composition.py::test_t2624_composition_rejects_collapsed_door_frame_opening -q --basetemp .pytest_tmp_map_studio_door_frame`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_arch_belt`; `git diff --check`.
+
 ### [2026-06-21] Map Studio Readiness Panel Shows VIS And Lightmap Status
 
 Owner: LordVaderCW

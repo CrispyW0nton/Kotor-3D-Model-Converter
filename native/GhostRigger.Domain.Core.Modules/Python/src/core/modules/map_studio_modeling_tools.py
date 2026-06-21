@@ -600,6 +600,15 @@ _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
         implemented=True,
     ),
     MapStudioToolBeltAction(
+        "arch",
+        "Arch",
+        "geometry",
+        "add_primitive",
+        "Add a curved arch primitive for room entrances, alcoves, and visual portal silhouettes.",
+        "Arches are visual geometry; pair them with explicit door/trigger/waypoint transition setup when they mark an exit.",
+        implemented=True,
+    ),
+    MapStudioToolBeltAction(
         "extrude",
         "Extrude",
         "geometry",
@@ -1061,6 +1070,7 @@ _TOOL_BELT_PRESETS: tuple[MapStudioToolBeltPreset, ...] = (
             "ramp",
             "stairs",
             "door_frame",
+            "arch",
             "primitive",
             "extrude",
             "bridge",
@@ -1086,7 +1096,7 @@ _TOOL_BELT_PRESETS: tuple[MapStudioToolBeltPreset, ...] = (
         "component",
         "Component Modeling",
         "Vertex/edge/face cleanup tools for refining authored module geometry.",
-        ("plane", "wall", "cube", "door_frame", "extrude", "bridge", "cut", "opening", "opening_marker", "fill", "vertex_snap", "weld", "flatten", "mirror", "combine", "separate", "cleanup", "triangulate", "normals", "bevel", "boolean", "walkmesh", "validate"),
+        ("plane", "wall", "cube", "door_frame", "arch", "extrude", "bridge", "cut", "opening", "opening_marker", "fill", "vertex_snap", "weld", "flatten", "mirror", "combine", "separate", "cleanup", "triangulate", "normals", "bevel", "boolean", "walkmesh", "validate"),
     ),
     MapStudioToolBeltPreset(
         "terrain",

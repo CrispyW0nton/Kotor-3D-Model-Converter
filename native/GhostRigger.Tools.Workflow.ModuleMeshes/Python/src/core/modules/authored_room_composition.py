@@ -17,6 +17,7 @@ from .authored_room_primitives import (
     ArchPrimitive,
     CubePrimitive,
     CylinderPrimitive,
+    DoorFramePrimitive,
     FloorPrimitive,
     PrimitiveMaterial,
     RampPrimitive,
@@ -25,6 +26,7 @@ from .authored_room_primitives import (
     build_arch_mesh,
     build_cube_mesh,
     build_cylinder_mesh,
+    build_door_frame_mesh,
     build_floor_mesh,
     build_floor_wok,
     build_ramp_mesh,
@@ -36,7 +38,16 @@ from .authored_room_primitives import (
 from .module_format import WOKData, WOKFace
 
 
-BaseRoomPrimitive = Union[FloorPrimitive, WallPrimitive, CubePrimitive, RampPrimitive, StairsPrimitive, CylinderPrimitive, ArchPrimitive]
+BaseRoomPrimitive = Union[
+    FloorPrimitive,
+    WallPrimitive,
+    CubePrimitive,
+    RampPrimitive,
+    StairsPrimitive,
+    CylinderPrimitive,
+    DoorFramePrimitive,
+    ArchPrimitive,
+]
 
 
 @dataclass(frozen=True)
@@ -187,6 +198,8 @@ def _primitive_to_mesh(primitive: RoomPrimitive) -> PrimitiveMesh:
         return build_stairs_mesh(primitive)
     if isinstance(primitive, CylinderPrimitive):
         return build_cylinder_mesh(primitive)
+    if isinstance(primitive, DoorFramePrimitive):
+        return build_door_frame_mesh(primitive)
     if isinstance(primitive, ArchPrimitive):
         return build_arch_mesh(primitive)
     raise TypeError(f"Unsupported authored room primitive: {type(primitive)!r}")
@@ -294,6 +307,19 @@ def validate_authored_room_composition(composition: AuthoredRoomComposition) -> 
                 or float(base.frame_thickness) <= 0.0
             ):
                 blocking.append(f"Arch primitive {base_name} must have positive width, height, depth, and frame thickness.")
+        if isinstance(base, DoorFramePrimitive):
+            if (
+                float(base.width) <= 0.0
+                or float(base.height) <= 0.0
+                or float(base.depth) <= 0.0
+                or float(base.jamb_width) <= 0.0
+                or float(base.lintel_height) <= 0.0
+            ):
+                blocking.append(f"Door frame primitive {base_name} must have positive width, height, depth, jamb width, and lintel height.")
+            if float(base.width) <= float(base.jamb_width) * 2.0:
+                blocking.append(f"Door frame primitive {base_name} must leave a positive doorway opening width.")
+            if float(base.height) <= float(base.lintel_height):
+                blocking.append(f"Door frame primitive {base_name} must leave a positive doorway opening height.")
     if not composition.primitives and not composition.helper_meshes:
         warnings.append("Authored room composition has only a floor; add walls or helpers before game-facing export.")
     return AuthoredRoomCompositionValidation(

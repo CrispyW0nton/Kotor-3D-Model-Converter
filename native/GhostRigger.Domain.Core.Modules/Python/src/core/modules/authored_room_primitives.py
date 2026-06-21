@@ -89,6 +89,20 @@ class CylinderPrimitive:
 
 
 @dataclass(frozen=True)
+class DoorFramePrimitive:
+    """Rectangular doorway frame for KOTOR transition/portal blockouts."""
+
+    name: str
+    width: float = 2.2
+    height: float = 3.0
+    jamb_width: float = 0.22
+    lintel_height: float = 0.28
+    depth: float = 0.25
+    center: Vec3 = (0.0, 0.0, 1.5)
+    material: PrimitiveMaterial = field(default_factory=PrimitiveMaterial)
+
+
+@dataclass(frozen=True)
 class ArchPrimitive:
     """Segmented doorway arch frame for authored room blockouts."""
 
@@ -366,6 +380,70 @@ def build_cylinder_mesh(primitive: CylinderPrimitive) -> PrimitiveMesh:
     )
 
 
+def build_door_frame_mesh(primitive: DoorFramePrimitive) -> PrimitiveMesh:
+    """Build a rectangular U-shaped doorway frame from deterministic box parts."""
+
+    width = max(0.001, float(primitive.width))
+    height = max(0.001, float(primitive.height))
+    depth = max(0.001, float(primitive.depth))
+    jamb_width = max(0.001, min(float(primitive.jamb_width), width * 0.45))
+    lintel_height = max(0.001, min(float(primitive.lintel_height), height * 0.8))
+    cx, cy, cz = primitive.center
+    bottom = cz - height * 0.5
+    top = cz + height * 0.5
+    jamb_height = max(0.001, height - lintel_height)
+    half_width = width * 0.5
+
+    vertices: list[Vec3] = []
+    faces: list[Face] = []
+    for part_mesh in (
+        _box_vertices_faces(
+                name=f"{primitive.name}_left_jamb",
+                x=jamb_width,
+                y=depth,
+                z=jamb_height,
+                center=(cx - half_width + jamb_width * 0.5, cy, bottom + jamb_height * 0.5),
+                material=primitive.material,
+                primitive="door_frame_jamb",
+        ),
+        _box_vertices_faces(
+                name=f"{primitive.name}_right_jamb",
+                x=jamb_width,
+                y=depth,
+                z=jamb_height,
+                center=(cx + half_width - jamb_width * 0.5, cy, bottom + jamb_height * 0.5),
+                material=primitive.material,
+                primitive="door_frame_jamb",
+        ),
+        _box_vertices_faces(
+                name=f"{primitive.name}_lintel",
+                x=width,
+                y=depth,
+                z=lintel_height,
+                center=(cx, cy, top - lintel_height * 0.5),
+                material=primitive.material,
+                primitive="door_frame_lintel",
+        ),
+    ):
+        _append_mesh_parts(vertices, faces, part_mesh)
+
+    return _mesh(
+        name=primitive.name,
+        vertices=tuple(vertices),
+        faces=tuple(faces),
+        material=primitive.material,
+        primitive="door_frame",
+        metadata={
+            "jamb_width": jamb_width,
+            "lintel_height": lintel_height,
+            "opening_width": max(0.0, width - jamb_width * 2.0),
+            "opening_height": max(0.0, height - lintel_height),
+            "depth": depth,
+            "kotor_intent": "doorway_frame_transition_blockout",
+        },
+    )
+
+
 def build_arch_mesh(primitive: ArchPrimitive) -> PrimitiveMesh:
     """Build a segmented semi-circular doorway arch frame."""
 
@@ -460,6 +538,7 @@ __all__ = [
     "ArchPrimitive",
     "CubePrimitive",
     "CylinderPrimitive",
+    "DoorFramePrimitive",
     "FloorPrimitive",
     "PrimitiveMaterial",
     "RampPrimitive",
@@ -468,6 +547,7 @@ __all__ = [
     "build_arch_mesh",
     "build_cube_mesh",
     "build_cylinder_mesh",
+    "build_door_frame_mesh",
     "build_floor_mesh",
     "build_floor_wok",
     "build_ramp_mesh",

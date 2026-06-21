@@ -203,6 +203,60 @@ def test_t2624_composition_rejects_invalid_stairs_walkmesh_surface() -> None:
     assert "bad_stairs_path stairs surface 7 (NON_WALK) is not walkable." in validation.blocking_issues
 
 
+def test_t2624_composition_adds_rectangular_door_frame_without_wok_faces() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_composition import AuthoredRoomComposition, compile_authored_room_composition, validate_authored_room_composition
+    from src.core.modules.authored_room_primitives import DoorFramePrimitive, FloorPrimitive
+
+    composition = AuthoredRoomComposition(
+        room_resref="door_room",
+        floor=FloorPrimitive(name="door_room_floor", width=8.0, depth=8.0),
+        primitives=(
+            DoorFramePrimitive(
+                name="door_room_frame",
+                width=2.4,
+                height=3.2,
+                jamb_width=0.25,
+                lintel_height=0.3,
+                depth=0.35,
+            ),
+        ),
+    )
+
+    validation = validate_authored_room_composition(composition)
+    geometry = compile_authored_room_composition(composition)
+
+    assert validation.ok is True
+    assert geometry.metadata["walkmesh_primitive_count"] == 0
+    assert geometry.wok.walkable_face_count() == 2
+    frame_mesh = geometry.helper_meshes[0]
+    assert frame_mesh.name == "door_room_frame"
+    assert frame_mesh.metadata["primitive"] == "door_frame"
+    assert frame_mesh.metadata["opening_width"] == 1.9
+    assert round(frame_mesh.metadata["opening_height"], 6) == 2.9
+    assert len(frame_mesh.vertices) == 24
+    assert len(frame_mesh.faces) == 36
+
+
+def test_t2624_composition_rejects_collapsed_door_frame_opening() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_composition import AuthoredRoomComposition, validate_authored_room_composition
+    from src.core.modules.authored_room_primitives import DoorFramePrimitive, FloorPrimitive
+
+    composition = AuthoredRoomComposition(
+        room_resref="bad_door_frame",
+        floor=FloorPrimitive(name="bad_door_frame_floor"),
+        primitives=(DoorFramePrimitive(name="bad_door_frame", width=1.0, jamb_width=0.5),),
+    )
+
+    validation = validate_authored_room_composition(composition)
+
+    assert validation.ok is False
+    assert "Door frame primitive bad_door_frame must leave a positive doorway opening width." in validation.blocking_issues
+
+
 def test_t2637_composition_transforms_placed_ramp_mesh_and_wok_together() -> None:
     _install_native_payload_paths()
 

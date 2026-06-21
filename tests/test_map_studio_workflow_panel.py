@@ -555,6 +555,8 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert '"cylinder"' in source
         assert '"door_frame"' in source
         assert '"Door Frame"' in source
+        assert '"arch"' in source
+        assert '"Arch"' in source
         assert '"extrude"' in source
         assert '"bridge"' in source
         assert '"cut"' in source
@@ -795,6 +797,7 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "def _map_studio_belt_primitive_kind" in window_source
     assert "def _select_map_studio_modeling_tool" in window_source
     assert '"door_frame": "door_frame"' in window_source
+    assert '"arch": "arch"' in window_source
     assert 'if key == "corridor":' in window_source
     assert "self.create_map_studio_corridor()" in window_source
     assert 'if key == "terrain_patch":' in window_source

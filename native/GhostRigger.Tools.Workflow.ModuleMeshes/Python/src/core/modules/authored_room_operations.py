@@ -68,6 +68,7 @@ from .authored_room_primitives import (
     ArchPrimitive,
     CubePrimitive,
     CylinderPrimitive,
+    DoorFramePrimitive,
     FloorPrimitive,
     RampPrimitive,
     StairsPrimitive,
@@ -172,7 +173,8 @@ _COMPOSITION_PRIMITIVE_KINDS: tuple[AuthoredCompositionPrimitiveKind, ...] = (
     AuthoredCompositionPrimitiveKind("ramp", "Ramp", "A sloped walkable ramp that contributes WOK faces.", creates_walkmesh=True),
     AuthoredCompositionPrimitiveKind("stairs", "Stairs", "A visual staircase with a walkable ramp-style WOK proxy.", creates_walkmesh=True),
     AuthoredCompositionPrimitiveKind("cylinder", "Cylinder", "A round column or pedestal primitive."),
-    AuthoredCompositionPrimitiveKind("arch", "Door Frame", "A doorway arch/frame primitive for blockout, transition, and portal tests."),
+    AuthoredCompositionPrimitiveKind("door_frame", "Door Frame", "A rectangular doorway frame primitive for transition and portal blockout."),
+    AuthoredCompositionPrimitiveKind("arch", "Arch", "A curved arch primitive for room entrances and visual portal silhouettes."),
 )
 
 
@@ -504,6 +506,8 @@ def _primitive_type(primitive: Any) -> str:
     base = primitive.primitive if isinstance(primitive, PlacedRoomPrimitive) else primitive
     if isinstance(base, FloorPrimitive):
         return "plane"
+    if isinstance(base, DoorFramePrimitive):
+        return "door_frame"
     name = type(base).__name__
     return name[:-9].lower() if name.endswith("Primitive") else name.lower()
 
@@ -573,6 +577,14 @@ def _primitive_dimensions(primitive: Any) -> tuple[AuthoredCompositionPrimitiveD
             _dimension("height", "Height", base.height),
             _dimension("segments", "Segments", base.segments, minimum=3.0, maximum=128.0, step=1.0, suffix="", integer=True),
         )
+    if isinstance(base, DoorFramePrimitive):
+        return (
+            _dimension("width", "Width", base.width),
+            _dimension("height", "Height", base.height),
+            _dimension("jamb_width", "Jamb", base.jamb_width, minimum=0.01, step=0.01),
+            _dimension("lintel_height", "Lintel", base.lintel_height, minimum=0.01, step=0.01),
+            _dimension("depth", "Depth", base.depth, minimum=0.01, step=0.01),
+        )
     if isinstance(base, ArchPrimitive):
         return (
             _dimension("width", "Width", base.width),
@@ -608,8 +620,10 @@ def _primitive_kind(value: Any) -> str:
         "platform": "plane",
         "stair": "stairs",
         "step": "stairs",
-        "door_frame": "arch",
-        "doorway": "arch",
+        "doorframe": "door_frame",
+        "door_frame": "door_frame",
+        "doorway": "door_frame",
+        "doorway_frame": "door_frame",
         "door_arch": "arch",
     }
     kind = aliases.get(kind, kind)
@@ -680,6 +694,8 @@ def _default_primitive_for_kind(kind: str, name: str, material: PrimitiveMateria
         return StairsPrimitive(name=name, width=2.0, depth=3.0, height=1.0, steps=4, surface_id=floor_surface, material=material)
     if kind == "cylinder":
         return CylinderPrimitive(name=name, radius=0.5, height=1.0, segments=16, center=(0.0, 0.0, 0.5), material=material)
+    if kind == "door_frame":
+        return DoorFramePrimitive(name=name, width=2.2, height=3.0, jamb_width=0.22, lintel_height=0.28, depth=0.25, center=(0.0, 0.0, 1.5), material=material)
     if kind == "arch":
         return ArchPrimitive(name=name, width=2.4, height=3.0, frame_thickness=0.3, depth=0.35, center=(0.0, 0.0, 1.5), material=material)
     raise ValueError(f"Unsupported authored room primitive kind '{kind}'.")
@@ -774,6 +790,17 @@ def _updated_base_primitive_dimensions(base: Any, dimensions: Any) -> Any:
             radius=_dimension_float(values, "radius", base.radius),
             height=_dimension_float(values, "height", base.height),
             segments=_dimension_int(values, "segments", base.segments, minimum=3),
+        )
+    if isinstance(base, DoorFramePrimitive):
+        allowed = {"width", "height", "jamb_width", "lintel_height", "depth"}
+        _reject_unknown_dimensions(values, allowed, base.name)
+        return replace(
+            base,
+            width=_dimension_float(values, "width", base.width),
+            height=_dimension_float(values, "height", base.height),
+            jamb_width=_dimension_float(values, "jamb_width", base.jamb_width, minimum=0.01),
+            lintel_height=_dimension_float(values, "lintel_height", base.lintel_height, minimum=0.01),
+            depth=_dimension_float(values, "depth", base.depth, minimum=0.01),
         )
     if isinstance(base, ArchPrimitive):
         allowed = {"width", "height", "frame_thickness", "depth", "segments"}

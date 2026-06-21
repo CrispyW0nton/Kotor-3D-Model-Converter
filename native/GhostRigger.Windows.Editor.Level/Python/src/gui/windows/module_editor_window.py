@@ -1125,6 +1125,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "stairs": "stairs",
             "cylinder": "cylinder",
             "door_frame": "door_frame",
+            "arch": "arch",
         }.get(str(action_key or "").strip(), "")
 
     def _map_studio_belt_placement_kind(self, action_key: str) -> str:
