@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 
 def _install_native_payload_paths() -> None:
@@ -222,6 +223,97 @@ def test_t2639_runtime_resources_promote_project_to_export_candidate() -> None:
     assert readiness.ready_for_game_test is True
     assert readiness.missing_runtime_resources == ()
     assert "warp grdev01" in readiness.next_action
+
+
+def test_t2605_kmap_bridge_reports_missing_runtime_outputs_for_ui() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_to_kmap_payload,
+        build_kmap_authored_module_readiness,
+    )
+
+    kmap = SimpleNamespace(
+        name="grdev01",
+        game="K1",
+        metadata={},
+        extra_sections={"authored_module": authored_project_to_kmap_payload(_floor_plan_project())},
+    )
+
+    result = build_kmap_authored_module_readiness(kmap)
+
+    status = result.metadata["runtime_output_status"]
+    assert status["status"] == "Missing generated resources"
+    assert status["regenerate_required"] is True
+    assert "grdev01.are" in status["missing"]
+    assert "grdev01_room01.mdl" in status["missing"]
+    assert status["stale_outputs"] == []
+    assert "regenerate missing KOTOR runtime resources" in status["fix_hint"]
+
+
+def test_t2605_kmap_bridge_reports_current_runtime_outputs_for_ui() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_to_kmap_payload,
+        build_kmap_authored_module_readiness,
+    )
+
+    payload = authored_project_to_kmap_payload(
+        _floor_plan_project(),
+        runtime_resources=tuple(f"{resref}.{restype}" for resref, restype in _runtime_keys()),
+    )
+    kmap = SimpleNamespace(name="grdev01", game="K1", metadata={}, extra_sections={"authored_module": payload})
+
+    result = build_kmap_authored_module_readiness(kmap)
+
+    status = result.metadata["runtime_output_status"]
+    assert status["status"] == "Current"
+    assert status["regenerate_required"] is False
+    assert status["missing"] == []
+    assert "grdev01_room01.wok" in status["present"]
+
+
+def test_t2605_kmap_bridge_reports_stale_component_edit_outputs_for_ui() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_to_kmap_payload,
+        build_kmap_authored_module_readiness,
+    )
+
+    project = _floor_plan_project()
+    audit = {
+        "operation": "move_floor_plan_vertex",
+        "summary": "Moved a floor-plan vertex.",
+        "walkmesh_review_required": True,
+        "export_candidate_stale": True,
+        "game_proof_stale": True,
+        "topology_changed": True,
+        "stale_outputs": ["MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod"],
+        "next_action": "Regenerate room MDL/MDX/WOK, rebuild LYT/VIS/PTH, package the .mod, then verify in game.",
+    }
+    project = replace(
+        project,
+        rooms=(replace(project.rooms[0], metadata={"last_component_edit_audit": audit}),),
+    )
+    payload = authored_project_to_kmap_payload(
+        project,
+        runtime_resources=tuple(f"{resref}.{restype}" for resref, restype in _runtime_keys()),
+    )
+    kmap = SimpleNamespace(name="grdev01", game="K1", metadata={}, extra_sections={"authored_module": payload})
+
+    result = build_kmap_authored_module_readiness(kmap)
+
+    status = result.metadata["runtime_output_status"]
+    impacts = {row["resource"]: row for row in status["resource_impacts"]}
+    assert status["status"] == "Stale generated resources"
+    assert status["regenerate_required"] is True
+    assert status["edited_resource"] == "grdev01_room01"
+    assert status["latest_operation"] == "move_floor_plan_vertex"
+    assert status["stale_outputs"] == ["MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod"]
+    assert impacts["WOK"]["why_stale"] == "Walkmesh may no longer match the edited floor or openings."
+    assert "Regenerate room MDL/MDX/WOK" in status["fix_hint"]
 
 
 def test_t2692_readiness_reports_full_map_studio_toolchain_scope() -> None:

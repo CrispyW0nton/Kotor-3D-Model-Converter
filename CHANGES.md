@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Reports Runtime Output Regeneration Status
+
+Owner: LordVaderCW
+Task: T2605
+Subsystem: Map Studio / Authored KMAP readiness bridge
+Intersects: Domain Core Modules KMAP bridge, ModuleMeshes mirror package, and authored module readiness tests.
+
+- Added a `runtime_output_status` metadata contract to the authored KMAP readiness bridge so the Level Editor can show expected, present, missing, and stale generated KOTOR outputs without duplicating readiness logic in Qt.
+- Surfaced component-edit stale outputs and resource impact rows through the bridge, including the edited room, latest operation, regeneration action, and MDL/MDX/WOK/LYT/VIS/PTH/.mod impact text.
+- Added regressions for missing runtime resources, current export-candidate resources, and stale resources caused by component edits.
+- Verification: `python -m py_compile native/GhostRigger.Domain.Core.Modules/Python/src/core/modules/authored_module_kmap_bridge.py native/GhostRigger.Tools.Workflow.ModuleMeshes/Python/src/core/modules/authored_module_kmap_bridge.py tests/test_authored_module_readiness.py`; `python -m pytest tests/test_authored_module_readiness.py::test_t2605_kmap_bridge_reports_missing_runtime_outputs_for_ui tests/test_authored_module_readiness.py::test_t2605_kmap_bridge_reports_current_runtime_outputs_for_ui tests/test_authored_module_readiness.py::test_t2605_kmap_bridge_reports_stale_component_edit_outputs_for_ui -q --basetemp .pytest_tmp_map_studio_runtime_output_status`.
+
 ### [2026-06-21] Map Studio Labels Installed Test Builds Separately From Export Candidates
 
 Owner: LordVaderCW

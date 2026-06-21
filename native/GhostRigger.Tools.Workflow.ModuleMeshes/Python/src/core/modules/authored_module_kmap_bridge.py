@@ -438,6 +438,44 @@ def _runtime_resources(data: Any) -> tuple[tuple[str, str], ...]:
     return tuple(sorted(keys))
 
 
+def _runtime_resource_label(key: tuple[str, str]) -> str:
+    resref, restype = key
+    return f"{resref}.{restype.lstrip('.').lower()}"
+
+
+def _runtime_output_status(readiness: AuthoredModuleReadiness) -> dict[str, Any]:
+    """Summarize generated KOTOR outputs for Map Studio UI/readiness panels."""
+
+    expected = tuple(readiness.expected_runtime_resources)
+    present = tuple(readiness.present_runtime_resources)
+    missing = tuple(readiness.missing_runtime_resources)
+    component_edit = readiness.component_edit
+    stale_outputs = tuple(component_edit.stale_outputs)
+    regenerate_required = bool(missing or stale_outputs)
+    if stale_outputs:
+        status = "Stale generated resources"
+        fix_hint = component_edit.next_action or component_edit.fix_hint
+    elif missing:
+        status = "Missing generated resources"
+        fix_hint = "Build/export the authored module to regenerate missing KOTOR runtime resources."
+    else:
+        status = "Current"
+        fix_hint = "Runtime resources are current for this authored KMAP state."
+    return {
+        "status": status,
+        "regenerate_required": regenerate_required,
+        "expected": [_runtime_resource_label(key) for key in expected],
+        "present": [_runtime_resource_label(key) for key in present],
+        "missing": [_runtime_resource_label(key) for key in missing],
+        "stale_outputs": list(stale_outputs),
+        "resource_impacts": [dict(row) for row in component_edit.resource_impacts],
+        "edited_resource": component_edit.latest_room_resref,
+        "latest_operation": component_edit.latest_operation,
+        "next_action": component_edit.next_action,
+        "fix_hint": fix_hint,
+    }
+
+
 def _vec3_payload(value: tuple[float, float, float]) -> list[float]:
     return [float(value[0]), float(value[1]), float(value[2])]
 
@@ -965,7 +1003,11 @@ def build_kmap_authored_module_readiness(kmap_project: Any) -> AuthoredModuleKMa
         project=project,
         readiness=readiness,
         runtime_resources=resources,
-        metadata={"source": "src.core.modules.authored_module_kmap_bridge", "has_payload": True},
+        metadata={
+            "source": "src.core.modules.authored_module_kmap_bridge",
+            "has_payload": True,
+            "runtime_output_status": _runtime_output_status(readiness),
+        },
     )
 
 
