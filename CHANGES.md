@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Routes Light Belt Action Through KMAP Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt / Authored lighting
+Intersects: native Scene/Tools Map Studio action dispatch, Level Editor light context, authored room-light undo command.
+
+- Routed the `Light` tool-belt action through `add_authored_room_light` so it creates authored KMAP room-light intent instead of only focusing the lighting panel.
+- Added room-light fields to the shared tool action context and Level Editor context builder, including room resref, name, type, position, color, radius, and intensity.
+- Added undo/redo command history recording for authored room-light creation and updated the contract audit so `Light` is classified as a mutating command-backed action.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_contract_audit.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_contract_audit.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q --basetemp .pytest_tmp_map_studio_light_belt`; `python -m pytest tests/test_map_studio_workflow_panel.py -q --basetemp .pytest_tmp_map_studio_light_ui`; Map Studio tool contract audit now reports 75 command-backed actions, 72 mutating command actions, 3 query actions, 6 studio-workspace actions, and 0 workflow-focus actions.
+
 ### [2026-06-21] Map Studio Wires Viewport Modifier Shortcuts Through Tool Dispatcher
 
 Owner: LordVaderCW

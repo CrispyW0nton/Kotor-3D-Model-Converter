@@ -39,6 +39,13 @@ class MapStudioToolActionContext:
     entry_area_resref: str = ""
     entry_position: tuple[float, float, float] = (0.0, 0.0, 0.0)
     entry_facing: float = 0.0
+    light_room_resref: str = ""
+    light_name: str = ""
+    light_position: tuple[float, float, float] = (0.0, 0.0, 2.25)
+    light_color: tuple[float, float, float] = (1.0, 0.92, 0.78)
+    light_radius: float = 8.0
+    light_intensity: float = 1.0
+    light_type: str = "point"
     wall_opening_name: str = ""
     wall_opening_edge_index: int = 0
     wall_opening_center_fraction: float = 0.5
@@ -435,6 +442,29 @@ def resolve_map_studio_tool_belt_action(
             authoring_context=(
                 "Entry Point: write the authored module IFO player start from the selected KMAP-world position; "
                 "validate that it lands on a reachable WOK before export/game proof."
+            ),
+        )
+
+    if key == "light":
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="grid",
+            command_method="add_authored_room_light",
+            command_kwargs={
+                "room_resref": str(ctx.light_room_resref or "").strip(),
+                "name": str(ctx.light_name or "").strip(),
+                "position": tuple(ctx.light_position),
+                "color": tuple(ctx.light_color),
+                "radius": float(ctx.light_radius),
+                "intensity": float(ctx.light_intensity),
+                "light_type": str(ctx.light_type or "point").strip().lower() or "point",
+            },
+            mutates_kmap=True,
+            status_message="Added authored room light; lighting, export, install handoff, and game proof are stale.",
+            authoring_context=(
+                "Lighting: add authored room-light intent to KMAP state for later room MDL/lightmap/export checks. "
+                "Viewport lighting is previewable only until an in-game module test proves the result."
             ),
         )
 

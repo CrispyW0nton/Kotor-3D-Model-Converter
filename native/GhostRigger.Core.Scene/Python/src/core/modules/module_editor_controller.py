@@ -2226,6 +2226,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         update = add_authored_room_light_to_project(
             authored,
             room_resref=room_resref,
@@ -2242,6 +2243,21 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Added Map Studio {update.light.light_type} room light {update.light.name} in {update.light.room_resref}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.lighting.add_room_light",
+            label=f"Add room light {update.light.name}",
+            before=before,
+            metadata={
+                "light_id": update.light_id,
+                "room_resref": update.light.room_resref,
+                "name": update.light.name,
+                "position": update.light.position,
+                "color": update.light.color,
+                "radius": update.light.radius,
+                "intensity": update.light.intensity,
+                "light_type": update.light.light_type,
+            },
         )
         return self.authored_module_readiness()
 

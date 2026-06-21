@@ -63,6 +63,9 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["placeable"].command_method == "add_authored_gameplay_placement"
     assert statuses["entry_point"].contract_kind == "command_mutates_kmap"
     assert statuses["entry_point"].command_method == "set_authored_module_entry_point"
+    assert statuses["light"].contract_kind == "command_mutates_kmap"
+    assert statuses["light"].command_method == "add_authored_room_light"
+    assert statuses["light"].mutates_kmap is True
     assert statuses["opening"].contract_kind == "command_mutates_kmap"
     assert statuses["opening"].command_method == "apply_authored_room_operation"
     assert statuses["cut"].contract_kind == "command_mutates_kmap"
@@ -270,6 +273,33 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     }
     assert entry_point_route.mutates_kmap is True
     assert "IFO player start" in entry_point_route.authoring_context
+
+    light_route = resolve_map_studio_tool_belt_action(
+        "light",
+        MapStudioToolActionContext(
+            light_room_resref="room_a",
+            light_name="belt_key_light",
+            light_position=(1.0, 2.0, 2.25),
+            light_color=(0.8, 0.7, 0.6),
+            light_radius=9.5,
+            light_intensity=1.4,
+            light_type="spot",
+        ),
+    )
+
+    assert light_route.enabled is True
+    assert light_route.command_method == "add_authored_room_light"
+    assert light_route.command_kwargs == {
+        "room_resref": "room_a",
+        "name": "belt_key_light",
+        "position": (1.0, 2.0, 2.25),
+        "color": (0.8, 0.7, 0.6),
+        "radius": 9.5,
+        "intensity": 1.4,
+        "light_type": "spot",
+    }
+    assert light_route.mutates_kmap is True
+    assert "room-light intent" in light_route.authoring_context
 
     opening_missing = resolve_map_studio_tool_belt_action("opening")
 
@@ -732,6 +762,35 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo()
     controller.undo_map_studio_command()
 
     assert controller.project.name == "grbelt01"
+
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grlight01")
+    light_room_resref = controller.authored_floor_plan_room_choices()[0].room_resref
+    execute_map_studio_tool_belt_action(
+        controller,
+        "light",
+        MapStudioToolActionContext(
+            light_room_resref=light_room_resref,
+            light_name="belt_key_light",
+            light_position=(1.0, 1.5, 2.25),
+            light_color=(1.0, 0.9, 0.7),
+            light_radius=7.0,
+            light_intensity=1.25,
+            light_type="point",
+        ),
+    )
+
+    light_rows = controller.authored_room_lights()
+    assert light_rows[-1].name == "belt_key_light"
+    assert light_rows[-1].room_resref == light_room_resref
+    assert light_rows[-1].position == (1.0, 1.5, 2.25)
+    assert light_rows[-1].color == (1.0, 0.9, 0.7)
+    assert light_rows[-1].radius == 7.0
+    assert light_rows[-1].intensity == 1.25
+    assert controller.command_history.undo_label == "Add room light belt_key_light"
+
+    controller.undo_map_studio_command()
+
+    assert all(row.name != "belt_key_light" for row in controller.authored_room_lights())
 
     execute_map_studio_tool_belt_action(
         controller,
@@ -1265,6 +1324,13 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert '"bend_tool",' in window_source
     assert '"curve_tool",' in window_source
     assert '"lattice",' in window_source
+    assert '"light",' in window_source
+    assert "roomLightRoomLineEdit" in window_source
+    assert "roomLightNameLineEdit" in window_source
+    assert "roomLightTypeComboBox" in window_source
+    assert "light_room_resref=light_room" in window_source
+    assert "light_position=(" in window_source
+    assert "light_color=(" in window_source
     assert 'MapStudioToolBeltAction(\n        "triangulate",' in scene_catalog
     assert 'MapStudioToolBeltAction(\n        "triangulate",' in tools_catalog
 
@@ -1276,6 +1342,9 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="add_authored_room_primitive"' in source
         assert 'command_method="create_authored_room_preset_module"' in source
         assert 'command_method="snap_authored_floor_plan_vertex"' in source
+        assert 'if key == "light":' in source
+        assert "light_room_resref" in source
+        assert 'command_method="add_authored_room_light"' in source
         assert 'command_method="apply_authored_room_operation"' in source
         assert 'command_method="duplicate_authored_room_primitive"' in source
         assert 'command_method="set_authored_room_edge_normal_policy"' in source

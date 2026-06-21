@@ -1433,6 +1433,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         entry_y = getattr(self.builder_tab, "entryPointPosYSpinBox", None)
         entry_z = getattr(self.builder_tab, "entryPointPosZSpinBox", None)
         entry_facing = getattr(self.builder_tab, "entryPointFacingSpinBox", None)
+        light_room = str(getattr(getattr(self.builder_tab, "roomLightRoomLineEdit", None), "text", lambda: "")()).strip()
+        light_name = str(getattr(getattr(self.builder_tab, "roomLightNameLineEdit", None), "text", lambda: "")()).strip()
+        light_type_combo = getattr(self.builder_tab, "roomLightTypeComboBox", None)
+        light_type = str(light_type_combo.currentData() or "point") if light_type_combo is not None else "point"
+        light_x = getattr(self.builder_tab, "roomLightPosXSpinBox", None)
+        light_y = getattr(self.builder_tab, "roomLightPosYSpinBox", None)
+        light_z = getattr(self.builder_tab, "roomLightPosZSpinBox", None)
+        light_r = getattr(self.builder_tab, "roomLightColorRSpinBox", None)
+        light_g = getattr(self.builder_tab, "roomLightColorGSpinBox", None)
+        light_b = getattr(self.builder_tab, "roomLightColorBSpinBox", None)
+        light_radius = getattr(self.builder_tab, "roomLightRadiusSpinBox", None)
+        light_intensity = getattr(self.builder_tab, "roomLightIntensitySpinBox", None)
         wall_opening_name = str(getattr(getattr(self.builder_tab, "floorPlanOpeningNameLineEdit", None), "text", lambda: "")()).strip()
         wall_opening_edge = getattr(self.builder_tab, "floorPlanOpeningEdgeSpinBox", None)
         wall_opening_center = getattr(self.builder_tab, "floorPlanOpeningCenterSpinBox", None)
@@ -1507,6 +1519,21 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 float(entry_z.value()) if entry_z is not None else 0.0,
             ),
             entry_facing=float(entry_facing.value()) if entry_facing is not None else 0.0,
+            light_room_resref=light_room,
+            light_name=light_name,
+            light_position=(
+                float(light_x.value()) if light_x is not None else 0.0,
+                float(light_y.value()) if light_y is not None else 0.0,
+                float(light_z.value()) if light_z is not None else 2.25,
+            ),
+            light_color=(
+                float(light_r.value()) if light_r is not None else 1.0,
+                float(light_g.value()) if light_g is not None else 0.92,
+                float(light_b.value()) if light_b is not None else 0.78,
+            ),
+            light_radius=float(light_radius.value()) if light_radius is not None else 8.0,
+            light_intensity=float(light_intensity.value()) if light_intensity is not None else 1.0,
+            light_type=light_type,
             wall_opening_name=wall_opening_name,
             wall_opening_edge_index=int(wall_opening_edge.value()) if wall_opening_edge is not None else 0,
             wall_opening_center_fraction=float(wall_opening_center.value()) if wall_opening_center is not None else 0.5,
@@ -1990,6 +2017,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "sound",
             "camera",
             "store",
+            "light",
             "opening",
             "opening_marker",
             "terrain",
