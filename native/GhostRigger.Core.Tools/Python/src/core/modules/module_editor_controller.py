@@ -4097,13 +4097,16 @@ class ModuleEditorController:
         tester: str = "",
         notes: str = "",
         module_loads_in_game: bool = False,
+        module_identity_matches_authored_resref: bool = False,
         player_spawns_on_floor: bool = False,
         test_placeable_visible: bool = False,
         player_can_walk_on_floor: bool = False,
+        no_inherited_base_game_geometry_or_scripted_movers: bool = False,
         allow_missing_evidence: bool = False,
     ):
         """Record in-game proof for a staged Map Studio module proof manifest."""
 
+        before = self._capture_map_studio_command_state()
         proof_path = Path(proof_manifest_path)
         try:
             proof = json.loads(proof_path.read_text(encoding="utf-8"))
@@ -4125,7 +4128,15 @@ class ModuleEditorController:
         if task == "T2601" or proof_filename.endswith("_in_game_smoke_manifest.json"):
             result = record_dev_module_game_proof(DevModuleGameProofRequest(**common))
         else:
-            result = record_authored_module_game_proof(AuthoredModuleGameProofRequest(**common))
+            result = record_authored_module_game_proof(
+                AuthoredModuleGameProofRequest(
+                    **common,
+                    module_identity_matches_authored_resref=bool(module_identity_matches_authored_resref),
+                    no_inherited_base_game_geometry_or_scripted_movers=bool(
+                        no_inherited_base_game_geometry_or_scripted_movers
+                    ),
+                )
+            )
             if getattr(result, "ok", False):
                 payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
                 if payload:
@@ -4142,6 +4153,23 @@ class ModuleEditorController:
                             payload[key] = recorded_proof[key]
                     self.project.extra_sections["authored_module"] = payload
                     self.project.dirty = True
+                    module_root = str(payload.get("module_root") or getattr(self.project, "name", "") or "new_level")
+                    self._record_map_studio_command(
+                        action_key="map_studio.export.record_game_proof",
+                        label=f"Record game proof {module_root}",
+                        before=before,
+                        stale_outputs=(),
+                        readiness_impact=(
+                            "Map Studio proof metadata changed; generated MDL/MDX/WOK/LYT/VIS/PTH/.mod files are unchanged."
+                        ),
+                        summary="Recorded accepted in-game evidence and promoted the authored module proof state.",
+                        metadata={
+                            "module_root": module_root,
+                            "proof_manifest_path": str(getattr(result, "proof_manifest_path", "") or proof_path),
+                            "evidence_path": str(getattr(result, "evidence_path", "") or evidence_path),
+                            "game_tested": True,
+                        },
+                    )
         self.model.log(getattr(result, "message", "Recorded Map Studio game proof."))
         return result
 

@@ -315,6 +315,42 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert record_proof.capability_stage == "game_tested_evidence_handoff"
     assert "accepted in-game evidence" in record_proof.readiness_summary
 
+    record_proof_with_evidence = resolve_map_studio_tool_belt_action(
+        "record_proof",
+        MapStudioToolActionContext(
+            proof_manifest_path="C:/tmp/grterrain_proof.json",
+            proof_evidence_path="C:/tmp/grterrain_warp.png",
+            proof_tester="pytest",
+            proof_notes="Warped into the authored module.",
+            proof_module_loads_in_game=True,
+            proof_module_identity_matches_authored_resref=True,
+            proof_player_spawns_on_floor=True,
+            proof_test_placeable_visible=True,
+            proof_player_can_walk_on_floor=True,
+            proof_no_inherited_base_game_geometry_or_scripted_movers=True,
+        ),
+    )
+
+    assert record_proof_with_evidence.enabled is True
+    assert record_proof_with_evidence.command_method == "record_map_studio_game_proof"
+    assert record_proof_with_evidence.command_kwargs == {
+        "proof_manifest_path": "C:/tmp/grterrain_proof.json",
+        "evidence_path": "C:/tmp/grterrain_warp.png",
+        "tester": "pytest",
+        "notes": "Warped into the authored module.",
+        "module_loads_in_game": True,
+        "module_identity_matches_authored_resref": True,
+        "player_spawns_on_floor": True,
+        "test_placeable_visible": True,
+        "player_can_walk_on_floor": True,
+        "no_inherited_base_game_geometry_or_scripted_movers": True,
+        "allow_missing_evidence": False,
+    }
+    assert record_proof_with_evidence.mutates_kmap is True
+    assert record_proof_with_evidence.stale_outputs == ()
+    assert "update KMAP proof metadata" in record_proof_with_evidence.authoring_context
+    assert "game-tested" in record_proof_with_evidence.authoring_context
+
     selected_primitive = resolve_map_studio_tool_belt_action(
         "primitive",
         MapStudioToolActionContext(
@@ -1481,6 +1517,40 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert proof_ready.capability_stage == "installed_for_game_test_recording_handoff"
     assert "screenshot or video evidence" in proof_ready.summary
     assert controller.command_history.undo_label == "Stage authored module grterrain"
+
+    proof_evidence = tmp_path / "grterrain_warp.png"
+    proof_evidence.write_bytes(b"fake proof image")
+    proof_recorded = execute_map_studio_tool_belt_action(
+        controller,
+        "record_proof",
+        MapStudioToolActionContext(
+            proof_manifest_path=stage_result.proof_manifest_path,
+            proof_evidence_path=str(proof_evidence),
+            proof_tester="pytest",
+            proof_notes="Tool-belt route proof.",
+            proof_module_loads_in_game=True,
+            proof_module_identity_matches_authored_resref=True,
+            proof_player_spawns_on_floor=True,
+            proof_test_placeable_visible=True,
+            proof_player_can_walk_on_floor=True,
+            proof_no_inherited_base_game_geometry_or_scripted_movers=True,
+        ),
+    )
+
+    assert proof_recorded.ok is True
+    assert proof_recorded.code == "game_proof_recorded"
+    assert controller.command_history.undo_label == "Record game proof grterrain"
+    proof_payload = controller.project.extra_sections["authored_module"]
+    assert proof_payload["game_tested"] is True
+    assert proof_payload["in_game_proof_evidence_path"] == str(proof_evidence)
+    assert proof_payload["game_test"]["accepted"] is True
+
+    controller.undo_map_studio_command()
+
+    assert controller.command_history.undo_label == "Stage authored module grterrain"
+    undone_proof_payload = controller.project.extra_sections["authored_module"]
+    assert undone_proof_payload["game_tested"] is False
+    assert "in_game_proof_evidence_path" not in undone_proof_payload
 
     modules_dir = tmp_path / "Modules"
     modules_dir.mkdir()

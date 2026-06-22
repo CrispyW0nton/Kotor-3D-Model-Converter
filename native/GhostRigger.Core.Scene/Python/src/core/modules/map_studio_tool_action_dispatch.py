@@ -101,6 +101,17 @@ class MapStudioToolActionContext:
     export_dry_run: bool = True
     export_overwrite: bool = False
     export_game_modules_dir: str = ""
+    proof_manifest_path: str = ""
+    proof_evidence_path: str = ""
+    proof_tester: str = ""
+    proof_notes: str = ""
+    proof_module_loads_in_game: bool = False
+    proof_module_identity_matches_authored_resref: bool = False
+    proof_player_spawns_on_floor: bool = False
+    proof_test_placeable_visible: bool = False
+    proof_player_can_walk_on_floor: bool = False
+    proof_no_inherited_base_game_geometry_or_scripted_movers: bool = False
+    proof_allow_missing_evidence: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -260,10 +271,19 @@ def _route(
     command_method: str = "",
     command_kwargs: dict[str, Any] | None = None,
     mutates_kmap: bool = False,
+    stale_outputs: tuple[str, ...] | None = None,
+    readiness_impact: str | None = None,
     status_message: str = "",
     authoring_context: str = "",
 ) -> MapStudioToolActionRoute:
     capability = map_studio_tool_capability_summary(action)
+    route_mutates = bool(mutates_kmap and enabled)
+    resolved_stale_outputs = (
+        tuple(stale_outputs) if stale_outputs is not None else MAP_STUDIO_TOOL_ACTION_STALE_OUTPUTS
+    )
+    resolved_readiness_impact = (
+        str(readiness_impact) if readiness_impact is not None else MAP_STUDIO_TOOL_ACTION_READINESS_IMPACT
+    )
     return MapStudioToolActionRoute(
         action_key=action.key,
         label=action.label,
@@ -278,9 +298,9 @@ def _route(
         placement_kind=placement_kind,
         command_method=command_method if enabled else "",
         command_kwargs=dict(command_kwargs or {}) if enabled else {},
-        mutates_kmap=bool(mutates_kmap and enabled),
-        stale_outputs=MAP_STUDIO_TOOL_ACTION_STALE_OUTPUTS if mutates_kmap and enabled else (),
-        readiness_impact=MAP_STUDIO_TOOL_ACTION_READINESS_IMPACT if mutates_kmap and enabled else "",
+        mutates_kmap=route_mutates,
+        stale_outputs=resolved_stale_outputs if route_mutates else (),
+        readiness_impact=resolved_readiness_impact if route_mutates else "",
         status_message=status_message or action.description,
         authoring_context=authoring_context,
         capability_stage=capability.capability_stage,
@@ -378,6 +398,43 @@ def resolve_map_studio_tool_belt_action(
         )
 
     if key == "record_proof":
+        proof_manifest = str(ctx.proof_manifest_path or "").strip()
+        evidence_path = str(ctx.proof_evidence_path or "").strip()
+        if proof_manifest and evidence_path:
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="grid",
+                command_method="record_map_studio_game_proof",
+                command_kwargs={
+                    "proof_manifest_path": proof_manifest,
+                    "evidence_path": evidence_path,
+                    "tester": str(ctx.proof_tester or ""),
+                    "notes": str(ctx.proof_notes or ""),
+                    "module_loads_in_game": bool(ctx.proof_module_loads_in_game),
+                    "module_identity_matches_authored_resref": bool(ctx.proof_module_identity_matches_authored_resref),
+                    "player_spawns_on_floor": bool(ctx.proof_player_spawns_on_floor),
+                    "test_placeable_visible": bool(ctx.proof_test_placeable_visible),
+                    "player_can_walk_on_floor": bool(ctx.proof_player_can_walk_on_floor),
+                    "no_inherited_base_game_geometry_or_scripted_movers": bool(
+                        ctx.proof_no_inherited_base_game_geometry_or_scripted_movers
+                    ),
+                    "allow_missing_evidence": bool(ctx.proof_allow_missing_evidence),
+                },
+                mutates_kmap=True,
+                stale_outputs=(),
+                readiness_impact=(
+                    "Map Studio proof metadata changed; generated MDL/MDX/WOK/LYT/VIS/PTH/.mod files are unchanged."
+                ),
+                status_message=(
+                    "Record accepted KOTOR warp-test evidence and promote the authored module toward game-tested status."
+                ),
+                authoring_context=(
+                    "Record Proof: attach screenshot or video evidence from an actual KOTOR warp test, record acceptance "
+                    "checks in the proof manifest, and update KMAP proof metadata. This is the only path that can mark "
+                    "an authored module game-tested."
+                ),
+            )
         return _route(
             action,
             focus_component_mode="object",

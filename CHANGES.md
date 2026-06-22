@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Records Game Proof Through Tool Belt
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Game proof / Tool action routing
+Intersects: native Scene/Tools dispatcher mirrors, module editor controller mirrors, and Map Studio dispatch regression tests.
+
+- Added proof manifest, evidence path, tester, notes, and authored-module acceptance checks to the shared Map Studio tool-action context so `Record Proof` can stay a handoff query until evidence is supplied, then execute the real proof-recording command.
+- Routed accepted proof evidence through `record_map_studio_game_proof`, including authored-module checks for resref identity and absence of inherited base-game geometry or scripted movers.
+- Recorded proof metadata as an undoable KMAP-only mutation, keeping generated MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs current while allowing the game-tested proof state to roll back to the staged export-candidate state.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_record_proof_contract`; `git diff --check`.
+
 ### [2026-06-22] Map Studio Makes Stage And Install Metadata Undoable
 
 Owner: LordVaderCW
