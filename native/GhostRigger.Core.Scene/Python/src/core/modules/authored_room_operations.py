@@ -2728,11 +2728,16 @@ def combine_authored_room_composition_primitives(
     vertex_count = 0
     face_count = 0
     primitive_types: list[str] = []
+    world_vertices: list[tuple[float, float, float]] = []
     for primitive in selected:
         mesh = primitive_to_mesh(primitive)
         vertex_count += len(tuple(mesh.vertices or ()))
         face_count += len(tuple(mesh.faces or ()))
         primitive_types.append(_primitive_type(primitive))
+        world_vertices.extend(_primitive_world_vertices(room, primitive))
+    bounds_min, bounds_max = _vec_bounds(tuple(world_vertices))
+    center = _vec_center(bounds_min, bounds_max)
+    dimensions = _vec_dimensions(bounds_min, bounds_max)
     group_id = _unique_primitive_group_name(composition, group_name)
     group_payload = {
         "name": group_id,
@@ -2740,6 +2745,11 @@ def combine_authored_room_composition_primitives(
         "primitive_types": primitive_types,
         "operation": "combine_primitives",
         "coordinate_space": "authored_room_composition_mesh_space",
+        "bounds_coordinate_space": "kmap_world",
+        "bounds_min": [float(value) for value in bounds_min],
+        "bounds_max": [float(value) for value in bounds_max],
+        "center": [float(value) for value in center],
+        "dimensions": [float(value) for value in dimensions],
         "topology_policy": "preserve_authored_primitives_no_mesh_bake",
         "baked_mesh_combine": "planned",
         "vertex_count": vertex_count,

@@ -40,6 +40,11 @@ class MapStudioExportObjectBoundary:
     walkmesh_face_count: int = 0
     walkable_face_count: int = 0
     material_textures: tuple[str, ...] = ()
+    bounds_coordinate_space: str = ""
+    bounds_min: tuple[float, float, float] | None = None
+    bounds_max: tuple[float, float, float] | None = None
+    center: tuple[float, float, float] | None = None
+    dimensions: tuple[float, float, float] | None = None
     uv_handoff_recommended: bool = False
     dcc_handoff_status: str = "keep_in_map_studio"
     dcc_handoff_reason: str = ""
@@ -69,6 +74,11 @@ class MapStudioExportObjectBoundary:
             "walkmesh_face_count": self.walkmesh_face_count,
             "walkable_face_count": self.walkable_face_count,
             "material_textures": list(self.material_textures),
+            "bounds_coordinate_space": self.bounds_coordinate_space,
+            "bounds_min": list(self.bounds_min) if self.bounds_min is not None else [],
+            "bounds_max": list(self.bounds_max) if self.bounds_max is not None else [],
+            "center": list(self.center) if self.center is not None else [],
+            "dimensions": list(self.dimensions) if self.dimensions is not None else [],
             "uv_handoff_recommended": self.uv_handoff_recommended,
             "dcc_handoff_status": self.dcc_handoff_status,
             "dcc_handoff_reason": self.dcc_handoff_reason,
@@ -123,6 +133,16 @@ def _group_member_names(group: dict[str, Any]) -> tuple[str, ...]:
     if isinstance(values, (list, tuple)):
         return tuple(dict.fromkeys(str(value or "").strip() for value in values if str(value or "").strip()))
     return ()
+
+
+def _vec3_from_group(group: dict[str, Any], key: str) -> tuple[float, float, float] | None:
+    values = group.get(key)
+    if not isinstance(values, (list, tuple)) or len(values) < 3:
+        return None
+    try:
+        return (float(values[0]), float(values[1]), float(values[2]))
+    except (TypeError, ValueError):
+        return None
 
 
 def _object_kind(primitive: Any, metadata: dict[str, Any]) -> str:
@@ -241,6 +261,7 @@ def _composition_group_boundaries(
         )
         face_count = int(group.get("face_count") or 0)
         vertex_count = int(group.get("vertex_count") or 0)
+        dimensions = _vec3_from_group(group, "dimensions")
         dcc_status = "blocked" if blocking else "ready_for_external_uv"
         dcc_reason = (
             "Fix missing grouped primitives before using this object group for UV/texturing handoff."
@@ -254,6 +275,11 @@ def _composition_group_boundaries(
             f"Primitive group is authored inside {resref}.mdl/{resref}.mdx/{resref}.wok.",
             "Topology is preserved as individual primitives; arbitrary baked mesh combine is planned.",
             f"Group source mesh estimate: {vertex_count} vertices, {face_count} faces.",
+            (
+                f"Group KMAP-world dimensions: {dimensions[0]:.3f} x {dimensions[1]:.3f} x {dimensions[2]:.3f}."
+                if dimensions is not None
+                else "Group KMAP-world dimensions are not recorded yet; recombine the group to refresh bounds."
+            ),
         )
         boundaries.append(
             MapStudioExportObjectBoundary(
@@ -271,6 +297,11 @@ def _composition_group_boundaries(
                 walkmesh_face_count=0,
                 walkable_face_count=0,
                 material_textures=textures,
+                bounds_coordinate_space=str(group.get("bounds_coordinate_space") or ""),
+                bounds_min=_vec3_from_group(group, "bounds_min"),
+                bounds_max=_vec3_from_group(group, "bounds_max"),
+                center=_vec3_from_group(group, "center"),
+                dimensions=dimensions,
                 uv_handoff_recommended=True,
                 dcc_handoff_status=dcc_status,
                 dcc_handoff_reason=dcc_reason,

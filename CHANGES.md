@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Records Combined Object Bounds
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Modeling tools / Combine object handoff
+Intersects: native Scene/Tools authored room operation mirrors, export-object boundary mirrors, and Map Studio dispatch regression tests.
+
+- Added KMAP-world bounds, center, and dimensions to combined primitive groups so Maya-style object combine produces a measurable modular-kit handoff object instead of only a name/count marker.
+- Threaded combined-group bounds through Map Studio export-object boundaries and authored-module readiness metadata so UI panels and DCC/UV handoff reports can display exact group size without owning geometry math.
+- Preserved capability honesty: combined primitive groups still keep individual primitive topology and export through the parent room until a future baked mesh combine/separate pipeline exists.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_export_objects.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_export_objects.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_combine_bounds_contract`; `git diff --check`.
+
 ### [2026-06-22] Map Studio Records Game Proof Through Tool Belt
 
 Owner: LordVaderCW

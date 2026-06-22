@@ -1915,6 +1915,12 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert object_group["name"] == "kit_column_group"
     assert object_group["primitive_names"] == ["combine_cube", "combine_cylinder"]
     assert object_group["coordinate_space"] == "authored_room_composition_mesh_space"
+    assert object_group["bounds_coordinate_space"] == "kmap_world"
+    assert len(object_group["bounds_min"]) == 3
+    assert len(object_group["bounds_max"]) == 3
+    assert len(object_group["center"]) == 3
+    assert len(object_group["dimensions"]) == 3
+    assert all(float(value) > 0.0 for value in object_group["dimensions"])
     assert object_group["topology_policy"] == "preserve_authored_primitives_no_mesh_bake"
     assert object_group["baked_mesh_combine"] == "planned"
     assert object_group["vertex_count"] > 0
@@ -1936,13 +1942,24 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert group_boundary.resource_boundary_policy == "combined_group_within_parent_room"
     assert group_boundary.member_primitive_names == ("combine_cube", "combine_cylinder")
     assert group_boundary.source_operation == "combine_primitives"
+    assert group_boundary.bounds_coordinate_space == "kmap_world"
+    assert group_boundary.bounds_min == tuple(object_group["bounds_min"])
+    assert group_boundary.bounds_max == tuple(object_group["bounds_max"])
+    assert group_boundary.center == tuple(object_group["center"])
+    assert group_boundary.dimensions == tuple(object_group["dimensions"])
     assert group_boundary.owns_walkmesh is False
     assert group_boundary.uv_handoff_recommended is True
     assert group_boundary.dcc_handoff_status == "ready_for_external_uv"
     assert "still exports through the parent room" in group_boundary.dcc_handoff_reason
+    assert any("KMAP-world dimensions" in note for note in group_boundary.notes)
     assert readiness_group["member_primitive_names"] == ["combine_cube", "combine_cylinder"]
     assert readiness_group["resource_boundary_policy"] == "combined_group_within_parent_room"
     assert readiness_group["source_operation"] == "combine_primitives"
+    assert readiness_group["bounds_coordinate_space"] == "kmap_world"
+    assert readiness_group["bounds_min"] == object_group["bounds_min"]
+    assert readiness_group["bounds_max"] == object_group["bounds_max"]
+    assert readiness_group["center"] == object_group["center"]
+    assert readiness_group["dimensions"] == object_group["dimensions"]
 
     controller.undo_map_studio_command()
 
