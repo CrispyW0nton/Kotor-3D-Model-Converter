@@ -95,7 +95,7 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["bridge"].contract_kind == "command_mutates_kmap"
     assert statuses["bridge"].command_method == "bridge_authored_floor_plan_edges"
     assert statuses["combine"].contract_kind == "command_mutates_kmap"
-    assert statuses["combine"].command_method == "merge_authored_floor_plan_rooms"
+    assert statuses["combine"].command_method == "combine_authored_room_primitives"
     assert statuses["separate"].contract_kind == "command_mutates_kmap"
     assert statuses["separate"].command_method == "separate_authored_room_primitive"
     assert statuses["extrude"].contract_kind == "command_mutates_kmap"
@@ -946,7 +946,26 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     combine_missing = resolve_map_studio_tool_belt_action("combine")
 
     assert combine_missing.enabled is False
-    assert "two compatible floor-plan rooms" in combine_missing.disabled_reason
+    assert "two selected composition primitives" in combine_missing.disabled_reason
+
+    object_combine = resolve_map_studio_tool_belt_action(
+        "combine",
+        MapStudioToolActionContext(
+            room_resref="room_a",
+            primitive_name="room_a_wall",
+            target_primitive_name="room_a_arch",
+            metadata={"group_name": "entry_group"},
+        ),
+    )
+
+    assert object_combine.enabled is True
+    assert object_combine.command_method == "combine_authored_room_primitives"
+    assert object_combine.command_kwargs == {
+        "room_resref": "room_a",
+        "primitive_names": ("room_a_wall", "room_a_arch"),
+        "group_name": "entry_group",
+    }
+    assert "KMAP object group" in object_combine.authoring_context
 
     combine = resolve_map_studio_tool_belt_action(
         "combine",
@@ -1597,6 +1616,52 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     controller.undo_map_studio_command()
 
     assert len(controller.authored_room_primitive_transforms()) == count_before
+
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grcombobj")
+    execute_map_studio_tool_belt_action(
+        controller,
+        "primitive",
+        MapStudioToolActionContext(primitive_kind="cube", primitive_name="combine_cube"),
+    )
+    combine_cube = controller.authored_room_primitive_transforms()[-1]
+    execute_map_studio_tool_belt_action(
+        controller,
+        "primitive",
+        MapStudioToolActionContext(primitive_kind="cylinder", primitive_name="combine_cylinder"),
+    )
+    combine_cylinder = controller.authored_room_primitive_transforms()[-1]
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "combine",
+        MapStudioToolActionContext(
+            room_resref=combine_cube.room_resref,
+            primitive_name=combine_cube.primitive_name,
+            target_primitive_name=combine_cylinder.primitive_name,
+            metadata={"group_name": "kit_column_group"},
+        ),
+    )
+
+    object_combine_payload = controller.project.extra_sections["authored_module"]
+    object_combine_metadata = object_combine_payload["rooms"][0]["primitive"]["metadata"]
+    object_group = object_combine_metadata["combined_primitive_groups"][0]
+
+    assert object_group["name"] == "kit_column_group"
+    assert object_group["primitive_names"] == ["combine_cube", "combine_cylinder"]
+    assert object_group["coordinate_space"] == "authored_room_composition_mesh_space"
+    assert object_group["topology_policy"] == "preserve_authored_primitives_no_mesh_bake"
+    assert object_group["baked_mesh_combine"] == "planned"
+    assert object_group["vertex_count"] > 0
+    assert object_group["face_count"] > 0
+    assert object_combine_metadata["combined_primitive_group_by_name"]["combine_cube"] == "kit_column_group"
+    assert object_combine_metadata["combined_primitive_group_by_name"]["combine_cylinder"] == "kit_column_group"
+    assert controller.command_history.undo_label == "Combine primitives combine_cube, combine_cylinder"
+
+    controller.undo_map_studio_command()
+
+    restored_object_combine_payload = controller.project.extra_sections["authored_module"]
+    restored_object_combine_metadata = restored_object_combine_payload["rooms"][0]["primitive"]["metadata"]
+    assert "combined_primitive_groups" not in restored_object_combine_metadata
 
     controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grfill01")
     fill_room = controller.authored_floor_plan_room_choices()[0]
@@ -3068,6 +3133,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="fill_authored_floor_plan_face"' in source
         assert 'command_method="triangulate_authored_floor_plan_face"' in source
         assert 'command_method="bridge_authored_floor_plan_edges"' in source
+        assert 'command_method="combine_authored_room_primitives"' in source
         assert 'command_method="merge_authored_floor_plan_rooms"' in source
         assert 'command_method="separate_authored_room_primitive"' in source
         assert 'command_method="duplicate_authored_room_primitive"' in source

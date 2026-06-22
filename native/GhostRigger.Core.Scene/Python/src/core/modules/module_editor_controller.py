@@ -115,6 +115,7 @@ from .authored_room_operations import (
     center_authored_room_composition_primitive_pivot,
     cleanup_authored_floor_plan_normals,
     cleanup_authored_floor_plan_vertices,
+    combine_authored_room_composition_primitives,
     duplicate_authored_room_composition_primitive,
     fill_authored_floor_plan_face,
     freeze_authored_room_composition_primitive_transform,
@@ -1827,6 +1828,55 @@ class ModuleEditorController:
                 "first_room_resref": first_room_resref,
                 "second_room_resref": second_room_resref,
                 "result_room_resref": result_room_resref,
+            },
+        )
+        return self.authored_module_readiness()
+
+    def combine_authored_room_primitives(
+        self,
+        *,
+        room_resref: str,
+        primitive_names: Any,
+        group_name: str = "",
+    ):
+        """Combine selected authored composition primitives into a KMAP object group."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        before = self._capture_map_studio_command_state()
+        updated = combine_authored_room_composition_primitives(
+            authored,
+            room_resref=room_resref,
+            primitive_names=primitive_names,
+            group_name=group_name,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        if isinstance(primitive_names, (str, bytes)):
+            text = primitive_names.decode("utf-8", errors="ignore") if isinstance(primitive_names, bytes) else primitive_names
+            selected = tuple(part.strip() for part in text.split(",") if part.strip())
+        else:
+            selected = tuple(str(name or "").strip() for name in tuple(primitive_names or ()) if str(name or "").strip())
+        self.model.log(
+            f"Combined Map Studio primitives {', '.join(selected)} into an authored object group; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.combine",
+            label=f"Combine primitives {', '.join(selected)}",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "primitive_names": selected,
+                "group_name": group_name,
             },
         )
         return self.authored_module_readiness()

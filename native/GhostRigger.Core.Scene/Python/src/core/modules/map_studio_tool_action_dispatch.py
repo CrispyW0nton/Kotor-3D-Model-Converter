@@ -1368,13 +1368,31 @@ def resolve_map_studio_tool_belt_action(
         )
 
     if key == "combine":
+        if ctx.primitive_name and ctx.target_primitive_name:
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="grid",
+                command_method="combine_authored_room_primitives",
+                command_kwargs={
+                    "room_resref": ctx.room_resref,
+                    "primitive_names": (ctx.primitive_name, ctx.target_primitive_name),
+                    "group_name": str(ctx.metadata.get("group_name") or ctx.result_room_resref or ""),
+                },
+                mutates_kmap=True,
+                authoring_context=(
+                    "Object Combine: record selected authored primitives as one KMAP object group for selection, "
+                    "readiness, DCC handoff, and later export policy while preserving primitive topology. "
+                    "Arbitrary baked mesh combine remains planned."
+                ),
+            )
         if not ctx.first_room_resref or not ctx.second_room_resref:
             return _route(
                 action,
                 focus_component_mode="object",
                 focus_snap_mode="grid",
                 enabled=False,
-                disabled_reason="Combine needs two compatible floor-plan rooms before it can merge export boundaries.",
+                disabled_reason="Combine needs two selected composition primitives or two compatible floor-plan rooms.",
             )
         return _route(
             action,

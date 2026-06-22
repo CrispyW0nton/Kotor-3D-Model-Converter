@@ -2671,6 +2671,113 @@ def duplicate_authored_room_composition_primitive(
     return _replace_rooms(project, rooms, operation="duplicate_special")
 
 
+def _unique_primitive_group_name(composition: AuthoredRoomComposition, requested_name: str = "") -> str:
+    groups = tuple(dict(item) for item in tuple(dict(composition.metadata).get("combined_primitive_groups") or ()))
+    used = {str(group.get("name") or "").strip() for group in groups if str(group.get("name") or "").strip()}
+    base = str(requested_name or "").strip() or "combined_primitive_group"
+    base = "".join(char if char.isalnum() or char in {"_", "-"} else "_" for char in base)[:32] or "combined_primitive_group"
+    if base not in used:
+        return base
+    for index in range(1, 1000):
+        suffix = f"_{index:02d}"
+        candidate = f"{base[: max(1, 32 - len(suffix))]}{suffix}"[:32]
+        if candidate not in used:
+            return candidate
+    raise ValueError(f"Could not create a unique primitive group name for '{requested_name}'.")
+
+
+def _primitive_name_values(primitive_names: Any) -> tuple[str, ...]:
+    if primitive_names is None:
+        return ()
+    if isinstance(primitive_names, (str, bytes)):
+        text = primitive_names.decode("utf-8", errors="ignore") if isinstance(primitive_names, bytes) else primitive_names
+        values = [part.strip() for part in text.split(",") if part.strip()]
+    else:
+        values = [str(name or "").strip() for name in tuple(primitive_names or ()) if str(name or "").strip()]
+    return tuple(dict.fromkeys(values))
+
+
+def combine_authored_room_composition_primitives(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_names: Any,
+    group_name: str = "",
+) -> AuthoredModuleProject:
+    """Record a combined object group for authored composition primitives.
+
+    This is a KMAP object-boundary command, not arbitrary mesh baking.  It lets
+    Map Studio preserve individual primitive topology while declaring that a
+    selected set should be treated as one modular object for selection,
+    readiness, DCC handoff, and later export policy.
+    """
+
+    selected_names = _primitive_name_values(primitive_names)
+    if len(selected_names) < 2:
+        raise ValueError("Combining authored primitives requires at least two primitive names.")
+    index = _target_room_index(project, room_resref)
+    room = project.rooms[index]
+    composition = _composition_for_room(room)
+    primitives = tuple(composition.primitives or ())
+    by_name = {_primitive_name(primitive): primitive for primitive in primitives if _primitive_name(primitive)}
+    missing = [name for name in selected_names if name not in by_name]
+    if missing:
+        known = ", ".join(sorted(by_name))
+        raise ValueError(f"Room {room.room_resref} has no primitive named '{missing[0]}'. Known primitives: {known or '(none)'}.")
+    selected = tuple(by_name[name] for name in selected_names)
+    vertex_count = 0
+    face_count = 0
+    primitive_types: list[str] = []
+    for primitive in selected:
+        mesh = primitive_to_mesh(primitive)
+        vertex_count += len(tuple(mesh.vertices or ()))
+        face_count += len(tuple(mesh.faces or ()))
+        primitive_types.append(_primitive_type(primitive))
+    group_id = _unique_primitive_group_name(composition, group_name)
+    group_payload = {
+        "name": group_id,
+        "primitive_names": list(selected_names),
+        "primitive_types": primitive_types,
+        "operation": "combine_primitives",
+        "coordinate_space": "authored_room_composition_mesh_space",
+        "topology_policy": "preserve_authored_primitives_no_mesh_bake",
+        "baked_mesh_combine": "planned",
+        "vertex_count": vertex_count,
+        "face_count": face_count,
+        "source": "map_studio:primitive_combine",
+    }
+    groups = [dict(item) for item in tuple(dict(composition.metadata).get("combined_primitive_groups") or ())]
+    groups.append(group_payload)
+    by_primitive = dict(dict(composition.metadata).get("combined_primitive_group_by_name") or {})
+    for name in selected_names:
+        by_primitive[name] = group_id
+    updated_composition = replace(
+        composition,
+        metadata={
+            **dict(composition.metadata),
+            "last_operation": "combine_primitives",
+            "last_combined_primitive_group": group_id,
+            "combined_primitive_groups": groups,
+            "combined_primitive_group_by_name": by_primitive,
+            "combined_primitive_group_count": len(groups),
+        },
+    )
+    updated = replace(
+        room,
+        primitive=updated_composition,
+        composition=None,
+        metadata={
+            **dict(room.metadata),
+            "primitive": "authored_room_composition",
+            "last_operation": "combine_primitives",
+            "last_combined_primitive_group": group_id,
+            "combined_primitive_group_count": len(groups),
+        },
+    )
+    rooms = tuple(project.rooms[:index] + (updated,) + project.rooms[index + 1 :])
+    return _replace_rooms(project, rooms, operation="combine_primitives")
+
+
 def apply_authored_floor_plan_inset(
     project: AuthoredModuleProject,
     *,
@@ -4476,6 +4583,7 @@ __all__ = [
     "center_authored_room_composition_primitive_pivot",
     "cleanup_authored_floor_plan_normals",
     "cleanup_authored_floor_plan_vertices",
+    "combine_authored_room_composition_primitives",
     "duplicate_authored_room_composition_primitive",
     "fill_authored_floor_plan_face",
     "freeze_authored_room_composition_primitive_transform",
