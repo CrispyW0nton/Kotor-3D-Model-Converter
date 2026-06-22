@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Command Search Shows Current Route Readiness
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Level Editor command search / Capability honesty
+Intersects: native Tools Level Editor command-search readiness and Map Studio tool-action dispatcher metadata.
+
+- Made the Map Studio command-search readiness label resolve the selected command through the current dispatcher context so modders see current `Not ready now` reasons such as missing rooms, missing export folders, or invalid WOK/primitive context.
+- Appended the same current route readiness to command-search tooltips while keeping command policy in `map_studio_tool_action_dispatch.py`.
+- Added source-contract coverage to preserve route-aware command-search readiness through future UI merges.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_workflow_panel.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_contract_audit.py`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_command_route_ui`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_command_route_audit`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_command_route_dispatch`.
+
 ### [2026-06-22] Map Studio Refreshes Tool Readiness From WOK Selection Changes
 
 Owner: LordVaderCW

@@ -897,6 +897,10 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "def _map_studio_command_search_tooltip" in window_source
     assert "def _map_studio_tool_route_tooltip" in window_source
     assert "def _map_studio_command_search_summary" in window_source
+    assert "def _map_studio_command_search_route" in window_source
+    assert "def _map_studio_command_search_context_tooltip" in window_source
+    assert "resolve_map_studio_tool_belt_action(key, self._map_studio_tool_action_context(key))" in window_source
+    assert "Not ready now: {reason}" in window_source
     assert "def _selected_map_studio_command_search_result" in window_source
     assert "def _update_map_studio_command_search_readiness" in window_source
     assert "capability_stage" in window_source

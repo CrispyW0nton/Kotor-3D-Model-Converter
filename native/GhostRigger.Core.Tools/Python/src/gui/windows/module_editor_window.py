@@ -1244,6 +1244,30 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             lines.append(readiness)
         return "\n".join(line for line in lines if line)
 
+    def _map_studio_command_search_route(self, result: Any | None) -> Any | None:
+        """Resolve the current dispatcher route for a command-search result."""
+
+        if result is None:
+            return None
+        key = str(getattr(result, "key", "") or "").strip()
+        if not key or key not in self._map_studio_tool_action_index:
+            return None
+        return resolve_map_studio_tool_belt_action(key, self._map_studio_tool_action_context(key))
+
+    def _map_studio_command_search_context_tooltip(self, result: Any | None) -> str:
+        """Format command-search tooltip with current route readiness appended."""
+
+        if result is None:
+            return ""
+        tooltip = self._map_studio_command_search_tooltip(result)
+        route = self._map_studio_command_search_route(result)
+        if route is None or bool(getattr(route, "enabled", True)):
+            return tooltip
+        reason = str(getattr(route, "disabled_reason", "") or "").strip()
+        if not reason:
+            return tooltip
+        return f"{tooltip}\nNot ready now: {reason}" if tooltip else f"Not ready now: {reason}"
+
     def _map_studio_tool_route_tooltip(self, action: Any, route: Any) -> str:
         """Format dispatcher route metadata for tool-belt buttons and menus."""
 
@@ -1276,7 +1300,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         capability = str(getattr(result, "capability_stage", "") or "unknown").replace("_", " ")
         resource_text = ", ".join(str(item) for item in tuple(getattr(result, "resource_impacts", ()) or ())) or "none"
         readiness = str(getattr(result, "readiness_summary", "") or "").strip()
-        return f"Command readiness: {label} | Capability: {capability} | Affects: {resource_text}. {readiness}".strip()
+        summary = f"Command readiness: {label} | Capability: {capability} | Affects: {resource_text}. {readiness}".strip()
+        route = self._map_studio_command_search_route(result)
+        if route is not None and not bool(getattr(route, "enabled", True)):
+            reason = str(getattr(route, "disabled_reason", "") or "").strip()
+            if reason:
+                summary = f"{summary} Not ready now: {reason}"
+        return summary
 
     def _selected_map_studio_command_search_result(self) -> Any | None:
         combo = getattr(self, "map_studio_command_search_combo", None)
@@ -1301,7 +1331,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         result = self._selected_map_studio_command_search_result()
         summary = self._map_studio_command_search_summary(result)
         label.setText(summary)
-        label.setToolTip(self._map_studio_command_search_tooltip(result) if result is not None else summary)
+        label.setToolTip(self._map_studio_command_search_context_tooltip(result) if result is not None else summary)
 
     def _clear_map_studio_tool_belt_layout(self, layout: QtWidgets.QLayout | None = None) -> None:
         target_layout = layout or self.map_studio_tool_belt_layout
