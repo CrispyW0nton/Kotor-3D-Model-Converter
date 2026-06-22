@@ -1019,6 +1019,25 @@ def resolve_map_studio_tool_belt_action(
         )
 
     if key == "mirror_z":
+        if ctx.primitive_name:
+            center = float(ctx.metadata.get("center", ctx.metadata.get("mirror_center", 0.0)))
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="grid",
+                command_method="mirror_authored_room_primitive_transform",
+                command_kwargs={
+                    "room_resref": ctx.room_resref,
+                    "primitive_name": ctx.primitive_name,
+                    "axis": "z",
+                    "center": center,
+                },
+                mutates_kmap=True,
+                authoring_context=(
+                    "Object Mirror Z: reflect the selected primitive placement across a horizontal Z plane in "
+                    "authored-room composition mesh space. This is placement mirroring, not baked arbitrary mesh mirroring."
+                ),
+            )
         kwargs: dict[str, Any] = {
             "room_resref": ctx.room_resref,
         }
@@ -1109,6 +1128,26 @@ def resolve_map_studio_tool_belt_action(
 
     if key in {"mirror", "mirror_x", "mirror_y"}:
         axis = {"mirror_y": "y", "mirror_x": "x"}.get(key, _clean_axis(ctx.axis))
+        if ctx.primitive_name:
+            center = float(ctx.metadata.get("center", ctx.metadata.get("mirror_center", 0.0)))
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="grid",
+                command_method="mirror_authored_room_primitive_transform",
+                command_kwargs={
+                    "room_resref": ctx.room_resref,
+                    "primitive_name": ctx.primitive_name,
+                    "axis": axis,
+                    "center": center,
+                },
+                mutates_kmap=True,
+                authoring_context=(
+                    "Object Mirror: reflect the selected primitive placement across the requested X/Y/Z plane in "
+                    "authored-room composition mesh space, preserving topology, dimensions, scale, and pivot intent. "
+                    "Arbitrary baked mesh mirroring remains planned."
+                ),
+            )
         return _route(
             action,
             focus_component_mode="vertex",

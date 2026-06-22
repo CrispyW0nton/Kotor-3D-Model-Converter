@@ -121,6 +121,7 @@ from .authored_room_operations import (
     flatten_authored_floor_plan_vertices,
     grid_snap_authored_floor_plan_vertices,
     grid_snap_authored_room_composition_primitive,
+    mirror_authored_room_composition_primitive_transform,
     mirror_authored_floor_plan_vertices,
     move_authored_floor_plan_point,
     move_authored_room_composition_primitive,
@@ -2719,6 +2720,53 @@ class ModuleEditorController:
                 "target_primitive_name": target_primitive_name,
                 "target_vertex_index": None if target_vertex_index is None else int(target_vertex_index),
                 "value": value,
+            },
+        )
+        return self.authored_module_readiness()
+
+    def mirror_authored_room_primitive_transform(
+        self,
+        *,
+        room_resref: str,
+        primitive_name: str,
+        axis: str = "x",
+        center: float = 0.0,
+    ):
+        """Mirror one authored primitive object placement across a coordinate plane."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = mirror_authored_room_composition_primitive_transform(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+            axis=axis,
+            center=center,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Mirrored Map Studio primitive {primitive_name} across {axis}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.object_mirror",
+            label=f"Object mirror {primitive_name} across {axis}",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "primitive_name": primitive_name,
+                "axis": axis,
+                "center": float(center),
             },
         )
         return self.authored_module_readiness()

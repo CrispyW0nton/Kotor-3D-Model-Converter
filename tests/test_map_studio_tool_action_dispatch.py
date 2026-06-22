@@ -109,7 +109,7 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["shrink_wrap"].contract_kind == "command_mutates_kmap"
     assert statuses["shrink_wrap"].command_method == "shrink_wrap_authored_room_primitive_to_terrain"
     assert statuses["mirror_z"].contract_kind == "command_mutates_kmap"
-    assert statuses["mirror_z"].command_method == "mirror_z_authored_terrain_heightfield"
+    assert statuses["mirror_z"].command_method == "mirror_authored_room_primitive_transform"
     assert statuses["bend_tool"].contract_kind == "command_mutates_kmap"
     assert statuses["bend_tool"].command_method == "bend_authored_terrain_heightfield"
     assert statuses["lattice"].contract_kind == "command_mutates_kmap"
@@ -2773,6 +2773,93 @@ def test_t2606_object_shrink_wrap_drops_primitive_bottom_to_terrain() -> None:
     assert restored.translation == (0.0, 0.0, 2.0)
 
 
+def test_t2606_object_mirror_reflects_primitive_placement() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_tool_action_dispatch import (
+        MapStudioToolActionContext,
+        execute_map_studio_tool_belt_action,
+        resolve_map_studio_tool_belt_action,
+    )
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grobjmir", game="K1")
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grobjmir")
+    execute_map_studio_tool_belt_action(
+        controller,
+        "primitive",
+        MapStudioToolActionContext(primitive_kind="cube", primitive_name="source_cube"),
+    )
+    source = controller.authored_room_primitive_transforms()[-1]
+    controller.set_authored_room_primitive_transform(
+        room_resref=source.room_resref,
+        primitive_name=source.primitive_name,
+        translation=(2.0, 1.0, 0.5),
+        rotation_degrees_z=30.0,
+        scale=(1.25, 1.0, 1.0),
+        pivot=(0.25, 0.0, 0.0),
+    )
+
+    route = resolve_map_studio_tool_belt_action(
+        "mirror_x",
+        MapStudioToolActionContext(
+            room_resref=source.room_resref,
+            primitive_name=source.primitive_name,
+            metadata={"center": 0.0},
+        ),
+    )
+    assert route.enabled is True
+    assert route.command_method == "mirror_authored_room_primitive_transform"
+    assert route.command_kwargs == {
+        "room_resref": source.room_resref,
+        "primitive_name": source.primitive_name,
+        "axis": "x",
+        "center": 0.0,
+    }
+    assert "Arbitrary baked mesh mirroring remains planned" in route.authoring_context
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "mirror_x",
+        MapStudioToolActionContext(
+            room_resref=source.room_resref,
+            primitive_name=source.primitive_name,
+            metadata={"center": 0.0},
+        ),
+    )
+
+    mirrored = {
+        row.primitive_name: row
+        for row in controller.authored_room_primitive_transforms()
+        if row.room_resref == source.room_resref
+    }["source_cube"]
+    assert mirrored.translation == (-2.5, 1.0, 0.5)
+    assert mirrored.rotation_degrees_z == 150.0
+    assert mirrored.scale == (1.25, 1.0, 1.0)
+    assert mirrored.pivot == (0.25, 0.0, 0.0)
+    assert controller.command_history.undo_label == "Object mirror source_cube across x"
+
+    payload = controller.project.extra_sections["authored_module"]
+    metadata = payload["rooms"][0]["primitive"]["metadata"]
+    assert metadata["last_operation"] == "object_mirror_primitive"
+    assert metadata["object_mirror_coordinate_space"] == "authored_room_composition_mesh_space"
+    assert metadata["object_mirror_axis"] == "x"
+    assert metadata["old_pivot_position"] == [2.25, 1.0, 0.5]
+    assert metadata["new_pivot_position"] == [-2.25, 1.0, 0.5]
+    assert metadata["old_translation"] == [2.0, 1.0, 0.5]
+    assert metadata["new_translation"] == [-2.5, 1.0, 0.5]
+
+    controller.undo_map_studio_command()
+    restored = {
+        row.primitive_name: row
+        for row in controller.authored_room_primitive_transforms()
+        if row.room_resref == source.room_resref
+    }["source_cube"]
+    assert restored.translation == (2.0, 1.0, 0.5)
+    assert restored.rotation_degrees_z == 30.0
+
+
 def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -> None:
     window_source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
     scene_dispatcher = _read("native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py")
@@ -2888,6 +2975,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="freeze_authored_room_primitive_transform"' in source
         assert 'command_method="grid_snap_authored_room_primitive"' in source
         assert 'command_method="snap_authored_room_primitive_pivot_to_vertex"' in source
+        assert 'command_method="mirror_authored_room_primitive_transform"' in source
         assert 'command_method="set_authored_room_edge_normal_policy"' in source
         assert 'command_method="apply_authored_terrain_brush_stroke"' in source
         assert 'command_method="shrink_wrap_authored_placements_to_terrain"' in source
@@ -2931,6 +3019,8 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert "snap_authored_room_composition_primitive_pivot_to_vertex" in source
         assert "def transform_snap_authored_room_primitive_level" in source
         assert "transform_snap_authored_room_composition_primitive_level" in source
+        assert "def mirror_authored_room_primitive_transform" in source
+        assert "mirror_authored_room_composition_primitive_transform" in source
         assert "def authored_terrain_status" in source
         assert "previewable_status_query" in source
 

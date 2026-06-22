@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Mirrors Primitive Object Placements
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Direct modeling tools / Object mirroring
+Intersects: native Scene/Tools authored room operations, ModuleEditorController mirrors, dispatcher routing, and tool-belt contracts.
+
+- Added a headless `mirror_authored_room_composition_primitive_transform` command that reflects a selected primitive placement across an X/Y/Z coordinate plane in authored-room composition mesh space.
+- Routed `mirror`, `mirror_x`, `mirror_y`, and `mirror_z` context-sensitively so selected primitives use object placement mirroring, while unselected floor-plan/terrain contexts keep their previous component or terrain mirror behavior.
+- Preserved topology, dimensions, scale, and pivot intent while recording KMAP mirror-plane metadata, yaw adjustment for X/Y reflection, undo/redo state, and stale validation/export/game-proof readiness impact.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_object_mirror_full`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_object_mirror_ui_contract`.
+
 ### [2026-06-22] Map Studio Shrink-Wraps Primitive Objects To Terrain
 
 Owner: LordVaderCW

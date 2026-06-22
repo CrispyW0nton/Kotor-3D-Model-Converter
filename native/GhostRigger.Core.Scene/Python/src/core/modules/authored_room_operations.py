@@ -2104,6 +2104,113 @@ def shrink_wrap_authored_room_composition_primitive_to_terrain(
     return _replace_rooms(project, rooms, operation="object_shrink_wrap_to_terrain")
 
 
+def _mirrored_yaw_degrees(rotation_degrees_z: float, axis: str) -> float:
+    angle = float(rotation_degrees_z)
+    if axis == "x":
+        mirrored = 180.0 - angle
+    elif axis == "y":
+        mirrored = -angle
+    else:
+        mirrored = angle
+    return ((mirrored + 180.0) % 360.0) - 180.0
+
+
+def mirror_authored_room_composition_primitive_transform(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+    axis: str = "x",
+    center: float = 0.0,
+) -> AuthoredModuleProject:
+    """Reflect a selected authored primitive placement across a coordinate plane.
+
+    This is an object-layout mirror command, not arbitrary baked mesh mirroring.
+    It reflects the primitive pivot position across X/Y/Z in authored-room
+    composition mesh space and adjusts yaw for X/Y mirrors while preserving
+    topology, dimensions, scale, and pivot intent.
+    """
+
+    axis_key = str(axis or "x").strip().lower()
+    if axis_key not in {"x", "y", "z"}:
+        raise ValueError("Object Mirror supports X, Y, or Z axes.")
+    axis_index = {"x": 0, "y": 1, "z": 2}[axis_key]
+    mirror_center = float(center)
+
+    index = _target_room_index(project, room_resref)
+    room = project.rooms[index]
+    composition = _composition_for_room(room)
+    source_name = str(primitive_name or "").strip()
+    if not source_name:
+        raise ValueError("Object Mirror requires a selected authored primitive.")
+
+    primitives = tuple(composition.primitives or ())
+    source_primitive = next((item for item in primitives if _primitive_name(item) == source_name), None)
+    known = ", ".join(_primitive_name(item) for item in primitives if _primitive_name(item))
+    if source_primitive is None:
+        raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'. Known primitives: {known or '(none)'}.")
+
+    transform = _primitive_transform(source_primitive)
+    old_translation = tuple(float(component) for component in transform.translation)
+    pivot = tuple(float(component) for component in transform.pivot)
+    old_pivot_position = tuple(old_translation[component] + pivot[component] for component in range(3))
+    mirrored_pivot_position = list(old_pivot_position)
+    mirrored_pivot_position[axis_index] = (2.0 * mirror_center) - old_pivot_position[axis_index]
+    new_translation = list(old_translation)
+    new_translation[axis_index] = mirrored_pivot_position[axis_index] - pivot[axis_index]
+    new_rotation = _mirrored_yaw_degrees(float(transform.rotation_degrees_z), axis_key)
+    mirrored_transform = PrimitiveTransform(
+        translation=tuple(float(component) for component in new_translation),
+        rotation_degrees_z=float(new_rotation),
+        scale=tuple(float(component) for component in transform.scale),
+        pivot=pivot,
+    )
+
+    updated_primitives = []
+    for primitive in primitives:
+        if _primitive_name(primitive) != source_name:
+            updated_primitives.append(primitive)
+            continue
+        if isinstance(primitive, PlacedRoomPrimitive):
+            updated_primitives.append(replace(primitive, transform=mirrored_transform))
+        else:
+            updated_primitives.append(PlacedRoomPrimitive(primitive=primitive, name=source_name, transform=mirrored_transform))
+
+    updated_composition = replace(
+        composition,
+        primitives=tuple(updated_primitives),
+        metadata={
+            **dict(composition.metadata),
+            "last_operation": "object_mirror_primitive",
+            "last_mirrored_primitive": source_name,
+            "object_mirror_coordinate_space": "authored_room_composition_mesh_space",
+            "object_mirror_axis": axis_key,
+            "object_mirror_center": mirror_center,
+            "old_pivot_position": list(old_pivot_position),
+            "new_pivot_position": [float(component) for component in mirrored_pivot_position],
+            "old_rotation_degrees_z": float(transform.rotation_degrees_z),
+            "new_rotation_degrees_z": float(new_rotation),
+            "old_translation": list(old_translation),
+            "new_translation": [float(component) for component in new_translation],
+            "source": "map_studio:object_mirror",
+        },
+    )
+    updated_room = replace(
+        room,
+        primitive=updated_composition,
+        composition=None,
+        metadata={
+            **dict(room.metadata),
+            "primitive": "authored_room_composition",
+            "last_operation": "object_mirror_primitive",
+            "last_mirrored_primitive": source_name,
+            "object_mirror_axis": axis_key,
+        },
+    )
+    rooms = tuple(project.rooms[:index] + (updated_room,) + project.rooms[index + 1 :])
+    return _replace_rooms(project, rooms, operation="object_mirror_primitive")
+
+
 def _linear_transform_vector(
     vector: tuple[float, float, float],
     transform: PrimitiveTransform,
@@ -4293,6 +4400,7 @@ __all__ = [
     "flatten_authored_floor_plan_vertices",
     "grid_snap_authored_floor_plan_vertices",
     "grid_snap_authored_room_composition_primitive",
+    "mirror_authored_room_composition_primitive_transform",
     "mirror_authored_floor_plan_vertices",
     "move_authored_floor_plan_point",
     "move_authored_room_composition_primitive",
