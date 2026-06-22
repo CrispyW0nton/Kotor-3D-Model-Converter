@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Makes Normal Cleanup Explicit In Tool Belt
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt catalog / Floor-plan normal cleanup
+Intersects: native Scene/Tools modeling-tool catalogs, dispatcher mirrors, and Map Studio dispatch regression tests.
+
+- Added `cleanup_normals` as an explicit Map Studio tool-belt action in the default and component presets so the existing cleanup-normal modeling tool is reachable by key, command search, and tool contract audit instead of relying on the older `normals` alias.
+- Routed `cleanup_normals`, `normals`, and `reverse_normals` through the same headless `cleanup_authored_floor_plan_normals` command with explicit positive/negative Z winding policy and capability-honest MDL/WOK export impact text.
+- Added route, audit, execution, and undo coverage proving reverse normals mutates KMAP floor-plan metadata and can be restored through command history.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests\test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_normals_route`; `git diff --check`.
+
 ### [2026-06-22] Map Studio Routes Held Vertex Snap To Object Snapping
 
 Owner: LordVaderCW

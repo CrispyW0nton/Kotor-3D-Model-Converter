@@ -104,6 +104,10 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["bevel"].command_method == "bevel_authored_floor_plan_room"
     assert statuses["inset"].contract_kind == "command_mutates_kmap"
     assert statuses["inset"].command_method == "inset_authored_floor_plan_room"
+    assert statuses["cleanup_normals"].contract_kind == "command_mutates_kmap"
+    assert statuses["cleanup_normals"].command_method == "cleanup_authored_floor_plan_normals"
+    assert statuses["reverse_normals"].contract_kind == "command_mutates_kmap"
+    assert statuses["reverse_normals"].command_method == "cleanup_authored_floor_plan_normals"
     assert statuses["sculpt_raise"].contract_kind == "command_mutates_kmap"
     assert statuses["sculpt_raise"].command_method == "apply_authored_terrain_brush_stroke"
     assert statuses["shrink_wrap"].contract_kind == "command_mutates_kmap"
@@ -1064,6 +1068,30 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
         "scale_multiplier": (1.0, 1.0, 1.2),
     }
     assert duplicate.mutates_kmap is True
+
+    cleanup_normals = resolve_map_studio_tool_belt_action(
+        "cleanup_normals",
+        MapStudioToolActionContext(room_resref="room_a", positive_z=True),
+    )
+
+    assert cleanup_normals.enabled is True
+    assert cleanup_normals.command_method == "cleanup_authored_floor_plan_normals"
+    assert cleanup_normals.command_kwargs == {"room_resref": "room_a", "positive_z": True}
+    assert cleanup_normals.mutates_kmap is True
+    assert "positive Z" in cleanup_normals.authoring_context
+    assert "MDL/WOK output" in cleanup_normals.authoring_context
+
+    reverse_normals = resolve_map_studio_tool_belt_action(
+        "reverse_normals",
+        MapStudioToolActionContext(room_resref="room_a", positive_z=True),
+    )
+
+    assert reverse_normals.enabled is True
+    assert reverse_normals.command_method == "cleanup_authored_floor_plan_normals"
+    assert reverse_normals.command_kwargs == {"room_resref": "room_a", "positive_z": False}
+    assert reverse_normals.mutates_kmap is True
+    assert "Reverse Normals" in reverse_normals.authoring_context
+    assert "negative Z" in reverse_normals.authoring_context
 
     soften = resolve_map_studio_tool_belt_action(
         "soften_edges",
@@ -2116,6 +2144,27 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert hard_metadata["edge_normal_policy"] == "hard"
     assert hard_metadata["edge_normal_policy_operation"] == "harden_edges"
     assert controller.command_history.undo_label == "Harden edges"
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "reverse_normals",
+        MapStudioToolActionContext(room_resref=room_for_normals.room_resref),
+    )
+
+    reversed_payload = controller.project.extra_sections["authored_module"]
+    reversed_primitive = reversed_payload["rooms"][0]["primitive"]
+    reversed_metadata = reversed_primitive["metadata"]
+    assert reversed_metadata["last_operation"] == "cleanup_floor_plan_normals"
+    assert reversed_metadata["normal_cleanup_positive_z"] is False
+    assert reversed_payload["rooms"][0]["metadata"]["normal_cleanup_positive_z"] is False
+    assert controller.command_history.undo_label == f"Clean {room_for_normals.room_resref} floor-plan normals"
+
+    controller.undo_map_studio_command()
+
+    restored_after_reverse = controller.project.extra_sections["authored_module"]
+    restored_after_reverse_metadata = restored_after_reverse["rooms"][0]["primitive"]["metadata"]
+    assert restored_after_reverse_metadata["edge_normal_policy"] == "hard"
+    assert "normal_cleanup_positive_z" not in restored_after_reverse_metadata
 
     controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grbool01")
     boolean_payload = controller.project.extra_sections["authored_module"]
@@ -3324,6 +3373,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="boolean_difference_authored_floor_plan_rooms"' in source
         assert 'command_method="fill_authored_floor_plan_face"' in source
         assert 'command_method="triangulate_authored_floor_plan_face"' in source
+        assert 'command_method="cleanup_authored_floor_plan_normals"' in source
         assert 'command_method="bridge_authored_floor_plan_edges"' in source
         assert 'command_method="combine_authored_room_primitives"' in source
         assert 'command_method="merge_authored_floor_plan_rooms"' in source

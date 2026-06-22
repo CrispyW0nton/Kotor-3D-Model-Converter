@@ -1232,14 +1232,21 @@ def resolve_map_studio_tool_belt_action(
             mutates_kmap=True,
         )
 
-    if key in {"normals", "reverse_normals"}:
+    if key in {"normals", "cleanup_normals", "reverse_normals"}:
+        positive_z = key != "reverse_normals" and bool(ctx.positive_z)
+        context_label = "Reverse Normals" if key == "reverse_normals" else "Cleanup Normals"
         return _route(
             action,
             focus_component_mode="face",
             focus_snap_mode="grid",
             command_method="cleanup_authored_floor_plan_normals",
-            command_kwargs={"room_resref": ctx.room_resref, "positive_z": key != "reverse_normals" and bool(ctx.positive_z)},
+            command_kwargs={"room_resref": ctx.room_resref, "positive_z": positive_z},
             mutates_kmap=True,
+            authoring_context=(
+                f"{context_label}: orient the selected floor-plan room winding in explicit KMAP floor-plan space "
+                f"so generated room geometry and WOK normals target {'positive' if positive_z else 'negative'} Z. "
+                "Validation/export/game proof become stale because winding affects generated MDL/WOK output."
+            ),
         )
 
     if key in {"soften_edges", "harden_edges"}:
