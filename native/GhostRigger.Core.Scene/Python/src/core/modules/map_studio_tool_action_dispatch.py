@@ -660,6 +660,24 @@ def resolve_map_studio_tool_belt_action(
         )
 
     if key == "shrink_wrap":
+        if ctx.primitive_name:
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="surface",
+                command_method="shrink_wrap_authored_room_primitive_to_terrain",
+                command_kwargs={
+                    "room_resref": ctx.room_resref,
+                    "primitive_name": ctx.primitive_name,
+                    "terrain_room_resref": ctx.target_room_resref,
+                },
+                mutates_kmap=True,
+                authoring_context=(
+                    "Object Shrink Wrap: move the selected authored primitive so its lowest transformed vertex "
+                    "lands on the selected or first terrain heightfield at the primitive pivot X/Y. "
+                    "This preserves topology and makes validation/export/game proof stale."
+                ),
+            )
         return _route(
             action,
             focus_component_mode="walkmesh",

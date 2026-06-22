@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Shrink-Wraps Primitive Objects To Terrain
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Direct modeling tools / Terrain snapping
+Intersects: native Scene/Tools authored room operations, ModuleEditorController mirrors, dispatcher routing, and tool-belt contracts.
+
+- Added a headless `shrink_wrap_authored_room_composition_primitive_to_terrain` command that moves a selected authored primitive so its lowest transformed vertex lands on the selected or first terrain heightfield sample at the primitive pivot X/Y.
+- Routed `shrink_wrap` context-sensitively: selected primitives now use the object-to-terrain path, while no selected primitive keeps the existing authored gameplay placement and entry-point terrain repair behavior.
+- Preserved KMAP object identity, topology, rotation, scale, and pivot while recording authored-room composition mesh-space metadata and stale validation/export/game-proof readiness impact through the controller undo/redo path.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_object_shrink_wrap_full`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_object_shrink_wrap_ui_contract`.
+
 ### [2026-06-22] Map Studio Adds Object-Level Transform Snap
 
 Owner: LordVaderCW

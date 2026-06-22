@@ -2010,6 +2010,100 @@ def transform_snap_authored_room_composition_primitive_level(
     return _replace_rooms(project, rooms, operation="object_transform_snap_level")
 
 
+def shrink_wrap_authored_room_composition_primitive_to_terrain(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+    terrain_room_resref: str = "",
+) -> AuthoredModuleProject:
+    """Drop a selected authored primitive so its lowest vertex lands on terrain.
+
+    This is the object-placement form of Shrink Wrap. It preserves topology,
+    dimensions, pivot, rotation, and scale; only the object's Z translation is
+    adjusted. The terrain sample is taken at the primitive pivot's X/Y.
+    """
+
+    object_index = _target_room_index(project, room_resref)
+    terrain_index = _target_terrain_room_index(project, terrain_room_resref)
+    object_room = project.rooms[object_index]
+    terrain_room = project.rooms[terrain_index]
+    terrain = _terrain_for_room(terrain_room)
+    composition = _composition_for_room(object_room)
+    source_name = str(primitive_name or "").strip()
+    if not source_name:
+        raise ValueError("Object Shrink Wrap requires a selected authored primitive.")
+
+    primitives = tuple(composition.primitives or ())
+    source_primitive = next((item for item in primitives if _primitive_name(item) == source_name), None)
+    known = ", ".join(_primitive_name(item) for item in primitives if _primitive_name(item))
+    if source_primitive is None:
+        raise ValueError(f"Room {object_room.room_resref} has no primitive named '{primitive_name}'. Known primitives: {known or '(none)'}.")
+
+    transform = _primitive_transform(source_primitive)
+    old_translation = tuple(float(component) for component in transform.translation)
+    pivot = tuple(float(component) for component in transform.pivot)
+    pivot_position = tuple(old_translation[index] + pivot[index] for index in range(3))
+    vertices = tuple(primitive_to_mesh(source_primitive).vertices or ())
+    if not vertices:
+        raise ValueError(f"Primitive '{source_name}' has no vertices to shrink-wrap.")
+    old_bottom_z = min(float(vertex[2]) for vertex in vertices)
+    terrain_position = _terrain_room_position(terrain_room)
+    surface_position = _snap_position_to_terrain(terrain, terrain_position, pivot_position)
+    target_surface_z = float(surface_position[2])
+    delta_z = target_surface_z - float(old_bottom_z)
+    new_translation = (old_translation[0], old_translation[1], old_translation[2] + delta_z)
+    wrapped_transform = PrimitiveTransform(
+        translation=new_translation,
+        rotation_degrees_z=float(transform.rotation_degrees_z),
+        scale=tuple(float(component) for component in transform.scale),
+        pivot=pivot,
+    )
+
+    updated_primitives = []
+    for primitive in primitives:
+        if _primitive_name(primitive) != source_name:
+            updated_primitives.append(primitive)
+            continue
+        if isinstance(primitive, PlacedRoomPrimitive):
+            updated_primitives.append(replace(primitive, transform=wrapped_transform))
+        else:
+            updated_primitives.append(PlacedRoomPrimitive(primitive=primitive, name=source_name, transform=wrapped_transform))
+
+    updated_composition = replace(
+        composition,
+        primitives=tuple(updated_primitives),
+        metadata={
+            **dict(composition.metadata),
+            "last_operation": "object_shrink_wrap_to_terrain",
+            "last_shrink_wrapped_primitive": source_name,
+            "object_shrink_wrap_coordinate_space": "authored_room_composition_mesh_space",
+            "terrain_room_resref": normalise_resref(terrain_room.room_resref),
+            "terrain_sample_position": [float(surface_position[0]), float(surface_position[1]), target_surface_z],
+            "old_bottom_z": float(old_bottom_z),
+            "target_surface_z": target_surface_z,
+            "delta_z": float(delta_z),
+            "old_translation": list(old_translation),
+            "new_translation": list(new_translation),
+            "source": "map_studio:object_terrain_shrink_wrap",
+        },
+    )
+    updated_room = replace(
+        object_room,
+        primitive=updated_composition,
+        composition=None,
+        metadata={
+            **dict(object_room.metadata),
+            "primitive": "authored_room_composition",
+            "last_operation": "object_shrink_wrap_to_terrain",
+            "last_shrink_wrapped_primitive": source_name,
+            "terrain_room_resref": normalise_resref(terrain_room.room_resref),
+        },
+    )
+    rooms = tuple(project.rooms[:object_index] + (updated_room,) + project.rooms[object_index + 1 :])
+    return _replace_rooms(project, rooms, operation="object_shrink_wrap_to_terrain")
+
+
 def _linear_transform_vector(
     vector: tuple[float, float, float],
     transform: PrimitiveTransform,
@@ -2740,6 +2834,21 @@ def _repair_placements_for_terrain(
             "terrain_height_repaired_after_operation": operation,
         },
     )
+
+
+def _target_terrain_room_index(project: AuthoredModuleProject, room_resref: str = "") -> int:
+    target = normalise_resref(room_resref)
+    if target:
+        index = _target_room_index(project, target)
+        _terrain_for_room(project.rooms[index])
+        return index
+    for index, room in enumerate(tuple(project.rooms or ())):
+        try:
+            _terrain_for_room(room)
+        except ValueError:
+            continue
+        return index
+    raise ValueError("Shrink Wrap needs an authored terrain heightfield room.")
 
 
 def apply_authored_floor_plan_rectangular_cut(
@@ -4196,6 +4305,7 @@ __all__ = [
     "set_authored_room_composition_primitive_style",
     "set_authored_room_composition_primitive_transform",
     "split_authored_floor_plan_face",
+    "shrink_wrap_authored_room_composition_primitive_to_terrain",
     "snap_authored_room_composition_primitive_pivot_to_vertex",
     "snap_authored_floor_plan_vertex_to_vertex",
     "transform_snap_authored_room_composition_primitive_level",

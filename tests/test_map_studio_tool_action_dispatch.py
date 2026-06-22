@@ -107,7 +107,7 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["sculpt_raise"].contract_kind == "command_mutates_kmap"
     assert statuses["sculpt_raise"].command_method == "apply_authored_terrain_brush_stroke"
     assert statuses["shrink_wrap"].contract_kind == "command_mutates_kmap"
-    assert statuses["shrink_wrap"].command_method == "shrink_wrap_authored_placements_to_terrain"
+    assert statuses["shrink_wrap"].command_method == "shrink_wrap_authored_room_primitive_to_terrain"
     assert statuses["mirror_z"].contract_kind == "command_mutates_kmap"
     assert statuses["mirror_z"].command_method == "mirror_z_authored_terrain_heightfield"
     assert statuses["bend_tool"].contract_kind == "command_mutates_kmap"
@@ -2672,6 +2672,105 @@ def test_t2606_object_transform_level_snap_aligns_primitive_pivot_axis() -> None
         if row.room_resref == source.room_resref
     }["source_cube"]
     assert restored.translation == (0.25, 0.5, 0.75)
+
+
+def test_t2606_object_shrink_wrap_drops_primitive_bottom_to_terrain() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_to_kmap_payload
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+    from src.core.modules.map_studio_tool_action_dispatch import (
+        MapStudioToolActionContext,
+        execute_map_studio_tool_belt_action,
+        resolve_map_studio_tool_belt_action,
+    )
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grobjwrap", game="K1")
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grobjwrap")
+    terrain_project = create_authored_module_from_room_preset(
+        preset_id="terrain_heightfield",
+        module_root="grobjwrp",
+        game="K1",
+    )
+    terrain_payload = authored_project_to_kmap_payload(terrain_project)
+    terrain_room = copy.deepcopy(terrain_payload["rooms"][0])
+    terrain_room["room_resref"] = "grobjterrain"
+    terrain_room["primitive"]["room_resref"] = "grobjterrain"
+    payload = controller.project.extra_sections["authored_module"]
+    payload["rooms"].append(terrain_room)
+    controller.project.extra_sections["authored_module"] = payload
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "primitive",
+        MapStudioToolActionContext(primitive_kind="cube", primitive_name="source_cube"),
+    )
+    source = controller.authored_room_primitive_transforms()[-1]
+    controller.set_authored_room_primitive_transform(
+        room_resref=source.room_resref,
+        primitive_name=source.primitive_name,
+        translation=(0.0, 0.0, 2.0),
+        rotation_degrees_z=35.0,
+        scale=(1.0, 1.0, 1.0),
+        pivot=(0.0, 0.0, 0.0),
+    )
+
+    route = resolve_map_studio_tool_belt_action(
+        "shrink_wrap",
+        MapStudioToolActionContext(
+            room_resref=source.room_resref,
+            primitive_name=source.primitive_name,
+            target_room_resref="grobjterrain",
+        ),
+    )
+    assert route.enabled is True
+    assert route.command_method == "shrink_wrap_authored_room_primitive_to_terrain"
+    assert route.command_kwargs == {
+        "room_resref": source.room_resref,
+        "primitive_name": source.primitive_name,
+        "terrain_room_resref": "grobjterrain",
+    }
+    assert "lowest transformed vertex" in route.authoring_context
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "shrink_wrap",
+        MapStudioToolActionContext(
+            room_resref=source.room_resref,
+            primitive_name=source.primitive_name,
+            target_room_resref="grobjterrain",
+        ),
+    )
+
+    wrapped = {
+        row.primitive_name: row
+        for row in controller.authored_room_primitive_transforms()
+        if row.room_resref == source.room_resref
+    }["source_cube"]
+    assert tuple(round(value, 6) for value in wrapped.translation) == (0.0, 0.0, 0.35)
+    assert wrapped.rotation_degrees_z == 35.0
+    assert wrapped.scale == (1.0, 1.0, 1.0)
+    assert wrapped.pivot == (0.0, 0.0, 0.0)
+    assert controller.command_history.undo_label == "Object shrink wrap source_cube to terrain"
+
+    payload = controller.project.extra_sections["authored_module"]
+    composition_metadata = payload["rooms"][0]["primitive"]["metadata"]
+    assert composition_metadata["last_operation"] == "object_shrink_wrap_to_terrain"
+    assert composition_metadata["object_shrink_wrap_coordinate_space"] == "authored_room_composition_mesh_space"
+    assert composition_metadata["terrain_room_resref"] == "grobjterrain"
+    assert composition_metadata["old_bottom_z"] == 2.0
+    assert round(float(composition_metadata["target_surface_z"]), 6) == 0.35
+    assert [round(float(value), 6) for value in composition_metadata["new_translation"]] == [0.0, 0.0, 0.35]
+
+    controller.undo_map_studio_command()
+    restored = {
+        row.primitive_name: row
+        for row in controller.authored_room_primitive_transforms()
+        if row.room_resref == source.room_resref
+    }["source_cube"]
+    assert restored.translation == (0.0, 0.0, 2.0)
 
 
 def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -> None:
