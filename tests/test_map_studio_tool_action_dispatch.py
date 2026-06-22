@@ -88,6 +88,10 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["inset"].command_method == "inset_authored_floor_plan_room"
     assert statuses["sculpt_raise"].contract_kind == "command_mutates_kmap"
     assert statuses["sculpt_raise"].command_method == "apply_authored_terrain_operation"
+    assert statuses["shrink_wrap"].contract_kind == "command_mutates_kmap"
+    assert statuses["shrink_wrap"].command_method == "shrink_wrap_authored_placements_to_terrain"
+    assert statuses["mirror_z"].contract_kind == "command_mutates_kmap"
+    assert statuses["mirror_z"].command_method == "mirror_z_authored_terrain_heightfield"
     assert statuses["bend_tool"].contract_kind == "command_mutates_kmap"
     assert statuses["bend_tool"].command_method == "bend_authored_terrain_heightfield"
     assert statuses["lattice"].contract_kind == "command_mutates_kmap"
@@ -773,8 +777,8 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     )
 
     assert mirror_z.enabled is True
-    assert mirror_z.command_method == "apply_authored_terrain_operation"
-    assert mirror_z.command_kwargs == {"operation": "mirror_z", "room_resref": "terrain01", "center_height": 0.25}
+    assert mirror_z.command_method == "mirror_z_authored_terrain_heightfield"
+    assert mirror_z.command_kwargs == {"room_resref": "terrain01", "center_height": 0.25}
     assert mirror_z.mutates_kmap is True
     assert "horizontal Z plane" in mirror_z.authoring_context
     assert "Arbitrary mesh/component Z mirroring remains planned" in mirror_z.authoring_context
@@ -861,8 +865,8 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     )
 
     assert shrink_wrap.enabled is True
-    assert shrink_wrap.command_method == "apply_authored_terrain_operation"
-    assert shrink_wrap.command_kwargs == {"operation": "shrink_wrap", "room_resref": "terrain01"}
+    assert shrink_wrap.command_method == "shrink_wrap_authored_placements_to_terrain"
+    assert shrink_wrap.command_kwargs == {"room_resref": "terrain01"}
     assert shrink_wrap.mutates_kmap is True
     assert "gameplay placements" in shrink_wrap.authoring_context
     assert "arbitrary mesh/walkmesh shrink-wrap remains planned" in shrink_wrap.authoring_context
@@ -1504,7 +1508,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert wrapped_room["primitive"]["metadata"]["last_operation"] == "terrain_shrink_wrap"
     assert wrapped_room["primitive"]["metadata"]["shrink_wrap_target"] == "authored_gameplay_placements"
     assert wrapped_room["metadata"]["shrink_wrap_surface"] == "terrain_heightfield"
-    assert controller.command_history.undo_label == "Apply terrain operation shrink_wrap"
+    assert controller.command_history.undo_label == f"Shrink wrap placements {terrain_room.room_resref}"
 
     controller.undo_map_studio_command()
 
@@ -1572,7 +1576,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert mirrored_room["primitive"]["metadata"]["mirror_center_height"] == 0.3
     assert mirrored_room["metadata"]["last_operation"] == "terrain_mirror_z"
     assert mirrored_payload["placements"]["metadata"]["terrain_height_repaired_after_operation"] == "terrain_mirror_z"
-    assert controller.command_history.undo_label == "Apply terrain operation mirror_z"
+    assert controller.command_history.undo_label == f"Mirror Z terrain {mirror_room.room_resref}"
 
     controller.undo_map_studio_command()
 
@@ -1790,6 +1794,8 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="duplicate_authored_room_primitive"' in source
         assert 'command_method="set_authored_room_edge_normal_policy"' in source
         assert 'command_method="apply_authored_terrain_operation"' in source
+        assert 'command_method="shrink_wrap_authored_placements_to_terrain"' in source
+        assert 'command_method="mirror_z_authored_terrain_heightfield"' in source
         assert 'command_method="authored_terrain_status"' in source
         assert 'command_method="authored_walkmesh_status"' in source
         assert 'command_method="add_authored_curve_guide"' in source

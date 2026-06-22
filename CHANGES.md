@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Names Mirror Z And Shrink Wrap Commands
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Terrain mirror and placement projection tools / Tool belt dispatch
+Intersects: native Scene/Tools ModuleEditorController mirrors and Map Studio tool-belt dispatcher.
+
+- Added named `mirror_z_authored_terrain_heightfield` and `shrink_wrap_authored_placements_to_terrain` controller commands so terrain mirroring and placement projection now record explicit KMAP command metadata, stale export/proof state, and undo labels.
+- Routed the visible Mirror Z and Shrink Wrap belt actions through named command surfaces while preserving the existing authored terrain heightfield math, placement-height repair, and KOTOR readiness invalidation.
+- Updated focused dispatch tests to prove route resolution, KMAP terrain/placement mutation, operation metadata, undo restoration, and source contracts.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests/test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q --basetemp .pytest_tmp_map_studio_mirror_wrap`.
+
 ### [2026-06-21] Map Studio Names Bend And Lattice Terrain Commands
 
 Owner: LordVaderCW

@@ -540,9 +540,8 @@ def resolve_map_studio_tool_belt_action(
             action,
             focus_component_mode="walkmesh",
             focus_snap_mode="surface",
-            command_method="apply_authored_terrain_operation",
+            command_method="shrink_wrap_authored_placements_to_terrain",
             command_kwargs={
-                "operation": "shrink_wrap",
                 "room_resref": ctx.room_resref,
             },
             mutates_kmap=True,
@@ -858,7 +857,6 @@ def resolve_map_studio_tool_belt_action(
 
     if key == "mirror_z":
         kwargs: dict[str, Any] = {
-            "operation": "mirror_z",
             "room_resref": ctx.room_resref,
         }
         if "center_height" in ctx.metadata:
@@ -867,7 +865,7 @@ def resolve_map_studio_tool_belt_action(
             action,
             focus_component_mode="terrain",
             focus_snap_mode="surface",
-            command_method="apply_authored_terrain_operation",
+            command_method="mirror_z_authored_terrain_heightfield",
             command_kwargs=kwargs,
             mutates_kmap=True,
             authoring_context=(
