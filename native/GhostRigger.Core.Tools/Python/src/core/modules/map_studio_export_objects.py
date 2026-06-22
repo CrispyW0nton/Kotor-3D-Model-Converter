@@ -40,6 +40,11 @@ class MapStudioExportObjectBoundary:
     walkmesh_face_count: int = 0
     walkable_face_count: int = 0
     material_textures: tuple[str, ...] = ()
+    duplicate_special_status: str = "not_authored"
+    duplicate_special_summary: str = "No Duplicate Special authored instances recorded."
+    duplicate_special_batch_count: int = 0
+    duplicate_special_generated_names: tuple[str, ...] = ()
+    duplicate_special_batches: tuple[dict[str, Any], ...] = ()
     normal_cleanup_status: str = "not_authored"
     normal_cleanup_summary: str = "No authored floor-plan normal cleanup recorded."
     normal_cleanup_positive_z: bool | None = None
@@ -80,6 +85,11 @@ class MapStudioExportObjectBoundary:
             "walkmesh_face_count": self.walkmesh_face_count,
             "walkable_face_count": self.walkable_face_count,
             "material_textures": list(self.material_textures),
+            "duplicate_special_status": self.duplicate_special_status,
+            "duplicate_special_summary": self.duplicate_special_summary,
+            "duplicate_special_batch_count": self.duplicate_special_batch_count,
+            "duplicate_special_generated_names": list(self.duplicate_special_generated_names),
+            "duplicate_special_batches": [dict(row) for row in self.duplicate_special_batches],
             "normal_cleanup_status": self.normal_cleanup_status,
             "normal_cleanup_summary": self.normal_cleanup_summary,
             "normal_cleanup_positive_z": self.normal_cleanup_positive_z,
@@ -127,6 +137,70 @@ def _composition_textures(composition: AuthoredRoomComposition) -> tuple[str, ..
         if texture:
             textures.append(texture)
     return tuple(dict.fromkeys(textures))
+
+
+def _duplicate_special_batches(primitive: Any, metadata: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+    primitive_metadata = dict(getattr(primitive, "metadata", {}) or {})
+    values = primitive_metadata.get("duplicate_special_batches")
+    if not isinstance(values, (list, tuple)):
+        values = metadata.get("duplicate_special_batches")
+    batches: list[dict[str, Any]] = []
+    if isinstance(values, (list, tuple)):
+        for value in values:
+            if isinstance(value, dict):
+                batches.append(dict(value))
+    return tuple(batches)
+
+
+def _duplicate_special_generated_names(batches: tuple[dict[str, Any], ...]) -> tuple[str, ...]:
+    names: list[str] = []
+    for batch in batches:
+        values = batch.get("generated_primitive_names")
+        if isinstance(values, (str, bytes)):
+            text = values.decode("utf-8", errors="ignore") if isinstance(values, bytes) else values
+            names.extend(part.strip() for part in text.split(",") if part.strip())
+        elif isinstance(values, (list, tuple)):
+            names.extend(str(value or "").strip() for value in values if str(value or "").strip())
+    return tuple(dict.fromkeys(names))
+
+
+def _duplicate_special_status(batches: tuple[dict[str, Any], ...]) -> str:
+    return "authored_duplicate_instances" if batches else "not_authored"
+
+
+def _duplicate_special_summary(batches: tuple[dict[str, Any], ...]) -> str:
+    if not batches:
+        return "No Duplicate Special authored instances recorded."
+    names = _duplicate_special_generated_names(batches)
+    source_names = tuple(
+        dict.fromkeys(
+            str(batch.get("source_primitive") or "").strip()
+            for batch in batches
+            if str(batch.get("source_primitive") or "").strip()
+        )
+    )
+    source_text = ", ".join(source_names[:3]) if source_names else "selected primitive"
+    suffix = "" if len(source_names) <= 3 else f", +{len(source_names) - 3} more"
+    return (
+        f"Duplicate Special authored {len(names)} modular instance(s) from {source_text}{suffix}; "
+        "instances remain KMAP primitives until an explicit bake/separate/export step."
+    )
+
+
+def _duplicate_special_batches_for_members(
+    batches: tuple[dict[str, Any], ...],
+    member_names: tuple[str, ...],
+) -> tuple[dict[str, Any], ...]:
+    if not batches or not member_names:
+        return ()
+    members = set(member_names)
+    filtered: list[dict[str, Any]] = []
+    for batch in batches:
+        generated = set(_duplicate_special_generated_names((batch,)))
+        source = str(batch.get("source_primitive") or "").strip()
+        if generated.intersection(members) or source in members:
+            filtered.append(dict(batch))
+    return tuple(filtered)
 
 
 def _normal_policy_entry(target: str, source: dict[str, Any]) -> dict[str, Any] | None:
@@ -402,6 +476,10 @@ def _composition_group_boundaries(
         dimensions = _vec3_from_group(group, "dimensions")
         normal_targets = _normal_policy_targets_for_members(composition, member_names)
         normal_cleanup = _normal_cleanup_positive_z(composition, {})
+        duplicate_batches = _duplicate_special_batches_for_members(
+            _duplicate_special_batches(composition, {}),
+            member_names,
+        )
         dcc_status = "blocked" if blocking else "ready_for_external_uv"
         dcc_reason = (
             "Fix missing grouped primitives before using this object group for UV/texturing handoff."
@@ -437,6 +515,11 @@ def _composition_group_boundaries(
                 walkmesh_face_count=0,
                 walkable_face_count=0,
                 material_textures=textures,
+                duplicate_special_status=_duplicate_special_status(duplicate_batches),
+                duplicate_special_summary=_duplicate_special_summary(duplicate_batches),
+                duplicate_special_batch_count=len(duplicate_batches),
+                duplicate_special_generated_names=_duplicate_special_generated_names(duplicate_batches),
+                duplicate_special_batches=duplicate_batches,
                 normal_cleanup_status=_normal_cleanup_status(normal_cleanup),
                 normal_cleanup_summary=_normal_cleanup_summary(normal_cleanup),
                 normal_cleanup_positive_z=normal_cleanup,
@@ -480,6 +563,7 @@ def map_studio_export_object_boundaries(project: AuthoredModuleProject) -> tuple
         material_textures: tuple[str, ...] = ()
         normal_cleanup: bool | None = None
         normal_targets: tuple[dict[str, Any], ...] = ()
+        duplicate_batches: tuple[dict[str, Any], ...] = ()
         bounds_min: tuple[float, float, float] | None = None
         bounds_max: tuple[float, float, float] | None = None
         center: tuple[float, float, float] | None = None
@@ -505,6 +589,7 @@ def map_studio_export_object_boundaries(project: AuthoredModuleProject) -> tuple
             blocking.append(f"Export object {resref or '(unnamed)'} could not compile: {exc}")
         if isinstance(primitive, AuthoredRoomComposition):
             material_textures = _composition_textures(primitive) or material_textures
+        duplicate_batches = _duplicate_special_batches(primitive, metadata)
         normal_cleanup = _normal_cleanup_positive_z(primitive, metadata)
         normal_targets = _normal_policy_targets(primitive, metadata)
         kind = _object_kind(primitive, metadata)
@@ -533,6 +618,11 @@ def map_studio_export_object_boundaries(project: AuthoredModuleProject) -> tuple
                 walkmesh_face_count=walkmesh_face_count,
                 walkable_face_count=walkable_face_count,
                 material_textures=material_textures,
+                duplicate_special_status=_duplicate_special_status(duplicate_batches),
+                duplicate_special_summary=_duplicate_special_summary(duplicate_batches),
+                duplicate_special_batch_count=len(duplicate_batches),
+                duplicate_special_generated_names=_duplicate_special_generated_names(duplicate_batches),
+                duplicate_special_batches=duplicate_batches,
                 normal_cleanup_status=_normal_cleanup_status(normal_cleanup),
                 normal_cleanup_summary=_normal_cleanup_summary(normal_cleanup),
                 normal_cleanup_positive_z=normal_cleanup,

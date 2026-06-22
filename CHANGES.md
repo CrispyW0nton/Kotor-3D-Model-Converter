@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Records Duplicate Special Instance Readiness
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Direct modeling tools / Duplicate Special readiness
+Intersects: native Scene/Tools authored room operation mirrors, export-object boundary mirrors, and Map Studio dispatch regression tests.
+
+- Added durable Duplicate Special batch metadata to authored room composition state, including source primitive, generated instance names, transform offsets, coordinate space, and topology policy.
+- Surfaced Duplicate Special instance batches through Map Studio export-object boundaries and authored-module readiness metadata so repeated modular-kit pieces are visible before DCC handoff, staging, or game proof.
+- Preserved capability honesty: duplicates remain KMAP primitive instances until an explicit bake/separate/export step, and MDL/MDX/WOK/LYT/VIS/PTH/.mod proof is marked stale by the command path.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_export_objects.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_export_objects.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_duplicate_special`; `git diff --check`.
+
 ### [2026-06-22] Map Studio Reports Normal Cleanup Winding In Export Readiness
 
 Owner: LordVaderCW

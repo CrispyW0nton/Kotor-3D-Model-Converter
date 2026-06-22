@@ -2587,6 +2587,27 @@ def _duplicate_primitive_name(existing: set[str], source_name: str, duplicate_in
     raise ValueError(f"Could not create a unique duplicate name for primitive '{source_name}'.")
 
 
+def _primitive_transform_payload(transform: PrimitiveTransform) -> dict[str, list[float] | float]:
+    return {
+        "translation": [float(value) for value in tuple(transform.translation or (0.0, 0.0, 0.0))],
+        "rotation_degrees_z": float(transform.rotation_degrees_z),
+        "scale": [float(value) for value in tuple(transform.scale or (1.0, 1.0, 1.0))],
+        "pivot": [float(value) for value in tuple(transform.pivot or (0.0, 0.0, 0.0))],
+    }
+
+
+def _duplicate_batch_name(existing: tuple[dict[str, Any], ...], source_name: str) -> str:
+    safe_source = "".join(char if char.isalnum() or char in {"_", "-"} else "_" for char in str(source_name or "primitive"))[:24]
+    base = safe_source or "primitive"
+    used = {str(item.get("batch_name") or "").strip() for item in existing}
+    for index in range(1, 1000):
+        suffix = f"_dup_batch_{index:02d}"
+        candidate = f"{base[: max(1, 32 - len(suffix))]}{suffix}"[:32]
+        if candidate not in used:
+            return candidate
+    raise ValueError(f"Could not create a unique duplicate batch name for primitive '{source_name}'.")
+
+
 def duplicate_authored_room_composition_primitive(
     project: AuthoredModuleProject,
     *,
@@ -2630,22 +2651,54 @@ def duplicate_authored_room_composition_primitive(
     source_transform = _primitive_transform(source)
     source_base = source.primitive if isinstance(source, PlacedRoomPrimitive) else source
     duplicates: list[PlacedRoomPrimitive] = []
+    duplicate_records: list[dict[str, Any]] = []
     for step in range(1, count + 1):
         scale = tuple(float(source_transform.scale[i]) * (float(multiplier[i]) ** step) for i in range(3))
         if any(float(value) <= 0.0 for value in scale):
             raise ValueError("Duplicate Special would create a primitive with non-positive scale.")
+        transform = PrimitiveTransform(
+            translation=tuple(float(source_transform.translation[i]) + (float(offset[i]) * step) for i in range(3)),
+            rotation_degrees_z=float(source_transform.rotation_degrees_z) + (float(rotation_offset_degrees_z) * step),
+            scale=scale,
+            pivot=source_transform.pivot,
+        )
+        duplicate_name = _duplicate_primitive_name(existing_names, target, step)
         duplicates.append(
             PlacedRoomPrimitive(
                 primitive=source_base,
-                name=_duplicate_primitive_name(existing_names, target, step),
-                transform=PrimitiveTransform(
-                    translation=tuple(float(source_transform.translation[i]) + (float(offset[i]) * step) for i in range(3)),
-                    rotation_degrees_z=float(source_transform.rotation_degrees_z) + (float(rotation_offset_degrees_z) * step),
-                    scale=scale,
-                    pivot=source_transform.pivot,
-                ),
+                name=duplicate_name,
+                transform=transform,
             )
         )
+        duplicate_records.append(
+            {
+                "name": duplicate_name,
+                "step": step,
+                "transform": _primitive_transform_payload(transform),
+            }
+        )
+    existing_batches = tuple(dict(item) for item in tuple(dict(composition.metadata).get("duplicate_special_batches") or ()))
+    batch_name = _duplicate_batch_name(existing_batches, target)
+    batch_payload = {
+        "batch_name": batch_name,
+        "source_primitive": target,
+        "generated_primitive_names": [record["name"] for record in duplicate_records],
+        "duplicate_count": count,
+        "coordinate_space": "authored_room_composition_mesh_space",
+        "translation_offset": [float(value) for value in offset],
+        "rotation_offset_degrees_z": float(rotation_offset_degrees_z),
+        "scale_multiplier": [float(value) for value in multiplier],
+        "source_transform": _primitive_transform_payload(source_transform),
+        "duplicate_transforms": duplicate_records,
+        "topology_policy": "instanced_authored_primitive_copy_no_mesh_bake",
+        "readiness_impact": "MDL/MDX/WOK/LYT/VIS/PTH/.mod export and game proof are stale.",
+        "source": "map_studio:duplicate_special",
+    }
+    batches = [dict(item) for item in existing_batches]
+    batches.append(batch_payload)
+    duplicate_source_by_name = dict(dict(composition.metadata).get("duplicate_special_source_by_name") or {})
+    for record in duplicate_records:
+        duplicate_source_by_name[str(record["name"])] = target
     updated_composition = replace(
         composition,
         primitives=tuple(composition.primitives or ()) + tuple(duplicates),
@@ -2654,6 +2707,11 @@ def duplicate_authored_room_composition_primitive(
             "last_operation": "duplicate_special",
             "last_duplicated_primitive": target,
             "duplicate_count": count,
+            "last_duplicate_special_batch": batch_name,
+            "last_duplicate_special_names": [record["name"] for record in duplicate_records],
+            "duplicate_special_batches": batches,
+            "duplicate_special_batch_count": len(batches),
+            "duplicate_special_source_by_name": duplicate_source_by_name,
         },
     )
     updated = replace(
@@ -2665,6 +2723,9 @@ def duplicate_authored_room_composition_primitive(
             "primitive": "authored_room_composition",
             "last_operation": "duplicate_special",
             "last_duplicated_primitive": target,
+            "last_duplicate_special_batch": batch_name,
+            "last_duplicate_special_names": [record["name"] for record in duplicate_records],
+            "duplicate_special_batch_count": len(batches),
         },
     )
     rooms = tuple(project.rooms[:index] + (updated,) + project.rooms[index + 1 :])

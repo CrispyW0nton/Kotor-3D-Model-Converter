@@ -1818,12 +1818,43 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert first_duplicate.primitive_type == primitive_before.primitive_type
     assert first_duplicate.translation[0] == primitive_before.translation[0] + 0.5
     assert second_duplicate.translation[0] == primitive_before.translation[0] + 1.0
+    duplicate_payload = controller.project.extra_sections["authored_module"]["rooms"][0]["primitive"]["metadata"]
+    duplicate_batch = duplicate_payload["duplicate_special_batches"][0]
+    duplicate_boundary = controller.map_studio_export_object_boundaries()[0]
+    duplicate_readiness_boundary = controller.authored_module_readiness().readiness.metadata["export_object_boundaries"][0]
+
+    assert duplicate_payload["last_operation"] == "duplicate_special"
+    assert duplicate_payload["last_duplicated_primitive"] == primitive_before.primitive_name
+    assert duplicate_payload["last_duplicate_special_names"] == [first_duplicate.primitive_name, second_duplicate.primitive_name]
+    assert duplicate_payload["duplicate_special_batch_count"] == 1
+    assert duplicate_payload["duplicate_special_source_by_name"][first_duplicate.primitive_name] == primitive_before.primitive_name
+    assert duplicate_payload["duplicate_special_source_by_name"][second_duplicate.primitive_name] == primitive_before.primitive_name
+    assert duplicate_batch["source_primitive"] == primitive_before.primitive_name
+    assert duplicate_batch["generated_primitive_names"] == [first_duplicate.primitive_name, second_duplicate.primitive_name]
+    assert duplicate_batch["coordinate_space"] == "authored_room_composition_mesh_space"
+    assert duplicate_batch["translation_offset"] == [0.5, 0.0, 0.0]
+    assert duplicate_batch["rotation_offset_degrees_z"] == 0.0
+    assert duplicate_batch["scale_multiplier"] == [1.0, 1.0, 1.0]
+    assert duplicate_batch["topology_policy"] == "instanced_authored_primitive_copy_no_mesh_bake"
+    assert duplicate_batch["readiness_impact"] == "MDL/MDX/WOK/LYT/VIS/PTH/.mod export and game proof are stale."
+    assert duplicate_boundary.duplicate_special_status == "authored_duplicate_instances"
+    assert duplicate_boundary.duplicate_special_batch_count == 1
+    assert duplicate_boundary.duplicate_special_generated_names == (first_duplicate.primitive_name, second_duplicate.primitive_name)
+    assert "Duplicate Special authored 2 modular instance" in duplicate_boundary.duplicate_special_summary
+    assert duplicate_readiness_boundary["duplicate_special_status"] == "authored_duplicate_instances"
+    assert duplicate_readiness_boundary["duplicate_special_batch_count"] == 1
+    assert duplicate_readiness_boundary["duplicate_special_generated_names"] == [
+        first_duplicate.primitive_name,
+        second_duplicate.primitive_name,
+    ]
     assert controller.can_undo_map_studio_command() is True
     assert controller.command_history.undo_label == f"Duplicate primitive {primitive_before.primitive_name}"
 
     controller.undo_map_studio_command()
 
     assert len(controller.authored_room_primitive_transforms()) == count_before
+    restored_duplicate_metadata = controller.project.extra_sections["authored_module"]["rooms"][0]["primitive"]["metadata"]
+    assert "duplicate_special_batches" not in restored_duplicate_metadata
 
     controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grwokrm")
     wok_room = controller.authored_floor_plan_room_choices()[0]
