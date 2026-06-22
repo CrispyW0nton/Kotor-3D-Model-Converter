@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Aligns Edge Normal Tool Belt Readiness
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt catalog / Edge normal capability honesty
+Intersects: native Scene/Tools modeling-tool catalogs and Map Studio dispatch regression tests.
+
+- Updated Soften and Harden tool-belt descriptions to reflect the implemented KMAP/export-readiness edge-normal policy path instead of stale planned-export wording.
+- Kept the UI-facing language capability-honest by separating visual-normal intent from WOK traversal and game-tested lighting gates.
+- Added regression coverage proving the tool-belt metadata no longer presents soften/harden normals as planned-only after the headless command and readiness path exist.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_normal_tool_labels`; `git diff --check`.
+
 ### [2026-06-22] Map Studio Surfaces Edge Normal Policy In Export Readiness
 
 Owner: LordVaderCW

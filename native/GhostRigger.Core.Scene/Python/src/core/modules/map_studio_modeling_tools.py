@@ -1199,8 +1199,8 @@ _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
         "Soften",
         "geometry",
         "soften_edges",
-        "Soften selected visual edges.",
-        "Softened normals are planned for visual export, not WOK traversal.",
+        "Soften selected visual edges and record authored visual-normal intent for the export boundary.",
+        "Softened normals are KMAP/export-readiness metadata for visual shading; WOK traversal remains validated separately.",
         implemented=True,
     ),
     MapStudioToolBeltAction(
@@ -1208,8 +1208,8 @@ _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
         "Harden",
         "geometry",
         "harden_edges",
-        "Harden selected visual edges.",
-        "Hardened normals are planned for visual export and lightmap seams.",
+        "Harden selected visual edges and record authored visual-normal intent for hard-surface silhouettes.",
+        "Hardened normals are KMAP/export-readiness metadata for visual seams; WOK traversal and game-tested lighting remain separate gates.",
         implemented=True,
     ),
     MapStudioToolBeltAction(

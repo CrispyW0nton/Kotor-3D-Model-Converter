@@ -162,6 +162,7 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     cube = resolve_map_studio_tool_belt_action("cube")
     tool_by_key = {tool.key: tool for tool in available_map_studio_modeling_tools()}
     tool_belt_actions = available_map_studio_tool_belt_actions()
+    action_by_key = {action.key: action for action in tool_belt_actions}
     tool_belt_action_keys = [action.key for action in tool_belt_actions]
 
     assert len(tool_belt_action_keys) == len(set(tool_belt_action_keys))
@@ -1157,6 +1158,10 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert harden.command_kwargs["policy"] == "hard"
     assert tool_by_key["soften_edges"].implemented is True
     assert tool_by_key["harden_edges"].implemented is True
+    assert "export boundary" in action_by_key["soften_edges"].description
+    assert "KMAP/export-readiness metadata" in action_by_key["soften_edges"].kotor_guardrail
+    assert "planned for visual export" not in action_by_key["soften_edges"].kotor_guardrail
+    assert "game-tested lighting remain separate gates" in action_by_key["harden_edges"].kotor_guardrail
 
     mirror_z = resolve_map_studio_tool_belt_action(
         "mirror_z",
