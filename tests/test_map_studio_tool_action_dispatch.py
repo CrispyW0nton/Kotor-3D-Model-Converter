@@ -1167,6 +1167,18 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert paint_wok_missing.enabled is False
     assert "active authored room" in paint_wok_missing.disabled_reason
 
+    paint_wok_decorative = resolve_map_studio_tool_belt_action(
+        "paint_wok",
+        MapStudioToolActionContext(
+            room_resref="room_a",
+            primitive_name="room_a_cube",
+            metadata={"supports_walkmesh_surface": False},
+        ),
+    )
+
+    assert paint_wok_decorative.enabled is False
+    assert "contributes walkmesh faces" in paint_wok_decorative.disabled_reason
+
     paint_wok_room = resolve_map_studio_tool_belt_action(
         "paint_wok",
         MapStudioToolActionContext(room_resref="room_a", metadata={"surface_id": 5}),
@@ -1665,6 +1677,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
 
     controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grwokpr")
     wok_primitive = next(row for row in controller.authored_room_primitive_transforms() if row.supports_walkmesh_surface)
+    decorative_primitive = next(row for row in controller.authored_room_primitive_transforms() if not row.supports_walkmesh_surface)
     before_surface_id = wok_primitive.surface_id
 
     execute_map_studio_tool_belt_action(
@@ -1690,6 +1703,27 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
         row for row in controller.authored_room_primitive_transforms() if row.primitive_name == wok_primitive.primitive_name
     )
     assert restored_primitive.surface_id == before_surface_id
+
+    try:
+        execute_map_studio_tool_belt_action(
+            controller,
+            "paint_wok",
+            MapStudioToolActionContext(
+                room_resref=decorative_primitive.room_resref,
+                primitive_name=decorative_primitive.primitive_name,
+                metadata={"surface_id": "stone"},
+            ),
+        )
+    except ValueError as exc:
+        assert "does not contribute walkmesh faces" in str(exc)
+    else:  # pragma: no cover - defensive failure path
+        raise AssertionError("Decorative primitives must not accept WOK surface paint.")
+
+    still_decorative = next(
+        row for row in controller.authored_room_primitive_transforms() if row.primitive_name == decorative_primitive.primitive_name
+    )
+    assert still_decorative.supports_walkmesh_surface is False
+    assert still_decorative.surface_id is None
 
     controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grcombobj")
     execute_map_studio_tool_belt_action(

@@ -704,6 +704,18 @@ def resolve_map_studio_tool_belt_action(
                 disabled_reason="Paint WOK Surface needs an active authored room before it can assign walkmesh surface intent.",
             )
         if ctx.primitive_name:
+            supports_walkmesh_surface = ctx.metadata.get("supports_walkmesh_surface")
+            if supports_walkmesh_surface is False:
+                return _route(
+                    action,
+                    focus_component_mode="walkmesh",
+                    focus_snap_mode="face",
+                    enabled=False,
+                    disabled_reason=(
+                        "Paint WOK Surface needs a selected primitive that contributes walkmesh faces, such as a "
+                        "plane, ramp, or stairs."
+                    ),
+                )
             return _route(
                 action,
                 focus_component_mode="walkmesh",
