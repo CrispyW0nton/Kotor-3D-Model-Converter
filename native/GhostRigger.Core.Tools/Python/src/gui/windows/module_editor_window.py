@@ -579,6 +579,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         custom_belt_root.addWidget(self.map_studio_custom_tool_belt_widget)
         self.map_studio_tool_belt_tabs.addTab(self.map_studio_tool_belt_custom_tab, "Custom +")
         root.addWidget(self.map_studio_tool_belt_tabs)
+        self.map_studio_command_search_readiness_label = QtWidgets.QLabel(
+            "Command readiness: choose a Map Studio tool to see capability stage, affected KOTOR resources, and export/game-proof impact."
+        )
+        self.map_studio_command_search_readiness_label.setObjectName("mapStudioCommandSearchReadinessLabel")
+        self.map_studio_command_search_readiness_label.setWordWrap(True)
+        root.addWidget(self.map_studio_command_search_readiness_label)
         self._refresh_map_studio_tool_index()
         self.main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         root.addWidget(self.main_splitter, 1)
@@ -704,6 +710,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.map_studio_customize_tool_belt_button.clicked.connect(self._customize_map_studio_tool_belt)
         self.map_studio_custom_tool_add_button.clicked.connect(self._add_selected_map_studio_custom_tool)
         self.map_studio_command_run_button.clicked.connect(self._run_selected_map_studio_command_search)
+        self.map_studio_command_search_combo.currentIndexChanged.connect(
+            lambda _index=0: self._update_map_studio_command_search_readiness()
+        )
+        self.map_studio_command_search_combo.editTextChanged.connect(
+            lambda _text="": self._update_map_studio_command_search_readiness()
+        )
         self.map_studio_tool_belt_widget.customContextMenuRequested.connect(
             lambda pos: self._open_map_studio_tool_context_menu(self.map_studio_tool_belt_widget, pos)
         )
@@ -1180,7 +1192,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     state = "usable" if bool(getattr(result, "implemented", False)) else "planned"
                     combo.addItem(f"{result.display_label} [{state}]", result.key)
                     index = combo.count() - 1
-                    combo.setItemData(index, str(getattr(result, "description", "") or ""), QtCore.Qt.ToolTipRole)
+                    combo.setItemData(index, self._map_studio_command_search_tooltip(result), QtCore.Qt.ToolTipRole)
                 if previous_text:
                     combo.setEditText(previous_text)
             finally:
@@ -1201,11 +1213,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                         continue
                     command_combo.addItem(result.display_label, result.key)
                     index = command_combo.count() - 1
-                    tooltip = str(getattr(result, "description", "") or "")
-                    guardrail = str(getattr(result, "kotor_guardrail", "") or "")
-                    if guardrail:
-                        tooltip = f"{tooltip}\nKOTOR: {guardrail}" if tooltip else f"KOTOR: {guardrail}"
-                    command_combo.setItemData(index, tooltip, QtCore.Qt.ToolTipRole)
+                    command_combo.setItemData(index, self._map_studio_command_search_tooltip(result), QtCore.Qt.ToolTipRole)
                 if previous_text:
                     command_combo.setEditText(previous_text)
             finally:
@@ -1215,6 +1223,62 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 completer.setCaseSensitivity(QtCore.Qt.CaseInsensitive)
                 completer.setFilterMode(QtCore.Qt.MatchContains)
                 completer.setCompletionMode(QtWidgets.QCompleter.PopupCompletion)
+            self._update_map_studio_command_search_readiness()
+
+    def _map_studio_command_search_tooltip(self, result: Any) -> str:
+        """Format command-search metadata without owning the policy itself."""
+
+        lines = [
+            str(getattr(result, "description", "") or "").strip(),
+            f"Capability: {str(getattr(result, 'capability_stage', '') or 'unknown').replace('_', ' ')}",
+        ]
+        resource_text = ", ".join(str(item) for item in tuple(getattr(result, "resource_impacts", ()) or ()))
+        if resource_text:
+            lines.append(f"Affects: {resource_text}")
+        guardrail = str(getattr(result, "kotor_guardrail", "") or "").strip()
+        if guardrail:
+            lines.append(f"KOTOR: {guardrail}")
+        readiness = str(getattr(result, "readiness_summary", "") or "").strip()
+        if readiness:
+            lines.append(readiness)
+        return "\n".join(line for line in lines if line)
+
+    def _map_studio_command_search_summary(self, result: Any | None) -> str:
+        if result is None:
+            return (
+                "Command readiness: choose a Map Studio tool to see capability stage, "
+                "affected KOTOR resources, and export/game-proof impact."
+            )
+        label = str(getattr(result, "display_label", "") or getattr(result, "label", "") or getattr(result, "key", "") or "Command")
+        capability = str(getattr(result, "capability_stage", "") or "unknown").replace("_", " ")
+        resource_text = ", ".join(str(item) for item in tuple(getattr(result, "resource_impacts", ()) or ())) or "none"
+        readiness = str(getattr(result, "readiness_summary", "") or "").strip()
+        return f"Command readiness: {label} | Capability: {capability} | Affects: {resource_text}. {readiness}".strip()
+
+    def _selected_map_studio_command_search_result(self) -> Any | None:
+        combo = getattr(self, "map_studio_command_search_combo", None)
+        if combo is None:
+            return None
+        key = str(combo.currentData() or "").strip()
+        if key:
+            matches = self.controller.map_studio_tool_command_search(key, limit=0)
+            for result in matches:
+                if str(getattr(result, "key", "") or "") == key:
+                    return result
+        query = str(combo.currentText() or "").strip()
+        if not query:
+            return None
+        matches = self.controller.map_studio_tool_command_search(query, limit=1)
+        return matches[0] if matches else None
+
+    def _update_map_studio_command_search_readiness(self) -> None:
+        label = getattr(self, "map_studio_command_search_readiness_label", None)
+        if label is None:
+            return
+        result = self._selected_map_studio_command_search_result()
+        summary = self._map_studio_command_search_summary(result)
+        label.setText(summary)
+        label.setToolTip(self._map_studio_command_search_tooltip(result) if result is not None else summary)
 
     def _clear_map_studio_tool_belt_layout(self, layout: QtWidgets.QLayout | None = None) -> None:
         target_layout = layout or self.map_studio_tool_belt_layout

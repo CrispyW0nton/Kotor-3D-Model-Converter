@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Shows Command Search Readiness In UI
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Level Editor / Command search readiness UI
+Intersects: native Tools Level Editor command search and Map Studio workflow-panel source contracts.
+
+- Added a visible `mapStudioCommandSearchReadinessLabel` under the Level Editor tool belt so selected Map Studio commands show capability stage, affected KOTOR resources, and export/game-proof impact before the modder runs the command.
+- Enriched command-search and custom-tool picker tooltips with command description, capability stage, KOTOR resource impacts, guardrails, and readiness summary while keeping policy metadata owned by the core command-search catalog.
+- Updated focused source-contract coverage so future merges keep the command-search UI tied to capability honesty and resource-impact metadata.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_workflow_panel_surfaces_editor_spine -q --basetemp .pytest_tmp_map_studio_command_readiness_ui`.
+
 ### [2026-06-21] Map Studio Search Reports Capability And Resource Impact
 
 Owner: LordVaderCW
