@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Projects Combined Primitive Groups Into Export Readiness
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Export readiness / Object groups
+Intersects: native Scene/Tools export-object boundary mirrors and tool-belt command regression tests.
+
+- Added `combined_primitive_group` export-object boundaries for authored room composition primitive groups so Map Studio readiness can show grouped modular objects instead of hiding them inside room metadata.
+- Preserved capability honesty by marking combined groups as modder-facing UV/DCC handoff objects that still export through the parent room MDL/MDX/WOK until a future bake/separate step.
+- Added stable `member_primitive_names` metadata, group texture summaries, missing-member blockers, and explicit resource-boundary policy reporting for readiness panels.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_export_objects.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_export_objects.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_object_group_boundaries`.
+
 ### [2026-06-22] Map Studio Combines Composition Primitives Into Object Groups
 
 Owner: LordVaderCW

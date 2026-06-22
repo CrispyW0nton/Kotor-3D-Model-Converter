@@ -1656,6 +1656,27 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert object_combine_metadata["combined_primitive_group_by_name"]["combine_cube"] == "kit_column_group"
     assert object_combine_metadata["combined_primitive_group_by_name"]["combine_cylinder"] == "kit_column_group"
     assert controller.command_history.undo_label == "Combine primitives combine_cube, combine_cylinder"
+    export_boundaries = controller.map_studio_export_object_boundaries()
+    readiness = controller.authored_module_readiness()
+    group_boundary = next(boundary for boundary in export_boundaries if boundary.object_kind == "combined_primitive_group")
+    readiness_group = next(
+        boundary
+        for boundary in readiness.readiness.metadata["export_object_boundaries"]
+        if boundary["object_kind"] == "combined_primitive_group"
+    )
+
+    assert group_boundary.label == "kit_column_group (combined primitive group)"
+    assert group_boundary.export_resref == combine_cube.room_resref
+    assert group_boundary.resource_boundary_policy == "combined_group_within_parent_room"
+    assert group_boundary.member_primitive_names == ("combine_cube", "combine_cylinder")
+    assert group_boundary.source_operation == "combine_primitives"
+    assert group_boundary.owns_walkmesh is False
+    assert group_boundary.uv_handoff_recommended is True
+    assert group_boundary.dcc_handoff_status == "ready_for_external_uv"
+    assert "still exports through the parent room" in group_boundary.dcc_handoff_reason
+    assert readiness_group["member_primitive_names"] == ["combine_cube", "combine_cylinder"]
+    assert readiness_group["resource_boundary_policy"] == "combined_group_within_parent_room"
+    assert readiness_group["source_operation"] == "combine_primitives"
 
     controller.undo_map_studio_command()
 

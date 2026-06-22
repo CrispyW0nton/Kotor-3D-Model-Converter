@@ -34,6 +34,7 @@ class MapStudioExportObjectBoundary:
     resources: tuple[tuple[str, str], ...]
     primitive_type: str
     primitive_count: int = 0
+    member_primitive_names: tuple[str, ...] = ()
     helper_mesh_count: int = 0
     render_mesh_count: int = 0
     walkmesh_face_count: int = 0
@@ -62,6 +63,7 @@ class MapStudioExportObjectBoundary:
             "resources": [[resref, restype] for resref, restype in self.resources],
             "primitive_type": self.primitive_type,
             "primitive_count": self.primitive_count,
+            "member_primitive_names": list(self.member_primitive_names),
             "helper_mesh_count": self.helper_mesh_count,
             "render_mesh_count": self.render_mesh_count,
             "walkmesh_face_count": self.walkmesh_face_count,
@@ -89,6 +91,10 @@ def _base_primitive(value: Any) -> Any:
     return value.primitive if isinstance(value, PlacedRoomPrimitive) else value
 
 
+def _placed_primitive_name(value: Any) -> str:
+    return str(getattr(value, "name", "") or "").strip()
+
+
 def _composition_textures(composition: AuthoredRoomComposition) -> tuple[str, ...]:
     textures: list[str] = []
     floor_texture = _primitive_texture(composition.floor)
@@ -99,6 +105,24 @@ def _composition_textures(composition: AuthoredRoomComposition) -> tuple[str, ..
         if texture:
             textures.append(texture)
     return tuple(dict.fromkeys(textures))
+
+
+def _composition_primitives_by_name(composition: AuthoredRoomComposition) -> dict[str, PlacedRoomPrimitive]:
+    return {
+        name: primitive
+        for primitive in tuple(composition.primitives or ())
+        if isinstance(primitive, PlacedRoomPrimitive) and (name := _placed_primitive_name(primitive))
+    }
+
+
+def _group_member_names(group: dict[str, Any]) -> tuple[str, ...]:
+    values = group.get("primitive_names")
+    if isinstance(values, (str, bytes)):
+        text = values.decode("utf-8", errors="ignore") if isinstance(values, bytes) else values
+        return tuple(dict.fromkeys(part.strip() for part in text.split(",") if part.strip()))
+    if isinstance(values, (list, tuple)):
+        return tuple(dict.fromkeys(str(value or "").strip() for value in values if str(value or "").strip()))
+    return ()
 
 
 def _object_kind(primitive: Any, metadata: dict[str, Any]) -> str:
@@ -186,6 +210,82 @@ def _dcc_handoff_state(
     return "ready_for_external_uv", "Room boundary can be UV/textured externally while preserving its MDL/MDX/WOK resref triplet."
 
 
+def _composition_group_boundaries(
+    *,
+    composition: AuthoredRoomComposition,
+    resref: str,
+) -> tuple[MapStudioExportObjectBoundary, ...]:
+    """Return export/readiness projections for authored combined primitive groups."""
+
+    groups = tuple(dict(item) for item in tuple(dict(composition.metadata).get("combined_primitive_groups") or ()))
+    if not groups:
+        return ()
+    primitives_by_name = _composition_primitives_by_name(composition)
+    boundaries: list[MapStudioExportObjectBoundary] = []
+    for group_index, group in enumerate(groups, start=1):
+        raw_name = str(group.get("name") or f"combined_primitive_group_{group_index:02d}").strip()
+        group_name = raw_name or f"combined_primitive_group_{group_index:02d}"
+        member_names = _group_member_names(group)
+        missing = tuple(name for name in member_names if name not in primitives_by_name)
+        member_primitives = tuple(primitives_by_name[name] for name in member_names if name in primitives_by_name)
+        textures = tuple(
+            dict.fromkeys(
+                texture
+                for primitive in member_primitives
+                if (texture := _primitive_texture(_base_primitive(primitive)))
+            )
+        )
+        blocking = tuple(
+            f"Combined primitive group '{group_name}' references missing primitive '{name}'."
+            for name in missing
+        )
+        face_count = int(group.get("face_count") or 0)
+        vertex_count = int(group.get("vertex_count") or 0)
+        dcc_status = "blocked" if blocking else "ready_for_external_uv"
+        dcc_reason = (
+            "Fix missing grouped primitives before using this object group for UV/texturing handoff."
+            if blocking
+            else (
+                "Combined primitive group can be UV/textured as a modder-facing object, "
+                "but it still exports through the parent room until a future bake/separate step."
+            )
+        )
+        notes = (
+            f"Primitive group is authored inside {resref}.mdl/{resref}.mdx/{resref}.wok.",
+            "Topology is preserved as individual primitives; arbitrary baked mesh combine is planned.",
+            f"Group source mesh estimate: {vertex_count} vertices, {face_count} faces.",
+        )
+        boundaries.append(
+            MapStudioExportObjectBoundary(
+                object_id=f"primitive_group:{resref}:{group_name}",
+                label=f"{group_name} (combined primitive group)",
+                source_room_resref=resref,
+                object_kind="combined_primitive_group",
+                export_resref=resref,
+                resources=((resref, "mdl"), (resref, "mdx"), (resref, "wok")),
+                primitive_type="AuthoredCombinedPrimitiveGroup",
+                primitive_count=len(member_names),
+                member_primitive_names=member_names,
+                helper_mesh_count=0,
+                render_mesh_count=len(member_primitives),
+                walkmesh_face_count=0,
+                walkable_face_count=0,
+                material_textures=textures,
+                uv_handoff_recommended=True,
+                dcc_handoff_status=dcc_status,
+                dcc_handoff_reason=dcc_reason,
+                resource_boundary_policy="combined_group_within_parent_room",
+                owns_walkmesh=False,
+                source_operation="combine_primitives",
+                source_room_resrefs=(resref,),
+                status="blocked" if blocking else "export_candidate",
+                notes=notes,
+                blocking_messages=blocking,
+            )
+        )
+    return tuple(boundaries)
+
+
 def map_studio_export_object_boundaries(project: AuthoredModuleProject) -> tuple[MapStudioExportObjectBoundary, ...]:
     """Return modder-facing export object boundaries for an authored module."""
 
@@ -254,6 +354,8 @@ def map_studio_export_object_boundaries(project: AuthoredModuleProject) -> tuple
                 blocking_messages=tuple(blocking),
             )
         )
+        if isinstance(primitive, AuthoredRoomComposition):
+            boundaries.extend(_composition_group_boundaries(composition=primitive, resref=resref))
     return tuple(boundaries)
 
 
