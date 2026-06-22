@@ -2455,6 +2455,23 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert brushed_room["primitive"]["metadata"]["source"] == "map_studio:terrain_brush_stroke"
     assert brushed_room["metadata"]["last_operation"] == "terrain_brush_stroke"
     assert controller.command_history.undo_label == "Apply terrain brush raise"
+    terrain_boundary = controller.map_studio_export_object_boundaries()[0]
+    terrain_boundary_metadata = terrain_boundary.to_metadata()
+    terrain_readiness_boundary = controller.authored_module_readiness().readiness.metadata["export_object_boundaries"][0]
+
+    assert terrain_boundary.terrain_authoring_status == "dirty_region_sculpted"
+    assert terrain_boundary.terrain_last_operation == "terrain_brush_stroke"
+    assert terrain_boundary.terrain_last_brush == "raise"
+    assert terrain_boundary.terrain_dirty_region["changed_sample_count"] == 1
+    assert terrain_boundary.terrain_height_rows == len(source_terrain_heights)
+    assert terrain_boundary.terrain_height_columns == len(source_terrain_heights[0])
+    assert terrain_boundary.terrain_height_range is not None
+    assert terrain_boundary.terrain_validation_status == "valid_heightfield_needs_gameplay_proof"
+    assert "full MDL/WOK rebuild waits" in terrain_boundary.terrain_authoring_summary
+    assert terrain_boundary_metadata["terrain_authoring_status"] == "dirty_region_sculpted"
+    assert terrain_boundary_metadata["terrain_dirty_region"]["changed_sample_count"] == 1
+    assert terrain_readiness_boundary["terrain_authoring_status"] == "dirty_region_sculpted"
+    assert terrain_readiness_boundary["terrain_last_brush"] == "raise"
 
     controller.undo_map_studio_command()
 

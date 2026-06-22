@@ -19,7 +19,11 @@ from .authored_module_project import (
 from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive
 from .authored_room_floorplan import FloorPlanRoomPrimitive
 from .authored_room_geometry import RectangularRoomPrimitive
-from .authored_terrain_builder import TerrainHeightfieldPrimitive
+from .authored_terrain_builder import (
+    TerrainHeightfieldPrimitive,
+    analyse_terrain_slopes,
+    validate_terrain_heightfield_primitive,
+)
 
 
 @dataclass(frozen=True)
@@ -45,6 +49,20 @@ class MapStudioExportObjectBoundary:
     duplicate_special_batch_count: int = 0
     duplicate_special_generated_names: tuple[str, ...] = ()
     duplicate_special_batches: tuple[dict[str, Any], ...] = ()
+    terrain_authoring_status: str = "not_terrain"
+    terrain_authoring_summary: str = "Not an authored terrain heightfield."
+    terrain_last_operation: str = ""
+    terrain_last_brush: str = ""
+    terrain_dirty_region: dict[str, Any] | None = None
+    terrain_height_rows: int = 0
+    terrain_height_columns: int = 0
+    terrain_height_min: float | None = None
+    terrain_height_max: float | None = None
+    terrain_height_range: float | None = None
+    terrain_max_slope_degrees: float | None = None
+    terrain_non_walk_triangle_count: int = 0
+    terrain_validation_status: str = "not_terrain"
+    terrain_validation_summary: str = "Not an authored terrain heightfield."
     normal_cleanup_status: str = "not_authored"
     normal_cleanup_summary: str = "No authored floor-plan normal cleanup recorded."
     normal_cleanup_positive_z: bool | None = None
@@ -90,6 +108,20 @@ class MapStudioExportObjectBoundary:
             "duplicate_special_batch_count": self.duplicate_special_batch_count,
             "duplicate_special_generated_names": list(self.duplicate_special_generated_names),
             "duplicate_special_batches": [dict(row) for row in self.duplicate_special_batches],
+            "terrain_authoring_status": self.terrain_authoring_status,
+            "terrain_authoring_summary": self.terrain_authoring_summary,
+            "terrain_last_operation": self.terrain_last_operation,
+            "terrain_last_brush": self.terrain_last_brush,
+            "terrain_dirty_region": dict(self.terrain_dirty_region or {}),
+            "terrain_height_rows": self.terrain_height_rows,
+            "terrain_height_columns": self.terrain_height_columns,
+            "terrain_height_min": self.terrain_height_min,
+            "terrain_height_max": self.terrain_height_max,
+            "terrain_height_range": self.terrain_height_range,
+            "terrain_max_slope_degrees": self.terrain_max_slope_degrees,
+            "terrain_non_walk_triangle_count": self.terrain_non_walk_triangle_count,
+            "terrain_validation_status": self.terrain_validation_status,
+            "terrain_validation_summary": self.terrain_validation_summary,
             "normal_cleanup_status": self.normal_cleanup_status,
             "normal_cleanup_summary": self.normal_cleanup_summary,
             "normal_cleanup_positive_z": self.normal_cleanup_positive_z,
@@ -381,6 +413,94 @@ def _primitive_count(primitive: Any) -> int:
     return 1
 
 
+def _terrain_authoring_state(primitive: Any, metadata: dict[str, Any]) -> dict[str, Any]:
+    """Return terrain-specific readiness/export facts for status panels."""
+
+    if not isinstance(primitive, TerrainHeightfieldPrimitive):
+        return {
+            "terrain_authoring_status": "not_terrain",
+            "terrain_authoring_summary": "Not an authored terrain heightfield.",
+            "terrain_last_operation": "",
+            "terrain_last_brush": "",
+            "terrain_dirty_region": None,
+            "terrain_height_rows": 0,
+            "terrain_height_columns": 0,
+            "terrain_height_min": None,
+            "terrain_height_max": None,
+            "terrain_height_range": None,
+            "terrain_max_slope_degrees": None,
+            "terrain_non_walk_triangle_count": 0,
+            "terrain_validation_status": "not_terrain",
+            "terrain_validation_summary": "Not an authored terrain heightfield.",
+        }
+
+    primitive_metadata = dict(getattr(primitive, "metadata", {}) or {})
+    rows = tuple(tuple(float(value) for value in tuple(row or ())) for row in tuple(primitive.heights or ()))
+    row_count = len(rows)
+    column_count = len(rows[0]) if rows else 0
+    values = tuple(value for row in rows for value in row)
+    height_min = min(values) if values else None
+    height_max = max(values) if values else None
+    height_range = (float(height_max) - float(height_min)) if height_min is not None and height_max is not None else None
+    last_operation = str(primitive_metadata.get("last_operation") or "").strip() or _source_operation(
+        primitive=primitive,
+        metadata=metadata,
+    )
+    last_brush = str(primitive_metadata.get("last_brush") or "").strip()
+    dirty_region = primitive_metadata.get("last_dirty_region")
+    dirty_payload = dict(dirty_region) if isinstance(dirty_region, dict) else None
+
+    validation = validate_terrain_heightfield_primitive(primitive)
+    if validation.ok:
+        slope_report = analyse_terrain_slopes(primitive)
+        validation_status = "valid_heightfield_needs_gameplay_proof"
+        validation_summary = (
+            f"Terrain heightfield is structurally valid with {slope_report.non_walk_triangle_count} "
+            f"non-walk triangle(s); run WOK/export validation and game proof before calling it game-ready."
+        )
+        max_slope = float(slope_report.max_slope_degrees)
+        non_walk = int(slope_report.non_walk_triangle_count)
+    else:
+        validation_status = "blocked_invalid_heightfield"
+        validation_summary = "; ".join(validation.blocking_issues)
+        max_slope = None
+        non_walk = 0
+
+    if last_brush:
+        changed_count = int((dirty_payload or {}).get("changed_sample_count") or 0)
+        authoring_status = "dirty_region_sculpted"
+        authoring_summary = (
+            f"Last terrain brush '{last_brush}' changed {changed_count} sample(s) in a dirty region; "
+            "full MDL/WOK rebuild waits for validation or staged export."
+        )
+    elif last_operation and last_operation != "authored_room":
+        authoring_status = "heightfield_operation_authored"
+        authoring_summary = (
+            f"Last terrain operation '{last_operation}' changed the heightfield; "
+            "validate slope, WOK faces, placements, and game proof before release."
+        )
+    else:
+        authoring_status = "terrain_heightfield_authored"
+        authoring_summary = "Terrain heightfield is editable in Map Studio; sculpt, validate WOK, then stage export."
+
+    return {
+        "terrain_authoring_status": authoring_status,
+        "terrain_authoring_summary": authoring_summary,
+        "terrain_last_operation": last_operation,
+        "terrain_last_brush": last_brush,
+        "terrain_dirty_region": dirty_payload,
+        "terrain_height_rows": row_count,
+        "terrain_height_columns": column_count,
+        "terrain_height_min": height_min,
+        "terrain_height_max": height_max,
+        "terrain_height_range": height_range,
+        "terrain_max_slope_degrees": max_slope,
+        "terrain_non_walk_triangle_count": non_walk,
+        "terrain_validation_status": validation_status,
+        "terrain_validation_summary": validation_summary,
+    }
+
+
 def _object_notes(*, primitive: Any, metadata: dict[str, Any], resref: str) -> tuple[str, ...]:
     notes = [f"Exports as {resref}.mdl, {resref}.mdx, and {resref}.wok."]
     if isinstance(primitive, AuthoredRoomComposition):
@@ -597,6 +717,7 @@ def map_studio_export_object_boundaries(project: AuthoredModuleProject) -> tuple
         owns_walkmesh = walkmesh_face_count > 0
         source_operation = _source_operation(primitive=primitive, metadata=metadata)
         source_room_resrefs = _source_room_resrefs(metadata, resref)
+        terrain_state = _terrain_authoring_state(primitive, metadata)
         dcc_status, dcc_reason = _dcc_handoff_state(
             uv_handoff_recommended=uv_handoff,
             walkmesh_face_count=walkmesh_face_count,
@@ -623,6 +744,20 @@ def map_studio_export_object_boundaries(project: AuthoredModuleProject) -> tuple
                 duplicate_special_batch_count=len(duplicate_batches),
                 duplicate_special_generated_names=_duplicate_special_generated_names(duplicate_batches),
                 duplicate_special_batches=duplicate_batches,
+                terrain_authoring_status=str(terrain_state["terrain_authoring_status"]),
+                terrain_authoring_summary=str(terrain_state["terrain_authoring_summary"]),
+                terrain_last_operation=str(terrain_state["terrain_last_operation"]),
+                terrain_last_brush=str(terrain_state["terrain_last_brush"]),
+                terrain_dirty_region=terrain_state["terrain_dirty_region"],
+                terrain_height_rows=int(terrain_state["terrain_height_rows"]),
+                terrain_height_columns=int(terrain_state["terrain_height_columns"]),
+                terrain_height_min=terrain_state["terrain_height_min"],
+                terrain_height_max=terrain_state["terrain_height_max"],
+                terrain_height_range=terrain_state["terrain_height_range"],
+                terrain_max_slope_degrees=terrain_state["terrain_max_slope_degrees"],
+                terrain_non_walk_triangle_count=int(terrain_state["terrain_non_walk_triangle_count"]),
+                terrain_validation_status=str(terrain_state["terrain_validation_status"]),
+                terrain_validation_summary=str(terrain_state["terrain_validation_summary"]),
                 normal_cleanup_status=_normal_cleanup_status(normal_cleanup),
                 normal_cleanup_summary=_normal_cleanup_summary(normal_cleanup),
                 normal_cleanup_positive_z=normal_cleanup,

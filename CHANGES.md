@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Surfaces Terrain Sculpt Readiness
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Terrain sculpting / Export-object readiness
+Intersects: native Scene/Tools export-object boundary mirrors and Map Studio dispatch regression tests.
+
+- Added terrain-specific authoring/readiness fields to Map Studio export-object boundaries, including last terrain operation, last brush, dirty region, height grid size, height range, slope facts, and validation status.
+- Threaded the same terrain sculpt metadata into authored-module readiness so panels can explain whether a heightfield is previewable/export-candidate while still requiring WOK validation and game proof.
+- Preserved the dirty-region performance policy: terrain brush strokes stay scoped to edited samples, with full MDL/WOK rebuilds deferred to validation or staged export.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_export_objects.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_export_objects.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_terrain_readiness`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_terrain_contract`; `git diff --check`.
+
 ### [2026-06-22] Map Studio Records Duplicate Special Instance Readiness
 
 Owner: LordVaderCW
