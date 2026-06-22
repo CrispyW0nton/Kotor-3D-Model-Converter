@@ -1697,6 +1697,102 @@ def grid_snap_authored_room_composition_primitive(
     return _replace_rooms(project, rooms, operation="object_grid_snap_primitive")
 
 
+def snap_authored_room_composition_primitive_pivot_to_vertex(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+    target_primitive_name: str,
+    target_vertex_index: int = 0,
+) -> AuthoredModuleProject:
+    """Snap one primitive object's pivot onto a target primitive vertex.
+
+    This is the headless form of Maya-style object vertex snapping for authored
+    primitives.  It moves the selected primitive by transform translation only;
+    it does not weld vertices or rewrite topology.
+    """
+
+    index = _target_room_index(project, room_resref)
+    room = project.rooms[index]
+    composition = _composition_for_room(room)
+    source_name = str(primitive_name or "").strip()
+    target_name = str(target_primitive_name or "").strip()
+    if not source_name:
+        raise ValueError("Object Vertex Snap requires a selected authored primitive.")
+    if not target_name:
+        raise ValueError("Object Vertex Snap requires a target authored primitive.")
+
+    primitives = tuple(composition.primitives or ())
+    source_primitive = next((item for item in primitives if _primitive_name(item) == source_name), None)
+    target_primitive = next((item for item in primitives if _primitive_name(item) == target_name), None)
+    known = ", ".join(_primitive_name(item) for item in primitives if _primitive_name(item))
+    if source_primitive is None:
+        raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'. Known primitives: {known or '(none)'}.")
+    if target_primitive is None:
+        raise ValueError(f"Room {room.room_resref} has no target primitive named '{target_primitive_name}'. Known primitives: {known or '(none)'}.")
+
+    vertices = tuple(primitive_to_mesh(target_primitive).vertices or ())
+    if not vertices:
+        raise ValueError(f"Target primitive '{target_name}' has no vertices to snap to.")
+    vertex_index = int(target_vertex_index)
+    if vertex_index < 0 or vertex_index >= len(vertices):
+        raise ValueError(
+            f"Target primitive '{target_name}' vertex index {vertex_index} is outside 0..{len(vertices) - 1}."
+        )
+
+    target_vertex = tuple(float(value) for value in vertices[vertex_index])
+    source_transform = _primitive_transform(source_primitive)
+    old_translation = tuple(float(value) for value in source_transform.translation)
+    source_pivot = tuple(float(value) for value in source_transform.pivot)
+    new_translation = tuple(target_vertex[i] - source_pivot[i] for i in range(3))
+    snapped_transform = PrimitiveTransform(
+        translation=new_translation,
+        rotation_degrees_z=float(source_transform.rotation_degrees_z),
+        scale=tuple(float(value) for value in source_transform.scale),
+        pivot=source_pivot,
+    )
+
+    updated_primitives = []
+    for primitive in primitives:
+        if _primitive_name(primitive) != source_name:
+            updated_primitives.append(primitive)
+            continue
+        if isinstance(primitive, PlacedRoomPrimitive):
+            updated_primitives.append(replace(primitive, transform=snapped_transform))
+        else:
+            updated_primitives.append(PlacedRoomPrimitive(primitive=primitive, name=source_name, transform=snapped_transform))
+
+    updated_composition = replace(
+        composition,
+        primitives=tuple(updated_primitives),
+        metadata={
+            **dict(composition.metadata),
+            "last_operation": "object_vertex_snap_primitive",
+            "last_vertex_snapped_primitive": source_name,
+            "object_vertex_snap_coordinate_space": "authored_room_composition_mesh_space",
+            "target_primitive": target_name,
+            "target_vertex_index": vertex_index,
+            "target_vertex": list(target_vertex),
+            "old_translation": list(old_translation),
+            "new_translation": list(new_translation),
+            "snapped_pivot": list(target_vertex),
+        },
+    )
+    updated = replace(
+        room,
+        primitive=updated_composition,
+        composition=None,
+        metadata={
+            **dict(room.metadata),
+            "primitive": "authored_room_composition",
+            "last_operation": "object_vertex_snap_primitive",
+            "last_vertex_snapped_primitive": source_name,
+        },
+    )
+    rooms = tuple(project.rooms[:index] + (updated,) + project.rooms[index + 1 :])
+    return _replace_rooms(project, rooms, operation="object_vertex_snap_primitive")
+
+
 def _linear_transform_vector(
     vector: tuple[float, float, float],
     transform: PrimitiveTransform,
@@ -3881,6 +3977,7 @@ __all__ = [
     "set_authored_room_composition_primitive_style",
     "set_authored_room_composition_primitive_transform",
     "split_authored_floor_plan_face",
+    "snap_authored_room_composition_primitive_pivot_to_vertex",
     "snap_authored_floor_plan_vertex_to_vertex",
     "transform_snap_authored_floor_plan_vertices",
     "triangulate_authored_floor_plan_face",

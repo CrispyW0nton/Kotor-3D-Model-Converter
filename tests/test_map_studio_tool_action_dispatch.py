@@ -68,6 +68,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["freeze_transform"].command_method == "freeze_authored_room_primitive_transform"
     assert statuses["object_grid_snap"].contract_kind == "command_mutates_kmap"
     assert statuses["object_grid_snap"].command_method == "grid_snap_authored_room_primitive"
+    assert statuses["object_vertex_snap"].contract_kind == "command_mutates_kmap"
+    assert statuses["object_vertex_snap"].command_method == "snap_authored_room_primitive_pivot_to_vertex"
     assert statuses["placeable"].contract_kind == "command_mutates_kmap"
     assert statuses["placeable"].command_method == "add_authored_gameplay_placement"
     assert statuses["entry_point"].contract_kind == "command_mutates_kmap"
@@ -397,6 +399,32 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     }
     assert object_snap_ready.mutates_kmap is True
     assert "KMAP-world space" in object_snap_ready.authoring_context
+
+    object_vertex_snap_missing = resolve_map_studio_tool_belt_action("object_vertex_snap")
+
+    assert object_vertex_snap_missing.enabled is False
+    assert "selected primitive, target primitive, and target vertex" in object_vertex_snap_missing.disabled_reason
+
+    object_vertex_snap_ready = resolve_map_studio_tool_belt_action(
+        "object_vertex_snap",
+        MapStudioToolActionContext(
+            room_resref="room_a",
+            primitive_name="room_a_cube",
+            target_primitive_name="room_a_wall",
+            target_vertex_index=3,
+        ),
+    )
+
+    assert object_vertex_snap_ready.enabled is True
+    assert object_vertex_snap_ready.command_method == "snap_authored_room_primitive_pivot_to_vertex"
+    assert object_vertex_snap_ready.command_kwargs == {
+        "room_resref": "room_a",
+        "primitive_name": "room_a_cube",
+        "target_primitive_name": "room_a_wall",
+        "target_vertex_index": 3,
+    }
+    assert object_vertex_snap_ready.mutates_kmap is True
+    assert "authored-room composition mesh space" in object_vertex_snap_ready.authoring_context
 
     placeable_route = resolve_map_studio_tool_belt_action(
         "placeable",
@@ -2343,6 +2371,89 @@ def test_t2606_object_grid_snap_moves_primitive_pivot_to_grid() -> None:
     assert restored.translation == (1.12, 2.37, 0.49)
 
 
+def test_t2606_object_vertex_snap_moves_primitive_pivot_to_target_vertex() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_tool_action_dispatch import (
+        MapStudioToolActionContext,
+        execute_map_studio_tool_belt_action,
+    )
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grobjvtx", game="K1")
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grobjvtx")
+    execute_map_studio_tool_belt_action(
+        controller,
+        "primitive",
+        MapStudioToolActionContext(primitive_kind="cube", primitive_name="source_cube"),
+    )
+    source = controller.authored_room_primitive_transforms()[-1]
+    controller.set_authored_room_primitive_transform(
+        room_resref=source.room_resref,
+        primitive_name=source.primitive_name,
+        translation=(0.25, 0.5, 0.75),
+        rotation_degrees_z=15.0,
+        scale=(1.25, 1.5, 1.0),
+        pivot=(0.0, 0.0, 0.5),
+    )
+    execute_map_studio_tool_belt_action(
+        controller,
+        "primitive",
+        MapStudioToolActionContext(primitive_kind="cube", primitive_name="target_cube"),
+    )
+    target = controller.authored_room_primitive_transforms()[-1]
+    controller.set_authored_room_primitive_transform(
+        room_resref=target.room_resref,
+        primitive_name=target.primitive_name,
+        translation=(2.0, 3.0, 1.0),
+        rotation_degrees_z=0.0,
+        scale=(1.0, 1.0, 1.0),
+        pivot=(0.0, 0.0, 0.0),
+    )
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "object_vertex_snap",
+        MapStudioToolActionContext(
+            room_resref=source.room_resref,
+            primitive_name=source.primitive_name,
+            target_primitive_name=target.primitive_name,
+            target_vertex_index=6,
+        ),
+    )
+
+    snapped = {
+        row.primitive_name: row
+        for row in controller.authored_room_primitive_transforms()
+        if row.room_resref == source.room_resref
+    }["source_cube"]
+    assert snapped.translation == (2.5, 3.5, 1.5)
+    assert snapped.rotation_degrees_z == 15.0
+    assert snapped.scale == (1.25, 1.5, 1.0)
+    assert snapped.pivot == (0.0, 0.0, 0.5)
+    assert controller.command_history.undo_label == "Object vertex snap source_cube"
+
+    payload = controller.project.extra_sections["authored_module"]
+    metadata = payload["rooms"][0]["primitive"]["metadata"]
+    assert metadata["last_operation"] == "object_vertex_snap_primitive"
+    assert metadata["object_vertex_snap_coordinate_space"] == "authored_room_composition_mesh_space"
+    assert metadata["target_primitive"] == "target_cube"
+    assert metadata["target_vertex_index"] == 6
+    assert metadata["target_vertex"] == [2.5, 3.5, 2.0]
+    assert metadata["old_translation"] == [0.25, 0.5, 0.75]
+    assert metadata["new_translation"] == [2.5, 3.5, 1.5]
+    assert metadata["snapped_pivot"] == [2.5, 3.5, 2.0]
+
+    controller.undo_map_studio_command()
+    restored = {
+        row.primitive_name: row
+        for row in controller.authored_room_primitive_transforms()
+        if row.room_resref == source.room_resref
+    }["source_cube"]
+    assert restored.translation == (0.25, 0.5, 0.75)
+
+
 def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -> None:
     window_source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
     scene_dispatcher = _read("native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py")
@@ -2414,6 +2525,8 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert '"freeze_transform"' in tools_catalog
     assert '"object_grid_snap"' in scene_catalog
     assert '"object_grid_snap"' in tools_catalog
+    assert '"object_vertex_snap"' in scene_catalog
+    assert '"object_vertex_snap"' in tools_catalog
 
     for source in (scene_dispatcher, tools_dispatcher):
         assert "class MapStudioToolActionContext" in source
@@ -2454,6 +2567,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="center_authored_room_primitive_pivot"' in source
         assert 'command_method="freeze_authored_room_primitive_transform"' in source
         assert 'command_method="grid_snap_authored_room_primitive"' in source
+        assert 'command_method="snap_authored_room_primitive_pivot_to_vertex"' in source
         assert 'command_method="set_authored_room_edge_normal_policy"' in source
         assert 'command_method="apply_authored_terrain_brush_stroke"' in source
         assert 'command_method="shrink_wrap_authored_placements_to_terrain"' in source
@@ -2491,6 +2605,8 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert "freeze_authored_room_composition_primitive_transform" in source
         assert "def grid_snap_authored_room_primitive" in source
         assert "grid_snap_authored_room_composition_primitive" in source
+        assert "def snap_authored_room_primitive_pivot_to_vertex" in source
+        assert "snap_authored_room_composition_primitive_pivot_to_vertex" in source
         assert "def authored_terrain_status" in source
         assert "previewable_status_query" in source
 

@@ -132,6 +132,7 @@ from .authored_room_operations import (
     set_authored_room_composition_primitive_style,
     set_authored_room_composition_primitive_transform,
     split_authored_floor_plan_face,
+    snap_authored_room_composition_primitive_pivot_to_vertex,
     snap_authored_floor_plan_vertex_to_vertex,
     transform_snap_authored_floor_plan_vertices,
     triangulate_authored_floor_plan_face,
@@ -2586,6 +2587,53 @@ class ModuleEditorController:
                 "primitive_name": primitive_name,
                 "grid_size": grid_size,
                 "axes": tuple(axes or ()),
+            },
+        )
+        return self.authored_module_readiness()
+
+    def snap_authored_room_primitive_pivot_to_vertex(
+        self,
+        *,
+        room_resref: str,
+        primitive_name: str,
+        target_primitive_name: str,
+        target_vertex_index: int = 0,
+    ):
+        """Snap one authored primitive pivot to a vertex on another primitive."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = snap_authored_room_composition_primitive_pivot_to_vertex(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+            target_primitive_name=target_primitive_name,
+            target_vertex_index=target_vertex_index,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Vertex-snapped Map Studio primitive {primitive_name} to {target_primitive_name}[{target_vertex_index}]; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.object_vertex_snap",
+            label=f"Object vertex snap {primitive_name}",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "primitive_name": primitive_name,
+                "target_primitive_name": target_primitive_name,
+                "target_vertex_index": int(target_vertex_index),
             },
         )
         return self.authored_module_readiness()

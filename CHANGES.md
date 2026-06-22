@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Snaps Primitive Objects To Primitive Vertices
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Direct modeling tools / Object vertex snapping
+Intersects: native Scene/Tools authored room operations, ModuleEditorController mirrors, tool-belt catalog, dispatcher routing, and tool-contract audit.
+
+- Added a headless `snap_authored_room_composition_primitive_pivot_to_vertex` command that snaps a selected primitive object's pivot to a target primitive vertex in authored-room composition mesh space without welding topology or changing primitive identity.
+- Routed the new `object_vertex_snap` / `Obj V Snap` action through the Map Studio modeling catalog, default/component tool-belt presets, dispatcher, controller undo/redo history, command readiness metadata, and Scene/Tools native payload mirrors.
+- Updated the tool-contract audit with representative object-vertex snap context so visible implemented shelf actions keep proving whether they are backed by core commands instead of decorative UI.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_map_studio_tool_action_dispatch.py`; `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_contract_audit.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_contract_audit.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_object_vertex_snap_full`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_object_vertex_snap_ui_contract`.
+
 ### [2026-06-22] Map Studio Snaps Primitive Objects To Grid
 
 Owner: LordVaderCW

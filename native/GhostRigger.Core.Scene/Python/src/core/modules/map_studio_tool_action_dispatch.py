@@ -35,6 +35,8 @@ class MapStudioToolActionContext:
     result_room_resref: str = ""
     primitive_name: str = ""
     primitive_kind: str = ""
+    target_primitive_name: str = ""
+    target_vertex_index: int | None = None
     placement_kind: str = ""
     placement_template_resref: str = ""
     placement_tag: str = ""
@@ -626,6 +628,33 @@ def resolve_map_studio_tool_belt_action(
             authoring_context=(
                 "Object Grid Snap: snap the selected primitive pivot in KMAP-world space to the authored grid. "
                 "This moves the object, preserves primitive identity/topology, and makes validation/export/game proof stale."
+            ),
+        )
+
+    if key == "object_vertex_snap":
+        if not ctx.primitive_name or not ctx.target_primitive_name or ctx.target_vertex_index is None:
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="vertex",
+                enabled=False,
+                disabled_reason="Object Vertex Snap needs a selected primitive, target primitive, and target vertex.",
+            )
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="vertex",
+            command_method="snap_authored_room_primitive_pivot_to_vertex",
+            command_kwargs={
+                "room_resref": ctx.room_resref,
+                "primitive_name": ctx.primitive_name,
+                "target_primitive_name": ctx.target_primitive_name,
+                "target_vertex_index": int(ctx.target_vertex_index),
+            },
+            mutates_kmap=True,
+            authoring_context=(
+                "Object Vertex Snap: move the selected primitive as an object so its pivot lands exactly on a target "
+                "primitive vertex in authored-room composition mesh space. This preserves topology and makes validation/export/game proof stale."
             ),
         )
 

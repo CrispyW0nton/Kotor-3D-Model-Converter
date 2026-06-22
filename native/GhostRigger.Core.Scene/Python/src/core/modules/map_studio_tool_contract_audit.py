@@ -72,6 +72,8 @@ def _rich_context() -> MapStudioToolActionContext:
         result_room_resref="audit_room_out",
         primitive_name="audit_room_a_cube",
         primitive_kind="cube",
+        target_primitive_name="audit_room_a_wall",
+        target_vertex_index=0,
         placement_kind="placeable",
         placement_template_resref="plc_bench",
         placement_tag="audit_placeable",
