@@ -1930,12 +1930,31 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert controller.command_history.undo_label == "Combine primitives combine_cube, combine_cylinder"
     export_boundaries = controller.map_studio_export_object_boundaries()
     readiness = controller.authored_module_readiness()
+    room_boundary = next(boundary for boundary in export_boundaries if boundary.object_kind == "composition_room")
     group_boundary = next(boundary for boundary in export_boundaries if boundary.object_kind == "combined_primitive_group")
+    readiness_room = next(
+        boundary
+        for boundary in readiness.readiness.metadata["export_object_boundaries"]
+        if boundary["object_kind"] == "composition_room"
+    )
     readiness_group = next(
         boundary
         for boundary in readiness.readiness.metadata["export_object_boundaries"]
         if boundary["object_kind"] == "combined_primitive_group"
     )
+
+    assert room_boundary.bounds_coordinate_space == "kmap_world"
+    assert room_boundary.bounds_min is not None
+    assert room_boundary.bounds_max is not None
+    assert room_boundary.center is not None
+    assert room_boundary.dimensions is not None
+    assert len(room_boundary.dimensions) == 3
+    assert all(float(value) > 0.0 for value in room_boundary.dimensions)
+    assert readiness_room["bounds_coordinate_space"] == "kmap_world"
+    assert readiness_room["bounds_min"] == list(room_boundary.bounds_min)
+    assert readiness_room["bounds_max"] == list(room_boundary.bounds_max)
+    assert readiness_room["center"] == list(room_boundary.center)
+    assert readiness_room["dimensions"] == list(room_boundary.dimensions)
 
     assert group_boundary.label == "kit_column_group (combined primitive group)"
     assert group_boundary.export_resref == combine_cube.room_resref

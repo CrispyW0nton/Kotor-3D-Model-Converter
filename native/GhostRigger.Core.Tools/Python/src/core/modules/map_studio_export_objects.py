@@ -145,6 +145,33 @@ def _vec3_from_group(group: dict[str, Any], key: str) -> tuple[float, float, flo
         return None
 
 
+def _mesh_vertices(mesh: Any) -> tuple[tuple[float, float, float], ...]:
+    vertices: list[tuple[float, float, float]] = []
+    for vertex in tuple(getattr(mesh, "vertices", ()) or ()):
+        if not isinstance(vertex, (list, tuple)) or len(vertex) < 3:
+            continue
+        try:
+            vertices.append((float(vertex[0]), float(vertex[1]), float(vertex[2])))
+        except (TypeError, ValueError):
+            continue
+    return tuple(vertices)
+
+
+def _bounds_from_vertices(
+    vertices: tuple[tuple[float, float, float], ...],
+) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]] | None:
+    if not vertices:
+        return None
+    xs = tuple(vertex[0] for vertex in vertices)
+    ys = tuple(vertex[1] for vertex in vertices)
+    zs = tuple(vertex[2] for vertex in vertices)
+    bounds_min = (min(xs), min(ys), min(zs))
+    bounds_max = (max(xs), max(ys), max(zs))
+    center = tuple((bounds_min[index] + bounds_max[index]) * 0.5 for index in range(3))  # type: ignore[return-value]
+    dimensions = tuple(max(0.0, bounds_max[index] - bounds_min[index]) for index in range(3))  # type: ignore[return-value]
+    return bounds_min, bounds_max, center, dimensions
+
+
 def _object_kind(primitive: Any, metadata: dict[str, Any]) -> str:
     if isinstance(primitive, AuthoredRoomComposition):
         if metadata.get("separated_from_room"):
@@ -332,11 +359,21 @@ def map_studio_export_object_boundaries(project: AuthoredModuleProject) -> tuple
         walkmesh_face_count = 0
         walkable_face_count = 0
         material_textures: tuple[str, ...] = ()
+        bounds_min: tuple[float, float, float] | None = None
+        bounds_max: tuple[float, float, float] | None = None
+        center: tuple[float, float, float] | None = None
+        dimensions: tuple[float, float, float] | None = None
         try:
             geometry = compile_authored_room_spec(room)
             helpers = tuple(getattr(geometry, "helper_meshes", ()) or ())
             helper_mesh_count = len(helpers)
             render_mesh_count = 1 + helper_mesh_count
+            render_vertices = _mesh_vertices(getattr(geometry, "room_mesh", None))
+            for helper in helpers:
+                render_vertices += _mesh_vertices(helper)
+            bounds = _bounds_from_vertices(render_vertices)
+            if bounds is not None:
+                bounds_min, bounds_max, center, dimensions = bounds
             faces = tuple(getattr(getattr(geometry, "wok", None), "faces", ()) or ())
             walkmesh_face_count = len(faces)
             walkable_face_count = int(getattr(geometry.wok, "walkable_face_count", lambda: 0)())
@@ -373,6 +410,11 @@ def map_studio_export_object_boundaries(project: AuthoredModuleProject) -> tuple
                 walkmesh_face_count=walkmesh_face_count,
                 walkable_face_count=walkable_face_count,
                 material_textures=material_textures,
+                bounds_coordinate_space="kmap_world" if bounds_min is not None else "",
+                bounds_min=bounds_min,
+                bounds_max=bounds_max,
+                center=center,
+                dimensions=dimensions,
                 uv_handoff_recommended=uv_handoff,
                 dcc_handoff_status=dcc_status,
                 dcc_handoff_reason=dcc_reason,
