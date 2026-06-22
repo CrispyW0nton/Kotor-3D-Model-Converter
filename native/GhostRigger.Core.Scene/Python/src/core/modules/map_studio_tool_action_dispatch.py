@@ -695,6 +695,14 @@ def resolve_map_studio_tool_belt_action(
 
     if key == "paint_wok":
         surface = ctx.metadata.get("surface_id", ctx.metadata.get("floor_surface", ctx.metadata.get("wok_surface", 4)))
+        if not ctx.room_resref:
+            return _route(
+                action,
+                focus_component_mode="walkmesh",
+                focus_snap_mode="face",
+                enabled=False,
+                disabled_reason="Paint WOK Surface needs an active authored room before it can assign walkmesh surface intent.",
+            )
         if ctx.primitive_name:
             return _route(
                 action,

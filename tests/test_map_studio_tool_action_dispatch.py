@@ -1162,6 +1162,11 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert "gameplay placements" in shrink_wrap.authoring_context
     assert "arbitrary mesh/walkmesh shrink-wrap remains planned" in shrink_wrap.authoring_context
 
+    paint_wok_missing = resolve_map_studio_tool_belt_action("paint_wok")
+
+    assert paint_wok_missing.enabled is False
+    assert "active authored room" in paint_wok_missing.disabled_reason
+
     paint_wok_room = resolve_map_studio_tool_belt_action(
         "paint_wok",
         MapStudioToolActionContext(room_resref="room_a", metadata={"surface_id": 5}),

@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Guards WOK Paint Without Active Room
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Walkmesh tools / Tool readiness
+Intersects: native Scene/Tools tool-action dispatch mirrors and tool-belt regression tests.
+
+- Disabled `paint_wok` when no authored room is active, returning an actionable readiness message instead of resolving a command with an empty room resref.
+- Preserved room-floor and selected walkmesh-primitive WOK painting behavior when valid room context is present.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_paint_wok_guard`; `git diff --check`.
+
 ### [2026-06-22] Map Studio Routes WOK Surface Painting Through Tool Belt
 
 Owner: LordVaderCW
