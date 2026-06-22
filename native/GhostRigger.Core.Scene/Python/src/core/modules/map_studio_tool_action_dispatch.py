@@ -413,14 +413,15 @@ def resolve_map_studio_tool_belt_action(
                 "dry_run": bool(ctx.export_dry_run),
                 "overwrite": bool(ctx.export_overwrite),
             },
-            mutates_kmap=False,
+            mutates_kmap=True,
             status_message=(
                 "Staged authored module package candidate; install handoff and live warp proof are still required "
                 "before calling it game-ready."
             ),
             authoring_context=(
                 "Stage .mod: compile the authored KMAP module through the staged export/proof service. "
-                "This creates an export candidate and test checklist, not game-tested proof."
+                "This creates an export candidate and test checklist, records package/proof metadata back into KMAP, "
+                "and is not game-tested proof."
             ),
         )
 
@@ -454,13 +455,14 @@ def resolve_map_studio_tool_belt_action(
                 "overwrite": bool(ctx.export_overwrite),
                 "game_modules_dir": modules_dir,
             },
-            mutates_kmap=False,
+            mutates_kmap=True,
             status_message=(
                 "Prepared authored module install candidate; live warp proof must still be recorded before calling it game-ready."
             ),
             authoring_context=(
                 "Install Test: stage the authored KMAP module, copy or dry-run copy to a chosen KOTOR Modules folder, "
-                "and write the manual warp-test checklist. This is not the same as recorded in-game proof."
+                "write the manual warp-test checklist, and record install/proof metadata back into KMAP. "
+                "This is not the same as recorded in-game proof."
             ),
         )
 

@@ -46,7 +46,7 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert audit.implemented_actions == audit.total_actions
     assert audit.command_backed_actions >= 82
     assert audit.mutating_command_actions >= 74
-    assert audit.query_command_actions >= 8
+    assert audit.query_command_actions >= 6
     assert audit.studio_workspace_actions == 0
     assert audit.workflow_focus_actions == 0
     assert statuses["cube"].contract_kind == "command_mutates_kmap"
@@ -127,12 +127,12 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["validate"].contract_kind == "command_query"
     assert statuses["validate"].command_method == "validate"
     assert statuses["validate"].mutates_kmap is False
-    assert statuses["stage_module"].contract_kind == "command_query"
+    assert statuses["stage_module"].contract_kind == "command_mutates_kmap"
     assert statuses["stage_module"].command_method == "stage_authored_module"
-    assert statuses["stage_module"].mutates_kmap is False
-    assert statuses["install_module"].contract_kind == "command_query"
+    assert statuses["stage_module"].mutates_kmap is True
+    assert statuses["install_module"].contract_kind == "command_mutates_kmap"
     assert statuses["install_module"].command_method == "stage_authored_module"
-    assert statuses["install_module"].mutates_kmap is False
+    assert statuses["install_module"].mutates_kmap is True
     assert statuses["launch_handoff"].contract_kind == "command_query"
     assert statuses["launch_handoff"].command_method == "map_studio_launch_handoff"
     assert statuses["launch_handoff"].mutates_kmap is False
@@ -248,9 +248,10 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
         "dry_run": True,
         "overwrite": False,
     }
-    assert stage_ready.mutates_kmap is False
-    assert stage_ready.stale_outputs == ()
+    assert stage_ready.mutates_kmap is True
+    assert stage_ready.stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
     assert "export candidate" in stage_ready.authoring_context
+    assert "records package/proof metadata back into KMAP" in stage_ready.authoring_context
     assert stage_ready.capability_stage == "export_candidate"
     assert "ExportJob" in stage_ready.resource_impacts
     assert ".mod" in stage_ready.resource_impacts
@@ -287,9 +288,10 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
         "overwrite": True,
         "game_modules_dir": ".pytest_tmp_modules",
     }
-    assert install_ready.mutates_kmap is False
-    assert install_ready.stale_outputs == ()
+    assert install_ready.mutates_kmap is True
+    assert install_ready.stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
     assert "manual warp-test checklist" in install_ready.authoring_context
+    assert "record install/proof metadata back into KMAP" in install_ready.authoring_context
 
     launch_handoff = resolve_map_studio_tool_belt_action("launch_handoff")
 
@@ -1455,7 +1457,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert stage_result.export_result.code == "export_candidate"
     assert stage_result.export_result.module_path.endswith(".mod")
     assert "game-tested" not in stage_result.message.lower()
-    assert controller.command_history.undo_label == "Create authored module grterrain"
+    assert controller.command_history.undo_label == "Stage authored module grterrain"
 
     launch_ready = execute_map_studio_tool_belt_action(controller, "launch_handoff")
 
@@ -1467,7 +1469,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert launch_ready.launch_helper_command == stage_result.launch_helper_command
     assert launch_ready.capability_stage == "installed_for_game_test_handoff"
     assert "screenshot or video proof" in launch_ready.next_action
-    assert controller.command_history.undo_label == "Create authored module grterrain"
+    assert controller.command_history.undo_label == "Stage authored module grterrain"
 
     proof_ready = execute_map_studio_tool_belt_action(controller, "record_proof")
 
@@ -1478,7 +1480,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert proof_ready.proof_manifest_path == stage_result.proof_manifest_path
     assert proof_ready.capability_stage == "installed_for_game_test_recording_handoff"
     assert "screenshot or video evidence" in proof_ready.summary
-    assert controller.command_history.undo_label == "Create authored module grterrain"
+    assert controller.command_history.undo_label == "Stage authored module grterrain"
 
     modules_dir = tmp_path / "Modules"
     modules_dir.mkdir()
@@ -1497,7 +1499,17 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert install_result.resolved_modules_dir == str(modules_dir)
     assert install_result.installed_module_path == ""
     assert any("Dry run:" in warning for warning in install_result.warnings)
+    assert controller.command_history.undo_label == "Install test module grterrain"
+
+    controller.undo_map_studio_command()
+
+    assert controller.command_history.undo_label == "Stage authored module grterrain"
+    assert controller.project.extra_sections["authored_module"]["proof_manifest_path"] == stage_result.proof_manifest_path
+
+    controller.undo_map_studio_command()
+
     assert controller.command_history.undo_label == "Create authored module grterrain"
+    assert "proof_manifest_path" not in controller.project.extra_sections["authored_module"]
 
     controller.undo_map_studio_command()
 

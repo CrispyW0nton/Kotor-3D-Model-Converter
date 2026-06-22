@@ -3906,6 +3906,7 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
@@ -3923,6 +3924,7 @@ class ModuleEditorController:
             )
         )
         export_result = result.export_result
+        recorded_package_metadata = False
         if export_result is not None and export_result.resources:
             runtime_resources = [f"{item.resref}.{item.restype}" for item in export_result.resources]
             payload = dict(payload)
@@ -3944,6 +3946,34 @@ class ModuleEditorController:
                 payload["modder_test_plan"] = test_plan
             self.project.extra_sections["authored_module"] = payload
             self.project.dirty = True
+            recorded_package_metadata = True
+        if recorded_package_metadata:
+            module_root = str(payload.get("module_root") or getattr(self.project, "name", "") or "new_level")
+            install_requested = bool(str(game_modules_dir or "").strip() or auto_detect_game_modules_dir)
+            label = f"{'Install test module' if install_requested else 'Stage authored module'} {module_root}"
+            self._record_map_studio_command(
+                action_key=(
+                    "map_studio.export.install_module"
+                    if install_requested
+                    else "map_studio.export.stage_module"
+                ),
+                label=label,
+                before=before,
+                stale_outputs=(),
+                readiness_impact=(
+                    "Map Studio package/proof metadata changed; geometry, WOK, LYT/VIS/PTH resources are unchanged."
+                ),
+                summary=(
+                    "Recorded staged package, install handoff, checklist, and proof-manifest metadata in KMAP."
+                ),
+                metadata={
+                    "module_root": module_root,
+                    "dry_run": bool(dry_run),
+                    "installed": install_requested,
+                    "proof_manifest_path": result.proof_manifest_path,
+                    "pack_manifest_path": getattr(export_result, "manifest_path", ""),
+                },
+            )
         self.model.log(result.message)
         return result
 

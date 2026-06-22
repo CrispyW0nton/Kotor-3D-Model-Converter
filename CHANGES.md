@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Makes Stage And Install Metadata Undoable
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Export readiness / Stage and install handoff metadata
+Intersects: native Scene/Tools Map Studio dispatcher mirrors, module editor controller mirrors, and Map Studio dispatch regression tests.
+
+- Reclassified Stage `.mod` and Install Test tool-belt routes as KMAP-mutating commands because successful staging records runtime resources, proof manifests, checklists, launch handoff paths, and install metadata back into the authored module state.
+- Added command-history snapshots around `stage_authored_module` so staged package/proof metadata and install-handoff metadata can be undone separately from geometry edits.
+- Updated tool-action coverage to prove Stage, Install, launch handoff, and proof-recording readiness now preserve capability honesty while keeping recorded in-game proof as a separate step.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_stage_undo`; `git diff --check`.
+
 ### [2026-06-22] Map Studio Makes Normal Cleanup Explicit In Tool Belt
 
 Owner: LordVaderCW
