@@ -11,6 +11,17 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Routes Held Vertex Snap To Object Snapping
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool action dispatcher / Held V object vertex snapping
+Intersects: native Scene/Tools dispatcher mirrors and Map Studio tool-action dispatch tests.
+
+- Promoted the viewport `Hold V` modifier metadata from a UI-only fact into core dispatcher policy: when `vertex_snap` is triggered from the Map Studio viewport with a selected authored primitive, it now resolves to `snap_authored_room_primitive_pivot_to_vertex`.
+- Preserved ordinary floor-plan `vertex_snap` behavior for selected source/target floor-plan points, keeping object snapping and component snapping distinct and capability-honest.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests\test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_modifier_routes`; `git diff --check`.
+
 ### [2026-06-22] Map Studio Carries Held Modifier State Into Tool Context
 
 Owner: LordVaderCW

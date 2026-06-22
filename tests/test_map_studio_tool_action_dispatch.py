@@ -444,6 +444,35 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert object_vertex_snap_ready.mutates_kmap is True
     assert "authored-room composition mesh space" in object_vertex_snap_ready.authoring_context
 
+    held_v_object_snap = resolve_map_studio_tool_belt_action(
+        "vertex_snap",
+        MapStudioToolActionContext(
+            room_resref="room_a",
+            primitive_name="room_a_cube",
+            target_primitive_name="room_a_wall",
+            target_vertex_index=2,
+            metadata={
+                "active_modifier_action": "vertex_snap",
+                "active_modifier_behavior": "hold_modifier",
+                "active_modifier_source": "map_studio_viewport",
+                "active_modifier_coordinate_space": "viewport_interaction",
+            },
+        ),
+    )
+
+    assert held_v_object_snap.enabled is True
+    assert held_v_object_snap.focus_component_mode == "object"
+    assert held_v_object_snap.focus_snap_mode == "vertex"
+    assert held_v_object_snap.command_method == "snap_authored_room_primitive_pivot_to_vertex"
+    assert held_v_object_snap.command_kwargs == {
+        "room_resref": "room_a",
+        "primitive_name": "room_a_cube",
+        "target_primitive_name": "room_a_wall",
+        "target_vertex_index": 2,
+    }
+    assert held_v_object_snap.mutates_kmap is True
+    assert "Hold V Object Vertex Snap" in held_v_object_snap.authoring_context
+
     placeable_route = resolve_map_studio_tool_belt_action(
         "placeable",
         MapStudioToolActionContext(
@@ -681,6 +710,7 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert ready_snap.enabled is True
     assert ready_snap.command_method == "snap_authored_floor_plan_vertex"
     assert ready_snap.command_kwargs["target_room_resref"] == "room_b"
+    assert ready_snap.focus_component_mode == "vertex"
 
     grid_snap = resolve_map_studio_tool_belt_action("grid_snap")
 
@@ -3205,6 +3235,10 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert "active_map_studio_modifier" in window_source
     assert 'metadata["active_modifier_action"]' in window_source
     assert 'metadata["active_modifier_behavior"] = "hold_modifier"' in window_source
+    assert "_viewport_hold_modifier_active(ctx, \"vertex_snap\")" in scene_dispatcher
+    assert "_viewport_hold_modifier_active(ctx, \"vertex_snap\")" in tools_dispatcher
+    assert "Hold V Object Vertex Snap" in scene_dispatcher
+    assert "Hold V Object Vertex Snap" in tools_dispatcher
     assert '"duplicate_special",' in window_source
     assert '"shrink_wrap",' in window_source
     assert '"create_room",' in window_source
