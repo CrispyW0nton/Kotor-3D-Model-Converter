@@ -71,7 +71,7 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["script"].command_method == "set_authored_script_hook"
     assert statuses["script"].mutates_kmap is True
     assert statuses["opening"].contract_kind == "command_mutates_kmap"
-    assert statuses["opening"].command_method == "apply_authored_room_operation"
+    assert statuses["opening"].command_method == "set_authored_floor_plan_wall_opening"
     assert statuses["cut"].contract_kind == "command_mutates_kmap"
     assert statuses["cut"].command_method == "axis_split_authored_floor_plan_room"
     assert statuses["boolean"].contract_kind == "command_mutates_kmap"
@@ -459,9 +459,8 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     )
 
     assert opening_route.enabled is True
-    assert opening_route.command_method == "apply_authored_room_operation"
+    assert opening_route.command_method == "set_authored_floor_plan_wall_opening"
     assert opening_route.command_kwargs == {
-        "operation": "wall_opening",
         "room_resref": "room_a",
         "name": "south_door",
         "edge_index": 0,
@@ -1171,7 +1170,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert opening_primitive["openings"][-1]["name"] == "south_door"
     assert opening_primitive["openings"][-1]["edge_index"] == 0
     assert opening_primitive["metadata"]["last_operation"] == "set_wall_opening"
-    assert controller.command_history.undo_label == "Apply room operation wall_opening"
+    assert controller.command_history.undo_label == "Set wall opening south_door"
 
     execute_map_studio_tool_belt_action(
         controller,
@@ -1206,6 +1205,12 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
 
     restored_marker_payload = controller.project.extra_sections["authored_module"]
     assert all(row.get("tag") != "south_exit_trigger" for row in restored_marker_payload["placements"]["triggers"])
+    assert controller.command_history.undo_label == "Set wall opening south_door"
+
+    controller.undo_map_studio_command()
+
+    restored_opening_payload = controller.project.extra_sections["authored_module"]
+    assert restored_opening_payload["rooms"][0]["primitive"].get("openings", []) == []
 
     controller.create_authored_room_preset_module(preset_id="octagonal_room", module_root="grbevel01")
     room_before = controller.authored_floor_plan_room_choices()[0]
@@ -1699,6 +1704,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'if key == "script":' in source
         assert "script_field_name" in source
         assert 'command_method = "set_authored_script_hook" if script_resref else "remove_authored_script_hook"' in source
+        assert 'command_method="set_authored_floor_plan_wall_opening"' in source
         assert 'command_method="apply_authored_room_operation"' in source
         assert 'command_method="rectangular_cut_authored_floor_plan_room"' in source
         assert 'command_method="axis_split_authored_floor_plan_room"' in source
@@ -1715,7 +1721,6 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert '"boolean_a_minus_b"' in source
         assert '"boolean_b_minus_a"' in source
         assert '"insert_edge_loop"' in source
-        assert '"operation": "wall_opening"' in source
         assert '"operation": "opening_transition_marker"' in source
         assert 'command_method="map_studio_universal_transform_overlay"' in source
 

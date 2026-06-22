@@ -119,6 +119,7 @@ from .authored_room_operations import (
     remove_authored_room_composition_primitive,
     separate_authored_room_composition_primitive,
     set_authored_floor_plan_extrusion_settings,
+    set_authored_floor_plan_wall_opening,
     set_authored_room_edge_normal_policy,
     set_authored_room_composition_primitive_dimensions,
     set_authored_room_composition_primitive_style,
@@ -1082,6 +1083,63 @@ class ModuleEditorController:
                 "axis": split_axis,
                 "coordinate": split_coordinate,
                 "room_resref_prefix": room_resref_prefix or "",
+            },
+        )
+        return self.authored_module_readiness()
+
+    def set_authored_floor_plan_wall_opening(
+        self,
+        *,
+        room_resref: str = "",
+        name: str = "",
+        edge_index: int = 0,
+        center_fraction: float = 0.5,
+        width: float = 1.5,
+        height: float = 2.1,
+        bottom: float = 0.0,
+    ):
+        """Add or replace one named wall opening on an authored floor-plan room edge."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        opening_name = str(name or "").strip() or f"opening_edge_{int(edge_index)}"
+        updated = set_authored_floor_plan_wall_opening(
+            authored,
+            room_resref=room_resref,
+            name=opening_name,
+            edge_index=int(edge_index),
+            center_fraction=float(center_fraction),
+            width=float(width),
+            height=float(height),
+            bottom=float(bottom),
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Set Map Studio wall opening {opening_name} on {room_resref or '(first room)'} edge {int(edge_index)}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.wall_opening",
+            label=f"Set wall opening {opening_name}",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "name": opening_name,
+                "edge_index": int(edge_index),
+                "center_fraction": float(center_fraction),
+                "width": float(width),
+                "height": float(height),
+                "bottom": float(bottom),
             },
         )
         return self.authored_module_readiness()

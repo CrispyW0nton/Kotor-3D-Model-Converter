@@ -639,9 +639,8 @@ def resolve_map_studio_tool_belt_action(
             action,
             focus_component_mode="edge",
             focus_snap_mode="edge",
-            command_method="apply_authored_room_operation",
+            command_method="set_authored_floor_plan_wall_opening",
             command_kwargs={
-                "operation": "wall_opening",
                 "room_resref": room_resref,
                 "name": str(ctx.wall_opening_name or "doorway_opening").strip() or "doorway_opening",
                 "edge_index": int(ctx.wall_opening_edge_index),
