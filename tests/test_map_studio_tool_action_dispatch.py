@@ -42,8 +42,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert audit.blocking_messages == ()
     assert audit.total_actions >= 80
     assert audit.implemented_actions == audit.total_actions
-    assert audit.command_backed_actions >= 81
-    assert audit.mutating_command_actions >= 73
+    assert audit.command_backed_actions >= 82
+    assert audit.mutating_command_actions >= 74
     assert audit.query_command_actions >= 8
     assert audit.studio_workspace_actions == 0
     assert audit.workflow_focus_actions == 0
@@ -82,6 +82,10 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["opening_marker"].command_method == "add_authored_floor_plan_opening_transition_marker"
     assert statuses["extrude"].contract_kind == "command_mutates_kmap"
     assert statuses["extrude"].command_method == "edge_extrude_authored_floor_plan_room"
+    assert statuses["bevel"].contract_kind == "command_mutates_kmap"
+    assert statuses["bevel"].command_method == "bevel_authored_floor_plan_room"
+    assert statuses["inset"].contract_kind == "command_mutates_kmap"
+    assert statuses["inset"].command_method == "inset_authored_floor_plan_room"
     assert statuses["sculpt_raise"].contract_kind == "command_mutates_kmap"
     assert statuses["sculpt_raise"].command_method == "apply_authored_terrain_operation"
     assert statuses["terrain"].contract_kind == "command_query"
@@ -592,6 +596,33 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
         "distance": 0.75,
         "edge_index": 2,
     }
+
+    bevel = resolve_map_studio_tool_belt_action(
+        "bevel",
+        MapStudioToolActionContext(room_resref="room_a", operation_distance=0.2),
+    )
+
+    assert bevel.enabled is True
+    assert bevel.command_method == "bevel_authored_floor_plan_room"
+    assert bevel.command_kwargs == {
+        "room_resref": "room_a",
+        "distance": 0.2,
+    }
+    assert bevel.mutates_kmap is True
+
+    inset = resolve_map_studio_tool_belt_action(
+        "inset",
+        MapStudioToolActionContext(room_resref="room_a", operation_distance=0.25),
+    )
+
+    assert inset.enabled is True
+    assert inset.command_method == "inset_authored_floor_plan_room"
+    assert inset.command_kwargs == {
+        "room_resref": "room_a",
+        "distance": 0.25,
+    }
+    assert inset.mutates_kmap is True
+    assert "KOTOR room/export boundaries" in inset.authoring_context
 
     boolean = resolve_map_studio_tool_belt_action(
         "boolean",
@@ -1223,7 +1254,22 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
 
     assert room_after.point_count > room_before.point_count
     assert controller.can_undo_map_studio_command() is True
-    assert controller.command_history.undo_label == "Apply room operation bevel"
+    assert controller.command_history.undo_label == f"Bevel {room_before.room_resref}"
+
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grinset01")
+    inset_room = controller.authored_floor_plan_room_choices()[0]
+    execute_map_studio_tool_belt_action(
+        controller,
+        "inset",
+        MapStudioToolActionContext(room_resref=inset_room.room_resref, operation_distance=0.2),
+    )
+    inset_payload = controller.project.extra_sections["authored_module"]
+    inset_primitive = inset_payload["rooms"][0]["primitive"]
+
+    assert inset_primitive["metadata"]["operation"] == "inset"
+    assert inset_primitive["metadata"]["inset_distance"] == 0.2
+    assert controller.can_undo_map_studio_command() is True
+    assert controller.command_history.undo_label == f"Inset {inset_room.room_resref}"
 
     controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grdupsp")
     primitive_before = controller.authored_room_primitive_transforms()[0]
@@ -1734,7 +1780,8 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="set_authored_floor_plan_wall_opening"' in source
         assert 'command_method="add_authored_floor_plan_opening_transition_marker"' in source
         assert 'command_method="edge_extrude_authored_floor_plan_room"' in source
-        assert 'command_method="apply_authored_room_operation"' in source
+        assert 'command_method="bevel_authored_floor_plan_room"' in source
+        assert 'command_method="inset_authored_floor_plan_room"' in source
         assert 'command_method="rectangular_cut_authored_floor_plan_room"' in source
         assert 'command_method="axis_split_authored_floor_plan_room"' in source
         assert 'command_method="boolean_difference_authored_floor_plan_rooms"' in source

@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Names Bevel And Inset Commands
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Bevel and inset editing / Tool belt dispatch
+Intersects: native Scene/Tools ModuleEditorController mirrors, Map Studio tool catalog, and Map Studio tool-belt dispatcher.
+
+- Added named `bevel_authored_floor_plan_room` and `inset_authored_floor_plan_room` controller commands so both room-shaping tools record explicit KMAP command metadata, stale export/proof state, and undo labels.
+- Added a visible `Inset` tool-belt action beside Bevel in the blockout/component presets so the UI can expose the existing floor-plan inset operation as a first-class Map Studio tool.
+- Routed Bevel and Inset through named dispatcher routes while preserving the existing deterministic floor-plan geometry operations and KOTOR readiness invalidation.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests/test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q --basetemp .pytest_tmp_map_studio_bevel_inset`.
+
 ### [2026-06-21] Map Studio Names Edge Extrude Command
 
 Owner: LordVaderCW

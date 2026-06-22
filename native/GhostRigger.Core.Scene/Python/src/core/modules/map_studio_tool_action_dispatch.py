@@ -1012,15 +1012,30 @@ def resolve_map_studio_tool_belt_action(
             action,
             focus_component_mode="edge",
             focus_snap_mode="grid",
-            command_method="apply_authored_room_operation",
+            command_method="bevel_authored_floor_plan_room",
             command_kwargs={
-                "operation": "bevel",
                 "room_resref": ctx.room_resref,
                 "distance": float(ctx.operation_distance),
             },
             mutates_kmap=True,
             authoring_context=(
                 "Bevel: chamfer convex room footprint corners while preserving deterministic WOK output."
+            ),
+        )
+
+    if key == "inset":
+        return _route(
+            action,
+            focus_component_mode="face",
+            focus_snap_mode="grid",
+            command_method="inset_authored_floor_plan_room",
+            command_kwargs={
+                "room_resref": ctx.room_resref,
+                "distance": float(ctx.operation_distance),
+            },
+            mutates_kmap=True,
+            authoring_context=(
+                "Inset: create an inward offset floor-plan face while preserving KOTOR room/export boundaries."
             ),
         )
 
