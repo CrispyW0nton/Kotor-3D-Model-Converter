@@ -1108,6 +1108,10 @@ def resolve_map_studio_tool_belt_action(
             command_method="triangulate_authored_floor_plan_face",
             command_kwargs={"room_resref": ctx.room_resref},
             mutates_kmap=True,
+            authoring_context=(
+                "Triangulate: precompute deterministic floor-plan fan triangles for export/readiness review; "
+                "WOK and room validation still decide whether the result is exportable."
+            ),
         )
 
     if key in {"fill", "fill_hole"}:
@@ -1127,6 +1131,10 @@ def resolve_map_studio_tool_belt_action(
             command_method="fill_authored_floor_plan_face",
             command_kwargs={"room_resref": ctx.room_resref, "point_indices": indices},
             mutates_kmap=True,
+            authoring_context=(
+                "Fill Hole: record a selected floor-plan loop as a filled face candidate, then run cleanup and "
+                "validation before treating it as MDL/WOK export-ready."
+            ),
         )
 
     if key == "bridge":
@@ -1151,6 +1159,10 @@ def resolve_map_studio_tool_belt_action(
                 "result_room_resref": ctx.result_room_resref,
             },
             mutates_kmap=True,
+            authoring_context=(
+                "Bridge: create a new connector room between two compatible floor-plan edges; matching elevation, "
+                "material, wall, and WOK surface settings are required before export."
+            ),
         )
 
     if key == "combine":
@@ -1173,6 +1185,10 @@ def resolve_map_studio_tool_belt_action(
                 "result_room_resref": ctx.result_room_resref,
             },
             mutates_kmap=True,
+            authoring_context=(
+                "Combine: merge two compatible rectangular floor-plan rooms into one export boundary while "
+                "preserving authored KMAP room identity, visibility, and stale export/proof state."
+            ),
         )
 
     if key == "separate":
@@ -1195,6 +1211,10 @@ def resolve_map_studio_tool_belt_action(
                 "result_room_resref": ctx.result_room_resref,
             },
             mutates_kmap=True,
+            authoring_context=(
+                "Separate: move one authored composition primitive into its own room/object boundary for "
+                "DCC UV/texturing handoff and independent KOTOR export validation."
+            ),
         )
 
     if key == "duplicate_special":

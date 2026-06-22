@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Proves Core Modeling Tool Commands
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Direct modeling tools / Tool belt dispatch
+Intersects: native Scene/Tools Map Studio tool-belt dispatcher and focused dispatch regression tests.
+
+- Added KOTOR-aware authoring context for Fill Hole, Triangulate, Bridge, Combine, and Separate routes so the tool belt explains export boundaries, WOK validation, DCC handoff, and cleanup expectations.
+- Added focused headless execution coverage proving Fill Hole, Triangulate, Bridge, Combine, and Separate mutate authored KMAP state through the tool-belt dispatcher and restore cleanly through Map Studio undo.
+- Strengthened the visible-action contract audit and source-contract tests for these direct modeling tools.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests/test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q --basetemp .pytest_tmp_map_studio_modeling_proof`.
+
 ### [2026-06-21] Map Studio Names Terrain Brush Stroke Command
 
 Owner: LordVaderCW

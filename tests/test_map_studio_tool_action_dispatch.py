@@ -80,6 +80,14 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["boolean_a_minus_b"].command_method == "boolean_difference_authored_floor_plan_rooms"
     assert statuses["opening_marker"].contract_kind == "command_mutates_kmap"
     assert statuses["opening_marker"].command_method == "add_authored_floor_plan_opening_transition_marker"
+    assert statuses["fill_hole"].contract_kind == "command_mutates_kmap"
+    assert statuses["fill_hole"].command_method == "fill_authored_floor_plan_face"
+    assert statuses["bridge"].contract_kind == "command_mutates_kmap"
+    assert statuses["bridge"].command_method == "bridge_authored_floor_plan_edges"
+    assert statuses["combine"].contract_kind == "command_mutates_kmap"
+    assert statuses["combine"].command_method == "merge_authored_floor_plan_rooms"
+    assert statuses["separate"].contract_kind == "command_mutates_kmap"
+    assert statuses["separate"].command_method == "separate_authored_room_primitive"
     assert statuses["extrude"].contract_kind == "command_mutates_kmap"
     assert statuses["extrude"].command_method == "edge_extrude_authored_floor_plan_room"
     assert statuses["bevel"].contract_kind == "command_mutates_kmap"
@@ -715,6 +723,100 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     }
     assert "KOTOR room/export boundaries" in edge_loop.authoring_context
 
+    fill_missing = resolve_map_studio_tool_belt_action("fill_hole")
+
+    assert fill_missing.enabled is False
+    assert "selected loop" in fill_missing.disabled_reason
+
+    fill = resolve_map_studio_tool_belt_action(
+        "fill_hole",
+        MapStudioToolActionContext(room_resref="room_a", point_indices=(0, 1, 2, 3)),
+    )
+
+    assert fill.enabled is True
+    assert fill.command_method == "fill_authored_floor_plan_face"
+    assert fill.command_kwargs == {"room_resref": "room_a", "point_indices": (0, 1, 2, 3)}
+    assert "MDL/WOK export-ready" in fill.authoring_context
+
+    triangulate = resolve_map_studio_tool_belt_action(
+        "triangulate",
+        MapStudioToolActionContext(room_resref="room_a"),
+    )
+
+    assert triangulate.enabled is True
+    assert triangulate.command_method == "triangulate_authored_floor_plan_face"
+    assert triangulate.command_kwargs == {"room_resref": "room_a"}
+    assert "deterministic floor-plan fan triangles" in triangulate.authoring_context
+
+    bridge_missing = resolve_map_studio_tool_belt_action("bridge")
+
+    assert bridge_missing.enabled is False
+    assert "two selected room edges" in bridge_missing.disabled_reason
+
+    bridge = resolve_map_studio_tool_belt_action(
+        "bridge",
+        MapStudioToolActionContext(
+            first_room_resref="room_a",
+            first_edge_index=0,
+            second_room_resref="room_b",
+            second_edge_index=1,
+            result_room_resref="room_bridge",
+        ),
+    )
+
+    assert bridge.enabled is True
+    assert bridge.command_method == "bridge_authored_floor_plan_edges"
+    assert bridge.command_kwargs == {
+        "first_room_resref": "room_a",
+        "first_edge_index": 0,
+        "second_room_resref": "room_b",
+        "second_edge_index": 1,
+        "result_room_resref": "room_bridge",
+    }
+    assert "connector room" in bridge.authoring_context
+
+    combine_missing = resolve_map_studio_tool_belt_action("combine")
+
+    assert combine_missing.enabled is False
+    assert "two compatible floor-plan rooms" in combine_missing.disabled_reason
+
+    combine = resolve_map_studio_tool_belt_action(
+        "combine",
+        MapStudioToolActionContext(
+            first_room_resref="room_a",
+            second_room_resref="room_b",
+            result_room_resref="room_ab",
+        ),
+    )
+
+    assert combine.enabled is True
+    assert combine.command_method == "merge_authored_floor_plan_rooms"
+    assert combine.command_kwargs == {
+        "first_room_resref": "room_a",
+        "second_room_resref": "room_b",
+        "result_room_resref": "room_ab",
+    }
+    assert "export boundary" in combine.authoring_context
+
+    separate_missing = resolve_map_studio_tool_belt_action("separate")
+
+    assert separate_missing.enabled is False
+    assert "primitive selection" in separate_missing.disabled_reason
+
+    separate = resolve_map_studio_tool_belt_action(
+        "separate",
+        MapStudioToolActionContext(room_resref="room_a", primitive_name="room_a_wall", result_room_resref="room_wall"),
+    )
+
+    assert separate.enabled is True
+    assert separate.command_method == "separate_authored_room_primitive"
+    assert separate.command_kwargs == {
+        "room_resref": "room_a",
+        "primitive_name": "room_a_wall",
+        "result_room_resref": "room_wall",
+    }
+    assert "DCC UV/texturing handoff" in separate.authoring_context
+
     duplicate_missing = resolve_map_studio_tool_belt_action("duplicate_special")
 
     assert duplicate_missing.enabled is False
@@ -1310,6 +1412,167 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
 
     assert len(controller.authored_room_primitive_transforms()) == count_before
 
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grfill01")
+    fill_room = controller.authored_floor_plan_room_choices()[0]
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "fill_hole",
+        MapStudioToolActionContext(room_resref=fill_room.room_resref, point_indices=(0, 1, 2, 3)),
+    )
+
+    fill_payload = controller.project.extra_sections["authored_module"]
+    fill_primitive = fill_payload["rooms"][0]["primitive"]
+
+    assert fill_primitive["metadata"]["last_operation"] == "fill_floor_plan_face"
+    assert fill_primitive["metadata"]["filled_face_indices"] == [0, 1, 2, 3]
+    assert fill_payload["rooms"][0]["metadata"]["last_operation"] == "fill_floor_plan_face"
+    assert controller.command_history.undo_label == f"Fill {fill_room.room_resref} floor-plan face"
+
+    controller.undo_map_studio_command()
+
+    restored_fill_payload = controller.project.extra_sections["authored_module"]
+    assert "filled_face_indices" not in restored_fill_payload["rooms"][0]["primitive"]["metadata"]
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "triangulate",
+        MapStudioToolActionContext(room_resref=fill_room.room_resref),
+    )
+
+    triangulated_payload = controller.project.extra_sections["authored_module"]
+    triangulated_metadata = triangulated_payload["rooms"][0]["primitive"]["metadata"]
+
+    assert triangulated_metadata["last_operation"] == "triangulate_floor_plan_face"
+    assert triangulated_metadata["triangulated_faces"] == [[0, 1, 2], [0, 2, 3]]
+    assert controller.command_history.undo_label == f"Triangulate {fill_room.room_resref} floor-plan face"
+
+    controller.undo_map_studio_command()
+
+    restored_triangulate_payload = controller.project.extra_sections["authored_module"]
+    assert "triangulated_faces" not in restored_triangulate_payload["rooms"][0]["primitive"]["metadata"]
+
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grbrdg1")
+    bridge_payload = controller.project.extra_sections["authored_module"]
+    bridge_base = bridge_payload["rooms"][0]
+    bridge_second = copy.deepcopy(bridge_base)
+    bridge_second["room_resref"] = "grbrdg1_room02"
+    bridge_second["primitive"]["room_resref"] = "grbrdg1_room02"
+    bridge_second["primitive"]["points"] = [
+        [8.0, -5.0],
+        [18.0, -5.0],
+        [18.0, 5.0],
+        [8.0, 5.0],
+    ]
+    bridge_base["visible_rooms"] = ["grbrdg1_room01", "grbrdg1_room02"]
+    bridge_second["visible_rooms"] = ["grbrdg1_room01", "grbrdg1_room02"]
+    bridge_payload["rooms"] = [bridge_base, bridge_second]
+    controller.project.extra_sections["authored_module"] = bridge_payload
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "bridge",
+        MapStudioToolActionContext(
+            first_room_resref="grbrdg1_room01",
+            first_edge_index=0,
+            second_room_resref="grbrdg1_room02",
+            second_edge_index=1,
+            result_room_resref="grbridge",
+        ),
+    )
+
+    bridged_payload = controller.project.extra_sections["authored_module"]
+    bridged_room = bridged_payload["rooms"][-1]
+
+    assert len(bridged_payload["rooms"]) == 3
+    assert bridged_room["room_resref"] == "grbridge"
+    assert bridged_room["primitive"]["metadata"]["operation"] == "bridge_edges"
+    assert bridged_room["primitive"]["metadata"]["first_room_resref"] == "grbrdg1_room01"
+    assert bridged_room["primitive"]["metadata"]["second_room_resref"] == "grbrdg1_room02"
+    assert controller.command_history.undo_label == "Bridge grbrdg1_room01:0 to grbrdg1_room02:1"
+
+    controller.undo_map_studio_command()
+
+    restored_bridge_payload = controller.project.extra_sections["authored_module"]
+    assert [room["room_resref"] for room in restored_bridge_payload["rooms"]] == ["grbrdg1_room01", "grbrdg1_room02"]
+
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grcomb1")
+    combine_payload = controller.project.extra_sections["authored_module"]
+    combine_base = combine_payload["rooms"][0]
+    combine_base["primitive"]["points"] = [
+        [-5.0, -5.0],
+        [0.0, -5.0],
+        [0.0, 5.0],
+        [-5.0, 5.0],
+    ]
+    combine_second = copy.deepcopy(combine_base)
+    combine_second["room_resref"] = "grcomb1_room02"
+    combine_second["primitive"]["room_resref"] = "grcomb1_room02"
+    combine_second["primitive"]["points"] = [
+        [0.0, -5.0],
+        [5.0, -5.0],
+        [5.0, 5.0],
+        [0.0, 5.0],
+    ]
+    combine_base["visible_rooms"] = ["grcomb1_room01", "grcomb1_room02"]
+    combine_second["visible_rooms"] = ["grcomb1_room01", "grcomb1_room02"]
+    combine_payload["rooms"] = [combine_base, combine_second]
+    controller.project.extra_sections["authored_module"] = combine_payload
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "combine",
+        MapStudioToolActionContext(
+            first_room_resref="grcomb1_room01",
+            second_room_resref="grcomb1_room02",
+            result_room_resref="grcombout",
+        ),
+    )
+
+    combined_payload = controller.project.extra_sections["authored_module"]
+    combined_room = combined_payload["rooms"][0]
+
+    assert len(combined_payload["rooms"]) == 1
+    assert combined_room["room_resref"] == "grcombout"
+    assert combined_room["primitive"]["metadata"]["operation"] == "rectangular_union"
+    assert combined_room["primitive"]["metadata"]["source_room_resrefs"] == ["grcomb1_room01", "grcomb1_room02"]
+    assert controller.command_history.undo_label == "Merge grcomb1_room01 and grcomb1_room02"
+
+    controller.undo_map_studio_command()
+
+    restored_combine_payload = controller.project.extra_sections["authored_module"]
+    assert [room["room_resref"] for room in restored_combine_payload["rooms"]] == ["grcomb1_room01", "grcomb1_room02"]
+
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grsep01")
+    separate_source_rows = controller.authored_room_primitive_transforms()
+    separate_source = separate_source_rows[0]
+    separate_source_count = len(separate_source_rows)
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "separate",
+        MapStudioToolActionContext(
+            room_resref=separate_source.room_resref,
+            primitive_name=separate_source.primitive_name,
+            result_room_resref="grsepwall",
+        ),
+    )
+
+    separated_payload = controller.project.extra_sections["authored_module"]
+
+    assert len(separated_payload["rooms"]) == 2
+    assert separated_payload["rooms"][1]["room_resref"] == "grsepwall"
+    assert separated_payload["rooms"][1]["metadata"]["last_operation"] == "separate_composition_primitive"
+    assert separated_payload["rooms"][1]["metadata"]["separated_primitive"] == separate_source.primitive_name
+    assert len(controller.authored_room_primitive_transforms()) == separate_source_count
+    assert controller.command_history.undo_label == f"Separate primitive {separate_source.primitive_name}"
+
+    controller.undo_map_studio_command()
+
+    restored_separate_payload = controller.project.extra_sections["authored_module"]
+    assert len(restored_separate_payload["rooms"]) == 1
+    assert len(controller.authored_room_primitive_transforms()) == separate_source_count
+
     controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grcutcmd")
 
     execute_map_studio_tool_belt_action(
@@ -1791,6 +2054,11 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="rectangular_cut_authored_floor_plan_room"' in source
         assert 'command_method="axis_split_authored_floor_plan_room"' in source
         assert 'command_method="boolean_difference_authored_floor_plan_rooms"' in source
+        assert 'command_method="fill_authored_floor_plan_face"' in source
+        assert 'command_method="triangulate_authored_floor_plan_face"' in source
+        assert 'command_method="bridge_authored_floor_plan_edges"' in source
+        assert 'command_method="merge_authored_floor_plan_rooms"' in source
+        assert 'command_method="separate_authored_room_primitive"' in source
         assert 'command_method="duplicate_authored_room_primitive"' in source
         assert 'command_method="set_authored_room_edge_normal_policy"' in source
         assert 'command_method="apply_authored_terrain_brush_stroke"' in source
