@@ -126,6 +126,15 @@ class MapStudioToolCommandSearchResult:
     match_text: str
 
 
+@dataclass(frozen=True)
+class MapStudioToolCapabilitySummary:
+    """Capability-honesty metadata shared by command search and tool routes."""
+
+    capability_stage: str
+    resource_impacts: tuple[str, ...]
+    readiness_summary: str
+
+
 _COMPONENT_MODES: tuple[MapStudioComponentMode, ...] = (
     MapStudioComponentMode(
         "object",
@@ -1777,6 +1786,16 @@ def _tool_readiness_summary(action: MapStudioToolBeltAction) -> str:
     return f"Previewable Map Studio edit/query; affected resources must be revalidated before export or game proof: {impacts}."
 
 
+def map_studio_tool_capability_summary(action: MapStudioToolBeltAction) -> MapStudioToolCapabilitySummary:
+    """Return capability/readiness metadata for one Map Studio action."""
+
+    return MapStudioToolCapabilitySummary(
+        capability_stage=_tool_capability_stage(action),
+        resource_impacts=_tool_resource_impacts(action),
+        readiness_summary=_tool_readiness_summary(action),
+    )
+
+
 def map_studio_tool_command_search(
     query: str = "",
     *,
@@ -1792,9 +1811,7 @@ def map_studio_tool_command_search(
         if not include_planned and not action.implemented:
             continue
         workspace = str(action.workspace_key or "map").replace("_", " ")
-        capability_stage = _tool_capability_stage(action)
-        resource_impacts = _tool_resource_impacts(action)
-        readiness_summary = _tool_readiness_summary(action)
+        capability = map_studio_tool_capability_summary(action)
         searchable = " ".join(
             (
                 action.key,
@@ -1804,9 +1821,9 @@ def map_studio_tool_command_search(
                 action.description,
                 action.kotor_guardrail,
                 action.hotkey,
-                capability_stage,
-                " ".join(resource_impacts),
-                readiness_summary,
+                capability.capability_stage,
+                " ".join(capability.resource_impacts),
+                capability.readiness_summary,
             )
         ).lower()
         if tokens and not all(token in searchable for token in tokens):
@@ -1840,9 +1857,9 @@ def map_studio_tool_command_search(
                 description=action.description,
                 kotor_guardrail=action.kotor_guardrail,
                 hotkey=action.hotkey,
-                capability_stage=capability_stage,
-                resource_impacts=resource_impacts,
-                readiness_summary=readiness_summary,
+                capability_stage=capability.capability_stage,
+                resource_impacts=capability.resource_impacts,
+                readiness_summary=capability.readiness_summary,
                 implemented=action.implemented,
                 score=score,
                 display_label=display_label,

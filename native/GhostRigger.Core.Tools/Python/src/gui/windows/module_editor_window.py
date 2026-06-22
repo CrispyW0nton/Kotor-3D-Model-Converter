@@ -1243,6 +1243,28 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             lines.append(readiness)
         return "\n".join(line for line in lines if line)
 
+    def _map_studio_tool_route_tooltip(self, action: Any, route: Any) -> str:
+        """Format dispatcher route metadata for tool-belt buttons and menus."""
+
+        lines = [
+            str(getattr(action, "description", "") or getattr(route, "status_message", "") or "").strip(),
+            f"Capability: {str(getattr(route, 'capability_stage', '') or 'unknown').replace('_', ' ')}",
+        ]
+        resource_text = ", ".join(str(item) for item in tuple(getattr(route, "resource_impacts", ()) or ()))
+        if resource_text:
+            lines.append(f"Affects: {resource_text}")
+        guardrail = str(getattr(action, "kotor_guardrail", "") or "").strip()
+        if guardrail:
+            lines.append(f"KOTOR: {guardrail}")
+        readiness = str(getattr(route, "readiness_summary", "") or "").strip()
+        if readiness:
+            lines.append(readiness)
+        if not bool(getattr(route, "enabled", True)):
+            reason = str(getattr(route, "disabled_reason", "") or "").strip()
+            if reason:
+                lines.append(f"Not ready: {reason}")
+        return "\n".join(line for line in lines if line)
+
     def _map_studio_command_search_summary(self, result: Any | None) -> str:
         if result is None:
             return (
@@ -1330,13 +1352,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             button.setText(str(getattr(action, "label", key) or key))
             button.setToolButtonStyle(QtCore.Qt.ToolButtonTextOnly)
             button.setEnabled(bool(getattr(action, "implemented", False)))
-            tooltip = str(getattr(action, "description", "") or "")
+            route = resolve_map_studio_tool_belt_action(key, self._map_studio_tool_action_context(key))
+            tooltip = self._map_studio_tool_route_tooltip(action, route)
             hotkey = str(getattr(action, "hotkey", "") or "")
-            guardrail = str(getattr(action, "kotor_guardrail", "") or "")
             if hotkey:
                 tooltip = f"{tooltip}\nHotkey: {hotkey}" if tooltip else f"Hotkey: {hotkey}"
-            if guardrail:
-                tooltip = f"{tooltip}\nKOTOR: {guardrail}" if tooltip else f"KOTOR: {guardrail}"
             button.setToolTip(tooltip)
             button.clicked.connect(lambda _checked=False, tool_action=action: self._handle_map_studio_tool_belt_action(tool_action))
             layout.addWidget(button)
@@ -1353,7 +1373,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         menu_action.setObjectName(f"mapStudioToolContextAction_{key}")
         menu_action.setData(key)
         menu_action.setEnabled(bool(route.enabled))
-        tooltip = str(route.disabled_reason or route.authoring_context or route.status_message or getattr(action, "description", "") or "")
+        tooltip = self._map_studio_tool_route_tooltip(action, route)
         if tooltip:
             menu_action.setToolTip(tooltip)
             menu_action.setStatusTip(tooltip)

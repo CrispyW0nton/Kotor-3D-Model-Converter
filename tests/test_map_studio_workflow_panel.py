@@ -888,12 +888,14 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "self.controller.map_studio_tool_command_search" in window_source
     assert "def _run_selected_map_studio_command_search" in window_source
     assert "def _map_studio_command_search_tooltip" in window_source
+    assert "def _map_studio_tool_route_tooltip" in window_source
     assert "def _map_studio_command_search_summary" in window_source
     assert "def _selected_map_studio_command_search_result" in window_source
     assert "def _update_map_studio_command_search_readiness" in window_source
     assert "capability_stage" in window_source
     assert "resource_impacts" in window_source
     assert "readiness_summary" in window_source
+    assert "self._map_studio_tool_route_tooltip(action, route)" in window_source
     assert "affected KOTOR resources" in window_source
     assert "export/game-proof impact" in window_source
     assert "self._handle_map_studio_tool_belt_action(action)" in window_source

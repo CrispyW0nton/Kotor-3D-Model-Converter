@@ -11,7 +11,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from .map_studio_modeling_tools import MapStudioToolBeltAction, available_map_studio_tool_belt_actions
+from .map_studio_modeling_tools import (
+    MapStudioToolBeltAction,
+    available_map_studio_tool_belt_actions,
+    map_studio_tool_capability_summary,
+)
 
 
 MAP_STUDIO_TOOL_ACTION_STALE_OUTPUTS: tuple[str, ...] = ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
@@ -118,6 +122,9 @@ class MapStudioToolActionRoute:
     readiness_impact: str = ""
     status_message: str = ""
     authoring_context: str = ""
+    capability_stage: str = ""
+    resource_impacts: tuple[str, ...] = ()
+    readiness_summary: str = ""
 
 
 _PRIMITIVE_ACTIONS: dict[str, str] = {
@@ -221,6 +228,7 @@ def _placement_tag_for_action(ctx: MapStudioToolActionContext, placement_kind: s
 
 
 def _disabled(action: MapStudioToolBeltAction | None, action_key: str, reason: str) -> MapStudioToolActionRoute:
+    capability = map_studio_tool_capability_summary(action) if action is not None else None
     return MapStudioToolActionRoute(
         action_key=action_key,
         label=str(getattr(action, "label", action_key) or action_key),
@@ -229,6 +237,9 @@ def _disabled(action: MapStudioToolBeltAction | None, action_key: str, reason: s
         enabled=False,
         disabled_reason=reason,
         status_message=reason,
+        capability_stage=capability.capability_stage if capability is not None else "unknown",
+        resource_impacts=capability.resource_impacts if capability is not None else (),
+        readiness_summary=capability.readiness_summary if capability is not None else reason,
     )
 
 
@@ -248,6 +259,7 @@ def _route(
     status_message: str = "",
     authoring_context: str = "",
 ) -> MapStudioToolActionRoute:
+    capability = map_studio_tool_capability_summary(action)
     return MapStudioToolActionRoute(
         action_key=action.key,
         label=action.label,
@@ -267,6 +279,9 @@ def _route(
         readiness_impact=MAP_STUDIO_TOOL_ACTION_READINESS_IMPACT if mutates_kmap and enabled else "",
         status_message=status_message or action.description,
         authoring_context=authoring_context,
+        capability_stage=capability.capability_stage,
+        resource_impacts=capability.resource_impacts,
+        readiness_summary=capability.readiness_summary,
     )
 
 

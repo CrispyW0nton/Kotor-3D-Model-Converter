@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Routes Carry Capability Metadata
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool action routing / Capability honesty
+Intersects: native Scene/Tools Map Studio modeling catalog, dispatcher mirrors, and Level Editor tool-belt UI.
+
+- Added a shared `MapStudioToolCapabilitySummary` helper so command search and tool-belt dispatch routes use the same capability stage, KOTOR resource-impact list, and readiness summary.
+- Extended `MapStudioToolActionRoute` with capability/readiness metadata so buttons, hotkeys, context menus, and command execution can present whether an action is previewable, an export candidate, an install handoff, or a game-proof evidence handoff.
+- Updated Level Editor tool-belt and context-menu tooltips to show dispatcher route capability, affected resources, KOTOR guardrails, readiness impact, and disabled reasons while keeping command policy in core.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_tool_action_dispatch.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context -q --basetemp .pytest_tmp_map_studio_route_capability`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_workflow_panel_surfaces_editor_spine -q --basetemp .pytest_tmp_map_studio_route_tooltip_ui`.
+
 ### [2026-06-21] Map Studio Shows Command Search Readiness In UI
 
 Owner: LordVaderCW

@@ -158,6 +158,10 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert cube.mutates_kmap is True
     assert cube.stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
     assert "game proof" in cube.readiness_impact
+    assert cube.capability_stage == "previewable"
+    assert "KMAP" in cube.resource_impacts
+    assert "WOK" in cube.resource_impacts
+    assert "affected resources" in cube.readiness_summary
 
     starter_room = resolve_map_studio_tool_belt_action(
         "create_room",
@@ -212,6 +216,9 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
 
     assert stage_missing.enabled is False
     assert "output directory" in stage_missing.disabled_reason
+    assert stage_missing.capability_stage == "export_candidate"
+    assert "ExportJob" in stage_missing.resource_impacts
+    assert ".mod" in stage_missing.resource_impacts
 
     stage_ready = resolve_map_studio_tool_belt_action(
         "stage_module",
@@ -228,6 +235,10 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert stage_ready.mutates_kmap is False
     assert stage_ready.stale_outputs == ()
     assert "export candidate" in stage_ready.authoring_context
+    assert stage_ready.capability_stage == "export_candidate"
+    assert "ExportJob" in stage_ready.resource_impacts
+    assert ".mod" in stage_ready.resource_impacts
+    assert "export candidate" in stage_ready.readiness_summary
 
     install_missing_output = resolve_map_studio_tool_belt_action("install_module")
 
@@ -272,6 +283,8 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert launch_handoff.mutates_kmap is False
     assert launch_handoff.stale_outputs == ()
     assert "staged proof manifest" in launch_handoff.authoring_context
+    assert launch_handoff.capability_stage == "installed_for_game_test_handoff"
+    assert "not game-tested proof" in launch_handoff.readiness_summary
 
     record_proof = resolve_map_studio_tool_belt_action("record_proof")
 
@@ -281,6 +294,8 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert record_proof.mutates_kmap is False
     assert record_proof.stale_outputs == ()
     assert "screenshot or video evidence" in record_proof.authoring_context
+    assert record_proof.capability_stage == "game_tested_evidence_handoff"
+    assert "accepted in-game evidence" in record_proof.readiness_summary
 
     selected_primitive = resolve_map_studio_tool_belt_action(
         "primitive",
@@ -2062,10 +2077,18 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert "script_resref=script_resref" in window_source
     assert 'MapStudioToolBeltAction(\n        "triangulate",' in scene_catalog
     assert 'MapStudioToolBeltAction(\n        "triangulate",' in tools_catalog
+    assert "class MapStudioToolCapabilitySummary" in scene_catalog
+    assert "class MapStudioToolCapabilitySummary" in tools_catalog
+    assert "def map_studio_tool_capability_summary" in scene_catalog
+    assert "def map_studio_tool_capability_summary" in tools_catalog
 
     for source in (scene_dispatcher, tools_dispatcher):
         assert "class MapStudioToolActionContext" in source
         assert "class MapStudioToolActionRoute" in source
+        assert "map_studio_tool_capability_summary" in source
+        assert "capability_stage: str" in source
+        assert "resource_impacts: tuple[str, ...]" in source
+        assert "readiness_summary: str" in source
         assert "def resolve_map_studio_tool_belt_action" in source
         assert "def execute_map_studio_tool_belt_action" in source
         assert 'if key == "validate":' in source
