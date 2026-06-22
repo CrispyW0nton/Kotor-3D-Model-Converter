@@ -910,7 +910,15 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "self.map_studio_custom_tool_belt_widget.customContextMenuRequested.connect" in window_source
     assert "self.viewport_panel.customContextMenuRequested.connect" in window_source
     assert "resolve_map_studio_tool_belt_action(key, self._map_studio_tool_action_context(key))" in window_source
-    assert "menu_action.triggered.connect(lambda _checked=False, tool_action=action: self._handle_map_studio_tool_belt_action(tool_action))" in window_source
+    assert "def _build_map_studio_tool_qaction" in window_source
+    assert "QtGui.QAction(label, self)" in window_source
+    assert "mapStudioToolBeltQAction_" in window_source
+    assert "mapStudioToolContextAction_" in window_source
+    assert "qaction.setData(key)" in window_source
+    assert "qaction.setStatusTip(tooltip)" in window_source
+    assert "button.setDefaultAction(qaction)" in window_source
+    assert "menu.addAction(self._build_map_studio_tool_qaction(action, context_menu=True))" in window_source
+    assert "qaction.triggered.connect(" in window_source
 
 
 def test_t2600_map_studio_builder_exposes_script_hook_controls() -> None:

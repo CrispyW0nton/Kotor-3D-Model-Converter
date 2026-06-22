@@ -1340,6 +1340,30 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 custom_layout.addWidget(placeholder)
                 custom_layout.addStretch(1)
 
+    def _build_map_studio_tool_qaction(self, action: Any, *, context_menu: bool = False) -> QtGui.QAction:
+        """Create a Qt action for one Map Studio tool without owning command policy."""
+
+        key = str(getattr(action, "key", "") or "")
+        label = str(getattr(action, "label", key) or key)
+        route = resolve_map_studio_tool_belt_action(key, self._map_studio_tool_action_context(key))
+        qaction = QtGui.QAction(label, self)
+        qaction.setObjectName(
+            f"mapStudioToolContextAction_{key}" if context_menu else f"mapStudioToolBeltQAction_{key}"
+        )
+        qaction.setData(key)
+        qaction.setEnabled(bool(route.enabled) if context_menu else bool(getattr(action, "implemented", False)))
+        tooltip = self._map_studio_tool_route_tooltip(action, route)
+        hotkey = str(getattr(action, "hotkey", "") or "")
+        if hotkey:
+            tooltip = f"{tooltip}\nHotkey: {hotkey}" if tooltip else f"Hotkey: {hotkey}"
+        if tooltip:
+            qaction.setToolTip(tooltip)
+            qaction.setStatusTip(tooltip)
+        qaction.triggered.connect(
+            lambda _checked=False, tool_action=action: self._handle_map_studio_tool_belt_action(tool_action)
+        )
+        return qaction
+
     def _populate_map_studio_tool_belt_layout(self, layout: QtWidgets.QHBoxLayout, actions: tuple[Any, ...] | list[Any]) -> None:
         """Draw one Maya-style shelf row of Map Studio tool-belt actions."""
 
@@ -1347,18 +1371,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             key = str(getattr(action, "key", "") or "")
             if not key:
                 continue
+            qaction = self._build_map_studio_tool_qaction(action)
             button = QtWidgets.QToolButton()
+            button.setDefaultAction(qaction)
             button.setObjectName(f"mapStudioToolBeltButton_{key}")
-            button.setText(str(getattr(action, "label", key) or key))
             button.setToolButtonStyle(QtCore.Qt.ToolButtonTextOnly)
             button.setEnabled(bool(getattr(action, "implemented", False)))
-            route = resolve_map_studio_tool_belt_action(key, self._map_studio_tool_action_context(key))
-            tooltip = self._map_studio_tool_route_tooltip(action, route)
-            hotkey = str(getattr(action, "hotkey", "") or "")
-            if hotkey:
-                tooltip = f"{tooltip}\nHotkey: {hotkey}" if tooltip else f"Hotkey: {hotkey}"
-            button.setToolTip(tooltip)
-            button.clicked.connect(lambda _checked=False, tool_action=action: self._handle_map_studio_tool_belt_action(tool_action))
             layout.addWidget(button)
         layout.addStretch(1)
 
@@ -1368,16 +1386,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         key = str(getattr(action, "key", "") or "")
         if not key:
             return
-        route = resolve_map_studio_tool_belt_action(key, self._map_studio_tool_action_context(key))
-        menu_action = menu.addAction(str(getattr(action, "label", key) or key))
-        menu_action.setObjectName(f"mapStudioToolContextAction_{key}")
-        menu_action.setData(key)
-        menu_action.setEnabled(bool(route.enabled))
-        tooltip = self._map_studio_tool_route_tooltip(action, route)
-        if tooltip:
-            menu_action.setToolTip(tooltip)
-            menu_action.setStatusTip(tooltip)
-        menu_action.triggered.connect(lambda _checked=False, tool_action=action: self._handle_map_studio_tool_belt_action(tool_action))
+        menu.addAction(self._build_map_studio_tool_qaction(action, context_menu=True))
 
     def _open_map_studio_tool_context_menu(self, widget: QtWidgets.QWidget, pos: QtCore.QPoint) -> None:
         """Open a context command surface backed by the shared Map Studio dispatcher."""

@@ -9,6 +9,21 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-22
+
+### [2026-06-22] Map Studio Tool Belt Uses QAction Command Surfaces
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Level Editor / Tool belt UI architecture
+Intersects: native Tools Level Editor tool-belt and context-menu command surfaces.
+
+- Added a shared `QAction` builder for Map Studio tool-belt and context-menu actions so toolbar buttons, menus, tooltips, status tips, hotkeys, and dispatcher calls use one Qt command surface.
+- Kept capability stage, KOTOR resource impact, readiness summary, and disabled-state policy delegated to the core Map Studio dispatcher instead of duplicating command logic in the Level Editor window.
+- Renamed the indexed vertex snapping tool label from `Snap Vertex / Grid` to `Snap Vertex`, keeping grid snapping as a separate tool and making Maya-style V snapping clearer in search and tool belts.
+- Updated focused source-contract coverage so future merges preserve the QAction-backed tool-belt architecture.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_workflow_panel_surfaces_editor_spine -q --basetemp .pytest_tmp_map_studio_qaction_belt`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_qaction_belt_contract`.
+
 ## 2026-06-21
 
 ### [2026-06-21] Map Studio Routes Carry Capability Metadata

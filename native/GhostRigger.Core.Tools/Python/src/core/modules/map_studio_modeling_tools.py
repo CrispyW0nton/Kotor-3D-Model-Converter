@@ -297,7 +297,7 @@ _MODELING_TOOLS: tuple[MapStudioModelingTool, ...] = (
     ),
     MapStudioModelingTool(
         "snap_vertices",
-        "Snap Vertex / Grid",
+        "Snap Vertex",
         "Cleanup",
         ("vertex",),
         "Move one floor-plan vertex to another vertex or snap selected vertices to the active grid without merging topology.",
