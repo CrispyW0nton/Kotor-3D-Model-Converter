@@ -40,6 +40,9 @@ class MapStudioExportObjectBoundary:
     walkmesh_face_count: int = 0
     walkable_face_count: int = 0
     material_textures: tuple[str, ...] = ()
+    normal_cleanup_status: str = "not_authored"
+    normal_cleanup_summary: str = "No authored floor-plan normal cleanup recorded."
+    normal_cleanup_positive_z: bool | None = None
     normal_policy_status: str = "default_exporter_normals"
     normal_policy_summary: str = "Default exporter normals; no authored soften/harden edge policy."
     edge_normal_policy_targets: tuple[dict[str, Any], ...] = ()
@@ -77,6 +80,9 @@ class MapStudioExportObjectBoundary:
             "walkmesh_face_count": self.walkmesh_face_count,
             "walkable_face_count": self.walkable_face_count,
             "material_textures": list(self.material_textures),
+            "normal_cleanup_status": self.normal_cleanup_status,
+            "normal_cleanup_summary": self.normal_cleanup_summary,
+            "normal_cleanup_positive_z": self.normal_cleanup_positive_z,
             "normal_policy_status": self.normal_policy_status,
             "normal_policy_summary": self.normal_policy_summary,
             "edge_normal_policy_targets": [dict(row) for row in self.edge_normal_policy_targets],
@@ -141,6 +147,33 @@ def _normal_policy_entry(target: str, source: dict[str, Any]) -> dict[str, Any] 
         "coordinate_space": str(source.get("edge_normal_policy_coordinate_space") or ""),
         "edges": edge_values,
     }
+
+
+def _normal_cleanup_positive_z(primitive: Any, metadata: dict[str, Any]) -> bool | None:
+    primitive_metadata = dict(getattr(primitive, "metadata", {}) or {})
+    for source in (primitive_metadata, metadata):
+        if "normal_cleanup_positive_z" in source:
+            return bool(source.get("normal_cleanup_positive_z"))
+    return None
+
+
+def _normal_cleanup_status(positive_z: bool | None) -> str:
+    if positive_z is True:
+        return "authored_positive_z_winding"
+    if positive_z is False:
+        return "authored_negative_z_winding"
+    return "not_authored"
+
+
+def _normal_cleanup_summary(positive_z: bool | None) -> str:
+    if positive_z is True:
+        return "Authored floor-plan normal cleanup targets positive-Z room/WOK winding for export review."
+    if positive_z is False:
+        return (
+            "Authored floor-plan normal cleanup intentionally targets negative-Z winding; "
+            "validate culling and WOK collision before export/game proof."
+        )
+    return "No authored floor-plan normal cleanup recorded."
 
 
 def _normal_policy_targets(primitive: Any, metadata: dict[str, Any]) -> tuple[dict[str, Any], ...]:
@@ -368,6 +401,7 @@ def _composition_group_boundaries(
         vertex_count = int(group.get("vertex_count") or 0)
         dimensions = _vec3_from_group(group, "dimensions")
         normal_targets = _normal_policy_targets_for_members(composition, member_names)
+        normal_cleanup = _normal_cleanup_positive_z(composition, {})
         dcc_status = "blocked" if blocking else "ready_for_external_uv"
         dcc_reason = (
             "Fix missing grouped primitives before using this object group for UV/texturing handoff."
@@ -403,6 +437,9 @@ def _composition_group_boundaries(
                 walkmesh_face_count=0,
                 walkable_face_count=0,
                 material_textures=textures,
+                normal_cleanup_status=_normal_cleanup_status(normal_cleanup),
+                normal_cleanup_summary=_normal_cleanup_summary(normal_cleanup),
+                normal_cleanup_positive_z=normal_cleanup,
                 normal_policy_status=_normal_policy_status(normal_targets),
                 normal_policy_summary=_normal_policy_summary(normal_targets),
                 edge_normal_policy_targets=normal_targets,
@@ -441,6 +478,7 @@ def map_studio_export_object_boundaries(project: AuthoredModuleProject) -> tuple
         walkmesh_face_count = 0
         walkable_face_count = 0
         material_textures: tuple[str, ...] = ()
+        normal_cleanup: bool | None = None
         normal_targets: tuple[dict[str, Any], ...] = ()
         bounds_min: tuple[float, float, float] | None = None
         bounds_max: tuple[float, float, float] | None = None
@@ -467,6 +505,7 @@ def map_studio_export_object_boundaries(project: AuthoredModuleProject) -> tuple
             blocking.append(f"Export object {resref or '(unnamed)'} could not compile: {exc}")
         if isinstance(primitive, AuthoredRoomComposition):
             material_textures = _composition_textures(primitive) or material_textures
+        normal_cleanup = _normal_cleanup_positive_z(primitive, metadata)
         normal_targets = _normal_policy_targets(primitive, metadata)
         kind = _object_kind(primitive, metadata)
         uv_handoff = kind in {"composition_room", "separated_primitive_object", "floor_plan_room", "rectangular_room"}
@@ -494,6 +533,9 @@ def map_studio_export_object_boundaries(project: AuthoredModuleProject) -> tuple
                 walkmesh_face_count=walkmesh_face_count,
                 walkable_face_count=walkable_face_count,
                 material_textures=material_textures,
+                normal_cleanup_status=_normal_cleanup_status(normal_cleanup),
+                normal_cleanup_summary=_normal_cleanup_summary(normal_cleanup),
+                normal_cleanup_positive_z=normal_cleanup,
                 normal_policy_status=_normal_policy_status(normal_targets),
                 normal_policy_summary=_normal_policy_summary(normal_targets),
                 edge_normal_policy_targets=normal_targets,

@@ -2290,6 +2290,14 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert reversed_metadata["normal_cleanup_positive_z"] is False
     assert reversed_payload["rooms"][0]["metadata"]["normal_cleanup_positive_z"] is False
     assert controller.command_history.undo_label == f"Clean {room_for_normals.room_resref} floor-plan normals"
+    reversed_boundary = controller.map_studio_export_object_boundaries()[0]
+    reversed_readiness_boundary = controller.authored_module_readiness().readiness.metadata["export_object_boundaries"][0]
+    assert reversed_boundary.normal_cleanup_status == "authored_negative_z_winding"
+    assert reversed_boundary.normal_cleanup_positive_z is False
+    assert "negative-Z winding" in reversed_boundary.normal_cleanup_summary
+    assert reversed_boundary.normal_policy_status == "authored_visual_normal_policy"
+    assert reversed_readiness_boundary["normal_cleanup_status"] == "authored_negative_z_winding"
+    assert reversed_readiness_boundary["normal_cleanup_positive_z"] is False
 
     controller.undo_map_studio_command()
 

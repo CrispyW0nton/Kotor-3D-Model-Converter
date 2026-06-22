@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Reports Normal Cleanup Winding In Export Readiness
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Export-object readiness / Normal cleanup winding
+Intersects: native Scene/Tools export-object boundary mirrors and Map Studio dispatch regression tests.
+
+- Added authored normal-cleanup winding fields to Map Studio export-object boundaries so Cleanup/Reverse Normals state is visible in readiness metadata before staging or DCC handoff.
+- Threaded positive-Z and negative-Z floor-plan winding intent through the same headless boundary contract as visual edge-normal policy.
+- Preserved capability honesty: winding cleanup is reported as export-review metadata and still requires WOK/culling validation and in-game proof before game-ready claims.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_export_objects.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_export_objects.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_normal_cleanup`; `git diff --check`.
+
 ### [2026-06-22] Map Studio Aligns Edge Normal Tool Belt Readiness
 
 Owner: LordVaderCW
