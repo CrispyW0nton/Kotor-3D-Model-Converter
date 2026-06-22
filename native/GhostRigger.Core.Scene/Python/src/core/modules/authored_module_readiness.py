@@ -21,6 +21,7 @@ from .authored_module_project import AuthoredModuleProject, compile_authored_roo
 from .authored_module_walkmesh import combine_authored_module_walkmesh
 from .authored_room_floorplan import FloorPlanRoomPrimitive, polygon_signed_area, validate_floor_plan_room_primitive
 from .map_studio_export_objects import map_studio_export_object_boundaries
+from .map_studio_curve_guides import authored_curve_guides
 from .authored_walkmesh_audit import audit_authored_wok
 from .authored_walkmesh_surfaces import walkmesh_surface_name
 
@@ -307,6 +308,19 @@ def _resource_key(resource: Any) -> RuntimeResourceKey | None:
 def _present_keys(resources: Iterable[Any]) -> tuple[RuntimeResourceKey, ...]:
     keys = {_key for resource in list(resources or ()) if (_key := _resource_key(resource)) and _key != ("", "")}
     return tuple(sorted(keys))
+
+
+def _curve_guide_capability_warnings(project: AuthoredModuleProject) -> tuple[str, ...]:
+    guides = authored_curve_guides(project)
+    if not guides:
+        return ()
+    plural = "s" if len(guides) != 1 else ""
+    names = ", ".join(guide.name for guide in guides[:3])
+    suffix = "" if len(guides) <= 3 else f", +{len(guides) - 3} more"
+    return (
+        f"{len(guides)} Map Studio construction curve guide{plural} ({names}{suffix}) "
+        "are previewable KMAP authoring guides only; they do not yet export as KOTOR runtime geometry, PTH, or walkmesh edges.",
+    )
 
 
 def _resource_label(key: RuntimeResourceKey) -> str:
@@ -1685,6 +1699,8 @@ def build_authored_module_readiness(
         script_warnings = (
             f"{external_script_count} authored script hook(s) rely on base-game, Override, or another installed mod .ncs instead of being packaged.",
         )
+    curve_guides = authored_curve_guides(project)
+    curve_guide_warnings = _curve_guide_capability_warnings(project)
     component_warnings = component_edit.validation_messages if not component_edit.ready else ()
     room_warnings = tuple(warning for room in rooms for warning in room.warnings)
     warnings = (
@@ -1698,6 +1714,7 @@ def build_authored_module_readiness(
         + template_warnings
         + transition_warnings
         + script_warnings
+        + curve_guide_warnings
         + component_warnings
     )
     can_preview = not preview_blocking and bool(rooms) and all(room.can_preview_geometry for room in rooms)
@@ -1836,6 +1853,9 @@ def build_authored_module_readiness(
             "room_count": len(rooms),
             "export_object_count": len(export_object_boundaries),
             "export_object_boundaries": [boundary.to_metadata() for boundary in export_object_boundaries],
+            "construction_curve_guide_count": len(curve_guides),
+            "construction_curve_guide_names": [guide.name for guide in curve_guides],
+            "construction_curve_guide_runtime_state": "guide_only_not_runtime_geometry" if curve_guides else "none",
             "uv_handoff_object_count": sum(1 for boundary in export_object_boundaries if boundary.uv_handoff_recommended),
             "walkable_face_count": sum(room.walkable_face_count for room in rooms),
             "walkable_component_count": sum(room.walkable_component_count for room in rooms),

@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Reports Curve Guides As Authoring-Only
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Authored module readiness / Construction curve guides
+Intersects: native Scene/Tools authored-module readiness mirrors and authored-module readiness regression tests.
+
+- Added core readiness metadata for construction curve guides, including guide count, guide names, and `guide_only_not_runtime_geometry` runtime state.
+- Added a modder-facing readiness warning when KMAP construction curve guides exist so the UI/export path stays honest that they are previewable authoring data, not yet exported KOTOR runtime geometry, PTH, or walkmesh edges.
+- Preserved the existing curve-guide command/undo/KMAP storage path while making its export capability explicit in readiness.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_readiness.py tests\test_authored_module_readiness.py`; `python -m pytest tests\test_authored_module_readiness.py::test_t2606_curve_guides_are_reported_as_authoring_only_in_readiness -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_curve_readiness`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_curve_readiness_dispatch`; `git diff --check`.
+
 ### [2026-06-22] Map Studio Exposes Curve Guide Parameters
 
 Owner: LordVaderCW

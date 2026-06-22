@@ -214,6 +214,33 @@ def test_t2639_floor_plan_project_is_previewable_but_not_export_candidate_withou
     assert "grdev01_room01.mdl" in runtime_status["missing"]
 
 
+def test_t2606_curve_guides_are_reported_as_authoring_only_in_readiness() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+    from src.core.modules.map_studio_curve_guides import add_authored_curve_guide
+
+    project = add_authored_curve_guide(
+        _floor_plan_project(),
+        name="main_path",
+        purpose="pth_planning",
+        room_resref="grdev01_room01",
+        coordinate_space="kmap_world",
+        points=((0.0, 0.0, 0.0), (1.0, 0.5, 0.0), (2.0, 0.5, 0.0)),
+    )
+
+    readiness = build_authored_module_readiness(project)
+
+    assert readiness.metadata["construction_curve_guide_count"] == 1
+    assert readiness.metadata["construction_curve_guide_names"] == ["main_path"]
+    assert readiness.metadata["construction_curve_guide_runtime_state"] == "guide_only_not_runtime_geometry"
+    assert any(
+        "previewable KMAP authoring guides only" in warning
+        and "do not yet export as KOTOR runtime geometry" in warning
+        for warning in readiness.warnings
+    )
+
+
 def test_t2639_runtime_resources_promote_project_to_export_candidate() -> None:
     _install_native_payload_paths()
 
