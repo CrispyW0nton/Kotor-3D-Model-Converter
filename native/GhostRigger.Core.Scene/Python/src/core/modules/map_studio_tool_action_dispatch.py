@@ -939,12 +939,33 @@ def resolve_map_studio_tool_belt_action(
     if key == "transform_snap_level":
         indices = _clean_indices(ctx.point_indices)
         if len(indices) < 2:
+            if ctx.primitive_name:
+                return _route(
+                    action,
+                    focus_component_mode="object",
+                    focus_snap_mode="level",
+                    command_method="transform_snap_authored_room_primitive_level",
+                    command_kwargs={
+                        "room_resref": ctx.room_resref,
+                        "primitive_name": ctx.primitive_name,
+                        "axis": _clean_axis(ctx.axis),
+                        "target_primitive_name": ctx.target_primitive_name,
+                        "target_vertex_index": None if ctx.target_vertex_index is None else int(ctx.target_vertex_index),
+                        "value": ctx.metadata.get("value"),
+                    },
+                    mutates_kmap=True,
+                    authoring_context=(
+                        "Object Transform Level Snap: align the selected primitive pivot on one X/Y/Z level, using an explicit "
+                        "value/target when supplied or the nearest primitive vertex candidate otherwise. This preserves topology and "
+                        "marks validation/export/game proof stale."
+                    ),
+                )
             return _route(
                 action,
                 focus_component_mode="vertex",
                 focus_snap_mode="level",
                 enabled=False,
-                disabled_reason="Transform level snap needs two or more selected floor-plan vertices.",
+                disabled_reason="Transform level snap needs two or more selected floor-plan vertices or a selected authored primitive.",
             )
         return _route(
             action,

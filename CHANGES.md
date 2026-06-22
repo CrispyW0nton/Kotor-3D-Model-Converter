@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Adds Object-Level Transform Snap
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Direct modeling tools / Transform snapping
+Intersects: native Scene/Tools authored room operations, ModuleEditorController mirrors, dispatcher routing, and tool-belt contracts.
+
+- Added a headless `transform_snap_authored_room_composition_primitive_level` command that aligns a selected primitive pivot along X/Y/Z to an explicit level or target primitive vertex while preserving topology, rotation, scale, and pivot intent.
+- Routed `transform_snap_level` so floor-plan vertex selections keep using the existing hold-J component command, while selected authored primitives now use the object-level snap path with KMAP metadata and stale validation/export/game-proof readiness impact.
+- Added focused regression coverage proving object-level transform snapping changes only the requested axis, records authored-room composition mesh-space metadata, and undoes back to the previous primitive transform.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests/test_map_studio_tool_action_dispatch.py::test_t2606_object_transform_level_snap_aligns_primitive_pivot_axis -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_object_level_snap`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_object_level_snap_full`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_object_level_snap_ui_contract`.
+
 ### [2026-06-22] Map Studio Auto-Targets Primitive Vertex Snaps
 
 Owner: LordVaderCW

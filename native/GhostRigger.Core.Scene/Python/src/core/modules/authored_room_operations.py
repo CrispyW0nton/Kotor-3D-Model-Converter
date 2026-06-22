@@ -1877,6 +1877,139 @@ def snap_authored_room_composition_primitive_pivot_to_vertex(
     return _replace_rooms(project, rooms, operation="object_vertex_snap_primitive")
 
 
+def transform_snap_authored_room_composition_primitive_level(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+    axis: str = "z",
+    target_primitive_name: str = "",
+    target_vertex_index: int | None = None,
+    value: float | None = None,
+) -> AuthoredModuleProject:
+    """Align a primitive pivot component to a target vertex/value level.
+
+    This is the object-placement form of hold-J transform snapping.  It only
+    changes the selected primitive translation on one named axis, preserving
+    primitive topology, rotation, scale, and pivot intent.
+    """
+
+    axis_key = str(axis or "z").strip().lower()
+    if axis_key not in {"x", "y", "z"}:
+        raise ValueError("Object transform level snap supports X, Y, or Z axes.")
+    axis_index = {"x": 0, "y": 1, "z": 2}[axis_key]
+
+    index = _target_room_index(project, room_resref)
+    room = project.rooms[index]
+    composition = _composition_for_room(room)
+    source_name = str(primitive_name or "").strip()
+    target_name = str(target_primitive_name or "").strip()
+    if not source_name:
+        raise ValueError("Object Transform Level Snap requires a selected authored primitive.")
+    primitives = tuple(composition.primitives or ())
+    source_primitive = next((item for item in primitives if _primitive_name(item) == source_name), None)
+    known = ", ".join(_primitive_name(item) for item in primitives if _primitive_name(item))
+    if source_primitive is None:
+        raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'. Known primitives: {known or '(none)'}.")
+
+    target_value = None if value is None else float(value)
+    resolved_target_name = target_name
+    resolved_target_vertex_index = None if target_vertex_index is None else int(target_vertex_index)
+    if target_value is None:
+        if resolved_target_name or resolved_target_vertex_index is not None:
+            if not resolved_target_name:
+                raise ValueError("Object Transform Level Snap needs a target primitive when a target vertex index is supplied.")
+            target_primitive = next((item for item in primitives if _primitive_name(item) == resolved_target_name), None)
+            if target_primitive is None:
+                raise ValueError(f"Room {room.room_resref} has no target primitive named '{target_primitive_name}'. Known primitives: {known or '(none)'}.")
+            vertices = tuple(primitive_to_mesh(target_primitive).vertices or ())
+            if resolved_target_vertex_index is None:
+                candidates = authored_room_composition_primitive_vertex_snap_candidates(
+                    project,
+                    room_resref=room_resref,
+                    primitive_name=source_name,
+                    target_primitive_name=resolved_target_name,
+                    max_results=1,
+                )
+                if not candidates:
+                    raise ValueError(f"Target primitive '{resolved_target_name}' has no vertices to snap to.")
+                chosen = candidates[0]
+                resolved_target_vertex_index = chosen.vertex_index
+                target_value = chosen.composition_position[axis_index]
+            else:
+                if resolved_target_vertex_index < 0 or resolved_target_vertex_index >= len(vertices):
+                    raise ValueError(
+                        f"Target primitive '{resolved_target_name}' vertex index {resolved_target_vertex_index} is outside 0..{len(vertices) - 1}."
+                    )
+                target_value = float(vertices[resolved_target_vertex_index][axis_index])
+        else:
+            candidates = authored_room_composition_primitive_vertex_snap_candidates(
+                project,
+                room_resref=room_resref,
+                primitive_name=source_name,
+                max_results=1,
+            )
+            if not candidates:
+                raise ValueError("Object Transform Level Snap needs another authored primitive with vertices in the selected room.")
+            chosen = candidates[0]
+            resolved_target_name = chosen.primitive_name
+            resolved_target_vertex_index = chosen.vertex_index
+            target_value = float(chosen.composition_position[axis_index])
+
+    transform = _primitive_transform(source_primitive)
+    old_translation = tuple(float(component) for component in transform.translation)
+    pivot = tuple(float(component) for component in transform.pivot)
+    old_pivot_level = pivot[axis_index] + old_translation[axis_index]
+    new_translation = list(old_translation)
+    new_translation[axis_index] = float(target_value) - pivot[axis_index]
+    snapped_transform = PrimitiveTransform(
+        translation=tuple(float(component) for component in new_translation),
+        rotation_degrees_z=float(transform.rotation_degrees_z),
+        scale=tuple(float(component) for component in transform.scale),
+        pivot=pivot,
+    )
+    updated_primitives = []
+    for primitive in primitives:
+        if _primitive_name(primitive) != source_name:
+            updated_primitives.append(primitive)
+            continue
+        if isinstance(primitive, PlacedRoomPrimitive):
+            updated_primitives.append(replace(primitive, transform=snapped_transform))
+        else:
+            updated_primitives.append(PlacedRoomPrimitive(primitive=primitive, name=source_name, transform=snapped_transform))
+
+    updated_composition = replace(
+        composition,
+        primitives=tuple(updated_primitives),
+        metadata={
+            **dict(composition.metadata),
+            "last_operation": "object_transform_snap_level",
+            "last_transform_snapped_primitive": source_name,
+            "object_transform_snap_coordinate_space": "authored_room_composition_mesh_space",
+            "object_transform_snap_axis": axis_key,
+            "object_transform_snap_value": float(target_value),
+            "object_transform_snap_old_pivot_level": float(old_pivot_level),
+            "target_primitive": resolved_target_name,
+            "target_vertex_index": resolved_target_vertex_index,
+            "old_translation": list(old_translation),
+            "new_translation": [float(component) for component in new_translation],
+        },
+    )
+    updated = replace(
+        room,
+        primitive=updated_composition,
+        composition=None,
+        metadata={
+            **dict(room.metadata),
+            "primitive": "authored_room_composition",
+            "last_operation": "object_transform_snap_level",
+            "last_transform_snapped_primitive": source_name,
+        },
+    )
+    rooms = tuple(project.rooms[:index] + (updated,) + project.rooms[index + 1 :])
+    return _replace_rooms(project, rooms, operation="object_transform_snap_level")
+
+
 def _linear_transform_vector(
     vector: tuple[float, float, float],
     transform: PrimitiveTransform,
@@ -4065,6 +4198,7 @@ __all__ = [
     "split_authored_floor_plan_face",
     "snap_authored_room_composition_primitive_pivot_to_vertex",
     "snap_authored_floor_plan_vertex_to_vertex",
+    "transform_snap_authored_room_composition_primitive_level",
     "transform_snap_authored_floor_plan_vertices",
     "triangulate_authored_floor_plan_face",
     "weld_authored_floor_plan_vertices",

@@ -732,6 +732,32 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert level_snap.mutates_kmap is True
     assert "hold-J command path" in level_snap.authoring_context
 
+    object_level_snap = resolve_map_studio_tool_belt_action(
+        "transform_snap_level",
+        MapStudioToolActionContext(
+            room_resref="room_a",
+            primitive_name="room_a_cube",
+            axis="z",
+            target_primitive_name="room_a_wall",
+            target_vertex_index=2,
+        ),
+    )
+
+    assert object_level_snap.enabled is True
+    assert object_level_snap.focus_component_mode == "object"
+    assert object_level_snap.focus_snap_mode == "level"
+    assert object_level_snap.command_method == "transform_snap_authored_room_primitive_level"
+    assert object_level_snap.command_kwargs == {
+        "room_resref": "room_a",
+        "primitive_name": "room_a_cube",
+        "axis": "z",
+        "target_primitive_name": "room_a_wall",
+        "target_vertex_index": 2,
+        "value": None,
+    }
+    assert object_level_snap.mutates_kmap is True
+    assert "nearest primitive vertex candidate" in object_level_snap.authoring_context
+
     extrude = resolve_map_studio_tool_belt_action(
         "extrude",
         MapStudioToolActionContext(room_resref="room_a", operation_distance=0.75, operation_edge_index=2),
@@ -2563,6 +2589,91 @@ def test_t2606_object_vertex_snap_auto_selects_nearest_target_vertex() -> None:
     assert restored.translation == (0.0, 0.0, 0.0)
 
 
+def test_t2606_object_transform_level_snap_aligns_primitive_pivot_axis() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_tool_action_dispatch import (
+        MapStudioToolActionContext,
+        execute_map_studio_tool_belt_action,
+    )
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grobjlvl", game="K1")
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grobjlvl")
+    execute_map_studio_tool_belt_action(
+        controller,
+        "primitive",
+        MapStudioToolActionContext(primitive_kind="cube", primitive_name="source_cube"),
+    )
+    source = controller.authored_room_primitive_transforms()[-1]
+    controller.set_authored_room_primitive_transform(
+        room_resref=source.room_resref,
+        primitive_name=source.primitive_name,
+        translation=(0.25, 0.5, 0.75),
+        rotation_degrees_z=25.0,
+        scale=(1.25, 1.5, 1.0),
+        pivot=(0.0, 0.0, 0.5),
+    )
+    execute_map_studio_tool_belt_action(
+        controller,
+        "primitive",
+        MapStudioToolActionContext(primitive_kind="cube", primitive_name="target_cube"),
+    )
+    target = controller.authored_room_primitive_transforms()[-1]
+    controller.set_authored_room_primitive_transform(
+        room_resref=target.room_resref,
+        primitive_name=target.primitive_name,
+        translation=(2.0, 3.0, 1.0),
+        rotation_degrees_z=0.0,
+        scale=(1.0, 1.0, 1.0),
+        pivot=(0.0, 0.0, 0.0),
+    )
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "transform_snap_level",
+        MapStudioToolActionContext(
+            room_resref=source.room_resref,
+            primitive_name=source.primitive_name,
+            axis="z",
+            target_primitive_name=target.primitive_name,
+            target_vertex_index=6,
+        ),
+    )
+
+    snapped = {
+        row.primitive_name: row
+        for row in controller.authored_room_primitive_transforms()
+        if row.room_resref == source.room_resref
+    }["source_cube"]
+    assert snapped.translation == (0.25, 0.5, 1.5)
+    assert snapped.rotation_degrees_z == 25.0
+    assert snapped.scale == (1.25, 1.5, 1.0)
+    assert snapped.pivot == (0.0, 0.0, 0.5)
+    assert controller.command_history.undo_label == "Object transform snap source_cube on z"
+
+    payload = controller.project.extra_sections["authored_module"]
+    metadata = payload["rooms"][0]["primitive"]["metadata"]
+    assert metadata["last_operation"] == "object_transform_snap_level"
+    assert metadata["object_transform_snap_coordinate_space"] == "authored_room_composition_mesh_space"
+    assert metadata["object_transform_snap_axis"] == "z"
+    assert metadata["object_transform_snap_value"] == 2.0
+    assert metadata["object_transform_snap_old_pivot_level"] == 1.25
+    assert metadata["target_primitive"] == "target_cube"
+    assert metadata["target_vertex_index"] == 6
+    assert metadata["old_translation"] == [0.25, 0.5, 0.75]
+    assert metadata["new_translation"] == [0.25, 0.5, 1.5]
+
+    controller.undo_map_studio_command()
+    restored = {
+        row.primitive_name: row
+        for row in controller.authored_room_primitive_transforms()
+        if row.room_resref == source.room_resref
+    }["source_cube"]
+    assert restored.translation == (0.25, 0.5, 0.75)
+
+
 def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -> None:
     window_source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
     scene_dispatcher = _read("native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py")
@@ -2653,6 +2764,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="snap_authored_floor_plan_vertex"' in source
         assert 'command_method="grid_snap_authored_floor_plan_vertices"' in source
         assert 'command_method="transform_snap_authored_floor_plan_vertices"' in source
+        assert 'command_method="transform_snap_authored_room_primitive_level"' in source
         assert 'if key == "light":' in source
         assert "light_room_resref" in source
         assert 'command_method="add_authored_room_light"' in source
@@ -2718,6 +2830,8 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert "authored_room_composition_primitive_vertex_snap_candidates" in source
         assert "def snap_authored_room_primitive_pivot_to_vertex" in source
         assert "snap_authored_room_composition_primitive_pivot_to_vertex" in source
+        assert "def transform_snap_authored_room_primitive_level" in source
+        assert "transform_snap_authored_room_composition_primitive_level" in source
         assert "def authored_terrain_status" in source
         assert "previewable_status_query" in source
 
