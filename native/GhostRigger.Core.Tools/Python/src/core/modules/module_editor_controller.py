@@ -1368,6 +1368,110 @@ class ModuleEditorController:
         )
         return self.authored_module_readiness()
 
+    def bend_authored_terrain_heightfield(
+        self,
+        *,
+        room_resref: str = "",
+        axis: str = "x",
+        amplitude: float = 0.25,
+        center: float | None = None,
+        span: float | None = None,
+    ):
+        """Bend one authored terrain heightfield and record explicit command metadata."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        bend_axis = str(axis or "x").strip().lower() or "x"
+        bend_amplitude = float(amplitude)
+        kwargs: dict[str, Any] = {
+            "room_resref": room_resref,
+            "axis": bend_axis,
+            "amplitude": bend_amplitude,
+        }
+        if center is not None:
+            kwargs["center"] = float(center)
+        if span is not None:
+            kwargs["span"] = float(span)
+        updated = apply_authored_terrain_operation(authored, "bend", **kwargs)
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Bent Map Studio terrain {room_resref or '(first terrain room)'} on {bend_axis} by {bend_amplitude:g}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.terrain.bend",
+            label=f"Bend terrain {room_resref or 'room'}",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "axis": bend_axis,
+                "amplitude": bend_amplitude,
+                "center": None if center is None else float(center),
+                "span": None if span is None else float(span),
+            },
+        )
+        return self.authored_module_readiness()
+
+    def lattice_authored_terrain_heightfield(
+        self,
+        *,
+        room_resref: str = "",
+        strength: float = 1.0,
+        control_deltas: Any = None,
+        amplitude: float | None = None,
+    ):
+        """Apply one authored terrain lattice deformation and record explicit command metadata."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        lattice_strength = float(strength)
+        kwargs: dict[str, Any] = {
+            "room_resref": room_resref,
+            "strength": lattice_strength,
+        }
+        if control_deltas is not None:
+            kwargs["control_deltas"] = control_deltas
+        elif amplitude is not None:
+            kwargs["amplitude"] = float(amplitude)
+        updated = apply_authored_terrain_operation(authored, "lattice", **kwargs)
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Applied Map Studio terrain lattice to {room_resref or '(first terrain room)'} at strength {lattice_strength:g}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.terrain.lattice",
+            label=f"Lattice terrain {room_resref or 'room'}",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "strength": lattice_strength,
+                "control_deltas": control_deltas,
+                "amplitude": None if amplitude is None else float(amplitude),
+            },
+        )
+        return self.authored_module_readiness()
+
     def add_authored_curve_guide(
         self,
         *,

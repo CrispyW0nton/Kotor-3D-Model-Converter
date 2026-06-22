@@ -878,7 +878,6 @@ def resolve_map_studio_tool_belt_action(
 
     if key == "bend_tool":
         kwargs = {
-            "operation": "bend",
             "room_resref": ctx.room_resref,
             "axis": _clean_axis(ctx.axis),
             "amplitude": float(ctx.metadata.get("amplitude", ctx.operation_distance)),
@@ -891,7 +890,7 @@ def resolve_map_studio_tool_belt_action(
             action,
             focus_component_mode="terrain",
             focus_snap_mode="surface",
-            command_method="apply_authored_terrain_operation",
+            command_method="bend_authored_terrain_heightfield",
             command_kwargs=kwargs,
             mutates_kmap=True,
             authoring_context=(
@@ -902,7 +901,6 @@ def resolve_map_studio_tool_belt_action(
 
     if key == "lattice":
         kwargs: dict[str, Any] = {
-            "operation": "lattice",
             "room_resref": ctx.room_resref,
             "strength": float(ctx.metadata.get("strength", 1.0)),
         }
@@ -914,7 +912,7 @@ def resolve_map_studio_tool_belt_action(
             action,
             focus_component_mode="terrain",
             focus_snap_mode="surface",
-            command_method="apply_authored_terrain_operation",
+            command_method="lattice_authored_terrain_heightfield",
             command_kwargs=kwargs,
             mutates_kmap=True,
             authoring_context=(

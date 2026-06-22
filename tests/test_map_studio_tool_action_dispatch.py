@@ -88,6 +88,10 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["inset"].command_method == "inset_authored_floor_plan_room"
     assert statuses["sculpt_raise"].contract_kind == "command_mutates_kmap"
     assert statuses["sculpt_raise"].command_method == "apply_authored_terrain_operation"
+    assert statuses["bend_tool"].contract_kind == "command_mutates_kmap"
+    assert statuses["bend_tool"].command_method == "bend_authored_terrain_heightfield"
+    assert statuses["lattice"].contract_kind == "command_mutates_kmap"
+    assert statuses["lattice"].command_method == "lattice_authored_terrain_heightfield"
     assert statuses["terrain"].contract_kind == "command_query"
     assert statuses["terrain"].command_method == "authored_terrain_status"
     assert statuses["walkmesh"].contract_kind == "command_query"
@@ -787,9 +791,8 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     )
 
     assert bend.enabled is True
-    assert bend.command_method == "apply_authored_terrain_operation"
+    assert bend.command_method == "bend_authored_terrain_heightfield"
     assert bend.command_kwargs == {
-        "operation": "bend",
         "room_resref": "terrain01",
         "axis": "y",
         "amplitude": 0.4,
@@ -814,9 +817,8 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     )
 
     assert lattice.enabled is True
-    assert lattice.command_method == "apply_authored_terrain_operation"
+    assert lattice.command_method == "lattice_authored_terrain_heightfield"
     assert lattice.command_kwargs == {
-        "operation": "lattice",
         "room_resref": "terrain01",
         "strength": 0.5,
         "control_deltas": ((0.0, 0.0), (0.0, 0.6)),
@@ -1607,7 +1609,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert "bend_slope_report" in bent_room["primitive"]["metadata"]
     assert bent_room["metadata"]["last_operation"] == "terrain_bend"
     assert bent_payload["placements"]["metadata"]["terrain_height_repaired_after_operation"] == "terrain_bend"
-    assert controller.command_history.undo_label == "Apply terrain operation bend"
+    assert controller.command_history.undo_label == f"Bend terrain {bend_room.room_resref}"
 
     controller.undo_map_studio_command()
 
@@ -1651,7 +1653,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert "lattice_slope_report" in latticed_room["primitive"]["metadata"]
     assert latticed_room["metadata"]["last_operation"] == "terrain_lattice"
     assert latticed_payload["placements"]["metadata"]["terrain_height_repaired_after_operation"] == "terrain_lattice"
-    assert controller.command_history.undo_label == "Apply terrain operation lattice"
+    assert controller.command_history.undo_label == f"Lattice terrain {lattice_room.room_resref}"
 
     controller.undo_map_studio_command()
 
@@ -1791,8 +1793,8 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="authored_terrain_status"' in source
         assert 'command_method="authored_walkmesh_status"' in source
         assert 'command_method="add_authored_curve_guide"' in source
-        assert '"operation": "bend"' in source
-        assert '"operation": "lattice"' in source
+        assert 'command_method="bend_authored_terrain_heightfield"' in source
+        assert 'command_method="lattice_authored_terrain_heightfield"' in source
         assert '"curve_tool"' in source
         assert '"boolean_a_minus_b"' in source
         assert '"boolean_b_minus_a"' in source
