@@ -565,6 +565,45 @@ def _base_primitive(primitive: Any) -> Any:
     return primitive.primitive if isinstance(primitive, PlacedRoomPrimitive) else primitive
 
 
+def _edge_index_values(edge_indices: Any) -> list[int]:
+    if edge_indices is None:
+        return []
+    if isinstance(edge_indices, (str, bytes)):
+        text = edge_indices.decode("utf-8", errors="ignore") if isinstance(edge_indices, bytes) else edge_indices
+        values = [part.strip() for part in text.split(",") if part.strip()]
+        return [int(value) for value in values]
+    try:
+        return [int(index) for index in tuple(edge_indices)]
+    except TypeError:
+        return [int(edge_indices)]
+
+
+def _primitive_mesh_edge_count(primitive: Any) -> int:
+    mesh = primitive_to_mesh(primitive)
+    edges: set[tuple[int, int]] = set()
+    for face in tuple(mesh.faces or ()):
+        indices = tuple(int(index) for index in face)
+        if len(indices) < 2:
+            continue
+        for left, right in zip(indices, indices[1:] + indices[:1]):
+            edge = (left, right) if left <= right else (right, left)
+            edges.add(edge)
+    return len(edges)
+
+
+def _validate_edge_indices(indices: list[int], *, edge_count: int, label: str) -> None:
+    if not indices:
+        return
+    if edge_count <= 0:
+        raise ValueError(f"{label} has no editable edges.")
+    invalid = [index for index in indices if index < 0 or index >= edge_count]
+    if invalid:
+        high = edge_count - 1
+        raise ValueError(
+            f"Selected edge index {invalid[0]} is outside {label}'s editable edge range 0..{high}."
+        )
+
+
 def _dimension(
     key: str,
     label: str,
@@ -1208,6 +1247,8 @@ def _edge_normal_policy_payload(
     policy: str,
     primitive_name: str = "",
     edge_indices: Any = None,
+    edge_count: int | None = None,
+    coordinate_space: str = "",
 ) -> dict[str, Any]:
     raw_policy = str(policy or "").strip().lower()
     aliases = {
@@ -1224,10 +1265,10 @@ def _edge_normal_policy_payload(
     if normal_policy is None:
         raise ValueError("Edge normal policy must be 'soft' or 'hard'.")
     target = str(primitive_name or "").strip()
-    indices = [int(index) for index in tuple(edge_indices or ())]
+    indices = _edge_index_values(edge_indices)
     scope = "selected_edges" if indices else ("primitive" if target else "all")
     operation = "soften_edges" if normal_policy == "soft" else "harden_edges"
-    return {
+    payload = {
         "edge_normal_policy": normal_policy,
         "edge_normal_policy_operation": operation,
         "edge_normal_policy_scope": scope,
@@ -1235,6 +1276,11 @@ def _edge_normal_policy_payload(
         "edge_normal_policy_edges": indices,
         "edge_normal_policy_source": "map_studio_tool_belt",
     }
+    if edge_count is not None:
+        payload["edge_normal_policy_edge_count"] = int(edge_count)
+    if coordinate_space:
+        payload["edge_normal_policy_coordinate_space"] = str(coordinate_space)
+    return payload
 
 
 def set_authored_room_edge_normal_policy(
@@ -1255,12 +1301,37 @@ def set_authored_room_edge_normal_policy(
     room_index = _target_room_index(project, room_resref)
     rooms = list(project.rooms)
     room = rooms[room_index]
-    payload = _edge_normal_policy_payload(policy=policy, primitive_name=primitive_name, edge_indices=edge_indices)
-    operation = str(payload["edge_normal_policy_operation"])
-    target = str(payload["edge_normal_policy_target"])
+    indices = _edge_index_values(edge_indices)
 
     if isinstance(room.primitive, AuthoredRoomComposition) or room.composition is not None:
         composition = _composition_for_room(room)
+        target_name = str(primitive_name or "").strip()
+        if indices and not target_name:
+            raise ValueError(
+                "Selected edge normal edits for primitive-composition rooms require a primitive name "
+                "so edge indices are unambiguous."
+            )
+        edge_count = 0
+        coordinate_space = "authored_room_composition_all_primitive_edges"
+        if target_name:
+            selected = next((item for item in tuple(composition.primitives or ()) if _primitive_name(item) == target_name), None)
+            if selected is None:
+                known = ", ".join(_primitive_name(item) for item in tuple(composition.primitives or ()) if _primitive_name(item))
+                raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'. Known primitives: {known or '(none)'}.")
+            edge_count = _primitive_mesh_edge_count(selected)
+            _validate_edge_indices(indices, edge_count=edge_count, label=f"Primitive {target_name}")
+            coordinate_space = "authored_room_composition_primitive_edges"
+        else:
+            edge_count = sum(_primitive_mesh_edge_count(item) for item in tuple(composition.primitives or ()))
+        payload = _edge_normal_policy_payload(
+            policy=policy,
+            primitive_name=target_name,
+            edge_indices=indices,
+            edge_count=edge_count,
+            coordinate_space=coordinate_space,
+        )
+        operation = str(payload["edge_normal_policy_operation"])
+        target = str(payload["edge_normal_policy_target"])
         by_target = dict(composition.metadata.get("edge_normal_policy_by_target") or {})
         by_target[target] = dict(payload)
         updated_composition = replace(
@@ -1291,6 +1362,17 @@ def set_authored_room_edge_normal_policy(
             "Edge normal policy currently supports authored floor-plan and primitive-composition rooms; "
             "terrain normals are derived from the heightfield brush pipeline."
         ) from exc
+    edge_count = len(tuple(primitive.points or ()))
+    _validate_edge_indices(indices, edge_count=edge_count, label=f"Floor-plan room {room.room_resref}")
+    payload = _edge_normal_policy_payload(
+        policy=policy,
+        primitive_name=primitive_name,
+        edge_indices=indices,
+        edge_count=edge_count,
+        coordinate_space="authored_floor_plan_loop_edges",
+    )
+    operation = str(payload["edge_normal_policy_operation"])
+    target = str(payload["edge_normal_policy_target"])
 
     updated_primitive = replace(
         primitive,

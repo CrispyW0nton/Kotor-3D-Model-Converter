@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Validates Edge-Normal Selections
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Direct modeling tools / Edge normals
+Intersects: native Scene/Tools authored room operations and tool-belt command regression tests.
+
+- Added headless validation for selected soften/harden edge indices before KMAP edge-normal intent is written, with separate coordinate-space metadata for authored floor-plan loop edges and composition primitive edges.
+- Required a named primitive for selected-edge normal edits in primitive-composition rooms so edge indices are not ambiguous across multiple objects.
+- Added focused regression coverage proving valid floor-plan and composition selections record edge counts/coordinate spaces, while invalid selections leave authored module state unchanged.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_operations.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_edge_normal_validation_full`; `python -m pytest tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_edge_normal_validation_ui_contract`.
+
 ### [2026-06-22] Map Studio Mirrors Primitive Object Placements
 
 Owner: LordVaderCW

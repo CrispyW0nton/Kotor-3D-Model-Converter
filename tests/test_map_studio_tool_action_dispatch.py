@@ -2306,6 +2306,106 @@ def test_t2606_freeze_transform_bakes_supported_primitive_without_moving_geometr
     assert restored.scale == (2.0, 3.0, 4.0)
 
 
+def test_t2606_edge_normal_policy_validates_floor_plan_edge_indices() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_tool_action_dispatch import (
+        MapStudioToolActionContext,
+        execute_map_studio_tool_belt_action,
+    )
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="gredgevalid", game="K1")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="gredgevalid")
+    room = controller.authored_floor_plan_room_choices()[0]
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "soften_edges",
+        MapStudioToolActionContext(room_resref=room.room_resref, metadata={"edge_indices": (0, 1)}),
+    )
+
+    payload = controller.project.extra_sections["authored_module"]
+    metadata = payload["rooms"][0]["primitive"]["metadata"]
+    assert metadata["edge_normal_policy_edge_count"] == 4
+    assert metadata["edge_normal_policy_coordinate_space"] == "authored_floor_plan_loop_edges"
+
+    controller.undo_map_studio_command()
+    before_payload = copy.deepcopy(controller.project.extra_sections["authored_module"])
+
+    with pytest.raises(ValueError, match="editable edge range 0..3"):
+        execute_map_studio_tool_belt_action(
+            controller,
+            "soften_edges",
+            MapStudioToolActionContext(room_resref=room.room_resref, metadata={"edge_indices": (99,)}),
+        )
+
+    assert controller.project.extra_sections["authored_module"] == before_payload
+
+
+def test_t2606_edge_normal_policy_validates_composition_primitive_edges() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_tool_action_dispatch import (
+        MapStudioToolActionContext,
+        execute_map_studio_tool_belt_action,
+    )
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="gredgecomp", game="K1")
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="gredgecomp")
+    execute_map_studio_tool_belt_action(
+        controller,
+        "primitive",
+        MapStudioToolActionContext(primitive_kind="cube", primitive_name="edge_cube"),
+    )
+    cube = controller.authored_room_primitive_transforms()[-1]
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "harden_edges",
+        MapStudioToolActionContext(
+            room_resref=cube.room_resref,
+            primitive_name=cube.primitive_name,
+            metadata={"edge_indices": (0, 1)},
+        ),
+    )
+
+    payload = controller.project.extra_sections["authored_module"]
+    metadata = payload["rooms"][0]["primitive"]["metadata"]["edge_normal_policy_by_target"]["edge_cube"]
+    assert metadata["edge_normal_policy"] == "hard"
+    assert metadata["edge_normal_policy_scope"] == "selected_edges"
+    assert metadata["edge_normal_policy_edge_count"] == 18
+    assert metadata["edge_normal_policy_coordinate_space"] == "authored_room_composition_primitive_edges"
+
+    controller.undo_map_studio_command()
+    before_payload = copy.deepcopy(controller.project.extra_sections["authored_module"])
+
+    with pytest.raises(ValueError, match="require a primitive name"):
+        execute_map_studio_tool_belt_action(
+            controller,
+            "harden_edges",
+            MapStudioToolActionContext(room_resref=cube.room_resref, metadata={"edge_indices": (0,)}),
+        )
+
+    assert controller.project.extra_sections["authored_module"] == before_payload
+
+    with pytest.raises(ValueError, match="editable edge range 0..17"):
+        execute_map_studio_tool_belt_action(
+            controller,
+            "harden_edges",
+            MapStudioToolActionContext(
+                room_resref=cube.room_resref,
+                primitive_name=cube.primitive_name,
+                metadata={"edge_indices": (99,)},
+            ),
+        )
+
+    assert controller.project.extra_sections["authored_module"] == before_payload
+
+
 def test_t2606_freeze_transform_rejects_rotated_parametric_primitive() -> None:
     _install_native_payload_paths()
 
