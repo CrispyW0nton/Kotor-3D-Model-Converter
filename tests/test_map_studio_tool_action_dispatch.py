@@ -118,6 +118,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["terrain"].command_method == "authored_terrain_status"
     assert statuses["walkmesh"].contract_kind == "command_query"
     assert statuses["walkmesh"].command_method == "authored_walkmesh_status"
+    assert statuses["paint_wok"].contract_kind == "command_mutates_kmap"
+    assert statuses["paint_wok"].command_method == "set_authored_room_primitive_style"
     assert statuses["validate"].contract_kind == "command_query"
     assert statuses["validate"].command_method == "validate"
     assert statuses["validate"].mutates_kmap is False
@@ -1160,6 +1162,32 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert "gameplay placements" in shrink_wrap.authoring_context
     assert "arbitrary mesh/walkmesh shrink-wrap remains planned" in shrink_wrap.authoring_context
 
+    paint_wok_room = resolve_map_studio_tool_belt_action(
+        "paint_wok",
+        MapStudioToolActionContext(room_resref="room_a", metadata={"surface_id": 5}),
+    )
+
+    assert paint_wok_room.enabled is True
+    assert paint_wok_room.command_method == "set_authored_room_walkmesh_surface"
+    assert paint_wok_room.command_kwargs == {"room_resref": "room_a", "floor_surface": 5}
+    assert paint_wok_room.mutates_kmap is True
+    assert "active room floor" in paint_wok_room.authoring_context
+
+    paint_wok_primitive = resolve_map_studio_tool_belt_action(
+        "paint_wok",
+        MapStudioToolActionContext(room_resref="room_a", primitive_name="room_a_ramp", metadata={"wok_surface": "stone"}),
+    )
+
+    assert paint_wok_primitive.enabled is True
+    assert paint_wok_primitive.command_method == "set_authored_room_primitive_style"
+    assert paint_wok_primitive.command_kwargs == {
+        "room_resref": "room_a",
+        "primitive_name": "room_a_ramp",
+        "surface_id": "stone",
+    }
+    assert paint_wok_primitive.mutates_kmap is True
+    assert "selected walkmesh-producing primitive" in paint_wok_primitive.authoring_context
+
     search_all = map_studio_tool_command_search("", limit=0)
     search_walkmesh = map_studio_tool_command_search("walkmesh", limit=5)
     search_v = map_studio_tool_command_search("snap vtx", limit=3)
@@ -1616,6 +1644,47 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     controller.undo_map_studio_command()
 
     assert len(controller.authored_room_primitive_transforms()) == count_before
+
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grwokrm")
+    wok_room = controller.authored_floor_plan_room_choices()[0]
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "paint_wok",
+        MapStudioToolActionContext(room_resref=wok_room.room_resref, metadata={"surface_id": "metal"}),
+    )
+
+    painted_room_payload = controller.project.extra_sections["authored_module"]["rooms"][0]
+    assert painted_room_payload["primitive"]["floor_surface_id"] == 10
+    assert controller.command_history.undo_label == f"Style {wok_room.room_resref}"
+
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grwokpr")
+    wok_primitive = next(row for row in controller.authored_room_primitive_transforms() if row.supports_walkmesh_surface)
+    before_surface_id = wok_primitive.surface_id
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "paint_wok",
+        MapStudioToolActionContext(
+            room_resref=wok_primitive.room_resref,
+            primitive_name=wok_primitive.primitive_name,
+            metadata={"surface_id": "wood"},
+        ),
+    )
+
+    painted_primitive = next(
+        row for row in controller.authored_room_primitive_transforms() if row.primitive_name == wok_primitive.primitive_name
+    )
+    assert painted_primitive.surface_id == 5
+    assert painted_primitive.surface_name == "WOOD"
+    assert controller.command_history.undo_label == f"Style primitive {wok_primitive.primitive_name}"
+
+    controller.undo_map_studio_command()
+
+    restored_primitive = next(
+        row for row in controller.authored_room_primitive_transforms() if row.primitive_name == wok_primitive.primitive_name
+    )
+    assert restored_primitive.surface_id == before_surface_id
 
     controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grcombobj")
     execute_map_studio_tool_belt_action(

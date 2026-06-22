@@ -693,6 +693,41 @@ def resolve_map_studio_tool_belt_action(
             ),
         )
 
+    if key == "paint_wok":
+        surface = ctx.metadata.get("surface_id", ctx.metadata.get("floor_surface", ctx.metadata.get("wok_surface", 4)))
+        if ctx.primitive_name:
+            return _route(
+                action,
+                focus_component_mode="walkmesh",
+                focus_snap_mode="face",
+                command_method="set_authored_room_primitive_style",
+                command_kwargs={
+                    "room_resref": ctx.room_resref,
+                    "primitive_name": ctx.primitive_name,
+                    "surface_id": surface,
+                },
+                mutates_kmap=True,
+                authoring_context=(
+                    "Paint WOK Surface: assign KOTOR walkmesh surface intent to the selected walkmesh-producing "
+                    "primitive while preserving its material texture; validation/export/game proof become stale."
+                ),
+            )
+        return _route(
+            action,
+            focus_component_mode="walkmesh",
+            focus_snap_mode="face",
+            command_method="set_authored_room_walkmesh_surface",
+            command_kwargs={
+                "room_resref": ctx.room_resref,
+                "floor_surface": surface,
+            },
+            mutates_kmap=True,
+            authoring_context=(
+                "Paint WOK Surface: assign KOTOR walkmesh surface intent to the active room floor so traversal "
+                "and generated WOK metadata are reviewed before export/game proof."
+            ),
+        )
+
     if key == "entry_point":
         return _route(
             action,

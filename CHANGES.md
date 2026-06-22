@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Routes WOK Surface Painting Through Tool Belt
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Walkmesh tools / WOK surface painting
+Intersects: native Scene/Tools tool-action dispatch mirrors, modeling-tool registry mirrors, and tool-belt regression tests.
+
+- Promoted `paint_wok` from modeling-tool intent into a command-backed Map Studio tool-belt action that can paint either the active room floor or a selected walkmesh-producing composition primitive.
+- Routed room painting through `set_authored_room_walkmesh_surface` and primitive painting through `set_authored_room_primitive_style`, preserving primitive material texture while assigning KOTOR WOK surface aliases such as `metal` and `wood`.
+- Added `paint_wok` to component, terrain, gameplay, and export-proof belts so WOK surface painting is discoverable in both modeling and traversal workflows.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_paint_wok`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_paint_wok_ui_contract`.
+
 ### [2026-06-22] Map Studio Projects Combined Primitive Groups Into Export Readiness
 
 Owner: LordVaderCW
