@@ -60,6 +60,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["terrain_patch"].command_method == "create_authored_room_preset_module"
     assert statuses["universal_transform"].contract_kind == "command_query"
     assert statuses["universal_transform"].command_method == "map_studio_universal_transform_overlay"
+    assert statuses["center_pivot"].contract_kind == "command_mutates_kmap"
+    assert statuses["center_pivot"].command_method == "center_authored_room_primitive_pivot"
     assert statuses["placeable"].contract_kind == "command_mutates_kmap"
     assert statuses["placeable"].command_method == "add_authored_gameplay_placement"
     assert statuses["entry_point"].contract_kind == "command_mutates_kmap"
@@ -331,6 +333,22 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert universal_ready.mutates_kmap is False
     assert universal_ready.stale_outputs == ()
     assert "transform handles" in universal_ready.authoring_context
+
+    center_pivot_missing = resolve_map_studio_tool_belt_action("center_pivot")
+
+    assert center_pivot_missing.enabled is False
+    assert "selected authored room primitive" in center_pivot_missing.disabled_reason
+
+    center_pivot_ready = resolve_map_studio_tool_belt_action(
+        "center_pivot",
+        MapStudioToolActionContext(room_resref="room_a", primitive_name="room_a_cube"),
+    )
+
+    assert center_pivot_ready.enabled is True
+    assert center_pivot_ready.command_method == "center_authored_room_primitive_pivot"
+    assert center_pivot_ready.command_kwargs == {"room_resref": "room_a", "primitive_name": "room_a_cube"}
+    assert center_pivot_ready.mutates_kmap is True
+    assert "primitive-local space" in center_pivot_ready.authoring_context
 
     placeable_route = resolve_map_studio_tool_belt_action(
         "placeable",
@@ -2016,6 +2034,76 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert "map_studio_curve_guides" not in restored_curve_payload.get("extra", {})
 
 
+def test_t2606_center_pivot_preserves_visible_primitive_bounds() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_tool_action_dispatch import (
+        MapStudioToolActionContext,
+        execute_map_studio_tool_belt_action,
+    )
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grpivot01", game="K1")
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grpivot01")
+    execute_map_studio_tool_belt_action(
+        controller,
+        "primitive",
+        MapStudioToolActionContext(primitive_kind="cube", primitive_name="pivot_cube"),
+    )
+    cube = controller.authored_room_primitive_transforms()[-1]
+    controller.set_authored_room_primitive_transform(
+        room_resref=cube.room_resref,
+        primitive_name=cube.primitive_name,
+        translation=(1.0, 2.0, 0.0),
+        rotation_degrees_z=30.0,
+        scale=(2.0, 1.0, 2.0),
+        pivot=(0.0, 0.0, 0.0),
+    )
+
+    before = controller.map_studio_universal_transform_overlay(
+        room_resref=cube.room_resref,
+        primitive_name=cube.primitive_name,
+    )
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "center_pivot",
+        MapStudioToolActionContext(room_resref=cube.room_resref, primitive_name=cube.primitive_name),
+    )
+
+    after_rows = {
+        row.primitive_name: row
+        for row in controller.authored_room_primitive_transforms()
+        if row.room_resref == cube.room_resref
+    }
+    centered = after_rows["pivot_cube"]
+    assert centered.pivot == (0.0, 0.0, 0.5)
+    assert centered.translation == (1.0, 2.0, 0.5)
+    assert controller.command_history.undo_label == "Center pivot pivot_cube"
+
+    after = controller.map_studio_universal_transform_overlay(
+        room_resref=cube.room_resref,
+        primitive_name=cube.primitive_name,
+    )
+    assert tuple(round(value, 6) for value in after.bounds_min) == tuple(round(value, 6) for value in before.bounds_min)
+    assert tuple(round(value, 6) for value in after.bounds_max) == tuple(round(value, 6) for value in before.bounds_max)
+    assert tuple(round(value, 6) for value in after.center) == tuple(round(value, 6) for value in before.center)
+    payload = controller.project.extra_sections["authored_module"]
+    room_payload = payload["rooms"][0]
+    assert room_payload["primitive"]["metadata"]["last_operation"] == "center_primitive_pivot"
+    assert room_payload["primitive"]["metadata"]["center_pivot_space"] == "primitive_local_preserve_world_geometry"
+
+    controller.undo_map_studio_command()
+    restored = {
+        row.primitive_name: row
+        for row in controller.authored_room_primitive_transforms()
+        if row.room_resref == cube.room_resref
+    }["pivot_cube"]
+    assert restored.pivot == (0.0, 0.0, 0.0)
+    assert restored.translation == (1.0, 2.0, 0.0)
+
+
 def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -> None:
     window_source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
     scene_dispatcher = _read("native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py")
@@ -2081,6 +2169,8 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert "class MapStudioToolCapabilitySummary" in tools_catalog
     assert "def map_studio_tool_capability_summary" in scene_catalog
     assert "def map_studio_tool_capability_summary" in tools_catalog
+    assert '"center_pivot"' in scene_catalog
+    assert '"center_pivot"' in tools_catalog
 
     for source in (scene_dispatcher, tools_dispatcher):
         assert "class MapStudioToolActionContext" in source
@@ -2118,6 +2208,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="merge_authored_floor_plan_rooms"' in source
         assert 'command_method="separate_authored_room_primitive"' in source
         assert 'command_method="duplicate_authored_room_primitive"' in source
+        assert 'command_method="center_authored_room_primitive_pivot"' in source
         assert 'command_method="set_authored_room_edge_normal_policy"' in source
         assert 'command_method="apply_authored_terrain_brush_stroke"' in source
         assert 'command_method="shrink_wrap_authored_placements_to_terrain"' in source
@@ -2150,6 +2241,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     for source in (scene_controller, tools_controller):
         assert "audit_map_studio_tool_belt_contract" in source
         assert "def map_studio_tool_belt_contract_audit" in source
+        assert "def center_authored_room_primitive_pivot" in source
         assert "def authored_terrain_status" in source
         assert "previewable_status_query" in source
 

@@ -550,6 +550,31 @@ def resolve_map_studio_tool_belt_action(
             ),
         )
 
+    if key == "center_pivot":
+        if not ctx.primitive_name:
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="grid",
+                enabled=False,
+                disabled_reason="Center Pivot needs a selected authored room primitive.",
+            )
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="grid",
+            command_method="center_authored_room_primitive_pivot",
+            command_kwargs={
+                "room_resref": ctx.room_resref,
+                "primitive_name": ctx.primitive_name,
+            },
+            mutates_kmap=True,
+            authoring_context=(
+                "Center Pivot: recenter the selected primitive pivot in primitive-local space and compensate "
+                "translation so visible geometry and generated WOK stay fixed while validation/export/game proof become stale."
+            ),
+        )
+
     if key == "shrink_wrap":
         return _route(
             action,

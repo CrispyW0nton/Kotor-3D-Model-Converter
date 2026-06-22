@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Centers Primitive Pivots Without Moving Geometry
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Direct modeling tools / Primitive transforms
+Intersects: native Scene/Tools authored room operations, ModuleEditorController mirrors, tool-belt catalog, and dispatcher routing.
+
+- Added a headless `center_authored_room_composition_primitive_pivot` command that moves a selected primitive pivot to its primitive-local bounds center and compensates translation so visible MDL/WOK geometry remains stable.
+- Routed the new `center_pivot` tool through the Map Studio tool-belt dispatcher with KMAP mutation, stale export/proof metadata, undo/redo command history, command search/catalog entries, and default/component belt exposure.
+- Added focused regression coverage proving Center Pivot preserves Universal Manipulator world bounds, records KMAP metadata, and undoes back to the previous pivot/translation.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests/test_map_studio_tool_action_dispatch.py::test_t2606_center_pivot_preserves_visible_primitive_bounds -q --basetemp .pytest_tmp_map_studio_center_pivot`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions -q --basetemp .pytest_tmp_map_studio_center_pivot_audit`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_center_pivot_ui_contract`.
+
 ### [2026-06-22] Map Studio Tool Belt Uses QAction Command Surfaces
 
 Owner: LordVaderCW

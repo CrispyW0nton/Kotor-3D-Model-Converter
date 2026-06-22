@@ -1596,6 +1596,110 @@ def move_authored_room_composition_primitive(
     raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'.")
 
 
+def _linear_transform_vector(
+    vector: tuple[float, float, float],
+    transform: PrimitiveTransform,
+) -> tuple[float, float, float]:
+    sx, sy, sz = (float(value) for value in transform.scale)
+    x = float(vector[0]) * sx
+    y = float(vector[1]) * sy
+    z = float(vector[2]) * sz
+    angle = math.radians(float(transform.rotation_degrees_z))
+    cos_a = math.cos(angle)
+    sin_a = math.sin(angle)
+    return (x * cos_a - y * sin_a, x * sin_a + y * cos_a, z)
+
+
+def _centered_local_pivot(primitive: Any) -> tuple[float, float, float]:
+    mesh = primitive_to_mesh(_base_primitive(primitive))
+    bounds_min, bounds_max = _vec_bounds(tuple(mesh.vertices or ()))
+    return _vec_center(bounds_min, bounds_max)
+
+
+def _translation_for_recentered_pivot(
+    transform: PrimitiveTransform,
+    new_pivot: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    old_pivot = tuple(float(value) for value in transform.pivot)
+    old_linear = _linear_transform_vector(old_pivot, transform)
+    new_linear = _linear_transform_vector(new_pivot, transform)
+    return tuple(
+        float(transform.translation[index])
+        + old_pivot[index]
+        - old_linear[index]
+        - float(new_pivot[index])
+        + new_linear[index]
+        for index in range(3)
+    )  # type: ignore[return-value]
+
+
+def center_authored_room_composition_primitive_pivot(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+) -> AuthoredModuleProject:
+    """Center one primitive pivot in local space while preserving visible geometry."""
+
+    index = _target_room_index(project, room_resref)
+    room = project.rooms[index]
+    composition = _composition_for_room(room)
+    target = str(primitive_name or "").strip()
+    if not target:
+        raise ValueError("Center Pivot requires a selected authored primitive.")
+    updated_primitives = []
+    found = False
+    old_pivot: tuple[float, float, float] | None = None
+    next_pivot: tuple[float, float, float] | None = None
+    for primitive in tuple(composition.primitives or ()):
+        name = _primitive_name(primitive)
+        if name != target:
+            updated_primitives.append(primitive)
+            continue
+        found = True
+        transform = _primitive_transform(primitive)
+        old_pivot = tuple(float(value) for value in transform.pivot)
+        next_pivot = _centered_local_pivot(primitive)
+        centered_transform = PrimitiveTransform(
+            translation=_translation_for_recentered_pivot(transform, next_pivot),
+            rotation_degrees_z=float(transform.rotation_degrees_z),
+            scale=tuple(float(value) for value in transform.scale),
+            pivot=next_pivot,
+        )
+        if isinstance(primitive, PlacedRoomPrimitive):
+            updated_primitives.append(replace(primitive, transform=centered_transform))
+        else:
+            updated_primitives.append(PlacedRoomPrimitive(primitive=primitive, name=name, transform=centered_transform))
+    if not found:
+        known = ", ".join(_primitive_name(item) for item in tuple(composition.primitives or ()) if _primitive_name(item))
+        raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'. Known primitives: {known or '(none)'}.")
+    updated_composition = replace(
+        composition,
+        primitives=tuple(updated_primitives),
+        metadata={
+            **dict(composition.metadata),
+            "last_operation": "center_primitive_pivot",
+            "last_centered_pivot_primitive": target,
+            "center_pivot_space": "primitive_local_preserve_world_geometry",
+            "old_pivot": list(old_pivot or (0.0, 0.0, 0.0)),
+            "new_pivot": list(next_pivot or (0.0, 0.0, 0.0)),
+        },
+    )
+    updated = replace(
+        room,
+        primitive=updated_composition,
+        composition=None,
+        metadata={
+            **dict(room.metadata),
+            "primitive": "authored_room_composition",
+            "last_operation": "center_primitive_pivot",
+            "last_centered_pivot_primitive": target,
+        },
+    )
+    rooms = tuple(project.rooms[:index] + (updated,) + project.rooms[index + 1 :])
+    return _replace_rooms(project, rooms, operation="center_primitive_pivot")
+
+
 def _duplicate_primitive_name(existing: set[str], source_name: str, duplicate_index: int) -> str:
     base = str(source_name or "primitive").strip() or "primitive"
     for suffix_index in range(duplicate_index, duplicate_index + 1000):
@@ -3476,6 +3580,7 @@ __all__ = [
     "authored_room_composition_primitives",
     "authored_room_composition_primitive_universal_transform",
     "bridge_authored_floor_plan_edges",
+    "center_authored_room_composition_primitive_pivot",
     "cleanup_authored_floor_plan_normals",
     "cleanup_authored_floor_plan_vertices",
     "duplicate_authored_room_composition_primitive",

@@ -111,6 +111,7 @@ from .authored_room_operations import (
     authored_terrain_room_choices,
     authored_room_composition_primitives,
     bridge_authored_floor_plan_edges,
+    center_authored_room_composition_primitive_pivot,
     cleanup_authored_floor_plan_normals,
     cleanup_authored_floor_plan_vertices,
     duplicate_authored_room_composition_primitive,
@@ -2537,6 +2538,39 @@ class ModuleEditorController:
             label=f"Move primitive {primitive_name}",
             before=before,
             metadata={"room_resref": room_resref, "primitive_name": primitive_name, "world_delta": world_delta},
+        )
+        return self.authored_module_readiness()
+
+    def center_authored_room_primitive_pivot(self, *, room_resref: str, primitive_name: str):
+        """Center one authored primitive pivot while preserving visible geometry."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = center_authored_room_composition_primitive_pivot(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Centered Map Studio pivot for primitive {primitive_name}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.center_pivot",
+            label=f"Center pivot {primitive_name}",
+            before=before,
+            metadata={"room_resref": room_resref, "primitive_name": primitive_name},
         )
         return self.authored_module_readiness()
 
