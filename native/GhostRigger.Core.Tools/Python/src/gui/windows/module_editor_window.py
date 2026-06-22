@@ -1352,6 +1352,19 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             combo = getattr(self.builder_tab, combo_name, None)
             if combo is not None:
                 combo.currentIndexChanged.connect(lambda _index=0: self._refresh_map_studio_tool_context())
+        for spin_name in (
+            "duplicateSpecialCountSpinBox",
+            "duplicateSpecialOffsetXSpinBox",
+            "duplicateSpecialOffsetYSpinBox",
+            "duplicateSpecialOffsetZSpinBox",
+            "duplicateSpecialRotationZSpinBox",
+            "duplicateSpecialScaleXSpinBox",
+            "duplicateSpecialScaleYSpinBox",
+            "duplicateSpecialScaleZSpinBox",
+        ):
+            spin = getattr(self.builder_tab, spin_name, None)
+            if spin is not None:
+                spin.valueChanged.connect(lambda _value=0: self._refresh_map_studio_tool_context())
 
     def _refresh_map_studio_tool_context(self) -> None:
         """Rebuild Map Studio command surfaces from the current Builder selection."""
@@ -1689,6 +1702,14 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         cut_center_y = getattr(self.builder_tab, "cutCenterYSpinBox", None)
         cut_width = getattr(self.builder_tab, "cutWidthSpinBox", None)
         cut_depth = getattr(self.builder_tab, "cutDepthSpinBox", None)
+        duplicate_count = getattr(self.builder_tab, "duplicateSpecialCountSpinBox", None)
+        duplicate_offset_x = getattr(self.builder_tab, "duplicateSpecialOffsetXSpinBox", None)
+        duplicate_offset_y = getattr(self.builder_tab, "duplicateSpecialOffsetYSpinBox", None)
+        duplicate_offset_z = getattr(self.builder_tab, "duplicateSpecialOffsetZSpinBox", None)
+        duplicate_rotation_z = getattr(self.builder_tab, "duplicateSpecialRotationZSpinBox", None)
+        duplicate_scale_x = getattr(self.builder_tab, "duplicateSpecialScaleXSpinBox", None)
+        duplicate_scale_y = getattr(self.builder_tab, "duplicateSpecialScaleYSpinBox", None)
+        duplicate_scale_z = getattr(self.builder_tab, "duplicateSpecialScaleZSpinBox", None)
         key = str(action_key or "").strip()
         axis = "x"
         if key == "mirror_y":
@@ -1902,6 +1923,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             cut_size=(
                 float(cut_width.value()) if cut_width is not None else 1.0,
                 float(cut_depth.value()) if cut_depth is not None else 1.0,
+            ),
+            duplicate_count=int(duplicate_count.value()) if duplicate_count is not None else 1,
+            duplicate_translation_offset=(
+                float(duplicate_offset_x.value()) if duplicate_offset_x is not None else 1.0,
+                float(duplicate_offset_y.value()) if duplicate_offset_y is not None else 0.0,
+                float(duplicate_offset_z.value()) if duplicate_offset_z is not None else 0.0,
+            ),
+            duplicate_rotation_offset_degrees_z=float(duplicate_rotation_z.value()) if duplicate_rotation_z is not None else 0.0,
+            duplicate_scale_multiplier=(
+                float(duplicate_scale_x.value()) if duplicate_scale_x is not None else 1.0,
+                float(duplicate_scale_y.value()) if duplicate_scale_y is not None else 1.0,
+                float(duplicate_scale_z.value()) if duplicate_scale_z is not None else 1.0,
             ),
             export_output_dir=str(getattr(self, "_last_output_dir", "") or "").strip(),
             export_dry_run=self._map_studio_export_dry_run_enabled(),

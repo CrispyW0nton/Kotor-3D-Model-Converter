@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Exposes Duplicate Special Parameters
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Level Editor tool belt / Duplicate Special
+Intersects: native Tools and GUI Display Builder panels, Level Editor tool-action context, and Map Studio workflow-panel source contracts.
+
+- Added visible Builder controls for Duplicate Special copy count, translation offset, Z rotation offset, and per-axis scale multiplier so modders can author repeat patterns instead of relying on hidden defaults.
+- Passed those controls into `MapStudioToolActionContext`, preserving the existing core Duplicate Special command, undo history, KMAP mutation path, and tool-belt/command-search execution route.
+- Refreshed Map Studio tool-belt readiness when Duplicate Special parameters change so the command surface stays aligned with the visible Builder state.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2606_map_studio_duplicate_special_parameters_are_visible_and_routed -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_duplicate_special_ui`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_duplicate_special_dispatch`; `git diff --check`.
+
 ### [2026-06-22] Map Studio Command Search Shows Current Route Readiness
 
 Owner: LordVaderCW

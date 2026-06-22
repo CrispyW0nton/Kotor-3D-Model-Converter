@@ -1224,6 +1224,39 @@ def test_t2605_map_studio_edit_mode_context_is_headless_policy() -> None:
         assert "def available_map_studio_edit_mode_contexts" in source
         assert "def map_studio_edit_mode_context" in source
 
+def test_t2606_map_studio_duplicate_special_parameters_are_visible_and_routed() -> None:
+    builder_source = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
+        "module_editor/builder_tab.py"
+    )
+    builder_mirror_source = _read(
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
+        "module_editor/builder_tab.py"
+    )
+    window_source = _read(
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
+        "module_editor_window.py"
+    )
+
+    for source in (builder_source, builder_mirror_source):
+        assert "Duplicate Special" in source
+        assert "mapStudioDuplicateSpecialCountSpinBox" in source
+        assert "mapStudioDuplicateSpecialOffsetXSpinBox" in source
+        assert "mapStudioDuplicateSpecialOffsetYSpinBox" in source
+        assert "mapStudioDuplicateSpecialOffsetZSpinBox" in source
+        assert "mapStudioDuplicateSpecialRotationZSpinBox" in source
+        assert "mapStudioDuplicateSpecialScaleXSpinBox" in source
+        assert "mapStudioDuplicateSpecialScaleYSpinBox" in source
+        assert "mapStudioDuplicateSpecialScaleZSpinBox" in source
+        assert "Repeat the selected primitive" in source
+
+    assert '"duplicateSpecialCountSpinBox"' in window_source
+    assert "duplicate_count=int(duplicate_count.value())" in window_source
+    assert "duplicate_translation_offset=(" in window_source
+    assert "duplicate_rotation_offset_degrees_z=float(duplicate_rotation_z.value())" in window_source
+    assert "duplicate_scale_multiplier=(" in window_source
+    assert '"duplicateSpecialScaleZSpinBox"' in window_source
+
 
 def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
     builder_source = _read(

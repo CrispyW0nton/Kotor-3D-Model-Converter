@@ -533,6 +533,75 @@ class BuilderTab(QtWidgets.QWidget):
         transform_layout.addRow(self.separatePrimitiveButton)
         transform_layout.addRow(self.removePrimitiveButton)
         layout.addWidget(transform_box)
+        duplicate_box = QtWidgets.QGroupBox("Duplicate Special")
+        duplicate_layout = QtWidgets.QFormLayout(duplicate_box)
+        self.duplicateSpecialHintLabel = QtWidgets.QLabel(
+            "Repeat the selected primitive with per-copy move, rotate, and scale offsets."
+        )
+        self.duplicateSpecialHintLabel.setObjectName("mapStudioDuplicateSpecialHintLabel")
+        self.duplicateSpecialHintLabel.setWordWrap(True)
+        self.duplicateSpecialCountSpinBox = QtWidgets.QSpinBox()
+        self.duplicateSpecialCountSpinBox.setObjectName("mapStudioDuplicateSpecialCountSpinBox")
+        self.duplicateSpecialCountSpinBox.setRange(1, 64)
+        self.duplicateSpecialCountSpinBox.setValue(1)
+        self.duplicateSpecialOffsetXSpinBox = self._make_transform_spin(
+            "mapStudioDuplicateSpecialOffsetXSpinBox",
+            -1000.0,
+            1000.0,
+            " m",
+            value=1.0,
+        )
+        self.duplicateSpecialOffsetYSpinBox = self._make_transform_spin(
+            "mapStudioDuplicateSpecialOffsetYSpinBox",
+            -1000.0,
+            1000.0,
+            " m",
+        )
+        self.duplicateSpecialOffsetZSpinBox = self._make_transform_spin(
+            "mapStudioDuplicateSpecialOffsetZSpinBox",
+            -1000.0,
+            1000.0,
+            " m",
+        )
+        self.duplicateSpecialRotationZSpinBox = self._make_transform_spin(
+            "mapStudioDuplicateSpecialRotationZSpinBox",
+            -360.0,
+            360.0,
+            " deg",
+            decimals=1,
+            step=15.0,
+        )
+        self.duplicateSpecialScaleXSpinBox = self._make_transform_spin(
+            "mapStudioDuplicateSpecialScaleXSpinBox",
+            0.01,
+            100.0,
+            "",
+            value=1.0,
+        )
+        self.duplicateSpecialScaleYSpinBox = self._make_transform_spin(
+            "mapStudioDuplicateSpecialScaleYSpinBox",
+            0.01,
+            100.0,
+            "",
+            value=1.0,
+        )
+        self.duplicateSpecialScaleZSpinBox = self._make_transform_spin(
+            "mapStudioDuplicateSpecialScaleZSpinBox",
+            0.01,
+            100.0,
+            "",
+            value=1.0,
+        )
+        duplicate_layout.addRow(self.duplicateSpecialHintLabel)
+        duplicate_layout.addRow("Copies:", self.duplicateSpecialCountSpinBox)
+        duplicate_layout.addRow("Offset X:", self.duplicateSpecialOffsetXSpinBox)
+        duplicate_layout.addRow("Offset Y:", self.duplicateSpecialOffsetYSpinBox)
+        duplicate_layout.addRow("Offset Z:", self.duplicateSpecialOffsetZSpinBox)
+        duplicate_layout.addRow("Rotate Z:", self.duplicateSpecialRotationZSpinBox)
+        duplicate_layout.addRow("Scale X:", self.duplicateSpecialScaleXSpinBox)
+        duplicate_layout.addRow("Scale Y:", self.duplicateSpecialScaleYSpinBox)
+        duplicate_layout.addRow("Scale Z:", self.duplicateSpecialScaleZSpinBox)
+        layout.addWidget(duplicate_box)
         dimensions_box = QtWidgets.QGroupBox("Primitive Dimensions")
         dimensions_layout = QtWidgets.QFormLayout(dimensions_box)
         self.primitiveDimensionHintLabel = QtWidgets.QLabel("Select an authored primitive to edit its dimensions.")
