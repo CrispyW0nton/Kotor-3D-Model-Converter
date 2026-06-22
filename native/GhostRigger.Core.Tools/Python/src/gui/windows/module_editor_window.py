@@ -716,6 +716,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.map_studio_command_search_combo.editTextChanged.connect(
             lambda _text="": self._update_map_studio_command_search_readiness()
         )
+        self._connect_map_studio_tool_context_refresh_signals()
         self.map_studio_tool_belt_widget.customContextMenuRequested.connect(
             lambda pos: self._open_map_studio_tool_context_menu(self.map_studio_tool_belt_widget, pos)
         )
@@ -1309,6 +1310,24 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
+
+    def _connect_map_studio_tool_context_refresh_signals(self) -> None:
+        """Refresh command-surface readiness when visible Map Studio context changes."""
+
+        for combo_name in (
+            "roomPrimitiveTransformComboBox",
+            "primitiveSurfaceComboBox",
+            "roomSurfaceComboBox",
+        ):
+            combo = getattr(self.builder_tab, combo_name, None)
+            if combo is not None:
+                combo.currentIndexChanged.connect(lambda _index=0: self._refresh_map_studio_tool_context())
+
+    def _refresh_map_studio_tool_context(self) -> None:
+        """Rebuild Map Studio command surfaces from the current Builder selection."""
+
+        self._refresh_map_studio_tool_belt()
+        self._update_map_studio_command_search_readiness()
 
     def _refresh_map_studio_tool_belt(self) -> None:
         self._clear_map_studio_tool_belt_layout(self.map_studio_tool_belt_layout)

@@ -803,7 +803,14 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "workspace_key" in window_source
     assert "usable" in window_source
     assert "planned" in window_source
+    assert "def _connect_map_studio_tool_context_refresh_signals" in window_source
+    assert "def _refresh_map_studio_tool_context" in window_source
+    assert '"roomPrimitiveTransformComboBox",' in window_source
+    assert '"primitiveSurfaceComboBox",' in window_source
+    assert '"roomSurfaceComboBox",' in window_source
+    assert "combo.currentIndexChanged.connect(lambda _index=0: self._refresh_map_studio_tool_context())" in window_source
     assert "def _refresh_map_studio_tool_belt" in window_source
+    assert "self._update_map_studio_command_search_readiness()" in window_source
     assert "def _apply_map_studio_tool_belt_preferences_from_project" in window_source
     assert "def _persist_map_studio_tool_belt_preferences" in window_source
     assert "def _handle_map_studio_tool_belt_preset_changed" in window_source
