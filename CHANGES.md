@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Keeps Tool Belt Action IDs Unique
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Tool belt catalog / Command search
+Intersects: native Scene/Tools Map Studio modeling catalog and tool-belt dispatcher tests.
+
+- Split the duplicate `triangulate` tool-belt action into a unique `triangulate_face` command ID while preserving the existing `triangulate` route for current tool-belt behavior.
+- Added `triangulate_face` to the blockout and component presets so custom layouts and command search can address the face-specific operation without colliding with the general Triangulate action.
+- Added a focused action-catalog uniqueness regression check plus dispatcher/search coverage for the new unique action ID.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context -q --basetemp .pytest_tmp_map_studio_action_catalog`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests/test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q --basetemp .pytest_tmp_map_studio_action_catalog_contract`.
+
 ### [2026-06-21] Map Studio Proves Core Modeling Tool Commands
 
 Owner: LordVaderCW

@@ -1100,7 +1100,7 @@ def resolve_map_studio_tool_belt_action(
             ),
         )
 
-    if key == "triangulate":
+    if key in {"triangulate", "triangulate_face"}:
         return _route(
             action,
             focus_component_mode="face",

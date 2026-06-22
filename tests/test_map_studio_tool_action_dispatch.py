@@ -138,12 +138,19 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
         resolve_map_studio_tool_belt_action,
     )
     from src.core.modules.map_studio_modeling_tools import (
+        available_map_studio_tool_belt_actions,
         available_map_studio_modeling_tools,
         map_studio_tool_command_search,
     )
 
     cube = resolve_map_studio_tool_belt_action("cube")
     tool_by_key = {tool.key: tool for tool in available_map_studio_modeling_tools()}
+    tool_belt_actions = available_map_studio_tool_belt_actions()
+    tool_belt_action_keys = [action.key for action in tool_belt_actions]
+
+    assert len(tool_belt_action_keys) == len(set(tool_belt_action_keys))
+    assert "triangulate" in tool_belt_action_keys
+    assert "triangulate_face" in tool_belt_action_keys
 
     assert cube.enabled is True
     assert cube.command_method == "add_authored_room_primitive"
@@ -748,6 +755,16 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert triangulate.command_kwargs == {"room_resref": "room_a"}
     assert "deterministic floor-plan fan triangles" in triangulate.authoring_context
 
+    triangulate_face = resolve_map_studio_tool_belt_action(
+        "triangulate_face",
+        MapStudioToolActionContext(room_resref="room_a"),
+    )
+
+    assert triangulate_face.enabled is True
+    assert triangulate_face.command_method == "triangulate_authored_floor_plan_face"
+    assert triangulate_face.command_kwargs == {"room_resref": "room_a"}
+    assert "deterministic floor-plan fan triangles" in triangulate_face.authoring_context
+
     bridge_missing = resolve_map_studio_tool_belt_action("bridge")
 
     assert bridge_missing.enabled is False
@@ -977,13 +994,15 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     search_walkmesh = map_studio_tool_command_search("walkmesh", limit=5)
     search_v = map_studio_tool_command_search("snap vtx", limit=3)
     search_grid = map_studio_tool_command_search("grid snap", limit=3)
+    search_triangulate_face = map_studio_tool_command_search("triangulate face", limit=3)
 
-    assert len(search_all) >= 81
+    assert len(search_all) >= 83
     assert search_walkmesh
     assert search_walkmesh[0].key == "walkmesh"
     assert search_walkmesh[0].display_label == "WOK Paint [walkmesh]"
     assert any(result.key == "vertex_snap" for result in search_v)
     assert any(result.key == "grid_snap" for result in search_grid)
+    assert any(result.key == "triangulate_face" for result in search_triangulate_face)
     assert all(result.implemented for result in search_all)
 
 
