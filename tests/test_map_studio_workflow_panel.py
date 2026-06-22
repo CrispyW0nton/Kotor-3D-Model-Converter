@@ -1145,6 +1145,10 @@ def test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes() -> None:
     assert 'self._select_map_studio_modeling_tool("fill_face")' in window_source
     assert 'self._select_map_studio_component_mode("walkmesh")' in window_source
     assert 'self._select_map_studio_modeling_tool("paint_wok")' in window_source
+    assert 'primitive_surface_data = self._map_studio_combo_data("primitiveSurfaceComboBox")' in window_source
+    assert 'room_surface_data = self._map_studio_combo_data("roomSurfaceComboBox")' in window_source
+    assert 'metadata["supports_walkmesh_surface"] = bool(primitive_data.get("supports_walkmesh_surface"))' in window_source
+    assert 'metadata["surface_id"] = surface_id' in window_source
     assert 'self._select_map_studio_modeling_tool("terrain_sculpt")' in window_source
     assert "self._focus_map_studio_export_proof_workspace()" in window_source
     assert 'context = f"{label} mode:' in window_source

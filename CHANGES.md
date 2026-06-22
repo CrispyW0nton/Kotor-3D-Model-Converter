@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Carries Primitive WOK Capability Into Tool Context
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Level Editor tool belt / Walkmesh readiness
+Intersects: native Tools Level Editor context builder and Map Studio workflow-panel source contracts.
+
+- Passed the selected composition primitive's `supports_walkmesh_surface` fact from the Builder panel into `MapStudioToolActionContext` metadata so `paint_wok` readiness can distinguish walkmesh-producing primitives from decorative geometry in the actual Level Editor action path.
+- Passed the visible room/primitive WOK surface combo selection into the tool-action metadata so the command-backed WOK paint route uses the modder's selected surface instead of a silent default.
+- Added source-contract coverage to preserve the primitive WOK capability and surface-selection handoff across future UI merges.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_wok_context_ui`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_wok_context_dispatch`.
+
 ### [2026-06-22] Map Studio Blocks WOK Paint On Decorative Primitives
 
 Owner: LordVaderCW

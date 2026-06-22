@@ -1622,6 +1622,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         union_second = self._map_studio_combo_data("floorPlanUnionSecondRoomComboBox")
         opening_data = self._map_studio_combo_data("floorPlanOpeningRoomComboBox")
         primitive_data = self._map_studio_combo_data("roomPrimitiveTransformComboBox")
+        primitive_surface_data = self._map_studio_combo_data("primitiveSurfaceComboBox")
+        room_surface_data = self._map_studio_combo_data("roomSurfaceComboBox")
         opening_marker_data = self._map_studio_combo_data("floorPlanOpeningMarkerRoomComboBox")
         selected_points = self._map_studio_selected_point_indices()
         source_point = getattr(self.builder_tab, "floorPlanSourcePointSpinBox", None)
@@ -1726,6 +1728,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             if key == "primitive"
             else str(primitive_data.get("primitive_name") or "")
         )
+        if primitive_name and "supports_walkmesh_surface" in primitive_data:
+            metadata["supports_walkmesh_surface"] = bool(primitive_data.get("supports_walkmesh_surface"))
+            metadata["selected_primitive_type"] = str(primitive_data.get("primitive_type") or "")
+            metadata["selected_primitive_surface_name"] = str(primitive_data.get("surface_name") or "")
+        if key == "paint_wok":
+            surface_data = primitive_surface_data if primitive_name else room_surface_data
+            surface_id = str(surface_data.get("surface_id") or primitive_data.get("surface_id") or "").strip()
+            if surface_id:
+                metadata["surface_id"] = surface_id
         terrain_room_resref = str(terrain_context.get("room_resref") or "").strip()
         if key.startswith("sculpt_"):
             current_room_resref = terrain_room_resref
