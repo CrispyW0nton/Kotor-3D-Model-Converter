@@ -117,6 +117,9 @@ class MapStudioToolCommandSearchResult:
     description: str
     kotor_guardrail: str
     hotkey: str
+    capability_stage: str
+    resource_impacts: tuple[str, ...]
+    readiness_summary: str
     implemented: bool
     score: int
     display_label: str
@@ -1727,6 +1730,53 @@ def map_studio_tool_belt_actions_for_preset(
     return tuple(actions)
 
 
+def _tool_capability_stage(action: MapStudioToolBeltAction) -> str:
+    if not bool(action.implemented):
+        return "planned"
+    key = str(action.key or "")
+    if key == "stage_module":
+        return "export_candidate"
+    if key in {"install_module", "launch_handoff"}:
+        return "installed_for_game_test_handoff"
+    if key == "record_proof":
+        return "game_tested_evidence_handoff"
+    return "previewable"
+
+
+def _tool_resource_impacts(action: MapStudioToolBeltAction) -> tuple[str, ...]:
+    key = str(action.key or "")
+    workspace = str(action.workspace_key or "")
+    if key == "validate":
+        return ("ValidationBus", "readiness")
+    if key in {"stage_module", "install_module", "launch_handoff", "record_proof"}:
+        return ("ExportJob", ".mod", "proof_manifest")
+    if workspace == "placements":
+        return ("KMAP", "GIT", "PTH", ".mod")
+    if workspace == "lighting":
+        return ("KMAP", "LYT", "VIS", "MDL", ".mod")
+    if workspace == "scripts":
+        return ("KMAP", "ARE", "IFO", ".mod")
+    if workspace in {"terrain", "walkmesh"}:
+        return ("KMAP", "MDL", "MDX", "WOK", "PTH", ".mod")
+    if workspace == "export":
+        return ("ValidationBus", "ExportJob", ".mod", "proof_manifest")
+    return ("KMAP", "MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+
+
+def _tool_readiness_summary(action: MapStudioToolBeltAction) -> str:
+    stage = _tool_capability_stage(action)
+    impacts = ", ".join(_tool_resource_impacts(action))
+    if stage == "planned":
+        return "Planned; do not present as usable until a command, validation impact, and export/readiness impact exist."
+    if stage == "export_candidate":
+        return f"Creates an export candidate through staged validation/export flow; resources: {impacts}."
+    if stage == "installed_for_game_test_handoff":
+        return f"Prepares install/launch handoff for game testing; not game-tested proof by itself; resources: {impacts}."
+    if stage == "game_tested_evidence_handoff":
+        return f"Records or prepares game-test evidence handoff; only accepted in-game evidence makes the module game-tested; resources: {impacts}."
+    return f"Previewable Map Studio edit/query; affected resources must be revalidated before export or game proof: {impacts}."
+
+
 def map_studio_tool_command_search(
     query: str = "",
     *,
@@ -1742,6 +1792,9 @@ def map_studio_tool_command_search(
         if not include_planned and not action.implemented:
             continue
         workspace = str(action.workspace_key or "map").replace("_", " ")
+        capability_stage = _tool_capability_stage(action)
+        resource_impacts = _tool_resource_impacts(action)
+        readiness_summary = _tool_readiness_summary(action)
         searchable = " ".join(
             (
                 action.key,
@@ -1751,6 +1804,9 @@ def map_studio_tool_command_search(
                 action.description,
                 action.kotor_guardrail,
                 action.hotkey,
+                capability_stage,
+                " ".join(resource_impacts),
+                readiness_summary,
             )
         ).lower()
         if tokens and not all(token in searchable for token in tokens):
@@ -1784,6 +1840,9 @@ def map_studio_tool_command_search(
                 description=action.description,
                 kotor_guardrail=action.kotor_guardrail,
                 hotkey=action.hotkey,
+                capability_stage=capability_stage,
+                resource_impacts=resource_impacts,
+                readiness_summary=readiness_summary,
                 implemented=action.implemented,
                 score=score,
                 display_label=display_label,

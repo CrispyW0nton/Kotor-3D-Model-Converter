@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Search Reports Capability And Resource Impact
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Command search / Capability honesty
+Intersects: native Scene/Tools Map Studio modeling catalog and focused tool-belt dispatch tests.
+
+- Added capability-stage, KOTOR resource-impact, and readiness-summary metadata to headless Map Studio command-search results so tool belts, command palettes, custom tabs, and context menus can display whether a tool is previewable, export-candidate, install-handoff, or evidence-handoff without guessing in Qt code.
+- Included the new readiness metadata in command-search matching so modders can discover tools by terms like `export candidate`, `.mod`, `game evidence`, `WOK`, or `KMAP`.
+- Updated focused dispatch/search tests to prove geometry tools report previewable resource impacts, staged export reports ExportJob/.mod impacts, and proof recording remains an evidence handoff rather than a false game-tested claim.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context -q --basetemp .pytest_tmp_map_studio_search_readiness`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests/test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q --basetemp .pytest_tmp_map_studio_search_readiness_contract`.
+
 ### [2026-06-21] Map Studio Keeps Tool Belt Action IDs Unique
 
 Owner: LordVaderCW

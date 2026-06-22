@@ -995,6 +995,8 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     search_v = map_studio_tool_command_search("snap vtx", limit=3)
     search_grid = map_studio_tool_command_search("grid snap", limit=3)
     search_triangulate_face = map_studio_tool_command_search("triangulate face", limit=3)
+    search_export_candidate = map_studio_tool_command_search("export candidate", limit=0)
+    search_game_evidence = map_studio_tool_command_search("game evidence", limit=0)
 
     assert len(search_all) >= 83
     assert search_walkmesh
@@ -1003,6 +1005,20 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert any(result.key == "vertex_snap" for result in search_v)
     assert any(result.key == "grid_snap" for result in search_grid)
     assert any(result.key == "triangulate_face" for result in search_triangulate_face)
+    cube_search = next(result for result in search_all if result.key == "cube")
+    stage_search = next(result for result in search_all if result.key == "stage_module")
+    proof_search = next(result for result in search_all if result.key == "record_proof")
+    assert cube_search.capability_stage == "previewable"
+    assert "KMAP" in cube_search.resource_impacts
+    assert "WOK" in cube_search.resource_impacts
+    assert "game proof" in cube_search.readiness_summary
+    assert stage_search.capability_stage == "export_candidate"
+    assert "ExportJob" in stage_search.resource_impacts
+    assert ".mod" in stage_search.resource_impacts
+    assert proof_search.capability_stage == "game_tested_evidence_handoff"
+    assert "accepted in-game evidence" in proof_search.readiness_summary
+    assert any(result.key == "stage_module" for result in search_export_candidate)
+    assert any(result.key == "record_proof" for result in search_game_evidence)
     assert all(result.implemented for result in search_all)
 
 
