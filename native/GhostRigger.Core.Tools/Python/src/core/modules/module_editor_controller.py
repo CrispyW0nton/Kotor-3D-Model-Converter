@@ -119,6 +119,7 @@ from .authored_room_operations import (
     freeze_authored_room_composition_primitive_transform,
     flatten_authored_floor_plan_vertices,
     grid_snap_authored_floor_plan_vertices,
+    grid_snap_authored_room_composition_primitive,
     mirror_authored_floor_plan_vertices,
     move_authored_floor_plan_point,
     move_authored_room_composition_primitive,
@@ -2539,6 +2540,53 @@ class ModuleEditorController:
             label=f"Move primitive {primitive_name}",
             before=before,
             metadata={"room_resref": room_resref, "primitive_name": primitive_name, "world_delta": world_delta},
+        )
+        return self.authored_module_readiness()
+
+    def grid_snap_authored_room_primitive(
+        self,
+        *,
+        room_resref: str,
+        primitive_name: str,
+        grid_size: float = 0.1,
+        axes: Any = ("x", "y", "z"),
+    ):
+        """Snap one authored primitive pivot to the Map Studio grid."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = grid_snap_authored_room_composition_primitive(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+            grid_size=grid_size,
+            axes=axes,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Grid-snapped Map Studio primitive {primitive_name}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.object_grid_snap",
+            label=f"Object grid snap {primitive_name}",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "primitive_name": primitive_name,
+                "grid_size": grid_size,
+                "axes": tuple(axes or ()),
+            },
         )
         return self.authored_module_readiness()
 

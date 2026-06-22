@@ -93,6 +93,8 @@ class MapStudioToolActionContext:
     duplicate_translation_offset: tuple[float, float, float] = (1.0, 0.0, 0.0)
     duplicate_rotation_offset_degrees_z: float = 0.0
     duplicate_scale_multiplier: tuple[float, float, float] = (1.0, 1.0, 1.0)
+    grid_size: float = 0.1
+    snap_axes: tuple[str, ...] = ("x", "y", "z")
     export_output_dir: str = ""
     export_dry_run: bool = True
     export_overwrite: bool = False
@@ -597,6 +599,33 @@ def resolve_map_studio_tool_belt_action(
             authoring_context=(
                 "Freeze Transform: bake supported unrotated primitive translation and scale into the authored "
                 "parametric primitive, reset transform intent to identity, and mark validation/export/game proof stale."
+            ),
+        )
+
+    if key == "object_grid_snap":
+        if not ctx.primitive_name:
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="grid",
+                enabled=False,
+                disabled_reason="Object Grid Snap needs a selected authored room primitive.",
+            )
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="grid",
+            command_method="grid_snap_authored_room_primitive",
+            command_kwargs={
+                "room_resref": ctx.room_resref,
+                "primitive_name": ctx.primitive_name,
+                "grid_size": float(ctx.grid_size),
+                "axes": tuple(ctx.snap_axes or ("x", "y", "z")),
+            },
+            mutates_kmap=True,
+            authoring_context=(
+                "Object Grid Snap: snap the selected primitive pivot in KMAP-world space to the authored grid. "
+                "This moves the object, preserves primitive identity/topology, and makes validation/export/game proof stale."
             ),
         )
 

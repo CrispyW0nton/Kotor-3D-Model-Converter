@@ -1596,6 +1596,107 @@ def move_authored_room_composition_primitive(
     raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'.")
 
 
+def _snap_scalar_to_grid(value: float, grid_size: float) -> float:
+    return round(float(value) / float(grid_size)) * float(grid_size)
+
+
+def grid_snap_authored_room_composition_primitive(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+    grid_size: float = 0.1,
+    axes: tuple[str, ...] | list[str] = ("x", "y", "z"),
+) -> AuthoredModuleProject:
+    """Snap a selected primitive pivot to the authored Map Studio grid.
+
+    This is an object-placement command in KMAP/world space.  It deliberately
+    does not weld or rewrite primitive topology; it moves the primitive by
+    updating transform translation so the local pivot lands on the grid.
+    """
+
+    safe_grid = float(grid_size)
+    if safe_grid <= 0.0:
+        raise ValueError("Object Grid Snap size must be greater than zero.")
+    axes_tuple = tuple(str(axis or "").strip().lower() for axis in tuple(axes or ("x", "y", "z")))
+    axes_xyz = tuple(axis for axis in axes_tuple if axis in {"x", "y", "z"}) or ("x", "y", "z")
+    axis_indices = {"x": 0, "y": 1, "z": 2}
+
+    index = _target_room_index(project, room_resref)
+    room = project.rooms[index]
+    composition = _composition_for_room(room)
+    target = str(primitive_name or "").strip()
+    if not target:
+        raise ValueError("Object Grid Snap requires a selected authored primitive.")
+
+    updated_primitives = []
+    found = False
+    old_translation: tuple[float, float, float] | None = None
+    new_translation: tuple[float, float, float] | None = None
+    snapped_pivot: tuple[float, float, float] | None = None
+    for primitive in tuple(composition.primitives or ()):
+        name = _primitive_name(primitive)
+        if name != target:
+            updated_primitives.append(primitive)
+            continue
+        found = True
+        transform = _primitive_transform(primitive)
+        old_translation = tuple(float(value) for value in transform.translation)
+        pivot = tuple(float(value) for value in transform.pivot)
+        world_pivot = tuple(pivot[i] + old_translation[i] for i in range(3))
+        next_world_pivot = list(world_pivot)
+        next_translation = list(old_translation)
+        for axis in axes_xyz:
+            component = axis_indices[axis]
+            next_world_pivot[component] = _snap_scalar_to_grid(world_pivot[component], safe_grid)
+            next_translation[component] = float(next_world_pivot[component]) - pivot[component]
+        snapped_pivot = tuple(float(value) for value in next_world_pivot)
+        new_translation = tuple(float(value) for value in next_translation)
+        snapped_transform = PrimitiveTransform(
+            translation=new_translation,
+            rotation_degrees_z=float(transform.rotation_degrees_z),
+            scale=tuple(float(value) for value in transform.scale),
+            pivot=pivot,
+        )
+        if isinstance(primitive, PlacedRoomPrimitive):
+            updated_primitives.append(replace(primitive, transform=snapped_transform))
+        else:
+            updated_primitives.append(PlacedRoomPrimitive(primitive=primitive, name=name, transform=snapped_transform))
+
+    if not found:
+        known = ", ".join(_primitive_name(item) for item in tuple(composition.primitives or ()) if _primitive_name(item))
+        raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'. Known primitives: {known or '(none)'}.")
+
+    updated_composition = replace(
+        composition,
+        primitives=tuple(updated_primitives),
+        metadata={
+            **dict(composition.metadata),
+            "last_operation": "object_grid_snap_primitive",
+            "last_grid_snapped_primitive": target,
+            "object_grid_snap_coordinate_space": "kmap_world_pivot",
+            "object_grid_snap_size": safe_grid,
+            "object_grid_snap_axes": list(axes_xyz),
+            "old_translation": list(old_translation or (0.0, 0.0, 0.0)),
+            "new_translation": list(new_translation or (0.0, 0.0, 0.0)),
+            "snapped_world_pivot": list(snapped_pivot or (0.0, 0.0, 0.0)),
+        },
+    )
+    updated = replace(
+        room,
+        primitive=updated_composition,
+        composition=None,
+        metadata={
+            **dict(room.metadata),
+            "primitive": "authored_room_composition",
+            "last_operation": "object_grid_snap_primitive",
+            "last_grid_snapped_primitive": target,
+        },
+    )
+    rooms = tuple(project.rooms[:index] + (updated,) + project.rooms[index + 1 :])
+    return _replace_rooms(project, rooms, operation="object_grid_snap_primitive")
+
+
 def _linear_transform_vector(
     vector: tuple[float, float, float],
     transform: PrimitiveTransform,
@@ -3767,6 +3868,7 @@ __all__ = [
     "freeze_authored_room_composition_primitive_transform",
     "flatten_authored_floor_plan_vertices",
     "grid_snap_authored_floor_plan_vertices",
+    "grid_snap_authored_room_composition_primitive",
     "mirror_authored_floor_plan_vertices",
     "move_authored_floor_plan_point",
     "move_authored_room_composition_primitive",
