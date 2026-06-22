@@ -97,6 +97,7 @@ from .authored_room_operations import (
     add_authored_room_composition_primitive,
     apply_authored_floor_plan_axis_split,
     apply_authored_floor_plan_boolean_difference,
+    apply_authored_floor_plan_edge_extrude,
     apply_authored_floor_plan_rectangular_cut,
     apply_authored_terrain_operation,
     apply_authored_floor_plan_rectangular_union,
@@ -1084,6 +1085,52 @@ class ModuleEditorController:
                 "axis": split_axis,
                 "coordinate": split_coordinate,
                 "room_resref_prefix": room_resref_prefix or "",
+            },
+        )
+        return self.authored_module_readiness()
+
+    def edge_extrude_authored_floor_plan_room(
+        self,
+        *,
+        room_resref: str = "",
+        edge_index: int,
+        distance: float,
+    ):
+        """Pull one authored floor-plan room edge outward and record explicit extrusion command metadata."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        edge = int(edge_index)
+        extrusion_distance = float(distance)
+        updated = apply_authored_floor_plan_edge_extrude(
+            authored,
+            room_resref=room_resref,
+            edge_index=edge,
+            distance=extrusion_distance,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Extruded Map Studio room {room_resref or '(first room)'} edge {edge} by {extrusion_distance:g} m; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.edge_extrude",
+            label=f"Extrude edge {edge} on {room_resref or 'room'}",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "edge_index": edge,
+                "distance": extrusion_distance,
             },
         )
         return self.authored_module_readiness()

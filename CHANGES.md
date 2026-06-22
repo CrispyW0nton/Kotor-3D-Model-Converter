@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Names Edge Extrude Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Edge extrusion editing / Tool belt dispatch
+Intersects: native Scene/Tools ModuleEditorController mirrors and Map Studio tool-belt dispatcher.
+
+- Added a named `edge_extrude_authored_floor_plan_room` controller command for the Extrude tool so floor-plan edge pulls now record explicit edge, distance, command, and undo metadata.
+- Routed the visible Extrude belt action through the named command while preserving the existing deterministic floor-plan edge extrusion behavior and KOTOR export/readiness invalidation.
+- Updated focused dispatch tests to prove route resolution, KMAP footprint mutation, operation metadata, undo restoration, and source contracts.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests/test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q --basetemp .pytest_tmp_map_studio_edge_extrude`.
+
 ### [2026-06-21] Map Studio Names Opening Marker Command
 
 Owner: LordVaderCW

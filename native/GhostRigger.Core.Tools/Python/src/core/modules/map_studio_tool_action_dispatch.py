@@ -994,9 +994,8 @@ def resolve_map_studio_tool_belt_action(
             action,
             focus_component_mode="edge",
             focus_snap_mode="grid",
-            command_method="apply_authored_room_operation",
+            command_method="edge_extrude_authored_floor_plan_room",
             command_kwargs={
-                "operation": "edge_extrude",
                 "room_resref": ctx.room_resref,
                 "distance": float(ctx.operation_distance),
                 "edge_index": int(ctx.operation_edge_index),

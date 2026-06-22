@@ -80,6 +80,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["boolean_a_minus_b"].command_method == "boolean_difference_authored_floor_plan_rooms"
     assert statuses["opening_marker"].contract_kind == "command_mutates_kmap"
     assert statuses["opening_marker"].command_method == "add_authored_floor_plan_opening_transition_marker"
+    assert statuses["extrude"].contract_kind == "command_mutates_kmap"
+    assert statuses["extrude"].command_method == "edge_extrude_authored_floor_plan_room"
     assert statuses["sculpt_raise"].contract_kind == "command_mutates_kmap"
     assert statuses["sculpt_raise"].command_method == "apply_authored_terrain_operation"
     assert statuses["terrain"].contract_kind == "command_query"
@@ -584,9 +586,8 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     )
 
     assert extrude.enabled is True
-    assert extrude.command_method == "apply_authored_room_operation"
+    assert extrude.command_method == "edge_extrude_authored_floor_plan_room"
     assert extrude.command_kwargs == {
-        "operation": "edge_extrude",
         "room_resref": "room_a",
         "distance": 0.75,
         "edge_index": 2,
@@ -1308,6 +1309,33 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert len(restored_rooms) == 1
     assert restored_rooms[0].room_resref == room_before_split.room_resref
 
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grextrd1")
+    extrude_room = controller.authored_floor_plan_room_choices()[0]
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "extrude",
+        MapStudioToolActionContext(
+            room_resref=extrude_room.room_resref,
+            operation_edge_index=0,
+            operation_distance=0.75,
+        ),
+    )
+
+    extruded_payload = controller.project.extra_sections["authored_module"]
+    extruded_primitive = extruded_payload["rooms"][0]["primitive"]
+
+    assert len(extruded_primitive["points"]) == 6
+    assert extruded_primitive["metadata"]["operation"] == "edge_extrude"
+    assert extruded_primitive["metadata"]["edge_index"] == 0
+    assert extruded_primitive["metadata"]["edge_extrude_distance"] == 0.75
+    assert controller.command_history.undo_label == "Extrude edge 0 on grextrd1_room01"
+
+    controller.undo_map_studio_command()
+
+    restored_extrude_payload = controller.project.extra_sections["authored_module"]
+    assert len(restored_extrude_payload["rooms"][0]["primitive"]["points"]) == 4
+
     controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grnorm01")
     room_for_normals = controller.authored_floor_plan_room_choices()[0]
 
@@ -1705,6 +1733,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method = "set_authored_script_hook" if script_resref else "remove_authored_script_hook"' in source
         assert 'command_method="set_authored_floor_plan_wall_opening"' in source
         assert 'command_method="add_authored_floor_plan_opening_transition_marker"' in source
+        assert 'command_method="edge_extrude_authored_floor_plan_room"' in source
         assert 'command_method="apply_authored_room_operation"' in source
         assert 'command_method="rectangular_cut_authored_floor_plan_room"' in source
         assert 'command_method="axis_split_authored_floor_plan_room"' in source
