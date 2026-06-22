@@ -1368,6 +1368,66 @@ class ModuleEditorController:
         )
         return self.authored_module_readiness()
 
+    def apply_authored_terrain_brush_stroke(
+        self,
+        *,
+        brush: str = "raise",
+        room_resref: str = "",
+        row_index: int = 0,
+        column_index: int = 0,
+        points: tuple[tuple[int, int, float], ...] = (),
+        delta: float = 0.1,
+        radius: int = 0,
+        height: float = 0.0,
+        iterations: int = 1,
+        strength: float = 0.5,
+        preserve_boundary: bool = True,
+        symmetry_axis: str = "",
+    ):
+        """Commit one dirty-region scoped terrain brush stroke to the authored KMAP module."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        brush_key = str(brush or "raise").strip().lower() or "raise"
+        stroke_points = tuple(points or ((int(row_index), int(column_index), 1.0),))
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        operation_kwargs: dict[str, Any] = {
+            "room_resref": room_resref,
+            "row_index": int(row_index),
+            "column_index": int(column_index),
+            "points": stroke_points,
+            "delta": float(delta),
+            "radius": int(radius),
+            "height": float(height),
+            "iterations": int(iterations),
+            "strength": float(strength),
+            "preserve_boundary": bool(preserve_boundary),
+        }
+        if str(symmetry_axis or "").strip():
+            operation_kwargs["symmetry_axis"] = str(symmetry_axis or "").strip().lower()
+        updated = apply_authored_terrain_operation(authored, f"brush_stroke:{brush_key}", **operation_kwargs)
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Applied Map Studio terrain brush {brush_key} to {room_resref or '(first terrain room)'}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.terrain.brush_stroke",
+            label=f"Apply terrain brush {brush_key}",
+            before=before,
+            metadata={"brush": brush_key, **operation_kwargs},
+        )
+        return self.authored_module_readiness()
+
     def shrink_wrap_authored_placements_to_terrain(
         self,
         *,

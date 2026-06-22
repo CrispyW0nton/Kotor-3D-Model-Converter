@@ -87,7 +87,7 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["inset"].contract_kind == "command_mutates_kmap"
     assert statuses["inset"].command_method == "inset_authored_floor_plan_room"
     assert statuses["sculpt_raise"].contract_kind == "command_mutates_kmap"
-    assert statuses["sculpt_raise"].command_method == "apply_authored_terrain_operation"
+    assert statuses["sculpt_raise"].command_method == "apply_authored_terrain_brush_stroke"
     assert statuses["shrink_wrap"].contract_kind == "command_mutates_kmap"
     assert statuses["shrink_wrap"].command_method == "shrink_wrap_authored_placements_to_terrain"
     assert statuses["mirror_z"].contract_kind == "command_mutates_kmap"
@@ -340,9 +340,9 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     )
 
     assert terrain_raise.enabled is True
-    assert terrain_raise.command_method == "apply_authored_terrain_operation"
+    assert terrain_raise.command_method == "apply_authored_terrain_brush_stroke"
     assert terrain_raise.command_kwargs == {
-        "operation": "brush_stroke:raise",
+        "brush": "raise",
         "room_resref": "terrain01",
         "row_index": 1,
         "column_index": 2,
@@ -1543,7 +1543,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert brushed_room["primitive"]["metadata"]["dirty_region_only"] is True
     assert brushed_room["primitive"]["metadata"]["source"] == "map_studio:terrain_brush_stroke"
     assert brushed_room["metadata"]["last_operation"] == "terrain_brush_stroke"
-    assert controller.command_history.undo_label == "Apply terrain operation brush_stroke:raise"
+    assert controller.command_history.undo_label == "Apply terrain brush raise"
 
     controller.undo_map_studio_command()
 
@@ -1793,7 +1793,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="boolean_difference_authored_floor_plan_rooms"' in source
         assert 'command_method="duplicate_authored_room_primitive"' in source
         assert 'command_method="set_authored_room_edge_normal_policy"' in source
-        assert 'command_method="apply_authored_terrain_operation"' in source
+        assert 'command_method="apply_authored_terrain_brush_stroke"' in source
         assert 'command_method="shrink_wrap_authored_placements_to_terrain"' in source
         assert 'command_method="mirror_z_authored_terrain_heightfield"' in source
         assert 'command_method="authored_terrain_status"' in source

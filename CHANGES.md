@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-21
 
+### [2026-06-21] Map Studio Names Terrain Brush Stroke Command
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Terrain sculpting / Tool belt dispatch
+Intersects: native Scene/Tools ModuleEditorController mirrors and Map Studio tool-belt dispatcher.
+
+- Added a named `apply_authored_terrain_brush_stroke` controller command so terrain sculpt actions commit dirty-region scoped heightfield strokes through an explicit command surface with brush metadata, stale export/proof state, and undo labels.
+- Routed visible terrain brush belt actions through the named command while preserving the existing authored terrain brush math, slope/performance metadata, and KMAP terrain mutation behavior.
+- Updated focused dispatch tests to prove route resolution, brush command payloads, KMAP mutation metadata, undo restoration, and source contracts.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests/test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q --basetemp .pytest_tmp_map_studio_terrain_brush`.
+
 ### [2026-06-21] Map Studio Names Mirror Z And Shrink Wrap Commands
 
 Owner: LordVaderCW

@@ -477,7 +477,7 @@ def resolve_map_studio_tool_belt_action(
             )
         terrain_points = tuple(ctx.terrain_points or ((int(ctx.terrain_row_index), int(ctx.terrain_column_index), 1.0),))
         kwargs: dict[str, Any] = {
-            "operation": f"brush_stroke:{terrain_brush}",
+            "brush": terrain_brush,
             "room_resref": str(ctx.room_resref or "").strip(),
             "row_index": int(ctx.terrain_row_index),
             "column_index": int(ctx.terrain_column_index),
@@ -496,7 +496,7 @@ def resolve_map_studio_tool_belt_action(
             focus_component_mode="terrain",
             focus_snap_mode="surface",
             terrain_brush=terrain_brush,
-            command_method="apply_authored_terrain_operation",
+            command_method="apply_authored_terrain_brush_stroke",
             command_kwargs=kwargs,
             mutates_kmap=True,
             status_message=(
