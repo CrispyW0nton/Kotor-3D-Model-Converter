@@ -228,21 +228,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             if event_type in {QtCore.QEvent.KeyPress, QtCore.QEvent.KeyRelease}:
                 key = getattr(event, "key", lambda: None)()
                 if key == QtCore.Qt.Key_V:
-                    self._vertex_snap_modifier_active = event_type == QtCore.QEvent.KeyPress
-                    if self._room_outline_point_drag is not None:
-                        if self._vertex_snap_modifier_active:
-                            self._request_room_outline_snap_preview_for_drag()
-                        else:
-                            self._clear_room_outline_snap_highlight()
+                    self.set_map_studio_modifier_active("vertex_snap", event_type == QtCore.QEvent.KeyPress)
                     return False
                 if key == QtCore.Qt.Key_J:
-                    self._transform_snap_modifier_active = event_type == QtCore.QEvent.KeyPress
-                    if self._transform_snap_modifier_active:
-                        self.marker_summary_label.setText(
-                            "Transform Level Snap active: selected vertices/edges will align to one level when the transform is committed."
-                        )
-                    else:
-                        self._restore_marker_summary_after_transform_snap()
+                    self.set_map_studio_modifier_active("transform_snap_level", event_type == QtCore.QEvent.KeyPress)
                     return False
             if event_type == QtCore.QEvent.MouseButtonPress:
                 if getattr(event, "button", lambda: None)() == QtCore.Qt.LeftButton:
@@ -314,6 +303,37 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         }:
             QtCore.QTimer.singleShot(0, self._ensure_embedded_viewport_toolbar_gap)
         return super().eventFilter(watched, event)
+
+    def active_map_studio_modifier(self) -> str:
+        """Return the currently held Maya-style Map Studio viewport modifier."""
+
+        if bool(self._vertex_snap_modifier_active):
+            return "vertex_snap"
+        if bool(self._transform_snap_modifier_active):
+            return "transform_snap_level"
+        return ""
+
+    def set_map_studio_modifier_active(self, action_key: str, active: bool) -> None:
+        """Set the current hold-style viewport modifier without owning command policy."""
+
+        key = str(action_key or "").strip()
+        enabled = bool(active)
+        if key == "vertex_snap":
+            self._vertex_snap_modifier_active = enabled
+            if self._room_outline_point_drag is not None:
+                if enabled:
+                    self._request_room_outline_snap_preview_for_drag()
+                else:
+                    self._clear_room_outline_snap_highlight()
+            return
+        if key == "transform_snap_level":
+            self._transform_snap_modifier_active = enabled
+            if enabled:
+                self.marker_summary_label.setText(
+                    "Transform Level Snap active: selected vertices/edges will align to one level when the transform is committed."
+                )
+            else:
+                self._restore_marker_summary_after_transform_snap()
 
     def _install_marker_pick_filters(self) -> None:
         candidates = [getattr(self, "viewport", None), getattr(getattr(self, "viewport", None), "canvas", None)]

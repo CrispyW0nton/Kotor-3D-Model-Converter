@@ -1366,6 +1366,10 @@ def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
         assert "def _select_room_outline_edge" in source
         assert "self.roomOutlineEdgeSelected.emit(room, edge)" in source
         assert "QtCore.Qt.Key_V" in source
+        assert "def active_map_studio_modifier" in source
+        assert "def set_map_studio_modifier_active" in source
+        assert 'self.set_map_studio_modifier_active("vertex_snap"' in source
+        assert 'self.set_map_studio_modifier_active("transform_snap_level"' in source
         assert "set_room_outline_vertex_snap_candidates" in source
         assert "set_map_studio_room_outline_snap_highlight" in source
         assert "clear_map_studio_room_outline_snap_highlight" in source
@@ -1385,6 +1389,11 @@ def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
 
     assert "terrainLiveBrushFrameRequested.connect(self.preview_map_studio_terrain_sculpt_frame)" in window_source
     assert "roomOutlinePointSnapPreviewRequested.connect(self.preview_authored_floor_plan_vertex_snap_candidates)" in window_source
+    assert "active_map_studio_modifier" in window_source
+    assert 'metadata["active_modifier_action"]' in window_source
+    assert 'metadata["active_modifier_behavior"] = "hold_modifier"' in window_source
+    assert 'metadata["active_modifier_source"] = "map_studio_viewport"' in window_source
+    assert 'metadata["active_modifier_coordinate_space"] = "viewport_interaction"' in window_source
     assert "roomOutlinePointSnapped.connect(self.snap_authored_floor_plan_vertex)" in window_source
     assert "terrainBrushFrameRequested.connect(self.apply_map_studio_viewport_terrain_brush_frame)" in window_source
     assert "terrainBrushStrokeCommitted.connect(self.commit_map_studio_viewport_terrain_brush_stroke)" in window_source

@@ -3202,6 +3202,9 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert 'self._activate_map_studio_modifier_shortcut("transform_snap_level")' in window_source
     assert "def _activate_map_studio_modifier_shortcut" in window_source
     assert "set_universal_transform_overlay" in window_source
+    assert "active_map_studio_modifier" in window_source
+    assert 'metadata["active_modifier_action"]' in window_source
+    assert 'metadata["active_modifier_behavior"] = "hold_modifier"' in window_source
     assert '"duplicate_special",' in window_source
     assert '"shrink_wrap",' in window_source
     assert '"create_room",' in window_source
@@ -3346,6 +3349,10 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert "previewable_status_query" in source
 
     assert "def set_universal_transform_overlay" in viewport_panel
+    assert "def active_map_studio_modifier" in viewport_panel
+    assert "def set_map_studio_modifier_active" in viewport_panel
+    assert 'self.set_map_studio_modifier_active("vertex_snap"' in viewport_panel
+    assert 'self.set_map_studio_modifier_active("transform_snap_level"' in viewport_panel
     assert "def _sync_universal_transform_overlay" in viewport_panel
     assert "def set_map_studio_universal_transform_overlay" in viewport_scene_models
     assert "def clear_map_studio_universal_transform_overlay" in viewport_scene_models

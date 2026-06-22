@@ -1763,6 +1763,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         metadata: dict[str, Any] = {}
         if cleanup_tolerance is not None:
             metadata["tolerance"] = float(cleanup_tolerance.value())
+        active_modifier_getter = getattr(self.viewport_panel, "active_map_studio_modifier", None)
+        active_modifier = active_modifier_getter() if callable(active_modifier_getter) else ""
+        if active_modifier:
+            metadata["active_modifier_action"] = str(active_modifier)
+            metadata["active_modifier_behavior"] = "hold_modifier"
+            metadata["active_modifier_source"] = "map_studio_viewport"
+            metadata["active_modifier_coordinate_space"] = "viewport_interaction"
         weld_policy = getattr(self.builder_tab, "floorPlanWeldPolicyComboBox", None)
         if weld_policy is not None:
             metadata["position_policy"] = str(weld_policy.currentData() or "target")

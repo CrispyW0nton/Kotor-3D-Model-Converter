@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Carries Held Modifier State Into Tool Context
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Level Editor viewport modifiers / V snap and J level snap
+Intersects: native Tools and GUI Display viewport panels, Level Editor tool-action context, and Map Studio workflow-panel source contracts.
+
+- Refactored the viewport's `V` and `J` key handling through a small held-modifier API so vertex snap and transform-level snap active state is queryable instead of being hidden inside event-filter branches.
+- Added active modifier metadata to `MapStudioToolActionContext` construction, including action key, hold behavior, source, and `viewport_interaction` coordinate-space label, so future drag/command routes can react to actual held modifier state without moving command policy into the UI.
+- Preserved existing room-outline snap preview/highlight behavior for `Hold V` and transform-level status messaging for `Hold J`.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_tool_action_dispatch.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_modifier_dispatch`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes tests\test_map_studio_workflow_panel.py::test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_modifier_ui`; `git diff --check`.
+
 ### [2026-06-22] Map Studio Surfaces Tool Shortcut Metadata
 
 Owner: LordVaderCW
