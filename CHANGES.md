@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Surfaces Tool Shortcut Metadata
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Level Editor tool belt / Command search and shortcuts
+Intersects: native Scene/Tools Map Studio modeling-tool catalogs, Level Editor QAction surfaces, and Map Studio command-search regression tests.
+
+- Added core-owned shortcut sequence and behavior metadata for the Universal Manipulator, object vertex snap, component vertex snap, and transform level snap so command search can distinguish display labels such as `Hold V` from executable key sequences such as `V`.
+- Threaded the metadata into Map Studio command-search results and searchable text so modders can find `Ctrl+T`, `Hold V`, and `Hold J` workflows through the same indexed tool surface as the rest of the Maya-style belt.
+- Updated Level Editor tool-belt/context-menu QActions to expose shortcut sequence/behavior properties, status tips, and context-menu accelerator labels without moving command routing or KMAP mutation policy into the GUI layer.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_tool_action_dispatch.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests\test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_shortcuts_dispatch`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_shortcuts_ui`; `git diff --check`.
+
 ### [2026-06-22] Map Studio Reports Curve Guides As Authoring-Only
 
 Owner: LordVaderCW

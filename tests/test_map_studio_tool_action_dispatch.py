@@ -1212,6 +1212,9 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     search_triangulate_face = map_studio_tool_command_search("triangulate face", limit=3)
     search_export_candidate = map_studio_tool_command_search("export candidate", limit=0)
     search_game_evidence = map_studio_tool_command_search("game evidence", limit=0)
+    search_ctrl_t = map_studio_tool_command_search("Ctrl+T", limit=3)
+    search_hold_v = map_studio_tool_command_search("hold V", limit=5)
+    search_hold_j = map_studio_tool_command_search("hold J", limit=5)
 
     assert len(search_all) >= 83
     assert search_walkmesh
@@ -1221,6 +1224,10 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert any(result.key == "grid_snap" for result in search_grid)
     assert any(result.key == "triangulate_face" for result in search_triangulate_face)
     cube_search = next(result for result in search_all if result.key == "cube")
+    universal_search = next(result for result in search_all if result.key == "universal_transform")
+    vertex_snap_search = next(result for result in search_all if result.key == "vertex_snap")
+    object_vertex_snap_search = next(result for result in search_all if result.key == "object_vertex_snap")
+    level_snap_search = next(result for result in search_all if result.key == "transform_snap_level")
     stage_search = next(result for result in search_all if result.key == "stage_module")
     proof_search = next(result for result in search_all if result.key == "record_proof")
     assert cube_search.capability_stage == "previewable"
@@ -1234,6 +1241,17 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert "accepted in-game evidence" in proof_search.readiness_summary
     assert any(result.key == "stage_module" for result in search_export_candidate)
     assert any(result.key == "record_proof" for result in search_game_evidence)
+    assert any(result.key == "universal_transform" for result in search_ctrl_t)
+    assert {result.key for result in search_hold_v} & {"vertex_snap", "object_vertex_snap"}
+    assert any(result.key == "transform_snap_level" for result in search_hold_j)
+    assert universal_search.shortcut_sequence == "Ctrl+T"
+    assert universal_search.shortcut_behavior == "press"
+    assert vertex_snap_search.shortcut_sequence == "V"
+    assert vertex_snap_search.shortcut_behavior == "hold_modifier"
+    assert object_vertex_snap_search.shortcut_sequence == "V"
+    assert object_vertex_snap_search.shortcut_behavior == "hold_modifier"
+    assert level_snap_search.shortcut_sequence == "J"
+    assert level_snap_search.shortcut_behavior == "hold_modifier"
     assert all(result.implemented for result in search_all)
 
 
@@ -3227,6 +3245,14 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert '"object_grid_snap"' in tools_catalog
     assert '"object_vertex_snap"' in scene_catalog
     assert '"object_vertex_snap"' in tools_catalog
+    for source in (scene_catalog, tools_catalog):
+        assert "shortcut_sequence: str = \"\"" in source
+        assert "shortcut_behavior: str = \"\"" in source
+        assert 'shortcut_sequence="Ctrl+T"' in source
+        assert 'shortcut_behavior="press"' in source
+        assert 'shortcut_sequence="V"' in source
+        assert 'shortcut_sequence="J"' in source
+        assert 'shortcut_behavior="hold_modifier"' in source
 
     for source in (scene_dispatcher, tools_dispatcher):
         assert "class MapStudioToolActionContext" in source

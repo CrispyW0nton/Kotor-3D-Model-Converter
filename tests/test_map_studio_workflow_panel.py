@@ -1125,6 +1125,9 @@ def test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes() -> None:
     assert "mapStudioTransformLevelSnapShortcut" in window_source
     assert 'QtGui.QKeySequence("V")' in window_source
     assert 'QtGui.QKeySequence("J")' in window_source
+    assert 'qaction.setProperty("mapStudioShortcutSequence", shortcut_sequence)' in window_source
+    assert 'qaction.setProperty("mapStudioShortcutBehavior", shortcut_behavior)' in window_source
+    assert "qaction.setShortcut(QtGui.QKeySequence(shortcut_sequence))" in window_source
     assert "QtCore.Qt.WidgetWithChildrenShortcut" in window_source
     assert 'self._activate_map_studio_modifier_shortcut("vertex_snap")' in window_source
     assert 'self._activate_map_studio_modifier_shortcut("transform_snap_level")' in window_source

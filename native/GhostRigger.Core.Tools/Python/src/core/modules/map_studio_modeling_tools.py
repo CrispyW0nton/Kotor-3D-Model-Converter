@@ -94,6 +94,8 @@ class MapStudioToolBeltAction:
     kotor_guardrail: str
     implemented: bool = False
     hotkey: str = ""
+    shortcut_sequence: str = ""
+    shortcut_behavior: str = ""
 
 
 @dataclass(frozen=True)
@@ -117,6 +119,8 @@ class MapStudioToolCommandSearchResult:
     description: str
     kotor_guardrail: str
     hotkey: str
+    shortcut_sequence: str
+    shortcut_behavior: str
     capability_stage: str
     resource_impacts: tuple[str, ...]
     readiness_summary: str
@@ -782,6 +786,8 @@ _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
         "Use selected component bounds as the source of truth for modular-kit scale; committed edits make runtime exports stale.",
         implemented=True,
         hotkey="Ctrl+T",
+        shortcut_sequence="Ctrl+T",
+        shortcut_behavior="press",
     ),
     MapStudioToolBeltAction(
         "center_pivot",
@@ -819,6 +825,8 @@ _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
         "Object vertex snapping preserves primitive topology; use floor-plan Vertex Snap when you intend to move/weld room vertices.",
         implemented=True,
         hotkey="Hold V",
+        shortcut_sequence="V",
+        shortcut_behavior="hold_modifier",
     ),
     MapStudioToolBeltAction(
         "plane",
@@ -955,6 +963,8 @@ _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
         "Snapping is not welding; it must preserve point identity and avoid degenerate footprints or invalid WOK boundaries.",
         implemented=True,
         hotkey="Hold V",
+        shortcut_sequence="V",
+        shortcut_behavior="hold_modifier",
     ),
     MapStudioToolBeltAction(
         "grid_snap",
@@ -992,6 +1002,8 @@ _TOOL_BELT_ACTIONS: tuple[MapStudioToolBeltAction, ...] = (
         "Level snapping should be followed by seam, WOK, and geometry validation before export.",
         implemented=True,
         hotkey="Hold J",
+        shortcut_sequence="J",
+        shortcut_behavior="hold_modifier",
     ),
     MapStudioToolBeltAction(
         "cleanup",
@@ -1915,6 +1927,8 @@ def map_studio_tool_command_search(
                 action.description,
                 action.kotor_guardrail,
                 action.hotkey,
+                action.shortcut_sequence,
+                action.shortcut_behavior,
                 capability.capability_stage,
                 " ".join(capability.resource_impacts),
                 capability.readiness_summary,
@@ -1951,6 +1965,8 @@ def map_studio_tool_command_search(
                 description=action.description,
                 kotor_guardrail=action.kotor_guardrail,
                 hotkey=action.hotkey,
+                shortcut_sequence=action.shortcut_sequence,
+                shortcut_behavior=action.shortcut_behavior,
                 capability_stage=capability.capability_stage,
                 resource_impacts=capability.resource_impacts,
                 readiness_summary=capability.readiness_summary,

@@ -1434,6 +1434,17 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         hotkey = str(getattr(action, "hotkey", "") or "")
         if hotkey:
             tooltip = f"{tooltip}\nHotkey: {hotkey}" if tooltip else f"Hotkey: {hotkey}"
+        shortcut_sequence = str(getattr(action, "shortcut_sequence", "") or "")
+        shortcut_behavior = str(getattr(action, "shortcut_behavior", "") or "")
+        if shortcut_sequence:
+            qaction.setProperty("mapStudioShortcutSequence", shortcut_sequence)
+            if context_menu:
+                qaction.setShortcut(QtGui.QKeySequence(shortcut_sequence))
+            shortcut_label = f"Shortcut sequence: {shortcut_sequence}"
+            if shortcut_behavior:
+                qaction.setProperty("mapStudioShortcutBehavior", shortcut_behavior)
+                shortcut_label = f"{shortcut_label} ({shortcut_behavior.replace('_', ' ')})"
+            tooltip = f"{tooltip}\n{shortcut_label}" if tooltip else shortcut_label
         if tooltip:
             qaction.setToolTip(tooltip)
             qaction.setStatusTip(tooltip)
