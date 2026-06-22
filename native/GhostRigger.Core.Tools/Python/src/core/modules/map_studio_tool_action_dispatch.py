@@ -575,6 +575,31 @@ def resolve_map_studio_tool_belt_action(
             ),
         )
 
+    if key == "freeze_transform":
+        if not ctx.primitive_name:
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="grid",
+                enabled=False,
+                disabled_reason="Freeze Transform needs a selected authored room primitive.",
+            )
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="grid",
+            command_method="freeze_authored_room_primitive_transform",
+            command_kwargs={
+                "room_resref": ctx.room_resref,
+                "primitive_name": ctx.primitive_name,
+            },
+            mutates_kmap=True,
+            authoring_context=(
+                "Freeze Transform: bake supported unrotated primitive translation and scale into the authored "
+                "parametric primitive, reset transform intent to identity, and mark validation/export/game proof stale."
+            ),
+        )
+
     if key == "shrink_wrap":
         return _route(
             action,

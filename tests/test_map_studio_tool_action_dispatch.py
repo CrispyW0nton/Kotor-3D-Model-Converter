@@ -4,6 +4,8 @@ import copy
 import sys
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -62,6 +64,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["universal_transform"].command_method == "map_studio_universal_transform_overlay"
     assert statuses["center_pivot"].contract_kind == "command_mutates_kmap"
     assert statuses["center_pivot"].command_method == "center_authored_room_primitive_pivot"
+    assert statuses["freeze_transform"].contract_kind == "command_mutates_kmap"
+    assert statuses["freeze_transform"].command_method == "freeze_authored_room_primitive_transform"
     assert statuses["placeable"].contract_kind == "command_mutates_kmap"
     assert statuses["placeable"].command_method == "add_authored_gameplay_placement"
     assert statuses["entry_point"].contract_kind == "command_mutates_kmap"
@@ -349,6 +353,22 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert center_pivot_ready.command_kwargs == {"room_resref": "room_a", "primitive_name": "room_a_cube"}
     assert center_pivot_ready.mutates_kmap is True
     assert "primitive-local space" in center_pivot_ready.authoring_context
+
+    freeze_missing = resolve_map_studio_tool_belt_action("freeze_transform")
+
+    assert freeze_missing.enabled is False
+    assert "selected authored room primitive" in freeze_missing.disabled_reason
+
+    freeze_ready = resolve_map_studio_tool_belt_action(
+        "freeze_transform",
+        MapStudioToolActionContext(room_resref="room_a", primitive_name="room_a_cube"),
+    )
+
+    assert freeze_ready.enabled is True
+    assert freeze_ready.command_method == "freeze_authored_room_primitive_transform"
+    assert freeze_ready.command_kwargs == {"room_resref": "room_a", "primitive_name": "room_a_cube"}
+    assert freeze_ready.mutates_kmap is True
+    assert "reset transform intent to identity" in freeze_ready.authoring_context
 
     placeable_route = resolve_map_studio_tool_belt_action(
         "placeable",
@@ -2104,6 +2124,128 @@ def test_t2606_center_pivot_preserves_visible_primitive_bounds() -> None:
     assert restored.translation == (1.0, 2.0, 0.0)
 
 
+def test_t2606_freeze_transform_bakes_supported_primitive_without_moving_geometry() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_tool_action_dispatch import (
+        MapStudioToolActionContext,
+        execute_map_studio_tool_belt_action,
+    )
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grfreeze01", game="K1")
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grfreeze01")
+    execute_map_studio_tool_belt_action(
+        controller,
+        "primitive",
+        MapStudioToolActionContext(primitive_kind="cube", primitive_name="freeze_cube"),
+    )
+    cube = controller.authored_room_primitive_transforms()[-1]
+    controller.set_authored_room_primitive_transform(
+        room_resref=cube.room_resref,
+        primitive_name=cube.primitive_name,
+        translation=(1.0, 2.0, 3.0),
+        rotation_degrees_z=0.0,
+        scale=(2.0, 3.0, 4.0),
+        pivot=(0.0, 0.0, 0.0),
+    )
+
+    before = controller.map_studio_universal_transform_overlay(
+        room_resref=cube.room_resref,
+        primitive_name=cube.primitive_name,
+    )
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "freeze_transform",
+        MapStudioToolActionContext(room_resref=cube.room_resref, primitive_name=cube.primitive_name),
+    )
+
+    after = controller.map_studio_universal_transform_overlay(
+        room_resref=cube.room_resref,
+        primitive_name=cube.primitive_name,
+    )
+    assert tuple(round(value, 6) for value in after.bounds_min) == tuple(round(value, 6) for value in before.bounds_min)
+    assert tuple(round(value, 6) for value in after.bounds_max) == tuple(round(value, 6) for value in before.bounds_max)
+    assert tuple(round(value, 6) for value in after.center) == tuple(round(value, 6) for value in before.center)
+
+    frozen = {
+        row.primitive_name: row
+        for row in controller.authored_room_primitive_transforms()
+        if row.room_resref == cube.room_resref
+    }["freeze_cube"]
+    assert frozen.translation == (0.0, 0.0, 0.0)
+    assert frozen.rotation_degrees_z == 0.0
+    assert frozen.scale == (1.0, 1.0, 1.0)
+    assert frozen.pivot == (0.0, 0.0, 0.0)
+    assert controller.command_history.undo_label == "Freeze transform freeze_cube"
+
+    payload = controller.project.extra_sections["authored_module"]
+    room_payload = payload["rooms"][0]
+    primitive_payload = next(
+        item for item in room_payload["primitive"]["primitives"] if item.get("instance_name") == "freeze_cube"
+    )
+    assert primitive_payload["type"] == "cube"
+    assert primitive_payload["size"] == [2.0, 3.0, 4.0]
+    assert primitive_payload["center"] == [1.0, 2.0, 5.0]
+    assert primitive_payload["transform"] == {
+        "translation": [0.0, 0.0, 0.0],
+        "rotation_degrees_z": 0.0,
+        "scale": [1.0, 1.0, 1.0],
+        "pivot": [0.0, 0.0, 0.0],
+    }
+    assert room_payload["primitive"]["metadata"]["freeze_transform_space"] == "primitive_local_parametric_unrotated"
+    assert room_payload["primitive"]["metadata"]["frozen_transform"]["translation"] == [1.0, 2.0, 3.0]
+
+    controller.undo_map_studio_command()
+    restored = {
+        row.primitive_name: row
+        for row in controller.authored_room_primitive_transforms()
+        if row.room_resref == cube.room_resref
+    }["freeze_cube"]
+    assert restored.translation == (1.0, 2.0, 3.0)
+    assert restored.scale == (2.0, 3.0, 4.0)
+
+
+def test_t2606_freeze_transform_rejects_rotated_parametric_primitive() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_tool_action_dispatch import (
+        MapStudioToolActionContext,
+        execute_map_studio_tool_belt_action,
+    )
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grfreezerot", game="K1")
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grfreezerot")
+    execute_map_studio_tool_belt_action(
+        controller,
+        "primitive",
+        MapStudioToolActionContext(primitive_kind="cube", primitive_name="rotated_cube"),
+    )
+    cube = controller.authored_room_primitive_transforms()[-1]
+    controller.set_authored_room_primitive_transform(
+        room_resref=cube.room_resref,
+        primitive_name=cube.primitive_name,
+        translation=(1.0, 2.0, 0.0),
+        rotation_degrees_z=15.0,
+        scale=(2.0, 1.0, 1.0),
+        pivot=(0.0, 0.0, 0.5),
+    )
+    before_payload = copy.deepcopy(controller.project.extra_sections["authored_module"])
+
+    with pytest.raises(ValueError, match="supports unrotated authored primitives only"):
+        execute_map_studio_tool_belt_action(
+            controller,
+            "freeze_transform",
+            MapStudioToolActionContext(room_resref=cube.room_resref, primitive_name=cube.primitive_name),
+        )
+
+    assert controller.project.extra_sections["authored_module"] == before_payload
+
+
 def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -> None:
     window_source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
     scene_dispatcher = _read("native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py")
@@ -2171,6 +2313,8 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert "def map_studio_tool_capability_summary" in tools_catalog
     assert '"center_pivot"' in scene_catalog
     assert '"center_pivot"' in tools_catalog
+    assert '"freeze_transform"' in scene_catalog
+    assert '"freeze_transform"' in tools_catalog
 
     for source in (scene_dispatcher, tools_dispatcher):
         assert "class MapStudioToolActionContext" in source
@@ -2209,6 +2353,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="separate_authored_room_primitive"' in source
         assert 'command_method="duplicate_authored_room_primitive"' in source
         assert 'command_method="center_authored_room_primitive_pivot"' in source
+        assert 'command_method="freeze_authored_room_primitive_transform"' in source
         assert 'command_method="set_authored_room_edge_normal_policy"' in source
         assert 'command_method="apply_authored_terrain_brush_stroke"' in source
         assert 'command_method="shrink_wrap_authored_placements_to_terrain"' in source
@@ -2242,6 +2387,8 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert "audit_map_studio_tool_belt_contract" in source
         assert "def map_studio_tool_belt_contract_audit" in source
         assert "def center_authored_room_primitive_pivot" in source
+        assert "def freeze_authored_room_primitive_transform" in source
+        assert "freeze_authored_room_composition_primitive_transform" in source
         assert "def authored_terrain_status" in source
         assert "previewable_status_query" in source
 

@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Freezes Supported Primitive Transforms
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Direct modeling tools / Primitive transforms
+Intersects: native Scene/Tools authored room operations, ModuleEditorController mirrors, tool-belt catalog, and dispatcher routing.
+
+- Added a headless `freeze_authored_room_composition_primitive_transform` command that bakes supported unrotated primitive translation/scale into parametric primitive dimensions/centers and resets transform intent to identity.
+- Kept capability honesty by rejecting rotated primitives and primitive types that cannot currently preserve visible geometry without a future baked-mesh representation.
+- Exposed `freeze_transform` through the Map Studio modeling catalog, default/component tool-belt presets, dispatcher route, controller undo/redo command history, command search/readiness metadata, and mirrored Scene/Tools packages.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests/test_map_studio_tool_action_dispatch.py::test_t2606_freeze_transform_bakes_supported_primitive_without_moving_geometry tests/test_map_studio_tool_action_dispatch.py::test_t2606_freeze_transform_rejects_rotated_parametric_primitive -q --basetemp .pytest_tmp_map_studio_freeze_transform`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions -q --basetemp .pytest_tmp_map_studio_freeze_transform_audit`; `python -m pytest tests/test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher tests/test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q --basetemp .pytest_tmp_map_studio_freeze_transform_ui_contract`.
+
 ### [2026-06-22] Map Studio Centers Primitive Pivots Without Moving Geometry
 
 Owner: LordVaderCW

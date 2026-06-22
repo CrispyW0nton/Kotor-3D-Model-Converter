@@ -116,6 +116,7 @@ from .authored_room_operations import (
     cleanup_authored_floor_plan_vertices,
     duplicate_authored_room_composition_primitive,
     fill_authored_floor_plan_face,
+    freeze_authored_room_composition_primitive_transform,
     flatten_authored_floor_plan_vertices,
     grid_snap_authored_floor_plan_vertices,
     mirror_authored_floor_plan_vertices,
@@ -2569,6 +2570,39 @@ class ModuleEditorController:
         self._record_map_studio_command(
             action_key="map_studio.primitive.center_pivot",
             label=f"Center pivot {primitive_name}",
+            before=before,
+            metadata={"room_resref": room_resref, "primitive_name": primitive_name},
+        )
+        return self.authored_module_readiness()
+
+    def freeze_authored_room_primitive_transform(self, *, room_resref: str, primitive_name: str):
+        """Freeze a supported authored primitive transform into its parametric shape."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = freeze_authored_room_composition_primitive_transform(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Froze Map Studio transform for primitive {primitive_name}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.freeze_transform",
+            label=f"Freeze transform {primitive_name}",
             before=before,
             metadata={"room_resref": room_resref, "primitive_name": primitive_name},
         )

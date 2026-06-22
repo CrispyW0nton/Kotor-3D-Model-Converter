@@ -1700,6 +1700,185 @@ def center_authored_room_composition_primitive_pivot(
     return _replace_rooms(project, rooms, operation="center_primitive_pivot")
 
 
+def _transform_local_point(
+    point: tuple[float, float, float],
+    transform: PrimitiveTransform,
+) -> tuple[float, float, float]:
+    px, py, pz = (float(value) for value in transform.pivot)
+    sx, sy, sz = (float(value) for value in transform.scale)
+    tx, ty, tz = (float(value) for value in transform.translation)
+    return (
+        (float(point[0]) - px) * sx + px + tx,
+        (float(point[1]) - py) * sy + py + ty,
+        (float(point[2]) - pz) * sz + pz + tz,
+    )
+
+
+def _nearly_equal(left: float, right: float, *, tolerance: float = 1.0e-6) -> bool:
+    return abs(float(left) - float(right)) <= tolerance
+
+
+def _freeze_transform_into_parametric_primitive(
+    primitive: Any,
+    transform: PrimitiveTransform,
+) -> Any:
+    """Bake an unrotated primitive transform into editable primitive fields.
+
+    This intentionally does not pretend to be a full mesh bake.  Rotated
+    primitives and primitives without an editable X/Y center need the future
+    topology-backed mesh primitive before their transform can be frozen without
+    changing visible output.
+    """
+
+    rotation = float(transform.rotation_degrees_z)
+    if not _nearly_equal(rotation, 0.0):
+        raise ValueError(
+            "Freeze Transform currently supports unrotated authored primitives only. "
+            "Keep the rotation as a transform or convert the primitive through a future baked-mesh workflow."
+        )
+
+    sx, sy, sz = (float(value) for value in transform.scale)
+    if any(value <= 0.0 for value in (sx, sy, sz)):
+        raise ValueError("Freeze Transform requires positive primitive scale values.")
+
+    base = _base_primitive(primitive)
+    if isinstance(base, CubePrimitive):
+        return replace(
+            base,
+            size=(float(base.size[0]) * sx, float(base.size[1]) * sy, float(base.size[2]) * sz),
+            center=_transform_local_point(tuple(base.center), transform),
+        )
+    if isinstance(base, WallPrimitive):
+        axis = str(base.axis or "x").lower()
+        width_scale = sy if axis == "y" else sx
+        thickness_scale = sx if axis == "y" else sy
+        return replace(
+            base,
+            width=float(base.width) * width_scale,
+            height=float(base.height) * sz,
+            thickness=float(base.thickness) * thickness_scale,
+            center=_transform_local_point(tuple(base.center), transform),
+        )
+    if isinstance(base, RampPrimitive):
+        return replace(
+            base,
+            width=float(base.width) * sx,
+            length=float(base.length) * sy,
+            height=float(base.height) * sz,
+            center=_transform_local_point(tuple(base.center), transform),
+        )
+    if isinstance(base, CylinderPrimitive):
+        if not _nearly_equal(sx, sy):
+            raise ValueError(
+                "Freeze Transform cannot bake non-uniform X/Y scale into a cylinder because it would become an ellipse. "
+                "Keep the scale as a transform until generic baked mesh primitives are available."
+            )
+        return replace(
+            base,
+            radius=float(base.radius) * sx,
+            height=float(base.height) * sz,
+            center=_transform_local_point(tuple(base.center), transform),
+        )
+    if isinstance(base, DoorFramePrimitive):
+        return replace(
+            base,
+            width=float(base.width) * sx,
+            height=float(base.height) * sz,
+            jamb_width=float(base.jamb_width) * sx,
+            lintel_height=float(base.lintel_height) * sz,
+            depth=float(base.depth) * sy,
+            center=_transform_local_point(tuple(base.center), transform),
+        )
+    if isinstance(base, ArchPrimitive):
+        return replace(
+            base,
+            width=float(base.width) * sx,
+            height=float(base.height) * sz,
+            frame_thickness=float(base.frame_thickness) * sx,
+            depth=float(base.depth) * sy,
+            center=_transform_local_point(tuple(base.center), transform),
+        )
+
+    raise ValueError(
+        f"Freeze Transform cannot safely bake {type(base).__name__} yet because that primitive lacks enough editable "
+        "center/shape fields to preserve visible geometry. Use Center Pivot/Transform for now."
+    )
+
+
+def freeze_authored_room_composition_primitive_transform(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+) -> AuthoredModuleProject:
+    """Bake a selected primitive's supported transform into its authored shape."""
+
+    index = _target_room_index(project, room_resref)
+    room = project.rooms[index]
+    composition = _composition_for_room(room)
+    target = str(primitive_name or "").strip()
+    if not target:
+        raise ValueError("Freeze Transform requires a selected authored primitive.")
+
+    updated_primitives = []
+    found = False
+    frozen_type = ""
+    old_transform: PrimitiveTransform | None = None
+    for primitive in tuple(composition.primitives or ()):
+        name = _primitive_name(primitive)
+        if name != target:
+            updated_primitives.append(primitive)
+            continue
+        found = True
+        transform = _primitive_transform(primitive)
+        old_transform = transform
+        frozen_base = _freeze_transform_into_parametric_primitive(primitive, transform)
+        frozen_type = type(frozen_base).__name__
+        updated_primitives.append(
+            PlacedRoomPrimitive(
+                primitive=frozen_base,
+                name=name,
+                transform=PrimitiveTransform(),
+            )
+        )
+
+    if not found:
+        known = ", ".join(_primitive_name(item) for item in tuple(composition.primitives or ()) if _primitive_name(item))
+        raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'. Known primitives: {known or '(none)'}.")
+
+    transform_payload = {
+        "translation": list(tuple(old_transform.translation if old_transform is not None else (0.0, 0.0, 0.0))),
+        "rotation_degrees_z": float(old_transform.rotation_degrees_z if old_transform is not None else 0.0),
+        "scale": list(tuple(old_transform.scale if old_transform is not None else (1.0, 1.0, 1.0))),
+        "pivot": list(tuple(old_transform.pivot if old_transform is not None else (0.0, 0.0, 0.0))),
+    }
+    updated_composition = replace(
+        composition,
+        primitives=tuple(updated_primitives),
+        metadata={
+            **dict(composition.metadata),
+            "last_operation": "freeze_primitive_transform",
+            "last_frozen_transform_primitive": target,
+            "freeze_transform_space": "primitive_local_parametric_unrotated",
+            "freeze_transform_primitive_type": frozen_type,
+            "frozen_transform": transform_payload,
+        },
+    )
+    updated = replace(
+        room,
+        primitive=updated_composition,
+        composition=None,
+        metadata={
+            **dict(room.metadata),
+            "primitive": "authored_room_composition",
+            "last_operation": "freeze_primitive_transform",
+            "last_frozen_transform_primitive": target,
+        },
+    )
+    rooms = tuple(project.rooms[:index] + (updated,) + project.rooms[index + 1 :])
+    return _replace_rooms(project, rooms, operation="freeze_primitive_transform")
+
+
 def _duplicate_primitive_name(existing: set[str], source_name: str, duplicate_index: int) -> str:
     base = str(source_name or "primitive").strip() or "primitive"
     for suffix_index in range(duplicate_index, duplicate_index + 1000):
@@ -3585,6 +3764,7 @@ __all__ = [
     "cleanup_authored_floor_plan_vertices",
     "duplicate_authored_room_composition_primitive",
     "fill_authored_floor_plan_face",
+    "freeze_authored_room_composition_primitive_transform",
     "flatten_authored_floor_plan_vertices",
     "grid_snap_authored_floor_plan_vertices",
     "mirror_authored_floor_plan_vertices",
