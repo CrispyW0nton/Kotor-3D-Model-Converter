@@ -2244,6 +2244,15 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert primitive_metadata["edge_normal_policy_edges"] == [0, 1]
     assert room_payload["metadata"]["edge_normal_policy"] == "soft"
     assert controller.command_history.undo_label == "Soften edges"
+    soften_boundary = controller.map_studio_export_object_boundaries()[0]
+    soften_readiness_boundary = controller.authored_module_readiness().readiness.metadata["export_object_boundaries"][0]
+    assert soften_boundary.normal_policy_status == "authored_visual_normal_policy"
+    assert "soft 2 room edge(s)" in soften_boundary.normal_policy_summary
+    assert "WOK traversal remains validated separately" in soften_boundary.normal_policy_summary
+    assert soften_boundary.edge_normal_policy_targets[0]["policy"] == "soft"
+    assert soften_boundary.edge_normal_policy_targets[0]["edges"] == [0, 1]
+    assert soften_readiness_boundary["normal_policy_status"] == "authored_visual_normal_policy"
+    assert soften_readiness_boundary["edge_normal_policy_targets"][0]["coordinate_space"] == "authored_floor_plan_loop_edges"
 
     controller.undo_map_studio_command()
 
@@ -2788,6 +2797,15 @@ def test_t2606_edge_normal_policy_validates_composition_primitive_edges() -> Non
     assert metadata["edge_normal_policy_scope"] == "selected_edges"
     assert metadata["edge_normal_policy_edge_count"] == 18
     assert metadata["edge_normal_policy_coordinate_space"] == "authored_room_composition_primitive_edges"
+    boundary = controller.map_studio_export_object_boundaries()[0]
+    readiness_boundary = controller.authored_module_readiness().readiness.metadata["export_object_boundaries"][0]
+    assert boundary.normal_policy_status == "authored_visual_normal_policy"
+    assert "hard 2 edge_cube edge(s)" in boundary.normal_policy_summary
+    assert boundary.edge_normal_policy_targets[0]["target"] == "edge_cube"
+    assert boundary.edge_normal_policy_targets[0]["edges"] == [0, 1]
+    assert boundary.edge_normal_policy_targets[0]["edge_count"] == 18
+    assert readiness_boundary["normal_policy_status"] == "authored_visual_normal_policy"
+    assert readiness_boundary["edge_normal_policy_targets"][0]["coordinate_space"] == "authored_room_composition_primitive_edges"
 
     controller.undo_map_studio_command()
     before_payload = copy.deepcopy(controller.project.extra_sections["authored_module"])

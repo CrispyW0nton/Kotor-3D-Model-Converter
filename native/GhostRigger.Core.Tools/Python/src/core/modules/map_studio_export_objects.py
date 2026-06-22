@@ -40,6 +40,9 @@ class MapStudioExportObjectBoundary:
     walkmesh_face_count: int = 0
     walkable_face_count: int = 0
     material_textures: tuple[str, ...] = ()
+    normal_policy_status: str = "default_exporter_normals"
+    normal_policy_summary: str = "Default exporter normals; no authored soften/harden edge policy."
+    edge_normal_policy_targets: tuple[dict[str, Any], ...] = ()
     bounds_coordinate_space: str = ""
     bounds_min: tuple[float, float, float] | None = None
     bounds_max: tuple[float, float, float] | None = None
@@ -74,6 +77,9 @@ class MapStudioExportObjectBoundary:
             "walkmesh_face_count": self.walkmesh_face_count,
             "walkable_face_count": self.walkable_face_count,
             "material_textures": list(self.material_textures),
+            "normal_policy_status": self.normal_policy_status,
+            "normal_policy_summary": self.normal_policy_summary,
+            "edge_normal_policy_targets": [dict(row) for row in self.edge_normal_policy_targets],
             "bounds_coordinate_space": self.bounds_coordinate_space,
             "bounds_min": list(self.bounds_min) if self.bounds_min is not None else [],
             "bounds_max": list(self.bounds_max) if self.bounds_max is not None else [],
@@ -115,6 +121,78 @@ def _composition_textures(composition: AuthoredRoomComposition) -> tuple[str, ..
         if texture:
             textures.append(texture)
     return tuple(dict.fromkeys(textures))
+
+
+def _normal_policy_entry(target: str, source: dict[str, Any]) -> dict[str, Any] | None:
+    policy = str(source.get("edge_normal_policy") or "").strip().lower()
+    if not policy:
+        return None
+    edges = source.get("edge_normal_policy_edges")
+    if isinstance(edges, (list, tuple)):
+        edge_values = [int(edge) for edge in edges]
+    else:
+        edge_values = []
+    return {
+        "target": str(target or "room"),
+        "policy": policy,
+        "operation": str(source.get("edge_normal_policy_operation") or ""),
+        "scope": str(source.get("edge_normal_policy_scope") or "all_edges"),
+        "edge_count": int(source.get("edge_normal_policy_edge_count") or 0),
+        "coordinate_space": str(source.get("edge_normal_policy_coordinate_space") or ""),
+        "edges": edge_values,
+    }
+
+
+def _normal_policy_targets(primitive: Any, metadata: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+    targets: list[dict[str, Any]] = []
+    primitive_metadata = dict(getattr(primitive, "metadata", {}) or {})
+    by_target = primitive_metadata.get("edge_normal_policy_by_target")
+    has_targeted_policy = isinstance(by_target, dict) and bool(by_target)
+    if not has_targeted_policy:
+        room_entry = _normal_policy_entry("room", primitive_metadata) or _normal_policy_entry("room", metadata)
+        if room_entry is not None:
+            targets.append(room_entry)
+    if isinstance(by_target, dict):
+        for target_name in sorted(str(name or "").strip() for name in by_target if str(name or "").strip()):
+            target_entry = by_target.get(target_name)
+            if isinstance(target_entry, dict):
+                entry = _normal_policy_entry(target_name, dict(target_entry))
+                if entry is not None:
+                    targets.append(entry)
+    return tuple(targets)
+
+
+def _normal_policy_targets_for_members(
+    composition: AuthoredRoomComposition,
+    member_names: tuple[str, ...],
+) -> tuple[dict[str, Any], ...]:
+    if not member_names:
+        return ()
+    wanted = set(member_names)
+    return tuple(row for row in _normal_policy_targets(composition, {}) if str(row.get("target") or "") in wanted)
+
+
+def _normal_policy_status(targets: tuple[dict[str, Any], ...]) -> str:
+    return "authored_visual_normal_policy" if targets else "default_exporter_normals"
+
+
+def _normal_policy_summary(targets: tuple[dict[str, Any], ...]) -> str:
+    if not targets:
+        return "Default exporter normals; no authored soften/harden edge policy."
+    parts = []
+    for row in targets[:4]:
+        policy = str(row.get("policy") or "authored")
+        target = str(row.get("target") or "room")
+        scope = str(row.get("scope") or "all_edges")
+        edge_count = int(row.get("edge_count") or 0)
+        selected_edges = tuple(row.get("edges") or ())
+        selected_count = len(selected_edges) if selected_edges else edge_count
+        if scope == "selected_edges" and edge_count:
+            parts.append(f"{policy} {selected_count} {target} edge(s)")
+        else:
+            parts.append(f"{policy} {target} {scope}")
+    suffix = "" if len(targets) <= 4 else f"; +{len(targets) - 4} more"
+    return "Authored visual-normal policy: " + "; ".join(parts) + suffix + ". WOK traversal remains validated separately."
 
 
 def _composition_primitives_by_name(composition: AuthoredRoomComposition) -> dict[str, PlacedRoomPrimitive]:
@@ -289,6 +367,7 @@ def _composition_group_boundaries(
         face_count = int(group.get("face_count") or 0)
         vertex_count = int(group.get("vertex_count") or 0)
         dimensions = _vec3_from_group(group, "dimensions")
+        normal_targets = _normal_policy_targets_for_members(composition, member_names)
         dcc_status = "blocked" if blocking else "ready_for_external_uv"
         dcc_reason = (
             "Fix missing grouped primitives before using this object group for UV/texturing handoff."
@@ -324,6 +403,9 @@ def _composition_group_boundaries(
                 walkmesh_face_count=0,
                 walkable_face_count=0,
                 material_textures=textures,
+                normal_policy_status=_normal_policy_status(normal_targets),
+                normal_policy_summary=_normal_policy_summary(normal_targets),
+                edge_normal_policy_targets=normal_targets,
                 bounds_coordinate_space=str(group.get("bounds_coordinate_space") or ""),
                 bounds_min=_vec3_from_group(group, "bounds_min"),
                 bounds_max=_vec3_from_group(group, "bounds_max"),
@@ -359,6 +441,7 @@ def map_studio_export_object_boundaries(project: AuthoredModuleProject) -> tuple
         walkmesh_face_count = 0
         walkable_face_count = 0
         material_textures: tuple[str, ...] = ()
+        normal_targets: tuple[dict[str, Any], ...] = ()
         bounds_min: tuple[float, float, float] | None = None
         bounds_max: tuple[float, float, float] | None = None
         center: tuple[float, float, float] | None = None
@@ -384,6 +467,7 @@ def map_studio_export_object_boundaries(project: AuthoredModuleProject) -> tuple
             blocking.append(f"Export object {resref or '(unnamed)'} could not compile: {exc}")
         if isinstance(primitive, AuthoredRoomComposition):
             material_textures = _composition_textures(primitive) or material_textures
+        normal_targets = _normal_policy_targets(primitive, metadata)
         kind = _object_kind(primitive, metadata)
         uv_handoff = kind in {"composition_room", "separated_primitive_object", "floor_plan_room", "rectangular_room"}
         owns_walkmesh = walkmesh_face_count > 0
@@ -410,6 +494,9 @@ def map_studio_export_object_boundaries(project: AuthoredModuleProject) -> tuple
                 walkmesh_face_count=walkmesh_face_count,
                 walkable_face_count=walkable_face_count,
                 material_textures=material_textures,
+                normal_policy_status=_normal_policy_status(normal_targets),
+                normal_policy_summary=_normal_policy_summary(normal_targets),
+                edge_normal_policy_targets=normal_targets,
                 bounds_coordinate_space="kmap_world" if bounds_min is not None else "",
                 bounds_min=bounds_min,
                 bounds_max=bounds_max,

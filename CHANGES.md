@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Surfaces Edge Normal Policy In Export Readiness
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Export-object readiness / Edge normal policy
+Intersects: native Scene/Tools export-object boundary mirrors and Map Studio dispatch regression tests.
+
+- Added authored visual-normal policy fields to Map Studio export-object boundaries so softened/hardened edge intent is visible in readiness metadata before DCC/UV/export handoff.
+- Threaded selected floor-plan and composition-primitive edge normal policy targets through the same headless readiness path used by the Level Editor instead of making Qt inspect KMAP payloads.
+- Preserved capability honesty: the metadata reports visual-normal intent only; WOK traversal and game-tested lighting remain separately validated.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_export_objects.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_export_objects.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests\test_map_studio_tool_action_dispatch.py::test_t2606_edge_normal_policy_validates_floor_plan_edge_indices tests\test_map_studio_tool_action_dispatch.py::test_t2606_edge_normal_policy_validates_composition_primitive_edges -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_normal_policy`; `git diff --check`.
+
 ### [2026-06-22] Map Studio Adds Room Boundary Dimensions
 
 Owner: LordVaderCW
