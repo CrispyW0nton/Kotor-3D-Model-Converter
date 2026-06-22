@@ -632,13 +632,13 @@ def resolve_map_studio_tool_belt_action(
         )
 
     if key == "object_vertex_snap":
-        if not ctx.primitive_name or not ctx.target_primitive_name or ctx.target_vertex_index is None:
+        if not ctx.primitive_name:
             return _route(
                 action,
                 focus_component_mode="object",
                 focus_snap_mode="vertex",
                 enabled=False,
-                disabled_reason="Object Vertex Snap needs a selected primitive, target primitive, and target vertex.",
+                disabled_reason="Object Vertex Snap needs a selected authored room primitive.",
             )
         return _route(
             action,
@@ -649,12 +649,13 @@ def resolve_map_studio_tool_belt_action(
                 "room_resref": ctx.room_resref,
                 "primitive_name": ctx.primitive_name,
                 "target_primitive_name": ctx.target_primitive_name,
-                "target_vertex_index": int(ctx.target_vertex_index),
+                "target_vertex_index": None if ctx.target_vertex_index is None else int(ctx.target_vertex_index),
             },
             mutates_kmap=True,
             authoring_context=(
                 "Object Vertex Snap: move the selected primitive as an object so its pivot lands exactly on a target "
-                "primitive vertex in authored-room composition mesh space. This preserves topology and makes validation/export/game proof stale."
+                "primitive vertex in authored-room composition mesh space; when no target is supplied, core chooses the nearest candidate. "
+                "This preserves topology and makes validation/export/game proof stale."
             ),
         )
 

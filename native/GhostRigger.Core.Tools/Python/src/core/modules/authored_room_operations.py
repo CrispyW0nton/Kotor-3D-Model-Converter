@@ -187,6 +187,18 @@ class AuthoredFloorPlanVertexSnapCandidate:
 
 
 @dataclass(frozen=True)
+class AuthoredPrimitiveVertexSnapCandidate:
+    """UI-ready target for object-level primitive vertex snapping."""
+
+    room_resref: str
+    primitive_name: str
+    vertex_index: int
+    composition_position: tuple[float, float, float]
+    distance: float
+    label: str
+
+
+@dataclass(frozen=True)
 class AuthoredTerrainRoomChoice:
     """UI-ready terrain room choice for heightfield sculpt operations."""
 
@@ -1697,19 +1709,76 @@ def grid_snap_authored_room_composition_primitive(
     return _replace_rooms(project, rooms, operation="object_grid_snap_primitive")
 
 
+def authored_room_composition_primitive_vertex_snap_candidates(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+    target_primitive_name: str = "",
+    max_results: int = 8,
+    distance_limit: float | None = None,
+) -> tuple[AuthoredPrimitiveVertexSnapCandidate, ...]:
+    """Return nearest transformed primitive vertices for object-level V snapping."""
+
+    index = _target_room_index(project, room_resref)
+    room = project.rooms[index]
+    composition = _composition_for_room(room)
+    source_name = str(primitive_name or "").strip()
+    target_filter = str(target_primitive_name or "").strip()
+    if not source_name:
+        raise ValueError("Primitive vertex snap candidates require a selected authored primitive.")
+    primitives = tuple(composition.primitives or ())
+    source_primitive = next((item for item in primitives if _primitive_name(item) == source_name), None)
+    if source_primitive is None:
+        known = ", ".join(_primitive_name(item) for item in primitives if _primitive_name(item))
+        raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'. Known primitives: {known or '(none)'}.")
+
+    source_transform = _primitive_transform(source_primitive)
+    source_pivot = tuple(float(value) for value in source_transform.pivot)
+    source_translation = tuple(float(value) for value in source_transform.translation)
+    source_position = tuple(source_pivot[i] + source_translation[i] for i in range(3))
+    limit = None if distance_limit is None else float(distance_limit)
+    count = max(1, int(max_results))
+    candidates: list[AuthoredPrimitiveVertexSnapCandidate] = []
+    for primitive in primitives:
+        name = _primitive_name(primitive)
+        if not name or name == source_name:
+            continue
+        if target_filter and name != target_filter:
+            continue
+        for vertex_index, vertex in enumerate(tuple(primitive_to_mesh(primitive).vertices or ())):
+            position = tuple(float(value) for value in vertex)
+            distance = math.sqrt(sum((position[i] - source_position[i]) ** 2 for i in range(3)))
+            if limit is not None and distance > limit:
+                continue
+            candidates.append(
+                AuthoredPrimitiveVertexSnapCandidate(
+                    room_resref=room.room_resref,
+                    primitive_name=name,
+                    vertex_index=int(vertex_index),
+                    composition_position=position,
+                    distance=float(distance),
+                    label=f"{name} vertex {vertex_index} ({distance:.3f} m)",
+                )
+            )
+    candidates.sort(key=lambda item: (item.distance, item.primitive_name, item.vertex_index))
+    return tuple(candidates[:count])
+
+
 def snap_authored_room_composition_primitive_pivot_to_vertex(
     project: AuthoredModuleProject,
     *,
     room_resref: str,
     primitive_name: str,
-    target_primitive_name: str,
-    target_vertex_index: int = 0,
+    target_primitive_name: str = "",
+    target_vertex_index: int | None = None,
 ) -> AuthoredModuleProject:
     """Snap one primitive object's pivot onto a target primitive vertex.
 
     This is the headless form of Maya-style object vertex snapping for authored
     primitives.  It moves the selected primitive by transform translation only;
-    it does not weld vertices or rewrite topology.
+    it does not weld vertices or rewrite topology.  If no target is provided,
+    the closest vertex on another primitive in the room is selected.
     """
 
     index = _target_room_index(project, room_resref)
@@ -1719,15 +1788,30 @@ def snap_authored_room_composition_primitive_pivot_to_vertex(
     target_name = str(target_primitive_name or "").strip()
     if not source_name:
         raise ValueError("Object Vertex Snap requires a selected authored primitive.")
-    if not target_name:
-        raise ValueError("Object Vertex Snap requires a target authored primitive.")
 
     primitives = tuple(composition.primitives or ())
     source_primitive = next((item for item in primitives if _primitive_name(item) == source_name), None)
-    target_primitive = next((item for item in primitives if _primitive_name(item) == target_name), None)
     known = ", ".join(_primitive_name(item) for item in primitives if _primitive_name(item))
     if source_primitive is None:
         raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'. Known primitives: {known or '(none)'}.")
+
+    if not target_name or target_vertex_index is None:
+        candidates = authored_room_composition_primitive_vertex_snap_candidates(
+            project,
+            room_resref=room_resref,
+            primitive_name=source_name,
+            target_primitive_name=target_name,
+            max_results=1,
+        )
+        if not candidates:
+            if target_name:
+                raise ValueError(f"Target primitive '{target_name}' has no vertices to snap to.")
+            raise ValueError("Object Vertex Snap needs another authored primitive with vertices in the selected room.")
+        chosen = candidates[0]
+        target_name = chosen.primitive_name
+        target_vertex_index = chosen.vertex_index
+
+    target_primitive = next((item for item in primitives if _primitive_name(item) == target_name), None)
     if target_primitive is None:
         raise ValueError(f"Room {room.room_resref} has no target primitive named '{target_primitive_name}'. Known primitives: {known or '(none)'}.")
 
@@ -3936,6 +4020,7 @@ __all__ = [
     "AuthoredCompositionPrimitiveTransform",
     "AuthoredUniversalTransformSelection",
     "AuthoredFloorPlanVertexSnapCandidate",
+    "AuthoredPrimitiveVertexSnapCandidate",
     "AuthoredFloorPlanRoomChoice",
     "AuthoredTerrainRoomChoice",
     "add_authored_floor_plan_opening_transition_marker",
@@ -3951,6 +4036,7 @@ __all__ = [
     "apply_authored_floor_plan_rectangular_cut",
     "available_authored_composition_primitive_kinds",
     "authored_floor_plan_vertex_snap_candidates",
+    "authored_room_composition_primitive_vertex_snap_candidates",
     "authored_floor_plan_room_choices",
     "authored_terrain_room_choices",
     "authored_room_composition_primitives",

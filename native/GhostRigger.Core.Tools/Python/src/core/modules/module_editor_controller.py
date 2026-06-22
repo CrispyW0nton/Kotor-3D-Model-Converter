@@ -107,6 +107,7 @@ from .authored_room_operations import (
     available_authored_composition_primitive_kinds,
     authored_floor_plan_room_choices,
     authored_floor_plan_vertex_snap_candidates,
+    authored_room_composition_primitive_vertex_snap_candidates,
     authored_room_composition_primitive_universal_transform,
     authored_terrain_room_choices,
     authored_room_composition_primitives,
@@ -1993,6 +1994,35 @@ class ModuleEditorController:
             limit=int(limit),
         )
 
+    def authored_room_primitive_vertex_snap_candidates(
+        self,
+        *,
+        room_resref: str,
+        primitive_name: str,
+        target_primitive_name: str = "",
+        max_results: int = 8,
+        distance_limit: float | None = None,
+    ):
+        """Return nearest primitive vertex snap targets without mutating project state."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return authored_room_composition_primitive_vertex_snap_candidates(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+            target_primitive_name=target_primitive_name,
+            max_results=int(max_results),
+            distance_limit=distance_limit,
+        )
+
     def snap_authored_floor_plan_vertex(
         self,
         *,
@@ -2596,8 +2626,8 @@ class ModuleEditorController:
         *,
         room_resref: str,
         primitive_name: str,
-        target_primitive_name: str,
-        target_vertex_index: int = 0,
+        target_primitive_name: str = "",
+        target_vertex_index: int | None = None,
     ):
         """Snap one authored primitive pivot to a vertex on another primitive."""
 
@@ -2623,7 +2653,7 @@ class ModuleEditorController:
         self.project.game = updated.game
         self.project.dirty = True
         self.model.log(
-            f"Vertex-snapped Map Studio primitive {primitive_name} to {target_primitive_name}[{target_vertex_index}]; previous exports/proofs are now stale."
+            f"Vertex-snapped Map Studio primitive {primitive_name}; previous exports/proofs are now stale."
         )
         self._record_map_studio_command(
             action_key="map_studio.primitive.object_vertex_snap",
@@ -2633,7 +2663,7 @@ class ModuleEditorController:
                 "room_resref": room_resref,
                 "primitive_name": primitive_name,
                 "target_primitive_name": target_primitive_name,
-                "target_vertex_index": int(target_vertex_index),
+                "target_vertex_index": None if target_vertex_index is None else int(target_vertex_index),
             },
         )
         return self.authored_module_readiness()
