@@ -93,6 +93,7 @@ from .authored_module_placements import (
     update_authored_gameplay_transition,
 )
 from .authored_room_operations import (
+    add_authored_floor_plan_opening_transition_marker,
     add_authored_room_composition_primitive,
     apply_authored_floor_plan_axis_split,
     apply_authored_floor_plan_boolean_difference,
@@ -1140,6 +1141,69 @@ class ModuleEditorController:
                 "width": float(width),
                 "height": float(height),
                 "bottom": float(bottom),
+            },
+        )
+        return self.authored_module_readiness()
+
+    def add_authored_floor_plan_opening_transition_marker(
+        self,
+        *,
+        room_resref: str = "",
+        opening_name: str = "",
+        edge_index: int | None = None,
+        marker_kind: str = "door",
+        template_resref: str = "",
+        tag: str = "",
+        linked_to: str = "",
+        linked_to_module: str = "",
+        transition_destination: int = 0,
+    ):
+        """Create KOTOR door/trigger/waypoint transition data from one authored wall opening."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        marker_type = str(marker_kind or "door").strip().lower() or "door"
+        updated = add_authored_floor_plan_opening_transition_marker(
+            authored,
+            room_resref=room_resref,
+            opening_name=opening_name,
+            edge_index=edge_index,
+            marker_kind=marker_type,
+            template_resref=template_resref,
+            tag=tag,
+            linked_to=linked_to,
+            linked_to_module=linked_to_module,
+            transition_destination=int(transition_destination),
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Created Map Studio opening marker {tag or opening_name or '(selected opening)'} as {marker_type}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.floor_plan.opening_transition_marker",
+            label=f"Add opening marker {tag or opening_name or marker_type}",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "opening_name": opening_name,
+                "edge_index": edge_index,
+                "marker_kind": marker_type,
+                "template_resref": template_resref,
+                "tag": tag,
+                "linked_to": linked_to,
+                "linked_to_module": linked_to_module,
+                "transition_destination": int(transition_destination),
             },
         )
         return self.authored_module_readiness()

@@ -667,7 +667,6 @@ def resolve_map_studio_tool_belt_action(
                 disabled_reason="Opening Marker needs an authored wall opening selected before it can create KOTOR transition data.",
             )
         kwargs: dict[str, Any] = {
-            "operation": "opening_transition_marker",
             "room_resref": str(ctx.room_resref or "").strip(),
             "opening_name": opening_name,
             "marker_kind": str(ctx.opening_marker_kind or "door").strip().lower() or "door",
@@ -683,7 +682,7 @@ def resolve_map_studio_tool_belt_action(
             action,
             focus_component_mode="placement",
             focus_snap_mode="doorhook",
-            command_method="apply_authored_room_operation",
+            command_method="add_authored_floor_plan_opening_transition_marker",
             command_kwargs=kwargs,
             mutates_kmap=True,
             authoring_context=(

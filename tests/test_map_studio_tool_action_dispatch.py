@@ -79,7 +79,7 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["boolean_a_minus_b"].contract_kind == "command_mutates_kmap"
     assert statuses["boolean_a_minus_b"].command_method == "boolean_difference_authored_floor_plan_rooms"
     assert statuses["opening_marker"].contract_kind == "command_mutates_kmap"
-    assert statuses["opening_marker"].command_method == "apply_authored_room_operation"
+    assert statuses["opening_marker"].command_method == "add_authored_floor_plan_opening_transition_marker"
     assert statuses["sculpt_raise"].contract_kind == "command_mutates_kmap"
     assert statuses["sculpt_raise"].command_method == "apply_authored_terrain_operation"
     assert statuses["terrain"].contract_kind == "command_query"
@@ -492,9 +492,8 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     )
 
     assert opening_marker_route.enabled is True
-    assert opening_marker_route.command_method == "apply_authored_room_operation"
+    assert opening_marker_route.command_method == "add_authored_floor_plan_opening_transition_marker"
     assert opening_marker_route.command_kwargs == {
-        "operation": "opening_transition_marker",
         "room_resref": "room_a",
         "opening_name": "south_door",
         "marker_kind": "trigger",
@@ -1199,7 +1198,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert marker_metadata["opening_name"] == "south_door"
     assert marker_metadata["marker_kind"] == "trigger"
     assert marker_metadata["transition_destination"] == 2
-    assert controller.command_history.undo_label == "Apply room operation opening_transition_marker"
+    assert controller.command_history.undo_label == "Add opening marker south_exit_trigger"
 
     controller.undo_map_studio_command()
 
@@ -1705,6 +1704,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert "script_field_name" in source
         assert 'command_method = "set_authored_script_hook" if script_resref else "remove_authored_script_hook"' in source
         assert 'command_method="set_authored_floor_plan_wall_opening"' in source
+        assert 'command_method="add_authored_floor_plan_opening_transition_marker"' in source
         assert 'command_method="apply_authored_room_operation"' in source
         assert 'command_method="rectangular_cut_authored_floor_plan_room"' in source
         assert 'command_method="axis_split_authored_floor_plan_room"' in source
@@ -1721,7 +1721,6 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert '"boolean_a_minus_b"' in source
         assert '"boolean_b_minus_a"' in source
         assert '"insert_edge_loop"' in source
-        assert '"operation": "opening_transition_marker"' in source
         assert 'command_method="map_studio_universal_transform_overlay"' in source
 
     for source in (scene_overlay, tools_overlay):
