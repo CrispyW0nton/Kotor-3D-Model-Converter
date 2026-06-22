@@ -1258,6 +1258,41 @@ def test_t2606_map_studio_duplicate_special_parameters_are_visible_and_routed() 
     assert '"duplicateSpecialScaleZSpinBox"' in window_source
 
 
+def test_t2606_map_studio_curve_tool_parameters_are_visible_and_routed() -> None:
+    builder_source = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
+        "module_editor/builder_tab.py"
+    )
+    builder_mirror_source = _read(
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
+        "module_editor/builder_tab.py"
+    )
+    window_source = _read(
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
+        "module_editor_window.py"
+    )
+
+    for source in (builder_source, builder_mirror_source):
+        assert "Construction Curve Guide" in source
+        assert "mapStudioCurveGuideNameLineEdit" in source
+        assert "mapStudioCurveGuidePurposeComboBox" in source
+        assert "mapStudioCurveGuidePoint1XSpinBox" in source
+        assert "mapStudioCurveGuidePoint2YSpinBox" in source
+        assert "mapStudioCurveGuidePoint3ZSpinBox" in source
+        assert "Points are stored in KMAP world space" in source
+        assert '"pth_planning"' in source
+        assert '"terrain_ridge"' in source
+
+    assert '"curveGuidePurposeComboBox"' in window_source
+    assert '"curveGuideNameLineEdit"' in window_source
+    assert "if key == \"curve_tool\":" in window_source
+    assert 'metadata["curve_name"]' in window_source
+    assert 'metadata["curve_purpose"]' in window_source
+    assert 'metadata["coordinate_space"] = "kmap_world"' in window_source
+    assert 'metadata["points"] = (' in window_source
+    assert '"curveGuidePoint3ZSpinBox"' in window_source
+
+
 def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
     builder_source = _read(
         "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"

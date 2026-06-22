@@ -1348,10 +1348,17 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "roomPrimitiveTransformComboBox",
             "primitiveSurfaceComboBox",
             "roomSurfaceComboBox",
+            "curveGuidePurposeComboBox",
         ):
             combo = getattr(self.builder_tab, combo_name, None)
             if combo is not None:
                 combo.currentIndexChanged.connect(lambda _index=0: self._refresh_map_studio_tool_context())
+        for line_name in (
+            "curveGuideNameLineEdit",
+        ):
+            line = getattr(self.builder_tab, line_name, None)
+            if line is not None:
+                line.textChanged.connect(lambda _text="": self._refresh_map_studio_tool_context())
         for spin_name in (
             "duplicateSpecialCountSpinBox",
             "duplicateSpecialOffsetXSpinBox",
@@ -1361,6 +1368,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "duplicateSpecialScaleXSpinBox",
             "duplicateSpecialScaleYSpinBox",
             "duplicateSpecialScaleZSpinBox",
+            "curveGuidePoint1XSpinBox",
+            "curveGuidePoint1YSpinBox",
+            "curveGuidePoint1ZSpinBox",
+            "curveGuidePoint2XSpinBox",
+            "curveGuidePoint2YSpinBox",
+            "curveGuidePoint2ZSpinBox",
+            "curveGuidePoint3XSpinBox",
+            "curveGuidePoint3YSpinBox",
+            "curveGuidePoint3ZSpinBox",
         ):
             spin = getattr(self.builder_tab, spin_name, None)
             if spin is not None:
@@ -1710,6 +1726,17 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         duplicate_scale_x = getattr(self.builder_tab, "duplicateSpecialScaleXSpinBox", None)
         duplicate_scale_y = getattr(self.builder_tab, "duplicateSpecialScaleYSpinBox", None)
         duplicate_scale_z = getattr(self.builder_tab, "duplicateSpecialScaleZSpinBox", None)
+        curve_name_line = getattr(self.builder_tab, "curveGuideNameLineEdit", None)
+        curve_purpose_combo = getattr(self.builder_tab, "curveGuidePurposeComboBox", None)
+        curve_p1x = getattr(self.builder_tab, "curveGuidePoint1XSpinBox", None)
+        curve_p1y = getattr(self.builder_tab, "curveGuidePoint1YSpinBox", None)
+        curve_p1z = getattr(self.builder_tab, "curveGuidePoint1ZSpinBox", None)
+        curve_p2x = getattr(self.builder_tab, "curveGuidePoint2XSpinBox", None)
+        curve_p2y = getattr(self.builder_tab, "curveGuidePoint2YSpinBox", None)
+        curve_p2z = getattr(self.builder_tab, "curveGuidePoint2ZSpinBox", None)
+        curve_p3x = getattr(self.builder_tab, "curveGuidePoint3XSpinBox", None)
+        curve_p3y = getattr(self.builder_tab, "curveGuidePoint3YSpinBox", None)
+        curve_p3z = getattr(self.builder_tab, "curveGuidePoint3ZSpinBox", None)
         key = str(action_key or "").strip()
         axis = "x"
         if key == "mirror_y":
@@ -1807,6 +1834,33 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             surface_id = str(surface_data.get("surface_id") or primitive_data.get("surface_id") or "").strip()
             if surface_id:
                 metadata["surface_id"] = surface_id
+        if key == "curve_tool":
+            metadata["curve_name"] = str(getattr(curve_name_line, "text", lambda: "")()).strip()
+            metadata["curve_purpose"] = str(
+                (
+                    curve_purpose_combo.currentData()
+                    if curve_purpose_combo is not None and curve_purpose_combo.currentData()
+                    else "path_guide"
+                )
+            )
+            metadata["coordinate_space"] = "kmap_world"
+            metadata["points"] = (
+                (
+                    float(curve_p1x.value()) if curve_p1x is not None else 0.0,
+                    float(curve_p1y.value()) if curve_p1y is not None else 0.0,
+                    float(curve_p1z.value()) if curve_p1z is not None else 0.0,
+                ),
+                (
+                    float(curve_p2x.value()) if curve_p2x is not None else 1.0,
+                    float(curve_p2y.value()) if curve_p2y is not None else 0.5,
+                    float(curve_p2z.value()) if curve_p2z is not None else 0.0,
+                ),
+                (
+                    float(curve_p3x.value()) if curve_p3x is not None else 2.0,
+                    float(curve_p3y.value()) if curve_p3y is not None else 0.5,
+                    float(curve_p3z.value()) if curve_p3z is not None else 0.0,
+                ),
+            )
         terrain_room_resref = str(terrain_context.get("room_resref") or "").strip()
         if key.startswith("sculpt_"):
             current_room_resref = terrain_room_resref

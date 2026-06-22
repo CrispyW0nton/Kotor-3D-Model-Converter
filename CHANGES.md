@@ -11,6 +11,18 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-22
 
+### [2026-06-22] Map Studio Exposes Curve Guide Parameters
+
+Owner: LordVaderCW
+Task: T2606
+Subsystem: Map Studio / Level Editor tool belt / Construction curve guides
+Intersects: native Tools and GUI Display Builder panels, Level Editor tool-action context, and Map Studio workflow-panel source contracts.
+
+- Added visible Builder controls for Construction Curve Guide name, purpose, and three explicit KMAP-world control points so the Curve Tool authors guide data from modder-selected values instead of silent defaults.
+- Routed those controls into the existing `curve_tool` metadata path, preserving the core `add_authored_curve_guide` command, undo history, KMAP guide storage, and export/proof stale-state behavior.
+- Refreshed Map Studio command surfaces when curve guide fields change so command-search/tool-belt context reflects visible guide parameters.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2606_map_studio_curve_tool_parameters_are_visible_and_routed -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_curve_ui`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q -p no:cacheprovider --basetemp .pytest_tmp_map_studio_curve_dispatch`; `git diff --check`.
+
 ### [2026-06-22] Map Studio Exposes Duplicate Special Parameters
 
 Owner: LordVaderCW
