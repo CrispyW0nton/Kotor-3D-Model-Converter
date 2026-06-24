@@ -18,11 +18,13 @@ from src.gui.qt_lib.dialogs.qt_dialogs import (
     show_viewport_navigation_reference,
 )
 from src.gui.qt_lib.dialogs.qt_settings_dialog import save_settings
+from src.gui.libtheme.icon_manager import ThemeIconManager
 from src.gui.libtheme.style_tokens import LEGACY_MATRIX_COLORS
 
 C = dict(LEGACY_MATRIX_COLORS)
 _GUI_DIR = Path(__file__).resolve().parents[3]
 _QT_ICON_DIR = (_GUI_DIR / "icons").as_posix()
+_fallback_icons = ThemeIconManager(_GUI_DIR / "icons")
 
 
 class WindowChromeMixin:
@@ -169,7 +171,7 @@ class WindowChromeMixin:
         self.sequence_editor_action.setShortcut("Ctrl+Alt+Q")
         self._configure_dock_toggle_action(self.sequence_editor_action, "sequence_editor", self._show_sequence_editor_dock)
         self.modules_action = QtGui.QAction(self._icon("modular"), "Open Map Studio Level Editor", self)
-        self.modules_action.triggered.connect(self._open_module_editor_window)
+        self.modules_action.triggered.connect(self._open_map_studio_modeling_workspace)
         self.rig_window_action = QtGui.QAction(self._icon("rig"), "Open Rigging Window", self)
         self.rig_window_action.triggered.connect(self._open_rig_window)
         self.texture_tool_action = QtGui.QAction(self._icon("texture"), "Texture Tool...", self)
@@ -455,7 +457,7 @@ class WindowChromeMixin:
         if path.exists():
             return QtGui.QIcon(str(path))
         fallback = _GUI_DIR / "icons" / f"{name}_24.png"
-        return QtGui.QIcon(str(fallback)) if fallback.exists() else QtGui.QIcon()
+        return QtGui.QIcon(str(fallback)) if fallback.exists() else _fallback_icons.icon(name, None, size)
 
     def _placeholder_action(self, text: str, shortcut: str = "") -> QtGui.QAction:
         action = QtGui.QAction(text, self)
@@ -557,7 +559,10 @@ class WindowChromeMixin:
         layout.addWidget(self._tool_button("Save  Ctrl+S", self.save_scene_action, "save"))
         layout.addWidget(self._tool_button("Auto-Rig  R", self.autorig_action, "autorig"))
         layout.addWidget(self._tool_button("Character Builder", self.character_builder_action, "charbuilder"))
-        layout.addWidget(self._tool_button("Modules", self.modules_action, "modular"))
+        map_studio_button = self._tool_button("Modules", self.modules_action, "modular")
+        map_studio_button.setObjectName("CommandStripMapStudioButton")
+        map_studio_button.setToolTip("Open Map Studio Level Editor")
+        layout.addWidget(map_studio_button)
         layout.addWidget(self._tool_button("Tex Dir", self.texture_dir_action, "texture"))
         layout.addWidget(self._tool_button("Settings  F2", self.settings_action, "settings", compact=True))
 
@@ -671,18 +676,216 @@ class WindowChromeMixin:
         band.setFrameShape(QtWidgets.QFrame.StyledPanel)
         band.setLineWidth(1)
         band.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
-        band.setFixedHeight(max(28, toolbar.height()))
-        row = QtWidgets.QHBoxLayout(band)
+        root = QtWidgets.QVBoxLayout(band)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        row_host = QtWidgets.QWidget(band)
+        row_host.setObjectName("ViewportToolbarDefaultRow")
+        row = QtWidgets.QHBoxLayout(row_host)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(0)
 
-        toolbar.setParent(band)
+        toolbar.setParent(row_host)
         toolbar.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
 
         row.addWidget(toolbar, 1)
+        modeling_button = QtWidgets.QToolButton(row_host)
+        modeling_button.setObjectName("ViewportToolbarMapStudioModelingButton")
+        modeling_button.setText("Modeling")
+        modeling_button.setIcon(self._icon("modular"))
+        modeling_button.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
+        modeling_button.setToolTip(
+            "Open Map Studio Modeling. KMAP room, terrain, component, and WOK edits are authored in Map Studio."
+        )
+        modeling_button.clicked.connect(self._open_map_studio_modeling_workspace)
+        row.addWidget(modeling_button, 0, QtCore.Qt.AlignVCenter)
+        root.addWidget(row_host)
+        modeling_tabs = None
+        viewport = getattr(self, "viewport", None)
+        take_modeling_tabs = getattr(viewport, "take_viewport_modeling_tabs", None)
+        if callable(take_modeling_tabs):
+            modeling_tabs = take_modeling_tabs()
+        if modeling_tabs is None:
+            modeling_tabs = self._make_viewport_modeling_tabs(band)
+        modeling_tabs.setParent(band)
+        root.addWidget(modeling_tabs)
         self.viewport_toolbar_band = band
+        self.viewport_toolbar_default_row = row_host
         self.viewport_toolbar_hosted_scroll = toolbar
+        self.viewport_toolbar_modeling_button = modeling_button
+        self.viewport_toolbar_modeling_tabs = modeling_tabs
+        modeling_tabs.setVisible(True)
+        self._sync_viewport_toolbar_band()
         return band
+
+    def _make_viewport_modeling_tabs(self, parent: QtWidgets.QWidget) -> QtWidgets.QTabWidget:
+        tabs = QtWidgets.QTabWidget(parent)
+        tabs.setObjectName("ViewportToolbarMapStudioModelingTabs")
+        tabs.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        tab = QtWidgets.QWidget(tabs)
+        tab.setObjectName("ViewportToolbarMapStudioModelingTab")
+        tab_root = QtWidgets.QVBoxLayout(tab)
+        tab_root.setContentsMargins(0, 0, 0, 0)
+        tab_root.setSpacing(0)
+        scroll = QtWidgets.QScrollArea(tab)
+        scroll.setObjectName("ViewportToolbarMapStudioModelingScrollArea")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        content = QtWidgets.QWidget(scroll)
+        content.setObjectName("ViewportToolbarMapStudioModelingRow")
+        row = QtWidgets.QHBoxLayout(content)
+        row.setContentsMargins(4, 1, 4, 1)
+        row.setSpacing(3)
+
+        mode_label = QtWidgets.QLabel("Modes", content)
+        mode_label.setObjectName("ViewportToolbarMapStudioModeLabel")
+        row.addWidget(mode_label)
+        for mode in ("Object", "Vertex", "Edge", "Face", "Terrain", "Walkmesh"):
+            button = QtWidgets.QToolButton(content)
+            button.setObjectName(f"ViewportToolbarMapStudioModeButton_{mode.lower()}")
+            button.setText(mode)
+            button.setProperty("_gr_full_text", mode)
+            button.setToolTip(f"Open Map Studio {mode} mode for KMAP-authored modeling.")
+            button.clicked.connect(lambda _checked=False, label=mode: self._open_map_studio_mode_from_viewport(label))
+            row.addWidget(button)
+
+        row.addSpacing(8)
+        tool_label = QtWidgets.QLabel("Tools", content)
+        tool_label.setObjectName("ViewportToolbarMapStudioToolLabel")
+        row.addWidget(tool_label)
+        actions = (
+            ("select", "Select", "Focus Map Studio object selection."),
+            ("move", "Move", "Focus Map Studio object transform tools."),
+            ("duplicate_selected", "Dupe", "Duplicate the selected Map Studio item."),
+            ("delete_selected", "Delete", "Delete the selected Map Studio item."),
+            ("object_grid_snap", "Snap", "Snap the selected primitive pivot to the Map Studio grid."),
+            ("weld", "Weld", "Weld selected floor-plan vertices."),
+            ("cut", "Cut", "Cut or split room/terrain topology."),
+            ("split", "Split", "Split authored room topology into KOTOR-safe ownership pieces."),
+            ("bridge", "Bridge", "Bridge selected edges for corridors or joins."),
+            ("extrude", "Extrude", "Extrude selected authored edges or faces."),
+            ("bevel", "Bevel", "Bevel selected authored geometry."),
+            ("inset", "Inset", "Inset selected authored faces."),
+            ("flatten", "Flatten", "Flatten selected floor-plan vertices."),
+            ("cleanup", "Cleanup", "Cleanup duplicate or collinear authored geometry."),
+            ("triangulate", "Triang.", "Triangulate selected room or WOK-facing faces."),
+            ("paint_material", "Material", "Assign KOTOR texture/material intent to the active room or selected primitive."),
+            ("paint_wok", "WOK", "Assign KOTOR WOK surface intent to the active room or selected walkmesh primitive."),
+            ("center_pivot", "Pivot", "Center the selected primitive pivot."),
+            ("freeze_transform", "Freeze", "Freeze supported primitive transforms into authored dimensions."),
+        )
+        for key, label, tooltip in actions:
+            button = QtWidgets.QToolButton(content)
+            button.setObjectName(f"ViewportToolbarMapStudioToolButton_{key}")
+            button.setText(label)
+            button.setProperty("_gr_full_text", label)
+            button.setToolTip(tooltip)
+            button.clicked.connect(lambda _checked=False, action_key=key: self._run_map_studio_viewport_modeling_command(action_key))
+            row.addWidget(button)
+        row.addStretch(1)
+        scroll.setWidget(content)
+        tab_root.addWidget(scroll)
+        tabs.addTab(tab, "Modeling")
+
+        blockout_tab = QtWidgets.QWidget(tabs)
+        blockout_tab.setObjectName("ViewportToolbarMapStudioBlockoutTab")
+        blockout_root = QtWidgets.QVBoxLayout(blockout_tab)
+        blockout_root.setContentsMargins(0, 0, 0, 0)
+        blockout_root.setSpacing(0)
+        blockout_scroll = QtWidgets.QScrollArea(blockout_tab)
+        blockout_scroll.setObjectName("ViewportToolbarMapStudioBlockoutScrollArea")
+        blockout_scroll.setWidgetResizable(True)
+        blockout_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        blockout_scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        blockout_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
+        blockout_content = QtWidgets.QWidget(blockout_scroll)
+        blockout_content.setObjectName("ViewportToolbarMapStudioBlockoutRow")
+        blockout_row = QtWidgets.QHBoxLayout(blockout_content)
+        blockout_row.setContentsMargins(4, 1, 4, 1)
+        blockout_row.setSpacing(3)
+
+        blockout_label = QtWidgets.QLabel("Blockout", blockout_content)
+        blockout_label.setObjectName("ViewportToolbarMapStudioBlockoutLabel")
+        blockout_row.addWidget(blockout_label)
+        blockout_actions = (
+            ("blockout_room", "Room", "Create a KMAP-authored starter room with editable primitives, WOK, LYT/VIS, and player start intent."),
+            ("floor", "Floor", "Add an authored walkable floor/platform primitive to the active Map Studio room."),
+            ("wall", "Wall", "Add an authored wall/slab primitive to the active Map Studio room."),
+            ("cube", "Cube", "Add an authored cube/blockout primitive to the active Map Studio room."),
+            ("ramp", "Ramp", "Add an authored ramp primitive with generated walkmesh-facing surface intent."),
+            ("stairs", "Stairs", "Add authored stairs with a continuous walkable WOK proxy."),
+            ("door_frame", "Doorway", "Add an authored doorway frame primitive for portal or transition blockout."),
+            ("arch", "Arch", "Add an authored arch primitive for entrance or portal silhouettes."),
+            ("terrain_patch", "Terrain", "Create a KMAP-authored terrain heightfield patch with slope-aware WOK intent."),
+        )
+        for key, label, tooltip in blockout_actions:
+            button = QtWidgets.QToolButton(blockout_content)
+            button.setObjectName(f"ViewportToolbarMapStudioBlockoutButton_{key}")
+            button.setText(label)
+            button.setProperty("_gr_full_text", label)
+            button.setToolTip(tooltip)
+            button.clicked.connect(lambda _checked=False, action_key=key: self._run_map_studio_viewport_modeling_command(action_key))
+            blockout_row.addWidget(button)
+        blockout_row.addStretch(1)
+        blockout_scroll.setWidget(blockout_content)
+        blockout_root.addWidget(blockout_scroll)
+        tabs.addTab(blockout_tab, "Blockout")
+        return tabs
+
+    def _open_map_studio_mode_from_viewport(self, mode_label: str) -> None:
+        self._open_map_studio_modeling_workspace()
+        window = getattr(self, "module_editor_window", None)
+        if window is None:
+            return
+        handler = getattr(window, "_handle_map_studio_edit_mode_changed", None)
+        if callable(handler):
+            handler(str(mode_label or "Object"))
+        window.show()
+        window.raise_()
+        window.activateWindow()
+
+    def _run_map_studio_viewport_modeling_command(self, action_key: str) -> None:
+        self._open_map_studio_modeling_workspace()
+        window = getattr(self, "module_editor_window", None)
+        if window is None:
+            return
+        key = str(action_key or "").strip()
+        if key == "select":
+            select_authored = getattr(window, "select_map_studio_authored_context", None)
+            if callable(select_authored) and select_authored():
+                return
+            self._open_map_studio_mode_from_viewport("Object")
+            return
+        if key == "move":
+            move_primitive = getattr(window, "move_map_studio_authored_primitive_selection", None)
+            if callable(move_primitive) and move_primitive():
+                return
+            self._open_map_studio_mode_from_viewport("Object")
+            return
+        if key == "duplicate_selected":
+            execute = getattr(window, "_execute_map_studio_tool_belt_command", None)
+            if callable(execute) and execute("duplicate_selected"):
+                return
+            duplicate = getattr(window, "duplicate_selected", None)
+            if callable(duplicate):
+                duplicate()
+            return
+        if key == "delete_selected":
+            execute = getattr(window, "_execute_map_studio_tool_belt_command", None)
+            if callable(execute) and execute("delete_selected"):
+                return
+            delete = getattr(window, "delete_selected", None)
+            if callable(delete):
+                delete()
+            return
+        execute = getattr(window, "_execute_map_studio_tool_belt_command", None)
+        if callable(execute):
+            execute(key)
+        window.show()
+        window.raise_()
+        window.activateWindow()
 
     def _sync_viewport_toolbar_band(self) -> None:
         toolbar = getattr(self, "viewport_toolbar_hosted_scroll", None)
@@ -691,7 +894,18 @@ class WindowChromeMixin:
             height = self._height_for_wrapping_widget(toolbar, max(28, toolbar.sizeHint().height()))
             toolbar.setMinimumHeight(height)
             toolbar.setMaximumHeight(height)
-            band.setFixedHeight(height)
+            row_host = getattr(self, "viewport_toolbar_default_row", None)
+            if row_host is not None:
+                row_host.setMinimumHeight(height)
+                row_host.setMaximumHeight(height)
+            modeling_tabs = getattr(self, "viewport_toolbar_modeling_tabs", None)
+            modeling_height = max(36, modeling_tabs.sizeHint().height()) if modeling_tabs is not None else 0
+        if modeling_tabs is not None:
+            modeling_tabs.setVisible(True)
+            modeling_tabs.setMinimumHeight(modeling_height)
+            modeling_tabs.setMaximumHeight(modeling_height)
+        band.setFixedHeight(height + modeling_height)
+        band.updateGeometry()
 
     def _sync_reserved_top_rows(self) -> None:
         command_bar = getattr(self, "command_bar", None)
@@ -707,9 +921,15 @@ class WindowChromeMixin:
         self._sync_viewport_toolbar_band()
         top_shell = getattr(self, "reserved_top_shell", None)
         if top_shell is not None:
+            shell_height = max(1, top_shell.sizeHint().height())
+            top_shell.setMinimumHeight(shell_height)
+            top_shell.setMaximumHeight(shell_height)
             top_shell.updateGeometry()
         top_toolbar = getattr(self, "reserved_top_toolbar", None)
         if top_toolbar is not None:
+            toolbar_height = max(1, top_toolbar.sizeHint().height(), getattr(top_shell, "minimumHeight", lambda: 0)())
+            top_toolbar.setMinimumHeight(toolbar_height)
+            top_toolbar.setMaximumHeight(toolbar_height)
             top_toolbar.updateGeometry()
 
     @staticmethod

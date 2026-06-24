@@ -197,6 +197,17 @@ def test_t1605_exports_install_safe_mod_source_resources_and_manifest(tmp_path, 
     assert manifest["install"]["module_path"] == result.module_path
     assert manifest["validation"]["blocking_issues"] == []
     assert manifest["source"]["resources"]
+    transaction = manifest["transaction"]
+    assert transaction["staging_model"] == "save_pipeline_temp_root_then_export_job_promote"
+    assert transaction["export_job"]["job_id"] == "map_studio.custom_module_package.custom01"
+    assert transaction["export_job"]["kind"] == "map_studio.custom_module_package"
+    assert transaction["export_job"]["status"] == "succeeded"
+    assert transaction["export_job"]["manifest_path"] == result.manifest_path
+    assert not pathlib.Path(transaction["staging_root"]).exists()
+    promoted_kinds = {row["artifact_kind"] for row in transaction["promoted_outputs"]}
+    assert {"module_package", "save_manifest", "pack_manifest", "loose_resource"} <= promoted_kinds
+    assert all(pathlib.Path(row["final_path"]).exists() for row in transaction["promoted_outputs"])
+    assert all(".ghostrigger_export_" not in row["final_path"] for row in transaction["promoted_outputs"])
 
 
 def test_t1605_strict_preflight_blocks_missing_game_ready_core_files(tmp_path, monkeypatch):

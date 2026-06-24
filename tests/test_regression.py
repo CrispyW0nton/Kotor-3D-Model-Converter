@@ -2209,6 +2209,63 @@ def test_c_drexlf_texture_alias_resolves_shipped_diffuse() -> None:
     assert "c_drex01" in textures
 
 
+def test_obj_import_preserves_mtl_map_kd_texture_metadata(tmp_path) -> None:
+    """OBJ imports should keep UVs and the diffuse texture named by map_Kd."""
+    pytest.importorskip("trimesh")
+    Image = pytest.importorskip("PIL.Image")
+    root = Path(__file__).resolve().parents[1]
+    from scripts.mcp.start_kotormcp_stdio import _python_roots
+
+    for path in reversed(_python_roots(root)):
+        text = str(path)
+        if path.exists() and text not in os.sys.path:
+            os.sys.path.insert(0, text)
+    from core.export.gltf_importer import auto_import
+
+    texture = tmp_path / "C_DrexlF_UV_basecolor.jpg"
+    Image.new("RGB", (2, 2), (120, 10, 20)).save(texture)
+    (tmp_path / "C_DrexlF_UV.mtl").write_text(
+        "\n".join(
+            [
+                "newmtl c_drex01",
+                "Kd 1.000000000 1.000000000 1.000000000",
+                "d 1.000000000",
+                "illum 2",
+                "map_Kd C_DrexlF_UV_basecolor.jpg",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    obj = tmp_path / "C_DrexlF_UV.obj"
+    obj.write_text(
+        "\n".join(
+            [
+                "mtllib C_DrexlF_UV.mtl",
+                "o C_DrexlF_UV",
+                "usemtl c_drex01",
+                "v 0.0 0.0 0.0",
+                "v 1.0 0.0 0.0",
+                "v 0.0 1.0 0.0",
+                "vt 0.0 0.0",
+                "vt 1.0 0.0",
+                "vt 0.0 1.0",
+                "f 1/1 2/2 3/3",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    model = auto_import(str(obj), model_name="C_DrexlF_UV")
+
+    assert model is not None
+    node = model.root_node.children[0]
+    assert node.uvs == [(0.0, 1.0), (1.0, 1.0), (0.0, 0.0)]
+    assert node.texture == "C_DrexlF_UV_basecolor"
+    assert node.texture_names == ["C_DrexlF_UV_basecolor"]
+    assert node.source_material_name == "c_drex01"
+    assert Path(node.external_texture_path) == texture
+
+
 @pytest.mark.skipif(not K1_PATH.exists(), reason="K1 install not available")
 def test_k1_aurora_light_controllers_populate_runtime_light_fields() -> None:
     from src.core.game.kotor_loader import load_model_from_bytes

@@ -425,6 +425,42 @@ def test_t2692_readiness_reports_full_map_studio_toolchain_scope() -> None:
     assert export_candidate.metadata["toolchain"][0]["name"] == "Geometry authoring"
 
 
+def test_t2911_readiness_metadata_reports_steep_walkable_wok_slope(monkeypatch) -> None:
+    _install_native_payload_paths()
+
+    import src.core.modules.authored_module_readiness as readiness_module
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+    from src.core.modules.module_format import WOKData, WOKFace
+
+    steep_wok = WOKData(
+        name="grsteep_room01",
+        verts=[
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 0.0, 2.0),
+        ],
+        faces=[
+            WOKFace(0, 1, 2, surface=4),
+        ],
+    )
+
+    def compile_steep_room(room):
+        return SimpleNamespace(
+            room_resref=room.normalised_resref(),
+            room_mesh=SimpleNamespace(name="grsteep_room01", texture="CM_Baremetal", faces=(0,)),
+            helper_meshes=(),
+            wok=steep_wok,
+        )
+
+    monkeypatch.setattr(readiness_module, "compile_authored_room_spec", compile_steep_room)
+
+    readiness = build_authored_module_readiness(_floor_plan_project())
+
+    assert readiness.metadata["steep_walkable_face_count"] == 1
+    assert readiness.metadata["max_walkable_slope_degrees"] > readiness.metadata["max_allowed_walkable_slope_degrees"]
+    assert any("steeper than" in message for message in readiness.blocking_messages)
+
+
 def test_t2606_readiness_reports_multi_room_vis_visibility_gaps() -> None:
     _install_native_payload_paths()
 
@@ -726,6 +762,40 @@ def test_t2684_readiness_reports_staged_and_installed_game_proof_state() -> None
     assert installed.metadata["elevated_launch_script_path"].endswith("grdev01_launch_kotor_as_admin.cmd")
     assert installed.metadata["proof_recording_script_path"].endswith("grdev01_record_game_proof.cmd")
     assert "Run the launch helper dry-run" in installed.next_action
+
+
+def test_t3104_readiness_metadata_keeps_package_resource_inventory() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+
+    inventory = {
+        "schema": "ghostrigger.map_studio.package_resource_inventory.v1",
+        "module_root": "grdev01",
+        "readback_ok": True,
+        "required_runtime_resources": [
+            {"resref": resref, "restype": restype}
+            for resref, restype in _runtime_keys()
+        ],
+        "missing_required_runtime_resources": [],
+        "resource_groups": {
+            "verified_archive_resource_count": 9,
+            "loose_staged_resource_count": 9,
+        },
+        "install": {"installed": False, "dry_run": True},
+    }
+    readiness = build_authored_module_readiness(
+        _floor_plan_project(),
+        packaged_resources=_runtime_keys(),
+        proof_metadata={
+            "proof_manifest_path": "C:/tmp/grdev01_authored_module_game_manifest.json",
+            "package_resource_inventory": inventory,
+        },
+    )
+
+    assert readiness.metadata["package_resource_inventory"] == inventory
+    assert readiness.metadata["package_resource_inventory"]["module_root"] == "grdev01"
+    assert readiness.metadata["package_resource_inventory"]["readback_ok"] is True
 
 
 def test_t2601_readiness_builds_k2_launch_helper() -> None:

@@ -43,6 +43,50 @@ class ModuleLayoutService:
             return LayoutLoadResult(ok=False, message=f"Could not load LYT: {exc}", code="lyt_error")
         return self.import_lyt(project, lyt, module_id=module_id, source_module=source_module or source.stem, source_path=str(source))
 
+    def load_lyt_text(
+        self,
+        project: KMapProject,
+        text: str,
+        *,
+        module_id: str = "",
+        source_module: str = "",
+        source_path: str = "",
+    ) -> LayoutLoadResult:
+        mf = _import_module_format()
+        try:
+            lyt = mf.LYTLayout.from_text(str(text or ""))
+        except Exception as exc:
+            return LayoutLoadResult(ok=False, message=f"Could not load LYT: {exc}", code="lyt_error")
+        return self.import_lyt(
+            project,
+            lyt,
+            module_id=module_id,
+            source_module=source_module,
+            source_path=source_path or f"{source_module}.lyt",
+        )
+
+    def load_lyt_bytes(
+        self,
+        project: KMapProject,
+        data: bytes,
+        *,
+        module_id: str = "",
+        source_module: str = "",
+        source_path: str = "",
+        encoding: str = "latin-1",
+    ) -> LayoutLoadResult:
+        try:
+            text = bytes(data or b"").decode(encoding, errors="replace")
+        except Exception as exc:
+            return LayoutLoadResult(ok=False, message=f"Could not decode LYT: {exc}", code="lyt_error")
+        return self.load_lyt_text(
+            project,
+            text,
+            module_id=module_id,
+            source_module=source_module,
+            source_path=source_path,
+        )
+
     def import_lyt(
         self,
         project: KMapProject,

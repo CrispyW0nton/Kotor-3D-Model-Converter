@@ -32,6 +32,7 @@ import json
 import logging
 import math
 import os
+import shlex
 import shutil
 import subprocess
 import struct
@@ -87,6 +88,88 @@ CTRL_SCALE       = 36
 
 # Maximum node name length in KotOR
 _MAX_NAME = 32
+
+
+def _parse_obj_diffuse_textures(path: str) -> Dict[str, Tuple[str, str]]:
+    """Return material-name -> (texture stem, texture path) for OBJ map_Kd refs."""
+    obj_path = Path(path)
+    if obj_path.suffix.lower() != ".obj" or not obj_path.is_file():
+        return {}
+
+    material_libs: List[Path] = []
+    try:
+        for raw in obj_path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            try:
+                parts = shlex.split(line, comments=True, posix=True)
+            except ValueError:
+                parts = line.split()
+            if parts and parts[0].lower() == "mtllib":
+                for item in parts[1:]:
+                    mtl_path = Path(item)
+                    if not mtl_path.is_absolute():
+                        mtl_path = obj_path.parent / mtl_path
+                    material_libs.append(mtl_path)
+    except OSError:
+        return {}
+
+    textures: Dict[str, Tuple[str, str]] = {}
+    for mtl_path in material_libs:
+        current = ""
+        try:
+            lines = mtl_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except OSError:
+            continue
+        for raw in lines:
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            try:
+                parts = shlex.split(line, comments=True, posix=True)
+            except ValueError:
+                parts = line.split()
+            if not parts:
+                continue
+            keyword = parts[0].lower()
+            if keyword == "newmtl" and len(parts) > 1:
+                current = parts[1]
+                continue
+            if keyword != "map_kd" or not current or len(parts) < 2:
+                continue
+            tex_ref = parts[-1]
+            tex_path = Path(tex_ref)
+            if not tex_path.is_absolute():
+                tex_path = mtl_path.parent / tex_path
+            stem = tex_path.stem[:_MAX_NAME]
+            if stem:
+                textures[current.lower()] = (stem, str(tex_path))
+    return textures
+
+
+def _trimesh_texture_reference(mesh: Any, obj_textures: Dict[str, Tuple[str, str]]) -> Tuple[str, str, str]:
+    """Resolve a texture name/source path/material name from a trimesh mesh."""
+    visual = getattr(mesh, "visual", None)
+    material = getattr(visual, "material", None)
+    material_name = str(getattr(material, "name", "") or "").strip()
+    if material_name and material_name.lower() in obj_textures:
+        tex_name, tex_path = obj_textures[material_name.lower()]
+        return tex_name, tex_path, material_name
+    if len(obj_textures) == 1:
+        only_name, (tex_name, tex_path) = next(iter(obj_textures.items()))
+        return tex_name, tex_path, material_name or only_name
+
+    image = getattr(material, "image", None)
+    filename = str(getattr(image, "filename", "") or "").strip()
+    if filename:
+        stem = Path(filename).stem[:_MAX_NAME]
+        if stem:
+            return stem, filename, material_name
+
+    if material_name:
+        return material_name[:_MAX_NAME], "", material_name
+    return "", "", ""
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  GLB binary chunk parser
@@ -1006,6 +1089,7 @@ class FBXFallbackImporter:
         model.root_node = root
 
         import trimesh as tm
+        obj_textures = _parse_obj_diffuse_textures(path)
         if isinstance(scene_or_mesh, tm.Scene):
             geoms = scene_or_mesh.geometry
         elif hasattr(scene_or_mesh, 'vertices'):
@@ -1027,6 +1111,14 @@ class FBXFallbackImporter:
                     and mesh.visual.uv is not None):
                 n.uvs = [(float(u), 1.0 - float(v))
                          for u, v in mesh.visual.uv.tolist()]
+            tex_name, tex_path, material_name = _trimesh_texture_reference(mesh, obj_textures)
+            if tex_name:
+                n.texture = tex_name[:_MAX_NAME]
+                n.texture_names = [n.texture]
+                if tex_path:
+                    n.external_texture_path = tex_path
+                if material_name:
+                    n.source_material_name = material_name[:_MAX_NAME]
             n.render = True
             n.has_shadow = True
             n.compute_bounds()

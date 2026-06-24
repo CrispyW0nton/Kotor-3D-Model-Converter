@@ -41,12 +41,16 @@ def test_t2658_controller_records_authored_game_proof_and_updates_kmap_readiness
         evidence_path=evidence,
         tester="pytest",
         module_loads_in_game=True,
+        module_identity_matches_authored_resref=True,
         player_spawns_on_floor=True,
         test_placeable_visible=True,
         player_can_walk_on_floor=True,
+        transition_pathing_sanity_confirmed=True,
+        no_inherited_base_game_geometry_or_scripted_movers=True,
     )
     readiness = controller.authored_module_readiness().readiness
     payload = controller.project.extra_sections["authored_module"]
+    proof = json.loads(Path(staged.proof_manifest_path).read_text(encoding="utf-8"))
 
     assert result.ok is True
     assert result.code == "game_proof_recorded"
@@ -55,6 +59,140 @@ def test_t2658_controller_records_authored_game_proof_and_updates_kmap_readiness
     assert readiness is not None
     assert readiness.game_tested is True
     assert readiness.capability_stage == "game_tested"
+    assert proof["package_resource_inventory"]["module_root"] == "grdev01"
+    assert proof["modder_test_plan"]["package_resource_inventory"] == proof["package_resource_inventory"]
+    assert proof["package_resource_inventory"]["readback_ok"] is True
+    assert proof["game_test"]["accepted_checks"] == proof["acceptance_checks"]
+    assert proof["modder_test_plan"]["accepted_acceptance_checks"] == proof["acceptance_checks"]
+    assert payload["modder_test_plan"]["accepted_acceptance_checks"] == proof["acceptance_checks"]
+
+
+def test_t3103_controller_rejects_stale_authored_proof_after_kmap_edit(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grdev01", game="K1")
+    controller.create_dev_test_authored_module()
+    staged = controller.stage_authored_module(tmp_path)
+    evidence = tmp_path / "grdev01_stale_warp_proof.png"
+    evidence.write_bytes(b"fake screenshot bytes")
+
+    controller.apply_authored_room_style(texture="CM_Baremetal", floor_surface="metal", room_resref="grdev01_room01")
+
+    result = controller.record_map_studio_game_proof(
+        proof_manifest_path=staged.proof_manifest_path,
+        evidence_path=evidence,
+        tester="pytest",
+        module_loads_in_game=True,
+        module_identity_matches_authored_resref=True,
+        player_spawns_on_floor=True,
+        test_placeable_visible=True,
+        player_can_walk_on_floor=True,
+        transition_pathing_sanity_confirmed=True,
+        no_inherited_base_game_geometry_or_scripted_movers=True,
+    )
+    payload = controller.project.extra_sections["authored_module"]
+    proof = json.loads(Path(staged.proof_manifest_path).read_text(encoding="utf-8"))
+
+    assert result.ok is False
+    assert result.code == "stale_proof_manifest"
+    assert "Regenerate the package" in result.message
+    assert payload["game_tested"] is False
+    assert payload["export_proof_invalidation"]["invalidates_game_proof"] is True
+    assert "proof_manifest_path" not in payload
+    assert proof["game_tested"] is False
+    assert "game_test" not in proof
+
+
+def test_t3103_controller_rejects_stale_authored_proof_after_placement_edit(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grdev01", game="K1")
+    controller.create_dev_test_authored_module()
+    staged = controller.stage_authored_module(tmp_path)
+    evidence = tmp_path / "grdev01_stale_placement_proof.png"
+    evidence.write_bytes(b"fake screenshot bytes")
+
+    controller.set_authored_gameplay_placement_transform(
+        "authored:placeable:0",
+        position=(2.25, 1.75, 0.0),
+    )
+
+    result = controller.record_map_studio_game_proof(
+        proof_manifest_path=staged.proof_manifest_path,
+        evidence_path=evidence,
+        tester="pytest",
+        module_loads_in_game=True,
+        module_identity_matches_authored_resref=True,
+        player_spawns_on_floor=True,
+        test_placeable_visible=True,
+        player_can_walk_on_floor=True,
+        transition_pathing_sanity_confirmed=True,
+        no_inherited_base_game_geometry_or_scripted_movers=True,
+    )
+    payload = controller.project.extra_sections["authored_module"]
+    invalidation = payload["export_proof_invalidation"]
+    proof = json.loads(Path(staged.proof_manifest_path).read_text(encoding="utf-8"))
+
+    assert result.ok is False
+    assert result.code == "stale_proof_manifest"
+    assert payload["game_tested"] is False
+    assert "proof_manifest_path" not in payload
+    assert invalidation["latest_operation"] == "last_gameplay_placement_transform"
+    assert invalidation["invalidates_previous_export"] is True
+    assert invalidation["invalidates_game_proof"] is True
+    assert invalidation["stale_outputs"] == ["GIT", "IFO", "PTH", ".mod"]
+    assert "fresh in-game proof" in invalidation["next_action"]
+    assert proof["game_tested"] is False
+    assert "game_test" not in proof
+
+
+def test_t3103_controller_rejects_stale_authored_proof_after_script_hook_edit(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grdev01", game="K1")
+    controller.create_dev_test_authored_module()
+    staged = controller.stage_authored_module(tmp_path)
+    evidence = tmp_path / "grdev01_stale_script_proof.png"
+    evidence.write_bytes(b"fake screenshot bytes")
+
+    controller.set_authored_script_hook(scope="area", field_name="OnEnter", script_resref="gr_onenter")
+
+    result = controller.record_map_studio_game_proof(
+        proof_manifest_path=staged.proof_manifest_path,
+        evidence_path=evidence,
+        tester="pytest",
+        module_loads_in_game=True,
+        module_identity_matches_authored_resref=True,
+        player_spawns_on_floor=True,
+        test_placeable_visible=True,
+        player_can_walk_on_floor=True,
+        transition_pathing_sanity_confirmed=True,
+        no_inherited_base_game_geometry_or_scripted_movers=True,
+    )
+    payload = controller.project.extra_sections["authored_module"]
+    invalidation = payload["export_proof_invalidation"]
+    proof = json.loads(Path(staged.proof_manifest_path).read_text(encoding="utf-8"))
+
+    assert result.ok is False
+    assert result.code == "stale_proof_manifest"
+    assert payload["game_tested"] is False
+    assert "proof_manifest_path" not in payload
+    assert invalidation["latest_operation"] == "last_script_hook"
+    assert invalidation["invalidates_previous_export"] is True
+    assert invalidation["invalidates_game_proof"] is True
+    assert invalidation["stale_outputs"] == ["ARE", "IFO", ".mod"]
+    assert "ARE/IFO script-hook resources" in invalidation["next_action"]
+    assert proof["game_tested"] is False
+    assert "game_test" not in proof
 
 
 def test_t2658_controller_dispatches_grdev01_smoke_proof_manifest(tmp_path: Path) -> None:
@@ -73,9 +211,12 @@ def test_t2658_controller_dispatches_grdev01_smoke_proof_manifest(tmp_path: Path
         evidence_path=evidence,
         tester="pytest",
         module_loads_in_game=True,
+        module_identity_matches_authored_resref=True,
         player_spawns_on_floor=True,
         test_placeable_visible=True,
         player_can_walk_on_floor=True,
+        transition_pathing_sanity_confirmed=True,
+        no_inherited_base_game_geometry_or_scripted_movers=True,
     )
     proof = json.loads(Path(staged.proof_manifest_path).read_text(encoding="utf-8"))
 
@@ -83,6 +224,33 @@ def test_t2658_controller_dispatches_grdev01_smoke_proof_manifest(tmp_path: Path
     assert result.code == "game_proof_recorded"
     assert proof["task"] == "T2601"
     assert proof["game_tested"] is True
+
+
+def test_t3103_proof_recording_handoff_uses_manifest_acceptance_checks(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grdev01", game="K1")
+    controller.create_dev_test_authored_module(module_root="grdev01")
+    staged = controller.stage_authored_module(tmp_path)
+    payload = controller.project.extra_sections["authored_module"]
+
+    handoff = controller.map_studio_game_proof_recording_handoff()
+    checks = set(handoff.required_checks)
+
+    assert handoff.ready is True
+    assert handoff.proof_manifest_path == staged.proof_manifest_path
+    assert payload["package_resource_inventory"]["module_root"] == "grdev01"
+    assert handoff.package_resource_inventory["module_root"] == "grdev01"
+    assert handoff.package_resource_inventory["readback_ok"] is True
+    assert "9 required runtime resource" in handoff.package_resource_summary
+    assert "0 missing" in handoff.package_resource_summary
+    assert "Loaded module identity matches the authored resref" in checks
+    assert "Transitions and pathing behave sanely in the loaded module" in checks
+    assert "No inherited vanilla geometry or scripted movers appear" in checks
+    assert "Screenshot or video evidence is attached" in checks
 
 
 def test_t2658_module_editor_has_in_app_game_proof_dialog_and_recorder() -> None:
@@ -120,9 +288,19 @@ def test_t2658_module_editor_has_in_app_game_proof_dialog_and_recorder() -> None
     ).read_text(encoding="utf-8")
 
     assert "_MapStudioGameProofDialog" in window_source
+    assert 'self.setObjectName("mapStudioGameProofDialog")' in window_source
     assert "mapStudioProofManifestLineEdit" in window_source
+    assert "mapStudioProofPackageResourceSummaryLabel" in window_source
     assert "mapStudioProofEvidenceLineEdit" in window_source
     assert "mapStudioProofModuleLoadsCheckBox" in window_source
+    assert "mapStudioProofModuleIdentityCheckBox" in window_source
+    assert "mapStudioProofTransitionPathingCheckBox" in window_source
+    assert "mapStudioProofNoInheritedContentCheckBox" in window_source
+    assert 'buttons.setObjectName("mapStudioProofButtons")' in window_source
+    assert '"module_identity_matches_authored_resref": self.module_identity_box.isChecked()' in window_source
+    assert '"transition_pathing_sanity_confirmed": self.transition_pathing_box.isChecked()' in window_source
+    assert '"no_inherited_base_game_geometry_or_scripted_movers": self.no_inherited_box.isChecked()' in window_source
+    assert 'package_resource_summary=str(getattr(proof_defaults, "package_resource_summary", "") or "")' in window_source
     assert "self.readiness_panel.gameTestRequested.connect(self.record_game_smoke_proof)" in window_source
     assert "self.controller.record_map_studio_game_proof(**values)" in window_source
     assert "mapStudioRecordGameProofButton" in panel_source
@@ -136,7 +314,7 @@ def test_t2600_module_editor_launch_handoff_shows_exact_warp_command() -> None:
     window_source = (
         repo
         / "native"
-        / "GhostRigger.Windows.Editor.Level"
+        / "GhostRigger.Core.Tools"
         / "Python"
         / "src"
         / "gui"
@@ -153,7 +331,9 @@ def test_t2600_module_editor_launch_handoff_shows_exact_warp_command() -> None:
     assert "mapStudioLaunchProofManifestLineEdit" in window_source
     assert "mapStudioLaunchProofRecorderLineEdit" in window_source
     assert "mapStudioLaunchHelperCommandEdit" in window_source
-    assert 'warp_command = str(payload.get("warp_command")' in window_source
+    assert "mapStudioLaunchPackageResourceSummaryLabel" in window_source
+    assert 'warp_command=str(getattr(handoff, "warp_command", "") or "warp <module>")' in window_source
+    assert 'package_resource_summary=str(getattr(handoff, "package_resource_summary", "") or "")' in window_source
     assert "_MapStudioLaunchHandoffDialog(" in window_source
     assert "Map Studio warp command:" in window_source
     assert "QtGui.QGuiApplication.clipboard().setText" in window_source

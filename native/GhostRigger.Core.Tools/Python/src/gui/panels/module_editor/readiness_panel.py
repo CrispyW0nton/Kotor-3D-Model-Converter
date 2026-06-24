@@ -112,6 +112,11 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.component_edit_resource_table.setMaximumHeight(150)
         root.addWidget(self.component_edit_resource_table)
 
+        self.export_proof_invalidation_label = QtWidgets.QLabel("Export/proof freshness: Not checked")
+        self.export_proof_invalidation_label.setObjectName("mapStudioReadinessExportProofInvalidationLabel")
+        self.export_proof_invalidation_label.setWordWrap(True)
+        root.addWidget(self.export_proof_invalidation_label)
+
         self.runtime_resource_table = QtWidgets.QTableWidget(0, 3)
         self.runtime_resource_table.setObjectName("mapStudioReadinessRuntimeResourceTable")
         self.runtime_resource_table.setHorizontalHeaderLabels(("Resource", "Status", "Fix / meaning"))
@@ -123,6 +128,11 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.runtime_resource_table.setMaximumHeight(180)
         root.addWidget(self.runtime_resource_table)
 
+        self.package_inventory_label = QtWidgets.QLabel("Package inventory: Not staged")
+        self.package_inventory_label.setObjectName("mapStudioReadinessPackageInventoryLabel")
+        self.package_inventory_label.setWordWrap(True)
+        root.addWidget(self.package_inventory_label)
+
         self.proof_label = QtWidgets.QLabel("Game proof: Not staged")
         self.proof_label.setObjectName("mapStudioReadinessGameProofLabel")
         self.proof_label.setWordWrap(True)
@@ -132,6 +142,17 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.proof_recorder_label.setObjectName("mapStudioReadinessProofRecorderLabel")
         self.proof_recorder_label.setWordWrap(True)
         root.addWidget(self.proof_recorder_label)
+
+        self.proof_acceptance_table = QtWidgets.QTableWidget(0, 2)
+        self.proof_acceptance_table.setObjectName("mapStudioReadinessProofAcceptanceTable")
+        self.proof_acceptance_table.setHorizontalHeaderLabels(("Live KOTOR proof check", "Evidence status"))
+        self.proof_acceptance_table.verticalHeader().setVisible(False)
+        self.proof_acceptance_table.horizontalHeader().setStretchLastSection(True)
+        self.proof_acceptance_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.proof_acceptance_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.proof_acceptance_table.setMinimumHeight(110)
+        self.proof_acceptance_table.setMaximumHeight(180)
+        root.addWidget(self.proof_acceptance_table)
 
         self.launch_label = QtWidgets.QLabel("Launch handoff: Not ready")
         self.launch_label.setObjectName("mapStudioReadinessLaunchHandoffLabel")
@@ -262,6 +283,21 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.script_reference_table.setMaximumHeight(150)
         root.addWidget(self.script_reference_table)
 
+        self.dialog_references_label = QtWidgets.QLabel("Dialog references: Not checked")
+        self.dialog_references_label.setObjectName("mapStudioReadinessDialogReferencesLabel")
+        self.dialog_references_label.setWordWrap(True)
+        root.addWidget(self.dialog_references_label)
+        self.dialog_reference_table = QtWidgets.QTableWidget(0, 4)
+        self.dialog_reference_table.setObjectName("mapStudioReadinessDialogReferenceTable")
+        self.dialog_reference_table.setHorizontalHeaderLabels(("Source", "Field", "Dialog", "Status / fix"))
+        self.dialog_reference_table.verticalHeader().setVisible(False)
+        self.dialog_reference_table.horizontalHeader().setStretchLastSection(True)
+        self.dialog_reference_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.dialog_reference_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.dialog_reference_table.setMinimumHeight(76)
+        self.dialog_reference_table.setMaximumHeight(150)
+        root.addWidget(self.dialog_reference_table)
+
         self.blocking_label = QtWidgets.QLabel("")
         self.blocking_label.setObjectName("mapStudioReadinessBlockingLabel")
         self.blocking_label.setWordWrap(True)
@@ -302,9 +338,12 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.floor_plan_geometry_label.setText("Floor-plan geometry: Not checked")
             self.doorway_transition_label.setText("Doorway/transition intent: Not checked")
             self.component_edit_label.setText("Component edits: Not checked")
+            self.export_proof_invalidation_label.setText("Export/proof freshness: Not checked")
             self._set_runtime_resource_rows((), (), (), {})
+            self.package_inventory_label.setText("Package inventory: Not staged")
             self.proof_label.setText("Game proof: Not staged")
             self.proof_recorder_label.setText("Proof recorder: Not ready")
+            self._set_proof_acceptance_rows(None)
             self.launch_label.setText("Launch handoff: Not ready")
             self.warp_command_edit.clear()
             self.launch_helper_edit.clear()
@@ -320,6 +359,8 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self._set_transition_reference_rows(())
             self.script_references_label.setText("ARE/IFO script hooks: Not checked")
             self._set_script_reference_rows(())
+            self.dialog_references_label.setText("Dialog references: Not checked")
+            self._set_dialog_reference_rows(())
             self.blocking_label.setText("Create or open a Map Studio module project first.")
             self.next_action_label.setText("")
             self.game_test_button.setEnabled(False)
@@ -365,13 +406,23 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             )
         else:
             self.runtime_label.setText("Runtime resources: Not checked")
-        self._set_pathing_summary(dict(metadata.get("pathing", {}) or {}))
+        self._set_pathing_summary(
+            dict(metadata.get("pathing", {}) or {}),
+            dict(metadata.get("transition_surface_gate", {}) or {}),
+        )
         self._set_visibility_summary(dict(metadata.get("visibility", {}) or {}))
         self._set_lighting_summary(dict(metadata.get("lighting", {}) or {}))
         self._set_floor_plan_geometry_summary(dict(metadata.get("geometry_validation", {}) or {}))
         self._set_doorway_transition_summary(dict(metadata.get("doorway_transition", {}) or {}))
         self._set_component_edit_summary(dict(metadata.get("component_edit", {}) or {}))
+        self._set_export_proof_invalidation_summary(dict(metadata.get("export_proof_invalidation", {}) or {}))
         self._set_runtime_resource_rows(expected, present, missing, runtime_output_status)
+        package_resource_inventory = (
+            dict(metadata.get("package_resource_inventory") or {})
+            if isinstance(metadata.get("package_resource_inventory"), dict)
+            else {}
+        )
+        self.package_inventory_label.setText(self._package_inventory_summary(package_resource_inventory))
         proof_status = str(metadata.get("proof_status") or "not_ready")
         installed_path = str(metadata.get("installed_module_path") or "")
         proof_manifest = str(metadata.get("proof_manifest_path") or "")
@@ -382,6 +433,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         proof_recorder_script = str(metadata.get("proof_recording_script_path") or "")
         modder_test_plan = dict(metadata.get("modder_test_plan") or {}) if isinstance(metadata.get("modder_test_plan"), dict) else {}
         missing_plan_checks = list(modder_test_plan.get("missing_acceptance_checks") or ())
+        self._set_proof_acceptance_rows(modder_test_plan)
         expected_executable = str(metadata.get("expected_executable_path") or "")
         warp_command = str(metadata.get("warp_command") or f"warp {module_root}")
         self.warp_command_edit.setText(warp_command if module_root and module_root != "(unnamed)" else "")
@@ -530,6 +582,19 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             self.script_references_label.setText("ARE/IFO script hooks: None")
         self._set_script_reference_rows(script_refs)
 
+        dialog_refs = list(metadata.get("dialog_references", ()) or ())
+        dialog_count = int(metadata.get("dialog_reference_count", len(dialog_refs)) or 0)
+        dialog_packaged_count = int(metadata.get("dialog_packaged_count", 0) or 0)
+        dialog_external_count = int(metadata.get("dialog_external_count", max(0, dialog_count - dialog_packaged_count)) or 0)
+        if dialog_refs:
+            self.dialog_references_label.setText(
+                f"Dialog references: {dialog_count} referenced, {dialog_packaged_count} packaged, "
+                f"{dialog_external_count} external/Override"
+            )
+        else:
+            self.dialog_references_label.setText("Dialog references: None")
+        self._set_dialog_reference_rows(dialog_refs)
+
         if blocking:
             body = "Blocking: " + "; ".join(str(item) for item in blocking[:4])
             if len(blocking) > 4:
@@ -559,13 +624,93 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         self.copy_launch_helper_button.setEnabled(bool(self.launch_helper_edit.text().strip()))
         self.copy_proof_manifest_button.setEnabled(bool(self.proof_manifest_edit.text().strip()))
 
-    def _set_pathing_summary(self, pathing: dict[str, Any]) -> None:
+    def _set_proof_acceptance_rows(self, test_plan: dict[str, Any] | None) -> None:
+        """List the live KOTOR evidence gates before proof can be accepted."""
+
+        if test_plan is None:
+            self.proof_acceptance_table.setRowCount(1)
+            for column, text in enumerate((
+                "No live KOTOR proof checklist",
+                "Create or stage an authored module to see warp/load, identity, walkability, and evidence gates.",
+            )):
+                self.proof_acceptance_table.setItem(0, column, self._table_item(text))
+            return
+        checks = tuple(str(item) for item in tuple(test_plan.get("acceptance_checks") or ()) if str(item).strip())
+        missing = {str(item) for item in tuple(test_plan.get("missing_acceptance_checks") or checks)}
+        if not checks:
+            checks = (
+                "module_loads_in_game",
+                "module_identity_matches_authored_resref",
+                "player_spawns_on_floor",
+                "test_placeable_visible",
+                "player_can_walk_on_floor",
+                "transition_pathing_sanity_confirmed",
+                "no_inherited_base_game_geometry_or_scripted_movers",
+                "screenshot_or_video_captured",
+            )
+            missing = set(checks)
+        self.proof_acceptance_table.setRowCount(len(checks))
+        for row, check in enumerate(checks):
+            for column, text in enumerate((self._proof_check_label(check), self._proof_check_status(check, missing))):
+                self.proof_acceptance_table.setItem(row, column, self._table_item(text))
+
+    @staticmethod
+    def _proof_check_label(check: str) -> str:
+        return {
+            "module_loads_in_game": "`warp` loads the generated module in KOTOR",
+            "module_identity_matches_authored_resref": "Loaded module identity matches the authored resref",
+            "player_spawns_on_floor": "Player appears on the generated floor",
+            "test_placeable_visible": "Authored/test placeable appears where expected",
+            "player_can_walk_on_floor": "Player can walk across generated WOK",
+            "transition_pathing_sanity_confirmed": "Transitions and PTH pathing behave sanely",
+            "no_inherited_base_game_geometry_or_scripted_movers": "No inherited vanilla geometry or scripted movers appear",
+            "screenshot_or_video_captured": "Screenshot or video evidence is attached",
+        }.get(check, check.replace("_", " "))
+
+    @staticmethod
+    def _proof_check_status(check: str, missing: set[str]) -> str:
+        if check in missing:
+            return "Required after staging; cannot be satisfied by package build alone"
+        return "Accepted in recorded proof"
+
+    @staticmethod
+    def _package_inventory_summary(inventory: dict[str, Any]) -> str:
+        if not inventory:
+            return "Package inventory: Not staged yet; build/stage the authored .mod before recording game proof."
+        groups = dict(inventory.get("resource_groups") or {})
+        required = len(tuple(inventory.get("required_runtime_resources") or ()))
+        missing = len(tuple(inventory.get("missing_required_runtime_resources") or ()))
+        archive_count = int(groups.get("verified_archive_resource_count") or 0)
+        loose_count = int(groups.get("loose_staged_resource_count") or 0)
+        readback = "readback ok" if bool(inventory.get("readback_ok")) else "readback not verified"
+        install = dict(inventory.get("install") or {})
+        install_state = "installed" if bool(install.get("installed")) else ("dry-run install" if bool(install.get("dry_run")) else "staged")
+        module_root = str(inventory.get("module_root") or "(module)").strip()
+        return (
+            f"Package inventory: {module_root}; {required} required runtime resource(s), {missing} missing, "
+            f"{archive_count} archive readback resource(s), {loose_count} loose staged file(s); {readback}; {install_state}."
+        )
+
+    def _set_pathing_summary(self, pathing: dict[str, Any], transition_surface_gate: dict[str, Any] | None = None) -> None:
         """Show generated PTH path graph readiness without exposing file-format details."""
 
+        transition_gate = dict(transition_surface_gate or {})
+        transition_blockers = [
+            str(message)
+            for message in list(transition_gate.get("blocking_messages") or [])
+            if str(message).strip()
+        ]
+        transition_fix = str(transition_gate.get("fix_hint") or "").strip()
         if not pathing:
             self.pathing_label.setText("Pathing: Not checked")
-            self.pathing_export_gate_label.setText("Pathing export gate: Not checked")
-            self._set_pathing_blocker_rows((), "")
+            if transition_blockers:
+                self.pathing_export_gate_label.setText(
+                    "Pathing export gate: Blocked by linked transition without WOK DOOR surface evidence."
+                )
+                self._set_pathing_blocker_rows(tuple(transition_blockers), transition_fix)
+            else:
+                self.pathing_export_gate_label.setText("Pathing export gate: Not checked")
+                self._set_pathing_blocker_rows((), "")
             return
         resource = str(pathing.get("pth_resource") or "(no PTH resource)")
         status = str(pathing.get("status") or "Not checked")
@@ -577,16 +722,24 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
         if len(anchors) > 5:
             anchor_text += f", +{len(anchors) - 5} more"
         blockers = [str(message) for message in list(pathing.get("blocking_messages") or []) if str(message).strip()]
+        all_blockers = blockers + transition_blockers
         fix_hint = str(pathing.get("fix_hint") or "Move entry points and gameplay anchors onto walkable WOK faces before export.")
-        if blockers:
+        if transition_blockers and not blockers and transition_fix:
+            fix_hint = transition_fix
+        if all_blockers:
             self.pathing_label.setText(
-                f"Pathing: {status}. PTH export blocked by {len(blockers)} WOK/path-anchor issue(s)."
+                f"Pathing: {status}. PTH/WOK export blocked by {len(all_blockers)} walkmesh/path issue(s)."
             )
-            self.pathing_export_gate_label.setText(
-                "Pathing export gate: Blocked until the module entry point, doors, triggers, "
-                "waypoints, creatures, and placeables sit on generated walkable WOK."
-            )
-            self._set_pathing_blocker_rows(tuple(blockers), fix_hint)
+            if transition_blockers:
+                self.pathing_export_gate_label.setText(
+                    "Pathing export gate: Blocked until linked doors/triggers have WOK DOOR surface 18 evidence."
+                )
+            else:
+                self.pathing_export_gate_label.setText(
+                    "Pathing export gate: Blocked until the module entry point, doors, triggers, "
+                    "waypoints, creatures, and placeables sit on generated walkable WOK."
+                )
+            self._set_pathing_blocker_rows(tuple(all_blockers), fix_hint)
             return
         self._set_pathing_blocker_rows((), fix_hint)
         if not ready:
@@ -818,6 +971,38 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             for column, text in enumerate(values):
                 self.component_edit_resource_table.setItem(row_index, column, self._table_item(text))
 
+    def _set_export_proof_invalidation_summary(self, invalidation: dict[str, Any]) -> None:
+        """Show whether stale authored edits invalidate package/proof evidence."""
+
+        if not invalidation:
+            self.export_proof_invalidation_label.setText(
+                "Export/proof freshness: Current for the recorded authored KMAP state."
+            )
+            return
+        stale_outputs = [
+            str(output)
+            for output in list(invalidation.get("stale_outputs") or [])
+            if str(output).strip()
+        ]
+        edited_rooms = [
+            str(room)
+            for room in list(invalidation.get("edited_rooms") or [])
+            if str(room).strip()
+        ]
+        latest_operation = str(invalidation.get("latest_operation") or "authored edit").strip()
+        latest_summary = str(invalidation.get("latest_summary") or "").strip()
+        next_action = str(invalidation.get("next_action") or "").strip()
+        export_text = "export stale" if bool(invalidation.get("invalidates_previous_export")) else "export current"
+        proof_text = "game proof stale" if bool(invalidation.get("invalidates_game_proof")) else "game proof current"
+        room_text = f" Room(s): {', '.join(edited_rooms)}." if edited_rooms else ""
+        stale_text = f" Stale outputs: {', '.join(stale_outputs)}." if stale_outputs else ""
+        summary_text = f" {latest_summary}" if latest_summary else ""
+        next_text = f" Next: {next_action}" if next_action else ""
+        self.export_proof_invalidation_label.setText(
+            f"Export/proof freshness: {export_text}; {proof_text}. "
+            f"Latest: {latest_operation}.{room_text}{summary_text}{stale_text}{next_text}".rstrip()
+        )
+
     @staticmethod
     def _normalise_resource_key(resource: Any) -> tuple[str, str]:
         if isinstance(resource, tuple) and len(resource) >= 2:
@@ -1039,6 +1224,35 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
                 message = "Script will be packaged." if packaged else "Script must exist in the base game, Override, or another mod."
             for column, text in enumerate((scope, field_name, f"{script_resref}.{restype}", f"{status}: {message}")):
                 self.script_reference_table.setItem(row, column, self._table_item(text))
+
+    def _set_dialog_reference_rows(self, references: tuple[Any, ...] | list[Any]) -> None:
+        """Show dialog/conversation resource readiness."""
+
+        rows = list(references or ())
+        if not rows:
+            self.dialog_reference_table.setRowCount(1)
+            for column, text in enumerate((
+                "No dialog references",
+                "Not checked",
+                "",
+                "Add dialog/conversation refs only when this module needs conversations.",
+            )):
+                self.dialog_reference_table.setItem(0, column, self._table_item(text))
+            return
+
+        self.dialog_reference_table.setRowCount(len(rows))
+        for row, reference in enumerate(rows):
+            source = str(self._reference_value(reference, "source", "") or "metadata")
+            field_name = str(self._reference_value(reference, "field_name", "") or "(unknown field)")
+            dialog_resref = str(self._reference_value(reference, "dialog_resref", "") or "(missing dialog)")
+            restype = str(self._reference_value(reference, "restype", "dlg") or "dlg").lstrip(".")
+            packaged = bool(self._reference_value(reference, "packaged", False))
+            status = str(self._reference_value(reference, "status", "") or ("packaged" if packaged else "external_or_override"))
+            message = str(self._reference_value(reference, "message", "") or "")
+            if not message:
+                message = "Dialog will be packaged." if packaged else "Dialog must exist in the base game, Override, or another mod."
+            for column, text in enumerate((source, field_name, f"{dialog_resref}.{restype}", f"{status}: {message}")):
+                self.dialog_reference_table.setItem(row, column, self._table_item(text))
 
     @staticmethod
     def _table_item(text: str) -> QtWidgets.QTableWidgetItem:

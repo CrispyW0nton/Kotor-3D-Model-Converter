@@ -6,7 +6,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, normalise_resref
-from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, build_composition_wok, compile_authored_room_composition
+from .authored_room_composition import (
+    AuthoredRoomComposition,
+    PlacedRoomPrimitive,
+    build_composition_wok,
+    compile_authored_room_composition,
+    primitive_to_mesh,
+)
 from .authored_room_floorplan import FloorPlanRoomPrimitive
 from .authored_room_geometry import RectangularRoomPrimitive
 from .authored_room_primitives import ArchPrimitive, WallPrimitive
@@ -88,14 +94,10 @@ def _floor_plan_points(primitive: FloorPlanRoomPrimitive, offset: Vec3) -> tuple
 
 
 def _composition_floor_points(primitive: AuthoredRoomComposition, offset: Vec3) -> tuple[Vec3, ...]:
-    half_w = float(primitive.floor.width) * 0.5
-    half_d = float(primitive.floor.depth) * 0.5
-    z = float(primitive.floor.z) + offset[2]
-    return (
-        (-half_w + offset[0], -half_d + offset[1], z),
-        (half_w + offset[0], -half_d + offset[1], z),
-        (half_w + offset[0], half_d + offset[1], z),
-        (-half_w + offset[0], half_d + offset[1], z),
+    mesh = primitive_to_mesh(primitive.floor)
+    return tuple(
+        (float(vertex[0]) + offset[0], float(vertex[1]) + offset[1], float(vertex[2]) + offset[2])
+        for vertex in tuple(mesh.vertices or ())[:4]
     )
 
 

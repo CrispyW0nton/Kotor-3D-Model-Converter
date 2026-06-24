@@ -565,6 +565,12 @@ def _base_primitive(primitive: Any) -> Any:
     return primitive.primitive if isinstance(primitive, PlacedRoomPrimitive) else primitive
 
 
+def _with_primitive_base(primitive: Any, base: Any, *, name: str = "") -> Any:
+    if isinstance(primitive, PlacedRoomPrimitive):
+        return replace(primitive, primitive=base, name=str(name or _primitive_name(primitive) or getattr(base, "name", "") or ""))
+    return base
+
+
 def _edge_index_values(edge_indices: Any) -> list[int]:
     if edge_indices is None:
         return []
@@ -754,7 +760,7 @@ def authored_room_composition_primitive_universal_transform(
     target = str(primitive_name or "").strip()
     if not target:
         raise ValueError("Universal Manipulator needs a selected authored primitive.")
-    for primitive in tuple(composition.primitives or ()):
+    for primitive in (composition.floor,) + tuple(composition.primitives or ()):
         if _primitive_name(primitive) != target:
             continue
         mesh = primitive_to_mesh(primitive)
@@ -849,7 +855,7 @@ def _unique_room_resref(project: AuthoredModuleProject, requested: str, fallback
 
 
 def _primitive_material(composition: AuthoredRoomComposition, texture: str = "") -> PrimitiveMaterial:
-    material = composition.floor.material
+    material = _primitive_material_value(composition.floor)
     if texture:
         return PrimitiveMaterial(
             texture=str(texture),
@@ -1047,6 +1053,27 @@ def authored_room_composition_primitives(
             composition = _composition_for_room(room)
         except ValueError:
             continue
+        floor = composition.floor
+        floor_transform = _primitive_transform(floor)
+        floor_material = _primitive_material_value(floor)
+        floor_surface_id = _primitive_surface_id(floor)
+        floor_name = _primitive_name(floor) or f"{room_name}_floor"
+        rows.append(
+            AuthoredCompositionPrimitiveTransform(
+                room_resref=room_name,
+                primitive_name=floor_name,
+                primitive_type="plane",
+                translation=tuple(float(value) for value in floor_transform.translation),
+                rotation_degrees_z=float(floor_transform.rotation_degrees_z),
+                scale=tuple(float(value) for value in floor_transform.scale),
+                pivot=tuple(float(value) for value in floor_transform.pivot),
+                texture=str(floor_material.texture or ""),
+                surface_id=floor_surface_id,
+                surface_name=walkmesh_surface_name(floor_surface_id) if floor_surface_id is not None else "",
+                supports_walkmesh_surface=True,
+                dimensions=_primitive_dimensions(floor),
+            )
+        )
         for primitive in tuple(composition.primitives or ()):
             name = _primitive_name(primitive)
             if not name:
@@ -1094,7 +1121,8 @@ def add_authored_room_composition_primitive(
     composition = _composition_for_room(room)
     kind = _primitive_kind(primitive_kind)
     name = _unique_primitive_name(composition, kind, primitive_name)
-    surface = floor_surface if floor_surface is not None else composition.floor.surface_id
+    base_floor = _base_primitive(composition.floor)
+    surface = floor_surface if floor_surface is not None else getattr(base_floor, "surface_id", 4)
     material = _primitive_material(composition, texture)
     base = _default_primitive_for_kind(kind, name, material, surface)
     transform = _updated_transform(
@@ -1137,6 +1165,55 @@ def add_authored_room_composition_primitive(
     )
 
 
+def claim_authored_room_composition_floor(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str = "",
+    primitive_name: str = "",
+    texture: Any = "",
+    floor_surface: Any = None,
+) -> AuthoredModuleProject:
+    """Rename/style the base composition floor instead of adding a duplicate WOK floor."""
+
+    room_index = _target_room_index(project, room_resref)
+    rooms = list(project.rooms)
+    room = rooms[room_index]
+    composition = _composition_for_room(room)
+    floor_base = _base_primitive(composition.floor)
+    next_name = str(primitive_name or _primitive_name(composition.floor) or f"{composition.room_resref}_floor").strip()
+    updated_floor_base = _updated_base_primitive_style(
+        replace(floor_base, name=next_name),
+        texture=texture,
+        surface_id=floor_surface,
+    )
+    updated_floor = _with_primitive_base(composition.floor, updated_floor_base, name=next_name)
+    updated_composition = replace(
+        composition,
+        floor=updated_floor,
+        metadata={
+            **dict(composition.metadata),
+            "last_claimed_floor": next_name,
+            "last_added_primitive": next_name,
+            "last_added_primitive_kind": "floor",
+        },
+    )
+    rooms[room_index] = replace(
+        room,
+        primitive=updated_composition if isinstance(room.primitive, AuthoredRoomComposition) else room.primitive,
+        composition=updated_composition if room.composition is not None else room.composition,
+        metadata={
+            **dict(room.metadata),
+            "last_operation": "claim_composition_floor",
+            "last_claimed_floor": next_name,
+        },
+    )
+    return _replace_rooms(
+        project,
+        tuple(rooms),
+        operation=f"claim_composition_floor:{next_name}",
+    )
+
+
 def set_authored_room_composition_primitive_dimensions(
     project: AuthoredModuleProject,
     *,
@@ -1153,6 +1230,32 @@ def set_authored_room_composition_primitive_dimensions(
     target = str(primitive_name or "").strip()
     if not target:
         raise ValueError("Primitive dimension edits require a primitive name.")
+    if _primitive_name(composition.floor) == target:
+        updated_floor_base = _updated_base_primitive_dimensions(_base_primitive(composition.floor), dimensions)
+        updated_floor = _with_primitive_base(composition.floor, updated_floor_base)
+        updated_composition = replace(
+            composition,
+            floor=updated_floor,
+            metadata={
+                **dict(composition.metadata),
+                "last_dimension_edit": target,
+            },
+        )
+        rooms[room_index] = replace(
+            room,
+            primitive=updated_composition if isinstance(room.primitive, AuthoredRoomComposition) else room.primitive,
+            composition=updated_composition if room.composition is not None else room.composition,
+            metadata={
+                **dict(room.metadata),
+                "last_operation": "set_composition_floor_dimensions",
+                "last_dimension_edit": target,
+            },
+        )
+        return _replace_rooms(
+            project,
+            tuple(rooms),
+            operation=f"set_composition_floor_dimensions:{target}",
+        )
     primitives = list(composition.primitives)
     for index, primitive in enumerate(primitives):
         if _primitive_name(primitive) != target:
@@ -1206,6 +1309,36 @@ def set_authored_room_composition_primitive_style(
     target = str(primitive_name or "").strip()
     if not target:
         raise ValueError("Primitive style edits require a primitive name.")
+    if _primitive_name(composition.floor) == target:
+        updated_floor_base = _updated_base_primitive_style(
+            _base_primitive(composition.floor),
+            texture=texture,
+            surface_id=surface_id,
+        )
+        updated_floor = _with_primitive_base(composition.floor, updated_floor_base)
+        updated_composition = replace(
+            composition,
+            floor=updated_floor,
+            metadata={
+                **dict(composition.metadata),
+                "last_style_edit": target,
+            },
+        )
+        rooms[room_index] = replace(
+            room,
+            primitive=updated_composition if isinstance(room.primitive, AuthoredRoomComposition) else room.primitive,
+            composition=updated_composition if room.composition is not None else room.composition,
+            metadata={
+                **dict(room.metadata),
+                "last_operation": "set_composition_floor_style",
+                "last_style_edit": target,
+            },
+        )
+        return _replace_rooms(
+            project,
+            tuple(rooms),
+            operation=f"set_composition_floor_style:{target}",
+        )
     primitives = list(composition.primitives)
     for index, primitive in enumerate(primitives):
         if _primitive_name(primitive) != target:
@@ -1396,6 +1529,108 @@ def set_authored_room_edge_normal_policy(
     return _replace_rooms(project, tuple(rooms), operation=f"{operation}:{target}")
 
 
+def _safe_authored_primitive_name(value: Any) -> str:
+    text = str(value or "").strip()
+    safe = "".join(char if char.isalnum() or char in {"_", "-"} else "_" for char in text)
+    safe = safe.strip("_-")
+    if not safe:
+        raise ValueError("Primitive rename requires a non-empty object name.")
+    return safe[:32]
+
+
+def _renamed_primitive(primitive: Any, name: str) -> Any:
+    base = _base_primitive(primitive)
+    renamed_base = replace(base, name=name)
+    if isinstance(primitive, PlacedRoomPrimitive):
+        return replace(primitive, primitive=renamed_base, name=name)
+    return renamed_base
+
+
+def rename_authored_room_composition_primitive(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+    new_primitive_name: str,
+) -> AuthoredModuleProject:
+    """Rename one editable composition primitive while preserving authored identity metadata."""
+
+    room_index = _target_room_index(project, room_resref)
+    rooms = list(project.rooms)
+    room = rooms[room_index]
+    composition = _composition_for_room(room)
+    target = str(primitive_name or "").strip()
+    replacement_name = _safe_authored_primitive_name(new_primitive_name)
+    if not target:
+        raise ValueError("Renaming a composition primitive requires a primitive name.")
+    all_primitives = (composition.floor,) + tuple(composition.primitives or ())
+    existing_lower = {
+        _primitive_name(primitive).lower()
+        for primitive in all_primitives
+        if _primitive_name(primitive) and _primitive_name(primitive) != target
+    }
+    if replacement_name.lower() in existing_lower:
+        raise ValueError(f"Room {room.room_resref} already has a primitive named '{replacement_name}'.")
+    if _primitive_name(composition.floor) == target:
+        updated_floor = _renamed_primitive(composition.floor, replacement_name)
+        updated_composition = replace(
+            composition,
+            floor=updated_floor,
+            metadata={
+                **dict(composition.metadata),
+                "last_renamed_primitive": target,
+                "last_renamed_primitive_to": replacement_name,
+            },
+        )
+        rooms[room_index] = replace(
+            room,
+            primitive=updated_composition if isinstance(room.primitive, AuthoredRoomComposition) else room.primitive,
+            composition=updated_composition if room.composition is not None else room.composition,
+            metadata={
+                **dict(room.metadata),
+                "last_operation": "rename_composition_primitive",
+                "last_renamed_primitive": target,
+                "last_renamed_primitive_to": replacement_name,
+            },
+        )
+        return _replace_rooms(
+            project,
+            tuple(rooms),
+            operation=f"rename_composition_primitive:{target}:{replacement_name}",
+        )
+    primitives = list(tuple(composition.primitives or ()))
+    for index, primitive in enumerate(primitives):
+        if _primitive_name(primitive) != target:
+            continue
+        primitives[index] = _renamed_primitive(primitive, replacement_name)
+        updated_composition = replace(
+            composition,
+            primitives=tuple(primitives),
+            metadata={
+                **dict(composition.metadata),
+                "last_renamed_primitive": target,
+                "last_renamed_primitive_to": replacement_name,
+            },
+        )
+        rooms[room_index] = replace(
+            room,
+            primitive=updated_composition if isinstance(room.primitive, AuthoredRoomComposition) else room.primitive,
+            composition=updated_composition if room.composition is not None else room.composition,
+            metadata={
+                **dict(room.metadata),
+                "last_operation": "rename_composition_primitive",
+                "last_renamed_primitive": target,
+                "last_renamed_primitive_to": replacement_name,
+            },
+        )
+        return _replace_rooms(
+            project,
+            tuple(rooms),
+            operation=f"rename_composition_primitive:{target}:{replacement_name}",
+        )
+    raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'.")
+
+
 def remove_authored_room_composition_primitive(
     project: AuthoredModuleProject,
     *,
@@ -1466,10 +1701,11 @@ def separate_authored_room_composition_primitive(
     if selected is None:
         raise ValueError(f"Room {source_room.room_resref} has no primitive named '{primitive_name}'.")
     new_room_resref = _unique_room_resref(project, result_room_resref, target)
+    source_floor_base = _base_primitive(source_composition.floor)
     new_floor = replace(
-        source_composition.floor,
+        source_floor_base,
         name=f"{new_room_resref}_mesh",
-        material=source_composition.floor.material,
+        material=source_floor_base.material,
     )
     separated_composition = AuthoredRoomComposition(
         room_resref=new_room_resref,
@@ -1571,6 +1807,27 @@ def _set_composition_primitive_transform(
     target = str(primitive_name or "").strip()
     if not target:
         raise ValueError("Primitive transform operation requires a primitive name.")
+    if _primitive_name(composition.floor) == target:
+        transform = _updated_transform(
+            _primitive_transform(composition.floor),
+            translation=translation,
+            rotation_degrees_z=rotation_degrees_z,
+            scale=scale,
+            pivot=pivot,
+        )
+        return replace(
+            composition,
+            floor=PlacedRoomPrimitive(
+                primitive=_base_primitive(composition.floor),
+                name=target,
+                transform=transform,
+            ),
+            metadata={
+                **dict(composition.metadata),
+                "last_operation": "set_floor_transform",
+                "last_transformed_primitive": target,
+            },
+        )
     updated_primitives = []
     found = False
     for primitive in tuple(composition.primitives or ()):
@@ -1607,7 +1864,11 @@ def _set_composition_primitive_transform(
                 )
             )
     if not found:
-        known = ", ".join(_primitive_name(item) for item in tuple(composition.primitives or ()) if _primitive_name(item))
+        known = ", ".join(
+            _primitive_name(item)
+            for item in (composition.floor,) + tuple(composition.primitives or ())
+            if _primitive_name(item)
+        )
         raise ValueError(f"Room {composition.room_resref} has no primitive named '{primitive_name}'. Known primitives: {known or '(none)'}.")
     return replace(
         composition,
@@ -1673,7 +1934,7 @@ def move_authored_room_composition_primitive(
     target = str(primitive_name or "").strip()
     if not target:
         raise ValueError("Primitive move operation requires a primitive name.")
-    for primitive in tuple(composition.primitives or ()):
+    for primitive in (composition.floor,) + tuple(composition.primitives or ()):
         if _primitive_name(primitive) != target:
             continue
         transform = _primitive_transform(primitive)
@@ -1723,15 +1984,17 @@ def grid_snap_authored_room_composition_primitive(
     if not target:
         raise ValueError("Object Grid Snap requires a selected authored primitive.")
 
+    updated_floor = composition.floor
     updated_primitives = []
     found = False
     old_translation: tuple[float, float, float] | None = None
     new_translation: tuple[float, float, float] | None = None
     snapped_pivot: tuple[float, float, float] | None = None
-    for primitive in tuple(composition.primitives or ()):
+    for primitive in (composition.floor,) + tuple(composition.primitives or ()):
         name = _primitive_name(primitive)
         if name != target:
-            updated_primitives.append(primitive)
+            if primitive is not composition.floor:
+                updated_primitives.append(primitive)
             continue
         found = True
         transform = _primitive_transform(primitive)
@@ -1752,17 +2015,28 @@ def grid_snap_authored_room_composition_primitive(
             scale=tuple(float(value) for value in transform.scale),
             pivot=pivot,
         )
-        if isinstance(primitive, PlacedRoomPrimitive):
+        if primitive is composition.floor:
+            updated_floor = PlacedRoomPrimitive(
+                primitive=_base_primitive(primitive),
+                name=name,
+                transform=snapped_transform,
+            )
+        elif isinstance(primitive, PlacedRoomPrimitive):
             updated_primitives.append(replace(primitive, transform=snapped_transform))
         else:
             updated_primitives.append(PlacedRoomPrimitive(primitive=primitive, name=name, transform=snapped_transform))
 
     if not found:
-        known = ", ".join(_primitive_name(item) for item in tuple(composition.primitives or ()) if _primitive_name(item))
+        known = ", ".join(
+            _primitive_name(item)
+            for item in (composition.floor,) + tuple(composition.primitives or ())
+            if _primitive_name(item)
+        )
         raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'. Known primitives: {known or '(none)'}.")
 
     updated_composition = replace(
         composition,
+        floor=updated_floor,
         primitives=tuple(updated_primitives),
         metadata={
             **dict(composition.metadata),
@@ -2637,11 +2911,11 @@ def duplicate_authored_room_composition_primitive(
     composition = _composition_for_room(room)
     existing_names = {
         _primitive_name(item)
-        for item in tuple(composition.primitives or ())
+        for item in (composition.floor,) + tuple(composition.primitives or ())
         if _primitive_name(item)
     }
     source = None
-    for primitive in tuple(composition.primitives or ()):
+    for primitive in (composition.floor,) + tuple(composition.primitives or ()):
         if _primitive_name(primitive) == target:
             source = primitive
             break
@@ -4665,6 +4939,7 @@ __all__ = [
     "mirror_authored_floor_plan_vertices",
     "move_authored_floor_plan_point",
     "move_authored_room_composition_primitive",
+    "rename_authored_room_composition_primitive",
     "remove_authored_room_composition_primitive",
     "separate_authored_room_composition_primitive",
     "set_authored_floor_plan_wall_opening",

@@ -45,7 +45,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_VALIDATION_BUS",
             "source_path": "src/core/validation/validation_bus.py",
             "packaged_path": "Python/src/core/validation/validation_bus.py",
-            "sha256": "1ec2a3767ef94b5b844a27e3de88b03f64c7c4ba399386319bf1aef7f90fde50"
+            "sha256": "e1b3fae5ba97f85ff70ed05535f0dc44006ab40204fb21c4f07df32d2df585e6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_VIEWPORT_VALIDATOR",

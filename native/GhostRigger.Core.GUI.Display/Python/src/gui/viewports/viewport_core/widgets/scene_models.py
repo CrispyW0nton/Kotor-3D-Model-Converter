@@ -59,7 +59,7 @@ class ViewportSceneModelMixin:
             self.renderer_button.setChecked(True)
             self.renderer_button.setToolTip("GPU renderer")
             self.canvas.setPixmap(QtGui.QPixmap())
-            self.canvas.setText("Empty Scene")
+            self.canvas.setText("" if self._map_studio_should_hide_empty_scene_label() else "Empty Scene")
             self._update_uv_viewer_model()
             self.camera_manager.set_model(None)
             self._refresh_camera_view_combo()
@@ -196,6 +196,10 @@ class ViewportSceneModelMixin:
             pass
         self._renderer.set_model(composite)
         self.camera_manager.set_model(composite)
+        self._gpu_tex_preload_model_id = 0
+        self._gpu_texture_snapshot_key = None
+        self._gpu_texture_snapshot_cache = {}
+        self._prewarm_textures(composite)
         self.modelChanged.emit(composite)
         self.select_scene_object(str(getattr(instance, "id", "") or ""))
         self._request_render(fast=True, reason="scene object appended", scene=True, overlay=True, resources=True)
@@ -618,6 +622,7 @@ class ViewportSceneModelMixin:
         """Display Map Studio authored placement marker geometry."""
 
         self._map_studio_marker_geometry = geometry
+        self._clear_map_studio_shared_debug_labels()
         self._request_render(fast=True, reason="map studio marker geometry changed", overlay=True)
 
     def clear_map_studio_marker_geometry(self) -> None:
@@ -629,6 +634,7 @@ class ViewportSceneModelMixin:
         """Display Map Studio authored room outline geometry."""
 
         self._map_studio_room_outline_geometry = geometry
+        self._clear_map_studio_shared_debug_labels()
         self._request_render(fast=True, reason="map studio room outline geometry changed", overlay=True)
 
     def clear_map_studio_room_outline_geometry(self) -> None:
@@ -662,6 +668,7 @@ class ViewportSceneModelMixin:
         """Display Map Studio Universal Manipulator bounds and dimensions."""
 
         self._map_studio_universal_transform_overlay = overlay
+        self._clear_map_studio_shared_debug_labels()
         self._request_render(fast=True, reason="map studio universal transform changed", overlay=True)
 
     def clear_map_studio_universal_transform_overlay(self) -> None:
@@ -673,6 +680,7 @@ class ViewportSceneModelMixin:
         """Display Map Studio terrain WOK walkability classification."""
 
         self._map_studio_terrain_walkability_overlay = overlay
+        self._clear_map_studio_shared_debug_labels()
         self._request_render(fast=True, reason="map studio terrain walkability changed", overlay=True)
 
     def clear_map_studio_terrain_walkability_overlay(self) -> None:
@@ -684,12 +692,57 @@ class ViewportSceneModelMixin:
         """Display the live Map Studio terrain sculpt brush cursor."""
 
         self._map_studio_terrain_brush_cursor = cursor if isinstance(cursor, dict) else None
+        self._clear_map_studio_shared_debug_labels()
         self._request_render(fast=True, reason="map studio terrain brush cursor changed", overlay=True)
 
     def clear_map_studio_terrain_brush_cursor(self) -> None:
         """Remove the live Map Studio terrain sculpt brush cursor."""
 
         self.set_map_studio_terrain_brush_cursor(None)
+
+    def set_map_studio_viewport_presentation(self, presentation: object | None) -> None:
+        """Apply Map Studio-specific clean viewport display preferences."""
+
+        self._map_studio_viewport_presentation = dict(presentation) if isinstance(presentation, dict) else {}
+        self._clear_map_studio_shared_debug_labels()
+        self._request_render(fast=True, reason="map studio viewport presentation changed", overlay=True, hud=True)
+
+    def clear_map_studio_viewport_presentation(self) -> None:
+        """Restore the shared viewport's default overlay presentation."""
+
+        self.set_map_studio_viewport_presentation(None)
+
+    def _map_studio_should_hide_empty_scene_label(self) -> bool:
+        """Return True when Map Studio owns authored viewport content despite no loaded model."""
+
+        if bool(self.property("_gr_map_studio_clean_viewport")):
+            return True
+        for name in (
+            "_map_studio_room_outline_geometry",
+            "_map_studio_marker_geometry",
+            "_map_studio_terrain_walkability_overlay",
+            "_map_studio_universal_transform_overlay",
+            "_map_studio_terrain_brush_cursor",
+        ):
+            if getattr(self, name, None) is not None:
+                return True
+        return False
+
+    def _clear_map_studio_shared_debug_labels(self) -> None:
+        if not self._map_studio_should_hide_empty_scene_label():
+            return
+        canvas = getattr(self, "canvas", None)
+        if canvas is None:
+            return
+        clear_diagnostics = getattr(canvas, "clear_diagnostics_text", None)
+        if callable(clear_diagnostics):
+            clear_diagnostics()
+        set_text = getattr(canvas, "setText", None)
+        if callable(set_text):
+            set_text("")
+        surface = getattr(canvas, "current_surface", lambda: None)()
+        if isinstance(surface, QtWidgets.QLabel):
+            surface.setText("")
 
     def _fit_external_skeleton_overlay(self, skeleton) -> None:
         """Fit a KOTOR template skeleton preview to the active source mesh."""

@@ -14,7 +14,11 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
     raise RuntimeError("PySide6 is required for the Qt shell") from exc
 
 from src.core.scene.scene_object import PivotData, Transform
-from src.core.scene.module_scene_import import ModuleRoomPlacement, resolve_module_room_placement
+from src.core.scene.module_scene_import import (
+    ModuleRoomPlacement,
+    resolve_module_room_placement,
+    resolve_module_room_placements,
+)
 from src.math.module_layout_math import module_anchor_relative_position
 from src.core.scene.scene_resource_ref import SceneResourceRef
 from src.gui.qt_lib.dialogs.add_model_to_scene_dialog import AddModelToSceneChoice, AddModelToSceneDialog
@@ -141,12 +145,76 @@ class ResourceLoadingMixin:
         resref = str(row.get("resref") or "")
         game = str(row.get("game") or "")
         if resref:
+            if self._row_is_module_asset(row) and self._start_content_browser_module_load(row, import_action=""):
+                return
             self._start_resource_load(resref, game, import_action="clear")
     def _add_content_browser_model_to_current_scene(self, row: dict) -> None:
         resref = str(row.get("resref") or "")
         game = str(row.get("game") or "")
         if resref:
+            if self._row_is_module_asset(row) and self._start_content_browser_module_load(row, import_action="add"):
+                return
             self._start_resource_load(resref, game, import_action="add")
+
+    @staticmethod
+    def _row_is_module_asset(row: dict) -> bool:
+        return str(row.get("category") or "").strip().lower() == "modules" or bool(row.get("module_code"))
+
+    def _start_content_browser_module_load(self, row: dict, import_action: str = "") -> bool:
+        if self._model_worker_is_running():
+            self._log("A model is already loading.", "warning")
+            return True
+        game = str(row.get("game") or self._current_game or self.settings_data.get("default_game") or "K1").upper()
+        resref = str(row.get("resref") or row.get("module_code") or "").strip()
+        manager = self._resource_manager or self._get_resource_manager()
+        placements = resolve_module_room_placements(game=game, resref=resref, resource_manager=manager)
+        if len(placements) <= 1:
+            return False
+        action = str(import_action or "").strip().lower()
+        if action not in {"add", "add_to_scene", "add to existing scene"}:
+            scene_objects = []
+            try:
+                scene_objects = list(self.scene_manager.get_scene_objects())
+            except Exception:
+                scene_objects = []
+            if scene_objects:
+                action = self._choose_model_import_action(f"{game}:{placements[0].module_root} module")
+                if action == "cancel":
+                    return True
+            else:
+                action = "clear"
+                self._pending_scene_import_placement = "origin"
+        else:
+            action = "add"
+        self._pending_module_room_queue = [(placement.resref, placement.game) for placement in placements]
+        self._pending_module_room_total = len(placements)
+        self._pending_module_room_label = placements[0].area_label or placements[0].module_root
+        self._pending_module_room_next_action = action
+        self._log(f"Loading module {game}:{placements[0].module_root} ({len(placements)} rooms)...")
+        self._start_next_module_room_load()
+        return True
+
+    def _start_next_module_room_load(self) -> None:
+        queue = list(getattr(self, "_pending_module_room_queue", []) or [])
+        if not queue:
+            total = int(getattr(self, "_pending_module_room_total", 0) or 0)
+            label = str(getattr(self, "_pending_module_room_label", "") or "module")
+            if total:
+                self._log(f"Loaded module {label} ({total} rooms)", "success")
+                self.statusBar().showMessage(f"Loaded module {label}")
+            self._pending_module_room_total = 0
+            self._pending_module_room_label = ""
+            self._pending_module_room_next_action = ""
+            return
+        resref, game = queue.pop(0)
+        self._pending_module_room_queue = queue
+        action = str(getattr(self, "_pending_module_room_next_action", "") or "add")
+        self._pending_module_room_next_action = "add"
+        total = int(getattr(self, "_pending_module_room_total", 0) or (len(queue) + 1))
+        loaded = total - len(queue)
+        label = str(getattr(self, "_pending_module_room_label", "") or "module")
+        self._show_progress_toast("Loading module", f"{label}: loading room {loaded}/{total} ({game}:{resref})...")
+        self._start_resource_load(resref, game, import_action=action)
 
     def _ipc_library_row_summary(self, row: dict) -> dict:
         keys = (
@@ -759,6 +827,8 @@ class ResourceLoadingMixin:
             self._pending_gpu_upload_model_id = 0
             self._pending_gpu_upload_total = 0
             self._finish_progress_toast("Model load failed", "Check the output log for details.")
+            if int(getattr(self, "_pending_module_room_total", 0) or 0):
+                QtCore.QTimer.singleShot(0, self._start_next_module_room_load)
             return
         self._update_progress_toast("Loading model", "Updating viewport and panels...", 5, 6)
         self._animation_timer.stop()
@@ -909,6 +979,8 @@ class ResourceLoadingMixin:
             self._invalidate_renderer_resources(f"model loaded: {name}")
         if scene_instance is not None:
             self._log(f"Scene object added: {scene_instance.name}", "success")
+        if int(getattr(self, "_pending_module_room_total", 0) or 0):
+            QtCore.QTimer.singleShot(0, self._start_next_module_room_load)
     def _infer_game_from_model(self, model) -> str:
         try:
             game_name = getattr(getattr(model, "game_version", ""), "name", "")

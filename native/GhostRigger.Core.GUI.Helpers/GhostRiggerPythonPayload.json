@@ -45,7 +45,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_GIZMO_TRANSFORM_GIZMO",
             "source_path": "src/core/gizmo/transform_gizmo.py",
             "packaged_path": "Python/src/core/gizmo/transform_gizmo.py",
-            "sha256": "98632feeebe96455330a0a708e9621faf73bb580e8309b2d25bd2f3ece6a754b"
+            "sha256": "bf0b2bc24d82b5c5dde1950060e77fbcb9a643974255f25577de0cf66e265555"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_GIZMO_RENDERER",

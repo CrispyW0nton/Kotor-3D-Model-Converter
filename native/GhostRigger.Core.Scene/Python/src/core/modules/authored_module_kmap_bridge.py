@@ -134,15 +134,22 @@ def _opening(data: Any) -> FloorPlanWallOpening:
     )
 
 
-def _floor_primitive(data: Any, room_resref: str) -> FloorPrimitive:
+def _floor_primitive(data: Any, room_resref: str) -> FloorPrimitive | PlacedRoomPrimitive:
     source = _dict(data)
-    return FloorPrimitive(
+    floor = FloorPrimitive(
         name=str(source.get("name") or f"{room_resref}_floor"),
         width=_float(source.get("width"), 10.0),
         depth=_float(source.get("depth"), 10.0),
         z=_float(source.get("z"), 0.0),
         surface_id=source.get("surface_id", source.get("floor_surface_id", 4)),
         material=_material(source.get("material")),
+    )
+    if source.get("transform") is None:
+        return floor
+    return PlacedRoomPrimitive(
+        primitive=floor,
+        transform=_transform(source.get("transform")),
+        name=str(source.get("instance_name") or source.get("name") or floor.name),
     )
 
 
@@ -611,18 +618,12 @@ def _base_primitive_payload(
 
 
 def _composition_payload(composition: AuthoredRoomComposition) -> dict[str, Any]:
+    floor_payload = _base_primitive_payload(composition.floor)
+    floor_payload["type"] = "floor"
     return {
         "type": "composition",
         "room_resref": composition.room_resref,
-        "floor": {
-            "type": "floor",
-            "name": composition.floor.name,
-            "width": float(composition.floor.width),
-            "depth": float(composition.floor.depth),
-            "z": float(composition.floor.z),
-            "surface_id": composition.floor.surface_id,
-            "material": _material_payload(composition.floor.material),
-        },
+        "floor": floor_payload,
         "primitives": [_base_primitive_payload(item) for item in composition.primitives],
         "metadata": dict(composition.metadata),
     }
@@ -778,6 +779,127 @@ def _placement_payload(placement: AuthoredGameplayPlacement) -> dict[str, Any]:
     }
 
 
+def _authored_payload_invalidation(project: AuthoredModuleProject) -> dict[str, Any]:
+    """Summarize authored edits that make packaged runtime/proof artifacts stale."""
+
+    stale_outputs: list[str] = []
+    edited_rooms: list[str] = []
+    latest_operation = ""
+    latest_summary = ""
+    next_action = ""
+    invalidates_previous_export = False
+    invalidates_game_proof = False
+
+    def add_stale_outputs(values: Any) -> None:
+        for value in tuple(values or ()):
+            output = str(value or "").strip()
+            if output and output not in stale_outputs:
+                stale_outputs.append(output)
+
+    for room in tuple(project.rooms or ()):
+        room_resref = normalise_resref(room.room_resref)
+        primitive = getattr(room, "primitive", None)
+        audit = dict(room.metadata.get("last_component_edit_audit") or {})
+        if not audit and primitive is not None:
+            audit = dict(getattr(primitive, "metadata", {}).get("last_component_edit_audit") or {})
+        if audit:
+            invalidates_previous_export = invalidates_previous_export or bool(audit.get("export_candidate_stale"))
+            invalidates_game_proof = invalidates_game_proof or bool(audit.get("game_proof_stale"))
+            add_stale_outputs(audit.get("stale_outputs"))
+            if room_resref and room_resref not in edited_rooms:
+                edited_rooms.append(room_resref)
+            latest_operation = str(audit.get("operation") or latest_operation)
+            latest_summary = str(audit.get("summary") or latest_summary)
+            next_action = str(audit.get("next_action") or next_action)
+        style = dict(room.metadata.get("last_room_style_update") or {})
+        if style:
+            invalidates_previous_export = True
+            invalidates_game_proof = True
+            add_stale_outputs(("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod"))
+            if room_resref and room_resref not in edited_rooms:
+                edited_rooms.append(room_resref)
+            latest_operation = "room_style_update"
+            latest_summary = (
+                f"Applied texture {style.get('texture', '')}, WOK surface "
+                f"{style.get('floor_surface_id', '')} ({style.get('floor_surface_name', '')})."
+            )
+            next_action = "Regenerate the module package and record fresh in-game proof after material or WOK changes."
+
+    project_extra = dict(getattr(project, "extra", {}) or {})
+    placement_edit_keys = (
+        "last_entry_point_update",
+        "last_gameplay_placement",
+        "last_gameplay_placement_transform",
+        "last_gameplay_placement_rename",
+        "last_gameplay_placement_duplicate",
+        "last_gameplay_placement_remove",
+    )
+    for key in placement_edit_keys:
+        edit = dict(project_extra.get(key) or {}) if isinstance(project_extra.get(key), dict) else {}
+        if not edit:
+            continue
+        invalidates_previous_export = True
+        invalidates_game_proof = True
+        add_stale_outputs(("GIT", "IFO", "PTH", ".mod"))
+        latest_operation = key
+        kind = str(edit.get("kind") or "entry_point")
+        tag = str(edit.get("tag") or edit.get("placement_id") or edit.get("area_resref") or "").strip()
+        latest_summary = f"Updated {kind} {tag}".strip()
+        next_action = "Regenerate gameplay resources and record fresh in-game proof after placement or entry-point changes."
+
+    lighting_edit_keys = (
+        "last_room_light",
+        "last_room_light_rename",
+        "last_room_light_duplicate",
+        "last_room_light_remove",
+    )
+    for key in lighting_edit_keys:
+        edit = dict(project_extra.get(key) or {}) if isinstance(project_extra.get(key), dict) else {}
+        if not edit:
+            continue
+        invalidates_previous_export = True
+        invalidates_game_proof = True
+        add_stale_outputs(("MDL", "MDX", ".mod"))
+        room_resref = normalise_resref(edit.get("room_resref"))
+        if room_resref and room_resref not in edited_rooms:
+            edited_rooms.append(room_resref)
+        latest_operation = key
+        name = str(edit.get("name") or "room light").strip()
+        latest_summary = f"Updated room light {name}".strip()
+        next_action = "Regenerate room model resources and record fresh in-game proof after lighting changes."
+
+    script_edit_keys = (
+        "last_script_hook",
+        "last_script_hook_remove",
+    )
+    for key in script_edit_keys:
+        edit = dict(project_extra.get(key) or {}) if isinstance(project_extra.get(key), dict) else {}
+        if not edit:
+            continue
+        invalidates_previous_export = True
+        invalidates_game_proof = True
+        add_stale_outputs(("ARE", "IFO", ".mod"))
+        latest_operation = key
+        scope = str(edit.get("scope") or "script").strip()
+        field_name = str(edit.get("field_name") or "").strip()
+        script = str(edit.get("script_resref") or "").strip()
+        latest_summary = f"Updated {scope} script hook {field_name} {script}".strip()
+        next_action = "Regenerate ARE/IFO script-hook resources and record fresh in-game proof after script changes."
+
+    if not invalidates_previous_export and not invalidates_game_proof and not stale_outputs:
+        return {}
+    return {
+        "invalidates_previous_export": bool(invalidates_previous_export or stale_outputs),
+        "invalidates_game_proof": bool(invalidates_game_proof or stale_outputs),
+        "edited_rooms": edited_rooms,
+        "latest_operation": latest_operation,
+        "latest_summary": latest_summary,
+        "stale_outputs": stale_outputs,
+        "next_action": next_action
+        or "Regenerate MDL/MDX/WOK/LYT/VIS/PTH/.mod resources and record fresh game proof.",
+    }
+
+
 def authored_project_to_kmap_payload(
     project: AuthoredModuleProject,
     *,
@@ -786,7 +908,8 @@ def authored_project_to_kmap_payload(
 ) -> dict[str, Any]:
     """Convert an authored module project to the serializable KMAP section."""
 
-    return {
+    invalidation = _authored_payload_invalidation(project)
+    payload = {
         "module_root": project.metadata.module_root,
         "game": project.game,
         "display_name": project.metadata.display_name,
@@ -809,8 +932,12 @@ def authored_project_to_kmap_payload(
         "notes": list(project.notes),
         "extra": dict(project.extra),
         "runtime_resources": list(runtime_resources),
-        "game_tested": bool(game_tested),
+        "game_tested": bool(game_tested) and not bool(invalidation.get("invalidates_game_proof")),
     }
+    if invalidation:
+        payload["export_proof_invalidation"] = invalidation
+        payload["manual_proof_required"] = True
+    return payload
 
 
 def create_dev_test_authored_module_payload(
@@ -912,6 +1039,119 @@ def create_dev_test_authored_module_payload(
     return authored_project_to_kmap_payload(project)
 
 
+def create_golden_test_authored_module_payload(
+    *,
+    module_root: str = "grgold01",
+    game: str = "K1",
+) -> dict[str, Any]:
+    """Create the canonical full Map Studio module fixture for game proof."""
+
+    root = normalise_resref(module_root)
+    room_resref = normalise_resref(f"{root}_room01")
+    project = create_single_room_project(
+        module_root=root,
+        game=game,
+        display_name="GhostRigger Golden Map",
+        room_primitive=RectangularRoomPrimitive(
+            room_resref=room_resref,
+            width=12.0,
+            depth=12.0,
+            wall_height=3.0,
+            floor_surface_id=4,
+            texture=normalize_authored_room_texture(DEFAULT_AUTHORED_ROOM_TEXTURE),
+            include_doorway_marker=True,
+        ),
+        lights=(
+            AuthoredRoomLight(
+                name=f"{root}_key_light"[:32],
+                room_resref=room_resref,
+                position=(0.0, -1.5, 2.6),
+                color=(1.0, 0.92, 0.76),
+                radius=9.0,
+                intensity=1.0,
+                light_type="point",
+                metadata={
+                    "source": "map_studio:golden_module_light",
+                    "purpose": "t3105_golden_smoke_visibility",
+                },
+            ),
+        ),
+        placements=AuthoredGameplayPlacement(
+            entry_point=ModuleEntryPoint(area_resref=root, position=(0.0, -4.0, 0.0), facing=0.0),
+            creatures=(
+                AuthoredCreatureInstance(
+                    template_resref="c_drdmkone",
+                    tag=f"{root}_npc",
+                    position=(-2.0, 1.0, 0.0),
+                    bearing=180.0,
+                ),
+            ),
+            doors=(
+                AuthoredDoorInstance(
+                    template_resref="door_t01",
+                    tag=f"{root}_door",
+                    position=(0.0, 4.25, 0.0),
+                    bearing=0.0,
+                    linked_to=f"{root}_exit",
+                    linked_to_module=root,
+                    transition_destination=1,
+                ),
+            ),
+            placeables=(
+                AuthoredPlaceableInstance(
+                    template_resref="plc_bench",
+                    tag=f"{root}_bench",
+                    position=(2.0, 1.25, 0.0),
+                    bearing=90.0,
+                ),
+            ),
+            waypoints=(
+                AuthoredWaypointInstance(
+                    template_resref="sw_startloc001",
+                    tag="start",
+                    position=(0.0, -4.0, 0.0),
+                ),
+                AuthoredWaypointInstance(
+                    template_resref="wp_test",
+                    tag=f"{root}_exit",
+                    position=(0.0, 3.25, 0.0),
+                    linked_to=f"{root}_door",
+                ),
+            ),
+            metadata={
+                "source": "map_studio:t3105_golden_module",
+                "player_start_is_module_entry": True,
+                "golden_module_stage": "requires_live_warp_proof",
+                "includes_room": True,
+                "includes_walkmesh": True,
+                "includes_placeable": True,
+                "includes_waypoint": True,
+                "includes_door_transition": True,
+                "includes_creature": True,
+                "expected_warp_command": f"warp {root}",
+            },
+        ),
+        notes=(
+            "T3105 golden custom module fixture.",
+            "Includes player start, generated WOK, placeable, waypoint, door transition intent, and NPC for live warp proof.",
+        ),
+        metadata={
+            "task": "T3105",
+            "source": "map_studio:t3105_golden_module",
+            "content_origin": "map_studio_original",
+            "authored_from_scratch": True,
+            "copied_from_base_game_module": False,
+            "source_module_resref": "",
+            "inherited_base_game_module_content": False,
+            "inherited_scripted_movers_expected": False,
+            "room_geometry_mode": "rectangular_composition",
+            "fixture_role": "golden_module_in_game_smoke_test",
+            "completion_requirement": "Package, install, warp in-game, verify expected objects, and record proof manifest.",
+        },
+    )
+    return authored_project_to_kmap_payload(project)
+
+
 def authored_project_from_kmap_payload(payload: Any, *, fallback_name: str = "new_level", fallback_game: str = "K1") -> AuthoredModuleProject:
     """Convert a serializable KMAP ``authored_module`` section to core intent."""
 
@@ -990,6 +1230,10 @@ def build_kmap_authored_module_readiness(kmap_project: Any) -> AuthoredModuleKMa
             "manual_proof_required",
             "game_test",
             "modder_test_plan",
+            "package_resource_inventory",
+            "export_job",
+            "pack_manifest_path",
+            "export_proof_invalidation",
         )
         if key in payload_dict and payload_dict[key] not in ("", None)
     }
@@ -1017,4 +1261,5 @@ __all__ = [
     "authored_project_to_kmap_payload",
     "build_kmap_authored_module_readiness",
     "create_dev_test_authored_module_payload",
+    "create_golden_test_authored_module_payload",
 ]

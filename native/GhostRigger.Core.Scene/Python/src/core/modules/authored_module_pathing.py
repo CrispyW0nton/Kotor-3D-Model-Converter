@@ -12,10 +12,13 @@ from dataclasses import dataclass, field
 from math import ceil, hypot, isfinite
 from typing import Any
 
+from .module_format import WALKABLE_IDS
+from .authored_walkmesh_sampling import walkmesh_face_at_xy
+
 
 Vec2 = tuple[float, float]
 Vec3 = tuple[float, float, float]
-WALKABLE_SURFACE_IDS = frozenset({1, 3, 4, 5, 9, 10, 11, 12, 13, 14, 19, 20, 21})
+WALKABLE_SURFACE_IDS = frozenset(WALKABLE_IDS)
 
 
 @dataclass(frozen=True)
@@ -85,10 +88,7 @@ def _walkmesh_bounds(wok: Any) -> tuple[float, float, float, float]:
 
 
 def _point_on_walkmesh(wok: Any, x: float, y: float) -> tuple[bool, int]:
-    face_at_point = getattr(wok, "face_at_point", None)
-    if not callable(face_at_point):
-        return True, -1
-    face_index = int(face_at_point(float(x), float(y)))
+    face_index = walkmesh_face_at_xy(wok, float(x), float(y))
     if face_index < 0:
         return False, face_index
     faces = list(getattr(wok, "faces", ()) or ())

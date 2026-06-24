@@ -19,8 +19,17 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     roomOutlineEdgeSelected = QtCore.Signal(str, int)
     roomPrimitiveSelected = QtCore.Signal(str, str)
     roomPrimitiveMoved = QtCore.Signal(str, str, object)
+    roomPrimitiveRotated = QtCore.Signal(str, str, float)
+    roomPrimitiveScaled = QtCore.Signal(str, str, object)
     terrainBrushFrameRequested = QtCore.Signal(str, str, object)
     terrainBrushStrokeCommitted = QtCore.Signal(str, str)
+    terrainBrushOptionsChanged = QtCore.Signal(int, float)
+    modeMarkingMenuRequested = QtCore.Signal(QtCore.QPoint)
+    toolMarkingMenuRequested = QtCore.Signal(QtCore.QPoint)
+    transformGizmoModeChanged = QtCore.Signal(str)
+    undoShortcutRequested = QtCore.Signal()
+    redoShortcutRequested = QtCore.Signal()
+    deleteShortcutRequested = QtCore.Signal()
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -28,8 +37,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._current_theme = None
         root = QtWidgets.QVBoxLayout(self)
         self.setFocusPolicy(QtCore.Qt.StrongFocus)
-        root.setContentsMargins(6, 8, 6, 0)
-        root.setSpacing(6)
+        root.setContentsMargins(4, 4, 4, 0)
+        root.setSpacing(4)
         self.viewport_toolbar_frame = QtWidgets.QFrame(self)
         self.viewport_toolbar_frame.setObjectName("ModuleViewportTopTools")
         toolbar_frame_layout = QtWidgets.QVBoxLayout(self.viewport_toolbar_frame)
@@ -52,10 +61,37 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.terrain_brush_box = QtWidgets.QCheckBox("Terrain Brush")
         self.terrain_brush_box.setObjectName("mapStudioViewportTerrainBrushCheckBox")
         self.terrain_brush_box.setToolTip("Paint the selected terrain heightfield brush directly in the viewport.")
+        self.transform_gizmo_group = QtWidgets.QButtonGroup(self)
+        self.transform_gizmo_group.setObjectName("mapStudioTransformGizmoModeButtonGroup")
+        self.transform_gizmo_group.setExclusive(True)
+        self.translate_gizmo_button = self._make_transform_gizmo_button(
+            "Translate",
+            "mapStudioViewportTranslateGizmoButton",
+            "translate",
+            "W",
+            "Move selected authored objects in KMAP world space.",
+        )
+        self.rotate_gizmo_button = self._make_transform_gizmo_button(
+            "Rotate",
+            "mapStudioViewportRotateGizmoButton",
+            "rotate",
+            "E",
+            "Rotate the selected authored object around its primitive pivot.",
+        )
+        self.scale_gizmo_button = self._make_transform_gizmo_button(
+            "Scale",
+            "mapStudioViewportScaleGizmoButton",
+            "scale",
+            "R",
+            "Scale/transform the selected authored object without changing its stable KMAP identity.",
+        )
         self.viewport_toolbar.addWidget(self.focus_button)
         self.viewport_toolbar.addWidget(self.grid_box)
         self.viewport_toolbar.addWidget(self.snap_box)
         self.viewport_toolbar.addWidget(self.terrain_brush_box)
+        self.viewport_toolbar.addWidget(self.translate_gizmo_button)
+        self.viewport_toolbar.addWidget(self.rotate_gizmo_button)
+        self.viewport_toolbar.addWidget(self.scale_gizmo_button)
         self.viewport_toolbar.addStretch(1)
         toolbar_frame_layout.addLayout(self.viewport_toolbar)
         self.marker_summary_label = QtWidgets.QLabel("Gameplay markers: none")
@@ -66,8 +102,11 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.splitter.setChildrenCollapsible(False)
         self.viewport = QtViewportWidget(self)
+        self.viewport.setObjectName("MapStudioViewportWidget")
         self.viewport.setFocusPolicy(QtCore.Qt.StrongFocus)
-        self.viewport.setMinimumHeight(520)
+        self.viewport.setMinimumHeight(320)
+        self.viewport.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self._configure_map_studio_viewport_quality()
         self._ensure_embedded_viewport_toolbar_gap()
         self._marker_pick_filter_ids: set[int] = set()
         self._install_marker_pick_filters()
@@ -78,19 +117,21 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.scene_table.setHorizontalHeaderLabels(["Type", "Name", "X", "Y", "Z", "Marker", "Facing", "Visible"])
         self.scene_table.horizontalHeader().setStretchLastSection(True)
         self.scene_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
-        self.scene_table.setMinimumHeight(58)
-        self.scene_table.setMaximumHeight(118)
+        self.scene_table.setMinimumHeight(46)
+        self.scene_table.setMaximumHeight(76)
         self.scene_table.itemSelectionChanged.connect(self._table_selection)
         self.scene_table.itemChanged.connect(self._table_item_changed)
         self.splitter.addWidget(self.viewport)
         self.splitter.addWidget(self.scene_table)
         self.splitter.setStretchFactor(0, 1)
         self.splitter.setStretchFactor(1, 0)
-        self.splitter.setSizes([900, 90])
+        self.splitter.setSizes([980, 54])
         root.addWidget(self.splitter, 1)
         self._row_ids: list[str] = []
         self._placement_markers: dict[str, object] = {}
         self._placement_marker_geometry: object | None = None
+        self._room_preview_model: object | None = None
+        self._room_preview_model_key = ""
         self._terrain_walkability_overlay: object | None = None
         self._universal_transform_overlay: object | None = None
         self._marker_drag: dict[str, object] | None = None
@@ -98,8 +139,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._room_outline_vertex_snap_candidates: dict[tuple[str, int], tuple[object, ...]] = {}
         self._vertex_snap_modifier_active = False
         self._transform_snap_modifier_active = False
+        self._transform_gizmo_mode = "translate"
         self._room_primitive_drag: dict[str, object] | None = None
         self._terrain_brush_drag: dict[str, object] | None = None
+        self._terrain_brush_option_drag: dict[str, object] | None = None
         self._terrain_brush_context: dict[str, object] = {
             "enabled": False,
             "room_resref": "",
@@ -107,9 +150,31 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "row_count": 0,
             "column_count": 0,
             "radius": 0,
+            "hardness": 0.5,
         }
         self._table_updating = False
         self.terrain_brush_box.toggled.connect(self._toggle_terrain_brush_interaction)
+        self.set_transform_gizmo_mode("translate", announce=False)
+        self._sync_clean_viewport_presentation()
+
+    def _make_transform_gizmo_button(
+        self,
+        label: str,
+        object_name: str,
+        mode_key: str,
+        hotkey: str,
+        tooltip: str,
+    ) -> QtWidgets.QToolButton:
+        button = QtWidgets.QToolButton(self)
+        button.setObjectName(object_name)
+        button.setText(label)
+        button.setCheckable(True)
+        button.setToolButtonStyle(QtCore.Qt.ToolButtonTextOnly)
+        button.setMinimumWidth(72)
+        button.setToolTip(f"{tooltip} Shortcut: {hotkey}.")
+        self.transform_gizmo_group.addButton(button)
+        button.clicked.connect(lambda _checked=False, key=mode_key: self.set_transform_gizmo_mode(key))
+        return button
 
     def set_project(
         self,
@@ -120,6 +185,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         authored_gameplay_marker_geometry=None,
         authored_room_outline_geometry=None,
         authored_terrain_walkability_overlay=None,
+        authored_room_preview_model=None,
     ) -> None:
         self._table_updating = True
         try:
@@ -128,6 +194,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self._placement_marker_geometry = authored_gameplay_marker_geometry
             self._room_outline_geometry = authored_room_outline_geometry
             self._terrain_walkability_overlay = authored_terrain_walkability_overlay
+            self._room_preview_model = authored_room_preview_model
             self._placement_markers = {
                 str(getattr(marker, "placement_id", "") or ""): marker
                 for marker in authored_gameplay_markers or ()
@@ -183,9 +250,11 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             authored_room_outline_geometry,
             authored_terrain_walkability_overlay,
         )
+        self._sync_room_preview_model(authored_room_preview_model)
         self._sync_room_outline_overlay(authored_room_outline_geometry)
         self._sync_marker_geometry_overlay(authored_gameplay_marker_geometry)
         self._sync_terrain_walkability_overlay(authored_terrain_walkability_overlay)
+        self._sync_clean_viewport_presentation()
 
     def select_id(self, item_id: str) -> None:
         for row, row_id in enumerate(self._row_ids):
@@ -227,6 +296,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             event_type = event.type()
             if event_type in {QtCore.QEvent.KeyPress, QtCore.QEvent.KeyRelease}:
                 key = getattr(event, "key", lambda: None)()
+                if event_type == QtCore.QEvent.KeyPress and self._handle_map_studio_shortcut_key(event):
+                    return True
                 if key == QtCore.Qt.Key_V:
                     self.set_map_studio_modifier_active("vertex_snap", event_type == QtCore.QEvent.KeyPress)
                     return False
@@ -234,6 +305,24 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     self.set_map_studio_modifier_active("transform_snap_level", event_type == QtCore.QEvent.KeyPress)
                     return False
             if event_type == QtCore.QEvent.MouseButtonPress:
+                if getattr(event, "button", lambda: None)() == QtCore.Qt.RightButton:
+                    modifiers = getattr(event, "modifiers", lambda: QtCore.Qt.NoModifier)()
+                    if (
+                        self._terrain_brush_context_enabled()
+                        and bool(modifiers & QtCore.Qt.AltModifier)
+                    ):
+                        focus = getattr(watched, "setFocus", None)
+                        if callable(focus):
+                            focus()
+                        return self._begin_terrain_brush_option_drag(event)
+                    focus = getattr(watched, "setFocus", None)
+                    if callable(focus):
+                        focus()
+                    if bool(modifiers & QtCore.Qt.ShiftModifier):
+                        self.toolMarkingMenuRequested.emit(self._event_global_position(event, watched))
+                    else:
+                        self.modeMarkingMenuRequested.emit(self._event_global_position(event, watched))
+                    return True
                 if getattr(event, "button", lambda: None)() == QtCore.Qt.LeftButton:
                     focus = getattr(watched, "setFocus", None)
                     if callable(focus):
@@ -242,7 +331,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                         terrain_sample = self._terrain_sample_at_event(event)
                         if terrain_sample is not None:
                             self._begin_terrain_brush_drag(terrain_sample, event)
-                            return True
+                        return True
                     placement_id = self._marker_at_event(event)
                     if placement_id:
                         self.select_id(placement_id)
@@ -279,6 +368,12 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     return self._finish_room_primitive_drag(event)
                 self._update_room_primitive_drag(event)
                 return True
+            if event_type == QtCore.QEvent.MouseMove and self._terrain_brush_option_drag is not None:
+                buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
+                if not (buttons & QtCore.Qt.RightButton):
+                    return self._finish_terrain_brush_option_drag(event)
+                self._update_terrain_brush_option_drag(event)
+                return True
             if event_type == QtCore.QEvent.MouseMove and self._terrain_brush_drag is not None:
                 buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
                 if not (buttons & QtCore.Qt.LeftButton):
@@ -286,6 +381,12 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 self._update_terrain_brush_drag(event)
                 return True
             if event_type == QtCore.QEvent.MouseMove and self._terrain_brush_context_enabled():
+                buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
+                if buttons & QtCore.Qt.LeftButton:
+                    terrain_sample = self._terrain_sample_at_event(event)
+                    if terrain_sample is not None:
+                        self._begin_terrain_brush_drag(terrain_sample, event)
+                    return True
                 self._terrain_sample_at_event(event)
             if event_type == QtCore.QEvent.MouseButtonRelease and self._marker_drag is not None:
                 return self._finish_marker_drag(event)
@@ -293,8 +394,12 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 return self._finish_room_outline_point_drag(event)
             if event_type == QtCore.QEvent.MouseButtonRelease and self._room_primitive_drag is not None:
                 return self._finish_room_primitive_drag(event)
+            if event_type == QtCore.QEvent.MouseButtonRelease and self._terrain_brush_option_drag is not None:
+                return self._finish_terrain_brush_option_drag(event)
             if event_type == QtCore.QEvent.MouseButtonRelease and self._terrain_brush_drag is not None:
                 return self._finish_terrain_brush_drag(event)
+            if event_type == QtCore.QEvent.MouseButtonRelease and self._terrain_brush_context_enabled():
+                return True
         toolbar_scroll = getattr(self.viewport, "viewport_toolbar_scroll", None)
         if watched is toolbar_scroll and event.type() in {
             QtCore.QEvent.Resize,
@@ -325,6 +430,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     self._request_room_outline_snap_preview_for_drag()
                 else:
                     self._clear_room_outline_snap_highlight()
+            self._sync_clean_viewport_presentation()
             return
         if key == "transform_snap_level":
             self._transform_snap_modifier_active = enabled
@@ -334,12 +440,19 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 )
             else:
                 self._restore_marker_summary_after_transform_snap()
+            self._sync_clean_viewport_presentation()
 
     def _install_marker_pick_filters(self) -> None:
-        candidates = [getattr(self, "viewport", None), getattr(getattr(self, "viewport", None), "canvas", None)]
+        viewport = getattr(self, "viewport", None)
+        if viewport is not None:
+            setattr(viewport, "_gr_map_studio_viewport_input_handler", self._handle_map_studio_viewport_input_event)
+        candidates = [viewport, getattr(viewport, "canvas", None)]
         canvas = getattr(getattr(self, "viewport", None), "canvas", None)
         current_surface = getattr(canvas, "current_surface", lambda: None)() if canvas is not None else None
         candidates.append(current_surface)
+        for root in (viewport, canvas, current_surface):
+            if isinstance(root, QtWidgets.QWidget):
+                candidates.extend(root.findChildren(QtWidgets.QWidget))
         for candidate in candidates:
             if candidate is None:
                 continue
@@ -359,7 +472,22 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if watched is self.viewport or watched is canvas:
             return True
         current_surface = getattr(canvas, "current_surface", lambda: None)() if canvas is not None else None
-        return watched is current_surface
+        if watched is current_surface:
+            return True
+        if isinstance(watched, QtWidgets.QWidget):
+            for root in (self.viewport, canvas, current_surface):
+                if isinstance(root, QtWidgets.QWidget) and watched is not root and root.isAncestorOf(watched):
+                    return True
+        return False
+
+    def _handle_map_studio_viewport_input_event(
+        self,
+        event: QtCore.QEvent,
+        watched: QtCore.QObject | None = None,
+    ) -> bool:
+        """Allow the embedded shared viewport to delegate Map Studio-only input first."""
+
+        return bool(self.eventFilter(watched or getattr(self.viewport, "canvas", None), event))
 
     def _marker_at_event(self, event: QtCore.QEvent) -> str:
         marker_at_screen = getattr(self.viewport, "map_studio_marker_at_screen", None)
@@ -438,6 +566,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         row_count: int = 0,
         column_count: int = 0,
         radius: int = 0,
+        hardness: float | None = None,
     ) -> None:
         """Update the viewport terrain brush context from the Builder controls."""
 
@@ -451,24 +580,32 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "row_count": max(0, int(row_count)),
             "column_count": max(0, int(column_count)),
             "radius": max(0, int(radius)),
+            "hardness": self._clamp_terrain_brush_hardness(
+                self._terrain_brush_context.get("hardness", 0.5) if hardness is None else hardness
+            ),
         }
         blocked = self.terrain_brush_box.blockSignals(True)
         self.terrain_brush_box.setChecked(bool(enabled))
         self.terrain_brush_box.blockSignals(blocked)
+        if bool(enabled):
+            self._install_marker_pick_filters()
         if not self._terrain_brush_context_enabled():
             self._clear_terrain_brush_cursor()
+        self._sync_clean_viewport_presentation()
 
     def set_terrain_walkability_overlay(self, authored_terrain_walkability_overlay=None) -> None:
         """Refresh only the terrain overlay during live sculpting."""
 
         self._terrain_walkability_overlay = authored_terrain_walkability_overlay
         self._sync_terrain_walkability_overlay(authored_terrain_walkability_overlay)
+        self._sync_clean_viewport_presentation()
 
     def set_universal_transform_overlay(self, overlay=None) -> None:
         """Refresh the Universal Manipulator overlay for the selected primitive."""
 
         self._universal_transform_overlay = overlay
         self._sync_universal_transform_overlay(overlay)
+        self._sync_clean_viewport_presentation()
 
     def _toggle_terrain_brush_interaction(self, enabled: bool) -> None:
         self._terrain_brush_context["enabled"] = bool(enabled)
@@ -476,6 +613,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self._finish_terrain_brush_drag(None)
         if not enabled:
             self._clear_terrain_brush_cursor()
+        self._sync_clean_viewport_presentation()
 
     def _terrain_brush_context_enabled(self) -> bool:
         context = self._terrain_brush_context
@@ -616,6 +754,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 "world_position": (float(world[0]), float(world[1]), float(world[2]) + 0.035),
                 "world_radius_position": (float(world[0]) + radius, float(world[1]), float(world[2]) + 0.035),
                 "radius_samples": max(0, int(self._terrain_brush_context.get("radius", 0) or 0)),
+                "hardness": self._clamp_terrain_brush_hardness(self._terrain_brush_context.get("hardness", 0.5)),
                 "color": "#00ff7a" if brush not in {"lower"} else "#55a7ff",
             }
         )
@@ -660,6 +799,55 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.terrainBrushFrameRequested.emit(brush, room_resref, (sample,))
         return True
 
+    def _begin_terrain_brush_option_drag(self, event: QtCore.QEvent) -> bool:
+        start = self._event_position(event)
+        if start is None:
+            return False
+        self._terrain_brush_option_drag = {
+            "start_screen": start,
+            "start_radius": max(0, int(self._terrain_brush_context.get("radius", 0) or 0)),
+            "start_hardness": self._clamp_terrain_brush_hardness(self._terrain_brush_context.get("hardness", 0.5)),
+        }
+        self._update_terrain_brush_option_drag(event)
+        return True
+
+    def _update_terrain_brush_option_drag(self, event: QtCore.QEvent) -> bool:
+        if self._terrain_brush_option_drag is None:
+            return False
+        current = self._event_position(event)
+        if current is None:
+            return True
+        start = self._terrain_brush_option_drag.get("start_screen", current)
+        dx = float(current[0]) - float(start[0])
+        dy = float(current[1]) - float(start[1])
+        start_radius = int(self._terrain_brush_option_drag.get("start_radius", 0) or 0)
+        start_hardness = self._clamp_terrain_brush_hardness(self._terrain_brush_option_drag.get("start_hardness", 0.5))
+        radius = max(0, min(64, start_radius + int(round(dx / 16.0))))
+        hardness = self._clamp_terrain_brush_hardness(start_hardness - (dy / 180.0))
+        self._terrain_brush_context["radius"] = radius
+        self._terrain_brush_context["hardness"] = hardness
+        self.marker_summary_label.setText(f"Terrain brush: size {radius}, hardness {hardness:.2f}")
+        self.terrainBrushOptionsChanged.emit(radius, hardness)
+        return True
+
+    def _finish_terrain_brush_option_drag(self, event: QtCore.QEvent | None = None) -> bool:
+        if self._terrain_brush_option_drag is None:
+            return False
+        if event is not None:
+            self._update_terrain_brush_option_drag(event)
+        self._terrain_brush_option_drag = None
+        return True
+
+    @staticmethod
+    def _clamp_terrain_brush_hardness(value: object) -> float:
+        try:
+            hardness = float(value)
+        except (TypeError, ValueError):
+            hardness = 0.5
+        if not math.isfinite(hardness):
+            hardness = 0.5
+        return max(0.0, min(1.0, hardness))
+
     def _update_terrain_brush_drag(self, event: QtCore.QEvent) -> bool:
         if self._terrain_brush_drag is None:
             return False
@@ -701,6 +889,23 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return None
         return (float(pos.x()), float(pos.y()))
 
+    def _event_global_position(self, event: QtCore.QEvent, watched: QtCore.QObject | None = None) -> QtCore.QPoint:
+        global_position = getattr(event, "globalPosition", None)
+        if callable(global_position):
+            pos = global_position()
+            try:
+                return pos.toPoint()
+            except Exception:
+                return QtCore.QPoint(int(pos.x()), int(pos.y()))
+        global_pos = getattr(event, "globalPos", None)
+        if callable(global_pos):
+            return global_pos()
+        local = self._event_position(event)
+        mapper = getattr(watched, "mapToGlobal", None)
+        if local is not None and callable(mapper):
+            return mapper(QtCore.QPoint(int(round(local[0])), int(round(local[1]))))
+        return self.mapToGlobal(QtCore.QPoint(0, 0))
+
     def _begin_marker_drag(self, placement_id: str, event: QtCore.QEvent) -> bool:
         marker = self._placement_markers.get(str(placement_id))
         start_screen = self._event_position(event)
@@ -715,6 +920,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "active": False,
             "pending_position": self._marker_position(marker),
         }
+        self._sync_clean_viewport_presentation()
         return True
 
     def _update_marker_drag(self, event: QtCore.QEvent) -> bool:
@@ -741,6 +947,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self._update_marker_drag(event)
         drag = self._marker_drag
         self._marker_drag = None
+        self._sync_clean_viewport_presentation()
         if not bool(drag.get("active", False)):
             return True
         position = tuple(float(v) for v in tuple(drag.get("pending_position", drag.get("start_position", (0.0, 0.0, 0.0))))[:3])
@@ -768,6 +975,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "pending_position": world_point,
         }
         self._request_room_outline_snap_preview_for_drag()
+        self._sync_clean_viewport_presentation()
         return True
 
     def _update_room_outline_point_drag(self, event: QtCore.QEvent) -> bool:
@@ -810,6 +1018,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         drag = self._room_outline_point_drag
         self._room_outline_point_drag = None
         self._clear_room_outline_snap_highlight()
+        self._sync_clean_viewport_presentation()
         if not bool(drag.get("active", False)):
             return True
         snap_candidate = drag.get("pending_snap_candidate") if bool(self._vertex_snap_modifier_active) else None
@@ -911,6 +1120,80 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         count = len(self._placement_markers)
         self.marker_summary_label.setText(f"Gameplay markers: {count}" if count else "Gameplay markers: none")
 
+    def set_transform_gizmo_mode(self, mode_key: str, *, announce: bool = True) -> None:
+        """Set the visible Map Studio transform gizmo mode and sync the shared viewport."""
+
+        key = str(mode_key or "translate").strip().lower()
+        if key in {"move", "translate"}:
+            key = "translate"
+            gimbal_mode = 1
+        elif key in {"rotate", "rotation"}:
+            key = "rotate"
+            gimbal_mode = 2
+        elif key in {"scale", "transform"}:
+            key = "scale"
+            gimbal_mode = 3
+        else:
+            key = "translate"
+            gimbal_mode = 1
+        self._transform_gizmo_mode = key
+        for button, button_key in (
+            (getattr(self, "translate_gizmo_button", None), "translate"),
+            (getattr(self, "rotate_gizmo_button", None), "rotate"),
+            (getattr(self, "scale_gizmo_button", None), "scale"),
+        ):
+            if button is None:
+                continue
+            blocked = button.blockSignals(True)
+            button.setChecked(button_key == key)
+            button.blockSignals(blocked)
+        viewport = getattr(self, "viewport", None)
+        if viewport is not None:
+            setattr(viewport, "_map_studio_transform_gizmo_mode", key)
+            setter = getattr(viewport, "set_gimbal_mode", None)
+            if callable(setter):
+                setter(gimbal_mode)
+            else:
+                request = getattr(viewport, "_request_render", None)
+                if callable(request):
+                    request(fast=True)
+        self._sync_clean_viewport_presentation()
+        if announce:
+            label = {"translate": "Translate", "rotate": "Rotate", "scale": "Scale"}[key]
+            self.marker_summary_label.setText(f"Map Studio {label} gimbal active. W/E/R switches Translate, Rotate, and Scale.")
+            self.transformGizmoModeChanged.emit(key)
+
+    def transform_gizmo_mode(self) -> str:
+        return str(getattr(self, "_transform_gizmo_mode", "translate") or "translate")
+
+    def _handle_map_studio_shortcut_key(self, event: QtCore.QEvent) -> bool:
+        modifiers = getattr(event, "modifiers", lambda: QtCore.Qt.NoModifier)()
+        key = getattr(event, "key", lambda: None)()
+        ctrl = bool(modifiers & QtCore.Qt.ControlModifier)
+        alt = bool(modifiers & QtCore.Qt.AltModifier)
+        shift = bool(modifiers & QtCore.Qt.ShiftModifier)
+        if ctrl and not alt and key == QtCore.Qt.Key_Z:
+            self.undoShortcutRequested.emit()
+            return True
+        if ctrl and not alt and key == QtCore.Qt.Key_R:
+            self.redoShortcutRequested.emit()
+            return True
+        if ctrl or alt or shift:
+            return False
+        if key == QtCore.Qt.Key_Delete:
+            self.deleteShortcutRequested.emit()
+            return True
+        if key == QtCore.Qt.Key_W:
+            self.set_transform_gizmo_mode("translate")
+            return True
+        if key == QtCore.Qt.Key_E:
+            self.set_transform_gizmo_mode("rotate")
+            return True
+        if key == QtCore.Qt.Key_R:
+            self.set_transform_gizmo_mode("scale")
+            return True
+        return False
+
     def _select_room_outline_edge(
         self,
         hit: tuple[str, int, tuple[float, float, float], tuple[float, float, float]],
@@ -949,10 +1232,15 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "primitive_name": primitive_name,
             "start_screen": start_screen,
             "start_center": world_center,
+            "start_center_screen": self._project_world_to_screen(world_center),
+            "mode": self.transform_gizmo_mode(),
             "active": False,
             "pending_delta": (0.0, 0.0, 0.0),
+            "pending_rotation_delta_degrees": 0.0,
+            "pending_scale_multiplier": (1.0, 1.0, 1.0),
         }
         self.roomPrimitiveSelected.emit(room_resref, primitive_name)
+        self._sync_clean_viewport_presentation()
         return True
 
     def _update_room_primitive_drag(self, event: QtCore.QEvent) -> bool:
@@ -965,6 +1253,23 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         screen_dx = float(current[0]) - float(start[0])
         screen_dy = float(current[1]) - float(start[1])
         if screen_dx * screen_dx + screen_dy * screen_dy < 9.0:
+            return True
+        mode = str(self._room_primitive_drag.get("mode") or "translate")
+        if mode == "rotate":
+            angle_delta = self._screen_rotation_delta_degrees(
+                tuple(self._room_primitive_drag.get("start_center_screen") or ()),
+                tuple(start),
+                tuple(current),
+            )
+            self._room_primitive_drag["active"] = True
+            self._room_primitive_drag["pending_rotation_delta_degrees"] = angle_delta
+            self.marker_summary_label.setText(f"Rotate gimbal: {angle_delta:+.1f} deg around selected primitive pivot.")
+            return True
+        if mode == "scale":
+            multiplier = self._screen_scale_multiplier(screen_dx, screen_dy)
+            self._room_primitive_drag["active"] = True
+            self._room_primitive_drag["pending_scale_multiplier"] = (multiplier, multiplier, multiplier)
+            self.marker_summary_label.setText(f"Scale gimbal: {multiplier:.3f}x selected primitive transform.")
             return True
         start_center = tuple(self._room_primitive_drag.get("start_center", (0.0, 0.0, 0.0)))
         if len(start_center) < 3:
@@ -989,7 +1294,23 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self._update_room_primitive_drag(event)
         drag = self._room_primitive_drag
         self._room_primitive_drag = None
+        self._sync_clean_viewport_presentation()
         if not bool(drag.get("active", False)):
+            return True
+        mode = str(drag.get("mode") or "translate")
+        if mode == "rotate":
+            self.roomPrimitiveRotated.emit(
+                str(drag.get("room_resref", "") or ""),
+                str(drag.get("primitive_name", "") or ""),
+                float(drag.get("pending_rotation_delta_degrees", 0.0) or 0.0),
+            )
+            return True
+        if mode == "scale":
+            self.roomPrimitiveScaled.emit(
+                str(drag.get("room_resref", "") or ""),
+                str(drag.get("primitive_name", "") or ""),
+                tuple(float(value) for value in tuple(drag.get("pending_scale_multiplier", (1.0, 1.0, 1.0)))[:3]),
+            )
             return True
         delta = tuple(float(v) for v in tuple(drag.get("pending_delta", (0.0, 0.0, 0.0)))[:3])
         if len(delta) < 3:
@@ -1000,6 +1321,53 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             delta,
         )
         return True
+
+    def _project_world_to_screen(self, position: object) -> tuple[float, float] | None:
+        project = getattr(getattr(self.viewport, "_renderer", None), "_proj", None)
+        if not callable(project):
+            return None
+        point = tuple(position or ())
+        if len(point) < 3:
+            return None
+        w, h = self._viewport_canvas_size()
+        try:
+            projected = project(float(point[0]), float(point[1]), float(point[2]), w, h)
+        except Exception:
+            return None
+        if projected is None or len(projected) < 2:
+            return None
+        return (float(projected[0]), float(projected[1]))
+
+    @staticmethod
+    def _screen_rotation_delta_degrees(
+        center_screen: tuple[object, ...],
+        start_screen: tuple[object, ...],
+        current_screen: tuple[object, ...],
+    ) -> float:
+        if len(center_screen) >= 2 and len(start_screen) >= 2 and len(current_screen) >= 2:
+            try:
+                cx, cy = float(center_screen[0]), float(center_screen[1])
+                sx, sy = float(start_screen[0]) - cx, float(start_screen[1]) - cy
+                ex, ey = float(current_screen[0]) - cx, float(current_screen[1]) - cy
+                if abs(sx) + abs(sy) > 1.0e-6 and abs(ex) + abs(ey) > 1.0e-6:
+                    start_angle = math.atan2(sy, sx)
+                    end_angle = math.atan2(ey, ex)
+                    delta = math.degrees(end_angle - start_angle)
+                    while delta > 180.0:
+                        delta -= 360.0
+                    while delta < -180.0:
+                        delta += 360.0
+                    return delta
+            except Exception:
+                pass
+        if len(start_screen) >= 2 and len(current_screen) >= 2:
+            return (float(current_screen[0]) - float(start_screen[0])) * 0.5
+        return 0.0
+
+    @staticmethod
+    def _screen_scale_multiplier(screen_dx: float, screen_dy: float) -> float:
+        raw = 1.0 + ((float(screen_dx) - float(screen_dy)) / 160.0)
+        return max(0.05, min(20.0, raw))
 
     def _marker_position(self, marker: object) -> tuple[float, float, float]:
         value = tuple(getattr(marker, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
@@ -1085,10 +1453,118 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return 10.0
         return value
 
+    def _configure_map_studio_viewport_quality(self) -> None:
+        self.viewport.setProperty("_gr_suppress_renderer_diagnostics", True)
+        self.viewport.setProperty("_gr_map_studio_clean_viewport", True)
+        self.viewport.setProperty("_gr_map_studio_hide_embedded_toolbar", True)
+        renderer = getattr(self.viewport, "_renderer", None)
+        if renderer is not None:
+            setattr(renderer, "wireframe", False)
+            setattr(renderer, "show_texture", True)
+        set_chrome = getattr(self.viewport, "set_viewport_chrome_visible", None)
+        if callable(set_chrome):
+            set_chrome(toolbar=False, transform_typein=False)
+        tabs = getattr(self.viewport, "viewport_map_studio_modeling_tabs", None)
+        if tabs is not None:
+            tabs.setVisible(False)
+            tabs.setMaximumHeight(0)
+        canvas = getattr(self.viewport, "canvas", None)
+        clear_text = getattr(canvas, "clear_diagnostics_text", None)
+        if callable(clear_text):
+            clear_text()
+        surface = getattr(canvas, "current_surface", lambda: None)()
+        if isinstance(surface, QtWidgets.QLabel):
+            surface.setText("")
+            surface.setToolTip("Map Studio viewport")
+
+    def _sync_clean_viewport_presentation(self) -> None:
+        viewport = getattr(self, "viewport", None)
+        if viewport is None:
+            return
+        viewport.setProperty("_gr_map_studio_clean_viewport", True)
+        terrain_active = self._terrain_brush_context_enabled()
+        room_edit_active = (
+            self._room_outline_point_drag is not None
+            or bool(self._vertex_snap_modifier_active)
+            or bool(self._transform_snap_modifier_active)
+        )
+        primitive_drag_active = self._room_primitive_drag is not None
+        preview_model_loaded = self._room_preview_model is not None
+        render_geometry_edit_active = room_edit_active or primitive_drag_active
+        presentation = {
+            "clean_display": True,
+            "preview_model_loaded": preview_model_loaded,
+            "show_render_geometry_overlay": render_geometry_edit_active if preview_model_loaded else True,
+            "show_room_mesh_fill_overlay": not preview_model_loaded,
+            "subtle_room_outlines": True,
+            "show_room_guides": room_edit_active,
+            "show_room_vertex_handles": room_edit_active,
+            "show_primitive_handles": render_geometry_edit_active if preview_model_loaded else True,
+            "subtle_primitive_handles": True,
+            "show_primitive_labels": False,
+            "show_transform_dimensions": primitive_drag_active or self.transform_gizmo_mode() == "scale",
+            "show_gimbal_labels": False,
+            "show_terrain_walkability": terrain_active,
+            "show_terrain_brush": terrain_active,
+            "show_placement_guides": self._marker_drag is not None,
+        }
+        setter = getattr(viewport, "set_map_studio_viewport_presentation", None)
+        if callable(setter):
+            setter(presentation)
+        else:
+            setattr(viewport, "_map_studio_viewport_presentation", presentation)
+        canvas = getattr(viewport, "canvas", None)
+        clear_diagnostics = getattr(canvas, "clear_diagnostics_text", None)
+        if callable(clear_diagnostics):
+            clear_diagnostics()
+        surface = getattr(canvas, "current_surface", lambda: None)() if canvas is not None else None
+        if isinstance(surface, QtWidgets.QLabel):
+            surface.setText("")
+
+    def _sync_room_preview_model(self, authored_room_preview_model=None) -> None:
+        viewport = getattr(self, "viewport", None)
+        if viewport is None:
+            return
+        load_model = getattr(viewport, "load_model", None)
+        if authored_room_preview_model is None:
+            current_model = getattr(viewport, "model", None)
+            if getattr(current_model, "_gr_map_studio_preview_model", False) and callable(load_model):
+                load_model(None)
+            self._room_preview_model_key = ""
+            viewport.setProperty("_gr_map_studio_preview_model_loaded", False)
+            return
+
+        key = str(getattr(authored_room_preview_model, "_gr_map_studio_preview_key", "") or id(authored_room_preview_model))
+        if key == self._room_preview_model_key and getattr(viewport, "model", None) is not None:
+            viewport.setProperty("_gr_map_studio_preview_model_loaded", True)
+            return
+        if callable(load_model):
+            load_model(authored_room_preview_model)
+            self._room_preview_model_key = key
+            viewport.setProperty("_gr_map_studio_preview_model_loaded", True)
+            renderer = getattr(viewport, "_renderer", None)
+            if renderer is not None:
+                setattr(renderer, "wireframe", False)
+            request_render = getattr(viewport, "_request_render", None)
+            if callable(request_render):
+                request_render(fast=True, reason="map studio preview model changed", resources=True, overlay=True, hud=True)
+
     def _ensure_embedded_viewport_toolbar_gap(self, gap_height: int = 6) -> None:
         toolbar_scroll = getattr(self.viewport, "viewport_toolbar_scroll", None)
         root_layout = getattr(self.viewport, "_root_layout", None) or self.viewport.layout()
         if toolbar_scroll is None or root_layout is None:
+            return
+        if bool(self.viewport.property("_gr_map_studio_hide_embedded_toolbar")):
+            toolbar_scroll.setVisible(False)
+            toolbar_scroll.setFixedHeight(0)
+            tabs = getattr(self.viewport, "viewport_map_studio_modeling_tabs", None)
+            if tabs is not None:
+                tabs.setVisible(False)
+                tabs.setMaximumHeight(0)
+            gap = getattr(self, "_viewport_toolbar_gap", None)
+            if gap is not None:
+                gap.setVisible(False)
+                gap.setFixedHeight(0)
             return
 
         target_height = self._embedded_viewport_toolbar_height(toolbar_scroll)
@@ -1162,8 +1638,12 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         markers = tuple(authored_gameplay_markers or ())
         room_count = int(getattr(authored_room_outline_geometry, "room_count", 0) or 0)
         terrain_triangles = tuple(getattr(authored_terrain_walkability_overlay, "triangles", ()) or ())
+        clean_display = bool(getattr(self, "viewport", None) is not None and self.viewport.property("_gr_map_studio_clean_viewport"))
+        preview_model_loaded = self._room_preview_model is not None
         if not markers and room_count <= 0 and not terrain_triangles:
-            self.marker_summary_label.setText("Gameplay markers: none")
+            self.marker_summary_label.setText(
+                "Map Studio clean view: no authored geometry yet" if clean_display else "Gameplay markers: none"
+            )
             return
         counts: dict[str, int] = {}
         warnings = 0
@@ -1174,7 +1654,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 warnings += 1
         parts_list = [f"{kind} {count}" for kind, count in sorted(counts.items())]
         if room_count > 0:
-            parts_list.insert(0, f"room outline {room_count}")
+            parts_list.insert(0, f"room mesh {room_count}" if preview_model_loaded else f"room outline {room_count}")
         parts = ", ".join(parts_list)
         if not parts and terrain_triangles:
             parts = "terrain overlay"
@@ -1199,6 +1679,19 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             max_slope = float(getattr(authored_terrain_walkability_overlay, "max_slope_degrees", 0.0) or 0.0)
             geometry_suffix = f"{geometry_suffix} | terrain walkability {walkable} walk / {blocked} blocked, max slope {max_slope:.1f} deg"
         suffix = f" | {warnings} marker warning(s)" if warnings else ""
+        if clean_display:
+            clean_parts = []
+            if room_count > 0:
+                clean_parts.append(f"{room_count} authored room mesh(es)" if preview_model_loaded else f"{room_count} authored room outline(s)")
+            if terrain_triangles:
+                clean_parts.append(f"{len(terrain_triangles)} terrain triangle(s)")
+            marker_count = sum(counts.values())
+            if marker_count:
+                clean_parts.append(f"{marker_count} gameplay marker(s)")
+            if warnings:
+                clean_parts.append(f"{warnings} warning(s)")
+            self.marker_summary_label.setText(f"Map Studio clean view: {', '.join(clean_parts)}")
+            return
         self.marker_summary_label.setText(f"Gameplay markers: {parts}{geometry_suffix}{suffix}")
 
     def _sync_room_outline_overlay(self, authored_room_outline_geometry=None) -> None:

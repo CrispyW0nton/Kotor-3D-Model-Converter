@@ -8,6 +8,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.gui.libtheme.qt_stylesheet_builder import QtStylesheetBuilder
 from src.gui.libtheme.style_tokens import LEGACY_MATRIX_COLORS
+from src.gui.libtheme.icon_manager import ThemeIconManager
 from src.gui.libtheme.theme_model import Theme
 
 
@@ -15,6 +16,7 @@ C = dict(LEGACY_MATRIX_COLORS)
 
 _GUI_DIR = Path(__file__).resolve().parents[1]
 _QT_ICON_DIR = (_GUI_DIR / "icons").as_posix()
+_fallback_icons = ThemeIconManager(_GUI_DIR / "icons")
 
 
 class QtOverflowScrollArea(QtWidgets.QScrollArea):
@@ -188,7 +190,7 @@ def icon(name: str, size: int = 16) -> QtGui.QIcon:
     if path.exists():
         return QtGui.QIcon(str(path))
     fallback = icons_dir / f"{name}_24.png"
-    return QtGui.QIcon(str(fallback)) if fallback.exists() else QtGui.QIcon()
+    return QtGui.QIcon(str(fallback)) if fallback.exists() else _fallback_icons.icon(name, None, size)
 
 
 def make_scrollable_panel(

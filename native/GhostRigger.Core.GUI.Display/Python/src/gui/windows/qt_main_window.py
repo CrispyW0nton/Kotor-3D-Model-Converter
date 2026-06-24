@@ -66,7 +66,6 @@ from src.gui.qt_lib.dialogs.add_model_to_scene_dialog import AddModelToSceneChoi
 from src.gui.qt_lib.dialogs.qt_lightmap_baker_dialog import QtLightmapBakerDialog
 from src.gui.qt_lib.dialogs.qt_render_frame_dialog import QtRenderFrameDialog
 from src.gui.qt_lib.panels.qt_resource_panel import QtResourceBrowserPanel, Qt2DABrowserPanel
-from src.gui.qt_lib.windows.module_editor_window import ModuleEditorWindow
 from src.gui.qt_lib.windows.qt_retarget_preview_controller import (
     QtRetargetViewportAdapter,
     RetargetPreviewUiController,

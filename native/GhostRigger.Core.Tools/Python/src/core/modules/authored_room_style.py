@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, normalise_resref
-from .authored_room_composition import AuthoredRoomComposition
+from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive
 from .authored_room_floorplan import FloorPlanRoomPrimitive
 from .authored_room_geometry import RectangularRoomPrimitive
 from .authored_room_materials import AuthoredRoomMaterialPreflight, compile_authored_room_material_preflight
@@ -125,15 +125,17 @@ def _styled_composition(
     surface_id: int,
     surface_name: str,
 ) -> AuthoredRoomComposition:
+    floor_base = primitive.floor.primitive if isinstance(primitive.floor, PlacedRoomPrimitive) else primitive.floor
     floor_material = replace(
-        primitive.floor.material,
+        floor_base.material,
         texture=texture,
         metadata={
-            **dict(primitive.floor.material.metadata),
+            **dict(floor_base.material.metadata),
             **_style_metadata(texture, surface_id, surface_name),
         },
     )
-    floor = replace(primitive.floor, surface_id=surface_id, material=floor_material)
+    floor_base = replace(floor_base, surface_id=surface_id, material=floor_material)
+    floor = replace(primitive.floor, primitive=floor_base) if isinstance(primitive.floor, PlacedRoomPrimitive) else floor_base
     return replace(
         primitive,
         floor=floor,

@@ -12,6 +12,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from .authored_walkmesh_sampling import walkmesh_face_at_xy, walkmesh_floor_z_at_xy
 from .authored_walkmesh_surfaces import walkable_walkmesh_surface_ids, walkmesh_surface_name
 
 
@@ -319,10 +320,7 @@ def validate_authored_gameplay_placement(placement: AuthoredGameplayPlacement) -
 
 
 def _walkmesh_face_at_position(wok: Any, position: Vec3) -> int:
-    face_at_point = getattr(wok, "face_at_point", None)
-    if not callable(face_at_point):
-        return -2
-    return int(face_at_point(float(position[0]), float(position[1])))
+    return walkmesh_face_at_xy(wok, float(position[0]), float(position[1]))
 
 
 def _triangle_floor_z_at_position(position: Vec3, a: Vec3, b: Vec3, c: Vec3) -> float:
@@ -398,12 +396,14 @@ def _walkmesh_check(label: str, position: Vec3, wok: Any, *, z_tolerance: float)
             surface_id=surface_id,
             message=f"{label} resolved to WOK face {face_index} with invalid vertex indices.",
         )
-    floor_z = _triangle_floor_z_at_position(
-        position,
-        tuple(verts[vertex_indices[0]]),  # type: ignore[arg-type]
-        tuple(verts[vertex_indices[1]]),  # type: ignore[arg-type]
-        tuple(verts[vertex_indices[2]]),  # type: ignore[arg-type]
-    )
+    floor_z = walkmesh_floor_z_at_xy(wok, face_index, float(position[0]), float(position[1]))
+    if floor_z is None:
+        floor_z = _triangle_floor_z_at_position(
+            position,
+            tuple(verts[vertex_indices[0]]),  # type: ignore[arg-type]
+            tuple(verts[vertex_indices[1]]),  # type: ignore[arg-type]
+            tuple(verts[vertex_indices[2]]),  # type: ignore[arg-type]
+        )
     if abs(float(position[2]) - floor_z) > float(z_tolerance):
         return AuthoredGameplayWalkmeshCheck(
             label=label,

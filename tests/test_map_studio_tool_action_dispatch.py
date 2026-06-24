@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import sys
 from pathlib import Path
 
@@ -42,18 +43,39 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert audit.capability_stage == "previewable_tool_contract_audit"
     assert audit.has_blockers is False
     assert audit.blocking_messages == ()
-    assert audit.total_actions >= 80
+    assert audit.total_actions >= 100
     assert audit.implemented_actions == audit.total_actions
-    assert audit.command_backed_actions >= 82
-    assert audit.mutating_command_actions >= 74
+    assert audit.command_backed_actions >= 86
+    assert audit.mutating_command_actions >= 78
     assert audit.query_command_actions >= 6
     assert audit.studio_workspace_actions == 0
-    assert audit.workflow_focus_actions == 0
+    assert audit.workflow_focus_actions >= 4
     assert statuses["cube"].contract_kind == "command_mutates_kmap"
     assert statuses["cube"].command_method == "add_authored_room_primitive"
     assert statuses["cube"].mutates_kmap is True
+    assert statuses["floor"].contract_kind == "command_mutates_kmap"
+    assert statuses["floor"].command_method == "add_authored_room_primitive"
+    assert statuses["floor"].mutates_kmap is True
     assert statuses["primitive"].contract_kind == "command_mutates_kmap"
     assert statuses["primitive"].command_method == "add_authored_room_primitive"
+    assert statuses["blockout_room"].contract_kind == "command_mutates_kmap"
+    assert statuses["blockout_room"].command_method == "create_authored_room_preset_module"
+    for mode_key in ("object", "vertex", "edge", "face"):
+        assert statuses[mode_key].contract_kind == "workflow_focus"
+        assert statuses[mode_key].command_method == ""
+        assert statuses[mode_key].mutates_kmap is False
+        assert statuses[mode_key].stale_outputs == ()
+    assert statuses["select"].contract_kind == "command_mutates_kmap"
+    assert statuses["select"].command_method == "set_map_studio_active_selection"
+    assert statuses["select"].mutates_kmap is True
+    assert statuses["select"].stale_outputs == ()
+    assert statuses["move"].contract_kind == "command_mutates_kmap"
+    assert statuses["move"].command_method == "move_authored_room_primitive"
+    assert statuses["move"].mutates_kmap is True
+    assert statuses["duplicate_selected"].contract_kind == "command_mutates_kmap"
+    assert statuses["duplicate_selected"].command_method == "duplicate_authored_room_primitive"
+    assert statuses["delete_selected"].contract_kind == "command_mutates_kmap"
+    assert statuses["delete_selected"].command_method == "remove_authored_room_primitive"
     assert statuses["create_room"].contract_kind == "command_mutates_kmap"
     assert statuses["create_room"].command_method == "create_authored_room_preset_module"
     assert statuses["corridor"].contract_kind == "command_mutates_kmap"
@@ -124,6 +146,8 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["walkmesh"].command_method == "authored_walkmesh_status"
     assert statuses["paint_wok"].contract_kind == "command_mutates_kmap"
     assert statuses["paint_wok"].command_method == "set_authored_room_primitive_style"
+    assert statuses["paint_material"].contract_kind == "command_mutates_kmap"
+    assert statuses["paint_material"].command_method == "set_authored_room_primitive_style"
     assert statuses["validate"].contract_kind == "command_query"
     assert statuses["validate"].command_method == "validate"
     assert statuses["validate"].mutates_kmap is False
@@ -166,8 +190,31 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     tool_belt_action_keys = [action.key for action in tool_belt_actions]
 
     assert len(tool_belt_action_keys) == len(set(tool_belt_action_keys))
+    for mode_key in ("object", "vertex", "edge", "face", "terrain", "walkmesh"):
+        assert mode_key in tool_belt_action_keys
     assert "triangulate" in tool_belt_action_keys
     assert "triangulate_face" in tool_belt_action_keys
+    assert "select" in tool_belt_action_keys
+    assert "move" in tool_belt_action_keys
+    assert "duplicate_selected" in tool_belt_action_keys
+    assert "delete_selected" in tool_belt_action_keys
+    assert "floor" in tool_belt_action_keys
+
+    for mode_key, snap_mode in (
+        ("object", "grid"),
+        ("vertex", "vertex"),
+        ("edge", "edge"),
+        ("face", "face"),
+    ):
+        route = resolve_map_studio_tool_belt_action(mode_key)
+        assert route.enabled is True
+        assert route.command_method == ""
+        assert route.focus_component_mode == mode_key
+        assert route.focus_snap_mode == snap_mode
+        assert route.mutates_kmap is False
+        assert route.stale_outputs == ()
+        assert route.readiness_impact == ""
+        assert mode_key.capitalize() in route.authoring_context
 
     assert cube.enabled is True
     assert cube.command_method == "add_authored_room_primitive"
@@ -179,6 +226,85 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert "KMAP" in cube.resource_impacts
     assert "WOK" in cube.resource_impacts
     assert "affected resources" in cube.readiness_summary
+
+    blockout_room = resolve_map_studio_tool_belt_action(
+        "blockout_room",
+        MapStudioToolActionContext(module_root="grblock42"),
+    )
+
+    assert blockout_room.enabled is True
+    assert blockout_room.command_method == "create_authored_room_preset_module"
+    assert blockout_room.command_kwargs == {"preset_id": "composition_starter_room", "module_root": "grblock42"}
+    assert blockout_room.mutates_kmap is True
+    assert "composition_starter_room" in blockout_room.authoring_context
+
+    floor = resolve_map_studio_tool_belt_action("floor")
+
+    assert floor.enabled is True
+    assert floor.command_method == "add_authored_room_primitive"
+    assert floor.command_kwargs["primitive_kind"] == "floor"
+    assert floor.mutates_kmap is True
+    assert "KMAP" in floor.resource_impacts
+    assert "WOK" in floor.resource_impacts
+
+    select_route = resolve_map_studio_tool_belt_action(
+        "select",
+        MapStudioToolActionContext(room_resref="room_a", primitive_name="room_a_cube"),
+    )
+    move_disabled = resolve_map_studio_tool_belt_action(
+        "move",
+        MapStudioToolActionContext(room_resref="room_a", primitive_name="room_a_cube"),
+    )
+    move_ready = resolve_map_studio_tool_belt_action(
+        "move",
+        MapStudioToolActionContext(
+            room_resref="room_a",
+            primitive_name="room_a_cube",
+            move_delta=(0.25, 0.0, 0.0),
+        ),
+    )
+
+    assert select_route.enabled is True
+    assert select_route.command_method == "set_map_studio_active_selection"
+    assert select_route.command_kwargs["primitive_name"] == "room_a_cube"
+    assert select_route.stale_outputs == ()
+    assert move_disabled.enabled is False
+    assert "non-zero world delta" in move_disabled.disabled_reason
+    assert move_ready.enabled is True
+    assert move_ready.command_method == "move_authored_room_primitive"
+    assert move_ready.command_kwargs["world_delta"] == (0.25, 0.0, 0.0)
+    assert move_ready.stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+
+    duplicate_selected_missing = resolve_map_studio_tool_belt_action("duplicate_selected")
+    delete_selected_missing = resolve_map_studio_tool_belt_action("delete_selected")
+    duplicate_selected = resolve_map_studio_tool_belt_action(
+        "duplicate_selected",
+        MapStudioToolActionContext(room_resref="room_a", primitive_name="room_a_cube"),
+    )
+    delete_selected = resolve_map_studio_tool_belt_action(
+        "delete_selected",
+        MapStudioToolActionContext(room_resref="room_a", primitive_name="room_a_cube"),
+    )
+
+    assert duplicate_selected_missing.enabled is False
+    assert "primitive selection" in duplicate_selected_missing.disabled_reason
+    assert duplicate_selected.enabled is True
+    assert duplicate_selected.command_method == "duplicate_authored_room_primitive"
+    assert duplicate_selected.command_kwargs == {
+        "room_resref": "room_a",
+        "primitive_name": "room_a_cube",
+        "duplicate_count": 1,
+        "translation_offset": (1.0, 0.0, 0.0),
+        "rotation_offset_degrees_z": 0.0,
+        "scale_multiplier": (1.0, 1.0, 1.0),
+    }
+    assert duplicate_selected.stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+    assert delete_selected_missing.enabled is False
+    assert "primitive selection" in delete_selected_missing.disabled_reason
+    assert delete_selected.enabled is True
+    assert delete_selected.command_method == "remove_authored_room_primitive"
+    assert delete_selected.command_kwargs == {"room_resref": "room_a", "primitive_name": "room_a_cube"}
+    assert delete_selected.stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
 
     starter_room = resolve_map_studio_tool_belt_action(
         "create_room",
@@ -328,6 +454,7 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
             proof_player_spawns_on_floor=True,
             proof_test_placeable_visible=True,
             proof_player_can_walk_on_floor=True,
+            proof_transition_pathing_sanity_confirmed=True,
             proof_no_inherited_base_game_geometry_or_scripted_movers=True,
         ),
     )
@@ -344,6 +471,7 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
         "player_spawns_on_floor": True,
         "test_placeable_visible": True,
         "player_can_walk_on_floor": True,
+        "transition_pathing_sanity_confirmed": True,
         "no_inherited_base_game_geometry_or_scripted_movers": True,
         "allow_missing_evidence": False,
     }
@@ -367,6 +495,7 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
         "primitive_kind": "cylinder",
         "room_resref": "room_a",
         "primitive_name": "room_a_cyl_01",
+        "module_root": "",
     }
     assert selected_primitive.mutates_kmap is True
 
@@ -1306,6 +1435,56 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert paint_wok_primitive.mutates_kmap is True
     assert "selected walkmesh-producing primitive" in paint_wok_primitive.authoring_context
 
+    paint_material_missing_texture = resolve_map_studio_tool_belt_action(
+        "paint_material",
+        MapStudioToolActionContext(room_resref="room_a", metadata={"surface_id": 4}),
+    )
+
+    assert paint_material_missing_texture.enabled is False
+    assert "texture/material resref" in paint_material_missing_texture.disabled_reason
+
+    paint_material_missing_surface = resolve_map_studio_tool_belt_action(
+        "paint_material",
+        MapStudioToolActionContext(room_resref="room_a", metadata={"texture": "CM_Baremetal"}),
+    )
+
+    assert paint_material_missing_surface.enabled is False
+    assert "current room WOK surface metadata" in paint_material_missing_surface.disabled_reason
+
+    paint_material_room = resolve_map_studio_tool_belt_action(
+        "paint_material",
+        MapStudioToolActionContext(room_resref="room_a", metadata={"texture": "CM_Baremetal", "floor_surface": "metal"}),
+    )
+
+    assert paint_material_room.enabled is True
+    assert paint_material_room.command_method == "apply_authored_room_style"
+    assert paint_material_room.command_kwargs == {
+        "room_resref": "room_a",
+        "texture": "CM_Baremetal",
+        "floor_surface": "metal",
+    }
+    assert paint_material_room.mutates_kmap is True
+    assert "preserving the current WOK surface intent" in paint_material_room.authoring_context
+
+    paint_material_primitive = resolve_map_studio_tool_belt_action(
+        "paint_material",
+        MapStudioToolActionContext(
+            room_resref="room_a",
+            primitive_name="room_a_ramp",
+            metadata={"texture": "LMA_wall01"},
+        ),
+    )
+
+    assert paint_material_primitive.enabled is True
+    assert paint_material_primitive.command_method == "set_authored_room_primitive_style"
+    assert paint_material_primitive.command_kwargs == {
+        "room_resref": "room_a",
+        "primitive_name": "room_a_ramp",
+        "texture": "LMA_wall01",
+    }
+    assert paint_material_primitive.mutates_kmap is True
+    assert "selected authored primitive" in paint_material_primitive.authoring_context
+
     search_all = map_studio_tool_command_search("", limit=0)
     search_walkmesh = map_studio_tool_command_search("walkmesh", limit=5)
     search_v = map_studio_tool_command_search("snap vtx", limit=3)
@@ -1317,7 +1496,7 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     search_hold_v = map_studio_tool_command_search("hold V", limit=5)
     search_hold_j = map_studio_tool_command_search("hold J", limit=5)
 
-    assert len(search_all) >= 83
+    assert len(search_all) >= 85
     assert search_walkmesh
     assert search_walkmesh[0].key == "walkmesh"
     assert search_walkmesh[0].display_label == "WOK Paint [walkmesh]"
@@ -1325,6 +1504,8 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert any(result.key == "grid_snap" for result in search_grid)
     assert any(result.key == "triangulate_face" for result in search_triangulate_face)
     cube_search = next(result for result in search_all if result.key == "cube")
+    select_search = next(result for result in search_all if result.key == "select")
+    move_search = next(result for result in search_all if result.key == "move")
     universal_search = next(result for result in search_all if result.key == "universal_transform")
     vertex_snap_search = next(result for result in search_all if result.key == "vertex_snap")
     object_vertex_snap_search = next(result for result in search_all if result.key == "object_vertex_snap")
@@ -1335,6 +1516,8 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert "KMAP" in cube_search.resource_impacts
     assert "WOK" in cube_search.resource_impacts
     assert "game proof" in cube_search.readiness_summary
+    assert select_search.capability_stage == "previewable"
+    assert move_search.capability_stage == "previewable"
     assert stage_search.capability_stage == "export_candidate"
     assert "ExportJob" in stage_search.resource_impacts
     assert ".mod" in stage_search.resource_impacts
@@ -1354,6 +1537,70 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert level_snap_search.shortcut_sequence == "J"
     assert level_snap_search.shortcut_behavior == "hold_modifier"
     assert all(result.implemented for result in search_all)
+
+
+def test_t2910_select_and_move_are_first_class_dispatcher_commands() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_tool_action_dispatch import (
+        MapStudioToolActionContext,
+        execute_map_studio_tool_belt_action,
+    )
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K1")
+    execute_map_studio_tool_belt_action(
+        controller,
+        "blockout_room",
+        MapStudioToolActionContext(module_root="grselmv"),
+    )
+    primitive = next(row for row in controller.authored_room_primitive_transforms() if row.primitive_type != "plane")
+    before_translation = tuple(float(value) for value in primitive.translation)
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "select",
+        MapStudioToolActionContext(
+            room_resref=primitive.room_resref,
+            primitive_name=primitive.primitive_name,
+        ),
+    )
+
+    selection = controller.map_studio_active_selection()
+    assert selection["selection_kind"] == "composition_primitive"
+    assert selection["room_resref"] == primitive.room_resref
+    assert selection["primitive_name"] == primitive.primitive_name
+    assert controller.command_history.undo_label == f"Select {primitive.primitive_name}"
+    assert controller.command_history.undo_stack[-1].stale_outputs == ()
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "move",
+        MapStudioToolActionContext(
+            room_resref=primitive.room_resref,
+            primitive_name=primitive.primitive_name,
+            move_delta=(0.5, 0.0, 0.0),
+        ),
+    )
+
+    moved = next(
+        row
+        for row in controller.authored_room_primitive_transforms()
+        if row.primitive_name == primitive.primitive_name
+    )
+    assert moved.translation[0] == before_translation[0] + 0.5
+    assert moved.translation[1:] == before_translation[1:]
+    assert controller.command_history.undo_label == f"Move primitive {primitive.primitive_name}"
+    assert controller.command_history.undo_stack[-1].stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+
+    controller.undo_map_studio_command()
+    restored = next(
+        row
+        for row in controller.authored_room_primitive_transforms()
+        if row.primitive_name == primitive.primitive_name
+    )
+    assert restored.translation == before_translation
 
 
 def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(tmp_path) -> None:
@@ -1413,6 +1660,23 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
 
     execute_map_studio_tool_belt_action(
         controller,
+        "floor",
+        MapStudioToolActionContext(primitive_name="belt_floor"),
+    )
+
+    floor_after = controller.authored_room_primitive_transforms()
+    assert len(floor_after) == before_count + 1
+    assert floor_after[-1].primitive_type == "plane"
+    assert floor_after[-1].primitive_name == "belt_floor"
+    assert floor_after[-1].supports_walkmesh_surface is True
+    assert controller.command_history.undo_label == "Add floor primitive"
+
+    controller.undo_map_studio_command()
+
+    assert len(controller.authored_room_primitive_transforms()) == before_count
+
+    execute_map_studio_tool_belt_action(
+        controller,
         "primitive",
         MapStudioToolActionContext(primitive_kind="wall", primitive_name="belt_wall"),
     )
@@ -1426,6 +1690,48 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     controller.undo_map_studio_command()
 
     assert len(controller.authored_room_primitive_transforms()) == before_count
+
+    empty_controller = ModuleEditorController()
+    empty_controller.new_project(name="grfresh1", game="K1")
+
+    execute_map_studio_tool_belt_action(
+        empty_controller,
+        "floor",
+        MapStudioToolActionContext(module_root="grfresh1", primitive_name="fresh_floor"),
+    )
+
+    fresh_payload = empty_controller.project.extra_sections["authored_module"]
+    fresh_primitives = empty_controller.authored_room_primitive_transforms()
+    assert empty_controller.project.name == "grfresh1"
+    assert fresh_payload["module_root"] == "grfresh1"
+    assert fresh_payload["rooms"][0]["primitive"]["type"] == "composition"
+    assert fresh_payload["rooms"][0]["primitive"]["metadata"]["preset_id"] == "composition_starter_room"
+    fresh_floor = next(row for row in fresh_primitives if row.primitive_name == "fresh_floor")
+    assert fresh_floor.primitive_type == "plane"
+    assert fresh_floor.supports_walkmesh_surface is True
+    assert empty_controller.command_history.undo_label == "Add floor primitive"
+    assert empty_controller.command_history.undo_stack[-1].metadata["auto_created_module"] is True
+    assert empty_controller.command_history.undo_stack[-1].stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+
+    empty_controller.undo_map_studio_command()
+
+    assert empty_controller.project.extra_sections.get("authored_module") is None
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "blockout_room",
+        MapStudioToolActionContext(module_root="grbelt_block"),
+    )
+
+    assert controller.project.name == "grbelt_block"
+    blockout_payload = controller.project.extra_sections["authored_module"]
+    assert blockout_payload["rooms"][0]["primitive"]["type"] == "composition"
+    assert blockout_payload["rooms"][0]["primitive"]["metadata"]["preset_id"] == "composition_starter_room"
+    assert controller.command_history.undo_label == "Create authored module grbelt_block"
+
+    controller.undo_map_studio_command()
+
+    assert controller.project.name == "grbelt01"
 
     execute_map_studio_tool_belt_action(
         controller,
@@ -1475,6 +1781,8 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert launch_missing.ready is False
     assert "Stage or install" in " ".join(launch_missing.blocking_messages)
     assert launch_missing.warp_command == "warp grterrain"
+    assert launch_missing.package_resource_inventory == {}
+    assert "No package resource inventory" in launch_missing.package_resource_summary
     assert controller.command_history.undo_label == "Create authored module grterrain"
 
     proof_missing = execute_map_studio_tool_belt_action(controller, "record_proof")
@@ -1498,6 +1806,9 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert stage_result.export_result.code == "export_candidate"
     assert stage_result.export_result.module_path.endswith(".mod")
     assert "game-tested" not in stage_result.message.lower()
+    staged_payload = controller.project.extra_sections["authored_module"]
+    assert staged_payload["package_resource_inventory"]["module_root"] == "grterrain"
+    assert staged_payload["package_resource_inventory"]["readback_ok"] is True
     assert controller.command_history.undo_label == "Stage authored module grterrain"
 
     launch_ready = execute_map_studio_tool_belt_action(controller, "launch_handoff")
@@ -1508,6 +1819,10 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert launch_ready.warp_command == "warp grterrain"
     assert launch_ready.proof_manifest_path == stage_result.proof_manifest_path
     assert launch_ready.launch_helper_command == stage_result.launch_helper_command
+    assert launch_ready.package_resource_inventory["module_root"] == "grterrain"
+    assert launch_ready.package_resource_inventory["readback_ok"] is True
+    assert "9 required runtime resource" in launch_ready.package_resource_summary
+    assert "0 missing" in launch_ready.package_resource_summary
     assert launch_ready.capability_stage == "installed_for_game_test_handoff"
     assert "screenshot or video proof" in launch_ready.next_action
     assert controller.command_history.undo_label == "Stage authored module grterrain"
@@ -1519,6 +1834,8 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert proof_ready.game == "K1"
     assert proof_ready.warp_command == "warp grterrain"
     assert proof_ready.proof_manifest_path == stage_result.proof_manifest_path
+    assert proof_ready.package_resource_inventory == launch_ready.package_resource_inventory
+    assert proof_ready.package_resource_summary == launch_ready.package_resource_summary
     assert proof_ready.capability_stage == "installed_for_game_test_recording_handoff"
     assert "screenshot or video evidence" in proof_ready.summary
     assert controller.command_history.undo_label == "Stage authored module grterrain"
@@ -1538,6 +1855,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
             proof_player_spawns_on_floor=True,
             proof_test_placeable_visible=True,
             proof_player_can_walk_on_floor=True,
+            proof_transition_pathing_sanity_confirmed=True,
             proof_no_inherited_base_game_geometry_or_scripted_movers=True,
         ),
     )
@@ -1793,7 +2111,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert controller.command_history.undo_label == f"Inset {inset_room.room_resref}"
 
     controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grdupsp")
-    primitive_before = controller.authored_room_primitive_transforms()[0]
+    primitive_before = next(row for row in controller.authored_room_primitive_transforms() if row.primitive_type != "plane")
     count_before = len(controller.authored_room_primitive_transforms())
 
     execute_map_studio_tool_belt_action(
@@ -1856,6 +2174,41 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     restored_duplicate_metadata = controller.project.extra_sections["authored_module"]["rooms"][0]["primitive"]["metadata"]
     assert "duplicate_special_batches" not in restored_duplicate_metadata
 
+    controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grdupsel")
+    selected_before = next(row for row in controller.authored_room_primitive_transforms() if row.primitive_type != "plane")
+    selected_count_before = len(controller.authored_room_primitive_transforms())
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "duplicate_selected",
+        MapStudioToolActionContext(room_resref=selected_before.room_resref, primitive_name=selected_before.primitive_name),
+    )
+
+    selected_after_duplicate = controller.authored_room_primitive_transforms()
+    duplicate_selected_name = f"{selected_before.primitive_name}_dup_01"[:32]
+    duplicate_selected_item = next(item for item in selected_after_duplicate if item.primitive_name == duplicate_selected_name)
+
+    assert len(selected_after_duplicate) == selected_count_before + 1
+    assert duplicate_selected_item.translation[0] == selected_before.translation[0] + 1.0
+    assert controller.command_history.undo_label == f"Duplicate primitive {selected_before.primitive_name}"
+    assert controller.command_history.undo_stack[-1].stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "delete_selected",
+        MapStudioToolActionContext(room_resref=duplicate_selected_item.room_resref, primitive_name=duplicate_selected_item.primitive_name),
+    )
+
+    names_after_delete = {item.primitive_name for item in controller.authored_room_primitive_transforms()}
+
+    assert duplicate_selected_name not in names_after_delete
+    assert len(names_after_delete) == selected_count_before
+    assert controller.command_history.undo_label == f"Remove primitive {duplicate_selected_name}"
+
+    controller.undo_map_studio_command()
+
+    assert duplicate_selected_name in {item.primitive_name for item in controller.authored_room_primitive_transforms()}
+
     controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grwokrm")
     wok_room = controller.authored_floor_plan_room_choices()[0]
 
@@ -1868,6 +2221,26 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     painted_room_payload = controller.project.extra_sections["authored_module"]["rooms"][0]
     assert painted_room_payload["primitive"]["floor_surface_id"] == 10
     assert controller.command_history.undo_label == f"Style {wok_room.room_resref}"
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "paint_material",
+        MapStudioToolActionContext(
+            room_resref=wok_room.room_resref,
+            metadata={"texture": "LMA_wall01", "floor_surface": "metal"},
+        ),
+    )
+
+    material_room_payload = controller.project.extra_sections["authored_module"]["rooms"][0]
+    assert material_room_payload["primitive"]["material"]["texture"] == "LMA_wall01"
+    assert material_room_payload["primitive"]["floor_surface_id"] == 10
+    assert controller.command_history.undo_label == f"Style {wok_room.room_resref}"
+    assert controller.command_history.undo_stack[-1].stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+
+    controller.undo_map_studio_command()
+
+    restored_material_room_payload = controller.project.extra_sections["authored_module"]["rooms"][0]
+    assert restored_material_room_payload["primitive"]["floor_surface_id"] == 10
 
     controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grwokpr")
     wok_primitive = next(row for row in controller.authored_room_primitive_transforms() if row.supports_walkmesh_surface)
@@ -1897,6 +2270,31 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
         row for row in controller.authored_room_primitive_transforms() if row.primitive_name == wok_primitive.primitive_name
     )
     assert restored_primitive.surface_id == before_surface_id
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "paint_material",
+        MapStudioToolActionContext(
+            room_resref=wok_primitive.room_resref,
+            primitive_name=wok_primitive.primitive_name,
+            metadata={"texture": "LMA_wall02"},
+        ),
+    )
+
+    material_primitive = next(
+        row for row in controller.authored_room_primitive_transforms() if row.primitive_name == wok_primitive.primitive_name
+    )
+    assert material_primitive.texture == "LMA_wall02"
+    assert material_primitive.surface_id == before_surface_id
+    assert controller.command_history.undo_label == f"Style primitive {wok_primitive.primitive_name}"
+    assert controller.command_history.undo_stack[-1].stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+
+    controller.undo_map_studio_command()
+
+    restored_material_primitive = next(
+        row for row in controller.authored_room_primitive_transforms() if row.primitive_name == wok_primitive.primitive_name
+    )
+    assert restored_material_primitive.surface_id == before_surface_id
 
     try:
         execute_map_studio_tool_belt_action(
@@ -2155,7 +2553,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
 
     controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grsep01")
     separate_source_rows = controller.authored_room_primitive_transforms()
-    separate_source = separate_source_rows[0]
+    separate_source = next(row for row in separate_source_rows if row.primitive_type != "plane")
     separate_source_count = len(separate_source_rows)
 
     execute_map_studio_tool_belt_action(
@@ -2174,7 +2572,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert separated_payload["rooms"][1]["room_resref"] == "grsepwall"
     assert separated_payload["rooms"][1]["metadata"]["last_operation"] == "separate_composition_primitive"
     assert separated_payload["rooms"][1]["metadata"]["separated_primitive"] == separate_source.primitive_name
-    assert len(controller.authored_room_primitive_transforms()) == separate_source_count
+    assert len(controller.authored_room_primitive_transforms()) == separate_source_count + 1
     assert controller.command_history.undo_label == f"Separate primitive {separate_source.primitive_name}"
 
     controller.undo_map_studio_command()
@@ -2631,6 +3029,49 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert "map_studio_curve_guides" not in restored_curve_payload.get("extra", {})
 
 
+def test_t2911_visible_paint_wok_round_trips_required_surface_intent() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_tool_action_dispatch import (
+        MapStudioToolActionContext,
+        execute_map_studio_tool_belt_action,
+    )
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    expected = {
+        "walkable": (4, "STONE"),
+        "non_walk": (7, "NON_WALK"),
+        "door transition": (18, "DOOR"),
+        "water": (6, "WATER"),
+        "grass": (3, "GRASS"),
+        "metal": (10, "METAL"),
+        "visual only": (8, "TRANSPARENT"),
+    }
+    controller = ModuleEditorController()
+    controller.new_project(name="surface_vocab", game="K1")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grsurf01")
+    room = controller.authored_floor_plan_room_choices()[0]
+
+    for alias, (surface_id, surface_name) in expected.items():
+        result = execute_map_studio_tool_belt_action(
+            controller,
+            "paint_wok",
+            MapStudioToolActionContext(room_resref=room.room_resref, metadata={"surface_id": alias}),
+        )
+        payload = controller.project.extra_sections["authored_module"]
+        primitive = payload["rooms"][0]["primitive"]
+        choice = controller.authored_walkmesh_room_surface_choices()[0]
+
+        assert primitive["floor_surface_id"] == surface_id
+        assert choice.floor_surface_id == surface_id
+        assert choice.floor_surface_name == surface_name
+        assert payload["game_tested"] is False
+        assert payload["runtime_resources"] == []
+        assert controller.command_history.undo_label == f"Style {room.room_resref}"
+        assert controller.command_history.undo_stack[-1].stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+        assert result.readiness is not None
+
+
 def test_t2606_center_pivot_preserves_visible_primitive_bounds() -> None:
     _install_native_payload_paths()
 
@@ -2999,6 +3440,75 @@ def test_t2606_object_grid_snap_moves_primitive_pivot_to_grid() -> None:
         if row.room_resref == cube.room_resref
     }["snap_cube"]
     assert restored.translation == (1.12, 2.37, 0.49)
+
+
+def test_t2606_object_move_and_grid_snap_preserve_authored_floor_transform() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.authored_room_composition import compile_authored_room_composition
+    from src.core.modules.map_studio_tool_action_dispatch import (
+        MapStudioToolActionContext,
+        execute_map_studio_tool_belt_action,
+    )
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grfloormv", game="K1")
+    execute_map_studio_tool_belt_action(
+        controller,
+        "floor",
+        MapStudioToolActionContext(module_root="grfloormv", primitive_name="floor_move"),
+    )
+    floor = next(row for row in controller.authored_room_primitive_transforms() if row.primitive_name == "floor_move")
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "move",
+        MapStudioToolActionContext(
+            room_resref=floor.room_resref,
+            primitive_name=floor.primitive_name,
+            move_delta=(0.13, 0.27, 0.0),
+        ),
+    )
+
+    moved = next(row for row in controller.authored_room_primitive_transforms() if row.primitive_name == "floor_move")
+    assert moved.translation == (0.13, 0.27, 0.0)
+    assert controller.command_history.undo_label == "Move primitive floor_move"
+    moved_payload = controller.project.extra_sections["authored_module"]
+    moved_floor_payload = moved_payload["rooms"][0]["primitive"]["floor"]
+    assert moved_floor_payload["transform"]["translation"] == [0.13, 0.27, 0.0]
+
+    round_trip = authored_project_from_kmap_payload(moved_payload)
+    geometry = compile_authored_room_composition(round_trip.rooms[0].primitive)
+    assert geometry.room_mesh.metadata["transform"]["translation"] == [0.13, 0.27, 0.0]
+    half_width = float(moved_floor_payload["width"]) * 0.5
+    assert geometry.wok.verts[0][0] < 0.0
+    assert round(float(geometry.wok.verts[0][0]) + half_width, 2) == 0.13
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "object_grid_snap",
+        MapStudioToolActionContext(
+            room_resref=floor.room_resref,
+            primitive_name=floor.primitive_name,
+            grid_size=0.1,
+            snap_axes=("x", "y", "z"),
+        ),
+    )
+
+    snapped = next(row for row in controller.authored_room_primitive_transforms() if row.primitive_name == "floor_move")
+    assert tuple(round(float(value), 2) for value in snapped.translation) == (0.1, 0.3, 0.0)
+    assert controller.command_history.undo_label == "Object grid snap floor_move"
+    snap_metadata = controller.project.extra_sections["authored_module"]["rooms"][0]["primitive"]["metadata"]
+    assert snap_metadata["last_operation"] == "object_grid_snap_primitive"
+    assert [round(float(value), 2) for value in snap_metadata["old_translation"]] == [0.13, 0.27, 0.0]
+    assert [round(float(value), 2) for value in snap_metadata["new_translation"]] == [0.1, 0.3, 0.0]
+
+    controller.undo_map_studio_command()
+
+    restored = next(row for row in controller.authored_room_primitive_transforms() if row.primitive_name == "floor_move")
+    assert restored.translation == (0.13, 0.27, 0.0)
 
 
 def test_t2606_object_vertex_snap_moves_primitive_pivot_to_target_vertex() -> None:
@@ -3448,8 +3958,118 @@ def test_t2606_object_mirror_reflects_primitive_placement() -> None:
     assert restored.rotation_degrees_z == 30.0
 
 
+def test_t2600_visible_authoring_loop_from_floor_to_export_candidate(tmp_path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_tool_action_dispatch import (
+        MapStudioToolActionContext,
+        execute_map_studio_tool_belt_action,
+    )
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grloop01", game="K1")
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "floor",
+        MapStudioToolActionContext(module_root="grloop01", primitive_name="loop_floor"),
+    )
+
+    payload = controller.project.extra_sections["authored_module"]
+    assert payload["module_root"] == "grloop01"
+    assert payload["rooms"][0]["primitive"]["type"] == "composition"
+    assert payload["rooms"][0]["primitive"]["metadata"]["preset_id"] == "composition_starter_room"
+    floor_row = next(row for row in controller.authored_room_primitive_transforms() if row.primitive_name == "loop_floor")
+    assert floor_row.primitive_type == "plane"
+    assert floor_row.supports_walkmesh_surface is True
+    assert controller.command_history.undo_label == "Add floor primitive"
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "paint_wok",
+        MapStudioToolActionContext(
+            room_resref=floor_row.room_resref,
+            primitive_name=floor_row.primitive_name,
+            metadata={"surface_id": "metal", "supports_walkmesh_surface": True},
+        ),
+    )
+    execute_map_studio_tool_belt_action(
+        controller,
+        "paint_material",
+        MapStudioToolActionContext(
+            room_resref=floor_row.room_resref,
+            primitive_name=floor_row.primitive_name,
+            metadata={"texture": "LMA_floor01"},
+        ),
+    )
+    execute_map_studio_tool_belt_action(
+        controller,
+        "entry_point",
+        MapStudioToolActionContext(
+            entry_area_resref="grloop01",
+            entry_position=(0.0, 0.0, 0.05),
+            entry_facing=0.0,
+        ),
+    )
+
+    styled_floor = next(row for row in controller.authored_room_primitive_transforms() if row.primitive_name == "loop_floor")
+    assert styled_floor.texture == "LMA_floor01"
+    assert styled_floor.surface_name.lower() == "metal"
+    assert controller.command_history.undo_stack[-1].stale_outputs == ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
+
+    issues = execute_map_studio_tool_belt_action(controller, "validate")
+    issue_codes = {str(getattr(issue, "code", "")) for issue in issues}
+    error_codes = {
+        str(getattr(issue, "code", ""))
+        for issue in issues
+        if str(getattr(issue, "severity", "")).lower() == "error"
+    }
+    assert "MAP_STUDIO_READINESS_BLOCKER" not in issue_codes
+    assert error_codes == set()
+
+    preview_readiness = controller.authored_module_readiness().readiness
+    assert preview_readiness.can_preview is True
+    assert preview_readiness.can_export_candidate is False
+    assert preview_readiness.blocking_messages == ()
+
+    stage_result = execute_map_studio_tool_belt_action(
+        controller,
+        "stage_module",
+        MapStudioToolActionContext(export_output_dir=str(tmp_path), export_dry_run=True),
+    )
+
+    assert stage_result.ok is True
+    assert stage_result.code == "dry_run"
+    assert stage_result.export_result is not None
+    assert stage_result.export_result.code == "export_candidate"
+    staged_payload = controller.project.extra_sections["authored_module"]
+    assert staged_payload["pack_manifest_path"] == stage_result.export_result.manifest_path
+    assert staged_payload["proof_manifest_path"] == stage_result.proof_manifest_path
+    assert staged_payload["package_resource_inventory"]["readback_ok"] is True
+    assert {"grloop01.lyt", "grloop01.vis", "grloop01.pth", "grloop01_room01.wok"} <= set(
+        staged_payload["runtime_resources"]
+    )
+
+    export_readiness = controller.authored_module_readiness().readiness
+    assert export_readiness.capability_stage == "export_candidate"
+    assert export_readiness.can_export_candidate is True
+    assert export_readiness.metadata["package_manifest_evidence"]["ready"] is True
+    assert export_readiness.metadata["package_manifest_evidence"]["missing"] == []
+
+    manifest = json.loads(Path(stage_result.export_result.manifest_path).read_text(encoding="utf-8"))
+    authored_manifest = manifest["map_studio_authored_module"]
+    assert authored_manifest["module_root"] == "grloop01"
+    assert authored_manifest["content_origin"] == "map_studio_original"
+    assert authored_manifest["authored_from_scratch"] is True
+    assert authored_manifest["rooms"][0]["wok_walkable_faces"] > 0
+    assert authored_manifest["pathing"]["walkmesh_component_count"] == 1
+    assert authored_manifest["visibility"]["ready"] is True
+
+
 def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -> None:
     window_source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
+    chrome_source = _read("native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/window_chrome.py")
     scene_dispatcher = _read("native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_tool_action_dispatch.py")
     tools_dispatcher = _read("native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_tool_action_dispatch.py")
     scene_overlay = _read("native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_universal_transform_overlay.py")
@@ -3486,6 +4106,25 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert "Hold V Object Vertex Snap" in scene_dispatcher
     assert "Hold V Object Vertex Snap" in tools_dispatcher
     assert '"duplicate_special",' in window_source
+    assert '"duplicate_selected",' in chrome_source
+    assert '"delete_selected",' in chrome_source
+    assert '"paint_material",' in chrome_source
+    assert '"paint_wok",' in chrome_source
+    assert 'execute("duplicate_selected")' in chrome_source
+    assert 'execute("delete_selected")' in chrome_source
+    assert '"duplicate_selected",' in scene_catalog
+    assert '"delete_selected",' in scene_catalog
+    assert 'MapStudioToolBeltAction(\n        "floor",' in scene_catalog
+    assert 'MapStudioToolBeltAction(\n        "paint_material",' in scene_catalog
+    assert 'MapStudioToolBeltAction(\n        "split",' in scene_catalog
+    assert '"duplicate_selected",' in tools_catalog
+    assert '"delete_selected",' in tools_catalog
+    assert 'MapStudioToolBeltAction(\n        "floor",' in tools_catalog
+    assert 'MapStudioToolBeltAction(\n        "paint_material",' in tools_catalog
+    assert 'MapStudioToolBeltAction(\n        "split",' in tools_catalog
+    assert 'if key == "paint_material":' in scene_dispatcher
+    assert 'if key == "paint_material":' in tools_dispatcher
+    assert 'metadata["texture"] = texture' in window_source
     assert '"shrink_wrap",' in window_source
     assert '"create_room",' in window_source
     assert '"corridor",' in window_source
@@ -3495,6 +4134,8 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert '"validate",' in window_source
     assert '"primitive",' in window_source
     assert '"cut",' in window_source
+    assert '"split",' in window_source
+    assert '"split",' in chrome_source
     assert '"opening_marker",' in window_source
     assert '"mirror_z",' in window_source
     assert '"bend_tool",' in window_source
@@ -3567,6 +4208,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="inset_authored_floor_plan_room"' in source
         assert 'command_method="rectangular_cut_authored_floor_plan_room"' in source
         assert 'command_method="axis_split_authored_floor_plan_room"' in source
+        assert 'key in {"cut", "split", "cut_slice_insert_edges", "insert_edge_loop"}' in source
         assert 'command_method="boolean_difference_authored_floor_plan_rooms"' in source
         assert 'command_method="fill_authored_floor_plan_face"' in source
         assert 'command_method="triangulate_authored_floor_plan_face"' in source

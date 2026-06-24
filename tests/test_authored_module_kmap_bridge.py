@@ -139,6 +139,33 @@ def test_t2684_kmap_bridge_reports_installed_authored_module_proof_state() -> No
     assert "Run the launch helper dry-run" in readiness.next_action
 
 
+def test_t3104_kmap_bridge_passes_package_inventory_to_readiness() -> None:
+    _install_native_payload_paths()
+
+    from src.core.level import new_kmap_project
+    from src.core.modules.authored_module_kmap_bridge import build_kmap_authored_module_readiness
+
+    project = new_kmap_project(name="grdev01", game="K1")
+    payload = _authored_payload(_runtime_resources())
+    payload["proof_manifest_path"] = "C:/tmp/grdev01_authored_module_game_manifest.json"
+    payload["package_resource_inventory"] = {
+        "schema": "ghostrigger.map_studio.package_resource_inventory.v1",
+        "module_root": "grdev01",
+        "readback_ok": True,
+        "required_runtime_resources": [{"resref": "grdev01", "restype": "are"}],
+        "missing_required_runtime_resources": [],
+        "resource_groups": {"verified_archive_resource_count": 9, "loose_staged_resource_count": 9},
+        "install": {"installed": False, "dry_run": False},
+    }
+    project.extra_sections["authored_module"] = payload
+
+    readiness = build_kmap_authored_module_readiness(project).readiness
+
+    assert readiness is not None
+    assert readiness.metadata["package_resource_inventory"]["module_root"] == "grdev01"
+    assert readiness.metadata["package_resource_inventory"]["readback_ok"] is True
+
+
 def test_t2642_dev_test_payload_roundtrips_placeable_and_waypoint() -> None:
     _install_native_payload_paths()
 

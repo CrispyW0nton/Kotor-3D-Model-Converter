@@ -13,9 +13,12 @@ from typing import Optional
 
 from PySide6 import QtGui
 
+from src.gui.libtheme.icon_manager import ThemeIconManager
+
 
 ICONS_DIR = Path(__file__).resolve().parents[1] / "icons"
 _cache: dict[str, QtGui.QIcon] = {}
+_fallback_icons = ThemeIconManager(ICONS_DIR)
 
 
 class I:
@@ -192,7 +195,7 @@ def get(name: str, size: int = 16) -> QtGui.QIcon:
     path = ICONS_DIR / f"{name}_{size}.png"
     if not path.exists():
         path = ICONS_DIR / f"{name}_24.png"
-    icon = QtGui.QIcon(str(path)) if path.exists() else QtGui.QIcon()
+    icon = QtGui.QIcon(str(path)) if path.exists() else _fallback_icons.icon(name, None, size)
     _cache[key] = icon
     return icon
 
@@ -217,7 +220,7 @@ def icon_for_label(label: str, size: int = 16) -> QtGui.QIcon:
         if key.startswith(pattern) and len(pattern) > best_len:
             best_icon = icon_name
             best_len = len(pattern)
-    return get(best_icon, size) if best_icon else QtGui.QIcon()
+    return get(best_icon, size) if best_icon else _fallback_icons.icon(key, None, size)
 
 
 def action_icon_kwargs(label: str, size: int = 16) -> dict:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 
@@ -8,6 +9,22 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _read(rel: str) -> str:
     return (ROOT / rel).read_text(encoding="utf-8")
+
+
+def _install_native_payload_paths() -> None:
+    for rel in reversed(
+        (
+            "native/GhostRigger.Core.Scene/Python",
+            "native/GhostRigger.Core.Tools/Python",
+            "native/GhostRigger.Core.Resources/Python",
+            "native/GhostRigger.Core.Math/Python",
+            "native/GhostRigger.Core.Rendering/Python",
+            ".",
+        )
+    ):
+        path = str((ROOT / rel).resolve())
+        if path not in sys.path:
+            sys.path.insert(0, path)
 
 
 def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
@@ -38,6 +55,7 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "mapStudioWorkflowScriptsLabel" in panel_source
     assert "mapStudioWorkflowValidationLabel" in panel_source
     assert "mapStudioWorkflowExportLabel" in panel_source
+    assert "mapStudioWorkflowExportJobLabel" in panel_source
     assert "mapStudioWorkflowProofLabel" in panel_source
     assert "mapStudioWorkflowNewKmapButton" in panel_source
     assert "mapStudioWorkflowOpenKmapButton" in panel_source
@@ -119,6 +137,12 @@ def test_t2600_map_studio_workflow_panel_surfaces_editor_spine() -> None:
     assert "Capability: Installed test build" in panel_source
     assert "Capability: Staged test build" in panel_source
     assert "Capability: Game-tested" in panel_source
+    assert "def _export_job_text" in panel_source
+    assert "ExportJob: Ready to stage; no package transaction recorded yet." in panel_source
+    assert "preflight ready" in panel_source
+    assert "package written" in panel_source
+    assert "readback OK" in panel_source
+    assert "game smoke tested" in panel_source
     assert "Required resources missing" in panel_source
     assert "generate or stage these module files before export/install" in panel_source
     assert "Geometry authoring" in panel_source
@@ -724,11 +748,18 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "self.builder_tab.moduleEntryPointRequested.connect(self.set_authored_module_entry_point)" in window_source
     assert "self.builder_tab.set_module_entry_point(self.controller.authored_module_entry_point())" in window_source
     assert "self.builder_tab.set_terrain_brushes(self.controller.available_map_studio_terrain_brushes())" in window_source
+    assert "Create grgold01 Golden Proof Module" in builder_source
+    assert "Create grgold01 Golden Proof Module" in builder_mirror_source
+    assert 'if action == "Create grgold01 Golden Proof Module":' in window_source
+    assert "self.controller.create_golden_test_authored_module()" in window_source
+    assert "door transition intent, and NPC" in window_source
     assert "def _focus_map_studio_entry_point_controls" in window_source
     assert "def _focus_map_studio_opening_marker_controls" in window_source
     assert "def _map_studio_export_dry_run_enabled" in window_source
     assert "def _ensure_map_studio_export_output_dir" in window_source
     assert "def _ensure_map_studio_game_modules_dir" in window_source
+    assert "def _open_map_studio_package_wizard" in window_source
+    assert "Map Studio package command canceled before any files were written." in window_source
     assert "def _map_studio_authored_module_root_for_install" in window_source
     assert "def _focus_map_studio_export_proof_workspace" in window_source
     assert "def set_authored_module_entry_point" in window_source
@@ -916,6 +947,25 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "mapStudioToolContextMenuCurrentBeltMenu" in window_source
     assert "mapStudioToolContextMenuSearchResultsMenu" in window_source
     assert "def _open_map_studio_tool_context_menu" in window_source
+    assert "mapStudioModeMarkingMenu" in window_source
+    assert "mapStudioModeMarkingButton_object" in window_source
+    assert "mapStudioModeMarkingButton_vertex" in window_source
+    assert "mapStudioModeMarkingButton_edge" in window_source
+    assert "mapStudioModeMarkingButton_face" in window_source
+    assert "mapStudioModeMarkingButton_select" in window_source
+    assert "mapStudioToolMarkingMenu" in window_source
+    assert "mapStudioToolMarkingQuickButton_extrude" in window_source
+    assert "mapStudioToolMarkingQuickButton_bridge" in window_source
+    assert "mapStudioToolMarkingQuickButton_cut" in window_source
+    assert "mapStudioToolMarkingQuickButton_weld" in window_source
+    assert "mapStudioToolMarkingQuickButton_fill_hole" in window_source
+    assert "mapStudioToolMarkingQuickButton_bevel" in window_source
+    assert "mapStudioToolMarkingTerrainBrushesMenu" in window_source
+    assert "mapStudioToolMarkingUvMappingMenu" in window_source
+    assert "mapStudioToolMarkingPlannedMenu" in window_source
+    assert "def _build_map_studio_mode_marking_menu" in window_source
+    assert "def _build_map_studio_tool_marking_menu" in window_source
+    assert "def _run_map_studio_mode_marking_action" in window_source
     assert "def _add_map_studio_context_menu_action" in window_source
     assert "self.map_studio_tool_belt_widget.customContextMenuRequested.connect" in window_source
     assert "self.map_studio_custom_tool_belt_widget.customContextMenuRequested.connect" in window_source
@@ -1033,6 +1083,7 @@ def test_t2601_map_studio_builder_exposes_modeling_mode_and_snap_palette() -> No
         assert '"vertex"' in source
         assert '"edge"' in source
         assert '"face"' in source
+        assert '"terrain"' in source
         assert '"walkmesh"' in source
         assert "Weld Vertices" in source
         assert "Bridge" in source
@@ -1051,11 +1102,12 @@ def test_t2601_map_studio_builder_exposes_modeling_mode_and_snap_palette() -> No
         assert "available_map_studio_modeling_tools" in source
         assert "available_map_studio_snap_modes" in source
         assert "map_studio_modeling_tool_summary" in source
-        assert "Object, Vertex, Edge, Face, and Walkmesh" in source
+        assert "Object, Vertex, Edge, Face, Terrain, and Walkmesh" in source
         assert "snap vertices" in source
 
     for source in (builder_source, builder_mirror_source):
         assert "Modeling Mode + Snap" in source
+        assert "Object, Vertex, Edge, Face, Terrain, and Walkmesh" in source
         assert "mapStudioModelingModeGuideLabel" in source
         assert "mapStudioComponentModeComboBox" in source
         assert "mapStudioModelingToolComboBox" in source
@@ -1076,6 +1128,19 @@ def test_t2601_map_studio_builder_exposes_modeling_mode_and_snap_palette() -> No
     assert "self.builder_tab.modelingContextChanged.connect(self.workflow_panel.set_active_authoring_context)" in window_source
 
 
+def test_t2908_component_modes_include_terrain_as_visible_authoring_mode() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_modeling_tools import available_map_studio_component_modes
+
+    modes = available_map_studio_component_modes()
+    assert tuple(mode.label for mode in modes) == ("Object", "Vertex", "Edge", "Face", "Terrain", "Walkmesh")
+    assert tuple(mode.key for mode in modes) == ("object", "vertex", "edge", "face", "terrain", "walkmesh")
+    terrain = next(mode for mode in modes if mode.key == "terrain")
+    assert "heightfield" in terrain.description.lower()
+    assert "WOK" in terrain.kotor_guardrail
+
+
 def test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes() -> None:
     toolbar_source = _read(
         "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
@@ -1094,6 +1159,8 @@ def test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes() -> None:
         assert "EDIT_MODES" in source
         assert "mapStudioToolbarEditModeComboBox" in source
         assert "mapStudioToolbarViewModeComboBox" in source
+        assert '("generate_module_files", "Generate Module Files")' in source
+        assert 'button.setObjectName(f"mapStudioToolbarActionButton_{key}")' in source
         for mode in ("Object", "Vertex", "Edge", "Face", "Walkmesh", "Placement", "Terrain", "Export"):
             assert f'"{mode}"' in source
         assert "snap, weld, flatten, mirror, and cleanup" in source
@@ -1137,6 +1204,7 @@ def test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes() -> None:
     assert "def _refresh_map_studio_tool_index" in window_source
     assert "def _add_selected_map_studio_custom_tool" in window_source
     assert "str(action or \"\").startswith(\"tool_belt:\")" in window_source
+    assert '"generate_module_files": self.build_module_files' in window_source
     assert "self.toolbar.selectionModeChanged.connect(self._handle_map_studio_edit_mode_changed)" in window_source
     assert "def _handle_map_studio_edit_mode_changed" in window_source
     assert "def _sync_map_studio_tool_belt_preset_for_edit_mode" in window_source
@@ -1333,6 +1401,26 @@ def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
         "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/module_editor_viewport_panel.py"
     )
+    event_navigation_source = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/"
+        "viewport_core/widgets/event_navigation.py"
+    )
+    overlay_layers_source = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/"
+        "viewport_core/widgets/overlay_layers.py"
+    )
+    scene_models_source = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/"
+        "viewport_core/widgets/scene_models.py"
+    )
+    rendering_pipeline_source = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/"
+        "viewport_core/widgets/rendering_pipeline.py"
+    )
+    viewport_widget_source = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/"
+        "viewport_core/widgets/viewport_widget.py"
+    )
 
     for source in (sculpt_source, sculpt_mirror_source):
         assert "class MapStudioTerrainSculptFrame" in source
@@ -1379,6 +1467,30 @@ def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
         assert "Release while holding V to commit" in source
         assert "terrainBrushFrameRequested = QtCore.Signal(str, str, object)" in source
         assert "terrainBrushStrokeCommitted = QtCore.Signal(str, str)" in source
+        assert "terrainBrushOptionsChanged = QtCore.Signal(int, float)" in source
+        assert "modeMarkingMenuRequested = QtCore.Signal(QtCore.QPoint)" in source
+        assert "toolMarkingMenuRequested = QtCore.Signal(QtCore.QPoint)" in source
+        assert "roomPrimitiveRotated = QtCore.Signal(str, str, float)" in source
+        assert "roomPrimitiveScaled = QtCore.Signal(str, str, object)" in source
+        assert "transformGizmoModeChanged = QtCore.Signal(str)" in source
+        assert "undoShortcutRequested = QtCore.Signal()" in source
+        assert "redoShortcutRequested = QtCore.Signal()" in source
+        assert "deleteShortcutRequested = QtCore.Signal()" in source
+        assert "mapStudioViewportTranslateGizmoButton" in source
+        assert "mapStudioViewportRotateGizmoButton" in source
+        assert "mapStudioViewportScaleGizmoButton" in source
+        assert "def set_transform_gizmo_mode" in source
+        assert "def _handle_map_studio_shortcut_key" in source
+        assert "QtCore.Qt.Key_W" in source
+        assert "QtCore.Qt.Key_E" in source
+        assert "QtCore.Qt.Key_R" in source
+        assert "QtCore.Qt.Key_Z" in source
+        assert "QtCore.Qt.Key_Delete" in source
+        assert "QtCore.Qt.ShiftModifier" in source
+        assert "self.toolMarkingMenuRequested.emit" in source
+        assert "self.modeMarkingMenuRequested.emit" in source
+        assert "_gr_map_studio_viewport_input_handler" in source
+        assert "def _handle_map_studio_viewport_input_event" in source
         assert "mapStudioViewportTerrainBrushCheckBox" in source
         assert "def set_terrain_brush_interaction" in source
         assert "def _terrain_sample_at_event" in source
@@ -1386,6 +1498,16 @@ def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
         assert "def _begin_terrain_brush_drag" in source
         assert "def _update_terrain_brush_drag" in source
         assert "def _finish_terrain_brush_drag" in source
+        assert "def _begin_terrain_brush_option_drag" in source
+        assert "def _update_terrain_brush_option_drag" in source
+        assert "QtCore.Qt.AltModifier" in source
+        assert "_gr_map_studio_clean_viewport" in source
+        assert "def _sync_clean_viewport_presentation" in source
+        assert '"clean_display": True' in source
+        assert '"subtle_room_outlines": True' in source
+        assert '"show_room_guides": room_edit_active' in source
+        assert '"show_transform_dimensions": primitive_drag_active or self.transform_gizmo_mode() == "scale"' in source
+        assert '"show_terrain_brush": terrain_active' in source
 
     assert "terrainLiveBrushFrameRequested.connect(self.preview_map_studio_terrain_sculpt_frame)" in window_source
     assert "roomOutlinePointSnapPreviewRequested.connect(self.preview_authored_floor_plan_vertex_snap_candidates)" in window_source
@@ -1397,7 +1519,53 @@ def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
     assert "roomOutlinePointSnapped.connect(self.snap_authored_floor_plan_vertex)" in window_source
     assert "terrainBrushFrameRequested.connect(self.apply_map_studio_viewport_terrain_brush_frame)" in window_source
     assert "terrainBrushStrokeCommitted.connect(self.commit_map_studio_viewport_terrain_brush_stroke)" in window_source
+    assert "terrainBrushOptionsChanged.connect(self._set_map_studio_terrain_brush_options)" in window_source
+    assert "mapStudioUndoAction" in window_source
+    assert 'QtGui.QKeySequence("Ctrl+Z")' in window_source
+    assert "mapStudioRedoAction" in window_source
+    assert 'QtGui.QKeySequence("Ctrl+R")' in window_source
+    assert "mapStudioTranslateGizmoShortcut" in window_source
+    assert "mapStudioRotateGizmoShortcut" in window_source
+    assert "mapStudioScaleGizmoShortcut" in window_source
+    assert "mapStudioDeleteSelectionShortcut" in window_source
+    assert "roomPrimitiveRotated.connect(self._rotate_authored_room_primitive)" in window_source
+    assert "roomPrimitiveScaled.connect(self._scale_authored_room_primitive)" in window_source
+    assert "transformGizmoModeChanged.connect(self._handle_map_studio_transform_gizmo_mode_changed)" in window_source
+    assert "undoShortcutRequested.connect(self.undo_map_studio_command)" in window_source
+    assert "redoShortcutRequested.connect(self.redo_map_studio_command)" in window_source
+    assert "deleteShortcutRequested.connect(self.delete_map_studio_current_selection)" in window_source
+    assert "def delete_map_studio_current_selection" in window_source
+    assert "def _refresh_map_studio_selected_primitive_transform_overlay" in window_source
+    assert "def _handle_map_studio_transform_gizmo_mode_changed" in window_source
+    assert "modeMarkingMenuRequested.connect(self._open_map_studio_mode_marking_menu)" in window_source
+    assert "toolMarkingMenuRequested.connect(self._open_map_studio_tool_marking_menu)" in window_source
+    assert "_gr_map_studio_viewport_input_handler" in event_navigation_source
+    assert "map_studio_handler(event, obj)" in event_navigation_source
+    assert "QtCore.QEvent.KeyPress" in event_navigation_source
+    assert "_map_studio_transform_gizmo_mode" in overlay_layers_source
+    assert 'mode == "rotate"' in overlay_layers_source
+    assert 'mode == "scale"' in overlay_layers_source
+    assert "def _map_studio_clean_viewport_enabled" in overlay_layers_source
+    assert "def _map_studio_presentation_flag" in overlay_layers_source
+    assert '"show_room_guides"' in overlay_layers_source
+    assert '"show_room_vertex_handles"' in overlay_layers_source
+    assert '"show_transform_dimensions"' in overlay_layers_source
+    assert '"show_terrain_walkability"' in overlay_layers_source
+    assert '"show_terrain_brush"' in overlay_layers_source
+    assert '"show_placement_guides"' in overlay_layers_source
+    assert "subtle_primitive_handles" in overlay_layers_source
+    assert "_gr_suppress_renderer_diagnostics" in overlay_layers_source
+    assert "set_map_studio_viewport_presentation" in scene_models_source
+    assert "def _map_studio_should_hide_empty_scene_label" in scene_models_source
+    assert 'self.canvas.setText("" if self._map_studio_should_hide_empty_scene_label() else "Empty Scene")' in scene_models_source
+    assert "setText(\"\")" in scene_models_source
+    assert "_map_studio_viewport_presentation" in viewport_widget_source
+    assert "_map_studio_universal_transform_overlay = None" in viewport_widget_source
+    assert "_gr_suppress_renderer_diagnostics" in rendering_pipeline_source
+    assert "self._renderer._draw_stats(draw, w, h)" in rendering_pipeline_source
+    assert "self._draw_renderer_statistics_overlay(draw, w, h)" in rendering_pipeline_source
     assert "def _sync_map_studio_terrain_brush_context" in window_source
+    assert "def _set_map_studio_terrain_brush_options" in window_source
     assert "def apply_map_studio_viewport_terrain_brush_frame" in window_source
     live_apply_source = window_source[
         window_source.index("def apply_map_studio_viewport_terrain_brush_frame") :
@@ -1475,6 +1643,36 @@ def test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proo
         assert "Requires live warp test and recorded evidence." in source
 
 
+def test_t3104_package_wizard_reviews_template_and_script_dependencies() -> None:
+    window_source = _read(
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
+        "module_editor_window.py"
+    )
+
+    assert "mapStudioPackageWizardResourceReviewTable" in window_source
+    assert 'setHorizontalHeaderLabels(("Resource or reference", "Status", "Why it matters"))' in window_source
+    assert "mapStudioPackageWizardProofGateTable" in window_source
+    assert 'setHorizontalHeaderLabels(("Live KOTOR proof check", "Package gate status"))' in window_source
+    assert "def _populate_proof_gate_table" in window_source
+    assert 'test_plan.get("acceptance_checks")' in window_source
+    assert 'test_plan.get("missing_acceptance_checks")' in window_source
+    assert "Required after staging; cannot be satisfied by package build alone" in window_source
+    assert "Transitions and PTH pathing behave sanely" in window_source
+    assert "No inherited vanilla geometry or scripted movers appear" in window_source
+    assert "def _reference_rows_from_metadata" in window_source
+    assert 'metadata.get("gameplay_template_references")' in window_source
+    assert 'metadata.get("script_references")' in window_source
+    assert 'metadata.get("dialog_references")' in window_source
+    assert 'label = f"{kind}:{resref}.{restype}"' in window_source
+    assert 'label = f"script:{script}.ncs"' in window_source
+    assert 'label = f"dialog:{dialog}.dlg"' in window_source
+    assert "external_or_base_game" in window_source
+    assert "external_or_override" in window_source
+    assert "Gameplay template dependency that must resolve during the in-game smoke test." in window_source
+    assert "ARE/IFO script hook dependency that must resolve during the in-game smoke test." in window_source
+    assert "Dialog/conversation dependency that must resolve during the in-game smoke test." in window_source
+
+
 def test_t2600_map_studio_asset_browser_explains_library_import_scope() -> None:
     asset_source = _read(
         "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
@@ -1534,6 +1732,8 @@ def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
         assert "lightmap {lightmap_status}" in source
         assert "proof: {proof}" in source
         assert "Pathing export gate: Blocked until the module entry point" in source
+        assert "transition_surface_gate" in source
+        assert "Blocked until linked doors/triggers have WOK DOOR surface 18 evidence" in source
         assert "Blocks export candidate and .mod game-test packaging" in source
         assert "anchors: {anchor_text}" in source
         assert "mapStudioReadinessFloorPlanGeometryLabel" in source
@@ -1545,11 +1745,24 @@ def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
         assert "def _set_component_edit_summary" in source
         assert "def _set_component_edit_resource_rows" in source
         assert "Component edits:" in source
+        assert "mapStudioReadinessExportProofInvalidationLabel" in source
+        assert "def _set_export_proof_invalidation_summary" in source
+        assert "metadata.get(\"export_proof_invalidation\"" in source
+        assert "Export/proof freshness:" in source
+        assert "invalidates_previous_export" in source
+        assert "invalidates_game_proof" in source
+        assert "game proof stale" in source
         assert "Fix before export" in source
         assert "Stale outputs:" in source
         assert "Next:" in source
         assert "mapStudioReadinessRuntimeResourceTable" in source
         assert 'setHorizontalHeaderLabels(("Resource", "Status", "Fix / meaning"))' in source
+        assert "mapStudioReadinessPackageInventoryLabel" in source
+        assert "def _package_inventory_summary" in source
+        assert "package_resource_inventory" in source
+        assert "Package inventory:" in source
+        assert "archive readback resource(s)" in source
+        assert "build/stage the authored .mod before recording game proof" in source
         assert "def _set_runtime_resource_rows" in source
         assert "runtime_output_status" in source
         assert "def _normalise_stale_output" in source
@@ -1569,6 +1782,18 @@ def test_t2600_map_studio_readiness_panel_lists_runtime_resources() -> None:
         assert "no scripted moving base-game test objects are present" in source
         assert "modder_test_plan" in source
         assert "acceptance check(s) still need live KOTOR evidence" in source
+        assert "mapStudioReadinessProofAcceptanceTable" in source
+        assert 'setHorizontalHeaderLabels(("Live KOTOR proof check", "Evidence status"))' in source
+        assert "def _set_proof_acceptance_rows" in source
+        assert "def _proof_check_label" in source
+        assert "def _proof_check_status" in source
+        assert 'test_plan.get("acceptance_checks")' in source
+        assert 'test_plan.get("missing_acceptance_checks")' in source
+        assert "Required after staging; cannot be satisfied by package build alone" in source
+        assert "Accepted in recorded proof" in source
+        assert "Transitions and PTH pathing behave sanely" in source
+        assert "No inherited vanilla geometry or scripted movers appear" in source
+        assert "Screenshot or video evidence is attached" in source
 
 
 def test_t2600_map_studio_readiness_panel_lists_gameplay_template_references() -> None:
@@ -1609,16 +1834,23 @@ def test_t2600_map_studio_readiness_panel_lists_transition_and_script_references
         assert "mapStudioReadinessTransitionReferenceTable" in source
         assert "mapStudioReadinessScriptReferencesLabel" in source
         assert "mapStudioReadinessScriptReferenceTable" in source
+        assert "mapStudioReadinessDialogReferencesLabel" in source
+        assert "mapStudioReadinessDialogReferenceTable" in source
         assert 'setHorizontalHeaderLabels(("Kind", "Tag", "Destination", "Status / fix"))' in source
         assert 'setHorizontalHeaderLabels(("Scope", "Field", "Script", "Status / fix"))' in source
+        assert 'setHorizontalHeaderLabels(("Source", "Field", "Dialog", "Status / fix"))' in source
         assert "transition_references" in source
         assert "script_references" in source
+        assert "dialog_references" in source
         assert "transition_incomplete_count" in source
         assert "script_external_count" in source
+        assert "dialog_external_count" in source
         assert "def _set_transition_reference_rows" in source
         assert "def _set_script_reference_rows" in source
+        assert "def _set_dialog_reference_rows" in source
         assert "Add a door, trigger, or waypoint transition when this module needs area links." in source
         assert "Assign ARE/IFO script hooks only when this module needs custom runtime behavior." in source
+        assert "Add dialog/conversation refs only when this module needs conversations." in source
 
 
 def test_t2600_map_studio_walkmesh_tab_explains_wok_workflow() -> None:
@@ -1776,13 +2008,23 @@ def test_t2600_map_studio_outliner_explains_selection_editing_workflow() -> None
         "native/GhostRigger.Core.Tools/Python/src/gui/panels/"
         "module_editor/module_editor_outliner.py"
     )
+    window_source = _read(
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
+        "module_editor_window.py"
+    )
 
     for source in (outliner_source, outliner_mirror_source):
         assert "Map Studio project outliner" in source
-        assert "modules, rooms, walkmeshes, authored placements, lights, blueprints, and resources" in source
-        assert "Outliner workflow: select resources" in source
-        assert "double-click or use Rename" in source
-        assert "KMAP Project / Resources" in source
+        assert "Maya-style scene objects plus modules, rooms, walkmeshes, authored placements, lights, blueprints, and resources" in source
+        assert "Outliner workflow: select scene objects" in source
+        assert "double-click to rename" in source
+        assert 'self.setHeaderLabels(["Scene Object", "Type"])' in source
+        assert "Scene Objects" in source
+        assert "Authored Rooms" in source
+        assert 'f"viewport_camera:{camera_name}"' in source
+        assert "authored_room_primitives" in source
+        assert "authored_primitive_item_id" in source
+        assert "itemRenamed = QtCore.Signal(str, str)" in source
         assert "mapStudioOutlinerContextMenu" in source
         assert "mapStudioOutlinerRenameAction" in source
         assert '("Rename", "rename", "mapStudioOutlinerRenameAction")' in source
@@ -1791,6 +2033,10 @@ def test_t2600_map_studio_outliner_explains_selection_editing_workflow() -> None
         assert "mapStudioOutlinerFocusViewportAction" in source
         assert "mapStudioOutlinerValidateSelectedAction" in source
         assert "Right-click for Rename, Duplicate, Delete, Focus, and Validate actions" in source
+    assert "self.outliner.itemRenamed.connect(self._rename_outliner_item_inline)" in window_source
+    assert "self.outliner.set_project(self.project, authored_placements, authored_room_lights, authored_room_primitives)" in window_source
+    assert "def _parse_map_studio_primitive_outliner_id" in window_source
+    assert "def rename_map_studio_authored_primitive" in window_source
 
 
 def test_t2600_map_studio_outliner_add_camera_and_light_are_wired_to_services() -> None:
@@ -1987,6 +2233,7 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "mapStudioWorkflowLayoutLabel" in mirror_source
     assert "mapStudioWorkflowTransitionsLabel" in mirror_source
     assert "mapStudioWorkflowScriptsLabel" in mirror_source
+    assert "mapStudioWorkflowExportJobLabel" in mirror_source
     assert "mapStudioWorkflowProofLabel" in mirror_source
     assert "mapStudioWorkflowStarterRoomButton" in mirror_source
     assert "mapStudioWorkflowDoorwayBlockoutButton" in mirror_source
@@ -2015,6 +2262,10 @@ def test_t2600_workflow_panel_is_mirrored_for_module_meshes_package() -> None:
     assert "walkmeshToolsRequested = QtCore.Signal()" in mirror_source
     assert "launchHandoffRequested = QtCore.Signal()" in mirror_source
     assert "Capability: Export candidate" in mirror_source
+    assert "def _export_job_text" in mirror_source
+    assert "preflight ready" in mirror_source
+    assert "package written" in mirror_source
+    assert "readback OK" in mirror_source
     assert "can_export_candidate" in mirror_source
     assert "PTH/WOK pathing blocked" in mirror_source
     assert "self.stage_button.setEnabled(bool(enabled and can_export))" in mirror_source
@@ -2094,6 +2345,8 @@ def test_t2600_map_studio_readiness_validation_projection_is_mirrored() -> None:
         assert "MAP_STUDIO_FLOOR_PLAN_GEOMETRY_WARNING" in text
         assert "MAP_STUDIO_VISIBILITY_BLOCKER" in text
         assert "MAP_STUDIO_VISIBILITY_WARNING" in text
+        assert "MAP_STUDIO_TRANSITION_WOK_SURFACE_BLOCKER" in text
+        assert "MAP_STUDIO_TRANSITION_WOK_SURFACE_WARNING" in text
         assert "MAP_STUDIO_LIGHTING_WARNING" in text
         assert "geometry_validation" in text
         assert "visibility" in text

@@ -19,6 +19,7 @@ class ModuleEditorToolbar(QtWidgets.QWidget):
         ("add_module", "Add Module"),
         ("validate", "Validate"),
         ("build", "Build"),
+        ("generate_module_files", "Generate Module Files"),
         ("export_fbx", "Export FBX"),
     )
     EDIT_MODES = (
@@ -59,6 +60,7 @@ class ModuleEditorToolbar(QtWidgets.QWidget):
         self.buttons: dict[str, QtWidgets.QToolButton] = {}
         for key, label in self.ACTIONS:
             button = QtWidgets.QToolButton()
+            button.setObjectName(f"mapStudioToolbarActionButton_{key}")
             button.setText(label)
             button.setProperty("_gr_full_text", label)
             button.setToolTip(label)

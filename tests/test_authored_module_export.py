@@ -26,6 +26,94 @@ def _install_native_payload_paths() -> None:
             sys.path.insert(0, path)
 
 
+def _authored_project_with_door_transition_surface(module_root: str, game: str = "K1"):
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        create_dev_test_authored_module_payload,
+    )
+
+    payload = create_dev_test_authored_module_payload(module_root=module_root, game=game)
+    return authored_project_from_kmap_payload(payload, fallback_name=module_root, fallback_game=game)
+
+
+def _read_repo_text(rel: str) -> str:
+    return (Path(__file__).resolve().parents[1] / rel).read_text(encoding="utf-8")
+
+
+def test_t2600_map_studio_builds_live_preview_model_from_authored_kmap_geometry() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        create_dev_test_authored_module_payload,
+    )
+    from src.core.modules.authored_module_preview_model import build_authored_module_preview_model
+
+    payload = create_dev_test_authored_module_payload(module_root="grdev01", game="K1")
+    project = authored_project_from_kmap_payload(payload, fallback_name="grdev01", fallback_game="K1")
+    result = build_authored_module_preview_model(project)
+
+    assert result.model is not None
+    assert result.room_count == 1
+    assert result.mesh_count >= 2
+    assert result.warnings == ()
+    assert result.model.name == "grdev01"
+    assert result.model.classification == "area"
+    assert getattr(result.model, "_gr_map_studio_preview_model") is True
+    assert getattr(result.model, "_gr_map_studio_preview_key")
+    assert len(result.model.mesh_nodes()) == result.mesh_count
+    assert result.model.bb_min[0] < result.model.bb_max[0]
+    assert result.model.bb_min[1] < result.model.bb_max[1]
+    assert result.model.bb_min[2] <= result.model.bb_max[2]
+    assert all(getattr(node, "_gr_map_studio_authored_mesh", False) for node in result.model.mesh_nodes())
+
+
+def test_t2600_map_studio_routes_authored_preview_model_into_viewport_panel() -> None:
+    controller_source = _read_repo_text(
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py"
+    )
+    controller_mirror = _read_repo_text(
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/module_editor_controller.py"
+    )
+    preview_source = _read_repo_text(
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/authored_module_preview_model.py"
+    )
+    preview_mirror = _read_repo_text(
+        "native/GhostRigger.Core.Tools/Python/src/core/modules/authored_module_preview_model.py"
+    )
+    panel_source = _read_repo_text(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+    )
+    panel_mirror = _read_repo_text(
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+    )
+    window_source = _read_repo_text(
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py"
+    )
+    overlay_source = _read_repo_text(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py"
+    )
+
+    assert preview_source == preview_mirror
+    assert "build_authored_module_preview_model" in controller_source
+    assert "def authored_room_preview_model" in controller_source
+    assert "def authored_room_preview_model" in controller_mirror
+    assert "authored_room_preview_model = self.controller.authored_room_preview_model()" in window_source
+    assert "authored_room_preview_model" in panel_source
+    assert "_sync_room_preview_model(authored_room_preview_model)" in panel_source
+    assert "load_model(authored_room_preview_model)" in panel_source
+    assert "preview_model_loaded = self._room_preview_model is not None" in panel_source
+    assert '"preview_model_loaded": preview_model_loaded' in panel_source
+    assert '"show_render_geometry_overlay": render_geometry_edit_active if preview_model_loaded else True' in panel_source
+    assert '"show_room_mesh_fill_overlay": not preview_model_loaded' in panel_source
+    assert panel_source == panel_mirror
+    assert '"preview_model_loaded"' in overlay_source
+    assert '"show_render_geometry_overlay"' in overlay_source
+    assert '"show_room_mesh_fill_overlay"' in overlay_source
+    assert "if not show_render_geometry_overlay:" in overlay_source
+    assert "if show_render_geometry_overlay and show_primitive_handles:" in overlay_source
+
+
 def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     _install_native_payload_paths()
 
@@ -49,6 +137,8 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert Path(result.manifest_path).is_file()
     assert result.package_verification is not None
     assert result.package_verification.ok is True
+    assert result.metadata["export_job"]["job_id"] == "map_studio.authored_module.grdev01"
+    assert result.metadata["export_job"]["status"] == "succeeded"
     assert ("grdev01_room01", "mdl") in {(item.resref, item.restype) for item in result.package_verification.resources}
     assert {"are", "git", "ifo", "lyt", "vis", "wok", "mdl", "mdx"} <= {summary.restype for summary in result.resources}
 
@@ -63,6 +153,26 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert authored_manifest["capability_stage"] == "export_candidate"
     assert authored_manifest["game_tested"] is False
     assert authored_manifest["warp_command"] == "warp grdev01"
+    export_job = authored_manifest["export_job"]
+    assert manifest["export_job"] == export_job
+    assert export_job["schema"] == "ghostrigger.authored_export_job.v1"
+    assert export_job["task"] == "T2913"
+    assert export_job["job_id"] == "map_studio.authored_module.grdev01"
+    assert export_job["kind"] == "map_studio.authored_module.mod_package"
+    assert export_job["transaction_model"] == "preflight -> package -> readback -> proof_handoff"
+    assert export_job["status"] == "succeeded"
+    assert export_job["preflight"]["ready"] is True
+    assert export_job["preflight"]["walkmesh_gate_ready"] is True
+    assert export_job["preflight"]["visibility_ready"] is True
+    assert export_job["package"]["ok"] is True
+    assert export_job["package"]["module_path"] == result.module_path
+    assert export_job["package"]["pack_manifest_path"] == result.manifest_path
+    assert export_job["readback"]["ok"] is True
+    assert export_job["proof_handoff"]["required"] is True
+    assert export_job["proof_handoff"]["state"] == "requires_live_warp_proof"
+    assert {"module_package", "pack_manifest", "loose_resource_directory", "loose_resource"} <= {
+        row["artifact_kind"] for row in export_job["outputs"]
+    }
     assert authored_manifest["lighting_count"] == 1
     assert authored_manifest["room_lights"][0]["name"] == "grdev01_key_light"
     assert authored_manifest["room_lights"][0]["room_resref"] == "grdev01_room01"
@@ -76,6 +186,17 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert authored_manifest["lighting"]["lightmap_manifest_path"] == ""
     assert authored_manifest["lighting"]["game_tested_lighting"] is False
     assert any("viewport/editor intent" in warning for warning in authored_manifest["lighting"]["warnings"])
+    material_uv = authored_manifest["material_uv"]
+    assert material_uv[0]["room_resref"] == "grdev01_room01"
+    assert material_uv[0]["texture"] == "CM_Baremetal"
+    assert material_uv[0]["floor_surface_id"] == 4
+    assert material_uv[0]["floor_surface_name"] == "STONE"
+    assert material_uv[0]["all_mesh_uvs_complete"] is True
+    assert material_uv[0]["meshes"][0]["role"] == "room_mesh"
+    assert material_uv[0]["meshes"][0]["uv_coordinate_space"] == "mesh_uv0"
+    assert material_uv[0]["meshes"][0]["uv_count"] == material_uv[0]["meshes"][0]["vertex_count"]
+    assert material_uv[0]["meshes"][0]["diffuse"] == [0.8, 0.8, 0.8]
+    assert material_uv[0]["meshes"][0]["ambient"] == [0.35, 0.35, 0.35]
     assert authored_manifest["visibility"]["vis_resource"] == "grdev01.vis"
     assert authored_manifest["visibility"]["ready"] is True
     assert authored_manifest["visibility"]["status"] == "Ready"
@@ -88,9 +209,31 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     ]
     assert authored_manifest["visibility"]["isolated_rooms"] == []
     assert authored_manifest["visibility"]["missing_targets"] == []
-    assert authored_manifest["rooms"][0]["wok_walkable_faces"] == 2
-    assert authored_manifest["rooms"][0]["wok_non_walk_faces"] == 8
-    assert authored_manifest["rooms"][0]["walkmesh_boundary_wall_faces"] == 8
+    assert authored_manifest["rooms"][0]["wok_walkable_faces"] == 4
+    assert authored_manifest["rooms"][0]["wok_non_walk_faces"] == 12
+    assert authored_manifest["rooms"][0]["wok_transition_surface_faces"] == 2
+    assert authored_manifest["rooms"][0]["walkmesh_boundary_wall_faces"] == 12
+    gate = authored_manifest["walkmesh_gate"]
+    assert gate["ready"] is True
+    assert gate["walkable_face_count"] == 4
+    assert gate["non_walk_face_count"] == 12
+    assert gate["transition_surface_face_count"] == 2
+    assert gate["transition_surface_gate"]["ready"] is True
+    assert gate["transition_surface_gate"]["required_transition_count"] == 0
+    assert gate["transition_surface_gate"]["transition_surface_face_count"] == 2
+    assert gate["degenerate_face_count"] == 0
+    assert gate["invalid_face_count"] == 0
+    assert gate["non_manifold_edge_count"] == 0
+    assert gate["steep_walkable_face_count"] == 0
+    assert gate["max_walkable_slope_degrees"] == 0.0
+    assert gate["max_allowed_walkable_slope_degrees"] == 45.0
+    assert gate["disconnected_walkmesh_room_count"] == 0
+    assert gate["gameplay_anchor_check_count"] == 3
+    assert gate["gameplay_anchor_checks_passed"] is True
+    assert gate["pth_compiled"] is True
+    assert gate["pth_point_count"] >= 1
+    assert {"entry_point", "placeable:grdev01_test_placeable", "waypoint:start"} <= set(gate["pathing_anchor_labels"])
+    assert gate["blocking_messages"] == []
     contract = authored_manifest["t2601_smoke_contract"]
     assert contract["task"] == "T2601"
     assert contract["warp_command"] == "warp grdev01"
@@ -156,6 +299,14 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert ("plc_bench", "utp", "placeable") in template_keys
     assert ("sw_startloc001", "utw", "waypoint") in template_keys
     assert all(row["status"] == "external_or_base_game" for row in template_dependencies)
+    reference_gate = authored_manifest["resource_reference_gate"]
+    assert reference_gate["ready"] is True
+    assert reference_gate["template_reference_count"] == 2
+    assert reference_gate["script_reference_count"] == 0
+    assert reference_gate["dialog_reference_count"] == 0
+    assert reference_gate["external_reference_count"] == 2
+    assert reference_gate["requires_install_context"] is True
+    assert reference_gate["all_required_packaged"] is False
 
 
 def test_t2606_authored_build_metadata_records_multi_room_vis_links() -> None:
@@ -293,6 +444,239 @@ def test_t2643_controller_exports_current_kmap_authored_module(tmp_path: Path) -
     assert "grdev01_room01.mdl" in payload["runtime_resources"]
 
 
+def test_t2643_generate_module_files_records_authored_runtime_resources(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grdev01", game="K1")
+    controller.create_dev_test_authored_module()
+
+    result = controller.generate_module_files(tmp_path)
+
+    assert result.ok is True
+    assert result.code == "export_candidate"
+    assert Path(result.module_path).is_file()
+    payload = controller.project.extra_sections["authored_module"]
+    assert "grdev01.are" in payload["runtime_resources"]
+    assert "grdev01.git" in payload["runtime_resources"]
+    assert "module.ifo" in payload["runtime_resources"]
+    assert "grdev01.pth" in payload["runtime_resources"]
+    assert "grdev01.lyt" in payload["runtime_resources"]
+    assert "grdev01.vis" in payload["runtime_resources"]
+    assert "grdev01_room01.mdl" in payload["runtime_resources"]
+    assert "grdev01_room01.mdx" in payload["runtime_resources"]
+    assert "grdev01_room01.wok" in payload["runtime_resources"]
+    readiness = controller.authored_module_readiness().readiness
+    assert readiness.missing_runtime_resources == ()
+    assert len(readiness.metadata["runtime_output_status"]["present"]) == 9
+
+
+def test_t2643_generate_module_files_clears_stale_export_invalidation(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grdev01", game="K1")
+    controller.create_dev_test_authored_module()
+    staged = controller.stage_authored_module(tmp_path)
+    assert staged.ok is True
+
+    controller.apply_authored_room_style(texture="CM_Baremetal", floor_surface="metal", room_resref="grdev01_room01")
+    stale_payload = controller.project.extra_sections["authored_module"]
+    assert stale_payload["export_proof_invalidation"]["invalidates_previous_export"] is True
+    assert stale_payload["runtime_resources"] == []
+
+    result = controller.generate_module_files(tmp_path)
+
+    assert result.ok is True
+    payload = controller.project.extra_sections["authored_module"]
+    assert "export_proof_invalidation" not in payload
+    assert "proof_manifest_path" not in payload
+    assert payload["manual_proof_required"] is True
+    assert payload["game_tested"] is False
+    assert "grdev01_room01.mdl" in payload["runtime_resources"]
+    readiness = controller.authored_module_readiness().readiness
+    assert readiness.missing_runtime_resources == ()
+    assert readiness.component_edit.stale_outputs == ()
+    assert readiness.metadata["export_proof_invalidation"] == {}
+
+
+def test_t3105_exports_golden_map_module_fixture(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import AuthoredModuleExportRequest, export_authored_module_project
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        create_golden_test_authored_module_payload,
+    )
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    payload = create_golden_test_authored_module_payload(module_root="grgold01", game="K1")
+    authored = authored_project_from_kmap_payload(payload, fallback_name="grgold01", fallback_game="K1")
+
+    result = export_authored_module_project(AuthoredModuleExportRequest(project=authored, output_dir=str(tmp_path)))
+
+    assert result.ok is True
+    assert result.package_verification is not None
+    assert result.package_verification.ok is True
+    assert {"are", "git", "ifo", "lyt", "vis", "pth", "wok", "mdl", "mdx"} <= {
+        summary.restype for summary in result.resources
+    }
+
+    manifest = json.loads(Path(result.manifest_path).read_text(encoding="utf-8"))
+    transaction = manifest["transaction"]
+    assert transaction["staged"] is True
+    assert transaction["status"] == "succeeded"
+    assert transaction["staging_model"] == "save_pipeline_temp_root_then_export_job_promote"
+    assert transaction["export_job"]["job_id"] == "map_studio.custom_module_package.grgold01"
+    assert transaction["export_job"]["kind"] == "map_studio.custom_module_package"
+    assert transaction["export_job"]["status"] == "succeeded"
+    assert transaction["export_job"]["manifest_path"] == result.manifest_path
+    assert not Path(transaction["staging_root"]).exists()
+    promoted_kinds = {row["artifact_kind"] for row in transaction["promoted_outputs"]}
+    assert {"module_package", "save_manifest", "pack_manifest", "loose_resource"} <= promoted_kinds
+    assert all(Path(row["final_path"]).exists() for row in transaction["promoted_outputs"])
+    assert all(".ghostrigger_pack_" not in row["final_path"] for row in transaction["promoted_outputs"])
+    assert Path(manifest["save_manifest_path"]).is_file()
+    assert ".ghostrigger_pack_" not in manifest["save_manifest_path"]
+    assert all(".ghostrigger_pack_" not in row["path"] for row in manifest["source"]["resources"])
+    authored_manifest = manifest["map_studio_authored_module"]
+    assert authored_manifest["module_root"] == "grgold01"
+    assert authored_manifest["project_metadata"]["task"] == "T3105"
+    assert authored_manifest["project_metadata"]["fixture_role"] == "golden_module_in_game_smoke_test"
+    assert authored_manifest["content_origin"] == "map_studio_original"
+    assert authored_manifest["copied_from_base_game_module"] is False
+    assert authored_manifest["inherited_base_game_module_content"] is False
+    assert authored_manifest["warp_command"] == "warp grgold01"
+    assert authored_manifest["gameplay_counts"]["creatures"] == 1
+    assert authored_manifest["gameplay_counts"]["doors"] == 1
+    assert authored_manifest["gameplay_counts"]["placeables"] == 1
+    assert authored_manifest["gameplay_counts"]["waypoints"] == 2
+    assert authored_manifest["rooms"][0]["wok_walkable_faces"] == 4
+    assert authored_manifest["rooms"][0]["wok_transition_surface_faces"] == 2
+    assert authored_manifest["walkability"]["ok"] is True
+    gate = authored_manifest["walkmesh_gate"]
+    assert gate["ready"] is True
+    assert gate["walkable_face_count"] == 4
+    assert gate["non_walk_face_count"] == 12
+    assert gate["transition_surface_face_count"] == 2
+    assert gate["transition_surface_gate"]["ready"] is True
+    assert gate["transition_surface_gate"]["required_transition_count"] == 1
+    assert gate["transition_surface_gate"]["references"][0]["tag"] == "grgold01_door"
+    assert gate["gameplay_anchor_check_count"] >= 6
+    assert gate["gameplay_anchor_checks_passed"] is True
+    assert gate["pth_compiled"] is True
+    assert {
+        "entry_point",
+        "creature:grgold01_npc",
+        "door:grgold01_door",
+        "placeable:grgold01_bench",
+        "waypoint:start",
+        "waypoint:grgold01_exit",
+    } <= set(gate["pathing_anchor_labels"])
+    assert gate["blocking_messages"] == []
+
+    contract = authored_manifest["t2601_smoke_contract"]
+    assert contract["expected_entry_point"]["area_resref"] == "grgold01"
+    assert contract["expected_entry_point"]["position"] == [0.0, -4.0, 0.0]
+    assert contract["expected_absent_runtime_observations"]["inherited_scripted_moving_test_objects"] is True
+    assert {row["filename"] for row in contract["required_resources"]} >= {
+        "grgold01.are",
+        "grgold01.git",
+        "module.ifo",
+        "grgold01.pth",
+        "grgold01.lyt",
+        "grgold01.vis",
+        "grgold01_room01.wok",
+        "grgold01_room01.mdl",
+        "grgold01_room01.mdx",
+    }
+    assert contract["all_required_resources_present"] is True
+    assert contract["all_walkability_checks_passed"] is True
+    assert {
+        "entry_point",
+        "creature:grgold01_npc",
+        "door:grgold01_door",
+        "placeable:grgold01_bench",
+        "waypoint:start",
+        "waypoint:grgold01_exit",
+    } <= set(contract["pathing_anchor_labels"])
+
+    template_dependencies = authored_manifest["gameplay_template_dependencies"]
+    template_keys = {(row["template_resref"], row["restype"], row["kind"]) for row in template_dependencies}
+    assert authored_manifest["gameplay_template_dependency_count"] == 5
+    assert ("c_drdmkone", "utc", "creature") in template_keys
+    assert ("door_t01", "utd", "door") in template_keys
+    assert ("plc_bench", "utp", "placeable") in template_keys
+    assert ("sw_startloc001", "utw", "waypoint") in template_keys
+    assert ("wp_test", "utw", "waypoint") in template_keys
+    reference_gate = authored_manifest["resource_reference_gate"]
+    assert reference_gate["template_reference_count"] == 5
+    assert reference_gate["script_reference_count"] == 0
+    assert reference_gate["dialog_reference_count"] == 0
+    assert reference_gate["external_reference_count"] == 5
+    assert reference_gate["requires_install_context"] is True
+
+    controller = ModuleEditorController()
+    readiness = controller.create_golden_test_authored_module(module_root="grgold01")
+    assert controller.project.extra_sections["authored_module"]["metadata"]["task"] == "T3105"
+    assert controller.project.name == "grgold01"
+    assert readiness.readiness is not None
+    assert readiness.readiness.blocking_messages == ()
+
+
+def test_t3105_export_gate_blocks_disconnected_walkmesh_islands(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import (
+        AuthoredModuleExportRequest,
+        build_authored_module,
+        export_authored_module_project,
+    )
+    from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+    from src.core.modules.authored_module_project import create_composition_room_project
+    from src.core.modules.authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, PrimitiveTransform
+    from src.core.modules.authored_room_primitives import FloorPrimitive
+
+    composition = AuthoredRoomComposition(
+        room_resref="grsplit",
+        floor=FloorPrimitive(name="main_floor", width=4.0, depth=4.0, surface_id=4),
+        primitives=(
+            PlacedRoomPrimitive(
+                primitive=FloorPrimitive(name="isolated_floor", width=2.0, depth=2.0, surface_id=4),
+                transform=PrimitiveTransform(translation=(8.0, 0.0, 0.0)),
+                name="isolated_floor",
+            ),
+        ),
+    )
+    project = create_composition_room_project(
+        module_root="grsplit",
+        game="K1",
+        display_name="Split WOK Test",
+        composition=composition,
+        placements=AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref="grsplit")),
+    )
+
+    build = build_authored_module(project)
+
+    gate = build.metadata["walkmesh_gate"]
+    assert gate["ready"] is False
+    assert gate["walkable_face_count"] == 4
+    assert gate["walkable_component_count"] == 2
+    assert gate["disconnected_walkmesh_room_count"] == 1
+    assert any("disconnected walkable island" in message for message in gate["blocking_messages"])
+
+    result = export_authored_module_project(AuthoredModuleExportRequest(project=project, output_dir=str(tmp_path)))
+
+    assert result.ok is False
+    assert result.code == "preflight_failed"
+    assert result.metadata["walkmesh_gate"]["ready"] is False
+    assert any("disconnected walkable island" in message for message in result.blocking_issues)
+
+
 def test_t2680_pathing_includes_walkable_spatial_gameplay_anchors() -> None:
     _install_native_payload_paths()
 
@@ -370,6 +754,90 @@ def test_t2680_pathing_includes_walkable_spatial_gameplay_anchors() -> None:
     assert ("stm_shop", "utm", "store") in template_keys
 
 
+def test_t3105_resource_reference_gate_records_scripts_and_dialogs() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+    from src.core.modules.authored_module_scripts import set_authored_script_hook
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grrefs01",
+        game="K1",
+    )
+    project = set_authored_script_hook(
+        project,
+        scope="module",
+        field_name="Mod_OnModLoad",
+        script_resref="k_ptar_a02aa_en",
+    ).project
+    project = set_authored_script_hook(
+        project,
+        scope="area",
+        field_name="OnEnter",
+        script_resref="k_ai_master",
+    ).project
+    project = replace(
+        project,
+        metadata=replace(
+            project.metadata,
+            metadata={
+                **dict(project.metadata.metadata),
+                "dialog_refs": {
+                    "opening_conversation": "dan13_belaya",
+                },
+            },
+        ),
+    )
+
+    build = build_authored_module(project)
+
+    gate = build.metadata["resource_reference_gate"]
+    assert gate["ready"] is True
+    assert gate["template_reference_count"] == 2
+    assert gate["script_reference_count"] == 2
+    assert gate["dialog_reference_count"] == 1
+    assert gate["external_reference_count"] == 5
+    assert gate["requires_install_context"] is True
+    assert gate["all_required_packaged"] is False
+    script_keys = {(row["scope"], row["field_name"], row["script_resref"], row["restype"]) for row in gate["scripts"]}
+    assert ("module", "Mod_OnModLoad", "k_ptar_a02aa_en", "ncs") in script_keys
+    assert ("area", "OnEnter", "k_ai_master", "ncs") in script_keys
+    assert gate["dialogs"] == [
+        {
+            "kind": "dialog",
+            "source": "dialog_refs",
+            "field_name": "opening_conversation",
+            "dialog_resref": "dan13_belaya",
+            "restype": "dlg",
+            "status": "external_or_override",
+            "packaged": False,
+            "required": True,
+            "message": "Dialog reference dan13_belaya.dlg must resolve from the base game, Override, or another installed mod.",
+        }
+    ]
+    readiness = build_authored_module_readiness(project, packaged_resources=build.resource_summaries)
+    assert readiness.metadata["dialog_reference_count"] == 1
+    assert readiness.metadata["dialog_external_count"] == 1
+    assert readiness.metadata["dialog_references"] == [
+        {
+            "source": "dialog_refs",
+            "field_name": "opening_conversation",
+            "dialog_resref": "dan13_belaya",
+            "restype": "dlg",
+            "status": "external_or_override",
+            "packaged": False,
+            "required": True,
+            "message": "Dialog reference dan13_belaya.dlg must resolve from the base game, Override, or another installed mod.",
+        }
+    ]
+    assert any(".dlg instead of being packaged" in warning for warning in readiness.warnings)
+
+
 def test_t2605_incomplete_door_transition_blocks_authored_export() -> None:
     _install_native_payload_paths()
 
@@ -409,13 +877,8 @@ def test_t2605_complete_door_module_transition_is_export_candidate() -> None:
     from src.core.modules.authored_module_export import build_authored_module
     from src.core.modules.authored_module_placements import add_authored_gameplay_placement
     from src.core.modules.authored_module_readiness import build_authored_module_readiness
-    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
 
-    project = create_authored_module_from_room_preset(
-        preset_id="rectangular_dev_room",
-        module_root="grtran02",
-        game="K1",
-    )
+    project = _authored_project_with_door_transition_surface("grtran02", "K1")
     project = add_authored_gameplay_placement(
         project,
         kind="door",
@@ -430,11 +893,65 @@ def test_t2605_complete_door_module_transition_is_export_candidate() -> None:
     readiness = build_authored_module_readiness(project, packaged_resources=build.resource_summaries)
 
     assert not build.blocking_issues
+    assert build.metadata["walkmesh_gate"]["transition_surface_face_count"] == 2
+    assert build.metadata["walkmesh_gate"]["transition_surface_gate"]["required_transition_count"] == 1
     assert readiness.metadata["transition_count"] == 1
     assert readiness.metadata["transition_complete_count"] == 1
     assert readiness.metadata["transition_incomplete_count"] == 0
     assert readiness.metadata["transition_references"][0]["status"] == "module_transition"
     assert readiness.can_export_candidate is True
+
+
+def test_t2911_linked_transition_requires_wok_door_surface_before_export() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import AuthoredModuleExportRequest, build_authored_module, export_authored_module_project
+    from src.core.modules.authored_module_placements import add_authored_gameplay_placement
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+    from src.core.modules.authored_module_validation_projection import authored_module_readiness_validation_issues
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grtran03",
+        game="K1",
+    )
+    project = add_authored_gameplay_placement(
+        project,
+        kind="door",
+        template_resref="door_t01",
+        tag="grtran_exit",
+        position=(0.0, 1.0, 0.0),
+        linked_to="wp_arrive",
+        linked_to_module="grnext01",
+    ).project
+
+    build = build_authored_module(project)
+
+    gate = build.metadata["walkmesh_gate"]["transition_surface_gate"]
+    assert gate["ready"] is False
+    assert gate["required_transition_count"] == 1
+    assert gate["transition_surface_face_count"] == 0
+    assert any("no WOK DOOR/transition surface" in message for message in build.blocking_issues)
+
+    readiness = build_authored_module_readiness(project, packaged_resources=build.resource_summaries)
+
+    readiness_gate = readiness.metadata["transition_surface_gate"]
+    assert readiness.can_export_candidate is False
+    assert readiness.export_status == "Transition WOK surface blocked"
+    assert readiness_gate["ready"] is False
+    assert readiness_gate["required_transition_count"] == 1
+    assert readiness_gate["transition_surface_face_count"] == 0
+    assert any("surface 18" in message for message in readiness.blocking_messages)
+    issues = authored_module_readiness_validation_issues(readiness)
+    assert any(issue.code == "MAP_STUDIO_TRANSITION_WOK_SURFACE_BLOCKER" for issue in issues)
+
+    result = export_authored_module_project(AuthoredModuleExportRequest(project=project, dry_run=True))
+
+    assert result.ok is False
+    assert result.code == "preflight_failed"
+    assert result.metadata["walkmesh_gate"]["ready"] is False
+    assert any("surface 18" in message for message in result.blocking_issues)
 
 
 def test_t2605_local_door_transition_requires_authored_destination_tag() -> None:
@@ -475,13 +992,8 @@ def test_t2605_local_door_transition_accepts_matching_authored_waypoint() -> Non
     from src.core.modules.authored_module_export import build_authored_module
     from src.core.modules.authored_module_placements import add_authored_gameplay_placement
     from src.core.modules.authored_module_readiness import build_authored_module_readiness
-    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
 
-    project = create_authored_module_from_room_preset(
-        preset_id="rectangular_dev_room",
-        module_root="grloc02",
-        game="K1",
-    )
+    project = _authored_project_with_door_transition_surface("grloc02", "K1")
     project = add_authored_gameplay_placement(
         project,
         kind="door",
@@ -502,6 +1014,8 @@ def test_t2605_local_door_transition_accepts_matching_authored_waypoint() -> Non
     readiness = build_authored_module_readiness(project, packaged_resources=build.resource_summaries)
 
     assert not build.blocking_issues
+    assert build.metadata["walkmesh_gate"]["transition_surface_face_count"] == 2
+    assert build.metadata["walkmesh_gate"]["transition_surface_gate"]["required_transition_count"] == 1
     assert readiness.metadata["transition_count"] == 1
     assert readiness.metadata["transition_complete_count"] == 1
     assert readiness.metadata["transition_incomplete_count"] == 0
@@ -737,7 +1251,12 @@ def test_t2643_export_panel_exposes_authored_module_action() -> None:
     assert "Export Authored KMAP Module" in panel_source
     assert panel_source == boundary_panel_source
     assert "self.export_panel.authoredModuleRequested.connect(self.export_authored_module)" in window_source
-    assert "self.controller.export_authored_module(path, dry_run=dry_run)" in window_source
+    assert "class _MapStudioPackageWizardDialog" in window_source
+    assert "mapStudioPackageWizardResourceReviewTable" in window_source
+    assert "mode=\"export\"" in window_source
+    assert "self.controller.export_authored_module(path, dry_run=bool(values.get(\"dry_run\")))" in window_source
+    assert "self.controller.generate_module_files(path)" in window_source
+    assert "self._refresh_all(\"Module files generated.\")" in window_source
     assert "authored_module_smoke_summary_lines" in window_source
 
 
@@ -758,6 +1277,13 @@ def _room_only_dev_authored_project():
         include_start_waypoint=False,
     )
     return authored_project_from_kmap_payload(payload, fallback_name="grdev01", fallback_game="K1")
+
+
+def _golden_authored_project():
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload, create_golden_test_authored_module_payload
+
+    payload = create_golden_test_authored_module_payload(module_root="grgold01", game="K1")
+    return authored_project_from_kmap_payload(payload, fallback_name="grgold01", fallback_game="K1")
 
 
 def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest(tmp_path: Path) -> None:
@@ -781,12 +1307,13 @@ def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manife
     checklist = Path(result.checklist_path).read_text(encoding="utf-8")
     assert "warp grdev01" in checklist
     assert "Evidence capture helper:" in checklist
-    assert "capture_grdev01_smoke_evidence.py" in checklist
+    assert "capture_authored_module_evidence.py" in checklist
     assert "Proof recorder:" in checklist
     proof_recorder = Path(result.proof_recording_script_path).read_text(encoding="utf-8")
     assert "record_authored_module_game_proof.py" in proof_recorder
     assert "--module-loads-in-game" in proof_recorder
     assert "--module-identity-matches-authored-resref" in proof_recorder
+    assert "--transition-pathing-sanity-confirmed" in proof_recorder
     assert "--no-inherited-base-game-geometry-or-scripted-movers" in proof_recorder
     assert "Drag or paste screenshot/video evidence path" in proof_recorder
     proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
@@ -797,9 +1324,65 @@ def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manife
     assert proof["game_tested"] is False
     assert proof["install"]["installed"] is False
     assert proof["package"]["verification"]["ok"] is True
-    assert "capture_grdev01_smoke_evidence.py" in proof["launch_handoff"]["evidence_capture_command"]
+    assert proof["export_job"] == proof["package"]["export_job"]
+    assert proof["export_job"]["job_id"] == "map_studio.authored_module.grdev01"
+    assert proof["export_job"]["status"] == "succeeded"
+    assert proof["export_job"]["package"]["module_path"] == result.export_result.module_path
+    assert proof["export_job"]["proof_handoff"]["proof_manifest_path"] == result.proof_manifest_path
+    assert proof["export_job"]["proof_handoff"]["installed"] is False
+    assert proof["export_job"]["proof_handoff"]["state"] == "requires_live_warp_proof"
+    inventory = proof["package_resource_inventory"]
+    assert inventory == proof["package"]["resource_inventory"]
+    assert inventory == proof["modder_test_plan"]["package_resource_inventory"]
+    assert inventory["schema"] == "ghostrigger.map_studio.package_resource_inventory.v1"
+    assert inventory["module_root"] == "grdev01"
+    assert inventory["readback_ok"] is True
+    assert inventory["all_required_runtime_resources_present"] is True
+    assert inventory["missing_required_runtime_resources"] == []
+    assert inventory["install"]["installed"] is False
+    assert inventory["install"]["dry_run"] is False
+    assert inventory["resource_groups"]["core_module_restypes_present"] == ["are", "git", "ifo", "lyt", "pth", "vis"]
+    assert inventory["resource_groups"]["room_model_resource_count"] == 2
+    assert inventory["resource_groups"]["room_walkmesh_resource_count"] == 1
+    assert {row["filename"] for row in inventory["required_runtime_resources"]} >= {
+        "grdev01.are",
+        "grdev01.git",
+        "module.ifo",
+        "grdev01.pth",
+        "grdev01.lyt",
+        "grdev01.vis",
+        "grdev01_room01.wok",
+        "grdev01_room01.mdl",
+        "grdev01_room01.mdx",
+    }
+    assert all(row["present_in_readback"] for row in inventory["required_runtime_resources"])
+    assert {row["filename"] for row in inventory["verified_archive_resources"]} >= {
+        "grdev01.are",
+        "grdev01.git",
+        "module.ifo",
+        "grdev01.pth",
+        "grdev01.lyt",
+        "grdev01.vis",
+        "grdev01_room01.wok",
+        "grdev01_room01.mdl",
+        "grdev01_room01.mdx",
+    }
+    assert {row["filename"] for row in inventory["loose_staged_resources"]} >= {
+        "grdev01.are",
+        "grdev01.git",
+        "module.ifo",
+        "grdev01.pth",
+        "grdev01.lyt",
+        "grdev01.vis",
+        "grdev01_room01.wok",
+        "grdev01_room01.mdl",
+        "grdev01_room01.mdx",
+    }
+    assert inventory["resource_reference_gate"]["template_reference_count"] >= 1
+    assert "capture_authored_module_evidence.py" in proof["launch_handoff"]["evidence_capture_command"]
     assert "--record-proof" in proof["launch_handoff"]["evidence_capture_command"]
     assert "--module-identity-matches-authored-resref" in proof["launch_handoff"]["evidence_capture_command"]
+    assert "--transition-pathing-sanity-confirmed" in proof["launch_handoff"]["evidence_capture_command"]
     assert "--no-inherited-base-game-geometry-or-scripted-movers" in proof["launch_handoff"]["evidence_capture_command"]
     test_plan = proof["modder_test_plan"]
     assert test_plan["task"] == "T2605"
@@ -819,12 +1402,87 @@ def test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manife
     assert contract["expected_placeables"][0]["tag"] == "grdev01_test_placeable"
     assert contract["all_walkability_checks_passed"] is True
     assert "placeable:grdev01_test_placeable" in contract["pathing_anchor_labels"]
+    reference_gate = contract["resource_reference_gate"]
+    assert reference_gate == test_plan["resource_reference_gate"]
+    assert reference_gate["template_reference_count"] >= 1
+    assert reference_gate["requires_install_context"] is True
+    assert any(row["kind"] == "placeable" for row in reference_gate["templates"])
     summary = authored_module_smoke_summary_lines(result.export_result)
     assert any("warp grdev01" in line for line in summary)
     assert "Expected player start: grdev01 at (0.00, -3.00, 0.00)." in summary
     assert any("grdev01_test_placeable" in line for line in summary)
     assert "Walkability preflight: 3/3 gameplay anchor(s) on generated WOK." in summary
     assert summary[-1] == "Capability: export candidate; in-game screenshot/video proof is still required."
+
+
+def test_t3105_golden_module_install_writes_generic_capture_handoff(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import AuthoredModuleInstallPrepRequest, prepare_authored_module_install
+
+    modules_dir = tmp_path / "KOTOR" / "Modules"
+    modules_dir.mkdir(parents=True)
+    result = prepare_authored_module_install(
+        AuthoredModuleInstallPrepRequest(
+            project=_golden_authored_project(),
+            output_dir=str(tmp_path / "stage"),
+            game_modules_dir=str(modules_dir),
+            dry_run=True,
+        )
+    )
+
+    assert result.ok is True
+    checklist = Path(result.checklist_path).read_text(encoding="utf-8")
+    proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
+
+    assert "warp grgold01" in checklist
+    assert "capture_authored_module_evidence.py" in checklist
+    assert "launch_authored_module_smoke_test.py" in proof["launch_handoff"]["launch_helper_command"]
+    assert "capture_authored_module_evidence.py" in proof["launch_handoff"]["evidence_capture_command"]
+    assert "capture_grdev01_smoke_evidence.py" not in proof["launch_handoff"]["evidence_capture_command"]
+    assert "--record-proof" in proof["launch_handoff"]["evidence_capture_command"]
+    assert "--test-placeable-visible" in proof["launch_handoff"]["evidence_capture_command"]
+    assert "--transition-pathing-sanity-confirmed" in proof["launch_handoff"]["evidence_capture_command"]
+    assert proof["launch_handoff"]["warp_command"] == "warp grgold01"
+    assert proof["t2601_smoke_contract"]["expected_entry_point"]["area_resref"] == "grgold01"
+    inventory = proof["package_resource_inventory"]
+    assert inventory["module_root"] == "grgold01"
+    assert inventory["install"]["installed"] is False
+    assert inventory["install"]["dry_run"] is True
+    assert inventory["install"]["modules_dir"] == str(modules_dir)
+    assert inventory["resource_reference_gate"]["template_reference_count"] == 5
+    assert {row["filename"] for row in inventory["required_runtime_resources"]} >= {
+        "grgold01.are",
+        "grgold01.git",
+        "module.ifo",
+        "grgold01.pth",
+        "grgold01.lyt",
+        "grgold01.vis",
+        "grgold01_room01.wok",
+        "grgold01_room01.mdl",
+        "grgold01_room01.mdx",
+    }
+    assert all(row["present_in_readback"] for row in inventory["required_runtime_resources"])
+    assert {
+        "creature:grgold01_npc",
+        "door:grgold01_door",
+        "placeable:grgold01_bench",
+        "waypoint:grgold01_exit",
+    } <= set(proof["t2601_smoke_contract"]["pathing_anchor_labels"])
+    reference_gate = proof["t2601_smoke_contract"]["resource_reference_gate"]
+    assert reference_gate == proof["modder_test_plan"]["resource_reference_gate"]
+    assert reference_gate["template_reference_count"] == 5
+    assert reference_gate["script_reference_count"] == 0
+    assert reference_gate["dialog_reference_count"] == 0
+    assert reference_gate["external_reference_count"] == 5
+    assert reference_gate["requires_install_context"] is True
+    assert {
+        ("c_drdmkone", "utc", "creature"),
+        ("door_t01", "utd", "door"),
+        ("plc_bench", "utp", "placeable"),
+        ("sw_startloc001", "utw", "waypoint"),
+        ("wp_test", "utw", "waypoint"),
+    } <= {(row["template_resref"], row["restype"], row["kind"]) for row in reference_gate["templates"]}
 
 
 def test_t2644_room_only_authored_install_omits_placeable_proof_requirement(tmp_path: Path) -> None:
@@ -849,6 +1507,7 @@ def test_t2644_room_only_authored_install_omits_placeable_proof_requirement(tmp_
         "module_identity_matches_authored_resref",
         "player_spawns_on_floor",
         "player_can_walk_on_floor",
+        "transition_pathing_sanity_confirmed",
         "no_inherited_base_game_geometry_or_scripted_movers",
         "screenshot_or_video_captured",
     ]
@@ -888,6 +1547,9 @@ def test_t2644_prepare_authored_module_install_copies_to_modules_with_backup(tmp
     assert proof["install"]["installed_module_path"] == str(installed)
     assert proof["install"]["installed"] is True
     assert proof["install"]["backup_module_path"] == str(backup)
+    assert proof["export_job"]["proof_handoff"]["installed"] is True
+    assert proof["export_job"]["proof_handoff"]["installed_module_path"] == str(installed)
+    assert proof["export_job"]["proof_handoff"]["state"] == "installed_requires_live_warp_proof"
     assert proof["modder_test_plan"]["capability_stage"] == "installed_test_build"
     assert proof["modder_test_plan"]["proof_state"] == "installed_requires_live_warp_proof"
     assert proof["modder_test_plan"]["install"]["installed"] is True
@@ -954,6 +1616,7 @@ def test_t2644_records_authored_module_game_proof(tmp_path: Path) -> None:
             player_spawns_on_floor=True,
             test_placeable_visible=True,
             player_can_walk_on_floor=True,
+            transition_pathing_sanity_confirmed=True,
             no_inherited_base_game_geometry_or_scripted_movers=True,
         )
     )
@@ -966,25 +1629,39 @@ def test_t2644_records_authored_module_game_proof(tmp_path: Path) -> None:
     assert proof["manual_proof_required"] is False
     assert proof["game_tested"] is True
     assert proof["game_test"]["accepted"] is True
+    assert proof["game_test"]["accepted_checks"] == proof["acceptance_checks"]
     assert proof["t2601_smoke_contract"]["game_tested"] is True
     assert proof["t2601_smoke_contract"]["proof_required"] is False
     assert proof["modder_test_plan"]["game_ready"] is True
     assert proof["modder_test_plan"]["proof_state"] == "game_smoke_tested"
     assert proof["modder_test_plan"]["capability_stage"] == "game_smoke_tested"
+    assert proof["modder_test_plan"]["accepted_acceptance_checks"] == proof["acceptance_checks"]
     assert proof["modder_test_plan"]["missing_acceptance_checks"] == []
     assert proof["modder_test_plan"]["evidence"]["path"] == str(evidence)
+    assert proof["export_job"]["status"] == "game_smoke_tested"
+    assert proof["export_job"]["proof_handoff"]["required"] is False
+    assert proof["export_job"]["proof_handoff"]["state"] == "game_smoke_tested"
+    assert proof["export_job"]["proof_handoff"]["evidence_path"] == str(evidence)
+    assert proof["export_job"]["proof_handoff"]["accepted_acceptance_checks"] == proof["acceptance_checks"]
 
     pack_manifest = json.loads(Path(result.pack_manifest_path).read_text(encoding="utf-8"))
     authored = pack_manifest["map_studio_authored_module"]
     assert authored["game_tested"] is True
     assert authored["capability_stage"] == "game_smoke_tested"
+    assert authored["in_game_proof"]["accepted_checks"] == proof["acceptance_checks"]
     assert authored["in_game_proof"]["checks"]["module_identity_matches_authored_resref"] is True
     assert authored["in_game_proof"]["checks"]["player_can_walk_on_floor"] is True
+    assert authored["in_game_proof"]["checks"]["transition_pathing_sanity_confirmed"] is True
     assert authored["in_game_proof"]["checks"]["no_inherited_base_game_geometry_or_scripted_movers"] is True
     assert authored["t2601_smoke_contract"]["capability_stage"] == "game_smoke_tested"
     assert authored["modder_test_plan"]["game_ready"] is True
     assert authored["modder_test_plan"]["proof_state"] == "game_smoke_tested"
+    assert authored["modder_test_plan"]["accepted_acceptance_checks"] == proof["acceptance_checks"]
     assert authored["modder_test_plan"]["evidence"]["path"] == str(evidence)
+    assert authored["export_job"]["status"] == "game_smoke_tested"
+    assert authored["export_job"]["proof_handoff"]["required"] is False
+    assert authored["export_job"]["proof_handoff"]["state"] == "game_smoke_tested"
+    assert authored["export_job"]["proof_handoff"]["accepted_acceptance_checks"] == proof["acceptance_checks"]
 
 
 def test_t2644_allow_missing_evidence_keeps_authored_module_unproven(tmp_path: Path) -> None:
@@ -1010,6 +1687,7 @@ def test_t2644_allow_missing_evidence_keeps_authored_module_unproven(tmp_path: P
             player_spawns_on_floor=True,
             test_placeable_visible=True,
             player_can_walk_on_floor=True,
+            transition_pathing_sanity_confirmed=True,
             no_inherited_base_game_geometry_or_scripted_movers=True,
             allow_missing_evidence=True,
         )
@@ -1021,6 +1699,9 @@ def test_t2644_allow_missing_evidence_keeps_authored_module_unproven(tmp_path: P
     proof = json.loads(Path(prep.proof_manifest_path).read_text(encoding="utf-8"))
     assert proof["manual_proof_required"] is True
     assert proof["game_tested"] is False
+    assert "screenshot_or_video_captured" not in proof["game_test"]["accepted_checks"]
+    assert set(proof["game_test"]["accepted_checks"]) == set(proof["acceptance_checks"]) - {"screenshot_or_video_captured"}
+    assert proof["modder_test_plan"]["accepted_acceptance_checks"] == proof["game_test"]["accepted_checks"]
 
 
 def test_t2601_authored_module_rejects_unsupported_game_proof_evidence(tmp_path: Path) -> None:
@@ -1047,6 +1728,7 @@ def test_t2601_authored_module_rejects_unsupported_game_proof_evidence(tmp_path:
             player_spawns_on_floor=True,
             test_placeable_visible=True,
             player_can_walk_on_floor=True,
+            transition_pathing_sanity_confirmed=True,
             no_inherited_base_game_geometry_or_scripted_movers=True,
         )
     )
@@ -1056,6 +1738,8 @@ def test_t2601_authored_module_rejects_unsupported_game_proof_evidence(tmp_path:
     proof = json.loads(Path(prep.proof_manifest_path).read_text(encoding="utf-8"))
     assert proof["game_tested"] is False
     assert proof["game_test"]["checks"]["screenshot_or_video_captured"] is False
+    assert "screenshot_or_video_captured" not in proof["game_test"]["accepted_checks"]
+    assert proof["export_job"]["proof_handoff"]["accepted_acceptance_checks"] == proof["game_test"]["accepted_checks"]
 
 
 def test_t2644_controller_stages_current_authored_module(tmp_path: Path) -> None:
@@ -1076,11 +1760,55 @@ def test_t2644_controller_stages_current_authored_module(tmp_path: Path) -> None
     assert payload["proof_manifest_path"] == result.proof_manifest_path
     assert "grdev01_room01.mdl" in payload["runtime_resources"]
     assert payload["pack_manifest_path"] == result.export_result.manifest_path
+    assert payload["export_job"]["job_id"] == "map_studio.authored_module.grdev01"
+    assert payload["export_job"]["status"] == "succeeded"
+    assert payload["export_job"]["proof_handoff"]["proof_manifest_path"] == result.proof_manifest_path
     assert payload["modder_test_plan"]["proof_state"] == "requires_live_warp_proof"
     assert payload["modder_test_plan"]["warp_command"] == "warp grdev01"
     readiness = controller.authored_module_readiness().readiness
+    assert readiness.metadata["export_job"]["job_id"] == "map_studio.authored_module.grdev01"
+    assert readiness.metadata["export_job_status"] == "succeeded"
+    assert readiness.metadata["export_job_package_ok"] is True
+    assert readiness.metadata["export_job_readback_ok"] is True
+    assert readiness.metadata["export_job_proof_state"] == "requires_live_warp_proof"
     assert readiness.metadata["modder_test_plan"]["warp_command"] == "warp grdev01"
     assert readiness.metadata["modder_test_plan"]["missing_acceptance_checks"] == payload["modder_test_plan"]["missing_acceptance_checks"]
+
+
+def test_t2912_style_edit_invalidates_staged_package_and_game_proof(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grdev01", game="K1")
+    controller.create_dev_test_authored_module()
+    staged = controller.stage_authored_module(tmp_path)
+
+    assert staged.ok is True
+    assert controller.project.extra_sections["authored_module"]["proof_manifest_path"] == staged.proof_manifest_path
+
+    controller.apply_authored_room_style(texture="CM_Baremetal", floor_surface="metal", room_resref="grdev01_room01")
+
+    payload = controller.project.extra_sections["authored_module"]
+    invalidation = payload["export_proof_invalidation"]
+    assert "proof_manifest_path" not in payload
+    assert payload["runtime_resources"] == []
+    assert payload["game_tested"] is False
+    assert payload["manual_proof_required"] is True
+    assert payload["rooms"][0]["primitive"]["floor_surface_id"] == 10
+    assert invalidation["invalidates_previous_export"] is True
+    assert invalidation["invalidates_game_proof"] is True
+    assert invalidation["edited_rooms"] == ["grdev01_room01"]
+    assert invalidation["latest_operation"] == "room_style_update"
+    assert invalidation["stale_outputs"] == ["MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod"]
+    assert "fresh in-game proof" in invalidation["next_action"]
+
+    readiness = controller.authored_module_readiness().readiness
+    assert readiness.can_export_candidate is False
+    assert readiness.metadata["export_proof_invalidation"] == invalidation
+    assert readiness.metadata["runtime_output_status"]["regenerate_required"] is True
+    assert readiness.metadata["room_styles"][0]["floor_surface_name"] == "METAL"
 
 
 def test_t2683_controller_installs_authored_module_to_modules_folder_with_backup(tmp_path: Path) -> None:
@@ -1106,7 +1834,7 @@ def test_t2683_controller_installs_authored_module_to_modules_folder_with_backup
     assert result.code == "installed"
     assert result.installed_module_path == str(installed)
     assert result.resolved_game_root_dir == str(modules_dir.parent)
-    assert "launch_grdev01_smoke_test.py" in result.launch_helper_command
+    assert "launch_authored_module_smoke_test.py" in result.launch_helper_command
     assert str(modules_dir.parent) in result.launch_helper_command
     assert Path(result.elevated_launch_script_path).is_file()
     launch_script = Path(result.elevated_launch_script_path).read_text(encoding="utf-8")
@@ -1129,6 +1857,8 @@ def test_t2683_controller_installs_authored_module_to_modules_folder_with_backup
     assert payload["modder_test_plan"]["install"]["installed"] is True
     assert payload["modder_test_plan"]["install"]["installed_module_path"] == str(installed)
     assert payload["modder_test_plan"]["install"]["proof_manifest_path"] == result.proof_manifest_path
+    assert payload["export_job"]["proof_handoff"]["state"] == "installed_requires_live_warp_proof"
+    assert payload["export_job"]["proof_handoff"]["installed_module_path"] == str(installed)
     proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
     assert proof["capability_stage"] == "installed_test_build"
     assert proof["proof_state"] == "installed_requires_live_warp_proof"
@@ -1159,5 +1889,11 @@ def test_t2644_export_panel_exposes_authored_module_stage_action() -> None:
     assert panel_source == boundary_panel_source
     assert "self.export_panel.authoredModuleStageRequested.connect(self.stage_authored_module)" in window_source
     assert "self.export_panel.authoredModuleInstallRequested.connect(self.install_authored_module)" in window_source
-    assert "self.controller.stage_authored_module(path, dry_run=dry_run)" in window_source
+    assert "mapStudioPackageWizardOutputDirLineEdit" in window_source
+    assert "mapStudioPackageWizardModulesDirLineEdit" in window_source
+    assert "mapStudioPackageWizardDryRunCheckBox" in window_source
+    assert "mapStudioPackageWizardNoPartialWriteLabel" in window_source
+    assert "mode=\"stage\"" in window_source
+    assert "mode=\"install\"" in window_source
+    assert "self.controller.stage_authored_module(path, dry_run=bool(values.get(\"dry_run\")))" in window_source
     assert "game_modules_dir=modules_path" in window_source

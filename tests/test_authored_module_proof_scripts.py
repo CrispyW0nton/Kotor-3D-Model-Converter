@@ -172,9 +172,12 @@ def test_t2645_records_authored_module_game_proof_from_script(tmp_path: Path) ->
         "--tester",
         "pytest",
         "--module-loads-in-game",
+        "--module-identity-matches-authored-resref",
         "--player-spawns-on-floor",
         "--test-placeable-visible",
         "--player-can-walk-on-floor",
+        "--transition-pathing-sanity-confirmed",
+        "--no-inherited-base-game-geometry-or-scripted-movers",
         "--json",
     )
 
@@ -221,6 +224,7 @@ def test_t2645_authored_proof_script_keeps_module_unproven_when_checks_missing(t
     assert "player_spawns_on_floor" in payload["missing_checks"]
     assert "test_placeable_visible" in payload["missing_checks"]
     assert "player_can_walk_on_floor" in payload["missing_checks"]
+    assert "transition_pathing_sanity_confirmed" in payload["missing_checks"]
     pack_manifest = json.loads(Path(payload["pack_manifest_path"]).read_text(encoding="utf-8"))
     authored = pack_manifest["map_studio_authored_module"]
     assert authored["game_tested"] is False

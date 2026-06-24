@@ -9,7 +9,7 @@
             "resource_name": "PYTHON_PAYLOAD_UNREAL_INIT",
             "source_path": "src/unreal/__init__.py",
             "packaged_path": "Python/src/unreal/__init__.py",
-            "sha256": "ef7102b03a4418213e742f3a914c689b95bf9a56d01d4244138c6cb0dd4de336"
+            "sha256": "44664d13d659a3834aa4e847ead7c364b704bfd8ba9f16e472102e8abb9e4987"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_UNREAL_ANIMATION_RETARGETING",

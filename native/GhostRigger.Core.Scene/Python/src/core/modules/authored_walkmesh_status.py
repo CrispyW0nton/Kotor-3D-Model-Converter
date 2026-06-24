@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .authored_module_project import AuthoredModuleProject, compile_authored_room_spec
-from .authored_room_composition import AuthoredRoomComposition
+from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive
 from .authored_room_floorplan import FloorPlanRoomPrimitive
 from .authored_room_geometry import RectangularRoomPrimitive
 from .authored_terrain_builder import TerrainHeightfieldPrimitive
@@ -29,6 +29,8 @@ class AuthoredWalkmeshStatus:
     invalid_face_count: int = 0
     degenerate_face_count: int = 0
     non_manifold_edge_count: int = 0
+    open_edge_count: int = 0
+    steep_walkable_face_count: int = 0
     summary: str = "Walkmesh: no authored module loaded."
     next_action: str = "Create a starter room or terrain patch before inspecting walkmesh."
     warnings: tuple[str, ...] = ()
@@ -57,7 +59,8 @@ def _room_surface_payload(primitive: object) -> tuple[str, str, int] | None:
     if isinstance(primitive, TerrainHeightfieldPrimitive):
         return ("terrain heightfield", str(primitive.material.texture or ""), resolve_walkmesh_surface_id(primitive.floor_surface_id))
     if isinstance(primitive, AuthoredRoomComposition):
-        return ("composed room", str(primitive.floor.material.texture or ""), resolve_walkmesh_surface_id(primitive.floor.surface_id))
+        floor = primitive.floor.primitive if isinstance(primitive.floor, PlacedRoomPrimitive) else primitive.floor
+        return ("composed room", str(floor.material.texture or ""), resolve_walkmesh_surface_id(floor.surface_id))
     return None
 
 
@@ -129,6 +132,9 @@ def authored_walkmesh_status_for_project(project: AuthoredModuleProject) -> Auth
     invalid_faces = sum(audit.invalid_face_count for audit in audits)
     degenerate_faces = sum(audit.degenerate_face_count for audit in audits)
     non_manifold_edges = sum(audit.non_manifold_edge_count for audit in audits)
+    open_edges = sum(audit.open_edge_count for audit in audits)
+    steep_walkable_faces = sum(audit.steep_walkable_face_count for audit in audits)
+    max_audit_slope = max((float(audit.max_walkable_slope_degrees) for audit in audits), default=0.0)
     audit_warnings = tuple(warning for audit in audits for warning in audit.warnings)
     audit_blocking = tuple(message for audit in audits for message in audit.blocking_messages)
     overlay = authored_terrain_walkability_overlay_for_project(project)
@@ -151,6 +157,8 @@ def authored_walkmesh_status_for_project(project: AuthoredModuleProject) -> Auth
             invalid_face_count=invalid_faces,
             degenerate_face_count=degenerate_faces,
             non_manifold_edge_count=non_manifold_edges,
+            open_edge_count=open_edges,
+            steep_walkable_face_count=steep_walkable_faces,
             summary=(
                 f"Walkmesh: {terrain_room_count} terrain room(s), {walkable} walkable triangle(s), "
                 f"{non_walk} blocked triangle(s), {component_count} walkable island(s), "
@@ -168,11 +176,14 @@ def authored_walkmesh_status_for_project(project: AuthoredModuleProject) -> Auth
         terrain_room_count=0,
         walkable_triangle_count=walkable,
         non_walk_triangle_count=non_walk,
+        max_slope_degrees=max_audit_slope,
         walkable_component_count=component_count,
         disconnected_walkmesh_room_count=disconnected_rooms,
         invalid_face_count=invalid_faces,
         degenerate_face_count=degenerate_faces,
         non_manifold_edge_count=non_manifold_edges,
+        open_edge_count=open_edges,
+        steep_walkable_face_count=steep_walkable_faces,
         summary=(
             f"Walkmesh: {room_count} authored flat/composition room(s), {walkable} walkable triangle(s), "
             f"{component_count} walkable island(s). Use Room Material + Walkmesh or Primitive Material + Surface "

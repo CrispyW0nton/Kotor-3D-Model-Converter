@@ -15,6 +15,9 @@ from .authored_walkmesh_surfaces import resolve_walkmesh_surface_id, walkmesh_su
 from .module_format import WOKData, WOKFace
 
 
+DOOR_TRANSITION_SURFACE_ID = 18
+
+
 Vec2 = tuple[float, float]
 Vec3 = tuple[float, float, float]
 Face = tuple[int, int, int]
@@ -97,6 +100,25 @@ def build_rectangular_room_wok(primitive: RectangularRoomPrimitive) -> WOKData:
     surface_id = resolve_walkmesh_surface_id(primitive.floor_surface_id)
     half_w = float(primitive.width) * 0.5
     half_d = float(primitive.depth) * 0.5
+    if primitive.include_doorway_marker:
+        strip_depth = max(0.25, min(2.0, float(primitive.depth) * 0.25))
+        strip_y = half_d - strip_depth
+        return WOKData(
+            verts=[
+                (-half_w, -half_d, 0.0),
+                (half_w, -half_d, 0.0),
+                (half_w, strip_y, 0.0),
+                (-half_w, strip_y, 0.0),
+                (half_w, half_d, 0.0),
+                (-half_w, half_d, 0.0),
+            ],
+            faces=[
+                WOKFace(0, 1, 2, surface=surface_id, adj1=-1, adj2=-1, adj3=1),
+                WOKFace(0, 2, 3, surface=surface_id, adj1=0, adj2=2, adj3=-1),
+                WOKFace(3, 2, 4, surface=DOOR_TRANSITION_SURFACE_ID, adj1=1, adj2=-1, adj3=3),
+                WOKFace(3, 4, 5, surface=DOOR_TRANSITION_SURFACE_ID, adj1=2, adj2=-1, adj3=-1),
+            ],
+        )
     return WOKData(
         verts=[
             (-half_w, -half_d, 0.0),
@@ -218,6 +240,7 @@ def build_rectangular_room_geometry(primitive: RectangularRoomPrimitive) -> Auth
             "wall_height": float(primitive.wall_height),
             "floor_surface_id": resolve_walkmesh_surface_id(primitive.floor_surface_id),
             "floor_surface_name": walkmesh_surface_name(resolve_walkmesh_surface_id(primitive.floor_surface_id)),
+            "transition_surface_id": DOOR_TRANSITION_SURFACE_ID if primitive.include_doorway_marker else 0,
             "helper_mesh_count": len(helpers),
         },
     )

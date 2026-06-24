@@ -93,6 +93,62 @@ def resolve_module_room_placement(
     return None
 
 
+def resolve_module_room_placements(
+    *,
+    game: str,
+    resref: str,
+    resource_manager: Any,
+) -> list[ModuleRoomPlacement]:
+    """Return all LYT-authored room placements for a module/category row.
+
+    ``resref`` may be a module code (``303NAR``), room stem (``303nar``), or
+    one room/submesh from that module (``303NARb3``). The returned rows stay in
+    LYT order so the GUI can import the module as a stable scene group.
+    """
+
+    game_key = "K2" if str(game or "").upper() in {"K2", "TSL"} else "K1"
+    source_resref = str(resref or "").rsplit(".", 1)[0].strip()
+    if not source_resref or resource_manager is None:
+        return []
+
+    info = get_module_info(source_resref, game_key)
+    if info is None:
+        return []
+
+    module_root = module_model_stem(info.module_code, game_key)
+    layout_bytes = _resource_bytes(resource_manager, module_root, game_key)
+    if not layout_bytes:
+        return []
+
+    try:
+        layout = LYTLayout.from_text(layout_bytes.decode("latin-1", errors="replace"))
+    except Exception:
+        return []
+
+    placements: list[ModuleRoomPlacement] = []
+    for index, room in enumerate(getattr(layout, "rooms", []) or []):
+        model = str(getattr(room, "model", "") or "").strip()
+        if not model or model.lower() == "null":
+            continue
+        placements.append(
+            ModuleRoomPlacement(
+                game=game_key,
+                resref=model,
+                module_code=info.module_code,
+                module_root=module_root,
+                area_label=info.label,
+                layout_resref=module_root,
+                room_index=index,
+                position=(
+                    float(getattr(room, "x", 0.0) or 0.0),
+                    float(getattr(room, "y", 0.0) or 0.0),
+                    float(getattr(room, "z", 0.0) or 0.0),
+                ),
+            )
+        )
+    return placements
+
+
 def _resource_bytes(resource_manager: Any, resref: str, game: str) -> bytes | None:
     try:
         from src.core.assets.resource_manager import RES_LYT

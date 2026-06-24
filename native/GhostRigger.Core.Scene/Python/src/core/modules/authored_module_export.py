@@ -19,7 +19,12 @@ from typing import Any
 
 from .authored_module_layout import compile_authored_module_layout
 from .authored_module_lighting import authored_room_light_payload
-from .authored_module_metadata import AuthoredAreaMetadata, compile_authored_module_metadata
+from .authored_module_metadata import (
+    AuthoredAreaMetadata,
+    authored_area_script_hooks,
+    authored_module_script_hooks,
+    compile_authored_module_metadata,
+)
 from .authored_module_objects import (
     AuthoredGameplayPlacement,
     build_git_bytes,
@@ -30,6 +35,7 @@ from .authored_module_pathing import AuthoredPathAnchor, compile_authored_pathin
 from .authored_module_project import AuthoredModuleProject, compile_authored_room_spec, normalise_resref, validate_authored_module_project
 from .authored_room_geometry import AuthoredRoomGeometry, PrimitiveMesh
 from .authored_room_materials import compile_authored_room_material_preflight
+from .authored_walkmesh_audit import DOOR_TRANSITION_SURFACE_ID, AuthoredWalkmeshAudit, audit_authored_wok
 from .authored_walkmesh_boundaries import apply_authored_walkmesh_boundary_policy_to_geometry
 from .custom_module_packager import CustomModulePackRequest, CustomModulePackResult, PackagedModuleResource, package_custom_module
 from .dev_module_smoke import (
@@ -153,6 +159,7 @@ class AuthoredModuleGameProofRequest:
     player_spawns_on_floor: bool = False
     test_placeable_visible: bool = False
     player_can_walk_on_floor: bool = False
+    transition_pathing_sanity_confirmed: bool = False
     no_inherited_base_game_geometry_or_scripted_movers: bool = False
     allow_missing_evidence: bool = False
 
@@ -367,6 +374,123 @@ def _walkability_to_manifest(walkability: Any) -> dict[str, Any]:
         ],
         "warnings": list(getattr(walkability, "warnings", ()) or ()),
         "blocking_issues": list(getattr(walkability, "blocking_issues", ()) or ()),
+    }
+
+
+def _walkmesh_audit_to_manifest(audit: AuthoredWalkmeshAudit) -> dict[str, Any]:
+    return {
+        "room_resref": audit.room_resref,
+        "ready": bool(audit.ready),
+        "face_count": int(audit.face_count),
+        "walkable_face_count": int(audit.walkable_face_count),
+        "non_walk_face_count": int(audit.non_walk_face_count),
+        "walkable_component_count": int(audit.walkable_component_count),
+        "disconnected_component_count": int(audit.disconnected_component_count),
+        "largest_walkable_component_faces": int(audit.largest_walkable_component_faces),
+        "invalid_face_count": int(audit.invalid_face_count),
+        "degenerate_face_count": int(audit.degenerate_face_count),
+        "non_manifold_edge_count": int(audit.non_manifold_edge_count),
+        "transition_surface_face_count": int(audit.transition_surface_face_count),
+        "steep_walkable_face_count": int(audit.steep_walkable_face_count),
+        "max_walkable_slope_degrees": float(audit.max_walkable_slope_degrees),
+        "max_allowed_walkable_slope_degrees": float(audit.max_allowed_walkable_slope_degrees),
+        "warnings": list(audit.warnings),
+        "blocking_messages": list(audit.blocking_messages),
+    }
+
+
+def _transition_link_rows(placements: AuthoredGameplayPlacement) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for kind, items in (
+        ("door", tuple(placements.doors or ())),
+        ("trigger", tuple(placements.triggers or ())),
+    ):
+        for index, item in enumerate(items):
+            linked_to = str(getattr(item, "linked_to", "") or "").strip()
+            if not linked_to:
+                continue
+            linked_module = normalise_resource_resref(getattr(item, "linked_to_module", ""))
+            rows.append(
+                {
+                    "kind": kind,
+                    "index": index,
+                    "tag": str(getattr(item, "tag", "") or ""),
+                    "template_resref": normalise_resource_resref(getattr(item, "template_resref", "")),
+                    "linked_to": linked_to,
+                    "linked_to_module": linked_module,
+                    "transition_destination": int(getattr(item, "transition_destination", 0) or 0),
+                    "requires_wok_transition_surface": True,
+                }
+            )
+    return rows
+
+
+def _transition_surface_gate_to_manifest(
+    placements: AuthoredGameplayPlacement,
+    audits: tuple[AuthoredWalkmeshAudit, ...],
+) -> dict[str, Any]:
+    rows = _transition_link_rows(placements)
+    transition_surface_face_count = sum(int(audit.transition_surface_face_count) for audit in audits)
+    warnings: list[str] = []
+    blocking: list[str] = []
+    if rows and transition_surface_face_count <= 0:
+        blocking.append(
+            f"Authored module has {len(rows)} linked door/trigger transition(s) but no WOK DOOR/transition surface "
+            f"face(s). Paint at least one doorway walkmesh face as surface {DOOR_TRANSITION_SURFACE_ID} before export."
+        )
+    if not rows and transition_surface_face_count > 0:
+        warnings.append(
+            f"Generated WOK includes {transition_surface_face_count} DOOR/transition surface face(s) but no linked door/trigger transition intent."
+        )
+    return {
+        "ready": not blocking,
+        "required_transition_count": len(rows),
+        "transition_surface_face_count": int(transition_surface_face_count),
+        "transition_surface_id": DOOR_TRANSITION_SURFACE_ID,
+        "references": rows,
+        "warnings": warnings,
+        "blocking_messages": blocking,
+    }
+
+
+def _walkmesh_gate_to_manifest(
+    audits: tuple[AuthoredWalkmeshAudit, ...],
+    *,
+    walkability: dict[str, Any],
+    pathing: dict[str, Any],
+    transition_surface_gate: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    blocking = [message for audit in audits for message in audit.blocking_messages]
+    blocking.extend(str(message) for message in walkability.get("blocking_issues", []) or [])
+    transition_gate = dict(transition_surface_gate or {})
+    blocking.extend(str(message) for message in transition_gate.get("blocking_messages", []) or [])
+    if not pathing:
+        blocking.append("Authored module PTH pathing was not compiled.")
+    return {
+        "ready": not blocking,
+        "room_count": len(audits),
+        "walkable_face_count": sum(int(audit.walkable_face_count) for audit in audits),
+        "non_walk_face_count": sum(int(audit.non_walk_face_count) for audit in audits),
+        "walkable_component_count": sum(int(audit.walkable_component_count) for audit in audits),
+        "disconnected_walkmesh_room_count": sum(1 for audit in audits if int(audit.walkable_component_count) > 1),
+        "invalid_face_count": sum(int(audit.invalid_face_count) for audit in audits),
+        "degenerate_face_count": sum(int(audit.degenerate_face_count) for audit in audits),
+        "non_manifold_edge_count": sum(int(audit.non_manifold_edge_count) for audit in audits),
+        "transition_surface_face_count": sum(int(audit.transition_surface_face_count) for audit in audits),
+        "transition_surface_gate": transition_gate,
+        "steep_walkable_face_count": sum(int(audit.steep_walkable_face_count) for audit in audits),
+        "max_walkable_slope_degrees": max((float(audit.max_walkable_slope_degrees) for audit in audits), default=0.0),
+        "max_allowed_walkable_slope_degrees": max((float(audit.max_allowed_walkable_slope_degrees) for audit in audits), default=0.0),
+        "gameplay_anchor_check_count": len(list(walkability.get("checks", []) or [])),
+        "gameplay_anchor_checks_passed": bool(walkability.get("ok", False)),
+        "pth_compiled": bool(pathing),
+        "pth_point_count": int(pathing.get("point_count", 0) or 0),
+        "pth_connection_count": int(pathing.get("connection_count", 0) or 0),
+        "pathing_anchor_labels": list(pathing.get("anchor_labels", []) or []),
+        "warnings": [warning for audit in audits for warning in audit.warnings]
+        + [str(warning) for warning in transition_gate.get("warnings", []) or []],
+        "blocking_messages": blocking,
+        "rooms": [_walkmesh_audit_to_manifest(audit) for audit in audits],
     }
 
 
@@ -591,6 +715,64 @@ def _positioned_expectations(kind: str, items: Any) -> list[dict[str, Any]]:
     return rows
 
 
+def _mesh_material_uv_record(mesh: Any, *, role: str, floor_surface_id: int = -1, floor_surface_name: str = "") -> dict[str, Any]:
+    vertices = tuple(getattr(mesh, "vertices", ()) or ())
+    uvs = tuple(getattr(mesh, "uvs", ()) or ())
+    return {
+        "role": role,
+        "mesh_name": str(getattr(mesh, "name", "") or ""),
+        "texture": str(getattr(mesh, "texture", "") or ""),
+        "diffuse": _vec3_to_manifest(getattr(mesh, "diffuse", (0.8, 0.8, 0.8))),
+        "ambient": _vec3_to_manifest(getattr(mesh, "ambient", (0.35, 0.35, 0.35))),
+        "vertex_count": len(vertices),
+        "face_count": len(tuple(getattr(mesh, "faces", ()) or ())),
+        "uv_count": len(uvs),
+        "uv_complete": bool(vertices) and len(uvs) == len(vertices),
+        "uv_coordinate_space": "mesh_uv0",
+        "wok_surface_id": int(floor_surface_id),
+        "wok_surface_name": str(floor_surface_name or ""),
+    }
+
+
+def _room_material_uv_manifest(room_geometry: dict[str, Any]) -> list[dict[str, Any]]:
+    """Summarize authored material/UV intent paired with generated MDL/WOK."""
+
+    rows: list[dict[str, Any]] = []
+    for room_resref, geometry in sorted(room_geometry.items()):
+        metadata = dict(getattr(geometry, "metadata", {}) or {})
+        floor_surface_id = int(metadata.get("floor_surface_id", -1) or -1)
+        floor_surface_name = str(metadata.get("floor_surface_name", "") or "")
+        meshes = [
+            _mesh_material_uv_record(
+                geometry.room_mesh,
+                role="room_mesh",
+                floor_surface_id=floor_surface_id,
+                floor_surface_name=floor_surface_name,
+            )
+        ]
+        for index, helper in enumerate(tuple(getattr(geometry, "helper_meshes", ()) or ())):
+            meshes.append(
+                _mesh_material_uv_record(
+                    helper,
+                    role=f"helper_mesh_{index + 1}",
+                    floor_surface_id=floor_surface_id,
+                    floor_surface_name=floor_surface_name,
+                )
+            )
+        rows.append(
+            {
+                "room_resref": room_resref,
+                "texture": meshes[0]["texture"] if meshes else "",
+                "floor_surface_id": floor_surface_id,
+                "floor_surface_name": floor_surface_name,
+                "mesh_count": len(meshes),
+                "all_mesh_uvs_complete": all(bool(row["uv_complete"]) for row in meshes),
+                "meshes": meshes,
+            }
+        )
+    return rows
+
+
 def _template_dependency_rows(
     placements: AuthoredGameplayPlacement,
     *,
@@ -631,6 +813,127 @@ def _template_dependency_rows(
                 }
             )
     return sorted(rows, key=lambda row: (row["kind"], row["template_resref"], row["restype"], row["tag"]))
+
+
+def _script_reference_rows(
+    project: AuthoredModuleProject,
+    *,
+    packaged_keys: set[tuple[str, str]] | None = None,
+) -> list[dict[str, Any]]:
+    packaged = packaged_keys or set()
+    rows: list[dict[str, Any]] = []
+    for scope, hooks in (
+        ("module", authored_module_script_hooks(project.metadata)),
+        ("area", authored_area_script_hooks(project.metadata)),
+    ):
+        for field_name, script_resref in hooks.items():
+            resref = normalise_resource_resref(script_resref)
+            if not resref:
+                continue
+            is_packaged = (resref, "ncs") in packaged
+            rows.append(
+                {
+                    "kind": "script",
+                    "scope": scope,
+                    "field_name": str(field_name),
+                    "script_resref": resref,
+                    "restype": "ncs",
+                    "status": "packaged" if is_packaged else "external_or_override",
+                    "packaged": is_packaged,
+                    "required": True,
+                    "message": (
+                        f"{scope} script hook {field_name} uses packaged script {resref}.ncs."
+                        if is_packaged
+                        else f"{scope} script hook {field_name} must resolve from the base game, Override, or another installed mod."
+                    ),
+                }
+            )
+    return sorted(rows, key=lambda row: (row["scope"], row["field_name"], row["script_resref"]))
+
+
+def _dialog_reference_rows(
+    project: AuthoredModuleProject,
+    *,
+    packaged_keys: set[tuple[str, str]] | None = None,
+) -> list[dict[str, Any]]:
+    packaged = packaged_keys or set()
+    metadata = dict(getattr(getattr(project, "metadata", None), "metadata", {}) or {})
+    sources: list[tuple[str, Any]] = []
+    for key in ("dialog_refs", "dialog_references", "dialogue_refs", "conversation_refs", "conversations", "dialogs"):
+        value = metadata.get(key)
+        if value:
+            sources.append((key, value))
+
+    rows: list[dict[str, Any]] = []
+
+    def append_row(source_key: str, label: str, value: Any) -> None:
+        resref = normalise_resource_resref(value)
+        if not resref:
+            return
+        is_packaged = (resref, "dlg") in packaged
+        rows.append(
+            {
+                "kind": "dialog",
+                "source": source_key,
+                "field_name": str(label or source_key),
+                "dialog_resref": resref,
+                "restype": "dlg",
+                "status": "packaged" if is_packaged else "external_or_override",
+                "packaged": is_packaged,
+                "required": True,
+                "message": (
+                    f"Dialog reference {resref}.dlg is included in this module package."
+                    if is_packaged
+                    else f"Dialog reference {resref}.dlg must resolve from the base game, Override, or another installed mod."
+                ),
+            }
+        )
+
+    for source_key, value in sources:
+        if isinstance(value, dict):
+            for label, resref in value.items():
+                append_row(source_key, str(label), resref)
+        elif isinstance(value, (list, tuple)):
+            for index, item in enumerate(value):
+                if isinstance(item, dict):
+                    append_row(source_key, str(item.get("field") or item.get("label") or item.get("name") or index), item.get("resref") or item.get("dialog") or item.get("dlg"))
+                else:
+                    append_row(source_key, str(index), item)
+        else:
+            append_row(source_key, source_key, value)
+    return sorted(rows, key=lambda row: (row["source"], row["field_name"], row["dialog_resref"]))
+
+
+def _resource_reference_gate_to_manifest(
+    *,
+    template_dependencies: list[dict[str, Any]],
+    script_references: list[dict[str, Any]],
+    dialog_references: list[dict[str, Any]],
+) -> dict[str, Any]:
+    references = list(template_dependencies) + list(script_references) + list(dialog_references)
+    packaged_count = sum(1 for row in references if bool(row.get("packaged")))
+    external_count = len(references) - packaged_count
+    warnings = [
+        str(row.get("message") or "")
+        for row in references
+        if row.get("required") and not row.get("packaged") and str(row.get("message") or "")
+    ]
+    return {
+        "ready": True,
+        "reference_count": len(references),
+        "packaged_reference_count": packaged_count,
+        "external_reference_count": external_count,
+        "template_reference_count": len(template_dependencies),
+        "script_reference_count": len(script_references),
+        "dialog_reference_count": len(dialog_references),
+        "all_required_packaged": external_count == 0,
+        "requires_install_context": external_count > 0,
+        "templates": list(template_dependencies),
+        "scripts": list(script_references),
+        "dialogs": list(dialog_references),
+        "warnings": warnings,
+        "blocking_messages": [],
+    }
 
 
 def _smoke_expectations_from_build_parts(
@@ -720,6 +1023,7 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
     root = project.module_root
     room_geometries: dict[str, AuthoredRoomGeometry] = {}
     room_woks: dict[str, WOKData] = {}
+    walkmesh_audits: list[AuthoredWalkmeshAudit] = []
     warnings: list[str] = []
     blocking: list[str] = []
 
@@ -748,6 +1052,10 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
             continue
         room_geometries[room_resref] = geometry
         room_woks[room_resref] = geometry.wok
+        audit = audit_authored_wok(room_resref, geometry.wok)
+        walkmesh_audits.append(audit)
+        warnings.extend(audit.warnings)
+        blocking.extend(audit.blocking_messages)
 
     entry_room, entry_wok = _entry_room_wok(project, room_geometries)
     walkability = None
@@ -830,6 +1138,15 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
     )
     walkability_metadata = _walkability_to_manifest(walkability)
     pathing_metadata = dict(pathing.metadata) if pathing is not None else {}
+    transition_surface_gate = _transition_surface_gate_to_manifest(project.placements, tuple(walkmesh_audits))
+    warnings.extend(str(warning) for warning in transition_surface_gate.get("warnings", []) or [])
+    blocking.extend(str(message) for message in transition_surface_gate.get("blocking_messages", []) or [])
+    walkmesh_gate = _walkmesh_gate_to_manifest(
+        tuple(walkmesh_audits),
+        walkability=walkability_metadata,
+        pathing=pathing_metadata,
+        transition_surface_gate=transition_surface_gate,
+    )
     visibility_metadata = _visibility_to_manifest(project, layout)
     smoke_expectations = _smoke_expectations_from_build_parts(
         project,
@@ -838,8 +1155,16 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
     )
     room_lights = [authored_room_light_payload(light) for light in tuple(getattr(project, "lights", ()) or ())]
     lighting_metadata = _lighting_to_manifest(project, room_lights)
+    material_uv = _room_material_uv_manifest(module_state.room_geometry)
     packaged_keys = set(resources)
     template_dependencies = _template_dependency_rows(project.placements, packaged_keys=packaged_keys)
+    script_references = _script_reference_rows(project, packaged_keys=packaged_keys)
+    dialog_references = _dialog_reference_rows(project, packaged_keys=packaged_keys)
+    resource_reference_gate = _resource_reference_gate_to_manifest(
+        template_dependencies=template_dependencies,
+        script_references=script_references,
+        dialog_references=dialog_references,
+    )
     packaged_template_count = sum(1 for row in template_dependencies if row["packaged"])
     external_template_count = len(template_dependencies) - packaged_template_count
     return AuthoredModuleBuild(
@@ -862,21 +1187,33 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
             "gameplay_template_dependency_count": len(template_dependencies),
             "gameplay_packaged_template_dependency_count": packaged_template_count,
             "gameplay_external_template_dependency_count": external_template_count,
+            "script_references": script_references,
+            "script_reference_count": len(script_references),
+            "dialog_references": dialog_references,
+            "dialog_reference_count": len(dialog_references),
+            "resource_reference_gate": resource_reference_gate,
             "lighting_count": len(room_lights),
             "room_lights": room_lights,
             "lighting": lighting_metadata,
+            "material_uv": material_uv,
             "visibility": visibility_metadata,
             "walkability": walkability_metadata,
             "pathing": pathing_metadata,
+            "walkmesh_gate": walkmesh_gate,
             "smoke_expectations": smoke_expectations,
         },
     )
 
 
-def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_result: CustomModulePackResult, verification: DevModulePackageVerification | None) -> None:
+def _augment_authored_manifest(
+    path: str,
+    build: AuthoredModuleBuild,
+    package_result: CustomModulePackResult,
+    verification: DevModulePackageVerification | None,
+) -> dict[str, Any]:
     manifest_path = Path(path)
     if not manifest_path.exists():
-        return
+        return _authored_export_job_record(build, package_result, verification)
     data = json.loads(manifest_path.read_text(encoding="utf-8"))
     remaining_acceptance = [
         f"Install/copy {build.module_root}.mod into the KOTOR Modules folder.",
@@ -889,10 +1226,13 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
     ]
     smoke_contract = _authored_smoke_contract(build, verification)
     source_identity = dict(smoke_contract.get("source_identity") or {})
+    project_metadata = dict(getattr(getattr(build.project, "metadata", None), "metadata", {}) or {})
+    export_job = _authored_export_job_record(build, package_result, verification)
     data["map_studio_authored_module"] = {
         "task": "T2643",
         "module_root": build.module_root,
         "game": build.game,
+        "project_metadata": project_metadata,
         "content_origin": str(smoke_contract.get("content_origin") or source_identity.get("content_origin") or "map_studio_original"),
         "authored_from_scratch": bool(smoke_contract.get("authored_from_scratch", source_identity.get("authored_from_scratch", True))),
         "copied_from_base_game_module": bool(smoke_contract.get("copied_from_base_game_module", source_identity.get("copied_from_base_game_module", False))),
@@ -911,6 +1251,11 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
                 "wok_faces": len(getattr(geometry.wok, "faces", []) or []),
                 "wok_walkable_faces": int(geometry.wok.walkable_face_count()) if hasattr(geometry.wok, "walkable_face_count") else 0,
                 "wok_non_walk_faces": int(geometry.wok.non_walk_face_count()) if hasattr(geometry.wok, "non_walk_face_count") else 0,
+                "wok_transition_surface_faces": sum(
+                    1
+                    for face in list(getattr(geometry.wok, "faces", []) or [])
+                    if int(getattr(face, "surface", -1)) == DOOR_TRANSITION_SURFACE_ID
+                ),
                 "model_nodes": 1 + len(geometry.helper_meshes),
                 "texture": str(getattr(geometry.room_mesh, "texture", "") or ""),
                 "floor_surface_id": int(getattr((list(getattr(geometry.wok, "faces", []) or []) or [None])[0], "surface", -1)),
@@ -923,16 +1268,24 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
         "gameplay_template_dependency_count": int(build.metadata.get("gameplay_template_dependency_count", 0) or 0),
         "gameplay_packaged_template_dependency_count": int(build.metadata.get("gameplay_packaged_template_dependency_count", 0) or 0),
         "gameplay_external_template_dependency_count": int(build.metadata.get("gameplay_external_template_dependency_count", 0) or 0),
+        "script_references": list(build.metadata.get("script_references", []) or []),
+        "script_reference_count": int(build.metadata.get("script_reference_count", 0) or 0),
+        "dialog_references": list(build.metadata.get("dialog_references", []) or []),
+        "dialog_reference_count": int(build.metadata.get("dialog_reference_count", 0) or 0),
+        "resource_reference_gate": dict(build.metadata.get("resource_reference_gate", {}) or {}),
         "lighting_count": int(build.metadata.get("lighting_count", 0) or 0),
         "room_lights": list(build.metadata.get("room_lights", []) or []),
         "lighting": dict(build.metadata.get("lighting", {}) or {}),
+        "material_uv": list(build.metadata.get("material_uv", []) or []),
         "visibility": dict(build.metadata.get("visibility", {}) or {}),
         "walkability": dict(build.metadata.get("walkability", {})),
         "pathing": dict(build.metadata.get("pathing", {})),
+        "walkmesh_gate": dict(build.metadata.get("walkmesh_gate", {}) or {}),
         "smoke_expectations": dict(build.metadata.get("smoke_expectations", {})),
         "resources": [summary.__dict__ for summary in build.resource_summaries],
         "package_ok": bool(package_result.ok),
         "package_verification": _verification_to_manifest(verification),
+        "export_job": export_job,
         "readback": {
             "ok": bool(verification.ok) if verification is not None else False,
             "code": verification.code if verification is not None else "not_verified",
@@ -961,8 +1314,10 @@ def _augment_authored_manifest(path: str, build: AuthoredModuleBuild, package_re
         ],
         "remaining_acceptance": remaining_acceptance,
     }
+    data["export_job"] = export_job
     data["validation"]["warnings"] = sorted(set(list(data.get("validation", {}).get("warnings", [])) + build.warnings + package_result.warnings))
     manifest_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return export_job
 
 
 def export_authored_module_project(request: AuthoredModuleExportRequest) -> AuthoredModuleExportResult:
@@ -971,6 +1326,8 @@ def export_authored_module_project(request: AuthoredModuleExportRequest) -> Auth
     build = build_authored_module(request.project, game_root_dir=request.game_root_dir)
     room_resrefs = tuple(sorted(build.module.room_geometry))
     if build.blocking_issues and request.strict:
+        metadata = dict(build.metadata)
+        metadata["export_job"] = _authored_export_job_record(build)
         return AuthoredModuleExportResult(
             ok=False,
             module_root=build.module_root,
@@ -978,11 +1335,13 @@ def export_authored_module_project(request: AuthoredModuleExportRequest) -> Auth
             resources=build.resource_summaries,
             warnings=build.warnings,
             blocking_issues=build.blocking_issues,
-            metadata=dict(build.metadata),
+            metadata=metadata,
             message=f"Authored Map Studio module preflight found {len(build.blocking_issues)} blocking issue(s).",
             code="preflight_failed",
         )
     if request.dry_run:
+        metadata = dict(build.metadata)
+        metadata["export_job"] = _authored_export_job_record(build)
         return AuthoredModuleExportResult(
             ok=not build.blocking_issues,
             module_root=build.module_root,
@@ -990,7 +1349,7 @@ def export_authored_module_project(request: AuthoredModuleExportRequest) -> Auth
             resources=build.resource_summaries,
             warnings=build.warnings + ["Dry run only; no MOD package was written."],
             blocking_issues=build.blocking_issues,
-            metadata=dict(build.metadata),
+            metadata=metadata,
             message=(
                 f"Authored Map Studio module dry run passed for {build.module_root}."
                 if not build.blocking_issues
@@ -1024,10 +1383,12 @@ def export_authored_module_project(request: AuthoredModuleExportRequest) -> Auth
             expected_room_resref=room_resrefs[0],
             game=build.game,
         )
-    _augment_authored_manifest(package_result.manifest_path, build, package_result, verification)
+    export_job = _augment_authored_manifest(package_result.manifest_path, build, package_result, verification)
     verification_warnings = list(verification.warnings) if verification is not None else []
     verification_blocking = list(verification.blocking_issues) if verification is not None else []
     ok = package_result.ok and (verification.ok if verification is not None else True)
+    metadata = dict(build.metadata)
+    metadata["export_job"] = export_job
     return AuthoredModuleExportResult(
         ok=ok,
         module_root=build.module_root,
@@ -1039,7 +1400,7 @@ def export_authored_module_project(request: AuthoredModuleExportRequest) -> Auth
         resources=build.resource_summaries,
         warnings=build.warnings + package_result.warnings + verification_warnings,
         blocking_issues=build.blocking_issues + package_result.blocking_issues + verification_blocking,
-        metadata=dict(build.metadata),
+        metadata=metadata,
         message=(
             f"Authored Map Studio module exported: {package_result.module_path}"
             if ok
@@ -1084,6 +1445,174 @@ def _verification_to_manifest(verification: DevModulePackageVerification | None)
         "warnings": list(verification.warnings),
         "blocking_issues": list(verification.blocking_issues),
     }
+
+
+def _artifact_output_record(path: str, artifact_kind: str, *, required: bool = True) -> dict[str, Any]:
+    text = str(path or "")
+    item_path = Path(text) if text else None
+    exists = item_path.exists() if item_path is not None else False
+    return {
+        "artifact_kind": artifact_kind,
+        "final_path": text,
+        "required": bool(required),
+        "exists": bool(exists),
+        "is_file": bool(item_path.is_file()) if item_path is not None and exists else False,
+        "is_dir": bool(item_path.is_dir()) if item_path is not None and exists else False,
+        "size": int(item_path.stat().st_size) if item_path is not None and item_path.is_file() else 0,
+    }
+
+
+def _package_output_records(package_result: CustomModulePackResult | None) -> list[dict[str, Any]]:
+    if package_result is None:
+        return []
+    outputs = [
+        _artifact_output_record(package_result.module_path, "module_package"),
+        _artifact_output_record(package_result.manifest_path, "pack_manifest"),
+        _artifact_output_record(package_result.resources_dir, "loose_resource_directory", required=False),
+    ]
+    for resource in list(package_result.staged_resources or []):
+        outputs.append(
+            {
+                "artifact_kind": "loose_resource",
+                "resref": resource.resref,
+                "restype": resource.restype,
+                "final_path": resource.path,
+                "required": True,
+                "exists": Path(resource.path).is_file(),
+                "size": resource.size,
+                "sha256": resource.sha256,
+                "source": resource.source,
+            }
+        )
+    return outputs
+
+
+def _export_job_status(
+    build: AuthoredModuleBuild,
+    package_result: CustomModulePackResult | None,
+    verification: DevModulePackageVerification | None,
+) -> str:
+    if build.blocking_issues:
+        return "preflight_failed"
+    if package_result is None:
+        return "pending"
+    if not package_result.ok:
+        return "preflight_failed" if package_result.code == "preflight_failed" else "failed"
+    if verification is not None and not verification.ok:
+        return "failed"
+    return "succeeded"
+
+
+def _authored_export_job_record(
+    build: AuthoredModuleBuild,
+    package_result: CustomModulePackResult | None = None,
+    verification: DevModulePackageVerification | None = None,
+    *,
+    proof_manifest_path: str = "",
+    install_path: str = "",
+    installed: bool = False,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    walkmesh_gate = dict(build.metadata.get("walkmesh_gate", {}) or {})
+    resource_gate = dict(build.metadata.get("resource_reference_gate", {}) or {})
+    pathing = dict(build.metadata.get("pathing", {}) or {})
+    visibility = dict(build.metadata.get("visibility", {}) or {})
+    smoke_expectations = dict(build.metadata.get("smoke_expectations", {}) or {})
+    expected_placeables = smoke_expectations.get("expected_placeables")
+    include_test_placeable = (
+        bool(expected_placeables)
+        if expected_placeables is not None
+        else bool(getattr(build.project.placements, "placeables", ()) or ())
+    )
+    package_blocking = list(package_result.blocking_issues) if package_result is not None else []
+    package_warnings = list(package_result.warnings) if package_result is not None else []
+    verification_manifest = _verification_to_manifest(verification)
+    return {
+        "schema": "ghostrigger.authored_export_job.v1",
+        "task": "T2913",
+        "job_id": f"map_studio.authored_module.{build.module_root}",
+        "kind": "map_studio.authored_module.mod_package",
+        "module_root": build.module_root,
+        "game": build.game,
+        "status": _export_job_status(build, package_result, verification),
+        "transaction_model": "preflight -> package -> readback -> proof_handoff",
+        "preflight": {
+            "ready": not bool(build.blocking_issues),
+            "resource_count": len(build.resource_summaries),
+            "blocking_issue_count": len(build.blocking_issues),
+            "warning_count": len(build.warnings),
+            "walkmesh_gate_ready": bool(walkmesh_gate.get("ready")),
+            "resource_reference_gate_ready": bool(resource_gate.get("ready")),
+            "pathing_ready": bool(pathing.get("ready", pathing.get("ok", False))),
+            "visibility_ready": bool(visibility.get("ready")),
+            "blocking_issues": list(build.blocking_issues),
+            "warnings": list(build.warnings),
+        },
+        "package": {
+            "ok": bool(package_result.ok) if package_result is not None else False,
+            "code": package_result.code if package_result is not None else "not_packaged",
+            "module_path": package_result.module_path if package_result is not None else "",
+            "pack_manifest_path": package_result.manifest_path if package_result is not None else "",
+            "resources_dir": package_result.resources_dir if package_result is not None else "",
+            "blocking_issues": package_blocking,
+            "warnings": package_warnings,
+        },
+        "outputs": _package_output_records(package_result),
+        "readback": verification_manifest,
+        "proof_handoff": {
+            "required": True,
+            "state": "installed_requires_live_warp_proof" if installed else "requires_live_warp_proof",
+            "dry_run": bool(dry_run),
+            "installed": bool(installed),
+            "installed_module_path": install_path,
+            "proof_manifest_path": proof_manifest_path,
+            "acceptance_required": _authored_acceptance_checks(include_test_placeable=include_test_placeable),
+        },
+    }
+
+
+def _export_job_for_install_proof(
+    export_result: AuthoredModuleExportResult,
+    *,
+    proof_manifest_path: str,
+    install_path: str,
+    installed: bool,
+    dry_run: bool,
+) -> dict[str, Any]:
+    export_job = dict(export_result.metadata.get("export_job") or {})
+    if not export_job:
+        export_job = {
+            "schema": "ghostrigger.authored_export_job.v1",
+            "task": "T2913",
+            "job_id": f"map_studio.authored_module.{export_result.module_root}",
+            "kind": "map_studio.authored_module.mod_package",
+            "module_root": export_result.module_root,
+            "status": "succeeded" if export_result.ok else "failed",
+            "transaction_model": "preflight -> package -> readback -> proof_handoff",
+            "package": {
+                "ok": bool(export_result.ok),
+                "module_path": export_result.module_path,
+                "pack_manifest_path": export_result.manifest_path,
+            },
+            "outputs": [
+                _artifact_output_record(export_result.module_path, "module_package"),
+                _artifact_output_record(export_result.manifest_path, "pack_manifest"),
+            ],
+            "readback": _verification_to_manifest(export_result.package_verification),
+        }
+    proof_handoff = dict(export_job.get("proof_handoff") or {})
+    proof_handoff.update(
+        {
+            "required": True,
+            "state": "installed_requires_live_warp_proof" if installed else "requires_live_warp_proof",
+            "dry_run": bool(dry_run),
+            "installed": bool(installed),
+            "installed_module_path": install_path,
+            "proof_manifest_path": proof_manifest_path,
+        }
+    )
+    export_job["proof_handoff"] = proof_handoff
+    return export_job
 
 
 def _authored_required_resource_rows(module_root: str, room_resrefs: tuple[str, ...]) -> list[dict[str, str]]:
@@ -1162,6 +1691,7 @@ def _authored_smoke_contract(build: AuthoredModuleBuild, verification: DevModule
     contract["in_game_acceptance_checks"] = _authored_acceptance_checks(
         include_test_placeable=bool(contract.get("expected_placeables"))
     )
+    contract["resource_reference_gate"] = dict(build.metadata.get("resource_reference_gate", {}) or {})
     return contract
 
 
@@ -1180,6 +1710,7 @@ def _authored_smoke_contract_from_export_result(export_result: AuthoredModuleExp
     contract["in_game_acceptance_checks"] = _authored_acceptance_checks(
         include_test_placeable=bool(contract.get("expected_placeables"))
     )
+    contract["resource_reference_gate"] = dict(export_result.metadata.get("resource_reference_gate", {}) or {})
     return contract
 
 
@@ -1239,6 +1770,7 @@ def _authored_game_test_steps(module_root: str, *, include_test_placeable: bool 
     steps.extend(
         [
             "Walk across the generated floor and confirm movement is not blocked unexpectedly.",
+            "Confirm transition/pathing sanity: authored PTH anchors are reachable and any door/transition links behave as expected.",
             "Confirm there are no inherited PLCaa scripted moving spheres, cones, rectangles, or other base-game test-room movers.",
             "Capture a screenshot or short clip as proof.",
         ]
@@ -1257,6 +1789,7 @@ def _authored_acceptance_checks(*, include_test_placeable: bool = True) -> list[
     checks.extend(
         [
             "player_can_walk_on_floor",
+            "transition_pathing_sanity_confirmed",
             "no_inherited_base_game_geometry_or_scripted_movers",
             "screenshot_or_video_captured",
         ]
@@ -1273,6 +1806,7 @@ def _authored_modder_test_plan(
     evidence_path: str = "",
     accepted: bool = False,
     missing_checks: list[str] | None = None,
+    package_resource_inventory: dict[str, Any] | None = None,
     dry_run: bool = False,
     installed: bool = False,
 ) -> dict[str, Any]:
@@ -1280,6 +1814,7 @@ def _authored_modder_test_plan(
 
     acceptance_checks = list(smoke_contract.get("in_game_acceptance_checks") or _authored_acceptance_checks())
     missing = list(missing_checks if missing_checks is not None else ([] if accepted else acceptance_checks))
+    accepted_checks = [check for check in acceptance_checks if check not in set(missing)]
     if accepted:
         capability_stage = "game_smoke_tested"
         proof_state = "game_smoke_tested"
@@ -1289,7 +1824,7 @@ def _authored_modder_test_plan(
     else:
         capability_stage = str(smoke_contract.get("capability_stage") or "export_candidate")
         proof_state = "requires_live_warp_proof"
-    return {
+    plan = {
         "task": "T2605",
         "module_root": str(smoke_contract.get("module_root") or ""),
         "capability_stage": capability_stage,
@@ -1310,9 +1845,11 @@ def _authored_modder_test_plan(
         "expected_entry_point": dict(smoke_contract.get("expected_entry_point") or {}),
         "expected_placeables": list(smoke_contract.get("expected_placeables") or ()),
         "expected_waypoints": list(smoke_contract.get("expected_waypoints") or ()),
+        "resource_reference_gate": dict(smoke_contract.get("resource_reference_gate") or {}),
         "walkability": dict(smoke_contract.get("walkability") or {}),
         "pathing_anchor_labels": list(smoke_contract.get("pathing_anchor_labels") or ()),
         "acceptance_checks": acceptance_checks,
+        "accepted_acceptance_checks": accepted_checks,
         "missing_acceptance_checks": missing,
         "evidence": {
             "required": not bool(accepted),
@@ -1324,6 +1861,88 @@ def _authored_modder_test_plan(
             if accepted
             else "Install the staged .mod, warp into the module, verify every acceptance check, then record screenshot/video proof."
         ),
+    }
+    if package_resource_inventory:
+        plan["package_resource_inventory"] = dict(package_resource_inventory)
+    return plan
+
+
+def _authored_package_resource_inventory(
+    *,
+    export_result: AuthoredModuleExportResult,
+    smoke_contract: dict[str, Any],
+    install_path: str = "",
+    modules_dir: str = "",
+    backup_path: str = "",
+    installed: bool = False,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Build the package resource inventory consumed by proof/status UI."""
+
+    verification = export_result.package_verification
+    verified_resources = [
+        {
+            "resref": resource.resref,
+            "restype": resource.restype,
+            "filename": f"{resource.resref}.{resource.restype}",
+            "size": resource.size,
+            "offset": resource.offset,
+        }
+        for resource in (verification.resources if verification is not None else ())
+    ]
+    verified_keys = {(row["resref"], row["restype"]) for row in verified_resources}
+    package_result = export_result.package_result
+    staged_resources = [
+        {
+            "resref": resource.resref,
+            "restype": resource.restype,
+            "filename": f"{resource.resref}.{resource.restype}",
+            "path": resource.path,
+            "size": resource.size,
+            "sha256": resource.sha256,
+            "source": resource.source,
+        }
+        for resource in (package_result.staged_resources if package_result is not None else ())
+    ]
+    required_resources = [
+        dict(
+            row,
+            present_in_readback=(str(row.get("resref") or ""), str(row.get("restype") or "")) in verified_keys,
+        )
+        for row in list(smoke_contract.get("required_resources") or ())
+        if isinstance(row, dict)
+    ]
+    restypes = {str(row.get("restype") or "") for row in required_resources}
+    room_model_count = sum(1 for row in required_resources if row.get("restype") in {"mdl", "mdx"})
+    room_walkmesh_count = sum(1 for row in required_resources if row.get("restype") == "wok")
+    core_restypes = ("are", "git", "ifo", "pth", "lyt", "vis")
+    return {
+        "schema": "ghostrigger.map_studio.package_resource_inventory.v1",
+        "module_root": export_result.module_root,
+        "module_path": export_result.module_path,
+        "pack_manifest_path": export_result.manifest_path,
+        "readback_ok": bool(verification.ok) if verification is not None else False,
+        "all_required_runtime_resources_present": bool(smoke_contract.get("all_required_resources_present")),
+        "required_runtime_resources": required_resources,
+        "missing_required_runtime_resources": list(smoke_contract.get("missing_required_resources") or ()),
+        "verified_archive_resources": verified_resources,
+        "loose_staged_resources": staged_resources,
+        "resource_groups": {
+            "core_module_restypes_present": sorted(restypes.intersection(core_restypes)),
+            "core_module_restypes_required": list(core_restypes),
+            "room_model_resource_count": room_model_count,
+            "room_walkmesh_resource_count": room_walkmesh_count,
+            "verified_archive_resource_count": len(verified_resources),
+            "loose_staged_resource_count": len(staged_resources),
+        },
+        "resource_reference_gate": dict(smoke_contract.get("resource_reference_gate") or {}),
+        "install": {
+            "modules_dir": modules_dir,
+            "installed_module_path": install_path,
+            "backup_module_path": backup_path,
+            "installed": bool(installed),
+            "dry_run": bool(dry_run),
+        },
     }
 
 
@@ -1396,11 +2015,12 @@ def _refresh_currentgame_module_cache(
     warnings.append(f"Refreshed stale KOTOR currentgame cache {cache_path.name}; backup written to {backup}.")
 
 
-def _authored_launch_helper_command(*, proof_manifest_path: Path, game: str, game_root_dir: str) -> str:
+def _authored_launch_helper_command(*, module_root: str, proof_manifest_path: Path, game: str, game_root_dir: str) -> str:
     if not game_root_dir:
         return ""
+    script_name = "launch_grdev01_smoke_test.py" if normalise_resref(module_root) == "grdev01" else "launch_authored_module_smoke_test.py"
     return (
-        "python scripts/launch_grdev01_smoke_test.py "
+        f"python scripts/{script_name} "
         f'--proof-manifest "{proof_manifest_path}" '
         f'--game "{str(game or "K1").upper()}" '
         f'--game-root-dir "{game_root_dir}" '
@@ -1462,19 +2082,17 @@ def _record_proof_script_path() -> str:
     return "scripts\\record_authored_module_game_proof.py"
 
 
-def _capture_grdev01_evidence_script_path() -> str:
+def _capture_authored_evidence_script_path() -> str:
     current = Path(__file__).resolve()
     for parent in current.parents:
-        script_path = parent / "scripts" / "capture_grdev01_smoke_evidence.py"
+        script_path = parent / "scripts" / "capture_authored_module_evidence.py"
         if script_path.is_file():
             return str(script_path)
-    return "scripts\\capture_grdev01_smoke_evidence.py"
+    return "scripts\\capture_authored_module_evidence.py"
 
 
 def _capture_evidence_command(*, proof_manifest_path: Path, module_root: str, include_test_placeable: bool = True) -> str:
-    if module_root.lower() != "grdev01":
-        return ""
-    capture_path = _capture_grdev01_evidence_script_path()
+    capture_path = _capture_authored_evidence_script_path()
     flags = [
         "--kotor-window-only",
         "--record-proof",
@@ -1485,6 +2103,7 @@ def _capture_evidence_command(*, proof_manifest_path: Path, module_root: str, in
     if include_test_placeable:
         flags.append("--test-placeable-visible")
     flags.append("--player-can-walk-on-floor")
+    flags.append("--transition-pathing-sanity-confirmed")
     flags.append("--no-inherited-base-game-geometry-or-scripted-movers")
     return f'python "{capture_path}" --proof-manifest "{proof_manifest_path}" ' + " ".join(flags)
 
@@ -1508,7 +2127,7 @@ def _write_authored_proof_recording_script(
         f"echo Proof manifest: {proof_path}",
         "echo.",
         f"echo Run this only after KOTOR has loaded the module with: warp {module_root}",
-        f"echo Confirm the module identity is {module_root}, the player spawns on the generated floor, {placeable_text}walking works, and no PLCaa/base-game scripted movers are present.",
+        f"echo Confirm the module identity is {module_root}, the player spawns on the generated floor, {placeable_text}walking works, transition/pathing sanity holds, and no PLCaa/base-game scripted movers are present.",
         "echo.",
         "set /p EVIDENCE=Drag or paste screenshot/video evidence path here, then press Enter: ",
         "set \"EVIDENCE=%EVIDENCE:\"=%\"",
@@ -1521,7 +2140,8 @@ def _write_authored_proof_recording_script(
             f'python "{recorder_path}" --proof-manifest "{proof_path}" '
             '--evidence "%EVIDENCE%" --tester "%USERNAME%" '
             "--module-loads-in-game --module-identity-matches-authored-resref --player-spawns-on-floor "
-            f"{placeable_flag}--player-can-walk-on-floor --no-inherited-base-game-geometry-or-scripted-movers"
+            f"{placeable_flag}--player-can-walk-on-floor --transition-pathing-sanity-confirmed "
+            "--no-inherited-base-game-geometry-or-scripted-movers"
         ),
         "if errorlevel 1 (",
         "  echo Proof recording did not complete. Check the message above.",
@@ -1560,6 +2180,7 @@ def _write_authored_install_proof_files(
     executable_name = _authored_game_executable_name(game)
     executable_path = str(Path(game_root_dir) / executable_name) if game_root_dir else executable_name
     launch_helper_command = _authored_launch_helper_command(
+        module_root=module_root,
         proof_manifest_path=proof_manifest_path,
         game=game,
         game_root_dir=game_root_dir,
@@ -1615,13 +2236,30 @@ def _write_authored_install_proof_files(
         ]
     )
     checklist_path.write_text("\n".join(checklist_lines), encoding="utf-8")
+    package_resource_inventory = _authored_package_resource_inventory(
+        export_result=export_result,
+        smoke_contract=smoke_contract,
+        install_path=install_path,
+        modules_dir=modules_dir,
+        backup_path=backup_path,
+        dry_run=dry_run,
+        installed=installed,
+    )
     modder_test_plan = _authored_modder_test_plan(
         smoke_contract=smoke_contract,
         module_path=export_result.module_path,
         install_path=install_path,
         proof_manifest_path=str(proof_manifest_path),
+        package_resource_inventory=package_resource_inventory,
         dry_run=dry_run,
         installed=installed,
+    )
+    export_job = _export_job_for_install_proof(
+        export_result,
+        proof_manifest_path=str(proof_manifest_path),
+        install_path=install_path,
+        installed=installed,
+        dry_run=dry_run,
     )
     proof_manifest = {
         "task": "T2644",
@@ -1633,7 +2271,11 @@ def _write_authored_install_proof_files(
             "module_path": export_result.module_path,
             "pack_manifest_path": export_result.manifest_path,
             "verification": _verification_to_manifest(export_result.package_verification),
+            "export_job": export_job,
+            "resource_inventory": package_resource_inventory,
         },
+        "export_job": export_job,
+        "package_resource_inventory": package_resource_inventory,
         "install": {
             "installed": installed,
             "dry_run": dry_run,
@@ -1769,6 +2411,7 @@ def prepare_authored_module_install(request: AuthoredModuleInstallPrepRequest) -
         blocking=blocking,
     )
     launch_helper_command = _authored_launch_helper_command(
+        module_root=export_result.module_root,
         proof_manifest_path=Path(proof_manifest_path),
         game=request.project.game,
         game_root_dir=resolved_game_root_dir,
@@ -1809,6 +2452,7 @@ def _proof_request_checks(request: AuthoredModuleGameProofRequest) -> dict[str, 
         "player_spawns_on_floor": bool(request.player_spawns_on_floor),
         "test_placeable_visible": bool(request.test_placeable_visible),
         "player_can_walk_on_floor": bool(request.player_can_walk_on_floor),
+        "transition_pathing_sanity_confirmed": bool(request.transition_pathing_sanity_confirmed),
         "no_inherited_base_game_geometry_or_scripted_movers": bool(
             request.no_inherited_base_game_geometry_or_scripted_movers
         ),
@@ -1883,6 +2527,7 @@ def _update_authored_pack_manifest_for_game_proof(
         plan["proof_state"] = "game_smoke_tested" if accepted else "requires_live_warp_proof"
         plan["capability_stage"] = "game_smoke_tested" if accepted else str(plan.get("capability_stage") or "export_candidate")
         plan["missing_acceptance_checks"] = list(proof_payload.get("missing_checks") or [])
+        plan["accepted_acceptance_checks"] = list(proof_payload.get("accepted_checks") or [])
         evidence = plan.setdefault("evidence", {})
         if isinstance(evidence, dict):
             evidence["required"] = not bool(accepted)
@@ -1892,6 +2537,19 @@ def _update_authored_pack_manifest_for_game_proof(
             if accepted
             else "Resolve missing in-game proof checks, then record fresh screenshot/video evidence."
         )
+    export_job = authored.get("export_job")
+    if isinstance(export_job, dict):
+        proof_handoff = export_job.setdefault("proof_handoff", {})
+        if isinstance(proof_handoff, dict):
+            proof_handoff["required"] = not bool(accepted)
+            proof_handoff["state"] = "game_smoke_tested" if accepted else "requires_live_warp_proof"
+            proof_handoff["evidence_path"] = str(proof_payload.get("evidence_path") or "")
+            proof_handoff["missing_acceptance_checks"] = list(proof_payload.get("missing_checks") or [])
+            proof_handoff["accepted_acceptance_checks"] = list(proof_payload.get("accepted_checks") or [])
+            proof_handoff["accepted"] = bool(accepted)
+        if accepted:
+            export_job["status"] = "game_smoke_tested"
+        manifest["export_job"] = export_job
     authored["in_game_proof"] = proof_payload
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return warnings
@@ -1925,6 +2583,7 @@ def record_authored_module_game_proof(request: AuthoredModuleGameProofRequest) -
     required = list(proof.get("acceptance_checks") or _authored_acceptance_checks())
     checks = _proof_request_checks(request)
     missing = [name for name in required if not checks.get(name, False)]
+    accepted_checks = [name for name in required if checks.get(name, False)]
     accepted = not missing
     tested_at = datetime.now(timezone.utc).isoformat()
     proof_payload = {
@@ -1934,6 +2593,7 @@ def record_authored_module_game_proof(request: AuthoredModuleGameProofRequest) -
         "notes": request.notes,
         "checks": checks,
         "accepted": accepted,
+        "accepted_checks": accepted_checks,
         "missing_checks": missing,
     }
     proof["game_test"] = proof_payload
@@ -1947,6 +2607,13 @@ def record_authored_module_game_proof(request: AuthoredModuleGameProofRequest) -
         contract["proof_required"] = not accepted
         if accepted:
             contract["capability_stage"] = "game_smoke_tested"
+        package_resource_inventory = proof.get("package_resource_inventory")
+        if not isinstance(package_resource_inventory, dict):
+            package = proof.get("package")
+            if isinstance(package, dict):
+                package_resource_inventory = package.get("resource_inventory")
+        if not isinstance(package_resource_inventory, dict):
+            package_resource_inventory = {}
         proof["modder_test_plan"] = _authored_modder_test_plan(
             smoke_contract=contract,
             module_path=str((proof.get("package") or {}).get("module_path") or ""),
@@ -1955,6 +2622,7 @@ def record_authored_module_game_proof(request: AuthoredModuleGameProofRequest) -
             evidence_path=request.evidence_path,
             accepted=accepted,
             missing_checks=missing,
+            package_resource_inventory=package_resource_inventory,
             dry_run=bool(install.get("dry_run")),
             installed=installed,
         )
@@ -1962,6 +2630,22 @@ def record_authored_module_game_proof(request: AuthoredModuleGameProofRequest) -
         proof["proof_state"] = proof["modder_test_plan"]["proof_state"]
     if accepted:
         proof["completed_at"] = tested_at
+    export_job = proof.get("export_job")
+    if isinstance(export_job, dict):
+        proof_handoff = export_job.setdefault("proof_handoff", {})
+        if isinstance(proof_handoff, dict):
+            proof_handoff["required"] = not bool(accepted)
+            proof_handoff["state"] = "game_smoke_tested" if accepted else "requires_live_warp_proof"
+            proof_handoff["evidence_path"] = request.evidence_path
+            proof_handoff["missing_acceptance_checks"] = missing
+            proof_handoff["accepted_acceptance_checks"] = accepted_checks
+            proof_handoff["accepted"] = bool(accepted)
+        if accepted:
+            export_job["status"] = "game_smoke_tested"
+        proof["export_job"] = export_job
+        package = proof.get("package")
+        if isinstance(package, dict):
+            package["export_job"] = export_job
     proof_manifest_path.write_text(json.dumps(proof, indent=2), encoding="utf-8")
 
     pack_manifest_path = str((proof.get("package") or {}).get("pack_manifest_path") or "")

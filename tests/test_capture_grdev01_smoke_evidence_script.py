@@ -121,7 +121,7 @@ def test_t2601_capture_grdev01_evidence_can_record_complete_authored_proof(tmp_p
     monkeypatch.setattr(
         module,
         "_kotor_process_summary",
-        lambda *, skip_check=False: {
+        lambda *, skip_check=False, warp_command="warp grdev01": {
             "checked": True,
             "required_for_recording": True,
             "running": True,
@@ -142,9 +142,12 @@ def test_t2601_capture_grdev01_evidence_can_record_complete_authored_proof(tmp_p
             "--tester",
             "pytest",
             "--module-loads-in-game",
+            "--module-identity-matches-authored-resref",
             "--player-spawns-on-floor",
             "--test-placeable-visible",
             "--player-can-walk-on-floor",
+            "--transition-pathing-sanity-confirmed",
+            "--no-inherited-base-game-geometry-or-scripted-movers",
             "--json",
         ]
     )
@@ -179,7 +182,7 @@ def test_t2601_capture_grdev01_evidence_blocks_proof_recording_without_kotor_pro
     monkeypatch.setattr(
         module,
         "_kotor_process_summary",
-        lambda *, skip_check=False: {
+        lambda *, skip_check=False, warp_command="warp grdev01": {
             "checked": True,
             "required_for_recording": True,
             "running": False,
@@ -200,9 +203,12 @@ def test_t2601_capture_grdev01_evidence_blocks_proof_recording_without_kotor_pro
             "--tester",
             "pytest",
             "--module-loads-in-game",
+            "--module-identity-matches-authored-resref",
             "--player-spawns-on-floor",
             "--test-placeable-visible",
             "--player-can-walk-on-floor",
+            "--transition-pathing-sanity-confirmed",
+            "--no-inherited-base-game-geometry-or-scripted-movers",
             "--json",
         ]
     )
@@ -231,7 +237,7 @@ def test_t2601_capture_grdev01_evidence_can_capture_kotor_window_only(
     monkeypatch.setattr(
         module,
         "_kotor_process_summary",
-        lambda *, skip_check=False: {
+        lambda *, skip_check=False, warp_command="warp grdev01": {
             "checked": True,
             "required_for_recording": True,
             "running": True,

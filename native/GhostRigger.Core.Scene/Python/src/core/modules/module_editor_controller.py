@@ -16,6 +16,7 @@ from .module_editor_model import MapStudioWorkspaceMode, ModuleEditorModel
 from .authored_module_export import (
     AuthoredModuleExportRequest,
     AuthoredModuleGameProofRequest,
+    AuthoredModuleGameProofResult,
     AuthoredModuleInstallPrepRequest,
     export_authored_module_project,
     prepare_authored_module_install,
@@ -26,7 +27,9 @@ from .authored_module_kmap_bridge import (
     authored_project_to_kmap_payload,
     build_kmap_authored_module_readiness,
     create_dev_test_authored_module_payload,
+    create_golden_test_authored_module_payload,
 )
+from .authored_module_preview_model import build_authored_module_preview_model
 from .authored_module_project import authored_resref_blocking_issue, normalise_resref
 from .authored_module_validation_projection import authored_module_readiness_validation_issues
 from .authored_gameplay_palette import authored_gameplay_palette_from_library_rows
@@ -113,6 +116,7 @@ from .authored_room_operations import (
     authored_room_composition_primitives,
     bridge_authored_floor_plan_edges,
     center_authored_room_composition_primitive_pivot,
+    claim_authored_room_composition_floor,
     cleanup_authored_floor_plan_normals,
     cleanup_authored_floor_plan_vertices,
     combine_authored_room_composition_primitives,
@@ -126,6 +130,7 @@ from .authored_room_operations import (
     mirror_authored_floor_plan_vertices,
     move_authored_floor_plan_point,
     move_authored_room_composition_primitive,
+    rename_authored_room_composition_primitive,
     remove_authored_room_composition_primitive,
     separate_authored_room_composition_primitive,
     set_authored_floor_plan_extrusion_settings,
@@ -168,8 +173,93 @@ def _read_json_object(path: str | Path) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+_MAP_STUDIO_PROOF_CHECK_LABELS = {
+    "module_loads_in_game": "`warp` loads the generated module in KOTOR",
+    "module_identity_matches_authored_resref": "Loaded module identity matches the authored resref",
+    "player_spawns_on_floor": "Player appears on the generated floor, not in void",
+    "test_placeable_visible": "Authored/test placeable appears where expected",
+    "player_can_walk_on_floor": "Player can walk across the generated floor",
+    "transition_pathing_sanity_confirmed": "Transitions and pathing behave sanely in the loaded module",
+    "no_inherited_base_game_geometry_or_scripted_movers": "No inherited vanilla geometry or scripted movers appear",
+    "screenshot_or_video_captured": "Screenshot or video evidence is attached",
+}
+
+
+def _map_studio_proof_required_check_labels(proof_manifest_path: str | Path) -> tuple[str, ...]:
+    proof = _read_json_object(proof_manifest_path) if str(proof_manifest_path or "").strip() else {}
+    checks = proof.get("acceptance_checks") if isinstance(proof, dict) else ()
+    if not isinstance(checks, list):
+        checks = ()
+    labels = []
+    for check in checks:
+        key = str(check or "").strip()
+        if not key:
+            continue
+        labels.append(_MAP_STUDIO_PROOF_CHECK_LABELS.get(key, key.replace("_", " ")))
+    if labels:
+        return tuple(labels)
+    return (
+        _MAP_STUDIO_PROOF_CHECK_LABELS["module_loads_in_game"],
+        _MAP_STUDIO_PROOF_CHECK_LABELS["module_identity_matches_authored_resref"],
+        _MAP_STUDIO_PROOF_CHECK_LABELS["player_spawns_on_floor"],
+        _MAP_STUDIO_PROOF_CHECK_LABELS["test_placeable_visible"],
+        _MAP_STUDIO_PROOF_CHECK_LABELS["player_can_walk_on_floor"],
+        _MAP_STUDIO_PROOF_CHECK_LABELS["transition_pathing_sanity_confirmed"],
+        _MAP_STUDIO_PROOF_CHECK_LABELS["no_inherited_base_game_geometry_or_scripted_movers"],
+        _MAP_STUDIO_PROOF_CHECK_LABELS["screenshot_or_video_captured"],
+    )
+
+
+def _map_studio_package_resource_inventory(
+    proof_manifest_path: str | Path,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return the staged package inventory from KMAP metadata or proof manifest."""
+
+    for source in (
+        dict(payload or {}),
+        dict((payload or {}).get("modder_test_plan") or {}) if isinstance((payload or {}).get("modder_test_plan"), dict) else {},
+    ):
+        inventory = source.get("package_resource_inventory")
+        if isinstance(inventory, dict):
+            return dict(inventory)
+    proof = _read_json_object(proof_manifest_path) if str(proof_manifest_path or "").strip() else {}
+    for source in (
+        proof,
+        dict(proof.get("package") or {}) if isinstance(proof.get("package"), dict) else {},
+        dict(proof.get("modder_test_plan") or {}) if isinstance(proof.get("modder_test_plan"), dict) else {},
+    ):
+        inventory = source.get("package_resource_inventory") or source.get("resource_inventory")
+        if isinstance(inventory, dict):
+            return dict(inventory)
+    return {}
+
+
+def _map_studio_package_resource_summary(inventory: dict[str, Any]) -> str:
+    """Return a compact modder-facing summary of the staged package inventory."""
+
+    if not inventory:
+        return "No package resource inventory is available; stage or install the authored module again."
+    groups = dict(inventory.get("resource_groups") or {})
+    required = len(tuple(inventory.get("required_runtime_resources") or ()))
+    missing = len(tuple(inventory.get("missing_required_runtime_resources") or ()))
+    readback_ok = bool(inventory.get("readback_ok"))
+    installed = bool(dict(inventory.get("install") or {}).get("installed"))
+    dry_run = bool(dict(inventory.get("install") or {}).get("dry_run"))
+    archive_count = int(groups.get("verified_archive_resource_count") or 0)
+    loose_count = int(groups.get("loose_staged_resource_count") or 0)
+    install_state = "installed" if installed else ("dry-run install" if dry_run else "staged")
+    return (
+        f"Package inventory: {required} required runtime resource(s), {missing} missing, "
+        f"{archive_count} archive readback resource(s), {loose_count} loose staged file(s), "
+        f"readback {'ok' if readback_ok else 'not verified'}, {install_state}."
+    )
+
+
 MAP_STUDIO_MODELING_STALE_OUTPUTS = ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
 MAP_STUDIO_MODELING_READINESS_IMPACT = "Map Studio validation, export, install handoff, and game proof are stale."
+MAP_STUDIO_ACTIVE_SELECTION_SECTION = "map_studio_active_selection"
+MAP_STUDIO_SELECTION_READINESS_IMPACT = "Map Studio selection target changed; generated resources are unchanged."
 
 
 @dataclass(frozen=True)
@@ -189,6 +279,8 @@ class MapStudioLaunchHandoffSummary:
     checklist_path: str = ""
     resolved_modules_dir: str = ""
     resolved_game_root_dir: str = ""
+    package_resource_inventory: dict[str, Any] | None = None
+    package_resource_summary: str = ""
     warnings: tuple[str, ...] = ()
     blocking_messages: tuple[str, ...] = ()
     summary: str = ""
@@ -207,6 +299,8 @@ class MapStudioGameProofRecordingSummary:
     proof_manifest_path: str = ""
     default_evidence_path: str = ""
     required_checks: tuple[str, ...] = ()
+    package_resource_inventory: dict[str, Any] | None = None
+    package_resource_summary: str = ""
     warnings: tuple[str, ...] = ()
     blocking_messages: tuple[str, ...] = ()
     summary: str = ""
@@ -261,8 +355,112 @@ class ModuleEditorController:
             metadata=metadata,
         )
         if record is not None:
+            self._mark_map_studio_export_proof_stale(
+                record.label,
+                before=before,
+                stale_outputs=tuple(stale_outputs or ()),
+                readiness_impact=readiness_impact,
+            )
             self.model.log(f"Undo checkpoint recorded: {record.label}.")
         return record
+
+    def _mark_map_studio_export_proof_stale(
+        self,
+        latest_summary: str,
+        *,
+        before,
+        stale_outputs: tuple[str, ...],
+        readiness_impact: str,
+    ) -> None:
+        if not stale_outputs:
+            return
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if not isinstance(payload, dict):
+            return
+        previous_payload = self._map_studio_authored_payload_from_snapshot(before)
+        has_export_or_proof = any(
+            str(payload.get(key) or previous_payload.get(key) or "").strip()
+            for key in (
+                "pack_manifest_path",
+                "proof_manifest_path",
+                "installed_module_path",
+                "in_game_proof_evidence_path",
+            )
+        ) or bool(payload.get("package_resource_inventory") or previous_payload.get("package_resource_inventory"))
+        if not has_export_or_proof:
+            return
+        for key in (
+            "pack_manifest_path",
+            "proof_manifest_path",
+            "checklist_path",
+            "installed_module_path",
+            "backup_module_path",
+            "resolved_modules_dir",
+            "resolved_game_root_dir",
+            "launch_helper_command",
+            "elevated_launch_script_path",
+            "proof_recording_script_path",
+            "package_resource_inventory",
+            "export_job",
+        ):
+            if key not in payload and key in previous_payload:
+                payload[key] = previous_payload[key]
+        payload["export_proof_invalidation"] = {
+            "invalidates_previous_export": True,
+            "invalidates_game_proof": True,
+            "latest_summary": str(latest_summary or "").strip(),
+            "stale_outputs": [str(output) for output in tuple(stale_outputs or ()) if str(output).strip()],
+            "readiness_impact": str(readiness_impact or "").strip(),
+            "next_action": "Regenerate the authored module package, reinstall it if needed, and record fresh in-game proof.",
+        }
+        self.project.dirty = True
+
+    @staticmethod
+    def _clear_authored_export_proof_invalidation(
+        payload: dict[str, Any],
+        *,
+        clear_stage_metadata: bool,
+    ) -> None:
+        """Mark generated resources current while keeping live game proof honest."""
+
+        for key in (
+            "export_proof_invalidation",
+            "in_game_proof",
+            "in_game_proof_evidence_path",
+            "evidence_path",
+            "game_test",
+        ):
+            payload.pop(key, None)
+        if clear_stage_metadata:
+            for key in (
+                "proof_manifest_path",
+                "checklist_path",
+                "installed_module_path",
+                "backup_module_path",
+                "resolved_modules_dir",
+                "resolved_game_root_dir",
+                "launch_helper_command",
+                "elevated_launch_script_path",
+                "proof_recording_script_path",
+                "package_resource_inventory",
+                "modder_test_plan",
+                "export_job",
+            ):
+                payload.pop(key, None)
+        payload["manual_proof_required"] = True
+        payload["game_tested"] = False
+
+    @staticmethod
+    def _map_studio_authored_payload_from_snapshot(snapshot) -> dict[str, Any]:
+        data = dict(getattr(snapshot, "data", {}) or {})
+        payload = data.get("authored_module")
+        if isinstance(payload, dict):
+            return dict(payload)
+        extra = data.get("extra_sections")
+        if isinstance(extra, dict) and isinstance(extra.get("authored_module"), dict):
+            return dict(extra["authored_module"])
+        return {}
 
     def can_undo_map_studio_command(self) -> bool:
         return self.command_history.can_undo
@@ -407,7 +605,7 @@ class ModuleEditorController:
             MapStudioWorkspaceMode(
                 key="geometry",
                 label="Room Geometry",
-                summary="Build floors, walls, corridors, doorway blockouts, primitives, and component-mode edits: Object, Vertex, Edge, Face, and Walkmesh.",
+                summary="Build floors, walls, corridors, doorway blockouts, primitives, and component-mode edits: Object, Vertex, Edge, Face, Terrain, and Walkmesh.",
                 next_action="Choose a modeling mode/tool, then create primitives, snap vertices, bevel/inset, cut, bridge, boolean, or shape the authored layout.",
             ),
             MapStudioWorkspaceMode(
@@ -458,6 +656,18 @@ class ModuleEditorController:
         self.project.game = str(payload.get("game") or self.project.game or "K1").upper()
         self.project.dirty = True
         self.model.log(f"Created authored Map Studio module {self.project.name}.")
+        return self.authored_module_readiness()
+
+    def create_golden_test_authored_module(self, *, module_root: str = "grgold01"):
+        """Store the canonical full Map Studio golden smoke module in the KMAP."""
+
+        root = str(module_root or "grgold01").strip() or "grgold01"
+        payload = create_golden_test_authored_module_payload(module_root=root, game=str(self.project.game or "K1").upper())
+        self.project.extra_sections["authored_module"] = payload
+        self.project.name = str(payload.get("module_root") or root)
+        self.project.game = str(payload.get("game") or self.project.game or "K1").upper()
+        self.project.dirty = True
+        self.model.log(f"Created authored Map Studio golden module {self.project.name}.")
         return self.authored_module_readiness()
 
     def available_authored_room_presets(self):
@@ -585,6 +795,58 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(f"Updated Map Studio tool belt preference: {preferences.preset_key}.")
         return preferences
+
+    def map_studio_active_selection(self) -> dict[str, Any]:
+        """Return KMAP-persisted active Map Studio selection context."""
+
+        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get(MAP_STUDIO_ACTIVE_SELECTION_SECTION) or {})
+        if int(payload.get("version") or 0) != 1:
+            return {}
+        return payload
+
+    def set_map_studio_active_selection(
+        self,
+        *,
+        component_mode: str = "object",
+        workspace_key: str = "geometry",
+        tool_key: str = "select",
+        room_resref: str = "",
+        primitive_name: str = "",
+        selection_kind: str = "",
+    ) -> dict[str, Any]:
+        """Persist the active authored selection target without staling generated resources."""
+
+        before = self._capture_map_studio_command_state()
+        component = str(component_mode or "object").strip().lower() or "object"
+        workspace = str(workspace_key or "geometry").strip().lower() or "geometry"
+        tool = str(tool_key or "select").strip().lower() or "select"
+        room = str(room_resref or "").strip()
+        primitive = str(primitive_name or "").strip()
+        kind = str(selection_kind or "").strip().lower()
+        if not kind:
+            kind = "composition_primitive" if primitive else ("authored_room" if room else "map_studio")
+        payload = {
+            "version": 1,
+            "selection_kind": kind,
+            "component_mode": component,
+            "workspace_key": workspace,
+            "tool_key": tool,
+            "room_resref": room,
+            "primitive_name": primitive,
+        }
+        self.project.extra_sections[MAP_STUDIO_ACTIVE_SELECTION_SECTION] = payload
+        self.project.dirty = True
+        label_target = primitive or room or "Map Studio"
+        self.model.log(f"Selected Map Studio {kind.replace('_', ' ')} {label_target}.")
+        self._record_map_studio_command(
+            action_key="map_studio.selection.select",
+            label=f"Select {label_target}",
+            before=before,
+            stale_outputs=(),
+            readiness_impact=MAP_STUDIO_SELECTION_READINESS_IMPACT,
+            metadata=payload,
+        )
+        return payload
 
     def map_studio_modeling_tool_summary(
         self,
@@ -727,6 +989,20 @@ class ModuleEditorController:
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
         return authored_room_outline_geometry_for_project(authored)
+
+    def authored_room_preview_model(self):
+        """Return a live KotorModel preview for authored Map Studio render geometry."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            return None
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        return build_authored_module_preview_model(authored).model
 
     def authored_room_primitive_transforms(self):
         """Return editable composition primitive transform rows for the current KMAP."""
@@ -2996,31 +3272,49 @@ class ModuleEditorController:
         pivot: Any = None,
         texture: str = "",
         floor_surface: Any = None,
+        module_root: str = "",
     ):
         """Append a primitive instance to an authored composition room."""
 
         extra = getattr(self.project, "extra_sections", {}) or {}
         payload = extra.get("authored_module")
-        if payload is None:
-            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
         before = self._capture_map_studio_command_state()
-        authored = authored_project_from_kmap_payload(
-            payload,
-            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
-            fallback_game=str(getattr(self.project, "game", "") or "K1"),
-        )
-        updated = add_authored_room_composition_primitive(
-            authored,
-            primitive_kind=primitive_kind,
-            room_resref=room_resref,
-            primitive_name=primitive_name,
-            translation=translation,
-            rotation_degrees_z=rotation_degrees_z,
-            scale=scale,
-            pivot=pivot,
-            texture=texture,
-            floor_surface=floor_surface,
-        )
+        auto_created_module = False
+        root = str(module_root or getattr(self.project, "name", "") or "grblock").strip() or "grblock"
+        if payload is None:
+            authored = create_authored_module_from_room_preset(
+                preset_id="composition_starter_room",
+                module_root=root,
+                game=str(self.project.game or "K1").upper(),
+            )
+            auto_created_module = True
+        else:
+            authored = authored_project_from_kmap_payload(
+                payload,
+                fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+                fallback_game=str(getattr(self.project, "game", "") or "K1"),
+            )
+        if auto_created_module and str(primitive_kind or "").strip().lower() in {"floor", "plane"}:
+            updated = claim_authored_room_composition_floor(
+                authored,
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+                texture=texture,
+                floor_surface=floor_surface,
+            )
+        else:
+            updated = add_authored_room_composition_primitive(
+                authored,
+                primitive_kind=primitive_kind,
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+                translation=translation,
+                rotation_degrees_z=rotation_degrees_z,
+                scale=scale,
+                pivot=pivot,
+                texture=texture,
+                floor_surface=floor_surface,
+            )
         self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
         self.project.name = updated.metadata.module_root
         self.project.game = updated.game
@@ -3042,6 +3336,8 @@ class ModuleEditorController:
                 "pivot": pivot,
                 "texture": texture,
                 "floor_surface": floor_surface,
+                "module_root": root if auto_created_module else "",
+                "auto_created_module": auto_created_module,
             },
         )
         return self.authored_module_readiness()
@@ -3173,6 +3469,50 @@ class ModuleEditorController:
                 "policy": policy,
                 "primitive_name": primitive_name,
                 "edge_indices": tuple(edge_indices or ()),
+            },
+        )
+        return self.authored_module_readiness()
+
+    def rename_authored_room_primitive(
+        self,
+        *,
+        room_resref: str,
+        primitive_name: str,
+        new_primitive_name: str,
+    ):
+        """Rename one authored composition primitive in the current KMAP module."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = rename_authored_room_composition_primitive(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+            new_primitive_name=new_primitive_name,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Renamed Map Studio room primitive {primitive_name} to {new_primitive_name}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.rename",
+            label=f"Rename primitive {primitive_name}",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "primitive_name": primitive_name,
+                "new_primitive_name": new_primitive_name,
             },
         )
         return self.authored_module_readiness()
@@ -3467,6 +3807,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         update = update_authored_gameplay_placement_transform(
             authored,
             placement_id,
@@ -3479,6 +3820,18 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Moved Map Studio {update.kind} placement {update.tag} to {update.position}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.gameplay.move_placement",
+            label=f"Move {update.kind} placement {update.tag}",
+            before=before,
+            metadata={
+                "placement_id": placement_id,
+                "kind": update.kind,
+                "tag": update.tag,
+                "position": update.position,
+                "bearing": bearing,
+            },
         )
         return self.authored_module_readiness()
 
@@ -3495,6 +3848,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         update = rename_authored_gameplay_placement(authored, placement_id, tag=tag)
         self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
         self.project.name = update.project.metadata.module_root
@@ -3502,6 +3856,12 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Renamed Map Studio {update.kind} placement to {update.tag}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.gameplay.rename_placement",
+            label=f"Rename {update.kind} placement {update.tag}",
+            before=before,
+            metadata={"placement_id": placement_id, "kind": update.kind, "tag": update.tag},
         )
         return update
 
@@ -3518,6 +3878,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         update = duplicate_authored_gameplay_placement(authored, placement_id)
         self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
         self.project.name = update.project.metadata.module_root
@@ -3525,6 +3886,17 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Duplicated Map Studio {update.kind} placement {update.tag}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.gameplay.duplicate_placement",
+            label=f"Duplicate {update.kind} placement {update.tag}",
+            before=before,
+            metadata={
+                "source_placement_id": placement_id,
+                "placement_id": update.placement_id,
+                "kind": update.kind,
+                "tag": update.tag,
+            },
         )
         return update
 
@@ -3541,6 +3913,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         update = remove_authored_gameplay_placement(authored, placement_id)
         self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
         self.project.name = update.project.metadata.module_root
@@ -3548,6 +3921,12 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Removed Map Studio {update.kind} placement {update.tag}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.gameplay.remove_placement",
+            label=f"Remove {update.kind} placement {update.tag}",
+            before=before,
+            metadata={"placement_id": placement_id, "kind": update.kind, "tag": update.tag},
         )
         return update
 
@@ -3573,6 +3952,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         update = update_authored_gameplay_camera_properties(
             authored,
             placement_id,
@@ -3588,6 +3968,20 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Edited Map Studio camera {update.tag}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.gameplay.edit_camera",
+            label=f"Edit camera {update.tag}",
+            before=before,
+            metadata={
+                "placement_id": placement_id,
+                "tag": update.tag,
+                "camera_id": camera_id,
+                "field_of_view": field_of_view,
+                "height": height,
+                "mic_range": mic_range,
+                "pitch": pitch,
+            },
         )
         return self.authored_module_readiness()
 
@@ -3611,6 +4005,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         update = update_authored_gameplay_transition(
             authored,
             placement_id,
@@ -3624,6 +4019,19 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Updated Map Studio {update.kind} transition for {update.tag}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.gameplay.set_transition",
+            label=f"Set {update.kind} transition {update.tag}",
+            before=before,
+            metadata={
+                "placement_id": placement_id,
+                "kind": update.kind,
+                "tag": update.tag,
+                "linked_to": linked_to,
+                "linked_to_module": linked_to_module,
+                "transition_destination": transition_destination,
+            },
         )
         return self.authored_module_readiness()
 
@@ -3640,6 +4048,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         update = update_authored_room_light_transform(authored, light_id, position=position)
         self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
         self.project.name = update.project.metadata.module_root
@@ -3647,6 +4056,12 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Moved Map Studio room light {update.light.name} to {update.light.position}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.lighting.move_room_light",
+            label=f"Move room light {update.light.name}",
+            before=before,
+            metadata={"light_id": light_id, "name": update.light.name, "position": update.light.position},
         )
         return self.authored_module_readiness()
 
@@ -3671,6 +4086,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         update = update_authored_room_light_properties(
             authored,
             light_id,
@@ -3685,6 +4101,19 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Edited Map Studio room light {update.light.name}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.lighting.edit_room_light",
+            label=f"Edit room light {update.light.name}",
+            before=before,
+            metadata={
+                "light_id": light_id,
+                "name": update.light.name,
+                "color": update.light.color,
+                "radius": update.light.radius,
+                "intensity": update.light.intensity,
+                "light_type": update.light.light_type,
+            },
         )
         return self.authored_module_readiness()
 
@@ -3701,6 +4130,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         update = rename_authored_room_light(authored, light_id, name=name)
         self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
         self.project.name = update.project.metadata.module_root
@@ -3708,6 +4138,12 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Renamed Map Studio room light to {update.light.name}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.lighting.rename_room_light",
+            label=f"Rename room light {update.light.name}",
+            before=before,
+            metadata={"light_id": light_id, "name": update.light.name},
         )
         return update
 
@@ -3724,6 +4160,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         update = duplicate_authored_room_light(authored, light_id)
         self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
         self.project.name = update.project.metadata.module_root
@@ -3731,6 +4168,12 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Duplicated Map Studio room light {update.light.name}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.lighting.duplicate_room_light",
+            label=f"Duplicate room light {update.light.name}",
+            before=before,
+            metadata={"source_light_id": light_id, "light_id": update.light_id, "name": update.light.name},
         )
         return update
 
@@ -3747,6 +4190,7 @@ class ModuleEditorController:
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
+        before = self._capture_map_studio_command_state()
         update = remove_authored_room_light(authored, light_id)
         self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
         self.project.name = update.project.metadata.module_root
@@ -3754,6 +4198,12 @@ class ModuleEditorController:
         self.project.dirty = True
         self.model.log(
             f"Removed Map Studio room light {update.light.name}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.lighting.remove_room_light",
+            label=f"Remove room light {update.light.name}",
+            before=before,
+            metadata={"light_id": light_id, "name": update.light.name},
         )
         return update
 
@@ -3835,6 +4285,14 @@ class ModuleEditorController:
     def build_preview(self, output_dir: str | Path):
         return self.builder_service.build_preview(self.project, output_dir)
 
+    def generate_module_files(self, output_dir: str | Path):
+        """Generate module files for the current project and record authored export state."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        if extra.get("authored_module") is not None:
+            return self.export_authored_module(output_dir, dry_run=False)
+        return self.build_preview(output_dir)
+
     def stage_dev_test_module(self, output_dir: str | Path, *, dry_run: bool = False, overwrite: bool = False):
         """Stage the first from-scratch Map Studio smoke module package."""
 
@@ -3877,12 +4335,18 @@ class ModuleEditorController:
         if not dry_run and result.resources:
             runtime_resources = [f"{item.resref}.{item.restype}" for item in result.resources]
             payload = dict(payload)
+            self._clear_authored_export_proof_invalidation(payload, clear_stage_metadata=True)
             payload["runtime_resources"] = runtime_resources
-            payload["game_tested"] = False
             payload["pack_manifest_path"] = result.manifest_path
+            export_job = dict((result.metadata or {}).get("export_job") or {})
+            if export_job:
+                payload["export_job"] = export_job
             manifest = _read_json_object(result.manifest_path)
             authored_manifest = manifest.get("map_studio_authored_module")
             if isinstance(authored_manifest, dict):
+                manifest_export_job = authored_manifest.get("export_job")
+                if isinstance(manifest_export_job, dict):
+                    payload["export_job"] = manifest_export_job
                 test_plan = authored_manifest.get("modder_test_plan")
                 if isinstance(test_plan, dict):
                     payload["modder_test_plan"] = test_plan
@@ -3928,8 +4392,8 @@ class ModuleEditorController:
         if export_result is not None and export_result.resources:
             runtime_resources = [f"{item.resref}.{item.restype}" for item in export_result.resources]
             payload = dict(payload)
+            self._clear_authored_export_proof_invalidation(payload, clear_stage_metadata=True)
             payload["runtime_resources"] = runtime_resources
-            payload["game_tested"] = False
             payload["proof_manifest_path"] = result.proof_manifest_path
             payload["checklist_path"] = result.checklist_path
             payload["resolved_modules_dir"] = result.resolved_modules_dir
@@ -3941,9 +4405,15 @@ class ModuleEditorController:
             payload["backup_module_path"] = result.backup_module_path
             payload["pack_manifest_path"] = export_result.manifest_path
             proof_manifest = _read_json_object(result.proof_manifest_path)
+            export_job = proof_manifest.get("export_job")
+            if isinstance(export_job, dict):
+                payload["export_job"] = export_job
             test_plan = proof_manifest.get("modder_test_plan")
             if isinstance(test_plan, dict):
                 payload["modder_test_plan"] = test_plan
+            package_inventory = _map_studio_package_resource_inventory(result.proof_manifest_path, payload)
+            if package_inventory:
+                payload["package_resource_inventory"] = package_inventory
             self.project.extra_sections["authored_module"] = payload
             self.project.dirty = True
             recorded_package_metadata = True
@@ -3992,6 +4462,8 @@ class ModuleEditorController:
         checklist_path = str(payload.get("checklist_path") or "").strip()
         resolved_modules_dir = str(payload.get("resolved_modules_dir") or "").strip()
         resolved_game_root_dir = str(payload.get("resolved_game_root_dir") or "").strip()
+        package_resource_inventory = _map_studio_package_resource_inventory(proof_manifest_path, payload)
+        package_resource_summary = _map_studio_package_resource_summary(package_resource_inventory)
 
         blocking: list[str] = []
         warnings: list[str] = []
@@ -4014,6 +4486,8 @@ class ModuleEditorController:
             warnings.append("Module root is unknown; the warp command must be checked before launch.")
         if not launch_helper_command:
             warnings.append("No CLI launch helper command was recorded; use the proof manifest and warp command manually.")
+        if not package_resource_inventory:
+            warnings.append("Package resource inventory is missing; stage or install the authored module again before game proof.")
 
         ready = len(blocking) == 0
         summary = (
@@ -4040,6 +4514,8 @@ class ModuleEditorController:
             checklist_path=checklist_path,
             resolved_modules_dir=resolved_modules_dir,
             resolved_game_root_dir=resolved_game_root_dir,
+            package_resource_inventory=package_resource_inventory,
+            package_resource_summary=package_resource_summary,
             warnings=tuple(warnings),
             blocking_messages=tuple(blocking),
             summary=summary,
@@ -4058,13 +4534,13 @@ class ModuleEditorController:
                 blocking.append(f"Proof manifest does not exist: {proof_manifest_path}")
         if not proof_manifest_path:
             blocking.append("Choose the proof manifest written by Stage .mod or Install Test before recording game proof.")
-        required_checks = (
-            "`warp` loads the generated module in KOTOR",
-            "Player appears on the generated floor, not in void",
-            "Authored/test placeable appears where expected",
-            "Player can walk across the generated floor",
-            "Screenshot or video evidence is attached",
-        )
+        required_checks = _map_studio_proof_required_check_labels(proof_manifest_path)
+        package_resource_inventory = _map_studio_package_resource_inventory(proof_manifest_path, payload=None)
+        if not package_resource_inventory:
+            package_resource_inventory = dict(getattr(launch, "package_resource_inventory", {}) or {})
+        package_resource_summary = _map_studio_package_resource_summary(package_resource_inventory)
+        if not package_resource_inventory:
+            warnings.append("Package resource inventory is missing; record proof only after staging/installing the current authored module.")
         ready = len(blocking) == 0
         summary = (
             f"Proof recording ready for {launch.game}:{launch.module_root or '<module>'}; attach screenshot or video evidence."
@@ -4083,6 +4559,8 @@ class ModuleEditorController:
             warp_command=launch.warp_command,
             proof_manifest_path=proof_manifest_path,
             required_checks=required_checks,
+            package_resource_inventory=package_resource_inventory,
+            package_resource_summary=package_resource_summary,
             warnings=tuple(warnings),
             blocking_messages=tuple(blocking),
             summary=summary,
@@ -4101,6 +4579,7 @@ class ModuleEditorController:
         player_spawns_on_floor: bool = False,
         test_placeable_visible: bool = False,
         player_can_walk_on_floor: bool = False,
+        transition_pathing_sanity_confirmed: bool = False,
         no_inherited_base_game_geometry_or_scripted_movers: bool = False,
         allow_missing_evidence: bool = False,
     ):
@@ -4114,6 +4593,56 @@ class ModuleEditorController:
             proof = {}
         task = str(proof.get("task") or "").strip().upper()
         proof_filename = proof_path.name.lower()
+        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
+        current_proof_manifest = str(payload.get("proof_manifest_path") or "").strip()
+        invalidation = dict(payload.get("export_proof_invalidation") or {}) if isinstance(payload.get("export_proof_invalidation"), dict) else {}
+        is_authored_proof = bool(proof.get("t2601_smoke_contract") or proof.get("modder_test_plan") or proof.get("package"))
+        if payload and is_authored_proof:
+            if invalidation:
+                message = (
+                    "Cannot record Map Studio game proof because the authored KMAP changed after this package/proof "
+                    "manifest was staged. Regenerate the package and run a fresh in-game proof."
+                )
+                result = AuthoredModuleGameProofResult(
+                    ok=False,
+                    proof_manifest_path=str(proof_path),
+                    evidence_path=str(evidence_path),
+                    blocking_issues=[message],
+                    message=message,
+                    code="stale_proof_manifest",
+                )
+                self.model.log(result.message)
+                return result
+            if not current_proof_manifest:
+                message = (
+                    "Cannot record Map Studio game proof because this authored KMAP has no current staged proof "
+                    "manifest. Stage the current authored module before recording live proof."
+                )
+                result = AuthoredModuleGameProofResult(
+                    ok=False,
+                    proof_manifest_path=str(proof_path),
+                    evidence_path=str(evidence_path),
+                    blocking_issues=[message],
+                    message=message,
+                    code="proof_manifest_not_current",
+                )
+                self.model.log(result.message)
+                return result
+            if current_proof_manifest and Path(current_proof_manifest) != proof_path:
+                message = (
+                    "Cannot record Map Studio game proof because the selected proof manifest is not the current "
+                    "staged manifest for this KMAP. Stage the current authored module again."
+                )
+                result = AuthoredModuleGameProofResult(
+                    ok=False,
+                    proof_manifest_path=str(proof_path),
+                    evidence_path=str(evidence_path),
+                    blocking_issues=[message],
+                    message=message,
+                    code="proof_manifest_not_current",
+                )
+                self.model.log(result.message)
+                return result
         common = {
             "proof_manifest_path": str(proof_path),
             "evidence_path": str(evidence_path),
@@ -4132,13 +4661,13 @@ class ModuleEditorController:
                 AuthoredModuleGameProofRequest(
                     **common,
                     module_identity_matches_authored_resref=bool(module_identity_matches_authored_resref),
+                    transition_pathing_sanity_confirmed=bool(transition_pathing_sanity_confirmed),
                     no_inherited_base_game_geometry_or_scripted_movers=bool(
                         no_inherited_base_game_geometry_or_scripted_movers
                     ),
                 )
             )
             if getattr(result, "ok", False):
-                payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
                 if payload:
                     try:
                         recorded_proof = json.loads(Path(getattr(result, "proof_manifest_path", "") or proof_path).read_text(encoding="utf-8"))
@@ -4148,9 +4677,23 @@ class ModuleEditorController:
                     payload["proof_manifest_path"] = str(getattr(result, "proof_manifest_path", "") or proof_path)
                     payload["pack_manifest_path"] = str(getattr(result, "pack_manifest_path", "") or "")
                     payload["in_game_proof_evidence_path"] = str(getattr(result, "evidence_path", "") or evidence_path)
-                    for key in ("manual_proof_required", "game_test", "modder_test_plan"):
+                    for key in ("manual_proof_required", "game_test", "modder_test_plan", "export_job"):
                         if key in recorded_proof:
                             payload[key] = recorded_proof[key]
+                    authored_proof = recorded_proof.get("in_game_proof")
+                    authored_manifest = recorded_proof.get("map_studio_authored_module")
+                    if not isinstance(authored_proof, dict) and isinstance(authored_manifest, dict):
+                        authored_proof = authored_manifest.get("in_game_proof")
+                    if not isinstance(authored_proof, dict):
+                        try:
+                            pack_proof = json.loads(Path(getattr(result, "pack_manifest_path", "") or "").read_text(encoding="utf-8"))
+                        except Exception:
+                            pack_proof = {}
+                        pack_authored = pack_proof.get("map_studio_authored_module") if isinstance(pack_proof, dict) else {}
+                        if isinstance(pack_authored, dict):
+                            authored_proof = pack_authored.get("in_game_proof")
+                    if isinstance(authored_proof, dict):
+                        payload["in_game_proof"] = authored_proof
                     self.project.extra_sections["authored_module"] = payload
                     self.project.dirty = True
                     module_root = str(payload.get("module_root") or getattr(self.project, "name", "") or "new_level")

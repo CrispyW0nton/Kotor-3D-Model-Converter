@@ -173,6 +173,25 @@ def test_t2652_invalid_surface_blocks_clearly() -> None:
         update_authored_room_style(project, texture="CM_Baremetal", floor_surface="not_a_surface")
 
 
+def test_t2911_room_style_accepts_visual_only_walkmesh_surface_alias() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+    from src.core.modules.authored_room_style import update_authored_room_style
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grvisual",
+        game="K1",
+    )
+
+    update = update_authored_room_style(project, texture="CM_Baremetal", floor_surface="visual_only")
+
+    assert update.floor_surface_id == 8
+    assert update.floor_surface_name == "TRANSPARENT"
+    assert any("not normally walkable" in warning for warning in update.warnings)
+
+
 def test_t2652_builder_tab_exposes_room_style_controls() -> None:
     repo = Path(__file__).resolve().parents[1]
     source = (

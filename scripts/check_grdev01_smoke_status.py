@@ -864,13 +864,19 @@ def _proof_command_flags(required_checks: list[str]) -> str:
         "player_spawns_on_floor": "--player-spawns-on-floor",
         "test_placeable_visible": "--test-placeable-visible",
         "player_can_walk_on_floor": "--player-can-walk-on-floor",
+        "transition_pathing_sanity_confirmed": "--transition-pathing-sanity-confirmed",
         "no_inherited_base_game_geometry_or_scripted_movers": "--no-inherited-base-game-geometry-or-scripted-movers",
     }
     return " ".join(flag_by_check[name] for name in required_checks if name in flag_by_check)
 
 
 def _runtime_verification_label(required_checks: list[str]) -> str:
-    return "floor/placeable/walkability" if "test_placeable_visible" in required_checks else "floor/walkability"
+    suffix = "/pathing" if "transition_pathing_sanity_confirmed" in required_checks else ""
+    return (
+        f"floor/placeable/walkability{suffix}"
+        if "test_placeable_visible" in required_checks
+        else f"floor/walkability{suffix}"
+    )
 
 
 def _diagnostic_variant_id(proof: dict[str, Any]) -> str:

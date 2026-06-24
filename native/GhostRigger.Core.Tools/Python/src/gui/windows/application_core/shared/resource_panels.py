@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from importlib import import_module
 from pathlib import Path
 
 try:
@@ -11,7 +12,20 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
 
 from src.core.rendering.renderer_settings import RendererSettings
 from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
-from src.gui.qt_lib.windows.module_editor_window import ModuleEditorWindow
+from src.gui.windows.application_core.application_core_lib.functions.qt_helpers import _qt_object_alive
+
+
+def _load_map_studio_window_class():
+    errors: list[str] = []
+    for module_name in (
+        "src.gui.windows.module_editor_window",
+        "src.gui.qt_lib.windows.module_editor_window",
+    ):
+        try:
+            return getattr(import_module(module_name), "ModuleEditorWindow")
+        except Exception as exc:  # pragma: no cover - reported through visible opener error
+            errors.append(f"{module_name}: {exc}")
+    raise ImportError("; ".join(errors))
 
 
 class ResourcePanelsMixin:
@@ -466,13 +480,27 @@ class ResourcePanelsMixin:
         viewport.open_uv_viewer()
     def _open_module_editor_window(self):
         window = getattr(self, "module_editor_window", None)
+        if window is not None and not _qt_object_alive(window):
+            window = None
+            self.module_editor_window = None
         if window is None:
-            window = ModuleEditorWindow(
-                self,
-                theme_manager=getattr(self, "theme_manager", None),
-                layout_manager=getattr(self, "layout_manager", None),
-            )
+            try:
+                ModuleEditorWindow = _load_map_studio_window_class()
+
+                window = ModuleEditorWindow(
+                    self,
+                    theme_manager=getattr(self, "theme_manager", None),
+                    layout_manager=getattr(self, "layout_manager", None),
+                )
+            except Exception as exc:
+                message = f"Map Studio could not open: {exc}"
+                log = getattr(self, "_log", None)
+                if callable(log):
+                    log(message, "error")
+                QtWidgets.QMessageBox.critical(self, "Map Studio", message)
+                return
             self.module_editor_window = window
+            window.destroyed.connect(lambda _obj=None: setattr(self, "module_editor_window", None))
             window.set_library_rows(getattr(self, "_library_rows", []) or [])
         window.set_renderer_settings(RendererSettings.from_settings(self.settings_data))
         window.set_navigation_profile(
@@ -483,6 +511,16 @@ class ResourcePanelsMixin:
         window.show()
         window.raise_()
         window.activateWindow()
+
+    def _open_map_studio_modeling_workspace(self):
+        self._open_module_editor_window()
+        window = getattr(self, "module_editor_window", None)
+        if window is None:
+            return
+        focus = getattr(window, "focus_map_studio_modeling_workspace", None)
+        if callable(focus):
+            focus()
+
     def _send_library_row_to_module_editor(self, row: dict) -> None:
         self._open_module_editor_window()
         window = getattr(self, "module_editor_window", None)

@@ -1373,6 +1373,43 @@ def test_t2908_controller_persists_map_studio_tool_belt_preferences_in_kmap(tmp_
     assert raw["map_studio_tool_belt"]["custom_action_keys"] == ["terrain", "bridge", "validate"]
 
 
+def test_t2908_controller_persists_map_studio_active_selection_in_kmap(tmp_path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.level import KMapSerializer
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="selection", game="K1")
+
+    selection = controller.set_map_studio_active_selection(
+        component_mode="object",
+        workspace_key="geometry",
+        tool_key="select",
+        room_resref="selection_room01",
+        primitive_name="selection_room01_cube",
+    )
+
+    assert selection["selection_kind"] == "composition_primitive"
+    assert controller.project.extra_sections["map_studio_active_selection"]["primitive_name"] == "selection_room01_cube"
+    assert controller.command_history.undo_label == "Select selection_room01_cube"
+    assert controller.command_history.undo_stack[-1].stale_outputs == ()
+
+    path = tmp_path / "selection.kmap"
+    controller.save_project(path)
+    reopened = ModuleEditorController()
+    reopened.open_project(path)
+    raw = KMapSerializer.to_dict(reopened.project)
+
+    assert reopened.map_studio_active_selection()["room_resref"] == "selection_room01"
+    assert raw["map_studio_active_selection"]["component_mode"] == "object"
+    assert raw["map_studio_active_selection"]["tool_key"] == "select"
+
+    controller.undo_map_studio_command()
+
+    assert controller.map_studio_active_selection() == {}
+
+
 def test_t2668_controller_creates_elevation_composition_room_preset() -> None:
     _install_native_payload_paths()
 

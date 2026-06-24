@@ -39,7 +39,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_GAME_GAME_LIBRARY_EXT",
             "source_path": "src/core/game/game_library_ext.py",
             "packaged_path": "Python/src/core/game/game_library_ext.py",
-            "sha256": "859fc6a1904c4b2fa18c066e99c4d22062fd3409100c3f188d13926ca3c48fff"
+            "sha256": "1e34931d45ec1149e9d2fbb72d59549c5f19d8ab0f09f3a7710e6bd81a6cea80"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GAME_IMPORT_NORMALISATION",

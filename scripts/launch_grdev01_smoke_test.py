@@ -1,10 +1,10 @@
-"""Launch KOTOR or TSL for the installed grdev01 Map Studio smoke test.
+"""Launch KOTOR or TSL for an installed authored Map Studio smoke test.
 
 This helper checks the proof manifest, verifies the staged package, verifies the
 installed Modules copy matches the package, then launches the matching game
 executable.
 It does not mark proof complete; use `record_authored_module_game_proof.py`
-after capturing real evidence from `warp grdev01`.
+after capturing real evidence from the proof manifest's warp command.
 """
 
 from __future__ import annotations
@@ -79,7 +79,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--require-console-ready",
         action="store_true",
-        help="Block launch unless the game INI has EnableCheats=1 so `warp grdev01` can be entered.",
+        help="Block launch unless the game INI has EnableCheats=1 so the proof manifest warp command can be entered.",
     )
     parser.add_argument(
         "--skip-console-check",
@@ -140,7 +140,7 @@ def _elevated_launch_command(*, executable: Path, game_root_dir: Path) -> list[s
     return ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_command]
 
 
-def _console_summary(*, game_root_dir: Path, game: str, skip: bool = False) -> dict[str, Any]:
+def _console_summary(*, game_root_dir: Path, game: str, skip: bool = False, warp_command: str = "warp grdev01") -> dict[str, Any]:
     if skip:
         return {
             "checked": False,
@@ -162,7 +162,7 @@ def _console_summary(*, game_root_dir: Path, game: str, skip: bool = False) -> d
             "game_ini_path": str(ini_path),
             "enable_cheats_value": "",
             "warnings": warnings,
-            "fix_hint": f"Create or update {ini_path.name} with `EnableCheats=1` under `[Game Options]`, then run `warp grdev01` in-game.",
+            "fix_hint": f"Create or update {ini_path.name} with `EnableCheats=1` under `[Game Options]`, then run `{warp_command}` in-game.",
         }
     try:
         text = ini_path.read_text(encoding="utf-8", errors="ignore")
@@ -174,7 +174,7 @@ def _console_summary(*, game_root_dir: Path, game: str, skip: bool = False) -> d
             "game_ini_path": str(ini_path),
             "enable_cheats_value": "",
             "warnings": warnings,
-            "fix_hint": f"Verify {ini_path.name} contains `EnableCheats=1` under `[Game Options]` before running `warp grdev01`.",
+            "fix_hint": f"Verify {ini_path.name} contains `EnableCheats=1` under `[Game Options]` before running `{warp_command}`.",
         }
     match = re.search(r"(?im)^\s*EnableCheats\s*=\s*([^\r\n;#]+)", text)
     value = match.group(1).strip() if match else ""
@@ -182,9 +182,9 @@ def _console_summary(*, game_root_dir: Path, game: str, skip: bool = False) -> d
     if not ready:
         warnings.append(
             (
-                f"{ini_path.name} does not have EnableCheats=1; `warp grdev01` may be unavailable."
+                f"{ini_path.name} does not have EnableCheats=1; `{warp_command}` may be unavailable."
                 if value
-                else f"{ini_path.name} is missing EnableCheats=1; `warp grdev01` may be unavailable."
+                else f"{ini_path.name} is missing EnableCheats=1; `{warp_command}` may be unavailable."
             )
         )
     return {
@@ -193,7 +193,7 @@ def _console_summary(*, game_root_dir: Path, game: str, skip: bool = False) -> d
         "game_ini_path": str(ini_path),
         "enable_cheats_value": value,
         "warnings": warnings,
-        "fix_hint": "" if ready else f"Set `EnableCheats=1` under `[Game Options]` in {ini_path.name}, then launch and run `warp grdev01`.",
+        "fix_hint": "" if ready else f"Set `EnableCheats=1` under `[Game Options]` in {ini_path.name}, then launch and run `{warp_command}`.",
     }
 
 
@@ -261,7 +261,7 @@ def _summary(
 
 def _print_human_summary(payload: dict[str, Any]) -> None:
     result = "OK" if payload["ok"] else "BLOCKED"
-    print(f"grdev01 KOTOR launch: {result} ({payload['code']})")
+    print(f"Authored module KOTOR launch: {result} ({payload['code']})")
     print(payload["message"])
     print(f"Status: {payload['status']}")
     print(f"Proof manifest: {payload['proof_manifest_path']}")
@@ -313,12 +313,12 @@ def main(argv: list[str] | None = None) -> int:
     elevated_launcher = str(handoff.get("elevated_launch_script_path") or "")
     proof_recorder = str(handoff.get("proof_recording_script_path") or "")
     warp_command = str(handoff.get("warp_command") or "warp grdev01")
-    console = _console_summary(game_root_dir=game_root_dir, game=game, skip=bool(args.skip_console_check))
+    console = _console_summary(game_root_dir=game_root_dir, game=game, skip=bool(args.skip_console_check), warp_command=warp_command)
     blocking = list(status.get("blocking_issues", []))
     if not executable.is_file():
         blocking.append(f"KOTOR executable does not exist: {executable}")
     if args.require_console_ready and console.get("checked") and not console.get("ready"):
-        blocking.append(console.get("fix_hint") or "KOTOR console is not ready for `warp grdev01`.")
+        blocking.append(console.get("fix_hint") or f"KOTOR console is not ready for `{warp_command}`.")
     ready = bool(status.get("ready_for_game_launch", False)) and not blocking
     launch_command = (
         _elevated_launch_command(executable=executable, game_root_dir=game_root_dir)
@@ -331,7 +331,7 @@ def main(argv: list[str] | None = None) -> int:
         payload = _summary(
             ok=False,
             code="not_ready",
-            message="KOTOR was not launched because the grdev01 smoke package is not ready.",
+            message="KOTOR was not launched because the authored module smoke package is not ready.",
             status=status,
             executable=executable,
             launch_command=launch_command,
@@ -398,9 +398,9 @@ def main(argv: list[str] | None = None) -> int:
             "Dry run passed; KOTOR launch command is ready."
             if args.dry_run
             else (
-                "Elevated KOTOR launch request was submitted for grdev01 smoke testing."
+                "Elevated KOTOR launch request was submitted for authored module smoke testing."
                 if args.elevated
-                else "KOTOR launched for grdev01 smoke testing."
+                else "KOTOR launched for authored module smoke testing."
             )
         ),
         status=status,

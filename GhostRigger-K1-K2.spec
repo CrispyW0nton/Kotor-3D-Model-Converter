@@ -7,6 +7,18 @@ import os
 import sys
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
+_NATIVE_PYTHON_ROOTS = []
+_native_dir = os.path.join(os.getcwd(), 'native')
+if os.path.isdir(_native_dir):
+    for _project_name in sorted(os.listdir(_native_dir)):
+        _python_root = os.path.join(_native_dir, _project_name, 'Python')
+        if os.path.isdir(os.path.join(_python_root, 'src')):
+            _NATIVE_PYTHON_ROOTS.append(_python_root)
+
+for _python_root in reversed(_NATIVE_PYTHON_ROOTS):
+    if _python_root not in sys.path:
+        sys.path.insert(0, _python_root)
+
 # ── Hidden imports ────────────────────────────────────────────────────────
 # M3/T304 — Qt is the only supported front-end. The previous tkinter +
 # PIL._tkinter_finder hidden-imports block was removed when the Tk
@@ -128,8 +140,8 @@ datas = [
 
 # ── Analysis ──────────────────────────────────────────────────────────────
 a = Analysis(
-    ['main.py'],
-    pathex=['.'],
+    ['native/GhostRigger.Native.Core.Host/main.py'],
+    pathex=['.', *_NATIVE_PYTHON_ROOTS],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,

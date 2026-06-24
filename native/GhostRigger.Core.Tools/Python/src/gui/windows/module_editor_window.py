@@ -19,7 +19,7 @@ from src.gui.panels.module_editor.blueprints_tab import BlueprintsTab
 from src.gui.panels.module_editor.builder_tab import BuilderTab
 from src.gui.panels.module_editor.export_panel import ModuleExportPanel
 from src.gui.panels.module_editor.module_editor_asset_browser import ModuleEditorAssetBrowser
-from src.gui.panels.module_editor.module_editor_outliner import ModuleEditorOutliner
+from src.gui.panels.module_editor.module_editor_outliner import ModuleEditorOutliner, authored_primitive_item_id
 from src.gui.panels.module_editor.module_editor_properties import ModuleEditorPropertiesPanel
 from src.gui.panels.module_editor.module_editor_toolbar import ModuleEditorToolbar
 from src.gui.panels.module_editor.module_editor_viewport_panel import ModuleEditorViewportPanel
@@ -29,6 +29,7 @@ from src.gui.panels.module_editor.rooms_tab import RoomsTab
 from src.gui.panels.module_editor.validation_panel import ModuleValidationPanel
 from src.gui.panels.module_editor.walkmesh_tab import WalkmeshTab
 from src.gui.panels.module_editor.workflow_panel import MapStudioWorkflowPanel
+from src.gui.qt_lib.assets.qt_theme import make_horizontal_overflow_area, make_scrollable_panel
 from src.core.rendering.renderer_settings import RendererSettings
 from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 
@@ -36,10 +37,17 @@ from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_P
 class _MapStudioGameProofDialog(QtWidgets.QDialog):
     """Collect manual KOTOR smoke-test proof before marking a module tested."""
 
-    def __init__(self, parent: QtWidgets.QWidget | None = None, *, proof_manifest_path: str = "") -> None:
+    def __init__(
+        self,
+        parent: QtWidgets.QWidget | None = None,
+        *,
+        proof_manifest_path: str = "",
+        package_resource_summary: str = "",
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Record Map Studio Game Proof")
         self.setModal(True)
+        self.setObjectName("mapStudioGameProofDialog")
         layout = QtWidgets.QVBoxLayout(self)
         form = QtWidgets.QFormLayout()
         layout.addLayout(form)
@@ -52,6 +60,14 @@ class _MapStudioGameProofDialog(QtWidgets.QDialog):
         proof_row.addWidget(self.proof_manifest_edit, 1)
         proof_row.addWidget(proof_browse)
         form.addRow("Proof manifest", proof_row)
+
+        self.package_resource_label = QtWidgets.QLabel(
+            package_resource_summary
+            or "Package inventory: stage or install the authored module before recording proof."
+        )
+        self.package_resource_label.setObjectName("mapStudioProofPackageResourceSummaryLabel")
+        self.package_resource_label.setWordWrap(True)
+        layout.addWidget(self.package_resource_label)
 
         self.evidence_edit = QtWidgets.QLineEdit()
         self.evidence_edit.setObjectName("mapStudioProofEvidenceLineEdit")
@@ -76,25 +92,35 @@ class _MapStudioGameProofDialog(QtWidgets.QDialog):
         checks_layout = QtWidgets.QVBoxLayout(checks_box)
         self.module_loads_box = QtWidgets.QCheckBox("`warp` loads the generated module in KOTOR")
         self.module_loads_box.setObjectName("mapStudioProofModuleLoadsCheckBox")
+        self.module_identity_box = QtWidgets.QCheckBox("Loaded module identity matches the authored resref")
+        self.module_identity_box.setObjectName("mapStudioProofModuleIdentityCheckBox")
         self.player_floor_box = QtWidgets.QCheckBox("Player appears on the generated floor, not in void")
         self.player_floor_box.setObjectName("mapStudioProofPlayerFloorCheckBox")
         self.placeable_visible_box = QtWidgets.QCheckBox("Authored/test placeable appears where expected")
         self.placeable_visible_box.setObjectName("mapStudioProofPlaceableVisibleCheckBox")
         self.walkable_floor_box = QtWidgets.QCheckBox("Player can walk across the generated floor")
         self.walkable_floor_box.setObjectName("mapStudioProofWalkableFloorCheckBox")
+        self.transition_pathing_box = QtWidgets.QCheckBox("Transitions and pathing behave sanely in the loaded module")
+        self.transition_pathing_box.setObjectName("mapStudioProofTransitionPathingCheckBox")
+        self.no_inherited_box = QtWidgets.QCheckBox("No inherited vanilla geometry or scripted movers appear")
+        self.no_inherited_box.setObjectName("mapStudioProofNoInheritedContentCheckBox")
         self.allow_missing_evidence_box = QtWidgets.QCheckBox("Record incomplete attempt if evidence file is missing")
         self.allow_missing_evidence_box.setObjectName("mapStudioProofAllowMissingEvidenceCheckBox")
         for widget in (
             self.module_loads_box,
+            self.module_identity_box,
             self.player_floor_box,
             self.placeable_visible_box,
             self.walkable_floor_box,
+            self.transition_pathing_box,
+            self.no_inherited_box,
             self.allow_missing_evidence_box,
         ):
             checks_layout.addWidget(widget)
         layout.addWidget(checks_box)
 
         buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        buttons.setObjectName("mapStudioProofButtons")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -109,9 +135,12 @@ class _MapStudioGameProofDialog(QtWidgets.QDialog):
             "tester": self.tester_edit.text().strip(),
             "notes": self.notes_edit.toPlainText().strip(),
             "module_loads_in_game": self.module_loads_box.isChecked(),
+            "module_identity_matches_authored_resref": self.module_identity_box.isChecked(),
             "player_spawns_on_floor": self.player_floor_box.isChecked(),
             "test_placeable_visible": self.placeable_visible_box.isChecked(),
             "player_can_walk_on_floor": self.walkable_floor_box.isChecked(),
+            "transition_pathing_sanity_confirmed": self.transition_pathing_box.isChecked(),
+            "no_inherited_base_game_geometry_or_scripted_movers": self.no_inherited_box.isChecked(),
             "allow_missing_evidence": self.allow_missing_evidence_box.isChecked(),
         }
 
@@ -136,6 +165,115 @@ class _MapStudioGameProofDialog(QtWidgets.QDialog):
             self.evidence_edit.setText(path)
 
 
+class _MapStudioLytResourceDialog(QtWidgets.QDialog):
+    """Choose an indexed LYT resource from configured KOTOR game installs."""
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None, *, rows: list[dict[str, Any]] | tuple[dict[str, Any], ...] = ()) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Load Indexed LYT")
+        self.setModal(True)
+        self.setObjectName("mapStudioLytResourceDialog")
+        self.resize(620, 460)
+        self._rows = [dict(row) for row in rows]
+        self._filtered_rows: list[dict[str, Any]] = []
+
+        root = QtWidgets.QVBoxLayout(self)
+        controls = QtWidgets.QHBoxLayout()
+        controls.setContentsMargins(0, 0, 0, 0)
+        self.search_edit = QtWidgets.QLineEdit(self)
+        self.search_edit.setObjectName("mapStudioLytResourceSearchLineEdit")
+        self.search_edit.setPlaceholderText("Filter resrefs")
+        self.game_combo = QtWidgets.QComboBox(self)
+        self.game_combo.setObjectName("mapStudioLytResourceGameComboBox")
+        self.game_combo.addItems(["All Games", "K1", "K2"])
+        controls.addWidget(self.search_edit, 1)
+        controls.addWidget(self.game_combo)
+        root.addLayout(controls)
+
+        self.resource_list = QtWidgets.QListWidget(self)
+        self.resource_list.setObjectName("mapStudioLytResourceListWidget")
+        self.resource_list.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        root.addWidget(self.resource_list, 1)
+
+        self.detail_label = QtWidgets.QLabel(self)
+        self.detail_label.setObjectName("mapStudioLytResourceDetailLabel")
+        self.detail_label.setWordWrap(True)
+        root.addWidget(self.detail_label)
+
+        buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self)
+        buttons.setObjectName("mapStudioLytResourceButtons")
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        root.addWidget(buttons)
+
+        self.search_edit.textChanged.connect(self._apply_filter)
+        self.game_combo.currentTextChanged.connect(self._apply_filter)
+        self.resource_list.itemSelectionChanged.connect(self._update_detail)
+        self.resource_list.itemDoubleClicked.connect(lambda _item: self.accept())
+        self._apply_filter()
+
+    def selected_row(self) -> dict[str, Any] | None:
+        item = self.resource_list.currentItem()
+        if item is None:
+            return None
+        row = item.data(QtCore.Qt.UserRole)
+        return dict(row) if isinstance(row, dict) else None
+
+    def accept(self) -> None:
+        if self.selected_row() is None:
+            QtWidgets.QMessageBox.information(self, "Load Indexed LYT", "Select a LYT resource to load.")
+            return
+        super().accept()
+
+    def _apply_filter(self) -> None:
+        query = self.search_edit.text().strip().lower()
+        game_filter = self.game_combo.currentText().strip()
+        self.resource_list.clear()
+        self._filtered_rows = []
+        for row in self._rows:
+            game = str(row.get("game", "") or "").upper()
+            resref = str(row.get("resref", "") or "").lower()
+            if game_filter in {"K1", "K2"} and game != game_filter:
+                continue
+            if query and query not in resref and query not in game.lower():
+                continue
+            self._filtered_rows.append(row)
+            item = QtWidgets.QListWidgetItem(self._row_label(row))
+            item.setData(QtCore.Qt.UserRole, dict(row))
+            item.setToolTip(self._row_detail(row))
+            self.resource_list.addItem(item)
+        if self.resource_list.count() > 0:
+            self.resource_list.setCurrentRow(0)
+        self._update_detail()
+
+    def _update_detail(self) -> None:
+        row = self.selected_row()
+        if row is None:
+            if self._rows:
+                self.detail_label.setText("No indexed LYT resource matches the current filter.")
+            else:
+                self.detail_label.setText("No indexed LYT resources were found in the configured game directories.")
+            return
+        self.detail_label.setText(self._row_detail(row))
+
+    @staticmethod
+    def _row_label(row: dict[str, Any]) -> str:
+        game = str(row.get("game", "") or "?").upper()
+        resref = str(row.get("resref", "") or "<unknown>").lower()
+        room_count = int(row.get("room_count", 0) or 0)
+        doorhook_count = int(row.get("doorhook_count", 0) or 0)
+        return f"[{game}] {resref}    {room_count} room(s), {doorhook_count} doorhook(s)"
+
+    @staticmethod
+    def _row_detail(row: dict[str, Any]) -> str:
+        game = str(row.get("game", "") or "?").upper()
+        resref = str(row.get("resref", "") or "<unknown>").lower()
+        source = str(row.get("source", "") or "configured game resources")
+        room_count = int(row.get("room_count", 0) or 0)
+        doorhook_count = int(row.get("doorhook_count", 0) or 0)
+        return f"{game}:{resref}.lyt from {source} - {room_count} room(s), {doorhook_count} doorhook(s)"
+
+
 class _MapStudioLaunchHandoffDialog(QtWidgets.QDialog):
     """Show the exact manual warp-test handoff before opening KOTOR."""
 
@@ -148,6 +286,7 @@ class _MapStudioLaunchHandoffDialog(QtWidgets.QDialog):
         proof_manifest_path: str = "",
         proof_recording_script_path: str = "",
         launch_helper_command: str = "",
+        package_resource_summary: str = "",
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Map Studio Warp Test Handoff")
@@ -161,6 +300,14 @@ class _MapStudioLaunchHandoffDialog(QtWidgets.QDialog):
         self.warning_label.setObjectName("mapStudioLaunchHandoffWarningLabel")
         self.warning_label.setWordWrap(True)
         root.addWidget(self.warning_label)
+
+        self.package_resource_label = QtWidgets.QLabel(
+            package_resource_summary
+            or "Package inventory: stage or install the authored module before launch handoff."
+        )
+        self.package_resource_label.setObjectName("mapStudioLaunchPackageResourceSummaryLabel")
+        self.package_resource_label.setWordWrap(True)
+        root.addWidget(self.package_resource_label)
 
         form = QtWidgets.QFormLayout()
         root.addLayout(form)
@@ -207,6 +354,362 @@ class _MapStudioLaunchHandoffDialog(QtWidgets.QDialog):
         copy_warp_button.clicked.connect(
             lambda: QtGui.QGuiApplication.clipboard().setText(self.warp_command_edit.text())
         )
+
+
+class _MapStudioPackageWizardDialog(QtWidgets.QDialog):
+    """Review authored-module package targets before staging or installing."""
+
+    def __init__(
+        self,
+        parent: QtWidgets.QWidget | None = None,
+        *,
+        mode: str,
+        readiness: object | None,
+        output_dir: str = "",
+        game_modules_dir: str = "",
+        dry_run: bool = True,
+    ) -> None:
+        super().__init__(parent)
+        self._readiness = readiness
+        self._mode = str(mode or "stage").strip().lower()
+        self.setWindowTitle("Map Studio Package Wizard")
+        self.setModal(True)
+        self.setObjectName("mapStudioPackageWizardDialog")
+
+        root = QtWidgets.QVBoxLayout(self)
+        self.summary_label = QtWidgets.QLabel(self._summary_text())
+        self.summary_label.setObjectName("mapStudioPackageWizardSummaryLabel")
+        self.summary_label.setWordWrap(True)
+        root.addWidget(self.summary_label)
+
+        form = QtWidgets.QFormLayout()
+        root.addLayout(form)
+
+        self.module_root_edit = QtWidgets.QLineEdit(str(getattr(readiness, "module_root", "") or ""))
+        self.module_root_edit.setObjectName("mapStudioPackageWizardModuleRootLineEdit")
+        self.module_root_edit.setReadOnly(True)
+        form.addRow("Module root", self.module_root_edit)
+
+        self.game_edit = QtWidgets.QLineEdit(str(getattr(readiness, "game", "") or ""))
+        self.game_edit.setObjectName("mapStudioPackageWizardGameLineEdit")
+        self.game_edit.setReadOnly(True)
+        form.addRow("Target game", self.game_edit)
+
+        self.capability_edit = QtWidgets.QLineEdit(str(getattr(readiness, "capability_stage", "") or "not_checked"))
+        self.capability_edit.setObjectName("mapStudioPackageWizardCapabilityLineEdit")
+        self.capability_edit.setReadOnly(True)
+        form.addRow("Capability", self.capability_edit)
+
+        self.output_dir_edit = QtWidgets.QLineEdit(output_dir)
+        self.output_dir_edit.setObjectName("mapStudioPackageWizardOutputDirLineEdit")
+        output_browse = QtWidgets.QPushButton("Browse...")
+        output_browse.setObjectName("mapStudioPackageWizardOutputBrowseButton")
+        output_row = QtWidgets.QHBoxLayout()
+        output_row.addWidget(self.output_dir_edit, 1)
+        output_row.addWidget(output_browse)
+        form.addRow("Stage/package folder", output_row)
+
+        self.install_check = QtWidgets.QCheckBox("Install/copy .mod to a KOTOR Modules folder after staging")
+        self.install_check.setObjectName("mapStudioPackageWizardInstallCheckBox")
+        self.install_check.setChecked(self._mode == "install")
+        self.install_check.setEnabled(self._mode == "install")
+        root.addWidget(self.install_check)
+
+        self.modules_dir_edit = QtWidgets.QLineEdit(game_modules_dir)
+        self.modules_dir_edit.setObjectName("mapStudioPackageWizardModulesDirLineEdit")
+        modules_browse = QtWidgets.QPushButton("Browse...")
+        modules_browse.setObjectName("mapStudioPackageWizardModulesBrowseButton")
+        modules_row = QtWidgets.QHBoxLayout()
+        modules_row.addWidget(self.modules_dir_edit, 1)
+        modules_row.addWidget(modules_browse)
+        form.addRow("KOTOR Modules folder", modules_row)
+
+        self.dry_run_check = QtWidgets.QCheckBox("Dry run: preview validation and targets without final writes")
+        self.dry_run_check.setObjectName("mapStudioPackageWizardDryRunCheckBox")
+        self.dry_run_check.setChecked(bool(dry_run))
+        root.addWidget(self.dry_run_check)
+
+        self.overwrite_check = QtWidgets.QCheckBox("Back up and replace existing module package if needed")
+        self.overwrite_check.setObjectName("mapStudioPackageWizardOverwriteCheckBox")
+        root.addWidget(self.overwrite_check)
+
+        self.no_partial_write_label = QtWidgets.QLabel(
+            "Writes use the authored-module ExportJob staging path: package files, checklist, and proof manifest are reviewed before game-ready proof is recorded."
+        )
+        self.no_partial_write_label.setObjectName("mapStudioPackageWizardNoPartialWriteLabel")
+        self.no_partial_write_label.setWordWrap(True)
+        root.addWidget(self.no_partial_write_label)
+
+        self.resource_table = QtWidgets.QTableWidget(0, 3)
+        self.resource_table.setObjectName("mapStudioPackageWizardResourceReviewTable")
+        self.resource_table.setHorizontalHeaderLabels(("Resource or reference", "Status", "Why it matters"))
+        self.resource_table.verticalHeader().setVisible(False)
+        self.resource_table.horizontalHeader().setStretchLastSection(True)
+        self.resource_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.resource_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.resource_table.setMinimumHeight(160)
+        root.addWidget(self.resource_table)
+        self._populate_resource_table()
+
+        self.proof_gate_table = QtWidgets.QTableWidget(0, 2)
+        self.proof_gate_table.setObjectName("mapStudioPackageWizardProofGateTable")
+        self.proof_gate_table.setHorizontalHeaderLabels(("Live KOTOR proof check", "Package gate status"))
+        self.proof_gate_table.verticalHeader().setVisible(False)
+        self.proof_gate_table.horizontalHeader().setStretchLastSection(True)
+        self.proof_gate_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.proof_gate_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.proof_gate_table.setMinimumHeight(120)
+        root.addWidget(self.proof_gate_table)
+        self._populate_proof_gate_table()
+
+        self.blocking_label = QtWidgets.QLabel(self._blocking_text())
+        self.blocking_label.setObjectName("mapStudioPackageWizardBlockingLabel")
+        self.blocking_label.setWordWrap(True)
+        root.addWidget(self.blocking_label)
+
+        self.buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        self.buttons.setObjectName("mapStudioPackageWizardButtons")
+        self.buttons.button(QtWidgets.QDialogButtonBox.Ok).setText(self._ok_text())
+        self.buttons.accepted.connect(self._accept_if_valid)
+        self.buttons.rejected.connect(self.reject)
+        root.addWidget(self.buttons)
+
+        output_browse.clicked.connect(self._browse_output_dir)
+        modules_browse.clicked.connect(self._browse_modules_dir)
+        self.install_check.toggled.connect(self._sync_install_controls)
+        self.modules_dir_edit.textChanged.connect(lambda _text: self._sync_install_controls())
+        self.module_root_edit.textChanged.connect(lambda _text: self._sync_install_controls())
+        self.dry_run_check.toggled.connect(lambda _checked: self._sync_install_controls())
+        self._sync_install_controls()
+
+    def values(self) -> dict[str, object]:
+        return {
+            "output_dir": self.output_dir_edit.text().strip(),
+            "game_modules_dir": self.modules_dir_edit.text().strip(),
+            "dry_run": self.dry_run_check.isChecked(),
+            "install_requested": self.install_check.isChecked(),
+            "overwrite": self.overwrite_check.isChecked(),
+        }
+
+    def _summary_text(self) -> str:
+        action = {
+            "export": "Export an authored .mod package candidate.",
+            "stage": "Stage an authored .mod package, checklist, and proof manifest for a KOTOR warp test.",
+            "install": "Stage and install an authored .mod package for a KOTOR warp test.",
+        }.get(self._mode, "Stage an authored .mod package for a KOTOR warp test.")
+        return (
+            f"{action} Review ARE/GIT/IFO/LYT/VIS/PTH, room MDL/MDX/WOK, install target, "
+            "and proof handoff before anything is written."
+        )
+
+    def _ok_text(self) -> str:
+        if self._mode == "export":
+            return "Export Candidate"
+        if self._mode == "install":
+            return "Stage and Install"
+        return "Stage Package"
+
+    def _blocking_text(self) -> str:
+        if self._readiness is None:
+            return "Package gate: readiness has not been checked. Create/open a KMAP and validate before packaging."
+        blockers = tuple(str(item) for item in tuple(getattr(self._readiness, "blocking_messages", ()) or ()) if str(item).strip())
+        if blockers:
+            return "Package gate blockers: " + " | ".join(blockers[:3])
+        export_status = str(getattr(self._readiness, "export_status", "") or "")
+        return f"Package gate: {export_status or 'No blocking readiness issues reported.'}"
+
+    def _populate_resource_table(self) -> None:
+        readiness = self._readiness
+        expected = tuple(getattr(readiness, "expected_runtime_resources", ()) or ()) if readiness is not None else ()
+        present = {self._resource_label(key) for key in tuple(getattr(readiness, "present_runtime_resources", ()) or ())}
+        missing = {self._resource_label(key) for key in tuple(getattr(readiness, "missing_runtime_resources", ()) or ())}
+        rows: list[tuple[str, str, str]] = []
+        for key in expected:
+            label = self._resource_label(key)
+            if label in present:
+                status = "current in KMAP package metadata"
+            elif label in missing:
+                status = "will be generated/staged by package build"
+            else:
+                status = "expected runtime output"
+            rows.append((label, status, self._resource_reason(label)))
+        metadata = dict(getattr(readiness, "metadata", {}) or {}) if readiness is not None else {}
+        rows.extend(self._reference_rows_from_metadata(metadata))
+        if not rows:
+            rows.append(("No runtime resources listed", "not ready", "Create or validate an authored module before packaging."))
+        self.resource_table.setRowCount(len(rows))
+        for row, values in enumerate(rows):
+            for column, text in enumerate(values):
+                item = QtWidgets.QTableWidgetItem(text)
+                item.setFlags(QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable)
+                self.resource_table.setItem(row, column, item)
+
+    def _populate_proof_gate_table(self) -> None:
+        metadata = dict(getattr(self._readiness, "metadata", {}) or {}) if self._readiness is not None else {}
+        test_plan = dict(metadata.get("modder_test_plan") or {}) if isinstance(metadata.get("modder_test_plan"), dict) else {}
+        checks = tuple(str(item) for item in tuple(test_plan.get("acceptance_checks") or ()) if str(item).strip())
+        missing = {str(item) for item in tuple(test_plan.get("missing_acceptance_checks") or checks)}
+        if not checks:
+            checks = (
+                "module_loads_in_game",
+                "module_identity_matches_authored_resref",
+                "player_spawns_on_floor",
+                "test_placeable_visible",
+                "player_can_walk_on_floor",
+                "transition_pathing_sanity_confirmed",
+                "no_inherited_base_game_geometry_or_scripted_movers",
+                "screenshot_or_video_captured",
+            )
+            missing = set(checks)
+        rows = tuple((self._proof_check_label(check), self._proof_check_status(check, missing)) for check in checks)
+        self.proof_gate_table.setRowCount(len(rows))
+        for row, values in enumerate(rows):
+            for column, text in enumerate(values):
+                item = QtWidgets.QTableWidgetItem(text)
+                item.setFlags(QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable)
+                self.proof_gate_table.setItem(row, column, item)
+
+    @staticmethod
+    def _proof_check_label(check: str) -> str:
+        return {
+            "module_loads_in_game": "`warp` loads the generated module in KOTOR",
+            "module_identity_matches_authored_resref": "Loaded module identity matches the authored resref",
+            "player_spawns_on_floor": "Player appears on the generated floor",
+            "test_placeable_visible": "Authored/test placeable appears where expected",
+            "player_can_walk_on_floor": "Player can walk across generated WOK",
+            "transition_pathing_sanity_confirmed": "Transitions and PTH pathing behave sanely",
+            "no_inherited_base_game_geometry_or_scripted_movers": "No inherited vanilla geometry or scripted movers appear",
+            "screenshot_or_video_captured": "Screenshot or video evidence is attached",
+        }.get(check, check.replace("_", " "))
+
+    @staticmethod
+    def _proof_check_status(check: str, missing: set[str]) -> str:
+        if check in missing:
+            return "Required after staging; cannot be satisfied by package build alone"
+        return "Accepted in recorded proof"
+
+    @classmethod
+    def _reference_rows_from_metadata(cls, metadata: dict[str, object]) -> list[tuple[str, str, str]]:
+        rows: list[tuple[str, str, str]] = []
+        for ref in tuple(metadata.get("gameplay_template_references") or ()):
+            if not isinstance(ref, dict):
+                continue
+            restype = str(ref.get("restype") or "").lower().lstrip(".")
+            resref = str(ref.get("template_resref") or "").strip()
+            kind = str(ref.get("kind") or "template").strip()
+            if not resref or not restype:
+                continue
+            label = f"{kind}:{resref}.{restype}"
+            status = str(ref.get("status") or ("packaged" if ref.get("packaged") else "external_or_base_game"))
+            reason = str(ref.get("message") or cls._reference_reason("template", restype))
+            rows.append((label, status, reason))
+        for ref in tuple(metadata.get("script_references") or ()):
+            if not isinstance(ref, dict):
+                continue
+            script = str(ref.get("script_resref") or "").strip()
+            if not script:
+                continue
+            label = f"script:{script}.ncs"
+            status = str(ref.get("status") or ("packaged" if ref.get("packaged") else "external_or_override"))
+            reason = str(ref.get("message") or cls._reference_reason("script", "ncs"))
+            rows.append((label, status, reason))
+        for ref in tuple(metadata.get("dialog_references") or ()):
+            if not isinstance(ref, dict):
+                continue
+            dialog = str(ref.get("dialog_resref") or "").strip()
+            if not dialog:
+                continue
+            label = f"dialog:{dialog}.dlg"
+            status = str(ref.get("status") or ("packaged" if ref.get("packaged") else "external_or_override"))
+            reason = str(ref.get("message") or cls._reference_reason("dialog", "dlg"))
+            rows.append((label, status, reason))
+        return rows
+
+    @staticmethod
+    def _resource_label(key: object) -> str:
+        if isinstance(key, tuple) and len(key) >= 2:
+            return f"{str(key[0]).strip()}.{str(key[1]).strip().lower().lstrip('.')}"
+        return str(key or "").strip()
+
+    @staticmethod
+    def _resource_reason(label: str) -> str:
+        restype = label.rpartition(".")[2].lower()
+        return {
+            "are": "Area metadata used when the module loads.",
+            "git": "Gameplay instances such as entry point, placeables, doors, and triggers.",
+            "ifo": "Module identity and entry area metadata.",
+            "pth": "Path graph anchors for entry, placements, and transitions.",
+            "lyt": "Room layout membership and positions.",
+            "vis": "Room visibility/culling links.",
+            "wok": "Walkable/non-walkable collision surface.",
+            "mdl": "Visible room model geometry.",
+            "mdx": "Paired model vertex data.",
+        }.get(restype, "KOTOR runtime package dependency.")
+
+    @staticmethod
+    def _reference_reason(kind: str, restype: str) -> str:
+        if kind == "script":
+            return "ARE/IFO script hook dependency that must resolve during the in-game smoke test."
+        if kind == "dialog":
+            return "Dialog/conversation dependency that must resolve during the in-game smoke test."
+        return {
+            "utc": "Creature template referenced by authored GIT placement data.",
+            "utd": "Door template referenced by authored GIT transition data.",
+            "utp": "Placeable template referenced by authored GIT placement data.",
+            "utt": "Trigger template referenced by authored GIT transition data.",
+            "utw": "Waypoint template referenced by authored GIT/pathing proof data.",
+        }.get(restype, "Gameplay template dependency that must resolve during the in-game smoke test.")
+
+    def _sync_install_controls(self) -> None:
+        install = self.install_check.isChecked()
+        self.modules_dir_edit.setEnabled(install)
+        self.overwrite_check.setEnabled(install)
+        destination = self._install_destination()
+        exists = bool(destination and destination.exists())
+        if not install:
+            self.overwrite_check.setText("Back up and replace existing module package if needed")
+            self.overwrite_check.setChecked(False)
+            return
+        if exists:
+            self.overwrite_check.setText(f"Back up and replace existing {destination.name}")
+        else:
+            self.overwrite_check.setText("No existing .mod detected in selected Modules folder")
+            self.overwrite_check.setChecked(False)
+
+    def _install_destination(self) -> Path | None:
+        modules_dir = self.modules_dir_edit.text().strip()
+        module_root = self.module_root_edit.text().strip().lower()
+        if not modules_dir or not module_root:
+            return None
+        return Path(modules_dir) / f"{module_root}.mod"
+
+    def _accept_if_valid(self) -> None:
+        if not self.output_dir_edit.text().strip():
+            QtWidgets.QMessageBox.warning(self, "Map Studio Package Wizard", "Choose a staging/package folder first.")
+            return
+        if self.install_check.isChecked():
+            if not self.modules_dir_edit.text().strip():
+                QtWidgets.QMessageBox.warning(self, "Map Studio Package Wizard", "Choose the target KOTOR Modules folder first.")
+                return
+            destination = self._install_destination()
+            if destination is not None and destination.exists() and not self.dry_run_check.isChecked() and not self.overwrite_check.isChecked():
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Map Studio Package Wizard",
+                    f"{destination.name} already exists. Enable backup/replace or choose another Modules folder.",
+                )
+                return
+        self.accept()
+
+    def _browse_output_dir(self) -> None:
+        path = QtWidgets.QFileDialog.getExistingDirectory(self, "Choose Map Studio package staging folder", self.output_dir_edit.text().strip())
+        if path:
+            self.output_dir_edit.setText(path)
+
+    def _browse_modules_dir(self) -> None:
+        path = QtWidgets.QFileDialog.getExistingDirectory(self, "Choose KOTOR Modules folder", self.modules_dir_edit.text().strip())
+        if path:
+            self.modules_dir_edit.setText(path)
 
 
 class _MapStudioNewProjectDialog(QtWidgets.QDialog):
@@ -422,7 +925,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.export_package_action = QtGui.QAction("Export Scene Package...", self)
         self.close_action = QtGui.QAction("Close", self)
         self.undo_action = QtGui.QAction("Undo", self)
+        self.undo_action.setObjectName("mapStudioUndoAction")
+        self.undo_action.setShortcut(QtGui.QKeySequence("Ctrl+Z"))
+        self.undo_action.setShortcutContext(QtCore.Qt.WindowShortcut)
         self.redo_action = QtGui.QAction("Redo", self)
+        self.redo_action.setObjectName("mapStudioRedoAction")
+        self.redo_action.setShortcut(QtGui.QKeySequence("Ctrl+R"))
+        self.redo_action.setShortcutContext(QtCore.Qt.WindowShortcut)
         self.delete_action = QtGui.QAction("Delete Selected", self)
         self.duplicate_action = QtGui.QAction("Duplicate Selected", self)
         self.rename_action = QtGui.QAction("Rename Selected", self)
@@ -481,7 +990,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         root.setContentsMargins(6, 6, 6, 6)
         root.setSpacing(8)
         self.toolbar = ModuleEditorToolbar(self)
-        root.addWidget(self.toolbar)
+        self.toolbar_scroll = make_horizontal_overflow_area(
+            self.toolbar,
+            "mapStudioTopToolbarScrollArea",
+            height=34,
+            parent=shell,
+        )
+        root.addWidget(self.toolbar_scroll)
         self.map_studio_scope_label = QtWidgets.QLabel(
             "Map Studio Level Editor: KMAP terrain, rooms, walkmesh, placements, validation, staged export, install handoff, and game proof."
         )
@@ -530,6 +1045,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.map_studio_tool_belt_layout = QtWidgets.QHBoxLayout(self.map_studio_tool_belt_widget)
         self.map_studio_tool_belt_layout.setContentsMargins(0, 0, 0, 0)
         self.map_studio_tool_belt_layout.setSpacing(4)
+        self.map_studio_tool_belt_scroll = make_horizontal_overflow_area(
+            self.map_studio_tool_belt_widget,
+            "mapStudioToolBeltScrollArea",
+            height=34,
+            parent=self.map_studio_tool_belt_default_tab,
+        )
         self.map_studio_command_search_combo = QtWidgets.QComboBox()
         self.map_studio_command_search_combo.setObjectName("mapStudioCommandSearchComboBox")
         self.map_studio_command_search_combo.setEditable(True)
@@ -543,7 +1064,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.map_studio_customize_tool_belt_button.setObjectName("mapStudioCustomizeToolBeltButton")
         belt_row.addWidget(self.map_studio_tool_belt_label)
         belt_row.addWidget(self.map_studio_tool_belt_preset_combo)
-        belt_row.addWidget(self.map_studio_tool_belt_widget, 1)
+        belt_row.addWidget(self.map_studio_tool_belt_scroll, 1)
         belt_row.addWidget(self.map_studio_command_search_combo)
         belt_row.addWidget(self.map_studio_command_run_button)
         belt_row.addWidget(self.map_studio_customize_tool_belt_button)
@@ -575,8 +1096,14 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.map_studio_custom_tool_belt_layout = QtWidgets.QHBoxLayout(self.map_studio_custom_tool_belt_widget)
         self.map_studio_custom_tool_belt_layout.setContentsMargins(0, 0, 0, 0)
         self.map_studio_custom_tool_belt_layout.setSpacing(4)
+        self.map_studio_custom_tool_belt_scroll = make_horizontal_overflow_area(
+            self.map_studio_custom_tool_belt_widget,
+            "mapStudioCustomToolBeltScrollArea",
+            height=34,
+            parent=self.map_studio_tool_belt_custom_tab,
+        )
         custom_belt_root.addLayout(custom_add_row)
-        custom_belt_root.addWidget(self.map_studio_custom_tool_belt_widget)
+        custom_belt_root.addWidget(self.map_studio_custom_tool_belt_scroll)
         self.map_studio_tool_belt_tabs.addTab(self.map_studio_tool_belt_custom_tab, "Custom +")
         root.addWidget(self.map_studio_tool_belt_tabs)
         self.map_studio_command_search_readiness_label = QtWidgets.QLabel(
@@ -585,7 +1112,6 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.map_studio_command_search_readiness_label.setObjectName("mapStudioCommandSearchReadinessLabel")
         self.map_studio_command_search_readiness_label.setWordWrap(True)
         root.addWidget(self.map_studio_command_search_readiness_label)
-        self._refresh_map_studio_tool_index()
         self.main_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         root.addWidget(self.main_splitter, 1)
 
@@ -615,6 +1141,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.set_modeling_tools(self.controller.available_map_studio_modeling_tools())
         self.builder_tab.set_modeling_snap_modes(self.controller.available_map_studio_snap_modes())
         self.builder_tab.set_terrain_brushes(self.controller.available_map_studio_terrain_brushes())
+        self._refresh_map_studio_tool_index()
         self.blueprints_tab = BlueprintsTab()
         for label, widget in (
             ("Rooms", self.rooms_tab),
@@ -627,7 +1154,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.left_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.left_splitter.setChildrenCollapsible(False)
         self.left_splitter.addWidget(self.left_tabs)
-        self.left_splitter.addWidget(self.workflow_tabs)
+        self.workflow_tabs_scroll = make_scrollable_panel(
+            self.workflow_tabs,
+            "mapStudioWorkflowTabsScrollArea",
+            parent=left,
+        )
+        self.left_splitter.addWidget(self.workflow_tabs_scroll)
         self.left_splitter.setStretchFactor(0, 3)
         self.left_splitter.setStretchFactor(1, 2)
         self.left_splitter.setSizes([520, 340])
@@ -639,12 +1171,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         center_layout.setContentsMargins(0, 0, 0, 0)
         self.viewport_panel = ModuleEditorViewportPanel(center)
         self.viewport_panel.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.viewport_panel_scroll = None
         center_layout.addWidget(self.viewport_panel, 1)
         self.main_splitter.addWidget(center)
 
         right = QtWidgets.QWidget()
         right.setMinimumWidth(260)
-        right.setMaximumWidth(520)
+        right.setMaximumWidth(440)
         right_layout = QtWidgets.QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         self.properties = ModuleEditorPropertiesPanel(right)
@@ -662,7 +1195,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         export_layout.addWidget(self.readiness_panel)
         export_layout.addWidget(self.export_panel)
         self.right_tabs.addTab(export_page, "Export")
-        right_layout.addWidget(self.right_tabs, 1)
+        self.right_tabs_scroll = make_scrollable_panel(
+            self.right_tabs,
+            "mapStudioRightTabsScrollArea",
+            parent=right,
+        )
+        right_layout.addWidget(self.right_tabs_scroll, 1)
         self.main_splitter.addWidget(right)
 
         self.bottom_tabs = QtWidgets.QTabWidget()
@@ -671,14 +1209,14 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.output_log.setReadOnly(True)
         self.bottom_tabs.addTab(self.validation_panel, "Validation")
         self.bottom_tabs.addTab(self.output_log, "Output")
-        self.bottom_tabs.setMinimumHeight(82)
-        self.bottom_tabs.setMaximumHeight(165)
+        self.bottom_tabs.setMinimumHeight(64)
+        self.bottom_tabs.setMaximumHeight(120)
         root.addWidget(self.bottom_tabs)
         self.statusBar().showMessage("Map Studio Level Editor ready.")
         self.main_splitter.setStretchFactor(0, 0)
         self.main_splitter.setStretchFactor(1, 1)
         self.main_splitter.setStretchFactor(2, 0)
-        self.main_splitter.setSizes([285, 1220, 320])
+        self.main_splitter.setSizes([260, 1380, 300])
         self._update_map_studio_workspace_guide()
         self._refresh_map_studio_tool_belt()
 
@@ -734,6 +1272,28 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.map_studio_universal_transform_shortcut = QtGui.QShortcut(QtGui.QKeySequence("Ctrl+T"), self)
         self.map_studio_universal_transform_shortcut.setObjectName("mapStudioUniversalTransformShortcut")
         self.map_studio_universal_transform_shortcut.activated.connect(self._activate_map_studio_universal_transform_shortcut)
+        self.map_studio_translate_gizmo_shortcut = QtGui.QShortcut(QtGui.QKeySequence("W"), self.viewport_panel)
+        self.map_studio_translate_gizmo_shortcut.setObjectName("mapStudioTranslateGizmoShortcut")
+        self.map_studio_translate_gizmo_shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        self.map_studio_translate_gizmo_shortcut.activated.connect(
+            lambda: self.viewport_panel.set_transform_gizmo_mode("translate")
+        )
+        self.map_studio_rotate_gizmo_shortcut = QtGui.QShortcut(QtGui.QKeySequence("E"), self.viewport_panel)
+        self.map_studio_rotate_gizmo_shortcut.setObjectName("mapStudioRotateGizmoShortcut")
+        self.map_studio_rotate_gizmo_shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        self.map_studio_rotate_gizmo_shortcut.activated.connect(
+            lambda: self.viewport_panel.set_transform_gizmo_mode("rotate")
+        )
+        self.map_studio_scale_gizmo_shortcut = QtGui.QShortcut(QtGui.QKeySequence("R"), self.viewport_panel)
+        self.map_studio_scale_gizmo_shortcut.setObjectName("mapStudioScaleGizmoShortcut")
+        self.map_studio_scale_gizmo_shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        self.map_studio_scale_gizmo_shortcut.activated.connect(
+            lambda: self.viewport_panel.set_transform_gizmo_mode("scale")
+        )
+        self.map_studio_delete_selection_shortcut = QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key_Delete), self.viewport_panel)
+        self.map_studio_delete_selection_shortcut.setObjectName("mapStudioDeleteSelectionShortcut")
+        self.map_studio_delete_selection_shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        self.map_studio_delete_selection_shortcut.activated.connect(self.delete_map_studio_current_selection)
         self.map_studio_vertex_snap_shortcut = QtGui.QShortcut(QtGui.QKeySequence("V"), self.viewport_panel)
         self.map_studio_vertex_snap_shortcut.setObjectName("mapStudioVertexSnapShortcut")
         self.map_studio_vertex_snap_shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
@@ -752,6 +1312,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.asset_browser.importRequested.connect(self.import_library_asset)
         self.outliner.itemSelected.connect(self.select_item)
         self.outliner.actionRequested.connect(self._outliner_action)
+        self.outliner.itemRenamed.connect(self._rename_outliner_item_inline)
         self.viewport_panel.itemSelected.connect(self.select_item)
         self.viewport_panel.transformEdited.connect(self._set_transform)
         self.viewport_panel.roomOutlinePointEdited.connect(self._set_authored_room_outline_point)
@@ -760,8 +1321,17 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.viewport_panel.roomOutlineEdgeSelected.connect(self._select_authored_room_outline_edge)
         self.viewport_panel.roomPrimitiveSelected.connect(self._select_authored_room_primitive)
         self.viewport_panel.roomPrimitiveMoved.connect(self._move_authored_room_primitive)
+        self.viewport_panel.roomPrimitiveRotated.connect(self._rotate_authored_room_primitive)
+        self.viewport_panel.roomPrimitiveScaled.connect(self._scale_authored_room_primitive)
         self.viewport_panel.terrainBrushFrameRequested.connect(self.apply_map_studio_viewport_terrain_brush_frame)
         self.viewport_panel.terrainBrushStrokeCommitted.connect(self.commit_map_studio_viewport_terrain_brush_stroke)
+        self.viewport_panel.terrainBrushOptionsChanged.connect(self._set_map_studio_terrain_brush_options)
+        self.viewport_panel.modeMarkingMenuRequested.connect(self._open_map_studio_mode_marking_menu)
+        self.viewport_panel.toolMarkingMenuRequested.connect(self._open_map_studio_tool_marking_menu)
+        self.viewport_panel.transformGizmoModeChanged.connect(self._handle_map_studio_transform_gizmo_mode_changed)
+        self.viewport_panel.undoShortcutRequested.connect(self.undo_map_studio_command)
+        self.viewport_panel.redoShortcutRequested.connect(self.redo_map_studio_command)
+        self.viewport_panel.deleteShortcutRequested.connect(self.delete_map_studio_current_selection)
         self.validation_panel.issueActivated.connect(self.select_item)
         self.readiness_panel.gameTestRequested.connect(self.record_game_smoke_proof)
         self.readiness_panel.launchHandoffRequested.connect(self.open_map_studio_launch_handoff)
@@ -832,6 +1402,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         terrain_radius = getattr(self.builder_tab, "terrainRadiusSpinBox", None)
         if terrain_radius is not None:
             terrain_radius.valueChanged.connect(lambda _value=0: self._sync_map_studio_terrain_brush_context())
+        terrain_strength = getattr(self.builder_tab, "terrainSmoothStrengthSpinBox", None)
+        if terrain_strength is not None:
+            terrain_strength.valueChanged.connect(lambda _value=0.0: self._sync_map_studio_terrain_brush_context())
         self.builder_tab.roomRectangularUnionRequested.connect(self.merge_authored_floor_plan_rooms)
         self.builder_tab.floorPlanBridgeRequested.connect(self.bridge_authored_floor_plan_edges)
         self.builder_tab.roomPrimitiveAddRequested.connect(self.add_authored_room_primitive)
@@ -967,9 +1540,155 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if self.controller.duplicate_selected() is not None:
             self._refresh_all("Duplicated selected item.")
 
+    def select_map_studio_authored_context(self) -> bool:
+        """Persist the current Builder-authored selection as lightweight KMAP state."""
+
+        context = self._map_studio_tool_action_context("select")
+        primitive_name = str(getattr(context, "primitive_name", "") or "").strip()
+        room_resref = str(getattr(context, "room_resref", "") or "").strip()
+        component_mode = "object"
+        combo = getattr(self.builder_tab, "componentModeComboBox", None)
+        if combo is not None:
+            data = combo.currentData()
+            if isinstance(data, dict):
+                component_mode = str(data.get("key") or component_mode)
+        try:
+            selection = self.controller.set_map_studio_active_selection(
+                component_mode=component_mode,
+                workspace_key=str(self.map_studio_workspace_combo.currentData() or "geometry"),
+                tool_key="select",
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Select Map Studio Target", str(exc))
+            return False
+        target = str(selection.get("primitive_name") or selection.get("room_resref") or "Map Studio")
+        self.show_map_studio_builder()
+        self.statusBar().showMessage(f"Selected Map Studio authored target {target}.", 5000)
+        self._log(f"Map Studio authored selection stored in KMAP: {target}.")
+        return True
+
+    def move_map_studio_authored_primitive_selection(self) -> bool:
+        """Move the Builder-selected authored primitive using the visible Move X/Y/Z fields."""
+
+        data = self._map_studio_combo_data("roomPrimitiveTransformComboBox")
+        primitive_name = str(data.get("primitive_name") or "").strip()
+        if not primitive_name:
+            return False
+        room_resref = str(data.get("room_resref") or "").strip()
+        before_translation = tuple(float(value) for value in tuple(data.get("translation") or (0.0, 0.0, 0.0))[:3])
+        if len(before_translation) != 3:
+            before_translation = (0.0, 0.0, 0.0)
+        spin_x = getattr(self.builder_tab, "primitiveTranslateXSpinBox", None)
+        spin_y = getattr(self.builder_tab, "primitiveTranslateYSpinBox", None)
+        spin_z = getattr(self.builder_tab, "primitiveTranslateZSpinBox", None)
+        if spin_x is None or spin_y is None or spin_z is None:
+            return False
+        after_translation = (float(spin_x.value()), float(spin_y.value()), float(spin_z.value()))
+        world_delta = tuple(after_translation[index] - before_translation[index] for index in range(3))
+        if all(abs(delta) < 1e-9 for delta in world_delta):
+            self.show_map_studio_builder()
+            spin_x.setFocus()
+            self.statusBar().showMessage("Map Studio Move ready: edit Move X/Y/Z, then click Move again to author the KMAP transform.", 5000)
+            return False
+        try:
+            result = self.controller.move_authored_room_primitive(
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+                world_delta=world_delta,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Move Map Studio Primitive", str(exc))
+            return False
+        readiness = result.readiness
+        message = f"Moved room primitive {primitive_name}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self.controller.model.select("")
+        self._refresh_all(message)
+        return True
+
+    def delete_map_studio_authored_primitive_selection(self) -> bool:
+        """Delete the Builder-selected authored primitive through the KMAP controller."""
+
+        context = self._map_studio_tool_action_context("delete_selected")
+        primitive_name = str(getattr(context, "primitive_name", "") or "").strip()
+        if not primitive_name:
+            return False
+        room_resref = str(getattr(context, "room_resref", "") or "").strip()
+        try:
+            result = self.controller.remove_authored_room_primitive(
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Delete Map Studio Primitive", str(exc))
+            return False
+        readiness = result.readiness
+        message = f"Deleted room primitive {primitive_name}; previous exports/proofs are now stale."
+        if readiness is not None:
+            message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_all(message)
+        return True
+
+    def delete_map_studio_current_selection(self) -> None:
+        """Delete the active Map Studio selection from the viewport shortcut route."""
+
+        if self.delete_map_studio_authored_primitive_selection():
+            return
+        self.delete_selected()
+
+    def _parse_map_studio_primitive_outliner_id(self, item_id: str) -> tuple[str, str] | None:
+        parts = str(item_id or "").split(":", 2)
+        if len(parts) != 3 or parts[0] != "authored_primitive":
+            return None
+        room_resref = parts[1].strip()
+        primitive_name = parts[2].strip()
+        if not room_resref or not primitive_name:
+            return None
+        return (room_resref, primitive_name)
+
+    def _map_studio_primitive_outliner_id(self, room_resref: str, primitive_name: str) -> str:
+        return authored_primitive_item_id(room_resref, primitive_name)
+
+    def _safe_map_studio_primitive_name_for_ui(self, value: str) -> str:
+        text = str(value or "").strip()
+        safe = "".join(char if char.isalnum() or char in {"_", "-"} else "_" for char in text)
+        return safe.strip("_-")[:32]
+
+    def rename_map_studio_authored_primitive(self, room_resref: str, primitive_name: str, new_name: str) -> bool:
+        updated_name = self._safe_map_studio_primitive_name_for_ui(new_name)
+        if not updated_name:
+            return False
+        if updated_name == str(primitive_name or "").strip():
+            self._select_authored_room_primitive(room_resref, primitive_name)
+            return True
+        try:
+            self.controller.rename_authored_room_primitive(
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+                new_primitive_name=updated_name,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Rename Map Studio Primitive", str(exc))
+            self._refresh_all()
+            return False
+        message = f"Renamed room primitive {primitive_name} to {updated_name}; previous exports/proofs are now stale."
+        self._refresh_all(message)
+        self._select_authored_room_primitive(room_resref, updated_name)
+        return True
+
     def rename_selected(self) -> None:
         item_id = self.controller.model.selected_ids[0] if self.controller.model.selected_ids else ""
         if not item_id:
+            return
+        primitive_identity = self._parse_map_studio_primitive_outliner_id(item_id)
+        if primitive_identity is not None:
+            room_resref, primitive_name = primitive_identity
+            name, ok = QtWidgets.QInputDialog.getText(self, "Rename Authored Primitive", "Name:", text=primitive_name)
+            if ok and name.strip():
+                self.rename_map_studio_authored_primitive(room_resref, primitive_name, name.strip())
             return
         if item_id.startswith("authored:"):
             authored = next((row for row in self.controller.authored_gameplay_placements() if getattr(row, "placement_id", "") == item_id), None)
@@ -1006,6 +1725,35 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         name, ok = QtWidgets.QInputDialog.getText(self, "Rename Selected", "Name:", text=current)
         if ok and name.strip():
             self._set_property(item_id, "name", name.strip())
+
+    def _rename_outliner_item_inline(self, item_id: str, new_name: str) -> None:
+        primitive_identity = self._parse_map_studio_primitive_outliner_id(item_id)
+        if primitive_identity is not None:
+            room_resref, primitive_name = primitive_identity
+            self.rename_map_studio_authored_primitive(room_resref, primitive_name, new_name)
+            return
+        self.select_item(item_id)
+        if item_id.startswith("authored:"):
+            try:
+                self.controller.rename_authored_gameplay_placement(item_id, tag=str(new_name or "").strip())
+            except Exception as exc:
+                QtWidgets.QMessageBox.warning(self, "Rename Authored Placement", str(exc))
+                self._refresh_all()
+                return
+            self._refresh_all("Renamed authored gameplay placement.")
+            return
+        if item_id.startswith("authored_light:"):
+            try:
+                self.controller.rename_authored_room_light(item_id, name=str(new_name or "").strip())
+            except Exception as exc:
+                QtWidgets.QMessageBox.warning(self, "Rename Authored Room Light", str(exc))
+                self._refresh_all()
+                return
+            self._refresh_all("Renamed authored room light.")
+            return
+        item = self.project.find_room(item_id) or self.project.find_module(item_id) or self.project.find_blueprint(item_id)
+        if item is not None and str(new_name or "").strip():
+            self._set_property(item_id, "name", str(new_name or "").strip())
 
     def validate_kmap(self) -> None:
         issues = self.controller.validate()
@@ -1521,6 +2269,222 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if menu.actions():
             menu.exec(widget.mapToGlobal(pos))
 
+    def _build_map_studio_mode_marking_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
+        """Build the Maya-style viewport mode marking menu for Map Studio."""
+
+        menu = QtWidgets.QMenu(parent or self)
+        menu.setObjectName("mapStudioModeMarkingMenu")
+        frame = QtWidgets.QFrame(menu)
+        frame.setObjectName("mapStudioModeMarkingMenuRadial")
+        layout = QtWidgets.QGridLayout(frame)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setHorizontalSpacing(6)
+        layout.setVerticalSpacing(6)
+        entries = (
+            ("object", "Object", "Object", 0, 1, "mapStudioModeMarkingAction_object", "mapStudioModeMarkingButton_object"),
+            ("vertex", "Vertex", "Vertex", 1, 0, "mapStudioModeMarkingAction_vertex", "mapStudioModeMarkingButton_vertex"),
+            ("select", "Select", "Select", 1, 1, "mapStudioModeMarkingAction_select", "mapStudioModeMarkingButton_select"),
+            ("edge", "Edge", "Edge", 1, 2, "mapStudioModeMarkingAction_edge", "mapStudioModeMarkingButton_edge"),
+            ("face", "Face", "Face", 2, 1, "mapStudioModeMarkingAction_face", "mapStudioModeMarkingButton_face"),
+        )
+        for key, label, mode_label, row, column, action_name, button_name in entries:
+            action = QtGui.QAction(label, menu)
+            action.setObjectName(action_name)
+            action.setData(key)
+            action.triggered.connect(lambda _checked=False, mode_key=key: self._run_map_studio_mode_marking_action(mode_key))
+            action.triggered.connect(menu.close)
+            button = QtWidgets.QToolButton(frame)
+            button.setObjectName(button_name)
+            button.setDefaultAction(action)
+            button.setToolButtonStyle(QtCore.Qt.ToolButtonTextOnly)
+            button.setMinimumWidth(82)
+            button.setToolTip(
+                "Return to selectable authored objects." if key == "select"
+                else f"Switch Map Studio to {mode_label} component mode."
+            )
+            layout.addWidget(button, row, column)
+            menu.addAction(action)
+        widget_action = QtWidgets.QWidgetAction(menu)
+        widget_action.setObjectName("mapStudioModeMarkingRadialWidgetAction")
+        widget_action.setDefaultWidget(frame)
+        menu.insertAction(menu.actions()[0] if menu.actions() else None, widget_action)
+        menu.insertSeparator(menu.actions()[1] if len(menu.actions()) > 1 else None)
+        return menu
+
+    def _open_map_studio_mode_marking_menu(self, global_pos: QtCore.QPoint) -> None:
+        menu = self._build_map_studio_mode_marking_menu(self.viewport_panel)
+        menu.exec(global_pos)
+
+    def _run_map_studio_mode_marking_action(self, mode_key: str) -> None:
+        key = str(mode_key or "object").strip().lower()
+        if key == "select":
+            action = self._map_studio_tool_action_for_key("select")
+            if action is not None:
+                self._handle_map_studio_tool_belt_action(action)
+            else:
+                self.select_map_studio_authored_context()
+            return
+        label_by_key = {"object": "Object", "vertex": "Vertex", "edge": "Edge", "face": "Face"}
+        label = label_by_key.get(key, "Object")
+        self._set_map_studio_toolbar_edit_mode(label)
+        self._handle_map_studio_edit_mode_changed(label)
+        self.select_map_studio_authored_context()
+
+    def _map_studio_tool_action_for_key(self, key: str):
+        action_key = str(key or "").strip()
+        if not action_key:
+            return None
+        if not self._map_studio_tool_action_index:
+            self._refresh_map_studio_tool_index()
+        action = self._map_studio_tool_action_index.get(action_key)
+        if action is not None:
+            return action
+        for candidate in self.controller.available_map_studio_tool_belt_actions():
+            if str(getattr(candidate, "key", "") or "") == action_key:
+                self._map_studio_tool_action_index[action_key] = candidate
+                return candidate
+        return None
+
+    def _make_map_studio_marking_tool_action(
+        self,
+        key: str,
+        *,
+        label: str = "",
+        object_prefix: str = "mapStudioToolMarkingAction",
+    ) -> QtGui.QAction:
+        action = self._map_studio_tool_action_for_key(key)
+        if action is None:
+            qaction = QtGui.QAction(label or key, self)
+            qaction.setObjectName(f"{object_prefix}_{key}")
+            qaction.setEnabled(False)
+            return qaction
+        qaction = self._build_map_studio_tool_qaction(action, context_menu=True)
+        qaction.setObjectName(f"{object_prefix}_{key}")
+        if label:
+            qaction.setText(label)
+        return qaction
+
+    def _add_map_studio_marking_tool_action(
+        self,
+        menu: QtWidgets.QMenu,
+        key: str,
+        *,
+        label: str = "",
+        object_prefix: str = "mapStudioToolMarkingAction",
+    ) -> QtGui.QAction:
+        qaction = self._make_map_studio_marking_tool_action(key, label=label, object_prefix=object_prefix)
+        menu.addAction(qaction)
+        return qaction
+
+    def _add_map_studio_planned_marking_action(self, menu: QtWidgets.QMenu, key: str, label: str) -> QtGui.QAction:
+        qaction = QtGui.QAction(label, menu)
+        qaction.setObjectName(f"mapStudioToolMarkingPlannedAction_{key}")
+        qaction.setEnabled(False)
+        qaction.setToolTip("Planned Map Studio tool; not yet backed by an authored KMAP command.")
+        menu.addAction(qaction)
+        return qaction
+
+    def _build_map_studio_tool_marking_menu(self, parent: QtWidgets.QWidget | None = None) -> QtWidgets.QMenu:
+        """Build the Shift+right-click Maya-style Map Studio tool marking menu."""
+
+        menu = QtWidgets.QMenu(parent or self)
+        menu.setObjectName("mapStudioToolMarkingMenu")
+        quick_frame = QtWidgets.QFrame(menu)
+        quick_frame.setObjectName("mapStudioToolMarkingQuickRadial")
+        quick_layout = QtWidgets.QGridLayout(quick_frame)
+        quick_layout.setContentsMargins(8, 8, 8, 8)
+        quick_layout.setHorizontalSpacing(6)
+        quick_layout.setVerticalSpacing(6)
+        quick_actions = (
+            ("extrude", "Extrude", 0, 1, "mapStudioToolMarkingQuickAction_extrude", "mapStudioToolMarkingQuickButton_extrude"),
+            ("bridge", "Bridge", 1, 0, "mapStudioToolMarkingQuickAction_bridge", "mapStudioToolMarkingQuickButton_bridge"),
+            ("cut", "Cut / Multi-Cut", 1, 1, "mapStudioToolMarkingQuickAction_cut", "mapStudioToolMarkingQuickButton_cut"),
+            ("weld", "Weld / Merge", 1, 2, "mapStudioToolMarkingQuickAction_weld", "mapStudioToolMarkingQuickButton_weld"),
+            ("fill_hole", "Fill Hole", 2, 0, "mapStudioToolMarkingQuickAction_fill_hole", "mapStudioToolMarkingQuickButton_fill_hole"),
+            ("bevel", "Bevel / Inset", 2, 2, "mapStudioToolMarkingQuickAction_bevel", "mapStudioToolMarkingQuickButton_bevel"),
+        )
+        for key, label, row, column, action_name, button_name in quick_actions:
+            action = self._make_map_studio_marking_tool_action(
+                key,
+                label=label,
+                object_prefix="mapStudioToolMarkingQuickAction",
+            )
+            action.setObjectName(action_name)
+            action.triggered.connect(menu.close)
+            button = QtWidgets.QToolButton(quick_frame)
+            button.setObjectName(button_name)
+            button.setDefaultAction(action)
+            button.setToolButtonStyle(QtCore.Qt.ToolButtonTextOnly)
+            button.setMinimumWidth(104)
+            quick_layout.addWidget(button, row, column)
+        widget_action = QtWidgets.QWidgetAction(menu)
+        widget_action.setObjectName("mapStudioToolMarkingQuickWidgetAction")
+        widget_action.setDefaultWidget(quick_frame)
+        menu.addAction(widget_action)
+        menu.addSection("Polygon Tools")
+        for key, label in (
+            ("insert_edge_loop", "Insert Edge Loop"),
+            ("cut_slice_insert_edges", "Slice"),
+            ("triangulate", "Triangulate"),
+            ("cleanup", "Cleanup"),
+            ("soften_edges", "Soften Edges"),
+            ("harden_edges", "Harden Edges"),
+            ("reverse_normals", "Reverse Normals"),
+            ("mirror", "Mirror"),
+            ("separate", "Separate"),
+            ("combine", "Combine"),
+            ("paint_material", "Paint Material"),
+            ("paint_wok", "Paint WOK Surface"),
+            ("validate", "Validate Selection"),
+        ):
+            self._add_map_studio_marking_tool_action(menu, key, label=label)
+        boolean_menu = menu.addMenu("Boolean")
+        boolean_menu.setObjectName("mapStudioToolMarkingBooleanMenu")
+        for key, label in (
+            ("boolean", "Boolean Tool"),
+            ("boolean_a_minus_b", "A - B"),
+            ("boolean_b_minus_a", "B - A"),
+        ):
+            self._add_map_studio_marking_tool_action(boolean_menu, key, label=label)
+        terrain_menu = menu.addMenu("Terrain Brushes")
+        terrain_menu.setObjectName("mapStudioToolMarkingTerrainBrushesMenu")
+        for key, label in (
+            ("sculpt_raise", "Raise"),
+            ("sculpt_lower", "Lower"),
+            ("sculpt_smooth", "Smooth"),
+            ("sculpt_flatten", "Flatten"),
+            ("sculpt_erase", "Erase / Reset"),
+            ("sculpt_plateau", "Plateau"),
+            ("sculpt_ramp", "Ramp"),
+            ("sculpt_slope", "Slope"),
+            ("sculpt_terrace", "Terrace"),
+            ("sculpt_pinch", "Pinch"),
+            ("sculpt_erode", "Erode"),
+            ("sculpt_noise", "Noise"),
+        ):
+            self._add_map_studio_marking_tool_action(terrain_menu, key, label=label)
+        uv_menu = menu.addMenu("UV / Mapping")
+        uv_menu.setObjectName("mapStudioToolMarkingUvMappingMenu")
+        self._add_map_studio_marking_tool_action(uv_menu, "paint_material", label="Assign Material Intent")
+        self._add_map_studio_planned_marking_action(uv_menu, "uv_project", "UV Project / Planar Map (planned)")
+        self._add_map_studio_planned_marking_action(uv_menu, "box_map", "Box Map (planned)")
+        planned_menu = menu.addMenu("Planned / Missing")
+        planned_menu.setObjectName("mapStudioToolMarkingPlannedMenu")
+        for key, label in (
+            ("append_polygon", "Append Polygon / Draw Face"),
+            ("offset_edge_loop", "Offset Edge Loop"),
+            ("loop_select", "Loop Select"),
+            ("ring_select", "Ring Select"),
+            ("terrain_mask_surface_paint", "Terrain Mask / Surface Paint"),
+            ("flatten_to_selection", "Flatten to Selection / Align to Plane"),
+        ):
+            self._add_map_studio_planned_marking_action(planned_menu, key, label)
+        return menu
+
+    def _open_map_studio_tool_marking_menu(self, global_pos: QtCore.QPoint) -> None:
+        menu = self._build_map_studio_tool_marking_menu(self.viewport_panel)
+        menu.exec(global_pos)
+
     def _focus_map_studio_command_search(self) -> None:
         """Focus the command-search field without changing the active Map Studio workspace."""
 
@@ -1754,7 +2718,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             axis = "y"
         elif key == "mirror_x":
             axis = "x"
-        elif key in {"cut", "cut_slice_insert_edges", "insert_edge_loop"} and operation_combo is not None:
+        elif key in {"cut", "split", "cut_slice_insert_edges", "insert_edge_loop"} and operation_combo is not None:
             axis = "y" if str(operation_combo.currentData() or "") == "split_y" else "x"
         elif key in {"mirror", "flatten", "grid_snap", "transform_snap_level"}:
             axis_combo = mirror_axis if key == "mirror" else flatten_axis
@@ -1763,7 +2727,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         metadata: dict[str, Any] = {}
         if cleanup_tolerance is not None:
             metadata["tolerance"] = float(cleanup_tolerance.value())
-        active_modifier_getter = getattr(self.viewport_panel, "active_map_studio_modifier", None)
+        viewport_panel = getattr(self, "viewport_panel", None)
+        active_modifier_getter = getattr(viewport_panel, "active_map_studio_modifier", None)
         active_modifier = active_modifier_getter() if callable(active_modifier_getter) else ""
         if active_modifier:
             metadata["active_modifier_action"] = str(active_modifier)
@@ -1837,17 +2802,55 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         primitive_kind_data = primitive_kind_combo.currentData() if primitive_kind_combo is not None else {}
         if not isinstance(primitive_kind_data, dict):
             primitive_kind_data = {}
-        primitive_kind = str(primitive_kind_data.get("kind") or "").strip()
-        primitive_name = (
-            str(getattr(primitive_name_line, "text", lambda: "")()).strip()
-            if key == "primitive"
-            else str(primitive_data.get("primitive_name") or "")
-        )
+        direct_primitive_keys = {
+            "floor",
+            "plane",
+            "cube",
+            "wall",
+            "ramp",
+            "stairs",
+            "cylinder",
+            "door_frame",
+            "arch",
+        }
+        if key == "primitive":
+            primitive_kind = str(primitive_kind_data.get("kind") or "").strip()
+            primitive_name = str(getattr(primitive_name_line, "text", lambda: "")()).strip()
+        elif key in direct_primitive_keys:
+            primitive_kind = ""
+            primitive_name = ""
+        else:
+            primitive_kind = ""
+            primitive_name = str(primitive_data.get("primitive_name") or "")
         if primitive_name and "supports_walkmesh_surface" in primitive_data:
             metadata["supports_walkmesh_surface"] = bool(primitive_data.get("supports_walkmesh_surface"))
             metadata["selected_primitive_type"] = str(primitive_data.get("primitive_type") or "")
             metadata["selected_primitive_surface_name"] = str(primitive_data.get("surface_name") or "")
+        move_delta = (0.0, 0.0, 0.0)
+        if primitive_name:
+            before_translation = tuple(float(value) for value in tuple(primitive_data.get("translation") or (0.0, 0.0, 0.0))[:3])
+            if len(before_translation) != 3:
+                before_translation = (0.0, 0.0, 0.0)
+            move_x = getattr(self.builder_tab, "primitiveTranslateXSpinBox", None)
+            move_y = getattr(self.builder_tab, "primitiveTranslateYSpinBox", None)
+            move_z = getattr(self.builder_tab, "primitiveTranslateZSpinBox", None)
+            if move_x is not None and move_y is not None and move_z is not None:
+                after_translation = (float(move_x.value()), float(move_y.value()), float(move_z.value()))
+                move_delta = tuple(after_translation[index] - before_translation[index] for index in range(3))
         if key == "paint_wok":
+            surface_data = primitive_surface_data if primitive_name else room_surface_data
+            surface_id = str(surface_data.get("surface_id") or primitive_data.get("surface_id") or "").strip()
+            if surface_id:
+                metadata["surface_id"] = surface_id
+        if key == "paint_material":
+            texture_line = (
+                getattr(self.builder_tab, "primitiveTextureLineEdit", None)
+                if primitive_name
+                else getattr(self.builder_tab, "roomTextureLineEdit", None)
+            )
+            texture = str(getattr(texture_line, "text", lambda: "")()).strip()
+            if texture:
+                metadata["texture"] = texture
             surface_data = primitive_surface_data if primitive_name else room_surface_data
             surface_id = str(surface_data.get("surface_id") or primitive_data.get("surface_id") or "").strip()
             if surface_id:
@@ -2008,6 +3011,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 float(duplicate_scale_y.value()) if duplicate_scale_y is not None else 1.0,
                 float(duplicate_scale_z.value()) if duplicate_scale_z is not None else 1.0,
             ),
+            move_delta=move_delta,
             export_output_dir=str(getattr(self, "_last_output_dir", "") or "").strip(),
             export_dry_run=self._map_studio_export_dry_run_enabled(),
             export_overwrite=bool(getattr(self, "_last_map_studio_install_overwrite", False))
@@ -2060,21 +3064,63 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._last_map_studio_install_overwrite = True
         return True
 
+    def _open_map_studio_package_wizard(self, *, mode: str, dry_run: bool) -> dict[str, object] | None:
+        """Collect package/stage/install targets through one Map Studio review step."""
+
+        readiness = None
+        try:
+            readiness = self.controller.authored_module_readiness().readiness
+        except Exception:
+            readiness = None
+        dialog = _MapStudioPackageWizardDialog(
+            self,
+            mode=mode,
+            readiness=readiness,
+            output_dir=str(getattr(self, "_last_output_dir", "") or ""),
+            game_modules_dir=str(getattr(self, "_last_game_modules_dir", "") or ""),
+            dry_run=bool(dry_run),
+        )
+        if dialog.exec() != QtWidgets.QDialog.Accepted:
+            return None
+        values = dialog.values()
+        self._last_output_dir = str(values.get("output_dir") or "")
+        self._last_game_modules_dir = str(values.get("game_modules_dir") or "")
+        self._last_map_studio_install_overwrite = bool(values.get("overwrite"))
+        self.export_panel.dry_run.setChecked(bool(values.get("dry_run")))
+        return values
+
     def _execute_map_studio_tool_belt_command(self, action_key: str) -> bool:
         """Execute a tool-belt action when the core dispatcher has a command."""
 
-        if action_key in {"stage_module", "install_module"} and not self._ensure_map_studio_export_output_dir(
-            "Stage authored module for game test"
-        ):
-            self._focus_map_studio_export_proof_workspace()
-            self.statusBar().showMessage("Map Studio export command canceled; choose an output folder to create a package candidate.", 5000)
-            return False
-        if action_key == "install_module" and not self._ensure_map_studio_game_modules_dir():
-            self._focus_map_studio_export_proof_workspace()
-            self.statusBar().showMessage("Install Test canceled; choose a KOTOR Modules folder to prepare an install candidate.", 5000)
-            return False
+        if action_key in {"stage_module", "install_module"}:
+            values = self._open_map_studio_package_wizard(
+                mode="install" if action_key == "install_module" else "stage",
+                dry_run=self._map_studio_export_dry_run_enabled(),
+            )
+            if values is None:
+                self._focus_map_studio_export_proof_workspace()
+                self.statusBar().showMessage("Map Studio package command canceled before any files were written.", 5000)
+                return False
         context = self._map_studio_tool_action_context(action_key)
         route = resolve_map_studio_tool_belt_action(action_key, context)
+        duplicate_before_names: set[tuple[str, str]] = set()
+        primitive_before_names: set[tuple[str, str]] | None = None
+        if action_key == "duplicate_selected":
+            duplicate_before_names = {
+                (
+                    str(getattr(row, "room_resref", "") or ""),
+                    str(getattr(row, "primitive_name", "") or ""),
+                )
+                for row in self.controller.authored_room_primitive_transforms()
+            }
+        if route.command_method == "add_authored_room_primitive":
+            primitive_before_names = {
+                (
+                    str(getattr(row, "room_resref", "") or ""),
+                    str(getattr(row, "primitive_name", "") or ""),
+                )
+                for row in self.controller.authored_room_primitive_transforms()
+            }
         if not route.command_method:
             if route.disabled_reason:
                 self.statusBar().showMessage(route.disabled_reason, 5000)
@@ -2171,11 +3217,60 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 if len(center) == 3:
                     status_message += f"; center {center[0]:.3f}, {center[1]:.3f}, {center[2]:.3f}."
             self._log(status_message)
+        select_primitive_after_refresh: tuple[str, str] | None = None
+        if action_key == "duplicate_selected":
+            new_rows = [
+                row
+                for row in self.controller.authored_room_primitive_transforms()
+                if (
+                    str(getattr(row, "room_resref", "") or ""),
+                    str(getattr(row, "primitive_name", "") or ""),
+                )
+                not in duplicate_before_names
+            ]
+            if new_rows:
+                selected = new_rows[-1]
+                select_primitive_after_refresh = (
+                    str(getattr(selected, "room_resref", "") or ""),
+                    str(getattr(selected, "primitive_name", "") or ""),
+                )
+        elif primitive_before_names is not None:
+            new_rows = [
+                row
+                for row in self.controller.authored_room_primitive_transforms()
+                if (
+                    str(getattr(row, "room_resref", "") or ""),
+                    str(getattr(row, "primitive_name", "") or ""),
+                )
+                not in primitive_before_names
+            ]
+            if new_rows:
+                selected = new_rows[-1]
+                select_primitive_after_refresh = (
+                    str(getattr(selected, "room_resref", "") or ""),
+                    str(getattr(selected, "primitive_name", "") or ""),
+                )
         self._refresh_all(status_message)
+        if select_primitive_after_refresh is not None:
+            self._select_map_studio_room_primitive(*select_primitive_after_refresh)
         self.workflow_panel.set_active_authoring_context(
             route.authoring_context or route.readiness_impact or route.status_message or route.label
         )
         return True
+
+    def _select_map_studio_room_primitive(self, room_resref: str, primitive_name: str) -> bool:
+        """Select an authored composition primitive in the visible Builder controls."""
+
+        selector = getattr(self.builder_tab, "select_room_primitive", None)
+        if callable(selector):
+            try:
+                selected = bool(selector(room_resref, primitive_name))
+                if selected:
+                    self._refresh_map_studio_selected_primitive_transform_overlay()
+                return selected
+            except Exception:
+                return False
+        return False
 
     def _focus_map_studio_entry_point_controls(self) -> None:
         """Focus Builder controls for the authored IFO player start."""
@@ -2508,11 +3603,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "boolean",
             "boolean_a_minus_b",
             "boolean_b_minus_a",
+            "blockout_room",
             "create_room",
             "corridor",
             "terrain_patch",
             "primitive",
             "cut",
+            "split",
             "cut_slice_insert_edges",
             "insert_edge_loop",
             "fill",
@@ -2522,8 +3619,19 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "bend_tool",
             "curve_tool",
             "lattice",
+            "inset",
             "combine",
             "separate",
+            "select",
+            "move",
+            "duplicate_selected",
+            "delete_selected",
+            "object_grid_snap",
+            "object_vertex_snap",
+            "center_pivot",
+            "freeze_transform",
+            "paint_material",
+            "paint_wok",
             "duplicate_special",
             "vertex_snap",
             "grid_snap",
@@ -2597,6 +3705,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "extrude",
             "bridge",
             "cut",
+            "split",
             "cut_slice_insert_edges",
             "insert_edge_loop",
             "opening",
@@ -2643,7 +3752,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     if index >= 0:
                         operation_combo.setCurrentIndex(index)
                     operation_combo.setFocus()
-            if key in {"cut", "cut_slice_insert_edges", "insert_edge_loop"}:
+            if key in {"cut", "split", "cut_slice_insert_edges", "insert_edge_loop"}:
                 operation_combo = getattr(self.builder_tab, "roomOperationComboBox", None)
                 if operation_combo is not None:
                     index = operation_combo.findData("split_x")
@@ -2721,6 +3830,22 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.workflow_panel.set_active_authoring_context("Builder: room, terrain, placement, lighting, and script authoring")
         self._log("Map Studio Builder focused.")
 
+    def focus_map_studio_modeling_workspace(self) -> None:
+        """Open the Map Studio modeling controls from the main viewport affordance."""
+
+        self.show_map_studio_builder()
+        self._set_map_studio_toolbar_edit_mode("Object")
+        self._select_map_studio_component_mode("object")
+        self._select_map_studio_modeling_tool("primitive_room")
+        component_combo = getattr(self.builder_tab, "componentModeComboBox", None)
+        if component_combo is not None:
+            component_combo.setFocus()
+        self.statusBar().showMessage(
+            "Map Studio Modeling ready: Object, Vertex, Edge, Face, Terrain, and Walkmesh tools author KMAP state.",
+            5000,
+        )
+        self._log("Map Studio Modeling workspace focused from the main viewport toolbar.")
+
     def _focus_map_studio_edit_mode_workspace(self, label: str) -> None:
         """Route the toolbar edit mode to the closest usable Map Studio workspace."""
 
@@ -2765,6 +3890,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         if mode_key == "terrain":
             self.show_map_studio_terrain_tools()
+            self._select_map_studio_component_mode("terrain")
             self._select_map_studio_modeling_tool("terrain_sculpt")
             return
         if mode_key == "export":
@@ -2819,6 +3945,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
 
         self._set_map_studio_workspace_combo_key("terrain")
         self.workflow_tabs.setCurrentWidget(self.builder_tab)
+        self._select_map_studio_component_mode("terrain")
         terrain = getattr(self.builder_tab, "terrainRoomComboBox", None)
         if terrain is not None:
             terrain.setFocus()
@@ -2989,12 +4116,21 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         path = QtWidgets.QFileDialog.getExistingDirectory(self, "Select output folder", self._last_output_dir or "")
         if not path:
             return
-        result = self.controller.build_preview(path)
-        self._last_output_dir = result.output_dir
+        result = self.controller.generate_module_files(path)
+        self._last_output_dir = str(getattr(result, "output_dir", "") or path)
         self._log(result.message)
+        if getattr(result, "module_path", ""):
+            self._log(f"Package: {result.module_path}")
         if result.manifest_path:
             self._log(f"Manifest: {result.manifest_path}")
-        self.validate_kmap()
+        if getattr(result, "module_root", "") and hasattr(result, "metadata"):
+            for line in authored_module_smoke_summary_lines(result):
+                self._log(line)
+        for warning in getattr(result, "warnings", ()):
+            self._log(f"Warning: {warning}")
+        for issue in getattr(result, "blocking_issues", ()):
+            self._log(f"Blocking: {issue}")
+        self._refresh_all("Module files generated.")
 
     def stage_dev_test_module(self, dry_run: bool = False) -> None:
         path = QtWidgets.QFileDialog.getExistingDirectory(self, "Stage grdev01 dev test module", self._last_output_dir or "")
@@ -3025,11 +4161,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._log(f"Blocking: {issue}")
 
     def export_authored_module(self, dry_run: bool = False) -> None:
-        path = QtWidgets.QFileDialog.getExistingDirectory(self, "Export authored KMAP module", self._last_output_dir or "")
-        if not path:
+        values = self._open_map_studio_package_wizard(mode="export", dry_run=dry_run)
+        if values is None:
             return
+        path = str(values.get("output_dir") or "")
         try:
-            result = self.controller.export_authored_module(path, dry_run=dry_run)
+            result = self.controller.export_authored_module(path, dry_run=bool(values.get("dry_run")))
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Export Authored Module", str(exc))
             return
@@ -3048,11 +4185,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._refresh_all("Authored module export state updated.")
 
     def stage_authored_module(self, dry_run: bool = False) -> None:
-        path = QtWidgets.QFileDialog.getExistingDirectory(self, "Stage authored module for game test", self._last_output_dir or "")
-        if not path:
+        values = self._open_map_studio_package_wizard(mode="stage", dry_run=dry_run)
+        if values is None:
             return
+        path = str(values.get("output_dir") or "")
         try:
-            result = self.controller.stage_authored_module(path, dry_run=dry_run)
+            result = self.controller.stage_authored_module(path, dry_run=bool(values.get("dry_run")))
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Stage Authored Module", str(exc))
             return
@@ -3087,31 +4225,16 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._log(f"Blocking: {issue}")
 
     def install_authored_module(self, dry_run: bool = False) -> None:
-        path = QtWidgets.QFileDialog.getExistingDirectory(self, "Stage authored module package and proof files", self._last_output_dir or "")
-        if not path:
+        values = self._open_map_studio_package_wizard(mode="install", dry_run=dry_run)
+        if values is None:
             return
-        modules_path = QtWidgets.QFileDialog.getExistingDirectory(self, "Select KOTOR Modules folder", "")
-        if not modules_path:
-            return
-        module_root = self._map_studio_authored_module_root_for_install()
-        destination = Path(modules_path) / f"{module_root}.mod"
-        overwrite = False
-        if destination.exists():
-            answer = QtWidgets.QMessageBox.question(
-                self,
-                "Install Authored Module",
-                f"{destination.name} already exists in the selected Modules folder.\n\n"
-                "GhostRigger will create a .bak backup before replacing it. Continue?",
-                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-                QtWidgets.QMessageBox.No,
-            )
-            if answer != QtWidgets.QMessageBox.Yes:
-                return
-            overwrite = True
+        path = str(values.get("output_dir") or "")
+        modules_path = str(values.get("game_modules_dir") or "")
+        overwrite = bool(values.get("overwrite"))
         try:
             result = self.controller.stage_authored_module(
                 path,
-                dry_run=dry_run,
+                dry_run=bool(values.get("dry_run")),
                 game_modules_dir=modules_path,
                 overwrite=overwrite,
             )
@@ -3143,7 +4266,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         for warning in tuple(getattr(proof_defaults, "warnings", ()) or ()):
             self._log(f"Warning: {warning}")
         default_manifest = str(getattr(proof_defaults, "proof_manifest_path", "") or "")
-        dialog = _MapStudioGameProofDialog(self, proof_manifest_path=default_manifest)
+        dialog = _MapStudioGameProofDialog(
+            self,
+            proof_manifest_path=default_manifest,
+            package_resource_summary=str(getattr(proof_defaults, "package_resource_summary", "") or ""),
+        )
         if dialog.exec() != QtWidgets.QDialog.Accepted:
             return False
         values = dialog.values()
@@ -3199,6 +4326,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             proof_manifest_path=str(proof_path) if proof_path.is_file() else "",
             proof_recording_script_path=str(proof_recorder_path) if proof_recorder_path.is_file() else "",
             launch_helper_command=str(getattr(handoff, "launch_helper_command", "") or ""),
+            package_resource_summary=str(getattr(handoff, "package_resource_summary", "") or ""),
         )
         if dialog.exec() != QtWidgets.QDialog.Accepted:
             return
@@ -3678,7 +4806,26 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 row_count=int(context.get("row_count", 0) or 0),
                 column_count=int(context.get("column_count", 0) or 0),
                 radius=int(context.get("radius", 0) or 0),
+                hardness=float(context.get("hardness", context.get("strength", 0.5)) or 0.5),
             )
+
+    def _set_map_studio_terrain_brush_options(self, radius: int, hardness: float) -> None:
+        """Apply viewport Alt+right-drag brush option edits to the visible Builder controls."""
+
+        radius_spin = getattr(self.builder_tab, "terrainRadiusSpinBox", None)
+        strength_spin = getattr(self.builder_tab, "terrainSmoothStrengthSpinBox", None)
+        if radius_spin is not None:
+            blocked = radius_spin.blockSignals(True)
+            radius_spin.setValue(max(radius_spin.minimum(), min(radius_spin.maximum(), int(radius))))
+            radius_spin.blockSignals(blocked)
+        if strength_spin is not None:
+            blocked = strength_spin.blockSignals(True)
+            strength_spin.setValue(max(strength_spin.minimum(), min(strength_spin.maximum(), float(hardness))))
+            strength_spin.blockSignals(blocked)
+        label = getattr(self.builder_tab, "terrainBrushStatusLabel", None)
+        if label is not None:
+            label.setText(f"Brush options: size {int(radius)}, hardness {float(hardness):.2f}.")
+        self._sync_map_studio_terrain_brush_context(force_enabled=True)
 
     def apply_map_studio_viewport_terrain_brush_frame(self, brush: str, room_resref: str, points: object) -> None:
         """Apply one live viewport terrain sculpt frame without a full Map Studio rebuild."""
@@ -3989,6 +5136,17 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._log("No output folder has been generated yet.")
 
     def select_item(self, item_id: str) -> None:
+        primitive_identity = self._parse_map_studio_primitive_outliner_id(item_id)
+        if primitive_identity is not None:
+            room_resref, primitive_name = primitive_identity
+            self.controller.model.select(item_id)
+            self.outliner.select_id(item_id)
+            self._select_authored_room_primitive(room_resref, primitive_name)
+            self.properties.set_selection(item_id)
+            label = self._selected_item_label(item_id)
+            self.workflow_panel.set_selection_context(label)
+            self.statusBar().showMessage(f"Selected {label or primitive_name}")
+            return
         self.controller.model.select(item_id)
         self.outliner.select_id(item_id)
         self.viewport_panel.select_id(item_id)
@@ -3999,6 +5157,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def _selected_item_label(self, item_id: str) -> str:
         if not item_id:
             return ""
+        primitive_identity = self._parse_map_studio_primitive_outliner_id(item_id)
+        if primitive_identity is not None:
+            room_resref, primitive_name = primitive_identity
+            row = self._authored_room_primitive_row(room_resref, primitive_name)
+            primitive_type = str(getattr(row, "primitive_type", "") or "primitive") if row is not None else "primitive"
+            return f"{primitive_type}: {primitive_name} ({room_resref})"
         authored = next((row for row in self.controller.authored_gameplay_placements() if getattr(row, "placement_id", "") == item_id), None)
         if authored is not None:
             kind = str(getattr(authored, "kind", "resource") or "resource")
@@ -4049,11 +5213,122 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "add_module": lambda: self._handle_tab_action("Add Module"),
             "validate": self.validate_kmap,
             "build": self.build_module_files,
+            "generate_module_files": self.build_module_files,
             "export_fbx": lambda: self.export_fbx(False),
         }
         callback = mapping.get(action)
         if callback:
             callback()
+
+    def _indexed_lyt_resource_rows(self) -> list[dict[str, Any]]:
+        try:
+            from src.core.assets.resource_manager import RES_LYT
+        except Exception:
+            RES_LYT = 3000
+        manager = getattr(self, "resource_manager", None)
+        if manager is None:
+            return []
+        rows: list[dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
+        for game, getter_name in (("K1", "get_k1"), ("K2", "get_k2")):
+            getter = getattr(manager, getter_name, None)
+            install = getter() if callable(getter) else None
+            list_resrefs = getattr(install, "list_resrefs", None)
+            if not callable(list_resrefs):
+                continue
+            try:
+                resrefs = list_resrefs(RES_LYT)
+            except Exception:
+                resrefs = []
+            source = str(getattr(install, "game_dir", "") or getattr(install, "root", "") or "")
+            for raw_resref in resrefs or ():
+                resref = str(raw_resref or "").strip().lower()
+                if not resref:
+                    continue
+                key = (game, resref)
+                if key in seen:
+                    continue
+                seen.add(key)
+                try:
+                    summary = self._lyt_resource_summary(manager.get(resref, RES_LYT, game))
+                except Exception:
+                    summary = {"room_count": 0, "doorhook_count": 0}
+                rows.append(
+                    {
+                        "game": game,
+                        "resref": resref,
+                        "source": source or "configured game resources",
+                        "room_count": int(summary.get("room_count", 0) or 0),
+                        "doorhook_count": int(summary.get("doorhook_count", 0) or 0),
+                    }
+                )
+        rows.sort(key=lambda row: (str(row.get("game", "")), str(row.get("resref", ""))))
+        return rows
+
+    def _lyt_resource_summary(self, data: bytes | bytearray | str | None) -> dict[str, int]:
+        if isinstance(data, str):
+            text = data
+        else:
+            text = bytes(data or b"").decode("latin-1", errors="replace")
+        try:
+            from src.core.modules import module_format as mf
+        except Exception:
+            from core.modules import module_format as mf  # type: ignore
+        lyt = mf.LYTLayout.from_text(text)
+        return {
+            "room_count": len(getattr(lyt, "rooms", []) or []),
+            "doorhook_count": len(getattr(lyt, "doorhooks", []) or []),
+        }
+
+    def _choose_indexed_lyt_resource(self, rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+        dialog = _MapStudioLytResourceDialog(self, rows=rows)
+        if dialog.exec() != QtWidgets.QDialog.Accepted:
+            return None
+        return dialog.selected_row()
+
+    def _open_indexed_lyt_resource_picker(self) -> None:
+        rows = self._indexed_lyt_resource_rows()
+        if not rows:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Load Indexed LYT",
+                "No indexed LYT resources are available from the configured KOTOR game directories.",
+            )
+            return
+        row = self._choose_indexed_lyt_resource(rows)
+        if row is not None:
+            self._load_indexed_lyt_resource(row)
+
+    def _load_indexed_lyt_resource(self, row: dict[str, Any]) -> None:
+        try:
+            from src.core.assets.resource_manager import RES_LYT
+        except Exception:
+            RES_LYT = 3000
+        manager = getattr(self, "resource_manager", None)
+        if manager is None:
+            QtWidgets.QMessageBox.warning(self, "Load Indexed LYT", "Game resource manager is not available.")
+            return
+        game = str(row.get("game", "") or "K1").upper()
+        resref = str(row.get("resref", "") or "").strip().lower()
+        if not resref:
+            QtWidgets.QMessageBox.warning(self, "Load Indexed LYT", "Selected LYT resource is missing a resref.")
+            return
+        try:
+            data = manager.get(resref, RES_LYT, game)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Load Indexed LYT", f"Could not read {game}:{resref}.lyt: {exc}")
+            return
+        if not data:
+            QtWidgets.QMessageBox.warning(self, "Load Indexed LYT", f"{game}:{resref}.lyt could not be read.")
+            return
+        result = self.controller.layout_service.load_lyt_bytes(
+            self.project,
+            bytes(data),
+            module_id=self.controller.model.active_module_id,
+            source_module=resref,
+            source_path=f"game_resource://{game}/{resref}.lyt",
+        )
+        self._refresh_all(f"{result.message} ({game}:{resref}.lyt)")
 
     def _handle_tab_action(self, action: str) -> None:
         if action == "Create grdev01 Dev Room":
@@ -4064,11 +5339,19 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 message = f"{message} Readiness: {readiness.capability_stage}."
             self._refresh_all(message)
             return
+        if action == "Create grgold01 Golden Proof Module":
+            result = self.controller.create_golden_test_authored_module()
+            readiness = result.readiness
+            message = (
+                "Created grgold01 golden proof module with room geometry, WOK player start, "
+                "placeable, waypoint, door transition intent, and NPC."
+            )
+            if readiness is not None:
+                message = f"{message} Readiness: {readiness.capability_stage}."
+            self._refresh_all(message)
+            return
         if action == "Load LYT":
-            path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Load LYT", "", "LYT files (*.lyt);;All files (*.*)")
-            if path:
-                result = self.controller.load_lyt(path)
-                self._refresh_all(result.message)
+            self._open_indexed_lyt_resource_picker()
             return
         if action == "Load WOK":
             path, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Load WOK", "", "Walkmesh files (*.wok *.dwk *.pwk *.bwm);;All files (*.*)")
@@ -4129,6 +5412,23 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def _outliner_action(self, action: str, item_id: str) -> None:
         if item_id:
             self.select_item(item_id)
+        primitive_identity = self._parse_map_studio_primitive_outliner_id(item_id)
+        if primitive_identity is not None:
+            if action == "rename":
+                self.rename_selected()
+                return
+            if action == "delete":
+                self.delete_map_studio_current_selection()
+                return
+            if action == "duplicate":
+                self._execute_map_studio_tool_belt_command("duplicate_selected")
+                return
+            if action == "focus_in_viewport":
+                self.viewport_panel.focus_selected()
+                return
+            if action == "validate_selected":
+                self.validate_kmap()
+                return
         mapping = {
             "add_module": "Add Module",
             "add_room": "Add Room",
@@ -4187,8 +5487,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def _select_authored_room_primitive(self, room_resref: str, primitive_name: str) -> None:
         selected = self.builder_tab.select_room_primitive(room_resref, primitive_name)
         if selected:
+            item_id = self._map_studio_primitive_outliner_id(room_resref, primitive_name)
+            self.controller.model.select(item_id)
+            self.outliner.select_id(item_id)
+            self.properties.set_selection(item_id)
             self.workflow_tabs.setCurrentWidget(self.builder_tab)
-            self.statusBar().showMessage(f"Selected room primitive {primitive_name}")
+            self._refresh_map_studio_selected_primitive_transform_overlay()
+            mode = self.viewport_panel.transform_gizmo_mode()
+            self.workflow_panel.set_selection_context(self._selected_item_label(item_id))
+            self.statusBar().showMessage(f"Selected room primitive {primitive_name}; {mode.title()} gimbal ready.")
 
     def _move_authored_room_primitive(self, room_resref: str, primitive_name: str, world_delta: object) -> None:
         try:
@@ -4200,7 +5507,97 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Move Authored Room Primitive", str(exc))
             return
-        self._refresh_all()
+        self._refresh_all(f"Moved room primitive {primitive_name}; previous exports/proofs are now stale.")
+        self._select_authored_room_primitive(room_resref, primitive_name)
+
+    def _authored_room_primitive_row(self, room_resref: str, primitive_name: str):
+        room = str(room_resref or "").strip()
+        name = str(primitive_name or "").strip()
+        for row in self.controller.authored_room_primitive_transforms():
+            if str(getattr(row, "primitive_name", "") or "") != name:
+                continue
+            if room and str(getattr(row, "room_resref", "") or "") != room:
+                continue
+            return row
+        return None
+
+    def _rotate_authored_room_primitive(self, room_resref: str, primitive_name: str, delta_degrees: float) -> None:
+        row = self._authored_room_primitive_row(room_resref, primitive_name)
+        if row is None:
+            return
+        current = float(getattr(row, "rotation_degrees_z", 0.0) or 0.0)
+        try:
+            self.controller.set_authored_room_primitive_transform(
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+                rotation_degrees_z=current + float(delta_degrees),
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Rotate Authored Room Primitive", str(exc))
+            return
+        self._refresh_all(f"Rotated room primitive {primitive_name}; previous exports/proofs are now stale.")
+        self._select_authored_room_primitive(room_resref, primitive_name)
+
+    def _scale_authored_room_primitive(self, room_resref: str, primitive_name: str, scale_multiplier: object) -> None:
+        row = self._authored_room_primitive_row(room_resref, primitive_name)
+        if row is None:
+            return
+        current = tuple(float(value) for value in tuple(getattr(row, "scale", (1.0, 1.0, 1.0)) or (1.0, 1.0, 1.0))[:3])
+        if len(current) != 3:
+            current = (1.0, 1.0, 1.0)
+        multiplier = tuple(float(value) for value in tuple(scale_multiplier or (1.0, 1.0, 1.0))[:3])
+        if len(multiplier) != 3:
+            multiplier = (1.0, 1.0, 1.0)
+        updated = tuple(max(0.01, current[index] * multiplier[index]) for index in range(3))
+        try:
+            self.controller.set_authored_room_primitive_transform(
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+                scale=updated,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Scale Authored Room Primitive", str(exc))
+            return
+        self._refresh_all(f"Scaled room primitive {primitive_name}; previous exports/proofs are now stale.")
+        self._select_authored_room_primitive(room_resref, primitive_name)
+
+    def _current_map_studio_room_primitive_identity(self) -> tuple[str, str] | None:
+        data = self._map_studio_combo_data("roomPrimitiveTransformComboBox")
+        primitive_name = str(data.get("primitive_name") or "").strip()
+        if not primitive_name:
+            return None
+        return (str(data.get("room_resref") or "").strip(), primitive_name)
+
+    def _refresh_map_studio_selected_primitive_transform_overlay(self) -> None:
+        identity = self._current_map_studio_room_primitive_identity()
+        if identity is None:
+            self.viewport_panel.set_universal_transform_overlay(None)
+            return
+        room_resref, primitive_name = identity
+        try:
+            overlay = self.controller.map_studio_universal_transform_overlay(
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+            )
+        except Exception:
+            self.viewport_panel.set_universal_transform_overlay(None)
+            return
+        self.viewport_panel.set_universal_transform_overlay(overlay)
+
+    def _handle_map_studio_transform_gizmo_mode_changed(self, mode_key: str) -> None:
+        label = {"translate": "Translate", "rotate": "Rotate", "scale": "Scale"}.get(
+            str(mode_key or "").lower(),
+            "Translate",
+        )
+        self._set_map_studio_toolbar_edit_mode("Object")
+        self._select_map_studio_component_mode("object")
+        self._select_map_studio_modeling_tool("universal_transform")
+        self._refresh_map_studio_selected_primitive_transform_overlay()
+        self.workflow_panel.set_active_authoring_context(
+            f"{label} gimbal: selected authored primitives edit durable KMAP transform state; "
+            "commits mark MDL/MDX/WOK/LYT/VIS/PTH/export proof stale."
+        )
+        self.statusBar().showMessage(f"Map Studio {label} gimbal active. Shortcuts: W translate, E rotate, R scale.", 5000)
 
     def _set_visibility(self, item_id: str, visible: bool) -> None:
         if item_id.startswith("authored:"):
@@ -4309,6 +5706,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         authored_markers = self.controller.authored_gameplay_preview_markers()
         authored_marker_geometry = self.controller.authored_gameplay_marker_geometry()
         authored_room_outline_geometry = self.controller.authored_room_outline_geometry()
+        authored_room_preview_model = self.controller.authored_room_preview_model()
         authored_terrain_walkability_overlay = self.controller.authored_terrain_walkability_overlay()
         authored_walkmesh_status = self.controller.authored_walkmesh_status()
         authored_walkmesh_room_surfaces = self.controller.authored_walkmesh_room_surface_choices()
@@ -4323,7 +5721,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.walkmesh_tab.set_walkmesh_status(authored_walkmesh_status)
         self.walkmesh_tab.set_room_surface_choices(authored_walkmesh_room_surfaces)
         self.properties.set_project(self.project, authored_placements, authored_room_lights)
-        self.outliner.set_project(self.project, authored_placements, authored_room_lights)
+        self.outliner.set_project(self.project, authored_placements, authored_room_lights, authored_room_primitives)
         self.viewport_panel.set_project(
             self.project,
             authored_placements,
@@ -4332,8 +5730,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             authored_marker_geometry,
             authored_room_outline_geometry,
             authored_terrain_walkability_overlay,
+            authored_room_preview_model,
         )
         self._sync_map_studio_terrain_brush_context()
+        self._refresh_map_studio_selected_primitive_transform_overlay()
         readiness_result = self.controller.authored_module_readiness()
         self.workflow_panel.set_state(self.project, readiness_result.readiness)
         self.readiness_panel.set_readiness(readiness_result.readiness)
@@ -4372,7 +5772,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if self.layout_manager is not None:
             self.apply_ghost_layout(self.layout_manager.get_layout())
         else:
-            self.main_splitter.setSizes([285, 1220, 320])
+            self.main_splitter.setSizes([260, 1380, 300])
 
     def _show_help(self, topic: str) -> None:
         QtWidgets.QMessageBox.information(
@@ -4419,16 +5819,16 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.resize(layout.main_width, layout.main_height)
         self.main_splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", 6))
         self.main_splitter.setSizes([
-            max(240, min(340, layout.panel("library").preferred_width)),
-            max(900, layout.viewport.preferred_width),
-            max(260, min(420, layout.panel("properties").preferred_width)),
+            max(230, min(320, layout.panel("library").preferred_width)),
+            max(1040, layout.viewport.preferred_width + 120),
+            max(250, min(390, layout.panel("properties").preferred_width)),
         ])
         if hasattr(self, "left_splitter"):
             self.left_splitter.setHandleWidth(layout.spacing_value("splitterHandleWidth", 6))
             self.left_splitter.setSizes([max(360, layout.main_height - 520), 320])
         bottom = layout.panel("outputLog")
         self.bottom_tabs.setMinimumHeight(max(72, min(120, bottom.min_height)))
-        self.bottom_tabs.setMaximumHeight(max(120, min(180, bottom.preferred_height)))
+        self.bottom_tabs.setMaximumHeight(max(112, min(150, bottom.preferred_height)))
         self.toolbar.apply_ghost_layout(layout)
         for widget in self.findChildren(QtWidgets.QWidget):
             hook = getattr(widget, "apply_ghost_layout", None)

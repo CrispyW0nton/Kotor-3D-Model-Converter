@@ -114,6 +114,7 @@ def test_t2606_floor_plan_vertex_move_is_undoable_through_controller() -> None:
     controller.new_project(name="grcmd01", game="K1")
     controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grcmd01")
     room_resref = controller.authored_floor_plan_room_choices()[0].room_resref
+    controller.command_history.clear()
 
     assert _first_floor_plan_point(controller) == (-5.0, -5.0)
     assert controller.can_undo_map_studio_command() is False
@@ -148,6 +149,7 @@ def test_t2606_terrain_sculpt_preview_is_side_effect_free_until_stroke_commit() 
     controller.new_project(name="grtrn01", game="K1")
     controller.create_authored_room_preset_module(preset_id="terrain_heightfield", module_root="grtrn01")
     room_resref = controller.project.extra_sections["authored_module"]["rooms"][0]["room_resref"]
+    controller.command_history.clear()
 
     assert _first_terrain_height(controller, 2, 2) == 0.35
     frame = controller.prepare_map_studio_terrain_sculpt_frame(
@@ -182,6 +184,126 @@ def test_t2606_terrain_sculpt_preview_is_side_effect_free_until_stroke_commit() 
     undo = controller.undo_map_studio_command()
     assert undo is not None
     assert _first_terrain_height(controller, 2, 2) == 0.35
+
+
+def test_t2606_gameplay_placement_edits_are_undoable_kmap_commands() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grgitcmd", game="K1")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grgitcmd")
+    added = controller.add_authored_gameplay_placement(
+        kind="placeable",
+        template_resref="plc_bench",
+        tag="bench_a",
+        position=(1.0, 1.0, 0.0),
+    )
+    controller.command_history.clear()
+    placement_id = next(row.placement_id for row in controller.authored_gameplay_placements() if row.tag == "bench_a")
+
+    controller.set_authored_gameplay_placement_transform(
+        placement_id,
+        position=(2.0, 3.0, 0.0),
+        bearing=45.0,
+    )
+    payload = controller.project.extra_sections["authored_module"]
+    assert payload["placements"]["placeables"][-1]["position"] == [2.0, 3.0, 0.0]
+    assert controller.command_history.undo_label == "Move placeable placement bench_a"
+    undo = controller.undo_map_studio_command()
+    assert undo is not None
+    assert "Stale outputs: MDL, MDX, WOK, LYT, VIS, PTH, .mod" in undo.message
+    assert controller.project.extra_sections["authored_module"]["placements"]["placeables"][-1]["position"] == [1.0, 1.0, 0.0]
+    controller.redo_map_studio_command()
+    assert controller.project.extra_sections["authored_module"]["placements"]["placeables"][-1]["bearing"] == 45.0
+
+    controller.command_history.clear()
+    renamed = controller.rename_authored_gameplay_placement(placement_id, tag="bench_renamed")
+    assert renamed.tag == "bench_renamed"
+    assert controller.command_history.undo_label == "Rename placeable placement bench_renamed"
+    controller.undo_map_studio_command()
+    assert controller.project.extra_sections["authored_module"]["placements"]["placeables"][-1]["tag"] == "bench_a"
+
+    controller.command_history.clear()
+    duplicated = controller.duplicate_authored_gameplay_placement(placement_id)
+    assert duplicated.tag == "bench_a_copy"
+    placeable_count = len(controller.project.extra_sections["authored_module"]["placements"]["placeables"])
+    assert placeable_count >= 3
+    assert controller.command_history.undo_label == "Duplicate placeable placement bench_a_copy"
+    controller.undo_map_studio_command()
+    assert len(controller.project.extra_sections["authored_module"]["placements"]["placeables"]) == placeable_count - 1
+
+    controller.command_history.clear()
+    removed = controller.remove_authored_gameplay_placement(placement_id)
+    assert removed.tag == "bench_a"
+    removed_count = len(controller.project.extra_sections["authored_module"]["placements"]["placeables"])
+    assert removed_count == placeable_count - 2
+    assert controller.command_history.undo_label == "Remove placeable placement bench_a"
+    controller.undo_map_studio_command()
+    assert len(controller.project.extra_sections["authored_module"]["placements"]["placeables"]) == removed_count + 1
+    assert controller.project.extra_sections["authored_module"]["placements"]["placeables"][-1]["tag"] == "bench_a"
+
+
+def test_t2606_room_light_edits_are_undoable_kmap_commands() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grlightcmd", game="K1")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grlightcmd")
+    controller.add_authored_room_light(name="key_light", position=(0.0, 0.0, 2.25))
+    controller.command_history.clear()
+    light_id = controller.authored_room_lights()[-1].light_id
+
+    controller.set_authored_room_light_transform(light_id, position=(1.0, 2.0, 3.0))
+    payload = controller.project.extra_sections["authored_module"]
+    assert payload["lights"][-1]["position"] == [1.0, 2.0, 3.0]
+    assert controller.command_history.undo_label == "Move room light key_light"
+    undo = controller.undo_map_studio_command()
+    assert undo is not None
+    assert "Stale outputs: MDL, MDX, WOK, LYT, VIS, PTH, .mod" in undo.message
+    assert controller.project.extra_sections["authored_module"]["lights"][-1]["position"] == [0.0, 0.0, 2.25]
+
+    controller.command_history.clear()
+    controller.set_authored_room_light_properties(
+        light_id,
+        color=(0.25, 0.5, 1.0),
+        radius=12.5,
+        intensity=1.75,
+        light_type="spot",
+    )
+    assert controller.project.extra_sections["authored_module"]["lights"][-1]["light_type"] == "spot"
+    assert controller.command_history.undo_label == "Edit room light key_light"
+    controller.undo_map_studio_command()
+    assert controller.project.extra_sections["authored_module"]["lights"][-1]["light_type"] == "point"
+
+    controller.command_history.clear()
+    renamed = controller.rename_authored_room_light(light_id, name="warm_key")
+    assert renamed.light.name == "warm_key"
+    assert controller.command_history.undo_label == "Rename room light warm_key"
+    controller.undo_map_studio_command()
+    assert controller.project.extra_sections["authored_module"]["lights"][-1]["name"] == "key_light"
+
+    controller.command_history.clear()
+    duplicated = controller.duplicate_authored_room_light(light_id)
+    assert duplicated.light.name == "key_light_copy"
+    light_count = len(controller.project.extra_sections["authored_module"]["lights"])
+    assert light_count >= 2
+    assert controller.command_history.undo_label == "Duplicate room light key_light_copy"
+    controller.undo_map_studio_command()
+    assert len(controller.project.extra_sections["authored_module"]["lights"]) == light_count - 1
+
+    controller.command_history.clear()
+    removed = controller.remove_authored_room_light(light_id)
+    assert removed.light.name == "key_light"
+    removed_count = len(controller.project.extra_sections["authored_module"]["lights"])
+    assert removed_count == light_count - 2
+    assert controller.command_history.undo_label == "Remove room light key_light"
+    controller.undo_map_studio_command()
+    assert len(controller.project.extra_sections["authored_module"]["lights"]) == removed_count + 1
+    assert controller.project.extra_sections["authored_module"]["lights"][-1]["name"] == "key_light"
 
 
 def test_t2606_level_editor_wires_undo_redo_actions_to_map_studio_command_spine() -> None:
@@ -222,6 +344,17 @@ def test_t2606_map_studio_topology_and_terrain_commands_have_action_keys() -> No
         "map_studio.primitive.remove",
         "map_studio.primitive.separate",
         "map_studio.room.set_style",
+        "map_studio.gameplay.move_placement",
+        "map_studio.gameplay.rename_placement",
+        "map_studio.gameplay.duplicate_placement",
+        "map_studio.gameplay.remove_placement",
+        "map_studio.gameplay.edit_camera",
+        "map_studio.gameplay.set_transition",
+        "map_studio.lighting.move_room_light",
+        "map_studio.lighting.edit_room_light",
+        "map_studio.lighting.rename_room_light",
+        "map_studio.lighting.duplicate_room_light",
+        "map_studio.lighting.remove_room_light",
     )
 
     for source in (scene_controller, tools_controller):

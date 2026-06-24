@@ -87,13 +87,13 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_MESH_RENDER_DATA",
             "source_path": "src/core/rendering/mesh_render_data.py",
             "packaged_path": "Python/src/core/rendering/mesh_render_data.py",
-            "sha256": "5cd1fa04f32bc134fb66eb529fdb9a2ca3c8b199f328de32d51a682f482a9f60"
+            "sha256": "35700ae28964e82d2be2d94a82f36039e568c20655487a6c03366ab4ce199866"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_RENDERER_BACKEND",
             "source_path": "src/core/rendering/renderer_backend.py",
             "packaged_path": "Python/src/core/rendering/renderer_backend.py",
-            "sha256": "5862294435bb68600831270de0e602670afbe3f99cf819cd7a39fd5a5cebedf3"
+            "sha256": "8c24ae7ed2d71dc53a3005b7c238f8f4b5e30314dc975a39303d3b3c096aec5e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_RENDERER_CAPABILITIES",
@@ -111,7 +111,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_SKELETON_RENDER_DATA",
             "source_path": "src/core/rendering/skeleton_render_data.py",
             "packaged_path": "Python/src/core/rendering/skeleton_render_data.py",
-            "sha256": "d5e563da0c1435b38a8795d5a94fe9f2f10992ba5afcbaa5de67bcb4de02a5c6"
+            "sha256": "f635366cb3e97538b24cf9fea72c70b559587724085f77360cfbee66b0167c02"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RESOURCES_INIT",
@@ -129,13 +129,13 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_SCENE_SCENE_OBJECT",
             "source_path": "src/core/scene/scene_object.py",
             "packaged_path": "Python/src/core/scene/scene_object.py",
-            "sha256": "14626cf8fbbfc33a08335b4db8204c9aa2d54a26a3599cc3b850f781de1d967b"
+            "sha256": "bf40551440c49246123bd0797ef16ad8911f6982151f69e6e4af862bd1a66f6e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_SCENE_SCENE_OBJECT_INSTANCE",
             "source_path": "src/core/scene/scene_object_instance.py",
             "packaged_path": "Python/src/core/scene/scene_object_instance.py",
-            "sha256": "4fc6e407607d5194c24be429ae3f180e785fc4bd412dfe922972134d8ac5bf8e"
+            "sha256": "38c6f23d7cc74b29fadd4b5940114f2e687c84410bf1ef7e2d06885d6e06fc01"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_RESOURCES_INIT",

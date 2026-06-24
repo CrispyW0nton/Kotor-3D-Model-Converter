@@ -55,6 +55,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--test-placeable-visible", action="store_true", help="Confirm authored test placeables appear where expected.")
     parser.add_argument("--player-can-walk-on-floor", action="store_true", help="Confirm the player can walk across the generated floor.")
     parser.add_argument(
+        "--transition-pathing-sanity-confirmed",
+        action="store_true",
+        help="Confirm authored PTH anchors are reachable and any door/transition links behave as expected.",
+    )
+    parser.add_argument(
         "--no-inherited-base-game-geometry-or-scripted-movers",
         action="store_true",
         help="Confirm no PLCaa/Taris/base-game room geometry or scripted moving test objects are present.",
@@ -127,6 +132,7 @@ def main(argv: list[str] | None = None) -> int:
             player_spawns_on_floor=bool(args.player_spawns_on_floor),
             test_placeable_visible=bool(args.test_placeable_visible),
             player_can_walk_on_floor=bool(args.player_can_walk_on_floor),
+            transition_pathing_sanity_confirmed=bool(args.transition_pathing_sanity_confirmed),
             no_inherited_base_game_geometry_or_scripted_movers=bool(
                 args.no_inherited_base_game_geometry_or_scripted_movers
             ),

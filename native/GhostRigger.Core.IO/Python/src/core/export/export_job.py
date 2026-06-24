@@ -127,11 +127,12 @@ def run_export_job(
         _publish(validation_bus, request, result.validation_report)
         return result
 
-    final_parent = _shared_output_parent(request.outputs)
-    assert final_parent is not None
-    final_parent.mkdir(parents=True, exist_ok=True)
+    final_parents = _output_parents(request.outputs)
+    assert final_parents
+    for parent in final_parents:
+        parent.mkdir(parents=True, exist_ok=True)
 
-    staging_parent = Path(request.staging_root) if request.staging_root is not None else final_parent
+    staging_parent = Path(request.staging_root) if request.staging_root is not None else _default_staging_parent(request.outputs)
     staging_parent.mkdir(parents=True, exist_ok=True)
     staging_dir = Path(
         tempfile.mkdtemp(
@@ -139,10 +140,7 @@ def run_export_job(
             dir=str(staging_parent),
         )
     )
-    output_map = {
-        spec.final_path: staging_dir / spec.final_path.name
-        for spec in request.outputs
-    }
+    output_map = _staged_output_map(request.outputs, staging_dir)
     context = ExportJobContext(request=request, staging_dir=staging_dir, output_map=output_map)
     staged_paths = {str(final): str(staged) for final, staged in output_map.items()}
     backups: dict[Path, Path] = {}
@@ -301,15 +299,6 @@ def _preflight_export_request(request: ExportJobRequest) -> ValidationReport:
                 )
             )
 
-    shared_parent = _shared_output_parent(request.outputs)
-    if request.outputs and shared_parent is None:
-        issues.append(
-            _issue(
-                "export.preflight.blocking",
-                "ExportJob currently requires all outputs to share one final parent directory.",
-            )
-        )
-
     if request.preflight_report is not None:
         issues.extend(request.preflight_report.issues)
 
@@ -410,6 +399,22 @@ def _publish(validation_bus: ValidationBus | None, request: ExportJobRequest, re
     validation_bus.publish(report, replace_source=True)
 
 
+def _output_parents(outputs: list[ExportOutputSpec]) -> list[Path]:
+    parents: dict[str, Path] = {}
+    for spec in outputs:
+        parent = spec.final_path.parent
+        parents[_normalized_path_key(parent)] = parent
+    return list(parents.values())
+
+
+def _default_staging_parent(outputs: list[ExportOutputSpec]) -> Path:
+    parents = _output_parents(outputs)
+    if not parents:
+        return Path(".")
+    shared = _shared_output_parent(outputs)
+    return shared if shared is not None else parents[0]
+
+
 def _shared_output_parent(outputs: list[ExportOutputSpec]) -> Path | None:
     if not outputs:
         return None
@@ -417,6 +422,25 @@ def _shared_output_parent(outputs: list[ExportOutputSpec]) -> Path | None:
     if len(parents) != 1:
         return None
     return outputs[0].final_path.parent
+
+
+def _staged_output_map(outputs: list[ExportOutputSpec], staging_dir: Path) -> dict[Path, Path]:
+    mapping: dict[Path, Path] = {}
+    used: set[str] = set()
+    shared_parent = _shared_output_parent(outputs)
+    for index, spec in enumerate(outputs):
+        if shared_parent is not None:
+            candidate = staging_dir / spec.final_path.name
+        else:
+            parent_slug = _safe_job_id(_normalized_path_key(spec.final_path.parent))
+            candidate = staging_dir / f"{index:04d}_{parent_slug}" / spec.final_path.name
+        key = _normalized_path_key(candidate)
+        if key in used:
+            candidate = candidate.with_name(f"{candidate.stem}_{index}{candidate.suffix}")
+            key = _normalized_path_key(candidate)
+        used.add(key)
+        mapping[spec.final_path] = candidate
+    return mapping
 
 
 def _rollback_promoted_outputs(final_paths: list[Path], backups: dict[Path, Path]) -> list[str]:

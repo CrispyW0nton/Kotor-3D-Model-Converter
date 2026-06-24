@@ -9,7 +9,1462 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-24
+
+### [2026-06-24] Module Room Texture Prewarm During Append
+
+Owner: LordVaderCW
+Subsystem: Main viewport module rendering / Texture cache residency / Native GUI payloads
+
+- Fixed the module room append path so newly appended scene room geometry invalidates the GPU texture snapshot and queues texture prewarming for the expanded composite scene.
+- This restores texture/lightmap cache population for rooms loaded after the first room in a multi-room module import, including `K2:209TEL` Citadel Station - Czerka Offices.
+- Regenerated the affected `GhostRigger.Core.GUI.Display` native Python payload manifest.
+- Verification: MCP `compare_model_pipelines(k2, 209TELx)` confirmed the room model/material references still match PyKotor; MCP `inspect_mdl(k2, 209TELx)` and `inspect_mdl(k2, 209TELv)` confirmed expected TEL diffuse/lightmap references; direct local `ResourceManager` probe confirmed `K2:209TEL` expands to 7 rooms and all 72 referenced diffuse/lightmap texture resources resolve from the K2 install; `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\scene_models.py tests\test_core_contracts.py`; `python -m pytest tests\test_core_contracts.py::test_kmax_scene_reload_preserves_selected_object_for_pivot_tools tests\test_core_contracts.py::test_qt_realistic_texture_prewarm_loads_detail_textures_without_paint_stall -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.GUI.Display`; `python -m pytest tests\test_core_contracts.py::test_kmax_scene_reload_preserves_selected_object_for_pivot_tools tests\test_core_contracts.py::test_qt_realistic_texture_prewarm_loads_detail_textures_without_paint_stall tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Root exe rebuild and visible Debug-app retest were deferred because `GhostRigger.exe` is currently running from the repository root.
+
+### [2026-06-24] Content Browser Module Room Batch Loading
+
+Owner: LordVaderCW
+Subsystem: Main Content Browser module loading / Scene module placement / Native GUI payloads
+
+- Added a scene-owned helper that expands a selected module or room-model row through its LYT into every non-NULL room placement in layout order.
+- Routed Content Browser module assets through a queued room import path so selecting a module category row loads the full module room set instead of only the clicked MDL, while preserving ordinary model add/open behavior.
+- Mirrored the scene helper and GUI orchestration across the affected `GhostRigger.Core.Scene`, `GhostRigger.Core.Tools`, and `GhostRigger.Core.GUI.Display` native Python payload copies.
+- Rebuilt the Debug native host and refreshed the repository-root `GhostRigger.exe` at `2026-06-24 15:27:25`.
+- Verification: MCP `compare_model_pipelines(k2, 303narb3)`, `inspect_mdl(k2, 303narb3)`, and `inspect_mdl_ghostrigger(k2, 303narb3)` confirmed the screenshot asset itself is valid sky-room MDL data; `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\scene\module_scene_import.py native\GhostRigger.Core.Tools\Python\src\core\scene\module_scene_import.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\resource_loading.py native\GhostRigger.Core.Tools\Python\src\gui\windows\application_core\shared\resource_loading.py tests\test_module_categories.py`; `python -m pytest tests\test_module_categories.py tests\test_core_contracts.py::test_content_browser_activation_adds_generic_model_rows_without_clear_prompt -q`; `python -m pytest tests\test_content_browser_panel.py::test_content_browser_add_to_current_scene_uses_explicit_signal tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; direct local probe confirmed `K2:303NARB3` expands to 35 `303NAR` room placements; `MSBuild.exe native\GhostRigger.Native.Core.Host\GhostRigger.Native.Core.Host.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m:1 /nr:false /v:m`; follow-up `MSBuild.exe ... /t:Build /p:Configuration=Debug /p:Platform=x64 /m:1 /nr:false /v:m` exited 0; final `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q` passed. Full visible Debug-app retest was not run in this turn.
+
+### [2026-06-24] OBJ Material Texture Import For Drexl Character Builder
+
+Owner: LordVaderCW
+Subsystem: Character Builder external OBJ import / Core IO and Tools native payloads
+
+- Added OBJ/MTL diffuse texture extraction to the trimesh fallback importer so imported OBJ meshes keep the `map_Kd` basecolor texture reference alongside their UVs.
+- Preserved the original OBJ material name as node metadata while using the resolved diffuse image stem for GhostRigger preview and external texture export resolution.
+- Added a focused regression test in `tests/test_regression.py` covering a Drexl-style OBJ with `newmtl c_drex01` and `map_Kd C_DrexlF_UV_basecolor.jpg`.
+- Updated affected native Python payload manifest hashes for `GhostRigger.Core.IO` and `GhostRigger.Core.Tools`.
+- Verification: `python -m py_compile native/GhostRigger.Core.IO/Python/src/core/export/gltf_importer.py native/GhostRigger.Core.Tools/Python/src/core/export/gltf_importer.py tests/test_regression.py`; `python -m pytest tests/test_regression.py::test_obj_import_preserves_mtl_map_kd_texture_metadata -q`; direct import probe of `C:/Users/NewAdmin/Documents/KotorMods/HighFidelityKotorCharacters/Drexl/C_DrexlF_UV.obj` confirmed 2,120 vertices, 1,526 faces, 2,120 UVs, texture `C_DrexlF_UV_basecolor`, source material `c_drex01`, and the expected JPG path; MCP `compare_model_pipelines(k2, c_drexlf)` confirmed the original game donor model matches PyKotor/GhostRigger with 65 nodes, 7 skin nodes, and animations `cwalk`, `cpause1`, `pause2`, `default`. Existing root `tests/test_headless_body_workflow.py` texture-export node IDs are skipped in this checkout because root `src/core/...` workflow copies are absent.
+
+### [2026-06-24] Map Studio Top Toolbar Generate Module Files Button
+
+Owner: LordVaderCW
+Task: T2600 / T2913
+Subsystem: Map Studio top toolbar / Authored module export workflow / Native payload packaging
+Intersects: Map Studio generated runtime-resource readiness and the running unsaved `grdev01` Map Studio session.
+
+- Added an explicit `Generate Module Files` button to the top Map Studio toolbar, next to the existing build/export controls shown in the level-editor window.
+- Routed the new toolbar action to the same fixed authored generation path as the Build command so it writes and records generated module runtime resources into KMAP state.
+- Added stable object names for top-toolbar action buttons so the new generation button can be targeted by visible UI tests.
+- Regenerated affected `GhostRigger.Core.Tools` and `GhostRigger.Core.GUI.Display` native Python payload manifests.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\module_editor_toolbar.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\module_editor_toolbar.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python scripts\native_python_payload_generator.py GhostRigger.Core.GUI.Display`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Root exe rebuild and visible post-fix retest were deferred because the running `GhostRigger.exe` still has the unsaved Map Studio session open.
+
+### [2026-06-24] Map Studio Generate Module Files Authored Export Routing
+
+Owner: LordVaderCW
+Task: T2600 / T2913
+Subsystem: Map Studio authored module export / KMAP runtime-resource readiness / Native payload packaging
+Intersects: Map Studio validation, package/proof readiness, authored KMAP export state, and the running unsaved `grdev01` Map Studio session.
+
+- Investigated the open Map Studio validation state after `Generate Module Files` and confirmed the real export gate was `Runtime package: Needs generated module resources. 0/9 resources present`, while the rest of the 19 rows were warning/proof/template/walkmesh guidance.
+- Routed the visible `Generate Module Files` command through the authored module exporter whenever the KMAP contains authored Map Studio geometry, instead of the legacy preview-manifest builder.
+- Added a controller-level `generate_module_files` path that records generated ARE/GIT/IFO/PTH/LYT/VIS, room MDL/MDX/WOK, pack manifest, export job metadata, and dirty KMAP state for authored projects, while preserving the old preview-manifest behavior for non-authored KMAPs.
+- Cleared stale export/proof invalidation metadata after a successful fresh generation so validation does not keep reporting old stale MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs after the resources have been regenerated; live in-game proof remains required.
+- Refreshed the Map Studio window after generation so validation, readiness, workflow buttons, and export/proof state update from the newly recorded KMAP runtime resources.
+- Regenerated affected `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools` native Python payload manifests.
+- Verification: visible UIA inspection of the running Map Studio `grdev01 *` validation table; `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py`; `python -m pytest tests\test_authored_module_export.py::test_t2643_generate_module_files_records_authored_runtime_resources tests\test_authored_module_export.py::test_t2643_generate_module_files_clears_stale_export_invalidation tests\test_authored_module_export.py::test_t2643_controller_exports_current_kmap_authored_module tests\test_authored_module_export.py::test_t2643_export_panel_exposes_authored_module_action -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Scene`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Post-fix visible retest and root exe rebuild were deferred because the running `GhostRigger.exe` has an unsaved Map Studio window open.
+
+### [2026-06-24] Map Studio Game-Visible Geometry Overlay Policy
+
+Owner: LordVaderCW
+Task: T2600 / T2603
+Subsystem: Map Studio viewport presentation / Authored KMAP mesh preview / Native payload packaging
+Intersects: Map Studio authored mesh preview, room outline editing hit zones, walkmesh/terrain overlays, and root exe rebuild.
+
+- Tightened the Map Studio clean-view contract so game-visible authored room/render geometry is displayed as loaded mesh data, not as visible overlay fills, outlines, or primitive handles.
+- Kept authored room outline hit zones available for editor tools while hiding their visible render-geometry overlay by default once the live preview model is loaded.
+- Reserved visible overlays for developer-only/non-rendered planning data such as walkmesh/walkability, invisible collision/blocking intent, terrain brush cursors, transform gizmos, and validation aids.
+- Updated the viewport summary text to describe loaded authored room meshes instead of room-outline overlays when a preview model is active.
+- Regenerated affected `GhostRigger.Core.Tools` and `GhostRigger.Core.GUI.Display` native Python payloads, rebuilt the Debug native host, and refreshed the repository-root `GhostRigger.exe` at `2026-06-24 13:51:57`.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\overlay_layers.py tests\test_authored_module_export.py`; `python -m pytest tests\test_authored_module_export.py::test_t2600_map_studio_routes_authored_preview_model_into_viewport_panel tests\test_authored_module_export.py::test_t2600_map_studio_builds_live_preview_model_from_authored_kmap_geometry -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python scripts\native_python_payload_generator.py GhostRigger.Core.GUI.Display`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; Debug MSBuild via `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe`; root `GhostRigger.exe` visible smoke launch started and closed cleanly.
+
+### [2026-06-24] Map Studio Authored Mesh Preview
+
+Owner: LordVaderCW
+Task: T2600 / T2603
+Subsystem: Map Studio viewport rendering / Authored KMAP room geometry / Native payload packaging
+Intersects: Map Studio clean viewport overlays, authored room outline selection, native Scene/Tools payload manifests, and repository-root exe rebuild.
+
+- Added a headless authored module preview builder that compiles durable KMAP room/terrain `PrimitiveMesh` state into an area-class `KotorModel` for the normal viewport model-rendering path.
+- Routed the preview model through `ModuleEditorController`, the Map Studio window refresh, and the embedded viewport panel so authored rooms render as actual mesh geometry instead of relying on translucent overlay polygons.
+- Tagged preview nodes with authored room/mesh metadata and a stable preview key so Map Studio can refresh the model only when authored geometry changes.
+- Muted Map Studio room overlay fill when a real preview model is loaded, leaving subtle outlines and hit zones available while the solid mesh becomes the visual truth.
+- Regenerated affected `GhostRigger.Core.Scene`, `GhostRigger.Core.Tools`, and `GhostRigger.Core.GUI.Display` payloads, refreshed the root Python payload manifest, rebuilt the Debug native host, and updated the repository-root `GhostRigger.exe` at `2026-06-24 13:00:04`.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_preview_model.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_preview_model.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\overlay_layers.py tests\test_authored_module_export.py`; `python -m pytest tests\test_authored_module_export.py::test_t2600_map_studio_builds_live_preview_model_from_authored_kmap_geometry tests\test_authored_module_export.py::test_t2600_map_studio_routes_authored_preview_model_into_viewport_panel -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Scene`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python scripts\native_python_payload_generator.py GhostRigger.Core.GUI.Display`; root manifest refresh for the touched packages; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; Debug MSBuild via `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe`; root `GhostRigger.exe` visible smoke launch started and closed cleanly. A direct temporary Qt Map Studio window probe timed out during startup and the probe process was stopped, so no UI process was left running.
+
+### [2026-06-24] Map Studio Clean Authored Geometry Viewport
+
+Owner: LordVaderCW
+Task: T2600 / T2603
+Subsystem: Map Studio viewport presentation / Shared Qt viewport diagnostics / Native payload packaging
+Intersects: Map Studio gimbal overlays, terrain brush overlays, room outline editing guides, and the embedded shared viewport renderer.
+
+- Added a Map Studio clean viewport presentation contract so authored KMAP room/terrain overlays suppress misleading shared-viewport labels such as `Empty Scene`, GPU unavailable text, frame timing, hardware diagnostics, and FPS pills while Map Studio owns the view.
+- Switched the Map Studio room overlay toward a cleaner authoring view: solid/subtle room polygons and outlines remain visible, primitive handles are muted, primitive labels, wall/opening guide lines, vertex dots, walkability overlays, and terrain brush overlays stay hidden until their matching edit/tool context is active, and placement guides stay pickable but muted until active.
+- Kept selected-object feedback visible through the universal transform overlay while hiding transform dimensions and handle labels by default; scale/active primitive drags can still show dimensions when they are useful.
+- Updated the embedded Map Studio viewport panel to push clean display flags whenever project geometry, terrain brush state, transform mode, marker drags, room outline drags, or modifier-key state changes.
+- Regenerated affected `GhostRigger.Core.GUI.Display` and `GhostRigger.Core.Tools` native Python payloads, rebuilt the Debug native host, and refreshed the repository-root `GhostRigger.exe` at `2026-06-24 12:31:58`.
+- Verification: `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\viewport_widget.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\scene_models.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\rendering_pipeline.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\overlay_layers.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py tests\test_map_studio_workflow_panel.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_main_screen_map_studio_action_opens_window_and_tool_belt_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.GUI.Display`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; `MSBuild native\GhostRigger.Native.Core.Host\GhostRigger.Native.Core.Host.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m:1 /nr:false /v:m`; root `GhostRigger.exe` smoke launch stayed running for 12 seconds, accepted `CloseMainWindow`, and exited with code 0.
+
+### [2026-06-24] Map Studio Maya-Style Scene Outliner
+
+Owner: LordVaderCW
+Task: T2600 / T2908
+Subsystem: Map Studio outliner / Authored room primitive identity / Native payload packaging
+Intersects: Map Studio object selection, viewport gimbal highlight, primitive rename/delete, and KMAP command history.
+
+- Expanded the Map Studio outliner into a two-column scene/object tree with a `Scene Objects` branch, default viewport cameras, authored rooms, and authored render primitives grouped under their room.
+- Added stable authored primitive outliner IDs so clicking a primitive row selects the matching Builder object, syncs workflow selection context, and refreshes the viewport/gimbal overlay highlight.
+- Added inline outliner rename support that applies the typed tree label through a new KMAP-backed `rename_authored_room_primitive` controller command instead of a cosmetic tree edit.
+- Added headless authored-room rename logic that preserves primitive uniqueness, updates floor/base or placed primitive names, records undo metadata, and marks MDL/MDX/WOK/LYT/VIS/PTH/.mod export/proof state stale.
+- Routed authored primitive outliner Delete and Duplicate context actions through the existing KMAP command-history paths used by visible Map Studio tools.
+- Regenerated affected `GhostRigger.Core.Tools`, `GhostRigger.Core.GUI.Display`, and `GhostRigger.Core.Scene` native Python payloads.
+- Follow-up: after the running root app was closed, forced a Debug native host rebuild and refreshed `GhostRigger.exe` in the repository root.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\module_editor_outliner.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\module_editor_outliner.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py tests\test_map_studio_level_editor_identity.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_outliner_selects_renames_and_deletes_primitives_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_delete_key_removes_selected_authored_primitive_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_visible_undo_redo_actions_restore_authored_kmap_state_runtime tests\test_map_studio_workflow_panel.py::test_t2600_map_studio_outliner_explains_selection_editing_workflow -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_gimbal_modes_and_undo_redo_shortcuts_runtime tests\test_map_studio_workflow_panel.py::test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python scripts\native_python_payload_generator.py GhostRigger.Core.GUI.Display`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Scene`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`.
+  Build verification: `MSBuild native\GhostRigger.Native.Core.Host\GhostRigger.Native.Core.Host.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m:1 /nr:false /v:m`; root `GhostRigger.exe` refreshed at `2026-06-24 11:45:32`.
+
+### [2026-06-24] Map Studio Selection Gimbal And Undo Shortcuts
+
+Owner: LordVaderCW
+Task: T2600 / T2908
+Subsystem: Map Studio viewport transform controls / Shared viewport input / Native payload packaging
+Intersects: Map Studio marking menus, terrain brush input delegation, selected primitive overlay, and root native host launch path.
+
+- Added visible Map Studio gimbal mode controls for Translate, Rotate, and Scale/Transform with Maya-style `W`, `E`, and `R` shortcuts.
+- Routed `Ctrl+Z` and `Ctrl+R` through Map Studio's authored command history so visible undo/redo restores durable KMAP state instead of only affecting viewport state.
+- Synced selected authored room primitives back into the embedded viewport transform overlay after creation, selection, refresh, undo, and redo so selecting an object immediately shows the correct gimbal target.
+- Extended the embedded viewport overlay so Translate draws axis handles, Rotate draws X/Y/Z rotation rings, and Scale draws center/corner scale handles while preserving the existing selection marker.
+- Added rotate and scale drag commits for authored room primitives through `set_authored_room_primitive_transform`, preserving command metadata, stale output tracking, and KMAP truth.
+- Follow-up: added Delete-key routing for the embedded Map Studio viewport so the selected authored primitive is removed through the same KMAP command-history path as the visible Delete tool, including stale MDL/MDX/WOK/LYT/VIS/PTH/.mod tracking and undo restoration.
+- Regenerated affected `GhostRigger.Core.Tools` and `GhostRigger.Core.GUI.Display` native Python payloads. Debug MSBuild rebuilt the native packages but could not refresh the repository-root `GhostRigger.exe` while the already-running root app process held the exe/runtime files open.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\event_navigation.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\overlay_layers.py tests\test_map_studio_level_editor_identity.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_gimbal_modes_and_undo_redo_shortcuts_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_delete_key_removes_selected_authored_primitive_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_gimbal_rotate_and_scale_commit_authored_kmap_runtime tests\test_map_studio_workflow_panel.py::test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_marking_menus_route_modes_and_tools_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_viewport_right_click_marking_menu_requests_split_by_shift_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_visible_tool_belt_buttons_mutate_kmap_state_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_visible_undo_redo_actions_restore_authored_kmap_state_runtime tests\test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt tests\test_map_studio_workflow_panel.py::test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python scripts\native_python_payload_generator.py GhostRigger.Core.GUI.Display`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; Debug MSBuild of `GhostRigger.Native.Core.Host` reached native/package rebuilds but failed during post-build root/runtime copy with files in use by the running root `GhostRigger.exe`.
+
+### [2026-06-24] Map Studio RMB Marking Menus Reach Embedded Viewport Surface
+
+Owner: LordVaderCW
+Task: T2600 / T2908
+Subsystem: Map Studio viewport interaction / Shared viewport navigation / Native payload packaging
+Intersects: Map Studio marking menus, terrain brush input, and the shared main-viewport mesh context menu path.
+
+- Fixed the manual-test failure where right-click and Shift + right-click inside the Map Studio viewport did not show the marking menus because the embedded shared viewport could receive and consume RMB events before the Map Studio panel filter.
+- Added a Map Studio input delegate on the embedded viewport so RMB marking menus and terrain brush Alt + RMB option drags route through Map Studio before generic mesh context or navigation handling.
+- Expanded Map Studio viewport event filtering across the embedded viewport tree and active renderer surface so surface replacement or input-bridge reinstall order cannot hide the marking-menu route.
+- Added runtime coverage that invokes the embedded viewport's own event filter directly, verifies plain RMB and Shift + RMB emit the correct marking-menu requests, and fails if the generic mesh context menu receives those Map Studio RMB events.
+- Regenerated affected `GhostRigger.Core.GUI.Display` and `GhostRigger.Core.Tools` native Python payloads, rebuilt the Debug native host, and smoke-launched the repository-root `GhostRigger.exe`.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\event_navigation.py tests\test_map_studio_level_editor_identity.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_marking_menus_route_modes_and_tools_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_viewport_right_click_marking_menu_requests_split_by_shift_runtime tests\test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt tests\test_map_studio_workflow_panel.py::test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.GUI.Display`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; Debug MSBuild of `GhostRigger.Native.Core.Host`; root `GhostRigger.exe` launch smoke stayed running for 12 seconds and closed with exit code 0.
+
+### [2026-06-24] Map Studio Viewport Marking Menus
+
+Owner: LordVaderCW
+Task: T2600 / T2908
+Subsystem: Map Studio modeling UI / Viewport interaction / Native payload packaging
+Intersects: Existing Map Studio terrain brush RMB option drag, tool belt routing, and root native host launch path.
+
+- Added a Maya-style right-click viewport marking menu for `Object`, `Vertex`, `Edge`, `Face`, and `Select` so mode switching stays close to the authored geometry.
+- Added a Shift + right-click Map Studio tools marking menu with radial quick picks for Extrude, Bridge, Cut/Multi-Cut, Weld/Merge, Fill Hole, and Bevel/Inset, plus polygon, boolean, terrain brush, UV/mapping, and planned/missing tool groups.
+- Routed marking-menu actions through the existing Map Studio tool action catalog so active mode/tool state stays synchronized with the Builder, toolbar, KMAP authoring context, readiness, undo, and stale export/proof tracking paths already used by visible controls.
+- Surfaced planned-but-important Maya/KOTOR map-building tools in the menu as disabled placeholders: Append Polygon/Draw Face, Offset Edge Loop, Loop/Ring Select, Terrain Mask/Surface Paint, UV Project/Box Map, and Flatten to Selection/Align to Plane.
+- Regenerated affected `GhostRigger.Core.Tools` and `GhostRigger.Core.GUI.Display` native Python payloads and rebuilt the Debug native host so the repository-root `GhostRigger.exe` contains the updated Map Studio UI.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py tests\test_map_studio_level_editor_identity.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_marking_menus_route_modes_and_tools_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_viewport_right_click_marking_menu_requests_split_by_shift_runtime tests\test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt tests\test_map_studio_workflow_panel.py::test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python scripts\native_python_payload_generator.py GhostRigger.Core.GUI.Display`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; Debug MSBuild of `GhostRigger.Native.Core.Host`; root `GhostRigger.exe` launch smoke stayed running for 12 seconds and closed with exit code 0.
+
+### [2026-06-24] Map Studio Terrain Brush Captures Viewport Drags
+
+Owner: LordVaderCW
+Task: T2600 / T2603
+Subsystem: Map Studio terrain sculpting / Viewport interaction / Native payload packaging
+Intersects: Existing Map Studio terrain brush, viewport marquee selection, and native Debug root executable launch path.
+
+- Updated the Map Studio viewport panel so active Terrain Brush mode consumes left mouse presses/drags before the generic viewport marquee selection path can create a selection rectangle.
+- Added Photoshop-style `Alt` + right mouse drag brush options: horizontal drag changes brush radius/size and vertical drag changes hardness, mapped to the existing terrain strength control.
+- Synced viewport brush option changes back into the visible Builder radius and strength controls and refreshed the brush context used by live terrain sculpt frames.
+- Added brush hardness to the viewport brush context/cursor label while preserving dirty-region live sculpt behavior and deferred full MDL/WOK rebuild policy.
+- Regenerated affected `GhostRigger.Core.Tools` and `GhostRigger.Core.GUI.Display` native Python payloads and rebuilt the Debug native host so the root executable path launches with the updated payload DLLs.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\overlay_layers.py tests\test_map_studio_level_editor_identity.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_viewport_terrain_brush_drag_paints_instead_of_marquee_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_viewport_terrain_brush_alt_right_drag_changes_size_and_hardness_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_terrain_brush_shelf_persists_kmap_metadata_runtime -q`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python scripts\native_python_payload_generator.py GhostRigger.Core.GUI.Display`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; Debug MSBuild of `GhostRigger.Native.Core.Host`; root `GhostRigger.exe` launch smoke stayed running for 10 seconds and closed normally.
+
+### [2026-06-24] Map Studio Viewport Layout And Indexed LYT Picker
+
+Owner: LordVaderCW
+Task: T2600 / Map Studio visible authoring workflow
+Subsystem: Map Studio UI / LYT resource loading / Embedded viewport / Native payload packaging
+Intersects: Existing Map Studio modeling belt, authored room workflow, and native Debug root executable launch path.
+
+- Replaced the Map Studio `Load LYT` room action's raw Explorer picker with an in-app indexed LYT resource chooser populated from configured K1/K2 game resource managers.
+- Added service support for loading LYT text/bytes directly from indexed game resources so selected `.lyt` files import into durable KMAP room state through the same authored layout path.
+- Removed the nested scroll wrapper around the Map Studio viewport, hid duplicate embedded viewport tool chrome, suppressed live renderer diagnostics in the embedded Map Studio viewport, and tightened fixed panel heights so the editor is less cramped while still expanding the viewport in normal use.
+- Added runtime coverage proving the indexed LYT picker does not call `QFileDialog`, lists K1/K2 resources, imports rooms into the active KMAP project, and keeps the Map Studio launch/tool belt route visible and usable.
+- Regenerated affected native Python payloads and rebuilt the Debug native host so the refreshed `GhostRigger.exe` is copied to the repository root.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\module_editor_viewport_panel.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\rendering_pipeline.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_layout_service.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_layout_service.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python scripts\native_python_payload_generator.py GhostRigger.Core.GUI.Display`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Scene`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; Debug MSBuild of `GhostRigger.Core.GUI.Display`, `GhostRigger.Core.Scene`, `GhostRigger.Core.Tools`, and `GhostRigger.Native.Core.Host`; root `GhostRigger.exe` launch smoke stayed running for 10 seconds and closed normally.
+
+### [2026-06-24] GUI Toolbars Generate Fallback Icons For Missing Packaged Assets
+
+Owner: LordVaderCW
+Task: Main viewport / Map Studio toolbar launch readiness
+Subsystem: GUI Display icon loading / Viewport toolbar / Native payload packaging
+Intersects: Map Studio visible modeling belt and root native host proof launch path.
+
+- Added generated non-null fallback icons to the theme icon manager, Qt asset helpers, main-window chrome icon path, and viewport toolbar icon helpers so icon-only buttons no longer render as blank squares when packaged SVG/PNG assets are missing.
+- Covered command strip, menu buttons, viewport display controls, navigation profile buttons, and label-based action icon helpers with the fallback path.
+- Added a real main-window regression that fails if icon-only command or viewport controls hide their text while still carrying a null icon.
+- Regenerated the `GhostRigger.Core.GUI.Display` native Python payload metadata and rebuilt the native Debug host so the refreshed GUI Display DLL and root executable sidecars are current.
+- Verification: `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\libtheme\icon_manager.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\shared\icons.py native\GhostRigger.Core.GUI.Display\Python\src\gui\assets\qt_icon_manager.py native\GhostRigger.Core.GUI.Display\Python\src\gui\assets\qt_theme.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\window_chrome.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_joint_dot_overlay.py::test_viewport_toolbar_primary_controls_are_icon_only tests\test_joint_dot_overlay.py::test_viewport_toolbar_render_buttons_and_navigation_are_branded -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.GUI.Display`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; `MSBuild.exe native\GhostRigger.Native.Core.Host\GhostRigger.Native.Core.Host.vcxproj /m /p:Configuration=Debug /p:Platform=x64 /v:minimal`; root `GhostRigger.exe` launch smoke stayed running for 12 seconds.
+
+### [2026-06-24] Root Native Host Launch Includes Sidecars And Python 3.13 2DA Typing Fix
+
+Owner: LordVaderCW
+Task: Build hygiene / native host launch readiness
+Subsystem: Native host launcher / Resource type annotations / Root executable sidecars
+Intersects: Map Studio manual proof launch path and native payload packaging.
+
+- Updated the native host post-build copy so root `GhostRigger.exe` is accompanied by `main.py`, `python313.dll`, and `python3.dll`, matching the sidecars required by the native bootstrap.
+- Ignored the generated root native-host sidecars so the repo root can remain an easy launch location without trying to track build products.
+- Fixed the package-local Python 3.13 startup crash from `Optional['2DA']` by changing the invalid forward reference to `Optional['TwoDA']` in the Resources and Tools payload copies.
+- Regenerated affected native payload manifests/resources for `GhostRigger.Core.Resources` and `GhostRigger.Core.Tools`.
+- Verification: `python -m py_compile native\GhostRigger.Core.Resources\Python\src\core\game\game_library_ext.py native\GhostRigger.Core.Tools\Python\src\core\game\game_library_ext.py`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Resources`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `MSBuild.exe native\GhostRigger.Native.Core.Host\GhostRigger.Native.Core.Host.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:BuildProjectReferences=false /m`; full referenced Debug host build with `MSBuild.exe native\GhostRigger.Native.Core.Host\GhostRigger.Native.Core.Host.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`; root `GhostRigger.exe` launch smokes stayed running for 20 seconds and then 15 seconds after the full build, with logs reaching Qt launcher, renderer initialization, theme/layout apply, resource indexing, and IPC server startup.
+
+### [2026-06-24] Build Outputs Land Root Executables And Cleanup Old Build Folders
+
+Owner: LordVaderCW
+Task: Build hygiene / native host packaging
+Subsystem: Build wrapper / PyInstaller spec / Native host Visual Studio output
+Intersects: Existing Map Studio native-host worktree changes and generated build-output cleanup.
+
+- Updated `build.bat` to use the tracked native host entry point, compile current native payload paths, and copy `dist\GhostRigger-K1-K2.exe` to `GhostRigger-K1-K2.exe` in the repository root after every PyInstaller build.
+- Updated the PyInstaller spec to discover native `Python\src` payload roots so the hybrid native/Python source layout is available during packaging.
+- Updated the native host Visual Studio post-build event to copy `GhostRigger.exe` to the repository root after Debug or Release builds from either solution or direct project builds, and ignored the generated root `GhostRigger.exe`.
+- Cleaned generated build outputs by removing root/native build directories, stale nested executable outputs, `__pycache__` folders, and temporary Codex root screenshots; then rebuilt the native Debug host so the repository root has a fresh `GhostRigger.exe`.
+- Verification: `python -m py_compile native\GhostRigger.Native.Core.Host\main.py native\GhostRigger.Core.Workflow\Python\src\core\retargeting\fbx_backend.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\qt_main_window.py`; Python syntax compile of `GhostRigger-K1-K2.spec`; XML parse/root-copy assertion for `native\GhostRigger.Native.Core.Host\GhostRigger.Native.Core.Host.vcxproj`; `MSBuild.exe native\GhostRigger.Native.Core.Host\GhostRigger.Native.Core.Host.vcxproj /p:Configuration=Debug /p:Platform=x64 /m`; `MSBuild.exe native\GhostRigger.Native.Core.Host\GhostRigger.Native.Core.Host.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:BuildProjectReferences=false /m`; executable scan confirmed the refreshed root `GhostRigger.exe`.
+
+## 2026-06-23
+
+### [2026-06-23] Map Studio Visible Stage Verifies Material UV Manifest Evidence
+
+Owner: LordVaderCW
+Task: T2600 / T2643 / T2910
+Subsystem: Map Studio / Visible staged export / Material and UV manifest evidence
+Intersects: Map Studio visible authoring loop coverage and authored-module export manifest validation.
+
+- Strengthened the visible Floor -> Paint WOK -> Paint Material -> Validate -> Stage runtime workflow so it now reads the staged pack manifest and verifies authored `material_uv` evidence.
+- The regression proves the UI-authored texture, WOK surface id/name, room mesh role, UV coordinate space, UV completeness, vertex/UV counts, and face count reach the package manifest and survive saved/reopened KMAP readiness checks.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_map_studio_controls_stage_export_candidate_runtime -q`; `python -m pytest tests\test_authored_module_export.py::test_t2643_exports_kmap_authored_module_package tests\test_map_studio_level_editor_identity.py::test_t2600_visible_map_studio_controls_stage_export_candidate_runtime -q`.
+
+### [2026-06-23] Map Studio Visible Validate Reports Open WOK Edge Warnings
+
+Owner: LordVaderCW
+Task: T2600 / T2911
+Subsystem: Map Studio / Visible validation panel / WOK topology readiness
+Intersects: Map Studio validation completion evidence and visible workflow coverage.
+
+- Extended the visible Map Studio Validate-table runtime regression so it now proves open/boundary WOK edge warnings are shown alongside invalid, degenerate, and non-manifold WOK topology rows.
+- The regression verifies the visible row uses `MAP_STUDIO_WOK_OPEN_EDGE_WARNING`, Warning severity, the open/boundary walkable-edge message, and the intentional room-perimeter/doorway/transition-boundary fix guidance.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_validate_table_reports_wok_topology_blockers_runtime -q`; `python -m pytest tests\test_authored_module_validation_projection.py::test_t2911_open_wok_edges_project_specific_validation_rows tests\test_map_studio_level_editor_identity.py::test_t2600_visible_validate_table_reports_wok_topology_blockers_runtime -q`.
+
+### [2026-06-23] Map Studio Visible Split Tool Commits KMAP Room Ownership
+
+Owner: LordVaderCW
+Task: T2600 / T2606 / T2910
+Subsystem: Map Studio / Visible component modeling tools / KMAP room ownership
+Intersects: Map Studio Level Editor visible modeling completion and native payload packaging.
+
+- Added `Split` as a first-class visible Map Studio tool-belt action instead of relying on `Cut` to imply split behavior.
+- Routed visible `Split` through the shared tool action dispatcher to the existing axis-split authored-room command so it creates durable KMAP room ownership pieces, undo metadata, and stale MDL/MDX/WOK/LYT/VIS/PTH/.mod state.
+- Added `Split` to the main viewport Modeling belt and the Map Studio default/component tool-belt presets, then strengthened runtime coverage to click the actual visible `Split` button and verify authored KMAP state changes.
+- Regenerated the affected native Python payload manifests/resources for `GhostRigger.Core.Tools`, `GhostRigger.Core.Scene`, and `GhostRigger.Core.GUI.Display`.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\window_chrome.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\construction.py tests\test_map_studio_level_editor_identity.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher tests\test_map_studio_level_editor_identity.py::test_t2600_visible_component_modeling_buttons_mutate_floor_plan_kmap_state_runtime -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`.
+
+### [2026-06-23] Map Studio Opener Import Fallback And Visible Modeling Belt Height
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Main viewport command strip / Native GUI payload
+Intersects: Follow-up to the Map Studio opener/tool-belt visibility repair in the active modeling-completion work.
+
+- Removed the eager main-window Map Studio import and added a resilient opener import helper that tries the canonical `src.gui.windows.module_editor_window` route before the legacy `src.gui.qt_lib.windows.module_editor_window` alias.
+- Forced viewport-owned Map Studio Modeling/Blockout tabs to keep a stable visible height when transferred into the main reserved top toolbar, and fixed the reserved toolbar/shell height to include both the default viewport row and the modeling tab strip.
+- Strengthened the runtime Qt regression so it proves the visible top toolbar reserves combined height for the default viewport row plus the Modeling tabs before clicking the actual Map Studio command-strip icon.
+- Regenerated the affected native Python payload manifests/resources for `GhostRigger.Core.GUI.Display` and `GhostRigger.Core.Tools`.
+- Verification: `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\resource_panels.py native\GhostRigger.Core.Tools\Python\src\gui\windows\application_core\shared\resource_panels.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\qt_main_window.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\window_chrome.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\construction.py`; `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_module_editor_icon_opens_map_studio_level_editor tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_icon_reopens_after_close_or_deleted_reference_runtime -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`.
+
+### [2026-06-23] Map Studio Visible Terrain Brush Shelf Persists KMAP Sculpt State
+
+Owner: LordVaderCW
+Task: T2600 / T2603 / T2606 / T2910
+Subsystem: Map Studio / Visible terrain sculpting / KMAP heightfield metadata
+Intersects: Map Studio Level Editor visible terrain workflow coverage and the active modeling-completion work.
+
+- Added a runtime Qt regression that creates a terrain patch through the visible `Terrain Patch` tool, then clicks the visible terrain shelf buttons for Noise, Terrace, Plateau, Flatten, Lower, Smooth, Erode, Ramp, Slope, Pinch, and Erase.
+- The regression verifies each visible brush records durable KMAP `terrain_brush_stroke` metadata, dirty-region scope, slope/performance facts, undo labels, stale MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs, export-boundary/readiness metadata, and saved/reopened `.kmap` persistence.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_terrain_brush_shelf_persists_kmap_metadata_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_terrain_patch_and_sculpt_buttons_mutate_kmap_state_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_visible_terrain_brush_shelf_persists_kmap_metadata_runtime tests\test_authored_room_operations.py::test_t2603_controller_applies_terrace_and_noise_terrain_brushes tests\test_authored_room_operations.py::test_t2603_controller_applies_plateau_ramp_pinch_and_erode_terrain_brushes tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q`.
+
+### [2026-06-23] Map Studio Icon Opens And Modeling Belt Stays Visible
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Main viewport command strip / Modeling tool belt
+Intersects: Map Studio Level Editor opener, visible top-toolbar modeling tabs, and native payload packaging.
+
+- Gave the main command-strip Map Studio icon a stable `CommandStripMapStudioButton` identity and updated the visible runtime regression to click that actual icon instead of triggering the action indirectly.
+- Kept the main viewport Map Studio Modeling/Blockout tabs visible and sized the reserved top toolbar to include them, preventing the modeling belt from being clipped underneath the default viewport toolbar.
+- Hardened the Map Studio opener in GUI Display and Tools payload copies so lazy import/construction failures are logged and shown as a Map Studio error dialog instead of making the click appear dead.
+- Regenerated the affected native Python payload manifests/resources for `GhostRigger.Core.GUI.Display` and `GhostRigger.Core.Tools`.
+- Verification: `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\window_chrome.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\resource_panels.py native\GhostRigger.Core.Tools\Python\src\gui\windows\application_core\shared\resource_panels.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_module_editor_icon_opens_map_studio_level_editor tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_icon_reopens_after_close_or_deleted_reference_runtime -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`.
+
+### [2026-06-23] Map Studio Visible Object Vertex Snap Persists KMAP Primitive Placement
+
+Owner: LordVaderCW
+Task: T2600 / T2606 / T2910
+Subsystem: Map Studio / Visible object snapping / KMAP primitive placement
+Intersects: Map Studio Level Editor visible snap workflow coverage and the active modeling-completion work.
+
+- Added a runtime Qt regression that clicks the actual `Cube` and `Obj V Snap` tool-belt buttons, moves the target primitive through visible transform controls, and lets the core snap path choose the nearest target primitive vertex.
+- The regression verifies object-space primitive translation, target primitive/vertex metadata, authored-room composition coordinate-space metadata, undo/stale MDL/MDX/WOK/LYT/VIS/PTH/.mod tracking, and saved/reopened `.kmap` persistence.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_object_vertex_snap_moves_primitive_and_persists_kmap_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_object_vertex_snap_moves_primitive_and_persists_kmap_runtime tests\test_map_studio_tool_action_dispatch.py::test_t2606_object_vertex_snap_moves_primitive_pivot_to_target_vertex tests\test_map_studio_tool_action_dispatch.py::test_t2606_object_vertex_snap_auto_selects_nearest_target_vertex tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context -q`.
+
+### [2026-06-23] Map Studio Visible Combine And Separate Persist KMAP Boundaries
+
+Owner: LordVaderCW
+Task: T2600 / T2606 / T2910
+Subsystem: Map Studio / Visible object modeling tools / KMAP room and object boundaries
+Intersects: Map Studio Level Editor visible workflow coverage and the active modeling-completion work.
+
+- Added a runtime Qt regression that clicks the actual `Create Room`, `Cut`, `Combine`, `Blockout Room`, and `Separate` Map Studio tool-belt buttons.
+- The regression verifies visible Combine merges compatible floor-plan rooms into one authored KMAP export boundary, visible Separate splits a selected composition primitive into its own authored room/object boundary, and both commands record undo metadata, stale MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs, and saved/reopened `.kmap` persistence.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_combine_and_separate_buttons_persist_kmap_boundaries_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_combine_and_separate_buttons_persist_kmap_boundaries_runtime tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context -q`.
+
+### [2026-06-23] Map Studio Visible Level Snap Persists KMAP Vertex Metadata
+
+Owner: LordVaderCW
+Task: T2600 / T2605 / T2606 / T2910
+Subsystem: Map Studio / Visible vertex modeling tools / KMAP transform snap metadata
+Intersects: Map Studio Level Editor visible snap/weld workflow coverage and the active modeling-completion work.
+
+- Extended the visible snap/weld runtime workflow to click the actual `Level Snap` tool-belt button using the floor-plan vertex controls.
+- The regression verifies authored KMAP `transform_snap_floor_plan_vertices` metadata, target-point policy, walkmesh/edit audit state, stale MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs, undo labeling, and saved/reopened `.kmap` persistence.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_snap_and_weld_buttons_persist_floor_plan_kmap_state_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_snap_and_weld_buttons_persist_floor_plan_kmap_state_runtime tests\test_authored_room_operations.py::test_t2606_controller_transform_level_snap_records_distinct_kmap_metadata tests\test_component_editing.py::test_t2605_transform_snap_level_aligns_vertices_to_target_axis tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context -q`.
+
+### [2026-06-23] Map Studio Visible Duplicate Special And Edge Normals Persist KMAP Metadata
+
+Owner: LordVaderCW
+Task: T2600 / T2606 / T2910
+Subsystem: Map Studio / Visible modeling actions / KMAP object metadata
+Intersects: Map Studio Level Editor visible workflow coverage and the active modeling-completion work.
+
+- Added a runtime Qt regression that clicks the visible `Cube`, `Duplicate Special`, `Soften`, and `Harden` tool-belt buttons from Map Studio.
+- The regression proves Duplicate Special parameters from visible spin boxes create durable authored primitive copies, records undo/stale MDL/MDX/WOK/LYT/VIS/PTH/.mod metadata, records soft/hard visual edge-normal intent, feeds export-boundary metadata, and persists through saved/reopened `.kmap`.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_duplicate_special_and_edge_normals_persist_kmap_metadata_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_duplicate_special_and_edge_normals_persist_kmap_metadata_runtime tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests\test_map_studio_tool_action_dispatch.py::test_t2606_edge_normal_policy_validates_floor_plan_edge_indices tests\test_map_studio_tool_action_dispatch.py::test_t2606_edge_normal_policy_validates_composition_primitive_edges -q`.
+
+### [2026-06-23] Map Studio Visible Walkmesh Tab Persists Room WOK Intent
+
+Owner: LordVaderCW
+Task: T2600 / T2910
+Subsystem: Map Studio / Visible Walkmesh workflow / KMAP WOK surface intent
+Intersects: Map Studio Level Editor visible workflow coverage and the active modeling-completion work.
+
+- Added a runtime Qt regression that creates and stages an authored floor, opens the visible `Open Walkmesh Tools` workflow path, changes the room WOK surface through the visible Walkmesh tab controls, and verifies the authored KMAP state records `WATER` surface intent.
+- The regression verifies undo metadata, generated-resource stale outputs, export/proof invalidation, status feedback, and save/open persistence of the Walkmesh tab surface assignment.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_walkmesh_tab_assigns_room_wok_surface_and_persists_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_icon_reopens_after_close_or_deleted_reference_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_main_viewport_mode_buttons_route_map_studio_workspaces_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_visible_walkmesh_tab_assigns_room_wok_surface_and_persists_runtime -q`.
+
+### [2026-06-23] Map Studio Visible Proof Dialog Writes Durable KMAP Game Proof
+
+Owner: LordVaderCW
+Task: T2600 / T2658 / T2910
+Subsystem: Map Studio / Visible game-proof workflow / KMAP proof metadata
+Intersects: Map Studio Level Editor proof UI, Tools and Scene controller payloads, and the active modeling-completion work.
+
+- Added stable object names to the Map Studio game-proof dialog and its button box so the visible proof recording flow can be tested as UI, not only as controller calls.
+- Added a runtime Qt regression that stages an authored package through the visible package wizard, clicks the visible `Record Proof` workflow button, fills the proof dialog, and verifies KMAP `game_tested`, evidence path, readiness, proof manifest, and durable `in_game_proof` metadata are updated.
+- Fixed the controller proof-recording copy-back so the richer `in_game_proof` object from the authored pack manifest is persisted into the active KMAP payload after accepted proof.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py tests\test_map_studio_level_editor_identity.py tests\test_map_studio_game_proof_ui.py`; `python -m pytest tests\test_map_studio_game_proof_ui.py::test_t2658_module_editor_has_in_app_game_proof_dialog_and_recorder tests\test_map_studio_level_editor_identity.py::test_t2600_visible_record_proof_dialog_updates_kmap_game_test_state_runtime tests\test_map_studio_game_proof_ui.py::test_t2658_controller_records_authored_game_proof_and_updates_kmap_readiness -q`; targeted MSBuild Debug rebuilds for `GhostRigger.Core.Tools` and `GhostRigger.Core.Scene` with repository `SolutionDir`.
+
+### [2026-06-23] Map Studio Visible Undo Redo Restores Authored KMAP State
+
+Owner: LordVaderCW
+Task: T2600 / T2606 / T2910
+Subsystem: Map Studio / Visible undo-redo workflow / KMAP command history
+Intersects: Map Studio Level Editor visible workflow coverage and the active modeling-completion work.
+
+- Added a runtime Qt regression that clicks the visible `Floor` modeling tool, triggers the actual Map Studio `Undo` QAction, verifies the authored floor primitive is removed from KMAP state, then triggers `Redo` and verifies the primitive returns.
+- The regression verifies visible Undo/Redo enablement, labels, status messages, and restored authored KMAP state, tying the visible UI controls to the shared command-history spine.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_undo_redo_actions_restore_authored_kmap_state_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_undo_redo_actions_restore_authored_kmap_state_runtime tests\test_map_studio_command_history.py::test_t2606_command_history_restores_serialized_kmap_project_state tests\test_map_studio_command_history.py::test_t2606_floor_plan_vertex_move_is_undoable_through_controller tests\test_map_studio_command_history.py::test_t2606_level_editor_wires_undo_redo_actions_to_map_studio_command_spine -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_visible_tool_belt_buttons_mutate_kmap_state_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_visible_undo_redo_actions_restore_authored_kmap_state_runtime -q`.
+
+### [2026-06-23] Map Studio Visible Select Persists Active KMAP Selection
+
+Owner: LordVaderCW
+Task: T2600 / T2910
+Subsystem: Map Studio / Visible modeling actions / KMAP selection persistence
+Intersects: Map Studio Level Editor visible workflow coverage and the active modeling-completion work.
+
+- Extended the visible Save/Open workflow to click the actual Map Studio `Select` tool-belt button and verify the active room/primitive selection is written to `map_studio_active_selection`.
+- The regression proves Select records undo metadata without marking generated MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs stale, then saves and reopens the `.kmap` to prove the selection context persists for later modeling actions.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_file_actions_save_open_kmap_and_keep_tool_belt_usable_runtime -q`.
+
+### [2026-06-23] Map Studio Viewport Modeling Belt Scrolls And Stage Evidence Round-Trips
+
+Owner: LordVaderCW
+Task: T2600 / T2910 / T2912
+Subsystem: Map Studio / Main viewport modeling toolbar / Export candidate KMAP persistence
+Intersects: Main viewport Map Studio tool-belt controls and the active modeling-completion work.
+
+- Wrapped the main viewport `Modeling` and `Blockout` tab contents in horizontal scroll areas so the top Map Studio tool belt remains usable on narrower viewport widths instead of clipping tools off-screen.
+- Extended the visible export-candidate runtime path so Floor, WOK, Material, Validate, Stage, Save As, Open, and readiness checks prove package/proof manifest evidence persists through a saved/reopened `.kmap`.
+- Verification: `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\construction.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\window_chrome.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_module_editor_icon_opens_map_studio_level_editor tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_main_viewport_mode_buttons_route_map_studio_workspaces_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_map_studio_controls_stage_export_candidate_runtime -q`; targeted MSBuild Debug rebuild for `GhostRigger.Core.GUI.Display` with repository `SolutionDir`.
+
+### [2026-06-23] Map Studio Main Icon Reopens Level Editor And Preserves Modeling Belt
+
+Owner: LordVaderCW
+Task: T2600 / T2910
+Subsystem: Map Studio / Main viewport modeling toolbar / Native Debug payload
+Intersects: Main viewport Map Studio tool-belt controls and the active modeling-completion work.
+
+- Hardened the main-shell Map Studio opener so stale/deleted Qt window references are discarded before the Level Editor is reopened from the menu/icon.
+- Added a runtime Qt regression that opens Map Studio from the real main-window action, closes it, reopens it, simulates a deleted stale reference, and verifies a fresh visible Level Editor with the `mapStudioToolBeltTabs` still appears.
+- Corrected authored-room composition metadata so `walkmesh_primitive_count` counts child WOK-producing blockout primitives while the base room floor remains tracked separately.
+- Verification: `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\resource_panels.py native\GhostRigger.Core.Tools\Python\src\gui\windows\application_core\shared\resource_panels.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_composition.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_composition.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_icon_reopens_after_close_or_deleted_reference_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_main_viewport_mode_buttons_route_map_studio_workspaces_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_visible_file_actions_save_open_kmap_and_keep_tool_belt_usable_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_file_actions_save_open_kmap_and_keep_tool_belt_usable_runtime tests\test_authored_module_kmap_bridge.py::test_t2667_kmap_round_trips_composition_room_primitives -q`; targeted MSBuild Debug rebuilds for `GhostRigger.Core.GUI.Display`, `GhostRigger.Core.Tools`, and `GhostRigger.Core.Scene` with repository `SolutionDir`.
+
+### [2026-06-23] Map Studio Viewport Mode Buttons Route To Authoring Workspaces
+
+Owner: LordVaderCW
+Task: T2600 / T2910
+Subsystem: Map Studio / Main viewport modeling toolbar / Mode routing
+Intersects: Main viewport Map Studio tool-belt controls and the active modeling-completion work.
+
+- Added a runtime Qt regression that clicks the actual main viewport Map Studio mode buttons for Object, Vertex, Edge, Face, Terrain, and Walkmesh.
+- The test verifies each button opens the Map Studio Level Editor and routes to the expected tool-belt preset, workspace, component mode, modeling tool, workflow tab, and status message instead of merely existing in the toolbar.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_main_viewport_mode_buttons_route_map_studio_workspaces_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_main_viewport_mode_buttons_route_map_studio_workspaces_runtime -q`.
+
+### [2026-06-23] Map Studio Visible Validate Displays WOK Topology Blockers
+
+Owner: LordVaderCW
+Task: T2600 / T2910 / T2912
+Subsystem: Map Studio / Visible validation / Generated WOK topology readiness
+Intersects: Map Studio Level Editor visible workflow coverage and the active modeling-completion work.
+
+- Added a runtime Qt regression that clicks the visible `Validate` tool-belt button and verifies the Map Studio validation table displays generated-WOK topology blockers for invalid triangle indices, degenerate WOK triangles, and non-manifold walkable edges.
+- The test keeps the window/button/table path real while using a controlled readiness result for intentionally corrupt generated-WOK facts, so modders get visible repair guidance without requiring UI steps that author invalid runtime topology.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_validate_table_reports_wok_topology_blockers_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_validate_table_reports_wok_topology_blockers_runtime tests\test_authored_module_validation_projection.py::test_t2911_wok_topology_blockers_project_specific_validation_rows -q`.
+
+### [2026-06-23] Map Studio Visible Validate Reports Steep Terrain Slopes
+
+Owner: LordVaderCW
+Task: T2600 / T2907 / T2910 / T2912
+Subsystem: Map Studio / Visible terrain validation / WOK slope readiness
+Intersects: Map Studio Level Editor visible workflow coverage and the active modeling-completion work.
+
+- Added a runtime Qt regression that creates a terrain patch through the visible Terrain preset, applies a steep raise brush stroke, and clicks the visible `Validate` tool-belt button.
+- The regression verifies the authored KMAP terrain slope report, non-walk steep triangle intent, validation-table warning text, and saved/reopened `.kmap` persistence of steep terrain slope warnings before export/proof.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_validate_reports_steep_terrain_slope_warning_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_validate_reports_steep_terrain_slope_warning_runtime tests\test_authored_module_validation_projection.py::test_t2911_bad_walkable_wok_slope_projects_specific_validation_row tests\test_authored_module_readiness.py::test_t2911_readiness_metadata_reports_steep_walkable_wok_slope -q`.
+
+### [2026-06-23] Map Studio Visible Normal Cleanup Reports And Repairs Bad Winding
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910 / T2912
+Subsystem: Map Studio / Visible face tools / KMAP winding validation
+Intersects: Map Studio Level Editor visible workflow coverage and the active modeling-completion work.
+
+- Added a runtime Qt regression that clicks the actual `Reverse Normals` and `Cleanup Normals` Map Studio tool-belt buttons against an authored floor-plan room.
+- The regression verifies reverse normals persist negative-Z winding intent, validation reports `MAP_STUDIO_FLOOR_PLAN_BAD_WINDING`, cleanup normals repairs the warning, KMAP room/primitive metadata persists positive-Z normal cleanup, and stale MDL/MDX/WOK/LYT/VIS/PTH/.mod undo metadata is recorded.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_normals_tools_report_and_repair_bad_winding_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_normals_tools_report_and_repair_bad_winding_runtime tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q`.
+
+### [2026-06-23] Map Studio Visible Validate Reports Unwalkable Player Starts
+
+Owner: LordVaderCW
+Task: T2600 / T2910 / T2912
+Subsystem: Map Studio / Visible validation / IFO player start pathing readiness
+Intersects: Map Studio Level Editor visible workflow coverage and the active modeling-completion work.
+
+- Added a runtime Qt regression that uses the visible Gameplay Layout preset, clicks the actual `Entry Point` tool-belt button to move the authored player start outside generated walkable WOK, then clicks visible `Validate`.
+- The regression verifies authored entry point KMAP state, undo/stale output metadata, validation-table error presentation, `MAP_STUDIO_PLAYER_START_NOT_WALKABLE` projection, and saved/reopened `.kmap` persistence of the invalid player start.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_validate_reports_unwalkable_player_start_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_validate_reports_unwalkable_player_start_runtime tests\test_authored_module_validation_projection.py::test_t2911_player_start_off_walkmesh_projects_specific_validation_row -q`.
+
+### [2026-06-23] Map Studio Visible Doorway Transition Authoring Persists And Validates
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910 / T2912
+Subsystem: Map Studio / Visible doorway tools / KMAP transition validation
+Intersects: Map Studio Level Editor visible workflow coverage and the active modeling-completion work.
+
+- Added a runtime Qt regression that clicks the actual Map Studio tool-belt `Opening` and `Opening Marker` buttons and verifies doorway opening plus KOTOR trigger transition intent are written into authored KMAP state.
+- The regression checks undo/stale output metadata, trigger template/tag/link/TransitionDestin fields, saved/reopened `.kmap` persistence, and validation reporting `MAP_STUDIO_TRANSITION_WOK_SURFACE_BLOCKER` when a linked transition exists without a DOOR/transition WOK surface.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_opening_and_transition_marker_persist_kmap_and_validate_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_opening_and_transition_marker_persist_kmap_and_validate_runtime tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q`.
+
+### [2026-06-23] Map Studio Visible Snap And Weld Buttons Persist KMAP State
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Visible vertex modeling tools / KMAP floor-plan authoring
+Intersects: Map Studio Level Editor visible workflow coverage and the active modeling-completion work.
+
+- Added a runtime Qt regression that clicks the actual Map Studio tool-belt `Vertex Snap`, `Grid Snap`, `Weld`, and `Merge Components` buttons and verifies they author durable floor-plan KMAP state.
+- The test covers cross-room vertex snap after a visible split, grid snapping selected floor-plan vertices, topology-changing weld and merge-alias behavior, undo labels, stale MDL/MDX/WOK/LYT/VIS/PTH/.mod metadata, walkmesh review audit state, and saved/reopened `.kmap` persistence.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_snap_and_weld_buttons_persist_floor_plan_kmap_state_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_snap_and_weld_buttons_persist_floor_plan_kmap_state_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_visible_component_modeling_buttons_mutate_floor_plan_kmap_state_runtime tests\test_map_studio_tool_action_dispatch.py::test_t2606_object_vertex_snap_moves_primitive_pivot_to_target_vertex tests\test_map_studio_tool_action_dispatch.py::test_t2606_object_vertex_snap_auto_selects_nearest_target_vertex -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_snap_and_weld_buttons_persist_floor_plan_kmap_state_runtime tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context -q`.
+
+### [2026-06-23] Map Studio Visible Pivot And Freeze Commands Preserve Geometry
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Visible object modeling tools / KMAP transform authoring
+Intersects: Tools Map Studio Level Editor selection routing, native Tools payload, and the active modeling-completion work.
+
+- Made newly added visible primitive actions select the created authored primitive after refresh, so immediate object-space commands target the new cube/wall/ramp/etc. instead of the starter floor.
+- Added a runtime Qt regression that uses visible controls to add cubes, apply transforms, click the actual `Center Pivot` and `Freeze` tool-belt buttons, and verify bounds remain stable while authored KMAP pivot/transform/parametric primitive state changes.
+- The regression also saves/reopens the `.kmap` to prove centered pivot and frozen transform state persist with stale MDL/MDX/WOK/LYT/VIS/PTH/.mod undo metadata.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_center_pivot_and_freeze_update_kmap_without_moving_bounds_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_center_pivot_and_freeze_update_kmap_without_moving_bounds_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_visible_required_blockout_buttons_create_distinct_kmap_primitives_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_visible_tool_belt_buttons_mutate_kmap_state_runtime -q`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_center_pivot_preserves_visible_primitive_bounds tests\test_map_studio_tool_action_dispatch.py::test_t2606_freeze_transform_bakes_supported_primitive_without_moving_geometry tests\test_map_studio_tool_action_dispatch.py::test_t2606_object_vertex_snap_moves_primitive_pivot_to_target_vertex -q`; regenerated native Python payload for `GhostRigger.Core.Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; rebuilt Debug `GhostRigger.Core.Tools.vcxproj`.
+
+### [2026-06-23] Map Studio Blockout Buttons Create Distinct KMAP Primitives
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Visible blockout tools / KMAP primitive authoring
+Intersects: Tools Map Studio Level Editor context routing, native Tools payload, and the active modeling-completion work.
+
+- Fixed direct visible blockout buttons so `Wall`, `Cube`, `Ramp`, `Stairs`, `Doorway`, and `Arch` use their stable tool-belt action key instead of inheriting the currently selected Builder primitive kind.
+- Added a runtime Qt regression that clicks the actual visible blockout buttons, verifies each required primitive type creates distinct authored KMAP state, checks walkmesh-capable intent for floor/ramp/stairs, verifies undo/stale MDL/MDX/WOK/LYT/VIS/PTH/.mod metadata, and saves/reopens the `.kmap`.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_required_blockout_buttons_create_distinct_kmap_primitives_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_required_blockout_buttons_create_distinct_kmap_primitives_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_visible_tool_belt_buttons_mutate_kmap_state_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_main_screen_map_studio_action_opens_window_and_tool_belt_runtime -q`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q`; regenerated native Python payload for `GhostRigger.Core.Tools`; rebuilt Debug `GhostRigger.Core.Tools.vcxproj`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`.
+
+### [2026-06-23] Map Studio Visible WOK Surface Vocabulary Persists To KMAP
+
+Owner: LordVaderCW
+Task: T2600 / T2911 / T2912
+Subsystem: Map Studio / Visible WOK authoring / KMAP persistence
+Intersects: Map Studio Level Editor visible workflow coverage and the active modeling-completion work.
+
+- Added a runtime Qt regression that creates a visible authored floor, selects each required WOK surface meaning from the actual `primitiveSurfaceComboBox`, clicks the visible `WOK` tool-belt button, and verifies authored KMAP state after every paint.
+- The visible workflow now proves walkable, non-walk, door/transition, water, grass, metal, and visual-only surface intent persists into the floor primitive, material metadata, undo history, stale MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs, and saved/reopened `.kmap` data.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2911_visible_wok_surface_combo_paints_required_kotor_intent_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2911_visible_wok_surface_combo_paints_required_kotor_intent_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_main_screen_map_studio_action_opens_window_and_tool_belt_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime -q`; `python -m pytest tests\test_authored_walkmesh_surfaces.py -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`.
+
+### [2026-06-23] Map Studio Opener And Modeling Belt Rebuilt Into Debug Host
+
+Owner: LordVaderCW
+Task: T2600 / T2910
+Subsystem: Map Studio / Main-screen opener / Native Debug host payload
+Intersects: GUI Display and Tools payloads for the active Map Studio modeling-completion work.
+
+- Regenerated the `GhostRigger.Core.GUI.Display` and `GhostRigger.Core.Tools` embedded Python payloads so the Map Studio icon action, viewport Modeling/Blockout tabs, and Level Editor tool belt are present in the native Debug app, not just source-runtime tests.
+- Rebuilt `GhostRigger.Core.GUI.Display.dll`, `GhostRigger.Core.Tools.dll`, and the Debug host executable at `native\GhostRigger.Native.Core.Host\build\vs\x64\Debug\GhostRigger.exe`.
+- Verification: `python scripts\native_python_payload_generator.py GhostRigger.Core.GUI.Display`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `MSBuild native\GhostRigger.Core.GUI.Display\GhostRigger.Core.GUI.Display.vcxproj /p:Configuration=Debug /p:Platform=x64 /m /v:minimal`; `MSBuild native\GhostRigger.Core.Tools\GhostRigger.Core.Tools.vcxproj /p:Configuration=Debug /p:Platform=x64 /m /v:minimal`; `MSBuild native\GhostRigger.Native.Core.Host\GhostRigger.Native.Core.Host.vcxproj /p:Configuration=Debug /p:Platform=x64 /m /v:minimal`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_main_screen_map_studio_action_opens_window_and_tool_belt_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`.
+
+### [2026-06-23] Map Studio Validate Reports Stale Package And Proof After Modeling Edits
+
+Owner: LordVaderCW
+Task: T2600 / T2910 / T2912
+Subsystem: Map Studio / Validation / Export proof stale tracking
+Intersects: Scene and Tools Module Editor controller payloads, Map Studio validation UI, and the active Map Studio modeling-completion work.
+
+- Made central Map Studio command recording preserve prior staged package/proof manifest evidence and write `export_proof_invalidation` when a mutating KMAP command runs after staging.
+- The stale marker records invalidated MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs, readiness impact, latest command summary, and the required regenerate/reinstall/re-proof next action.
+- Added a visible runtime regression that stages a package through the Package Wizard, moves the authored floor through visible controls, clicks Validate, and verifies the validation table reports `MAP_STUDIO_EXPORT_PROOF_STALE` with fresh in-game proof guidance.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_validate_reports_stale_package_after_modeling_edit_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_validate_reports_stale_package_after_modeling_edit_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_visible_map_studio_controls_stage_export_candidate_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_visible_component_modeling_buttons_mutate_floor_plan_kmap_state_runtime -q`; `python -m pytest tests\test_authored_module_validation_projection.py::test_t2912_stale_package_and_proof_state_projects_validation_row tests\test_authored_module_validation_projection.py::test_t2600_staged_export_candidate_has_package_manifest_evidence tests\test_authored_module_validation_projection.py::test_t2600_export_candidate_requires_game_proof_in_validation_rows -q`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; rebuilt Debug projects `GhostRigger.Core.Scene.vcxproj` and `GhostRigger.Core.Tools.vcxproj`.
+
+### [2026-06-23] Map Studio Terrain Patch And Sculpt Buttons Prove Durable KMAP Heightfields
+
+Owner: LordVaderCW
+Task: T2600 / T2907 / T2908 / T2910
+Subsystem: Map Studio / Level Editor tool belt / Terrain authoring
+Intersects: Map Studio visible runtime coverage and the active Map Studio modeling-completion work.
+
+- Added a runtime Qt regression that switches to the visible `Terrain` tool-belt preset, clicks the actual `Terrain` patch button, then clicks the visible `Raise` sculpt button.
+- The test verifies authored KMAP terrain heightfield state, GRASS WOK surface intent, terrain brush dirty-region metadata, slope/walkability report, performance budget metadata, undo label, and stale MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_terrain_patch_and_sculpt_buttons_mutate_kmap_state_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_terrain_patch_and_sculpt_buttons_mutate_kmap_state_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_visible_component_modeling_buttons_mutate_floor_plan_kmap_state_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_main_screen_map_studio_action_opens_window_and_tool_belt_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime -q`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`.
+
+### [2026-06-23] Map Studio Bridge Button Creates Connector KMAP Room After Visible Cut
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Level Editor tool belt / Floor-plan bridge modeling
+Intersects: Tools and GUI Display Builder tab payloads and the active Map Studio modeling-completion work.
+
+- Added a bridge-edge default selection so the visible `Create Room` -> `Cut` -> `Bridge` path targets different compatible edges instead of attempting edge `0` to edge `0` and producing a degenerate connector.
+- Extended the visible component modeling runtime regression to click the actual `Bridge` tool-belt button after a visible split and verify the authored connector room, bridge metadata, walkmesh review audit, undo label, and stale MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs.
+- Regenerated native Python payloads for `GhostRigger.Core.Tools` and `GhostRigger.Core.GUI.Display`.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\builder_tab.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_component_modeling_buttons_mutate_floor_plan_kmap_state_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_main_screen_map_studio_action_opens_window_and_tool_belt_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime -q`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests\test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; rebuilt Debug projects `GhostRigger.Core.Tools.vcxproj` and `GhostRigger.Core.GUI.Display.vcxproj`.
+
+### [2026-06-23] Map Studio Visible Component Modeling Buttons Commit KMAP Edits
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Level Editor tool belt / Floor-plan component modeling
+Intersects: Tools and GUI Display Builder tab payloads and the active Map Studio modeling-completion work.
+
+- Changed the default selected floor-plan points from `0,1` to `0,2` so clicking visible `Flatten` on a fresh room creates a valid authored KMAP footprint instead of collapsing an edge.
+- Added a runtime Qt regression that clicks the actual visible `Flatten`, `Cleanup`, `Triangulate`, `Extrude`, `Bevel`, and `Cut` buttons from a fresh room and verifies authored KMAP metadata, undo labels, room split output, and stale export outputs where applicable.
+- Regenerated native Python payloads for `GhostRigger.Core.Tools` and `GhostRigger.Core.GUI.Display`.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\builder_tab.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_component_modeling_buttons_mutate_floor_plan_kmap_state_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_component_modeling_buttons_mutate_floor_plan_kmap_state_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_visible_tool_belt_buttons_mutate_kmap_state_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_visible_inset_button_edits_floor_plan_kmap_state_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_main_screen_map_studio_action_opens_window_and_tool_belt_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime -q`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests\test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; rebuilt Debug projects `GhostRigger.Core.Tools.vcxproj` and `GhostRigger.Core.GUI.Display.vcxproj`.
+
+### [2026-06-23] Map Studio Floor Move And Snap Persist Authored KMAP Transforms
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Authored room composition / Visible tool-belt commands
+Intersects: Scene and Tools authored-room composition, KMAP bridge, walkmesh/status overlays, and the active Map Studio modeling-completion work.
+
+- Made the composition starter floor transformable as durable authored KMAP state while preserving it as a protected base floor for Delete.
+- Updated render geometry, generated WOK, outline overlays, material/WOK style status, and KMAP save/load serialization to unwrap placed floor intent correctly.
+- Added dispatcher and runtime Qt regressions proving visible `Move` and `Object Grid Snap` buttons can move the starter floor, persist `floor.transform`, preserve undo/stale-output metadata, and keep duplicate/delete selection behavior working.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_composition.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_outline_geometry.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_walkmesh_status.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_style.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_composition.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_outline_geometry.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_walkmesh_status.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_style.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_object_move_and_grid_snap_preserve_authored_floor_transform tests\test_map_studio_tool_action_dispatch.py::test_t2606_object_grid_snap_moves_primitive_pivot_to_grid tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_visible_tool_belt_buttons_mutate_kmap_state_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_main_screen_map_studio_action_opens_window_and_tool_belt_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_main_viewport_floor_blockout_button_creates_authored_kmap_state_runtime -q`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; rebuilt Debug projects `GhostRigger.Core.Scene.vcxproj` and `GhostRigger.Core.Tools.vcxproj`.
+
+### [2026-06-23] Map Studio Visible Inset Button Executes KMAP Component Edit
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Level Editor tool belt / Component modeling commands
+Intersects: Tools Map Studio Level Editor window and the active Map Studio modeling-completion work.
+
+- Routed the visible `Inset` tool-belt button through the direct Map Studio dispatcher instead of falling through to a Builder-focus-only path.
+- Added a runtime Qt regression that clicks `Create Room`, then the actual `Inset` button, and verifies authored KMAP floor-plan state changes, undo metadata records `Inset grdev01_room01`, and stale MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs are tracked.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_inset_button_edits_floor_plan_kmap_state_runtime tests\test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q`; regenerated native Python payloads for `GhostRigger.Core.Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; rebuilt Debug target `GhostRigger_Core_Tools`.
+
+### [2026-06-23] Map Studio Visible Controls Stage Export Candidate Evidence
+
+Owner: LordVaderCW
+Task: T2600 / T2910 / T2912
+Subsystem: Map Studio / Level Editor package workflow / Runtime UI coverage
+Intersects: Map Studio Level Editor runtime tests and the active Map Studio modeling-completion work.
+
+- Added a runtime Qt workflow regression that uses visible Map Studio controls to create a floor, assign WOK/material intent, run Validate, switch to the Export tool belt preset, open the Package Wizard, review resource/proof tables, and Stage Package.
+- The test verifies the visible stage path writes pack manifest and proof manifest paths plus package resource inventory/readback evidence back into authored KMAP state.
+- The test now proves the UI click-through path can promote a small authored map to `export_candidate` readiness with generated LYT/VIS/PTH/WOK package evidence instead of relying only on backend dispatcher calls.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_visible_map_studio_controls_stage_export_candidate_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_visible_tool_belt_buttons_mutate_kmap_state_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_main_screen_map_studio_action_opens_window_and_tool_belt_runtime -q`.
+
+### [2026-06-23] Map Studio Validation Names Degenerate Authored Faces
+
+Owner: LordVaderCW
+Task: T2600 / T2911 / T2912
+Subsystem: Map Studio / Validation / Geometry readiness
+Intersects: Scene and Tools authored-module validation projection mirrors and the active Map Studio modeling-completion work.
+
+- Promoted degenerate or zero-area authored floor-plan face blockers into a dedicated `MAP_STUDIO_DEGENERATE_FACE` validation row instead of leaving them as generic geometry/readiness blocker text.
+- Added a KOTOR-safe fix hint that points modders to Cleanup, Weld/Merge, Split, or Triangulate before MDL/WOK generation.
+- Suppressed duplicate generic geometry/readiness rows for the same degenerate authored-face message, matching the existing named WOK topology validation behavior.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_validation_projection.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_validation_projection.py tests\test_authored_module_validation_projection.py`; `python -m pytest tests\test_authored_module_validation_projection.py::test_t2911_degenerate_authored_faces_project_specific_validation_row tests\test_authored_module_validation_projection.py::test_t2911_wok_topology_blockers_project_specific_validation_rows tests\test_authored_module_validation_projection.py::test_t2911_floor_plan_geometry_warnings_project_specific_validation_rows tests\test_authored_module_validation_projection.py::test_t2911_player_start_off_walkmesh_projects_specific_validation_row tests\test_authored_module_validation_projection.py::test_t2912_stale_package_and_proof_state_projects_validation_row tests\test_authored_module_validation_projection.py::test_t2911_doorway_transition_intent_projects_specific_validation_row -q`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; rebuilt Debug targets `GhostRigger_Core_Scene` and `GhostRigger_Core_Tools`.
+
+### [2026-06-23] Map Studio Visible Belt Commands Route To Authored KMAP State
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Level Editor tool belt / KMAP command routing
+Intersects: Tools Map Studio Level Editor window and the active Map Studio modeling-completion work.
+
+- Routed Select, Move, Duplicate, Delete, object snap, pivot/freeze, Material, and WOK visible Map Studio tool-belt buttons through the direct dispatcher path so clicks execute authored KMAP commands instead of falling back to focus/no-op behavior.
+- After a visible Duplicate command, the Builder primitive selector now follows the newly-created authored duplicate so the next visible Delete command removes that duplicate rather than targeting the protected starter floor.
+- Added a runtime Qt regression that clicks the actual Map Studio Floor, Material, WOK, Duplicate, and Delete buttons and verifies durable KMAP primitive state, undo labels, and stale MDL/MDX/WOK/LYT/VIS/PTH/.mod metadata.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_level_editor_window_is_branded_as_map_studio_without_new_surface tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_visible_tool_belt_buttons_mutate_kmap_state_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_main_screen_map_studio_action_opens_window_and_tool_belt_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_main_viewport_floor_blockout_button_creates_authored_kmap_state_runtime -q`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q`; regenerated native Python payloads for `GhostRigger.Core.Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; rebuilt Debug target `GhostRigger_Core_Tools`; launched `build\vs\x64\Debug\GhostRigger.exe` and captured the live main viewport with the Modeling/Blockout belt visible.
+
+### [2026-06-23] Map Studio Opens In A Bounded Scrollable Window
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Level Editor shell / Tool-belt layout
+Intersects: Tools Map Studio Level Editor window and the active Map Studio modeling-completion work.
+
+- Wrapped the Map Studio top toolbar, default/custom tool belts, workflow tab stack, viewport pane, and right inspector stack in the existing theme-aware overflow/scroll containers so dense modeling controls stay reachable without forcing the standalone editor to an offscreen-sized minimum window.
+- Preserved existing Map Studio button/widget object names and command wiring while adding stable scroll-area object names for regression coverage.
+- Added runtime assertions that the Map Studio opener exposes the scrollable tool belts and keeps the Level Editor minimum size bounded, so clicking the main Modules/Map Studio icon cannot appear to do nothing because the editor inflated far beyond the desktop.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_main_screen_map_studio_action_opens_window_and_tool_belt_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime -q`; regenerated native Python payloads for `GhostRigger.Core.Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; rebuilt solution-level Debug target `GhostRigger_Core_Tools`; live-launched `build\vs\x64\Debug\GhostRigger.exe`, clicked the toolbar Modules/Map Studio icon, and confirmed `GhostRigger Map Studio - Level Editor - new_level` opened at `1666 x 959` with the modeling tool belt visible.
+
+### [2026-06-23] Map Studio Modes Are Cataloged Tool-Belt Actions
+
+Owner: LordVaderCW
+Task: T2600 / T2904 / T2908 / T2910
+Subsystem: Map Studio / Tool-belt action catalog / Component mode workflow
+Intersects: Scene and Tools Map Studio modeling-tool catalog and dispatcher mirrors in the active Map Studio modeling-completion work.
+
+- Promoted Object, Vertex, Edge, and Face into stable Map Studio tool-belt actions so visible mode buttons, command search, custom belts, context menus, and dispatcher metadata share the same action-key contract.
+- Added non-mutating focus routes for those mode actions with KOTOR-specific authoring context and snap-mode defaults, keeping stale KMAP/export/proof tracking on the committed modeling commands themselves.
+- Updated focused regression coverage so the tool contract audit reports 100 implemented actions with four workflow-focus mode actions, no blockers, and visible Map Studio belt buttons for Object/Vertex/Edge/Face.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_map_studio_tool_action_dispatch.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context -q`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; rebuilt solution-level Debug targets `GhostRigger_Core_Scene` and `GhostRigger_Core_Tools`; verified the rebuilt Debug DLLs contain the new Object/Vertex/Edge/Face mode route strings.
+
+### [2026-06-23] Map Studio Viewport Blockout Belt Exposes Floor Primitive
+
+Owner: LordVaderCW
+Task: T2600 / T2904 / T2908 / T2910
+Subsystem: Map Studio / Main viewport modeling belt / KMAP blockout authoring
+Intersects: GUI Display viewport construction and main-window chrome mirrors in the active Map Studio modeling-completion work.
+
+- Split the main viewport Blockout belt's starter-room action from the actual floor primitive by labeling `blockout_room` as `Room` and adding a separate `floor` button.
+- Added runtime coverage proving the main viewport shows all Object, Vertex, Edge, Face, Terrain, and Walkmesh mode buttons, shows the full blockout set including Floor, and opens Map Studio with the core modeling command belt visible.
+- Added a real Qt runtime click test proving the main-viewport Floor button opens Map Studio, creates walkmesh-capable authored KMAP floor state, marks the project dirty, records undo metadata, and stales MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs.
+- Verification: `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\construction.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\window_chrome.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_module_editor_icon_opens_map_studio_level_editor tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_main_viewport_floor_blockout_button_creates_authored_kmap_state_runtime -q`; regenerated native Python payloads for `GhostRigger.Core.GUI.Display`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; rebuilt solution-level Debug target `GhostRigger_Core_GUI_Display` with Visual Studio MSBuild; verified the rebuilt `GhostRigger.Core.GUI.Display.dll` contains the new authored floor primitive tooltip.
+
+### [2026-06-23] Map Studio WOK Paint Exposes Required Surface Intent
+
+Owner: LordVaderCW
+Task: T2600 / T2910 / T2911 / T2912
+Subsystem: Map Studio / Walkmesh authoring / WOK surface paint
+Intersects: Scene and Tools walkmesh-surface policy mirrors and the active Map Studio modeling-completion work in the dirty tree.
+
+- Added explicit modder-facing WOK authoring names for `visual_only` and `door_transition` while preserving KOTOR numeric surface IDs and raw WOK surface names for export.
+- Added the `door_transition` alias so visible WOK paint accepts the exact door/transition wording used by the Map Studio workflow.
+- Added focused regression coverage proving visible `paint_wok` round-trips walkable, non-walk, door transition, water, grass, metal, and visual-only surface intent into durable authored KMAP state, clears runtime proof/package evidence, and records stale MDL/MDX/WOK/LYT/VIS/PTH/.mod undo metadata.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_walkmesh_surfaces.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_walkmesh_surfaces.py tests\test_authored_walkmesh_surfaces.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_authored_walkmesh_surfaces.py::test_t2604_walkmesh_surface_palette_resolves_modder_names tests\test_map_studio_tool_action_dispatch.py::test_t2911_visible_paint_wok_round_trips_required_surface_intent -q`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; rebuilt solution-level Debug targets `GhostRigger_Core_Scene` and `GhostRigger_Core_Tools` with Visual Studio MSBuild.
+
+### [2026-06-23] Map Studio Main Shell Loads Rebuilt Modeling Belt
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Main-shell launcher / Viewport modeling belt
+Intersects: GUI Display viewport chrome and active Map Studio modeling-completion work in the dirty tree.
+
+- Rebuilt the `GhostRigger.Core.GUI.Display` Debug payload so `build\vs\x64\Debug\GhostRigger.exe` loads the Map Studio opener and viewport Modeling/Blockout tabs that were already present in source but missing from the older DLL.
+- Added a real `QtGhostRiggerMainWindow` runtime regression that verifies the main viewport exposes the `ViewportToolbarMapStudioModelingButton`, `ViewportToolbarMapStudioModelingTabs`, Object/Walkmesh mode buttons, Terrain blockout button, and opens the Map Studio Level Editor with `terrain_patch` and `paint_material` tool-belt buttons.
+- Verification: `python -m py_compile tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_main_screen_map_studio_action_opens_window_and_tool_belt_runtime tests\test_map_studio_level_editor_identity.py::test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime -q`; regenerated native Python payloads for `GhostRigger.Core.GUI.Display`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; rebuilt solution-level Debug target `GhostRigger_Core_GUI_Display`; offscreen real-main-window probe confirmed the Map Studio action opens a visible Level Editor with `mapStudioToolBeltTabs`.
+
+### [2026-06-23] Map Studio Validation Names Bad Floor-Plan Winding
+
+Owner: LordVaderCW
+Task: T2600 / T2911 / T2912
+Subsystem: Map Studio / Validation / Geometry readiness
+Intersects: Scene and Tools authored-module validation projection mirrors and the active Map Studio modeling-completion work in the dirty tree.
+
+- Promoted clockwise floor-plan winding from a generic authored geometry warning into `MAP_STUDIO_FLOOR_PLAN_BAD_WINDING`.
+- Added a specific fix hint that names Cleanup Face Normals or Reverse Normals and ties the correction to generated room geometry plus WOK winding.
+- Prevented duplicate generic readiness warnings when the same floor-plan winding issue is already projected as the Map Studio-specific validation row.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_validation_projection.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_validation_projection.py tests\test_authored_module_validation_projection.py`; `python -m pytest tests\test_authored_module_validation_projection.py::test_t2911_floor_plan_geometry_warnings_project_specific_validation_rows tests\test_authored_module_validation_projection.py::test_t2911_wok_topology_blockers_project_specific_validation_rows tests\test_authored_module_validation_projection.py::test_t2912_stale_package_and_proof_state_projects_validation_row tests\test_authored_module_validation_projection.py::test_t2911_bad_walkable_wok_slope_projects_specific_validation_row -q`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; rebuilt solution-level Debug targets `GhostRigger_Core_Scene` and `GhostRigger_Core_Tools` with Visual Studio MSBuild.
+
+### [2026-06-23] Map Studio Opener Has Runtime Tool-Belt Guard
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Main-screen opener / Default modeling tool belt
+Intersects: Scene and Tools Map Studio tool-belt policy mirrors and the active Map Studio modeling-completion work in the dirty tree.
+
+- Added a runtime Qt regression that triggers the same main-screen Map Studio action used by the Module/Map Studio icon, opens the real Map Studio Level Editor window offscreen, and asserts the window is visible with the default tool-belt widgets present.
+- Promoted `terrain_patch`, `paint_wok`, and `paint_material` into the default Blockout tool-belt preset so the first visible Map Studio workflow includes terrain patch blockout plus WOK/material assignment without requiring the user to hunt through another preset.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py -q`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context -q`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; rebuilt solution-level Debug targets `GhostRigger_Core_Scene` and `GhostRigger_Core_Tools` with Visual Studio MSBuild.
+
+### [2026-06-23] Map Studio Starter Floor Reaches Export Candidate
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910 / T2911 / T2912
+Subsystem: Map Studio / Starter room authoring / Export candidate workflow
+Intersects: Scene and Tools authored-room presets, composition primitive operations, tool-belt dispatch, and the active Map Studio modeling-completion work in the dirty tree.
+
+- Added an export-safe `composition_starter_room` preset for visible starter blockout/floor actions, keeping the elevation showcase preset available for ramp/stair tests without making the default floor workflow fail WOK island validation.
+- Made the composition base floor a selectable/styleable primitive row so visible Floor, Material, WOK, dimensions, and Universal Transform queries can address the actual room floor without creating a duplicate walkmesh surface.
+- Routed empty-project primitive bootstrapping and the visible `Blockout > Floor` action through the export-safe starter preset, then allowed base-floor duplicate operations to create placed floor copies instead of throwing when the base floor is selected.
+- Added an end-to-end visible-action contract test for fresh KMAP state: Floor bootstrap, WOK surface paint, material paint, entry point, validation, staging/package manifest evidence, generated runtime resources, WOK/PTH/LYT/VIS readiness, and export-candidate readiness.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_presets.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_operations.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_presets.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2910_select_and_move_are_first_class_dispatcher_commands tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests\test_map_studio_tool_action_dispatch.py::test_t2600_visible_authoring_loop_from_floor_to_export_candidate tests\test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_module_editor_icon_opens_map_studio_level_editor -q`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; rebuilt solution-level Debug targets `GhostRigger_Core_Scene` and `GhostRigger_Core_Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; Map Studio tool-belt audit reports 96/96 implemented and command-backed actions with no blockers; launched `build\vs\x64\Debug\GhostRigger.exe` from rebuilt output and captured the real main window with `PrintWindow`.
+
+### [2026-06-23] Map Studio Primitive Buttons Bootstrap Authored KMAP Rooms
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Modeling tool belt / Starter room authoring
+Intersects: Scene and Tools Map Studio command dispatch/controller mirrors and the active Map Studio modeling-completion work in the dirty tree.
+
+- Made visible primitive/blockout actions such as `Floor`, `Wall`, `Cube`, `Ramp`, `Stairs`, `Doorway`, and `Arch` usable from a fresh Map Studio project by auto-creating an editable composition starter room when no authored KMAP module exists yet.
+- Kept the bootstrap inside the shared controller command path so toolbar, menu, command-search, and custom tool-belt execution all create durable authored KMAP state, record undo metadata, and mark MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs stale.
+- Added focused regression coverage proving a first `Floor` action creates an authored module, appends a walkmesh-capable primitive, records stale export/proof state, and undo restores the previously empty KMAP state.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_module_editor_icon_opens_map_studio_level_editor -q`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; rebuilt solution-level Debug targets `GhostRigger_Core_Scene` and `GhostRigger_Core_Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; Map Studio tool-belt audit reports 96/96 implemented and command-backed actions with no blockers; launched `build\vs\x64\Debug\GhostRigger.exe` and captured the actual Debug window with `PrintWindow`, confirming the main viewport shows the `Modeling` and `Blockout` tabs plus Object/Vertex/Edge/Face/Terrain/Walkmesh modes, primitive actions, `Material`, and `WOK`.
+
+### [2026-06-23] Map Studio Exposes Durable Material And WOK Paint Actions
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Modeling tool belt / Material and WOK authoring
+Intersects: Scene, Tools, and GUI Display Map Studio tool-belt policy mirrors and the active Map Studio modeling-completion work in the dirty tree.
+
+- Added `paint_material` as a first-class Map Studio tool-belt action that writes KOTOR texture/material intent into durable KMAP room or primitive state.
+- Routed material painting through existing controller commands with undo metadata and stale MDL/MDX/WOK/LYT/VIS/PTH/.mod tracking, while requiring current WOK surface metadata for room-level edits so material changes do not silently alter traversal intent.
+- Added visible `Material` and `WOK` buttons to the main viewport Map Studio Modeling tab in both toolbar construction paths.
+- Fed `paint_material` dispatcher context from the visible room/primitive texture fields and current surface combo data.
+- Tightened cramped viewport-belt labels (`Dupe`, `Triang.`) so the Debug app can show all modeling commands, `Material`, `WOK`, `Pivot`, and `Freeze` without hiding the newly added actions behind elided text.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_contract_audit.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_contract_audit.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\window_chrome.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\construction.py tests\test_map_studio_tool_action_dispatch.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests\test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher tests\test_map_studio_level_editor_identity.py::test_t2600_module_editor_icon_opens_map_studio_level_editor -q`; regenerated native Python payloads for `GhostRigger.Core.Scene`, `GhostRigger.Core.Tools`, and `GhostRigger.Core.GUI.Display`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; rebuilt Debug `GhostRigger.Core.Scene.dll`, `GhostRigger.Core.Tools.dll`, and `GhostRigger.Core.GUI.Display.dll` both through direct project builds and solution-level targets `GhostRigger_Core_Scene`, `GhostRigger_Core_Tools`, and `GhostRigger_Core_GUI_Display` so `build\vs\x64\Debug\GhostRigger.exe` loads the fresh payload DLLs; captured the Debug app main window with `PrintWindow` and confirmed the main viewport shows the `Modeling` tab, Object/Vertex/Edge/Face/Terrain/Walkmesh modes, durable modeling actions, and visible `Material` / `WOK` buttons.
+
+### [2026-06-23] Map Studio Adds First-Class Floor Primitive Action
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Modeling tool belt / Primitive blockout actions
+Intersects: Scene and Tools Map Studio tool-belt policy mirrors and the active Map Studio modeling-completion work in the dirty tree.
+
+- Added `floor` as a stable Map Studio tool-belt action so command search and custom belts have an explicit floor primitive command instead of relying only on the lower-level `plane` key.
+- Routed `floor` through the existing authored room primitive command path, preserving durable KMAP state, undo history, walkmesh-surface support, and stale MDL/MDX/WOK/LYT/VIS/PTH/.mod tracking.
+- Kept the visible main-viewport `Floor` blockout button as the KOTOR-safe starter room action while making floor primitives available through the shared action catalog and presets.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests\test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher -q`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; rebuilt Debug `GhostRigger.Core.Scene.dll` and `GhostRigger.Core.Tools.dll`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`.
+
+### [2026-06-23] Map Studio Validation Tracks Package Manifest Evidence
+
+Owner: LordVaderCW
+Task: T2600 / T2911 / T2912
+Subsystem: Map Studio / Readiness / Package proof validation
+Intersects: Scene and Tools authored-module readiness/validation projection mirrors and the active Map Studio modeling-completion work in the dirty tree.
+
+- Added `package_manifest_evidence` readiness metadata so export-candidate authored modules distinguish generated runtime resources from staged package/proof evidence.
+- Projected missing pack manifest path, proof manifest path, package resource inventory, or readback proof into `MAP_STUDIO_PACKAGE_MANIFEST_EVIDENCE_MISSING` validation rows.
+- Kept staged candidates clean when Map Studio has current `.mod` pack manifest, proof manifest, and package resource readback inventory evidence.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_validation_projection.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_validation_projection.py`; `python -m pytest tests\test_authored_module_validation_projection.py::test_t2600_export_candidate_requires_game_proof_in_validation_rows tests\test_authored_module_validation_projection.py::test_t2600_staged_export_candidate_has_package_manifest_evidence tests\test_authored_module_export.py::test_t2644_controller_stages_current_authored_module tests\test_authored_module_readiness.py::test_t3104_readiness_metadata_keeps_package_resource_inventory -q`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; rebuilt Debug `GhostRigger.Core.Scene.dll` and `GhostRigger.Core.Tools.dll`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`.
+
+### [2026-06-23] Map Studio Validation Names Doorway Transition Intent Gaps
+
+Owner: LordVaderCW
+Task: T2600 / T2911 / T2912
+Subsystem: Map Studio / Validation / Doorway and transition readiness
+Intersects: Scene and Tools authored-module validation projection mirrors and the active Map Studio modeling-completion work in the dirty tree.
+
+- Projected doorway/opening transition readiness warnings into `MAP_STUDIO_DOORWAY_TRANSITION_INTENT_MISSING` validation rows.
+- The Validation tab now names openings that lack authored door, trigger, or waypoint transition markers instead of showing them only as generic readiness warnings.
+- Kept existing linked transition destination and WOK DOOR-surface validation rows separate so modders can distinguish missing intent, missing destination, and missing surface paint.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_validation_projection.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_validation_projection.py tests\test_authored_module_validation_projection.py`; `python -m pytest tests\test_authored_module_validation_projection.py::test_t2911_doorway_transition_intent_projects_specific_validation_row tests\test_authored_module_validation_projection.py::test_t2911_wok_topology_blockers_project_specific_validation_rows tests\test_authored_module_validation_projection.py::test_t2911_bad_walkable_wok_slope_projects_specific_validation_row tests\test_authored_module_validation_projection.py::test_t2911_player_start_off_walkmesh_projects_specific_validation_row tests\test_authored_module_validation_projection.py::test_t2912_stale_package_and_proof_state_projects_validation_row tests\test_authored_module_validation_projection.py::test_t2600_module_editor_controller_validate_includes_map_studio_readiness_issues -q`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests\test_map_studio_workflow_panel.py::test_t2600_map_studio_properties_exposes_transition_controls -q`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; rebuilt Debug `GhostRigger.Core.Scene.dll` and `GhostRigger.Core.Tools.dll`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`.
+
+### [2026-06-23] Map Studio Validation Names WOK Topology Blockers
+
+Owner: LordVaderCW
+Task: T2600 / T2911 / T2912
+Subsystem: Map Studio / Validation / WOK topology readiness
+Intersects: Scene and Tools authored-module validation projection mirrors and the active Map Studio modeling-completion work in the dirty tree.
+
+- Projected WOK audit blockers into named validation rows for invalid triangle vertex references, degenerate WOK triangles, and non-manifold walkable edges.
+- Added `MAP_STUDIO_WOK_INVALID_TRIANGLE`, `MAP_STUDIO_WOK_DEGENERATE_TRIANGLE`, and `MAP_STUDIO_WOK_NON_MANIFOLD_EDGE` so the Validation tab names topology failures instead of only showing generic readiness blockers.
+- Kept existing open-edge warnings and bad-slope rows separate, and suppressed duplicate generic readiness blocker rows for the same WOK topology messages.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_validation_projection.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_validation_projection.py tests\test_authored_module_validation_projection.py`; `python -m pytest tests\test_authored_module_validation_projection.py::test_t2911_wok_topology_blockers_project_specific_validation_rows tests\test_authored_module_validation_projection.py::test_t2911_bad_walkable_wok_slope_projects_specific_validation_row tests\test_authored_module_validation_projection.py::test_t2911_player_start_off_walkmesh_projects_specific_validation_row tests\test_authored_module_validation_projection.py::test_t2911_open_wok_edges_project_specific_validation_rows tests\test_authored_module_validation_projection.py::test_t2912_stale_package_and_proof_state_projects_validation_row -q`; `python -m pytest tests\test_authored_walkmesh_status.py::test_t2604_wok_audit_blocks_disconnected_walkable_islands tests\test_authored_walkmesh_status.py::test_t2911_wok_audit_blocks_steep_walkable_faces tests\test_authored_walkmesh_status.py::test_t2911_wok_audit_reports_open_boundary_edges_without_blocking -q`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; rebuilt Debug `GhostRigger.Core.Scene.dll` and `GhostRigger.Core.Tools.dll`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`.
+
+### [2026-06-23] Map Studio Validation Names Bad Walkable WOK Slopes
+
+Owner: LordVaderCW
+Task: T2600 / T2911 / T2912
+Subsystem: Map Studio / Validation / WOK slope readiness
+Intersects: Scene and Tools authored-module readiness/validation projection mirrors and the active Map Studio modeling-completion work in the dirty tree.
+
+- Promoted steep walkable WOK slope audit facts into authored-module readiness metadata: `steep_walkable_face_count`, `max_walkable_slope_degrees`, and `max_allowed_walkable_slope_degrees`.
+- Projected steep walkable WOK blockers into a dedicated `MAP_STUDIO_WOK_BAD_SLOPE` validation row with a KOTOR-safe fix hint to flatten terrain/ramp grades or paint steep faces non-walkable.
+- Suppressed duplicate generic readiness-blocker rows for the same steep-slope message so the Validation tab names the exact failure.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_validation_projection.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_validation_projection.py tests\test_authored_module_validation_projection.py tests\test_authored_module_readiness.py`; `python -m pytest tests\test_authored_module_validation_projection.py::test_t2911_bad_walkable_wok_slope_projects_specific_validation_row tests\test_authored_module_validation_projection.py::test_t2911_player_start_off_walkmesh_projects_specific_validation_row tests\test_authored_module_validation_projection.py::test_t2911_open_wok_edges_project_specific_validation_rows tests\test_authored_walkmesh_status.py::test_t2911_wok_audit_blocks_steep_walkable_faces tests\test_authored_module_readiness.py::test_t2911_readiness_metadata_reports_steep_walkable_wok_slope tests\test_authored_module_readiness.py::test_t2692_readiness_reports_full_map_studio_toolchain_scope -q`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; rebuilt Debug `GhostRigger.Core.Scene.dll` and `GhostRigger.Core.Tools.dll`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`.
+
+### [2026-06-23] Map Studio Validation Names Player Start Walkmesh Failures
+
+Owner: LordVaderCW
+Task: T2600 / T2911 / T2912
+Subsystem: Map Studio / Validation / PTH and WOK readiness
+Intersects: Scene and Tools authored-module validation projection mirrors and the active Map Studio modeling-completion work in the dirty tree.
+
+- Projected entry-point pathing blockers into a dedicated `MAP_STUDIO_PLAYER_START_NOT_WALKABLE` validation row instead of leaving the player start hidden inside generic PTH pathing errors.
+- The validation row uses existing readiness `blocking_targets` evidence so the suggested fix points the modder back to the module entry point controls and walkable WOK placement.
+- Kept the generic `MAP_STUDIO_PTH_PATHING_BLOCKER` rows for other doors, triggers, waypoints, placeables, and gameplay anchors while suppressing duplicate player-start rows.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_validation_projection.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_validation_projection.py tests\test_authored_module_validation_projection.py`; `python -m pytest tests\test_authored_module_validation_projection.py::test_t2911_player_start_off_walkmesh_projects_specific_validation_row tests\test_authored_module_validation_projection.py::test_t2911_open_wok_edges_project_specific_validation_rows tests\test_authored_module_validation_projection.py::test_t2912_stale_package_and_proof_state_projects_validation_row -q`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; rebuilt Debug `GhostRigger.Core.Scene.dll` and `GhostRigger.Core.Tools.dll`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`.
+
+### [2026-06-23] Map Studio Duplicate And Delete Use Visible Dispatcher Actions
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Main viewport Modeling belt / KMAP command routing
+Intersects: GUI Display main-window chrome, Scene and Tools Map Studio tool-belt policy mirrors, and the active Map Studio launch/modeling-belt work in the dirty tree.
+
+- Added first-class `duplicate_selected` and `delete_selected` actions to the Map Studio modeling/tool-belt catalogs and Blockout/Component presets so the visible top-viewport buttons resolve as durable Map Studio commands.
+- Routed `duplicate_selected` through `duplicate_authored_room_primitive` with the default viewport offset, preserving stable KMAP primitive state, undo metadata, and stale MDL/MDX/WOK/LYT/VIS/PTH/.mod proof tracking.
+- Routed `delete_selected` through `remove_authored_room_primitive`, keeping the existing undoable KMAP removal path instead of bypassing the shared dispatcher.
+- Updated the main viewport toolbar handler to execute `duplicate_selected` and `delete_selected` directly through the Map Studio dispatcher, while leaving `Duplicate Special` available for explicit repeated-offset batches.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\window_chrome.py tests\test_map_studio_tool_action_dispatch.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests\test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher tests\test_map_studio_level_editor_identity.py::test_t2600_module_editor_icon_opens_map_studio_level_editor -q`; regenerated native Python payloads for `GhostRigger.Core.Scene`, `GhostRigger.Core.Tools`, and `GhostRigger.Core.GUI.Display`; rebuilt Debug `GhostRigger.Core.Scene.dll`, `GhostRigger.Core.Tools.dll`, and `GhostRigger.Core.GUI.Display.dll`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; offscreen Qt main-window smoke with native package payload roots confirmed `_open_map_studio_modeling_workspace()` creates a visible `GhostRigger Map Studio - Level Editor - new_level` window and the main shell contains `Modeling` and `Blockout` tabs.
+
+### [2026-06-23] Map Studio Select And Move Are Dispatcher-Backed Commands
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Modeling tool belt / KMAP command routing
+Intersects: Scene and Tools Map Studio tool-belt policy mirrors, Tools Map Studio window routing, and the active Map Studio launch/modeling-belt work in the dirty tree.
+
+- Added first-class `select` and `move` actions to the Map Studio tool-belt catalog and built-in Blockout/Component presets so command search and custom belts expose the same basic actions as the main viewport Modeling belt.
+- Routed `select` through `set_map_studio_active_selection`, recording undoable KMAP selection metadata without staling generated MDL/MDX/WOK/PTH/LYT/VIS/package/proof resources.
+- Routed `move` through `move_authored_room_primitive` when a selected primitive and nonzero KMAP-world delta are present, preserving primitive identity while staling generated runtime/export/proof output.
+- Added `move_delta` to the shared tool action context and populated it from the visible Move X/Y/Z primitive controls in Map Studio.
+- Extended the tool-contract audit status with `stale_outputs` so the audit can prove non-staling selection versus staling geometry commands.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_contract_audit.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_contract_audit.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests\test_map_studio_tool_action_dispatch.py::test_t2910_select_and_move_are_first_class_dispatcher_commands -q`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; rebuilt Debug `GhostRigger.Core.Scene.dll` and `GhostRigger.Core.Tools.dll`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; verified rebuilt Debug DLLs contain `set_map_studio_active_selection`, `move_authored_room_primitive`, and `move_delta`.
+
+### [2026-06-23] Map Studio Reports Open WOK Edges And Visual-Only Surface Intent
+
+Owner: LordVaderCW
+Task: T2600 / T2911
+Subsystem: Map Studio / WOK validation / Walkmesh surface authoring
+Intersects: Scene and Tools authored walkmesh audit/status/readiness/validation mirrors and the active Map Studio modeling-belt work in the dirty tree.
+
+- Added explicit open/boundary walkable WOK edge counting to authored walkmesh audits, Walkmesh tab status, readiness room summaries, and readiness metadata.
+- Projected open WOK edge warnings into validation as `MAP_STUDIO_WOK_OPEN_EDGE_WARNING` so the validation table reports open edges separately from generic readiness warnings.
+- Added `visual_only` / `visual` / `render_only` authoring aliases for KOTOR surface `8 TRANSPARENT`, preserving visual-only WOK surface meaning without requiring modders to remember the numeric ID.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\modules\authored_walkmesh_audit.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_walkmesh_audit.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_walkmesh_status.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_walkmesh_status.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_walkmesh_surfaces.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_walkmesh_surfaces.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_validation_projection.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_validation_projection.py tests\test_authored_walkmesh_status.py tests\test_authored_room_style.py tests\test_authored_module_validation_projection.py`; `python -m pytest tests\test_authored_walkmesh_status.py::test_t2600_walkmesh_status_summarizes_flat_room_wok_intent tests\test_authored_walkmesh_status.py::test_t2911_wok_audit_reports_open_boundary_edges_without_blocking tests\test_authored_walkmesh_status.py::test_t2604_walkmesh_status_and_readiness_block_disconnected_composition_room tests\test_authored_room_style.py::test_t2911_room_style_accepts_visual_only_walkmesh_surface_alias tests\test_authored_module_validation_projection.py::test_t2911_open_wok_edges_project_specific_validation_rows -q`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; rebuilt Debug `GhostRigger.Core.Scene.dll` and `GhostRigger.Core.Tools.dll`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; verified rebuilt Debug DLLs contain `open/boundary walkable edge`, `visual_only`, and `MAP_STUDIO_WOK_OPEN_EDGE_WARNING`.
+
 ## 2026-06-22
+
+### [2026-06-22] Map Studio Toolbar Has Viewport-Owned Fallback
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Main viewport Modeling belt / Native host payload
+Intersects: GUI Display viewport construction and main-window chrome in the active Map Studio launch/modeling-belt work.
+
+- Added a viewport-owned `Modeling` / `Blockout` Map Studio tab strip directly under the default viewport toolbelt so the controls remain visible even if the main shell wrapper path is bypassed by an older/stale host surface.
+- Updated the main shell toolbar band to reparent that viewport-owned tab strip when the current shell path is active, avoiding duplicate tabs while keeping the fallback visible in the viewport path.
+- Rebuilt `GhostRigger.Core.GUI.Display.dll` for Debug and Release so the native executable payload includes `ViewportToolbarMapStudioModelingTabs`, `ViewportToolbarMapStudioBlockoutTab`, and the `Open Map Studio Level Editor` action wiring.
+- Verification: `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\construction.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\window_chrome.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_module_editor_icon_opens_map_studio_level_editor -q`; offscreen Qt construction with all native package source roots confirmed exactly one visible `ViewportToolbarMapStudioModelingTabs` in `ViewportToolbarBand`, tabs `Modeling` and `Blockout`, Object/Vertex/Edge/Face/Terrain/Walkmesh mode buttons, Floor/Wall/Cube/Ramp/Stairs/Doorway/Arch/Terrain blockout buttons, and `modules_action.trigger()` opened a visible `GhostRigger Map Studio - Level Editor - new_level` window; regenerated native Python payload for `GhostRigger.Core.GUI.Display`; rebuilt Debug and Release `GhostRigger.Core.GUI.Display.dll`; confirmed both rebuilt DLLs contain the Map Studio toolbar/action strings; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; Debug build-entrypoint offscreen probe through `build\vs\x64\Debug\main.py` confirmed visible `Modeling`/`Blockout` tabs and Map Studio launch. Release build-entrypoint probe was blocked before Map Studio by an unrelated existing extracted-payload import error for `src.mesh_tools.command_service`; the Release GUI Display DLL payload itself was rebuilt and string-verified.
+
+### [2026-06-22] Main Viewport Blockout Belt Authors KMAP Primitives
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Main viewport Modeling belt / Blockout primitives
+Intersects: GUI Display main-window chrome, Scene and Tools Map Studio tool-belt policy mirrors, Tools Map Studio window routing, and the active Map Studio launch/modeling-belt work in the dirty tree.
+
+- Added a visible main-viewport `Blockout` tab beside `Modeling` with Floor, Wall, Cube, Ramp, Stairs, Doorway, Arch, and Terrain buttons.
+- Added a command-backed `blockout_room` action that creates the composition-ready `elevation_test_room` KMAP preset so subsequent visible primitive buttons can author durable room primitives in the same map.
+- Routed the top `Floor` blockout button through the shared dispatcher instead of a UI shortcut, preserving KMAP state, undo/redo metadata, and stale export/proof semantics.
+- Verification: `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\window_chrome.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_level_editor_identity.py tests\test_map_studio_tool_action_dispatch.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions -q`; regenerated native Python payloads for `GhostRigger.Core.GUI.Display`, `GhostRigger.Core.Scene`, and `GhostRigger.Core.Tools`; rebuilt Debug `GhostRigger.Core.GUI.Display.dll`, `GhostRigger.Core.Scene.dll`, and `GhostRigger.Core.Tools.dll`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; Debug embedded-payload smoke confirmed the main viewport exposes `Modeling` and `Blockout` tabs with the blockout buttons, and a Debug embedded dispatcher smoke confirmed `blockout_room` creates a composition KMAP room followed by `cube` adding a durable authored primitive with undo label `Add cube primitive`. A full Qt click-through smoke was attempted but proved flaky in the harness, so the final visible verification was split into embedded widget construction plus embedded command mutation.
+
+### [2026-06-22] Map Studio Validation Reports Stale Export Proof
+
+Owner: LordVaderCW
+Task: T2600 / T2911 / T2912 / T3103
+Subsystem: Map Studio / KMAP validation / Export proof readiness
+Intersects: Scene and Tools authored-module validation projection mirrors and the active Map Studio launch/modeling-belt work in the dirty tree.
+
+- Projected existing `export_proof_invalidation` KMAP/readiness metadata into the validation table as `MAP_STUDIO_EXPORT_PROOF_STALE`.
+- The validation row now names stale generated outputs such as MDL, MDX, WOK, LYT, VIS, PTH, and `.mod`, and points the modder back to regenerate/package/re-proof work.
+- Added a regression that stages an authored module, changes room material/WOK surface intent, and confirms stale package/game-proof state is visible through validation.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_validation_projection.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_validation_projection.py tests\test_authored_module_validation_projection.py`; `python -m pytest tests\test_authored_module_validation_projection.py -q`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; rebuilt Debug `GhostRigger.Core.Scene.dll` and `GhostRigger.Core.Tools.dll`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; Debug-host Qt smoke through `build\vs\x64\Debug\main.py` confirmed the main viewport `Modeling` tab has the expected mode/tool buttons, the Map Studio icon action opens a visible `ModuleEditorWindow`, and Builder exposes Object, Vertex, Edge, Face, Terrain, and Walkmesh modes.
+
+### [2026-06-22] Main Viewport Select Persists Authored KMAP Target
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910
+Subsystem: Map Studio / Main viewport Modeling belt / Authored selection state
+Intersects: Scene and Tools module-editor controller mirrors, GUI Display main-window chrome, Tools Map Studio window command routing, and the active Map Studio modeling-belt work in the dirty tree.
+
+- Added a lightweight `map_studio_active_selection` KMAP section that stores the active Map Studio selection target, component mode, workspace, tool key, room resref, and primitive name.
+- Routed the main viewport Modeling-belt `Select` button to persist the Builder-selected authored room/primitive context through `set_map_studio_active_selection`.
+- Recorded undo/redo metadata for selection changes while intentionally leaving generated MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs unstaled because selection changes no geometry or package files.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\window_chrome.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_authored_room_operations.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_authored_room_operations.py::test_t2908_controller_persists_map_studio_active_selection_in_kmap tests\test_map_studio_level_editor_identity.py`; regenerated native Python payloads for `GhostRigger.Core.GUI.Display`, `GhostRigger.Core.Tools`, and `GhostRigger.Core.Scene`; rebuilt Debug `GhostRigger.Core.GUI.Display.dll`, `GhostRigger.Core.Tools.dll`, and `GhostRigger.Core.Scene.dll`; embedded Debug-host Qt smoke through `build\vs\x64\Debug\main.py` confirmed clicking the main viewport `Select` button writes `map_studio_active_selection` for a composition primitive, records `Select ...`, leaves stale outputs empty, and dirties the KMAP.
+
+### [2026-06-22] Main Viewport Move Authors KMAP Primitive Translation
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910 / T2911
+Subsystem: Map Studio / Main viewport Modeling belt / Authored primitive move
+Intersects: GUI Display main-window chrome, Tools Map Studio window command routing, and the active Map Studio modeling-belt work in the dirty tree.
+
+- Routed the main viewport Modeling-belt `Move` button to commit the Builder-selected authored primitive's edited Move X/Y/Z fields as a KMAP primitive delta through `move_authored_room_primitive`.
+- Kept zero-delta `Move` non-destructive: it focuses the Move fields and tells the modder to edit Move X/Y/Z before clicking Move again.
+- Preserved existing Object-mode focus behavior when no authored primitive is selected.
+- Verification: `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\window_chrome.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py`; regenerated native Python payloads for `GhostRigger.Core.GUI.Display` and `GhostRigger.Core.Tools`; rebuilt Debug `GhostRigger.Core.GUI.Display.dll` and `GhostRigger.Core.Tools.dll`; embedded Debug-host Qt smoke through `build\vs\x64\Debug\main.py` confirmed editing Move X then clicking the main viewport `Move` button changes authored primitive translation by `0.5`, dirties the KMAP, and records `Move primitive ...`. Note: `python -m pytest tests\test_authored_room_operations.py::test_t2677_controller_moves_composition_primitive_by_viewport_delta` currently fails on a pre-existing readiness assertion (`can_preview is True`) because current readiness also blocks on missing export/package resources; the UI move smoke and identity contract passed.
+
+### [2026-06-22] Main Viewport Duplicate And Delete Author KMAP Primitives
+
+Owner: LordVaderCW
+Task: T2600 / T2908 / T2910 / T2911
+Subsystem: Map Studio / Main viewport Modeling belt / Authored primitive commands
+Intersects: GUI Display main-window chrome, Tools Map Studio window command routing, and the active Map Studio modeling-belt work in the dirty tree.
+
+- Routed the main viewport Modeling-belt `Duplicate` button through Map Studio `Duplicate Special` when a Builder-selected authored composition primitive is active, so the visible action creates durable KMAP primitive instances and records stale export/proof state.
+- Added a Map Studio window helper for deleting the Builder-selected authored primitive through `remove_authored_room_primitive`, then wired the main viewport Modeling-belt `Delete` button to use it before falling back to outliner-selected deletions.
+- Preserved existing selected placement/light/outliner duplicate and delete behavior as a fallback when no authored primitive is selected.
+- Verification: `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\window_chrome.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests\test_map_studio_tool_action_dispatch.py::test_t2606_center_pivot_preserves_visible_primitive_bounds tests\test_map_studio_tool_action_dispatch.py::test_t2606_object_grid_snap_moves_primitive_pivot_to_grid tests\test_map_studio_level_editor_identity.py`; regenerated native Python payloads for `GhostRigger.Core.GUI.Display` and `GhostRigger.Core.Tools`; rebuilt Debug `GhostRigger.Core.GUI.Display.dll` and `GhostRigger.Core.Tools.dll`; embedded Debug-host Qt smoke through `build\vs\x64\Debug\main.py` confirmed the main viewport `Duplicate` button increased authored primitive count and recorded `Duplicate primitive ...`, then the main viewport `Delete` button removed a Builder-selected authored primitive and recorded `Remove primitive ...`.
+
+### [2026-06-22] Map Studio Icon Opens Modeling Belt From Main Viewport
+
+Owner: LordVaderCW
+Task: T2600 / T2904 / T2908 / T2909 / T2910
+Subsystem: Map Studio / Main viewport chrome / Modeling tool belt
+Intersects: GUI Display main-window chrome and the active Map Studio launch/tool-belt work in the dirty tree.
+
+- Changed the main Module/Map Studio icon action to open the modeling-ready Map Studio workspace instead of only the generic level-editor shell.
+- Added a visible main-viewport `Modeling` tab under the default viewport toolbar with Object, Vertex, Edge, Face, Terrain, Walkmesh mode buttons and core modeling actions including Select, Move, Duplicate, Delete, Snap, Weld, Cut, Bridge, Extrude, Bevel, Inset, Flatten, Cleanup, Triangulate, Pivot, and Freeze.
+- Routed the main-viewport Modeling buttons through the existing Map Studio window dispatcher or selected-object actions so authored KMAP state, undo, and stale-output behavior stay centralized.
+- Verification: `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\window_chrome.py`; regenerated the `GhostRigger.Core.GUI.Display` native Python payload; rebuilt Debug `GhostRigger.Core.GUI.Display.dll`; embedded Debug-host Qt smoke through `build\vs\x64\Debug\main.py` confirmed the `Modeling` tab, six mode buttons, sixteen tool buttons, the Map Studio icon opening a visible `ModuleEditorWindow`, and Object/Vertex/Terrain mode routing into the Builder component combo; `python -m pytest tests\test_map_studio_level_editor_identity.py`.
+
+### [2026-06-22] Map Studio Exposes Terrain As A Modeling Component Mode
+
+Owner: LordVaderCW
+Task: T2904 / T2908 / T2909 / T2910
+Subsystem: Map Studio / Modeling modes / Terrain tool belt
+Intersects: GUI Display and Tools Builder payloads, Scene and Tools modeling policy payloads, and current Map Studio launch/tool-belt fixes in the dirty tree.
+
+- Added `Terrain` to the headless Map Studio component-mode policy so visible modes now cover Object, Vertex, Edge, Face, Terrain, and Walkmesh.
+- Updated Builder modeling guide text and Map Studio toolbar synchronization so selecting Terrain mode focuses Terrain component mode, the terrain workspace, and the terrain tool-belt preset.
+- Mirrored the mode-policy and Builder text changes across the duplicated native payload copies used by the Debug embedded Python loader.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_modeling_tools.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py tests\test_map_studio_workflow_panel.py`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt tests\test_map_studio_workflow_panel.py::test_t2908_component_modes_include_terrain_as_visible_authoring_mode tests\test_map_studio_workflow_panel.py::test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes tests\test_map_studio_level_editor_identity.py`; regenerated native Python payloads for `GhostRigger.Core.GUI.Display`, `GhostRigger.Core.Scene`, and `GhostRigger.Core.Tools`; rebuilt Debug `GhostRigger.Core.GUI.Display.dll`, `GhostRigger.Core.Scene.dll`, and `GhostRigger.Core.Tools.dll`; embedded Debug-payload smoke through `build\vs\x64\Debug\main.py` confirmed the Map Studio component combo shows `Object|Vertex|Edge|Face|Terrain|Walkmesh`, selecting Terrain chooses the Terrain component, terrain workspace, terrain belt preset, and exposes 11 terrain brushes.
+
+### [2026-06-22] Map Studio Placement And Lighting Edits Record Undo/Stale State
+
+Owner: LordVaderCW
+Task: T2908 / T2910 / T2911
+Subsystem: Map Studio / KMAP command history / Authored placements and lighting
+Intersects: Scene and Tools native Python controller payload copies, current Map Studio proof/readiness work, and preset room lighting behavior in the dirty tree.
+
+- Added undo/redo command records for authored gameplay placement move, rename, duplicate, remove, camera edit, and transition edit operations.
+- Added undo/redo command records for authored room light move, property edit, rename, duplicate, and remove operations.
+- Preserved the standard Map Studio stale-output contract for these KMAP mutations: MDL, MDX, WOK, LYT, VIS, PTH, and `.mod` proof become stale.
+- Updated focused command-history and lighting tests so they validate current preset-backed authored lights by stable row/name instead of assuming empty preset lighting.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py tests\test_map_studio_command_history.py tests\test_authored_module_lighting.py`; `python -m pytest tests\test_map_studio_command_history.py tests\test_authored_gameplay_placements.py tests\test_authored_module_lighting.py`; `python -m pytest tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests\test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher tests\test_map_studio_level_editor_identity.py`; regenerated native Python payloads for `GhostRigger.Core.Scene` and `GhostRigger.Core.Tools`; rebuilt Debug `GhostRigger.Core.Scene.dll` and `GhostRigger.Core.Tools.dll` into `build\vs\x64\Debug`; embedded Debug-payload smoke through `build\vs\x64\Debug\main.py` confirmed an authored placement edit records an undo label, restores serialized KMAP state, and reports stale MDL/MDX/WOK/LYT/VIS/PTH/.mod proof state.
+
+### [2026-06-22] Map Studio Opens And Exposes Modeling Entry
+
+Owner: LordVaderCW
+Task: T2904 / T2908 / T2909 / T2910
+Subsystem: Map Studio / Level Editor launch / Modeling tool belt
+Intersects: GUI Display main viewport chrome, Tools Map Studio window initialization, split native Python package imports, and existing Map Studio proof/readiness work in the dirty tree.
+
+- Fixed split-package import masking so the GUI Display main window can resolve the Tools-owned `ModuleEditorWindow` through `src.gui.qt_lib.windows.module_editor_window`.
+- Fixed Tools scene package path merging so Tools-owned scene imports can see the Scene-owned `_native` bridge.
+- Added a main viewport toolbar `Modeling` launcher that opens Map Studio and focuses the KMAP-backed Builder/modeling controls instead of leaking KMAP mutation tools into the generic KMAX viewport.
+- Fixed Map Studio construction order/guards so command-search readiness no longer crashes before Builder or viewport panel widgets exist.
+- Verification: `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\__init__.py native\GhostRigger.Core.Tools\Python\src\core\scene\__init__.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\window_chrome.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\resource_panels.py native\GhostRigger.Core.Tools\Python\src\gui\windows\application_core\shared\resource_panels.py`; import smoke for `src.gui.qt_lib.windows.qt_main_window` and `src.gui.qt_lib.windows.module_editor_window`; offscreen Qt construction smoke for `ModuleEditorWindow` confirming the Modeling label, tool-belt plane button, component combo, command search, and modeling focus hook; regenerated and rebuilt the Debug `GhostRigger.Core.GUI.Display.dll` and `GhostRigger.Core.Tools.dll` payloads with MSBuild using the repo `SolutionDir`; embedded Debug-payload smoke through `build\vs\x64\Debug\main.py` confirmed the main viewport `Modeling` button exists, clicking it opens Map Studio, and Map Studio focuses the modeling workspace; `python -m pytest tests\test_map_studio_level_editor_identity.py tests\test_map_studio_workflow_panel.py::test_t2601_map_studio_builder_exposes_modeling_mode_and_snap_palette tests\test_map_studio_workflow_panel.py::test_t2605_map_studio_toolbar_exposes_goal_aligned_edit_modes tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_resolves_command_and_disabled_context tests\test_map_studio_tool_action_dispatch.py::test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher` passed.
+
+### [2026-06-22] Map Studio Proof Manifests Mark Accepted Checks
+
+Owner: LordVaderCW
+Task: T3103 / T3104 / T3105
+Subsystem: Map Studio / Game proof manifest / Accepted KOTOR evidence gates
+Intersects: native Scene/Tools authored-module export mirrors, grdev01 proof manifest regressions, controller proof readiness regression, and native payload manifests.
+
+- Added explicit `accepted_checks` to recorded authored-module in-game proof payloads so accepted KOTOR proof gates are durable manifest data instead of being inferred only from an empty missing list.
+- Mirrored accepted proof gates into `modder_test_plan.accepted_acceptance_checks` and `export_job.proof_handoff.accepted_acceptance_checks` for both proof manifests and pack-manifest updates.
+- Added regressions for complete proof, missing-evidence proof, unsupported-evidence proof, and controller-recorded proof so module load, authored identity, floor spawn, placeable visibility, WOK walkability, transition/PTH sanity, no inherited vanilla content, and screenshot/video evidence are explicitly auditable.
+- Regenerated Scene and Tools Python payload manifests after the authored export repair.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_export.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_export.py`; `python -m pytest tests\test_authored_module_export.py::test_t2644_records_authored_module_game_proof tests\test_authored_module_export.py::test_t2644_allow_missing_evidence_keeps_authored_module_unproven tests\test_authored_module_export.py::test_t2601_authored_module_rejects_unsupported_game_proof_evidence tests\test_map_studio_game_proof_ui.py::test_t2658_controller_records_authored_game_proof_and_updates_kmap_readiness -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Scene`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python -m pytest tests\test_authored_module_export.py::test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest tests\test_authored_module_export.py::test_t2644_records_authored_module_game_proof tests\test_authored_module_export.py::test_t2644_allow_missing_evidence_keeps_authored_module_unproven tests\test_authored_module_export.py::test_t2601_authored_module_rejects_unsupported_game_proof_evidence tests\test_map_studio_game_proof_ui.py::test_t2658_controller_records_authored_game_proof_and_updates_kmap_readiness -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. No live Debug-app visual test was run this turn.
+
+### [2026-06-22] Map Studio Readiness Lists Live Proof Checks
+
+Owner: LordVaderCW
+Task: T3103 / T3104 / T3105
+Subsystem: Map Studio / Readiness UI / Game-proof acceptance checklist
+Intersects: GUI Display/Tools readiness panels, package wizard proof-gate source contracts, and native GUI/Tools payload manifests.
+
+- Added a live KOTOR proof acceptance table to the main Map Studio readiness panel so the always-visible workflow shell lists the exact warp/load, authored identity, floor spawn, placeable visibility, WOK walkability, transition/PTH sanity, no inherited vanilla content, and screenshot/video gates.
+- Populated the table from readiness `modder_test_plan.acceptance_checks` and `missing_acceptance_checks`, with the same fallback labels and package-build warning used by the package wizard.
+- Mirrored the presentation-only change across GUI Display and Tools panel payload copies and regenerated the affected native payload manifests.
+- Verification: `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\readiness_panel.py native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\readiness_panel.py`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_runtime_resources -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.GUI.Display`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_runtime_resources tests\test_map_studio_workflow_panel.py::test_t3104_package_wizard_reviews_template_and_script_dependencies -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. No live Debug-app visual test was run this turn.
+
+### [2026-06-22] Map Studio Readiness Shows Staged Package Inventory
+
+Owner: LordVaderCW
+Task: T3103 / T3104 / T3105
+Subsystem: Map Studio / Readiness UI / Package inventory
+Intersects: native Scene/Tools authored readiness bridges, GUI Display/Tools readiness panels, package inventory source contracts, and native payload manifests.
+
+- Threaded staged `package_resource_inventory` through authored-module KMAP readiness and readiness metadata so the main Map Studio readiness panel can report the same package/readback state as the launch and proof dialogs.
+- Added a visible Package inventory readiness label that summarizes module root, required runtime resource count, missing count, archive readback count, loose staged file count, readback state, and staged/install state before game proof is recorded.
+- Added focused regressions proving readiness metadata preserves the package inventory, the KMAP bridge passes it through, and both readiness panel copies expose the visible inventory gate.
+- Regenerated Scene, Tools, and GUI Display Python payload manifests after the package-local readiness/UI repair.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\readiness_panel.py native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\readiness_panel.py`; `python -m pytest tests\test_authored_module_readiness.py::test_t3104_readiness_metadata_keeps_package_resource_inventory tests\test_authored_module_kmap_bridge.py::test_t3104_kmap_bridge_passes_package_inventory_to_readiness tests\test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_runtime_resources -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Scene`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python scripts\native_python_payload_generator.py GhostRigger.Core.GUI.Display`; `python -m pytest tests\test_authored_module_readiness.py::test_t3104_readiness_metadata_keeps_package_resource_inventory tests\test_authored_module_kmap_bridge.py::test_t3104_kmap_bridge_passes_package_inventory_to_readiness tests\test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_runtime_resources tests\test_map_studio_game_proof_ui.py::test_t3103_proof_recording_handoff_uses_manifest_acceptance_checks -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. No live Debug-app visual test was run this turn.
+
+### [2026-06-22] Map Studio Package Wizard Shows Live Proof Gate
+
+Owner: LordVaderCW
+Task: T3103 / T3104 / T3105
+Subsystem: Map Studio / Package wizard / Game-proof checklist visibility
+Intersects: Tools module-editor window, package wizard source contracts, grdev01 proof UI source contracts, and native Tools payload manifest.
+
+- Added a live KOTOR proof-gate table to the Map Studio package wizard so Stage/Install visibly distinguishes package creation from the later in-game acceptance checks.
+- Populated the table from readiness `modder_test_plan.acceptance_checks` and `missing_acceptance_checks`, with fallback checks for module load, authored identity, player floor spawn, placeable visibility, walkability, transition/PTH sanity, no inherited vanilla content, and screenshot/video evidence.
+- Added source-contract regressions proving the package wizard reviews the proof gate alongside runtime resources and template/script/dialog dependencies.
+- Regenerated the Tools Python payload manifest after the package-wizard UI repair.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t3104_package_wizard_reviews_template_and_script_dependencies -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t3104_package_wizard_reviews_template_and_script_dependencies tests\test_map_studio_workflow_panel.py::test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proof tests\test_map_studio_game_proof_ui.py::test_t2658_module_editor_has_in_app_game_proof_dialog_and_recorder tests\test_map_studio_game_proof_ui.py::test_t2600_module_editor_launch_handoff_shows_exact_warp_command -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. No live Debug-app visual test was run this turn.
+
+### [2026-06-22] Map Studio Proof Dialogs Show Package Inventory
+
+Owner: LordVaderCW
+Task: T3103 / T3104 / T3105
+Subsystem: Map Studio / Launch and proof UI / Authored module package inventory
+Intersects: Tools module-editor window, grdev01 proof UI regression, workflow-panel source contracts, and native Tools payload manifest.
+
+- Added controller-provided package inventory summary labels to the Map Studio launch handoff and game-proof dialogs so a modder can see the staged/readback resource state before launching KOTOR or recording proof.
+- Passed `package_resource_summary` from the launch/proof handoff summaries into the dialogs instead of duplicating KOTOR package parsing in Qt.
+- Added source-contract regressions for the visible inventory labels and handoff summary wiring.
+- Regenerated the Tools Python payload manifest after the UI repair.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py`; `python -m pytest tests\test_map_studio_game_proof_ui.py::test_t2658_module_editor_has_in_app_game_proof_dialog_and_recorder tests\test_map_studio_game_proof_ui.py::test_t2600_module_editor_launch_handoff_shows_exact_warp_command tests\test_map_studio_game_proof_ui.py::test_t3103_proof_recording_handoff_uses_manifest_acceptance_checks -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proof tests\test_map_studio_workflow_panel.py::test_t3104_package_wizard_reviews_template_and_script_dependencies -q`. No live Debug-app visual test was run this turn.
+
+### [2026-06-22] Map Studio Handoffs Surface Package Inventory
+
+Owner: LordVaderCW
+Task: T3103 / T3104 / T3105
+Subsystem: Map Studio / Launch and proof handoff / Authored module controller
+Intersects: native Scene/Tools module-editor controller mirrors, tool-belt launch/proof routing, grdev01 proof UI regression, and native payload manifests.
+
+- Threaded authored-module `package_resource_inventory` from the proof manifest back into KMAP metadata during Stage/Install so the visible launch/proof workflow has a durable resource audit without reparsing package internals in Qt.
+- Added package inventory and summary fields to `MapStudioLaunchHandoffSummary` and `MapStudioGameProofRecordingSummary`, covering required runtime resources, missing count, archive readback count, loose staged file count, readback state, and install/dry-run state.
+- Added regressions proving staged `grdev01`/tool-belt handoffs expose the same package inventory that the proof manifest records before a modder records game proof.
+- Regenerated Scene and Tools Python payload manifests after the controller handoff repair.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py`; `python -m pytest tests\test_map_studio_game_proof_ui.py::test_t3103_proof_recording_handoff_uses_manifest_acceptance_checks tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Scene`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python -m pytest tests\test_map_studio_game_proof_ui.py tests\test_map_studio_tool_action_dispatch.py::test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo tests\test_authored_module_export.py::test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; Scene/Tools mirror `Compare-Object` check.
+
+### [2026-06-22] Map Studio Proof Manifests List Package Resource Inventory
+
+Owner: LordVaderCW
+Task: T3103 / T3104 / T3105
+Subsystem: Map Studio / Authored module proof manifests / Package resource handoff
+Intersects: native Scene/Tools authored-module export mirrors, grdev01 proof UI regression, golden-module launch handoff, and native payload manifests.
+
+- Added a structured `package_resource_inventory` to authored-module proof manifests so Stage/Install records required runtime resources, readback archive resources, loose staged files, resource-reference gate data, and install/dry-run state in one durable UI/status payload.
+- Preserved the package inventory when recording complete or incomplete in-game proof so the manifest remains auditable after the live warp result is written.
+- Routed non-`grdev01` authored smoke launch handoffs through `launch_authored_module_smoke_test.py` while keeping `grdev01` on its dedicated helper.
+- Added regressions for `grdev01` inventory/readback coverage, golden-module generic launch handoff, dry-run install inventory state, and proof-recording inventory preservation.
+- Regenerated Scene and Tools Python payload manifests after the authored export repair.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_export.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_export.py scripts\launch_authored_module_smoke_test.py scripts\launch_grdev01_smoke_test.py`; `python -m pytest tests\test_authored_module_export.py::test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest tests\test_authored_module_export.py::test_t3105_golden_module_install_writes_generic_capture_handoff tests\test_authored_module_export.py::test_t2644_prepare_authored_module_install_copies_to_modules_with_backup -q`; `python -m pytest tests\test_map_studio_game_proof_ui.py::test_t2658_controller_records_authored_game_proof_and_updates_kmap_readiness tests\test_authored_module_proof_scripts.py tests\test_check_grdev01_smoke_status_script.py::test_t2698_status_accepts_installed_authored_smoke_package -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Scene`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; Scene/Tools mirror `Compare-Object` check.
+
+### [2026-06-22] Map Studio Proof Handoff Uses Manifest Acceptance Gates
+
+Owner: LordVaderCW
+Task: T3103 / T3104 / T3105
+Subsystem: Map Studio / Game proof handoff / Authored module controller
+Intersects: native Scene/Tools module-editor controller mirrors, grdev01 proof UI regression, and native payload manifests.
+
+- Updated the Map Studio proof-recording handoff to derive its required checklist from the staged proof manifest's `acceptance_checks` instead of a hardcoded older floor/placeable-only list.
+- Added labels for authored module identity, transition/pathing sanity, no inherited vanilla geometry or scripted movers, and screenshot/video evidence so the in-app Record Proof path matches the real `grdev01` proof gates.
+- Added a regression proving a staged `grdev01` authored module handoff reports the manifest's identity/pathing/no-inherited-content/evidence requirements before proof can be recorded.
+- Regenerated Scene and Tools Python payload manifests after the controller repair.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py`; `python -m pytest tests\test_map_studio_game_proof_ui.py::test_t3103_proof_recording_handoff_uses_manifest_acceptance_checks tests\test_map_studio_game_proof_ui.py::test_t2658_module_editor_has_in_app_game_proof_dialog_and_recorder tests\test_map_studio_game_proof_ui.py::test_t2600_module_editor_launch_handoff_shows_exact_warp_command -q`; `python -m pytest tests\test_map_studio_game_proof_ui.py tests\test_prepare_grdev01_authored_smoke_script.py tests\test_check_grdev01_smoke_status_script.py tests\test_capture_grdev01_smoke_evidence_script.py -q`; `python -m pytest tests\test_authored_module_export.py::test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest tests\test_authored_module_export.py::test_t2644_controller_stages_current_authored_module tests\test_authored_module_export.py::test_t2644_records_authored_module_game_proof tests\test_authored_module_export.py::test_t2601_authored_module_rejects_unsupported_game_proof_evidence -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Scene`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; Scene/Tools mirror `Compare-Object` check.
+
+### [2026-06-22] Map Studio Restores Authored grdev01 Package Promotion
+
+Owner: LordVaderCW
+Task: T3103 / T3104 / T3105
+Subsystem: Map Studio / Authored module packaging / grdev01 smoke proof handoff
+Intersects: native Scene/Tools custom module packager and authored module export mirrors, grdev01 prep/status/evidence scripts, and native payload manifests.
+
+- Fixed package-local `ExportJob` discovery so the authored grdev01 prep flow can promote staged module resources into `install/Modules/grdev01.mod` instead of failing on `src.core.export.export_job` import ordering.
+- Restored the launch handoff to the full `launch_grdev01_smoke_test.py` helper while keeping the authored-module wrapper path available for compatibility.
+- Aligned grdev01 smoke status/prep assertions with the current authored evidence handoff and generated WOK contract (`4 / 12` walkable/non-walk faces).
+- Regenerated Scene and Tools Python payload manifests after the package-local repair.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\custom_module_packager.py native\GhostRigger.Core.Tools\Python\src\core\modules\custom_module_packager.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_export.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_export.py`; `python -m pytest tests\test_prepare_grdev01_authored_smoke_script.py tests\test_check_grdev01_smoke_status_script.py tests\test_capture_grdev01_smoke_evidence_script.py -q`; `python -m pytest tests\test_authored_module_export.py::test_t2911_linked_transition_requires_wok_door_surface_before_export tests\test_authored_module_export.py::test_t2907_terrain_preset_exports_walkable_wok_pathing_and_lighting tests\test_authored_walkmesh_status.py -q`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Scene`; `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`; `python -m pytest tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; Scene/Tools mirror `Compare-Object` checks.
+
+### [2026-06-22] Map Studio WOK Sampler Ships In Native Payloads
+
+Owner: LordVaderCW
+Task: T2905 / T2911 / T2913 / T3103
+Subsystem: Native Python payload / Map Studio WOK sampling / Automation, Scene, Tools, Math, and IO packages
+Intersects: native payload manifests, RC resources, Visual Studio payload item lists, Automation MCP payload coverage, Core.IO byte-identity repair, and native payload coverage tests.
+
+- Regenerated Scene and Tools embedded Python payload manifests/resources so the new authored WOK sampler and Map Studio helper modules are discoverable by the native Debug host.
+- Added the missing Scene/Tools Map Studio core module payload entries to the Visual Studio project and filter item lists, including `authored_walkmesh_sampling.py`.
+- Packaged the Automation-owned `src/max2021_mcp` MCP bridge into `GhostRigger.Core.Automation`, repaired the Math payload project item list for `component_editing.py`, and aligned the Core.IO packaged `mdl_writer.py` copy with canonical root `src`.
+- Updated the native payload manifest coverage count to the current 1,154 packaged Python file references and regenerated all native Python payload manifests/hashes.
+- Verification: `python scripts\native_python_payload_generator.py --all`; `python -m py_compile native\GhostRigger.Core.Automation\Python\src\max2021_mcp\__init__.py native\GhostRigger.Core.Automation\Python\src\max2021_mcp\server.py`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_manifest_covers_every_python_source_and_dll_project tests\test_native_python_payloads.py::test_python_payloads_are_included_in_visual_studio_projects tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; custom all-payload source coverage, byte-identity, and SHA-256 hash check; `python -m pytest tests\test_authored_walkmesh_status.py::test_t2911_pathing_samples_wok_triangles_without_face_lookup_method tests\test_authored_walkmesh_status.py::test_t2911_entry_point_samples_wok_triangles_without_face_lookup_method -q`.
+
+### [2026-06-22] Map Studio Samples WOK Triangles For Pathing Gates
+
+Owner: LordVaderCW
+Task: T2905 / T2911 / T2913 / T3103
+Subsystem: Map Studio / WOK sampling / PTH and gameplay placement validation
+Intersects: native Scene/Tools authored walkmesh sampling, authored pathing, gameplay placement checks, and walkmesh readiness regressions.
+
+- Added a shared authored WOK triangle sampler that resolves XY points against actual WOK vertices/faces when a WOK object does not provide `face_at_point`.
+- Routed PTH path-point validation and gameplay entry/placement walkmesh checks through the sampler so Map Studio does not treat unsampled WOK-like geometry as automatically valid.
+- Added regressions proving an off-triangle PTH point is blocked and a valid entry point resolves to walkable WOK face 0 even without a convenience lookup method.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_walkmesh_sampling.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_walkmesh_sampling.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_pathing.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_pathing.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_objects.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_objects.py`; `python -m pytest tests\test_authored_walkmesh_status.py::test_t2911_pathing_samples_wok_triangles_without_face_lookup_method tests\test_authored_walkmesh_status.py::test_t2911_entry_point_samples_wok_triangles_without_face_lookup_method -q`; `python -m pytest tests\test_authored_module_export.py::test_t2644_controller_stages_current_authored_module tests\test_authored_walkmesh_status.py::test_t2604_walkmesh_status_and_readiness_block_disconnected_composition_room -q`; Scene/Tools `authored_walkmesh_sampling.py`, `authored_module_pathing.py`, and `authored_module_objects.py` mirror `Compare-Object` checks.
+
+### [2026-06-22] Map Studio Invalidates Proof After Script And Lighting Edits
+
+Owner: LordVaderCW
+Task: T2913 / T3103 / T3105
+Subsystem: Map Studio / Authored script hooks and room lighting / Stale proof gate
+Intersects: native Scene/Tools authored-module script helpers, KMAP bridge mirrors, and Map Studio game-proof UI regression.
+
+- Added durable authored script-hook edit evidence so ARE/IFO script changes can clear trusted staged export/proof state through the KMAP payload.
+- Extended authored KMAP `export_proof_invalidation` evidence to room-light edits and script-hook edits, marking MDL/MDX/.mod or ARE/IFO/.mod outputs stale with a modder-facing next action.
+- Added a regression proving an old `grdev01` proof manifest cannot be reused after assigning an authored area `OnEnter` script hook.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_scripts.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_scripts.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_kmap_bridge.py`; `python -m pytest tests\test_map_studio_game_proof_ui.py::test_t3103_controller_rejects_stale_authored_proof_after_script_hook_edit tests\test_map_studio_game_proof_ui.py::test_t3103_controller_rejects_stale_authored_proof_after_placement_edit -q`; `python -m pytest tests\test_authored_module_metadata.py::test_t2600_authored_script_hook_editor_updates_project_metadata tests\test_authored_module_metadata.py::test_t2600_controller_script_hook_edit_actions_clear_export_and_proof_state -q`; Scene/Tools `authored_module_scripts.py` and `authored_module_kmap_bridge.py` mirror `Compare-Object` checks.
+
+### [2026-06-22] Map Studio Invalidates Proof After Gameplay Placement Edits
+
+Owner: LordVaderCW
+Task: T2913 / T3103 / T3105
+Subsystem: Map Studio / Authored gameplay edits / Stale proof gate
+Intersects: native Scene/Tools authored-module KMAP bridge, module-editor controller mirrors, and Map Studio game-proof UI regression.
+
+- Extended authored KMAP `export_proof_invalidation` evidence to entry-point and gameplay placement edits so GIT/IFO/PTH/.mod output and game proof become explicitly stale after modder placement changes.
+- Hardened the Map Studio proof recorder to reject authored proof manifests when the current KMAP no longer has a current staged proof manifest.
+- Added a regression proving a moved `grdev01` test placeable cannot reuse the old proof manifest to mark the edited module `game_tested`.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py`; `python -m pytest tests\test_map_studio_game_proof_ui.py::test_t3103_controller_rejects_stale_authored_proof_after_placement_edit tests\test_map_studio_game_proof_ui.py::test_t3103_controller_rejects_stale_authored_proof_after_kmap_edit tests\test_map_studio_game_proof_ui.py::test_t2658_controller_records_authored_game_proof_and_updates_kmap_readiness -q`; Scene/Tools `authored_module_kmap_bridge.py` and `module_editor_controller.py` mirror `Compare-Object` checks.
+
+### [2026-06-22] Map Studio Rejects Stale Authored Proof Manifests
+
+Owner: LordVaderCW
+Task: T2913 / T3103 / T3105
+Subsystem: Map Studio / Game proof controller / Stale proof gate
+Intersects: native Scene/Tools module-editor controller mirrors and Map Studio game-proof UI regression.
+
+- Blocked `record_map_studio_game_proof` from promoting an authored KMAP to `game_tested` when the current map has `export_proof_invalidation` from edits made after staging.
+- Rejected proof manifests that are not the current staged manifest for the authored KMAP, so old package/proof evidence cannot be reused after material, WOK, geometry, or placement changes.
+- Added a regression proving an old `grdev01` proof manifest remains unaccepted after a room material/WOK edit and the KMAP stays untested until restaged and reproven.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py`; `python -m pytest tests\test_map_studio_game_proof_ui.py::test_t3103_controller_rejects_stale_authored_proof_after_kmap_edit tests\test_map_studio_game_proof_ui.py::test_t2658_controller_records_authored_game_proof_and_updates_kmap_readiness -q`; Scene/Tools `module_editor_controller.py` mirror `Compare-Object` check.
+
+### [2026-06-22] Map Studio Shows Stale Proof In Readiness UI
+
+Owner: LordVaderCW
+Task: T2912 / T2913 / T3103 / T3105
+Subsystem: Map Studio / Readiness UI / Export proof invalidation
+Intersects: GUI Display/Tools readiness-panel mirrors and Map Studio workflow-panel source contract.
+
+- Added an `Export/proof freshness` readiness row that projects authored KMAP `export_proof_invalidation` metadata into the visible Map Studio status panel.
+- Shows whether prior package output or game proof is stale, the latest authored edit operation, edited rooms, stale MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs, and the next regeneration/proof action.
+- Added source-contract coverage so both GUI Display and Tools readiness-panel mirrors keep the stale-proof UI projection.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\readiness_panel.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\readiness_panel.py`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_runtime_resources -q`; GUI Display/Tools `readiness_panel.py` mirror `Compare-Object` check.
+
+### [2026-06-22] Map Studio Invalidates Staged Proof After Authored Edits
+
+Owner: LordVaderCW
+Task: T2912 / T2913 / T3103 / T3105
+Subsystem: Map Studio / KMAP authored payload / Export and proof invalidation
+Intersects: native Scene/Tools authored-module KMAP bridge and readiness mirrors, plus authored-module controller regression.
+
+- Added a durable `export_proof_invalidation` block to authored KMAP payloads when component edits or room material/WOK style changes make MDL/MDX/WOK/LYT/VIS/PTH/.mod outputs and game proof stale.
+- Forced edited payloads to clear trusted game-tested state and require fresh proof, while exposing the invalidation object through authored-module readiness metadata for the UI.
+- Added a regression proving a staged `grdev01` package loses stale proof handoff after a room style/WOK edit and reports the exact stale runtime outputs.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_readiness.py`; `python -m pytest tests\test_authored_module_export.py::test_t2912_style_edit_invalidates_staged_package_and_game_proof tests\test_authored_module_export.py::test_t2644_controller_stages_current_authored_module -q`; Scene/Tools `authored_module_kmap_bridge.py` and `authored_module_readiness.py` mirror `Compare-Object` checks.
+
+### [2026-06-22] Map Studio Records Material And UV Intent In Package Evidence
+
+Owner: LordVaderCW
+Task: T2912 / T2913 / T3105
+Subsystem: Map Studio / Authored module export / Material and UV evidence
+Intersects: native Scene/Tools authored-module export mirrors and authored-module export regression.
+
+- Added per-room `material_uv` export evidence tying visible room meshes and helper meshes to texture, diffuse/ambient values, UV coverage, UV coordinate space, and WOK surface intent.
+- Wrote the material/UV summary into authored module pack manifests so stage/install/proof review can verify material and WOK intent without inspecting backend mesh objects.
+- Added regression coverage for `grdev01` package manifest material/UV evidence.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_export.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_export.py`; `python -m pytest tests\test_authored_module_export.py::test_t2643_exports_kmap_authored_module_package -q`; Scene/Tools `authored_module_export.py` mirror `Compare-Object` check.
+
+### [2026-06-22] Map Studio Readiness Shows Dialog References
+
+Owner: LordVaderCW
+Task: T3104 / T3105
+Subsystem: Map Studio / Readiness UI / Dialog dependency review
+Intersects: GUI Display/Tools readiness-panel mirrors, authored-module readiness/export tests, and Map Studio workflow source contracts.
+
+- Added a dialog/conversation reference section to the Map Studio readiness panel so `.dlg` dependencies are visible during normal validation/readiness review, not only in package manifests or the package wizard.
+- Displayed dialog source, field, resref, packaged/external status, and fix guidance using the same readiness metadata now produced by authored-module readiness.
+- Kept GUI Display and Tools readiness-panel mirrors byte-identical after the UI projection update.
+- Verification: `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\readiness_panel.py native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\readiness_panel.py`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_transition_and_script_references tests\test_authored_module_export.py::test_t3105_resource_reference_gate_records_scripts_and_dialogs -q`; GUI Display/Tools `readiness_panel.py` mirror `Compare-Object` check.
+
+### [2026-06-22] Map Studio Readiness Projects Dialog Dependencies
+
+Owner: LordVaderCW
+Task: T3104 / T3105
+Subsystem: Map Studio / Readiness / Package wizard dependency review
+Intersects: native Scene/Tools authored-module readiness mirrors, Core Tools package wizard, authored-module export regression, and workflow-panel source contract.
+
+- Added authored dialog/conversation references to readiness metadata so `.dlg` dependencies are visible before staging or installing a Map Studio module.
+- Surfaced external dialog dependency warnings and package-wizard rows alongside generated runtime files, gameplay templates, and ARE/IFO script hooks.
+- Reused the existing package-manifest dialog reference shape so readiness, proof/package manifests, and UI review speak the same resource-reference language.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py`; `python -m pytest tests\test_authored_module_export.py::test_t3105_resource_reference_gate_records_scripts_and_dialogs tests\test_map_studio_workflow_panel.py::test_t3104_package_wizard_reviews_template_and_script_dependencies -q`; Scene/Tools `authored_module_readiness.py` mirror `Compare-Object` check.
+
+### [2026-06-22] Map Studio Package Wizard Reviews Gameplay Dependencies
+
+Owner: LordVaderCW
+Task: T3104 / T3105
+Subsystem: Map Studio / Package wizard / Resource dependency review
+Intersects: Core Tools Map Studio window and workflow-panel source contracts.
+
+- Extended the package wizard resource review table from generated runtime files to include gameplay template references and ARE/IFO script hook dependencies from authored-module readiness metadata.
+- Labeled packaged versus external/base-game/Override dependencies so a modder can see install-context assumptions before staging, installing, or recording a live warp proof.
+- Added a focused source contract proving the package wizard lists template and script dependencies alongside the staged resource review.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t3104_package_wizard_reviews_template_and_script_dependencies tests\test_map_studio_workflow_panel.py::test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proof -q`.
+
+### [2026-06-22] Map Studio Carries Resource Reference Gates Into Proof Handoff
+
+Owner: LordVaderCW
+Task: T2913 / T3105
+Subsystem: Map Studio / Authored module proof manifest / Resource reference gates
+Intersects: native Scene/Tools authored-module export mirrors and authored-module package/proof regressions.
+
+- Added the authored module `resource_reference_gate` to the smoke contract and modder test plan written into install proof manifests, so template, script, and dialog dependency status stays visible during stage/install/proof review.
+- Preserved the existing package-manifest resource gate while making the proof handoff show whether gameplay templates are packaged or require base game/Override/install context before `warp <module>`.
+- Added regression assertions for grdev01 and grgold01 proof manifests so the modder-facing proof plan lists the expected UTC/UTD/UTP/UTW template dependencies.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_export.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_export.py`; `python -m pytest tests\test_authored_module_export.py::test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest tests\test_authored_module_export.py::test_t3105_golden_module_install_writes_generic_capture_handoff -q`; `python -m pytest tests\test_authored_module_export.py::test_t2643_exports_kmap_authored_module_package tests\test_authored_module_export.py::test_t3105_exports_golden_map_module_fixture -q`; Scene/Tools `authored_module_export.py` mirror `Compare-Object` check.
+
+### [2026-06-22] Map Studio Exposes Full Game-Proof Acceptance Checks
+
+Owner: LordVaderCW
+Task: T3103 / T3105
+Subsystem: Map Studio / Game-proof UI / Authored module acceptance checks
+Intersects: Core Tools Map Studio window and game-proof UI source contracts.
+
+- Added visible game-proof dialog checks for authored module identity, transition/pathing sanity, and absence of inherited vanilla geometry or scripted movers.
+- Passed those UI values through `record_map_studio_game_proof` so modders can satisfy the same proof-manifest gates from Map Studio that backend scripts already require.
+- Repaired the stale launch-handoff source contract to the active Core Tools window path and current warp-command handoff.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py`; `python -m pytest tests\test_map_studio_game_proof_ui.py -q`; `python -m pytest tests\test_authored_module_export.py::test_t2644_records_authored_module_game_proof -q`.
+
+### [2026-06-22] Map Studio Routes Custom Package Promotion Through ExportJob
+
+Owner: LordVaderCW
+Task: T2913 / T3105
+Subsystem: Map Studio / Authored module packaging / ExportJob promotion
+Intersects: native Scene/Tools custom module packager mirrors, custom packager tests, and authored-module export regressions.
+
+- Routed custom module package promotion through `run_export_job` so `.mod`, save manifest, loose source resources, and pack manifest outputs are promoted as one staged export transaction.
+- Added `map_studio.custom_module_package.<module>` transaction metadata to pack manifests, including final paths, staged `ExportJob` paths, durable backup paths, and the `save_pipeline_temp_root_then_export_job_promote` staging model.
+- Preserved the existing save-pipeline temp-root build step while making `ExportJob` the final artifact promoter into `install/Modules`, `source/resources`, and the pack manifest location.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\custom_module_packager.py native\GhostRigger.Core.Tools\Python\src\core\modules\custom_module_packager.py`; `python -m pytest tests\test_custom_module_packager.py -q`; `python -m pytest tests\test_authored_module_export.py::test_t2643_exports_kmap_authored_module_package tests\test_authored_module_export.py::test_t3105_exports_golden_map_module_fixture tests\test_authored_module_export.py::test_t2644_controller_stages_current_authored_module -q`; Scene/Tools `custom_module_packager.py` mirror `Compare-Object` check.
+
+### [2026-06-22] ExportJob Supports Multi-Directory Package Outputs
+
+Owner: LordVaderCW
+Task: T2913 / T3105
+Subsystem: Core IO / ExportJob / Map Studio packaging infrastructure
+Intersects: native IO/Tools export-job mirrors, ExportJob regressions, and authored-module package smoke regressions.
+
+- Removed the single-final-parent restriction from `run_export_job` so one staged export transaction can promote outputs into separate folders such as `install/Modules`, source resource folders, and manifest folders.
+- Added per-output staged paths under the temporary job directory for multi-directory jobs while preserving the previous flat staging layout for single-parent jobs.
+- Added regression coverage proving multi-directory outputs are written only in staging, promoted together, and cleaned up after success.
+- Verification: `python -m py_compile native\GhostRigger.Core.IO\Python\src\core\export\export_job.py native\GhostRigger.Core.Tools\Python\src\core\export\export_job.py`; `python -m pytest tests\test_export_job.py -q`; `python -m pytest tests\test_authored_module_export.py::test_t2643_exports_kmap_authored_module_package tests\test_authored_module_export.py::test_t2644_controller_stages_current_authored_module -q`; IO/Tools `export_job.py` mirror `Compare-Object` check.
+
+### [2026-06-22] Map Studio Promotes Packages From A Staged Output Root
+
+Owner: LordVaderCW
+Task: T2913 / T3105
+Subsystem: Map Studio / Authored module packaging / Staged package promotion
+Intersects: native Scene/Tools custom module packager mirrors and authored-module export/install regressions.
+
+- Changed custom module packaging to build `.mod`, save manifest, pack manifest, and loose source resources under a temporary staged package root before promoting verified artifacts to the requested output folders.
+- Added explicit package transaction metadata recording staged promotion, promoted output kinds, final paths, backup paths, and preflight-only failures.
+- Kept final manifests pointed at promoted output paths and verified the temporary staging root is removed after successful export.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\custom_module_packager.py native\GhostRigger.Core.Tools\Python\src\core\modules\custom_module_packager.py`; `python -m pytest tests\test_authored_module_export.py::test_t2643_exports_kmap_authored_module_package tests\test_authored_module_export.py::test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest tests\test_authored_module_export.py::test_t2644_controller_stages_current_authored_module -q`; `python -m pytest tests\test_authored_module_export.py::test_t3105_golden_module_install_writes_generic_capture_handoff tests\test_authored_module_export.py::test_t2644_prepare_authored_module_install_copies_to_modules_with_backup tests\test_authored_module_export.py::test_t2683_controller_installs_authored_module_to_modules_folder_with_backup -q`; Scene/Tools `custom_module_packager.py` mirror `Compare-Object` check.
+
+### [2026-06-22] Map Studio Surfaces ExportJob State In Workflow UI
+
+Owner: LordVaderCW
+Task: T2913 / T3105
+Subsystem: Map Studio / Workflow UI / Authored module proof handoff
+Intersects: native Scene/Tools authored-module export, KMAP bridge, readiness/controller mirrors, GUI Display/Tools workflow panel mirrors, and Map Studio workflow/export regressions.
+
+- Persisted authored-module `export_job` transaction evidence into the KMAP authored-module payload during export, stage/install, and proof recording.
+- Projected export-job status, package/readback state, proof handoff state, and pack manifest path through authored-module readiness metadata.
+- Added a visible Map Studio workflow panel line summarizing preflight, package, readback, and proof handoff so modders can see staged package truth without opening backend manifests.
+- Promoted proof and pack manifest export-job handoff state to `game_smoke_tested` after accepted live warp evidence is recorded.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_export.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_export.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\workflow_panel.py native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\workflow_panel.py`; `python -m pytest tests\test_authored_module_export.py::test_t2644_controller_stages_current_authored_module tests\test_authored_module_export.py::test_t2683_controller_installs_authored_module_to_modules_folder_with_backup tests\test_authored_module_export.py::test_t2644_records_authored_module_game_proof tests\test_map_studio_workflow_panel.py::test_t2600_map_studio_workflow_panel_surfaces_editor_spine tests\test_map_studio_workflow_panel.py::test_t2600_workflow_panel_is_mirrored_for_module_meshes_package -q`; Scene/Tools and GUI Display/Tools mirror `Compare-Object` checks for touched payload copies.
+
+### [2026-06-22] Map Studio Records Authored ExportJob Evidence
+
+Owner: LordVaderCW
+Task: T2913 / T3105
+Subsystem: Map Studio / Authored module packaging / Game-proof handoff
+Intersects: native Scene/Tools authored-module export mirrors and authored-module export/install regressions.
+
+- Added a durable `ghostrigger.authored_export_job.v1` record to authored-module pack manifests, tying preflight gates, package outputs, readback verification, and required live-game proof handoff into one transaction summary.
+- Returned the same export-job evidence through `AuthoredModuleExportResult.metadata` so controllers and UI surfaces can inspect staged packaging status without reopening the pack manifest.
+- Copied the export-job record into install proof manifests with the proof-manifest path, staged/installed state, and installed module path for the live `warp <module>` smoke-test loop.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_export.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_export.py`; `python -m pytest tests\test_authored_module_export.py::test_t2643_exports_kmap_authored_module_package tests\test_authored_module_export.py::test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest tests\test_authored_module_export.py::test_t2644_prepare_authored_module_install_copies_to_modules_with_backup tests\test_authored_module_export.py::test_t2644_room_only_authored_install_omits_placeable_proof_requirement -q`; `python -m pytest tests\test_authored_module_export.py::test_t3105_golden_module_install_writes_generic_capture_handoff -q`; Scene/Tools `authored_module_export.py` mirror `Compare-Object` check.
+
+### [2026-06-22] Map Studio Surfaces Transition WOK Gate In Readiness
+
+Owner: LordVaderCW
+Task: T2911 / T3105
+Subsystem: Map Studio / Readiness UI / Validation projection
+Intersects: native Scene/Tools authored-module readiness and validation-projection mirrors, GUI Display/Tools readiness panel mirrors, and authored-module export/readiness regressions.
+
+- Added a headless readiness `transition_surface_gate` so linked door/trigger transitions without WOK `DOOR`/surface `18` evidence block export candidate status before packaging.
+- Projected the same transition-surface blocker into the Map Studio readiness panel's PTH/WOK blocker table with an actionable surface-18 fix.
+- Added validation-table issue rows `MAP_STUDIO_TRANSITION_WOK_SURFACE_BLOCKER` and warning coverage so the normal Map Studio validation workflow points modders to the missing DOOR WOK surface.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_readiness.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_validation_projection.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_validation_projection.py native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\readiness_panel.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\readiness_panel.py`; `python -m pytest tests/test_authored_module_export.py::test_t2911_linked_transition_requires_wok_door_surface_before_export tests/test_authored_module_export.py::test_t2605_complete_door_module_transition_is_export_candidate tests/test_authored_module_export.py::test_t2605_local_door_transition_accepts_matching_authored_waypoint tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_panel_lists_runtime_resources tests/test_map_studio_workflow_panel.py::test_t2600_map_studio_readiness_validation_projection_is_mirrored -q`; mirror `Compare-Object` checks for touched core and GUI payload copies.
+
+### [2026-06-22] Map Studio Gates Linked Transitions On WOK Door Surfaces
+
+Owner: LordVaderCW
+Task: T2911 / T3105
+Subsystem: Map Studio / Walkmesh validation / Authored module export gate
+Intersects: native Scene/Tools authored walkmesh, pathing, room geometry/composition, module format, and authored-module export mirrors.
+
+- Added authored WOK transition-surface counts and a `transition_surface_gate` under `walkmesh_gate` so linked door/trigger transitions require at least one WOK `DOOR`/surface `18` face before export.
+- Split doorway-marker rectangular WOK floors into normal floor plus a connected door-transition strip, keeping dev/golden smoke fixtures game-facing while preserving topology/pathing checks.
+- Promoted KOTOR WOK surface `18` into the canonical walkable surface set and made authored PTH generation consume that shared policy instead of a stale duplicate list.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_export.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_pathing.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_composition.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_room_geometry.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_walkmesh_audit.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_format.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_export.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_pathing.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_composition.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_room_geometry.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_walkmesh_audit.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_format.py`; `python -m pytest tests/test_authored_module_export.py::test_t2643_exports_kmap_authored_module_package tests/test_authored_module_export.py::test_t3105_exports_golden_map_module_fixture tests/test_authored_module_export.py::test_t2911_linked_transition_requires_wok_door_surface_before_export tests/test_authored_module_export.py::test_t3105_export_gate_blocks_disconnected_walkmesh_islands tests/test_authored_module_export.py::test_t2907_terrain_preset_exports_walkable_wok_pathing_and_lighting tests/test_authored_walkmesh_status.py::test_t2911_wok_audit_blocks_steep_walkable_faces tests/test_authored_walkmesh_status.py::test_t2604_wok_audit_blocks_disconnected_walkable_islands -q`; Scene/Tools mirror `Compare-Object` checks for the touched Python payload copies.
+
+### [2026-06-22] Map Studio Blocks Steep Walkable WOK Faces
+
+Owner: LordVaderCW
+Task: T2911 / T3105
+Subsystem: Map Studio / Walkmesh validation / Authored module export gate
+Intersects: native Scene/Tools authored walkmesh audit/status/export mirrors and walkmesh/export regressions.
+
+- Added a 45-degree authored WOK slope gate that blocks walkable faces painted onto too-steep triangles before export/game proof.
+- Surfaced steep-walkable face counts plus max/allowed walkable slope facts through walkmesh status and the authored-module `walkmesh_gate` manifest.
+- Preserved terrain behavior where steep samples are painted non-walkable by the terrain builder while blocking manually authored or mispainted steep walkable WOK faces.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_walkmesh_audit.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_walkmesh_audit.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_walkmesh_status.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_walkmesh_status.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_export.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_export.py`; `python -m pytest tests\test_authored_walkmesh_status.py::test_t2911_wok_audit_blocks_steep_walkable_faces tests\test_authored_walkmesh_status.py::test_t2604_wok_audit_blocks_disconnected_walkable_islands tests\test_authored_module_export.py::test_t2643_exports_kmap_authored_module_package tests\test_authored_module_export.py::test_t3105_export_gate_blocks_disconnected_walkmesh_islands tests\test_authored_walkmesh_status.py::test_t2600_walkmesh_status_reports_terrain_walkability_counts tests\test_authored_module_export.py::test_t2907_terrain_preset_exports_walkable_wok_pathing_and_lighting -q`.
+
+### [2026-06-22] Map Studio Adds Package Resource Reference Gate
+
+Owner: LordVaderCW
+Task: T3105
+Subsystem: Map Studio / Authored module packaging / Resource reference validation
+Intersects: native Scene/Tools authored-module export mirrors and authored-module export regressions.
+
+- Added a `resource_reference_gate` package-manifest summary covering gameplay template dependencies, ARE/IFO script hooks, and dialog/conversation references.
+- Reported packaged versus external/base-game/Override reference counts so staged modules make template/script/dialog install assumptions explicit before live warp proof.
+- Added regressions for dev/golden authored modules plus a script/dialog metadata case proving `.utc/.utp/.utd/.utw`, `.ncs`, and `.dlg` references appear in export evidence.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_export.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_export.py`; `python -m pytest tests\test_authored_module_export.py::test_t2643_exports_kmap_authored_module_package tests\test_authored_module_export.py::test_t3105_exports_golden_map_module_fixture tests\test_authored_module_export.py::test_t3105_resource_reference_gate_records_scripts_and_dialogs tests\test_authored_module_export.py::test_t2680_pathing_includes_walkable_spatial_gameplay_anchors -q`.
+
+### [2026-06-22] Map Studio Requires Transition Pathing In Game Proof
+
+Owner: LordVaderCW
+Task: T3105
+Subsystem: Map Studio / Authored module proof recording / Pathing acceptance
+Intersects: native Scene/Tools authored-module export, Map Studio action dispatch/controller mirrors, proof helper scripts, and smoke-status regressions.
+
+- Added `transition_pathing_sanity_confirmed` as an explicit authored-module in-game acceptance check, separate from basic floor walking.
+- Threaded the new check through proof manifests, modder test plans, `.cmd` proof recorder handoff, generic evidence capture, the standalone proof recorder, status/prepare helper commands, and the Map Studio tool-belt proof route.
+- Updated proof and status regressions so room-only, dev, and golden authored modules require pathing/transition sanity evidence before being marked game-smoke-tested.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_export.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_export.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\map_studio_tool_action_dispatch.py native\GhostRigger.Core.Tools\Python\src\core\modules\map_studio_tool_action_dispatch.py scripts\record_authored_module_game_proof.py scripts\capture_grdev01_smoke_evidence.py scripts\check_grdev01_smoke_status.py scripts\prepare_grdev01_authored_smoke.py`; targeted pytest proof, capture, status, prepare, and Map Studio dispatch cases.
+
+### [2026-06-22] Map Studio Adds Walkmesh Gate To Authored Module Manifests
+
+Owner: LordVaderCW
+Task: T3105
+Subsystem: Map Studio / Authored module export / Walkmesh validation gate
+Intersects: native Scene/Tools authored-module export mirrors and authored-module export regressions.
+
+- Added a manifest-level `walkmesh_gate` summary that combines authored WOK topology audits, gameplay anchor walkability checks, and compiled PTH pathing facts before a module is considered export-ready.
+- Promoted disconnected walkable islands, invalid/degenerate faces, non-manifold edges, failed gameplay anchors, and missing PTH compilation into authored-module preflight evidence.
+- Extended dev, golden, and disconnected-island regressions so reliable module proof now records WOK/PTH readiness and blocks split walkmesh islands before packaging.
+- Verification: `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_export.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_export.py`; `python -m pytest tests\test_authored_module_export.py::test_t2643_exports_kmap_authored_module_package tests\test_authored_module_export.py::test_t3105_exports_golden_map_module_fixture tests\test_authored_module_export.py::test_t3105_export_gate_blocks_disconnected_walkmesh_islands -q`; `Compare-Object (Get-Content native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_export.py) (Get-Content native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_export.py)`.
+
+### [2026-06-22] Map Studio Generalizes Authored Module Proof Helpers
+
+Owner: LordVaderCW
+Task: T3105
+Subsystem: Map Studio / Authored module proof handoff / Evidence capture
+Intersects: native Scene/Tools authored-module export mirrors, proof helper scripts, and authored-module install regressions.
+
+- Switched authored-module stage/install proof manifests to emit generic `launch_authored_module_smoke_test.py` and `capture_authored_module_evidence.py` helper commands instead of grdev01-only helper names.
+- Kept the existing grdev01 scripts as compatibility implementation entry points, while making capture/launch guidance follow the proof manifest's module root and warp command.
+- Added a `grgold01` install-prep regression proving the richer golden module now receives launch, capture, and proof-recording handoff commands for room/WOK/player-start/placeable/waypoint/door/NPC proof.
+- Verification: `python -m py_compile scripts\capture_grdev01_smoke_evidence.py scripts\capture_authored_module_evidence.py scripts\launch_grdev01_smoke_test.py scripts\launch_authored_module_smoke_test.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_export.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_export.py`; `python -m pytest tests\test_authored_module_export.py::test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest tests\test_authored_module_export.py::test_t3105_golden_module_install_writes_generic_capture_handoff tests\test_authored_module_export.py::test_t2644_room_only_authored_install_omits_placeable_proof_requirement tests\test_authored_module_export.py::test_t2683_controller_installs_authored_module_to_modules_folder_with_backup -q`.
+
+### [2026-06-22] Map Studio Surfaces Golden Proof Module In Builder
+
+Owner: LordVaderCW
+Task: T3105
+Subsystem: Map Studio / Builder workflow / Golden module proof loop
+Intersects: native GUI Display/Tools Builder panel mirrors and Map Studio window action routing.
+
+- Added a visible Builder workflow action for creating the `grgold01` golden proof module directly from Map Studio instead of relying on backend-only fixture construction.
+- Routed the action through `ModuleEditorController.create_golden_test_authored_module()` and refreshed readiness with explicit room/WOK/player-start/placeable/waypoint/door/NPC proof-loop messaging.
+- Kept the GUI Display and Tools Builder panel mirrors in sync and extended the Map Studio source-contract test to preserve the visible golden proof entry point.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\module_editor\builder_tab.py native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt tests\test_authored_module_export.py::test_t3105_exports_golden_map_module_fixture -q`.
+
+### [2026-06-22] Map Studio Adds Golden Module Smoke Fixture
+
+Owner: LordVaderCW
+Task: T3105
+Subsystem: Map Studio / Authored module export / In-game smoke-test fixture
+Intersects: native Scene/Tools authored-module bridge, controller mirrors, and authored-module export manifest contracts.
+
+- Added a canonical `grgold01` authored module fixture with generated room geometry, WOK-backed player start, placeable, waypoint, door transition intent, NPC, lighting, and no copied base-game source identity.
+- Preserved authored project metadata in the package manifest as `project_metadata` so T3105 proof requirements remain visible after MOD export/stage/install handoff.
+- Added controller plumbing for creating the golden authored module from KMAP state and a focused export regression proving required ARE/GIT/IFO/PTH/LYT/VIS/WOK/MDL/MDX resources, walkable pathing anchors, and template dependencies.
+- Verification: `python -m pytest tests\test_authored_module_export.py::test_t3105_exports_golden_map_module_fixture -q`; `python -m py_compile native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_kmap_bridge.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_editor_controller.py native\GhostRigger.Core.Scene\Python\src\core\modules\authored_module_export.py native\GhostRigger.Core.Tools\Python\src\core\modules\authored_module_export.py`; `python -m pytest tests\test_authored_module_export.py::test_t2643_exports_kmap_authored_module_package tests\test_authored_module_export.py::test_t2643_controller_exports_current_kmap_authored_module tests\test_authored_module_export.py::test_t3105_exports_golden_map_module_fixture tests\test_authored_module_export.py::test_t2644_prepare_authored_module_install_writes_checklist_and_proof_manifest -q`.
+
+### [2026-06-22] Map Studio Adds Authored Module Package Wizard
+
+Owner: LordVaderCW
+Task: T3104
+Subsystem: Map Studio / Authored module package UI / Game proof handoff
+Intersects: Core Tools Level Editor package/proof workflow and Map Studio source-contract tests.
+
+- Added an in-app Map Studio package wizard that reviews module root, target game, capability stage, staging folder, install target, dry-run state, overwrite/backup intent, and ARE/GIT/IFO/LYT/VIS/PTH/MDL/MDX/WOK runtime resources before package writes.
+- Routed Export Authored KMAP Module, Stage Authored Module for Game Test, Install Authored Module for Game Test, and tool-belt stage/install actions through the same review step instead of bare folder prompts.
+- Kept capability honesty in the UI: staging/install still creates an export/install candidate and proof manifest, while game-ready status still requires recorded live KOTOR warp evidence.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\module_editor_window.py`; `python -m pytest tests\test_authored_module_export.py::test_t2643_export_panel_exposes_authored_module_action tests\test_authored_module_export.py::test_t2644_export_panel_exposes_authored_module_stage_action tests\test_map_studio_workflow_panel.py::test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt -q`; `python -m pytest tests\test_map_studio_workflow_panel.py::test_t2600_map_studio_export_panel_explains_safe_stage_install_and_game_proof tests\test_authored_module_export.py::test_t2644_controller_stages_current_authored_module -q`.
 
 ### [2026-06-22] Map Studio Surfaces Terrain Sculpt Readiness
 

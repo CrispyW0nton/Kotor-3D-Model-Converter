@@ -70,3 +70,34 @@ def test_library_enrichment_adds_human_area_labels_for_module_models():
 def test_library_category_detects_known_room_model_names():
     assert infer_model_category("m02aa_01a", "tile") == "Modules"
     assert infer_model_category("301nar") == "Modules"
+
+
+class _ModuleSceneResourceManager:
+    def get(self, resref: str, restype: int, game: str = "K1"):
+        assert restype == 3000
+        assert game == "K1"
+        if resref.lower() != "m02aa":
+            return None
+        return (
+            "roomcount 3\n"
+            "m02aa_01a 0 0 0\n"
+            "NULL 1 1 1\n"
+            "m02aa_01b 10 20 30\n"
+            "donelayout\n"
+        ).encode("latin-1")
+
+
+def test_module_room_scene_import_expands_room_row_to_layout_rooms():
+    from src.core.scene.module_scene_import import resolve_module_room_placements
+
+    placements = resolve_module_room_placements(
+        game="K1",
+        resref="m02aa_01a",
+        resource_manager=_ModuleSceneResourceManager(),
+    )
+
+    assert [placement.resref for placement in placements] == ["m02aa_01a", "m02aa_01b"]
+    assert [placement.room_index for placement in placements] == [0, 2]
+    assert placements[0].module_code == "tar_m02aa"
+    assert placements[0].module_root == "m02aa"
+    assert placements[1].position == (10.0, 20.0, 30.0)

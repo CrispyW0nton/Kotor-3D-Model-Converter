@@ -41,6 +41,15 @@ def _metadata_key_for_scope(scope: str) -> str:
     return "area_scripts" if scope == "area" else "module_scripts"
 
 
+def _script_hook_edit_payload(*, scope: str, field_name: str, script_resref: str, removed: bool = False) -> dict[str, Any]:
+    return {
+        "scope": scope,
+        "field_name": field_name,
+        "script_resref": script_resref,
+        "removed": bool(removed),
+    }
+
+
 def _normalise_field_name(scope: str, field_name: Any) -> str:
     wanted = str(field_name or "").strip().lower()
     fields = _fields_for_scope(scope)
@@ -101,7 +110,18 @@ def set_authored_script_hook(
     metadata[key] = hooks
     updated_metadata = replace(project.metadata, metadata=metadata)
     return AuthoredScriptHookUpdate(
-        project=replace(project, metadata=updated_metadata),
+        project=replace(
+            project,
+            metadata=updated_metadata,
+            extra={
+                **dict(project.extra),
+                "last_script_hook": _script_hook_edit_payload(
+                    scope=normalized_scope,
+                    field_name=normalized_field,
+                    script_resref=script,
+                ),
+            },
+        ),
         scope=normalized_scope,
         field_name=normalized_field,
         script_resref=script,
@@ -128,7 +148,19 @@ def remove_authored_script_hook(
         metadata.pop(key, None)
     updated_metadata = replace(project.metadata, metadata=metadata)
     return AuthoredScriptHookUpdate(
-        project=replace(project, metadata=updated_metadata),
+        project=replace(
+            project,
+            metadata=updated_metadata,
+            extra={
+                **dict(project.extra),
+                "last_script_hook_remove": _script_hook_edit_payload(
+                    scope=normalized_scope,
+                    field_name=normalized_field,
+                    script_resref=removed_script,
+                    removed=True,
+                ),
+            },
+        ),
         scope=normalized_scope,
         field_name=normalized_field,
         script_resref=removed_script,

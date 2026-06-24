@@ -90,7 +90,7 @@ def test_t2647_prepare_grdev01_authored_smoke_installs_with_backup(tmp_path: Pat
     assert payload["resolved_game_root_dir"] == str(modules_dir.parent)
     assert "launch_grdev01_smoke_test.py" in payload["launch_helper_command"]
     assert str(modules_dir.parent) in payload["launch_helper_command"]
-    assert "capture_grdev01_smoke_evidence.py" in payload["evidence_capture_command"]
+    assert "capture_authored_module_evidence.py" in payload["evidence_capture_command"]
     assert "--record-proof" in payload["evidence_capture_command"]
     assert Path(payload["elevated_launch_script_path"]).is_file()
     assert Path(payload["proof_recording_script_path"]).is_file()
@@ -158,8 +158,11 @@ def test_t2647_prepare_grdev01_room_only_summary_omits_placeable_check(tmp_path:
     proof = json.loads(Path(payload["proof_manifest_path"]).read_text(encoding="utf-8"))
     assert proof["acceptance_checks"] == [
         "module_loads_in_game",
+        "module_identity_matches_authored_resref",
         "player_spawns_on_floor",
         "player_can_walk_on_floor",
+        "transition_pathing_sanity_confirmed",
+        "no_inherited_base_game_geometry_or_scripted_movers",
         "screenshot_or_video_captured",
     ]
 

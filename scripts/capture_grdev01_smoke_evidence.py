@@ -1,9 +1,9 @@
-"""Capture screenshot evidence for the grdev01 in-game smoke test.
+"""Capture screenshot evidence for an authored Map Studio in-game smoke test.
 
-Run this after KOTOR is showing the `warp grdev01` result.  By default it only
-captures a BMP screenshot.  Use `--record-proof` plus the explicit acceptance
-flags after verifying the module loads, the player stands on the generated
-floor, the test placeable is visible, and walking works.
+Run this after KOTOR is showing the proof manifest's warp result.  By default
+it only captures a BMP screenshot.  Use `--record-proof` plus the explicit
+acceptance flags after verifying the module loads, the player stands on the
+generated floor, expected placed objects are visible, and walking works.
 """
 
 from __future__ import annotations
@@ -87,13 +87,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "--proof-manifest",
         type=Path,
         default=DEFAULT_PROOF_MANIFEST,
-        help="Proof manifest written by the grdev01 prepare/install helper.",
+        help="Proof manifest written by the Map Studio prepare/install helper.",
     )
     parser.add_argument(
         "--output",
         type=Path,
         default=None,
-        help="Optional BMP evidence path. Defaults to <manifest-dir>/evidence/grdev01_smoke_<timestamp>.bmp.",
+        help="Optional BMP evidence path. Defaults to <manifest-dir>/evidence/<module>_smoke_<timestamp>.bmp.",
     )
     parser.add_argument("--tester", default="", help="Name or handle of the tester recording proof.")
     parser.add_argument("--notes", default="", help="Optional notes about the KOTOR build, install path, or result.")
@@ -108,7 +108,7 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow proof recording without confirming a running KOTOR process. Intended only for scripted diagnostics.",
     )
-    parser.add_argument("--module-loads-in-game", action="store_true", help="Confirm `warp grdev01` loads the generated module.")
+    parser.add_argument("--module-loads-in-game", action="store_true", help="Confirm the proof manifest warp command loads the generated module.")
     parser.add_argument(
         "--module-identity-matches-authored-resref",
         action="store_true",
@@ -117,6 +117,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--player-spawns-on-floor", action="store_true", help="Confirm the player appears on the generated floor.")
     parser.add_argument("--test-placeable-visible", action="store_true", help="Confirm the smoke-test placeable appears.")
     parser.add_argument("--player-can-walk-on-floor", action="store_true", help="Confirm the player can walk across the generated floor.")
+    parser.add_argument(
+        "--transition-pathing-sanity-confirmed",
+        action="store_true",
+        help="Confirm authored PTH anchors are reachable and any door/transition links behave as expected.",
+    )
     parser.add_argument(
         "--no-inherited-base-game-geometry-or-scripted-movers",
         action="store_true",
@@ -134,9 +139,27 @@ def _load_proof(proof_manifest: Path) -> dict[str, Any]:
     return proof if isinstance(proof, dict) else {}
 
 
+def _proof_module_root(proof: dict[str, Any]) -> str:
+    package = proof.get("package") if isinstance(proof.get("package"), dict) else {}
+    module_root = str(
+        proof.get("module_root")
+        or proof.get("package_module_root")
+        or package.get("module_root")
+        or "grdev01"
+    ).strip()
+    return module_root or "grdev01"
+
+
+def _proof_warp_command(proof: dict[str, Any]) -> str:
+    handoff = proof.get("launch_handoff") if isinstance(proof.get("launch_handoff"), dict) else {}
+    module_root = _proof_module_root(proof)
+    return str(handoff.get("warp_command") or proof.get("warp_command") or f"warp {module_root}")
+
+
 def _default_output_path(proof_manifest: Path) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return proof_manifest.parent / "evidence" / f"grdev01_smoke_{timestamp}.bmp"
+    module_root = _proof_module_root(_load_proof(proof_manifest))
+    return proof_manifest.parent / "evidence" / f"{module_root}_smoke_{timestamp}.bmp"
 
 
 def _capture_screen_bmp(output_path: Path) -> dict[str, Any]:
@@ -416,7 +439,7 @@ def _bmp_evidence_quality(output_path: Path) -> dict[str, Any]:
     if blank:
         blocking.append(
             (
-                "Screenshot evidence is mostly black/blank. Load a save, run `warp grdev01`, "
+                "Screenshot evidence is mostly black/blank. Load a save, run the proof manifest warp command, "
                 "and capture the visible generated floor/placeable before recording proof."
             )
         )
@@ -434,7 +457,7 @@ def _bmp_evidence_quality(output_path: Path) -> dict[str, Any]:
     }
 
 
-def _kotor_process_summary(*, skip_check: bool = False) -> dict[str, Any]:
+def _kotor_process_summary(*, skip_check: bool = False, warp_command: str = "warp grdev01") -> dict[str, Any]:
     if skip_check:
         return {
             "checked": False,
@@ -522,7 +545,7 @@ def _kotor_process_summary(*, skip_check: bool = False) -> dict[str, Any]:
                 "blocking_issues": [f"Could not parse KOTOR process check output: {exc}"],
             }
 
-    blocking = [] if processes else ["No running KOTOR process was detected. Launch KOTOR, warp to grdev01, then record proof."]
+    blocking = [] if processes else [f"No running KOTOR process was detected. Launch KOTOR, run `{warp_command}`, then record proof."]
     return {
         "checked": True,
         "required_for_recording": True,
@@ -545,6 +568,7 @@ def _record_proof(
     player_spawns_on_floor: bool,
     test_placeable_visible: bool,
     player_can_walk_on_floor: bool,
+    transition_pathing_sanity_confirmed: bool,
     no_inherited_base_game_geometry_or_scripted_movers: bool,
 ) -> dict[str, Any]:
     _install_payload_paths()
@@ -579,6 +603,7 @@ def _record_proof(
                 player_spawns_on_floor=player_spawns_on_floor,
                 test_placeable_visible=test_placeable_visible,
                 player_can_walk_on_floor=player_can_walk_on_floor,
+                transition_pathing_sanity_confirmed=transition_pathing_sanity_confirmed,
                 no_inherited_base_game_geometry_or_scripted_movers=no_inherited_base_game_geometry_or_scripted_movers,
             )
         )
@@ -604,6 +629,8 @@ def _summary(
     record: dict[str, Any] | None,
     kotor_process: dict[str, Any] | None = None,
     evidence_quality: dict[str, Any] | None = None,
+    module_root: str = "grdev01",
+    warp_command: str = "warp grdev01",
 ) -> dict[str, Any]:
     process_blocking = list((kotor_process or {}).get("blocking_issues", []))
     quality_blocking = list((evidence_quality or {}).get("blocking_issues", []))
@@ -616,12 +643,13 @@ def _summary(
         "Review the screenshot, verify the smoke-test checklist in-game, then rerun with "
         "`--record-proof --module-loads-in-game --module-identity-matches-authored-resref "
         "--player-spawns-on-floor --test-placeable-visible --player-can-walk-on-floor "
-        "--no-inherited-base-game-geometry-or-scripted-movers` to mark the package game-tested."
+        "--transition-pathing-sanity-confirmed --no-inherited-base-game-geometry-or-scripted-movers` "
+        "to mark the package game-tested."
     )
     if process_blocking:
-        next_action = "Launch KOTOR, run `warp grdev01`, verify the smoke-test checklist, then rerun evidence capture."
+        next_action = f"Launch KOTOR, run `{warp_command}`, verify the smoke-test checklist, then rerun evidence capture."
     if quality_blocking:
-        next_action = "Load a save, run `warp grdev01`, confirm the generated floor/placeable/walkability, then capture visible evidence again."
+        next_action = f"Load a save, run `{warp_command}`, confirm the generated floor/placeable/walkability, then capture visible evidence again."
     if record is not None and record.get("ok"):
         next_action = "Proof manifest updated; run the status checker to confirm the package is game-tested."
     return {
@@ -629,6 +657,8 @@ def _summary(
         "code": "captured" if record is None else str(record.get("code") or "recorded"),
         "message": str(capture.get("message") or ""),
         "proof_manifest_path": str(proof_manifest),
+        "module_root": module_root,
+        "warp_command": warp_command,
         "evidence_path": str(output_path),
         "capture": capture,
         "kotor_process": kotor_process,
@@ -646,7 +676,7 @@ def _summary(
 
 def _print_human_summary(summary: dict[str, Any]) -> None:
     status = "OK" if summary["ok"] else "INCOMPLETE"
-    print(f"grdev01 evidence capture: {status} ({summary['code']})")
+    print(f"{summary.get('module_root', 'authored')} evidence capture: {status} ({summary['code']})")
     print(summary["message"])
     print(f"Proof manifest: {summary['proof_manifest_path']}")
     print(f"Evidence: {summary['evidence_path']}")
@@ -675,18 +705,21 @@ def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     proof_manifest = args.proof_manifest
+    proof = _load_proof(proof_manifest)
+    module_root = _proof_module_root(proof)
+    warp_command = _proof_warp_command(proof)
     output_path = args.output or _default_output_path(proof_manifest)
     record = None
     kotor_process = None
     if args.kotor_window_only:
-        kotor_process = _kotor_process_summary(skip_check=bool(args.skip_kotor_process_check))
+        kotor_process = _kotor_process_summary(skip_check=bool(args.skip_kotor_process_check), warp_command=warp_command)
         capture = _capture_kotor_window_bmp(output_path, kotor_process)
     else:
         capture = _capture_screen_bmp(output_path)
     evidence_quality = _bmp_evidence_quality(output_path) if capture.get("ok") and (args.record_proof or args.kotor_window_only) else None
     if capture.get("ok") and args.record_proof:
         if kotor_process is None:
-            kotor_process = _kotor_process_summary(skip_check=bool(args.skip_kotor_process_check))
+            kotor_process = _kotor_process_summary(skip_check=bool(args.skip_kotor_process_check), warp_command=warp_command)
         if kotor_process.get("blocking_issues") or (evidence_quality is not None and evidence_quality.get("blocking_issues")):
             blocking_issues = list(kotor_process.get("blocking_issues", []))
             if evidence_quality is not None:
@@ -719,6 +752,7 @@ def main(argv: list[str] | None = None) -> int:
                 player_spawns_on_floor=bool(args.player_spawns_on_floor),
                 test_placeable_visible=bool(args.test_placeable_visible),
                 player_can_walk_on_floor=bool(args.player_can_walk_on_floor),
+                transition_pathing_sanity_confirmed=bool(args.transition_pathing_sanity_confirmed),
                 no_inherited_base_game_geometry_or_scripted_movers=bool(
                     args.no_inherited_base_game_geometry_or_scripted_movers
                 ),
@@ -730,6 +764,8 @@ def main(argv: list[str] | None = None) -> int:
         record=record,
         kotor_process=kotor_process,
         evidence_quality=evidence_quality,
+        module_root=module_root,
+        warp_command=warp_command,
     )
     if args.json:
         print(json.dumps(summary, indent=2))

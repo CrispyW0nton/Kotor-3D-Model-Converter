@@ -4024,6 +4024,8 @@ def test_kmax_scene_reload_preserves_selected_object_for_pivot_tools() -> None:
     assert "self.select_scene_object(selected_id)" in load_scene_source
     assert "clear_caches" not in append_scene_source
     assert "root.children.append(node)" in append_scene_source
+    assert "self._prewarm_textures(composite)" in append_scene_source
+    assert "self._gpu_texture_snapshot_key = None" in append_scene_source
     assert 'reason="scene object appended"' in append_scene_source
 
 

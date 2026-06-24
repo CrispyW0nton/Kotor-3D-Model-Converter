@@ -204,14 +204,22 @@ def test_non_serializable_metadata_fails_preflight(tmp_path: Path) -> None:
     assert any("non-JSON-serializable" in issue.message for issue in result.validation_report.issues)
 
 
-def test_outputs_must_share_parent_directory_for_now(tmp_path: Path) -> None:
+def test_multi_directory_outputs_stage_and_promote_together(tmp_path: Path) -> None:
     out_a = tmp_path / "a" / "one.txt"
     out_b = tmp_path / "b" / "two.txt"
-    called = False
+    seen_staging_dirs: list[Path] = []
 
-    def writer(_context: ExportJobContext) -> None:
-        nonlocal called
-        called = True
+    def writer(context: ExportJobContext) -> None:
+        context.write_text(out_a, "one", encoding="utf-8")
+        context.write_text(out_b, "two", encoding="utf-8")
+        staged_a = context.staged_path_for(out_a)
+        staged_b = context.staged_path_for(out_b)
+        assert staged_a.exists()
+        assert staged_b.exists()
+        assert staged_a.parent != staged_b.parent
+        assert not out_a.exists()
+        assert not out_b.exists()
+        seen_staging_dirs.extend([staged_a.parent, staged_b.parent])
 
     result = run_export_job(
         _request(
@@ -224,9 +232,12 @@ def test_outputs_must_share_parent_directory_for_now(tmp_path: Path) -> None:
         writer=writer,
     )
 
-    assert result.status == ExportJobStatus.PREFLIGHT_FAILED
-    assert called is False
-    assert any("share one final parent" in issue.message for issue in result.validation_report.issues)
+    assert result.status == ExportJobStatus.SUCCEEDED
+    assert out_a.read_text(encoding="utf-8") == "one"
+    assert out_b.read_text(encoding="utf-8") == "two"
+    assert Path(result.staged_paths[str(out_a)]).name == "one.txt"
+    assert Path(result.staged_paths[str(out_b)]).name == "two.txt"
+    assert seen_staging_dirs and all(not path.exists() for path in seen_staging_dirs)
 
 
 def test_manifest_writer_output_is_promoted(tmp_path: Path) -> None:

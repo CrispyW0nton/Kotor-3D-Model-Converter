@@ -106,7 +106,13 @@ class ViewportRenderingPipelineMixin:
             governor.mark_clean_after_render(render_reason, self._last_render_wall)
         if img is None:
             if self.model is None:
-                self.canvas.setText("GPU render unavailable\nEmpty Scene")
+                if bool(self.property("_gr_suppress_renderer_diagnostics")) or (
+                    hasattr(self, "_map_studio_should_hide_empty_scene_label")
+                    and self._map_studio_should_hide_empty_scene_label()
+                ):
+                    self.canvas.setText("")
+                else:
+                    self.canvas.setText("GPU render unavailable\nEmpty Scene")
                 return
             mesh_count = len(self.model.mesh_nodes()) if hasattr(self.model, "mesh_nodes") else 0
             node_count = self.model.node_count() if hasattr(self.model, "node_count") else 0
@@ -248,6 +254,10 @@ class ViewportRenderingPipelineMixin:
         set_text = getattr(self.canvas, "set_diagnostics_text", None)
         clear_text = getattr(self.canvas, "clear_diagnostics_text", None)
         if not callable(set_text):
+            return
+        if bool(self.property("_gr_suppress_renderer_diagnostics")):
+            if callable(clear_text):
+                clear_text()
             return
         if not bool(getattr(self._renderer_settings, "show_renderer_diagnostics", True)):
             if callable(clear_text):
@@ -572,8 +582,9 @@ class ViewportRenderingPipelineMixin:
             self._draw_mesh_subobject_selection(draw, w, h)
             self._draw_joint_marquee(draw)
             self._renderer._draw_axes(draw, w, h)
-            self._renderer._draw_stats(draw, w, h)
-            self._draw_renderer_statistics_overlay(draw, w, h)
+            if not bool(self.property("_gr_suppress_renderer_diagnostics")):
+                self._renderer._draw_stats(draw, w, h)
+                self._draw_renderer_statistics_overlay(draw, w, h)
             self._draw_active_camera_overlays(draw, w, h)
             self._record_overlay_rebuild(time_module.perf_counter() - overlay_started)
             return img

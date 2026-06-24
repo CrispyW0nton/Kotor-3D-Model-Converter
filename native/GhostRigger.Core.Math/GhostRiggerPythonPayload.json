@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Math",
-    "file_count": 45,
+    "file_count": 46,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -93,7 +93,13 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_INIT",
             "source_path": "src/core/geometry/__init__.py",
             "packaged_path": "Python/src/core/geometry/__init__.py",
-            "sha256": "a0a22627060292608bec4c6f26badde8edeedfcba27445938b91c67ba9d290f5"
+            "sha256": "ca06e2942e5480eafe8fe3d0721d3f606c733877fe8cd8b64e2f9b82cd88596e"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_COMPONENT_EDITING",
+            "source_path": "src/core/geometry/component_editing.py",
+            "packaged_path": "Python/src/core/geometry/component_editing.py",
+            "sha256": "3b29cee870ec1c271257ce16ef0cb2c5510242d24b3303adebf4fea57aaf407f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_LIGHTSABER",
@@ -201,7 +207,7 @@
             "resource_name": "PYTHON_PAYLOAD_MATH_GPU_MATH",
             "source_path": "src/math/gpu_math.py",
             "packaged_path": "Python/src/math/gpu_math.py",
-            "sha256": "9ec4f83e22baa11eb08264f1bb7e3aad4286d304a0968ca83f5ffd062db40ec8"
+            "sha256": "078e91f3b54234848f319afa2943a3e7dbe2b38768063e29ef3eca8eb6a951e7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_MODULE_LAYOUT_MATH",

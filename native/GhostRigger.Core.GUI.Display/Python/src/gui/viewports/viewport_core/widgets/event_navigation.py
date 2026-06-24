@@ -38,6 +38,15 @@ class ViewportEventNavigationMixin:
             if et == QtCore.QEvent.Leave:
                 self._clear_viewport_hover(reason="viewport leave")
                 return False
+            if et in {
+                QtCore.QEvent.MouseButtonPress,
+                QtCore.QEvent.MouseMove,
+                QtCore.QEvent.MouseButtonRelease,
+                QtCore.QEvent.KeyPress,
+            }:
+                map_studio_handler = getattr(self, "_gr_map_studio_viewport_input_handler", None)
+                if callable(map_studio_handler) and bool(map_studio_handler(event, obj)):
+                    return True
             if et == QtCore.QEvent.MouseButtonPress:
                 self.canvas.setFocus()
                 action = self._navigation_action(event.button(), event.modifiers())

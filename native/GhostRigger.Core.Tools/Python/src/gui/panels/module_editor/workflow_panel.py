@@ -210,6 +210,11 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         self.export_label.setWordWrap(True)
         root.addWidget(self.export_label)
 
+        self.export_job_label = QtWidgets.QLabel("ExportJob: No package transaction recorded")
+        self.export_job_label.setObjectName("mapStudioWorkflowExportJobLabel")
+        self.export_job_label.setWordWrap(True)
+        root.addWidget(self.export_job_label)
+
         self.proof_label = QtWidgets.QLabel("Game proof: Required before game-ready")
         self.proof_label.setObjectName("mapStudioWorkflowProofLabel")
         self.proof_label.setWordWrap(True)
@@ -371,6 +376,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self.scripts_label.setText("Scripts: Add module or area script hooks when this map needs scripted behavior.")
             self.validation_label.setText("Validation: Not checked")
             self.export_label.setText("Export/install: Not ready")
+            self.export_job_label.setText("ExportJob: No package transaction recorded")
             self.proof_label.setText("Game proof: Required before game-ready")
             self.next_action_label.setText("Next: create or open a KMAP project.")
             return
@@ -415,6 +421,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             self._set_action_enabled(True, can_place=has_authored_module, can_export=False, can_proof=False)
             self.validation_label.setText("Validation: Not checked")
             self.export_label.setText("Export/install: Not ready")
+            self.export_job_label.setText("ExportJob: Waiting for authored content and validation")
             self.proof_label.setText("Game proof: Required before game-ready")
             self.next_action_label.setText("Next: create authored content in Builder.")
             return
@@ -429,6 +436,7 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         metadata = dict(getattr(readiness, "metadata", {}) or {})
         pathing = dict(metadata.get("pathing") or {})
         pathing_blockers = tuple(pathing.get("blockers", ()) or ())
+        export_job = dict(metadata.get("export_job") or {})
         installed_path = str(metadata.get("installed_module_path") or "")
         proof_manifest = str(metadata.get("proof_manifest_path") or "")
         readiness_game = str(getattr(readiness, "game", "") or game)
@@ -531,6 +539,13 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
             )
         else:
             self.export_label.setText(f"Export/install: {export_status}.")
+        self.export_job_label.setText(
+            self._export_job_text(
+                export_job,
+                can_export_candidate=can_export_candidate,
+                game_tested=game_tested,
+            )
+        )
         if game_tested:
             self.proof_label.setText("Game proof: Recorded from a live KOTOR warp test.")
         else:
@@ -652,6 +667,34 @@ class MapStudioWorkflowPanel(QtWidgets.QWidget):
         if stage_label.lower() == "previewable":
             return "Test state: Previewable only. Generate missing runtime resources before staging."
         return f"Test state: {stage_label}. Resolve blockers before game testing."
+
+    @staticmethod
+    def _export_job_text(
+        export_job: dict[str, Any],
+        *,
+        can_export_candidate: bool,
+        game_tested: bool,
+    ) -> str:
+        if not export_job:
+            if can_export_candidate:
+                return "ExportJob: Ready to stage; no package transaction recorded yet."
+            return "ExportJob: Waiting for preflight, package, readback, and proof handoff."
+
+        status = str(export_job.get("status") or "not_run").replace("_", " ")
+        preflight = dict(export_job.get("preflight") or {})
+        package = dict(export_job.get("package") or {})
+        readback = dict(export_job.get("readback") or {})
+        proof = dict(export_job.get("proof_handoff") or {})
+
+        blocking_count = int(preflight.get("blocking_issue_count") or 0)
+        preflight_text = "preflight ready" if preflight.get("ready") else f"preflight blocked ({blocking_count})"
+        package_text = "package written" if package.get("ok") else "package not written"
+        readback_text = "readback OK" if readback.get("ok") else "readback pending"
+        proof_state = str(proof.get("state") or ("game_smoke_tested" if game_tested else "requires_live_warp_proof"))
+        proof_text = proof_state.replace("_", " ")
+        if game_tested:
+            proof_text = "game smoke tested"
+        return f"ExportJob: {status}; {preflight_text}; {package_text}; {readback_text}; proof {proof_text}."
 
     @staticmethod
     def _format_resource_key(resource: Any) -> str:

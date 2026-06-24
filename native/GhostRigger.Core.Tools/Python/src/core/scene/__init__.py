@@ -1,5 +1,9 @@
 """Scene graph, room-visibility, and KMAX editor scene services."""
 
+from pkgutil import extend_path
+
+__path__ = extend_path(__path__, __name__)
+
 from .kmax_scene import KMAX_FILE_TYPE, KMAX_FILE_VERSION, KMaxScene
 from .kmax_scene_manager import KMaxSceneManager
 from .kmax_serializer import KMaxSerializer

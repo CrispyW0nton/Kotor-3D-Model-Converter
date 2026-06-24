@@ -32,6 +32,7 @@ class MapStudioToolContractStatus:
     contract_kind: str
     command_method: str = ""
     mutates_kmap: bool = False
+    stale_outputs: tuple[str, ...] = ()
     readiness_impact: str = ""
     preset_keys: tuple[str, ...] = ()
     in_any_preset: bool = False
@@ -112,6 +113,7 @@ def _rich_context() -> MapStudioToolActionContext:
         cut_center=(0.5, 0.5),
         cut_size=(0.25, 0.25),
         duplicate_count=2,
+        move_delta=(0.25, 0.0, 0.0),
         export_output_dir=".pytest_tmp_map_studio_stage",
         export_dry_run=True,
         export_overwrite=True,
@@ -119,6 +121,8 @@ def _rich_context() -> MapStudioToolActionContext:
         metadata={
             "edge_indices": (0, 1),
             "position_policy": "target",
+            "texture": "CM_Baremetal",
+            "surface_id": 4,
             "curve_name": "audit_curve",
             "curve_purpose": "terrain_ridge",
             "points": ((0.0, 0.0, 0.0), (1.0, 0.5, 0.0), (2.0, 0.5, 0.0)),
@@ -203,6 +207,7 @@ def audit_map_studio_tool_belt_contract() -> MapStudioToolContractAudit:
                 contract_kind=kind,
                 command_method=str(route.command_method or ""),
                 mutates_kmap=bool(route.mutates_kmap),
+                stale_outputs=tuple(getattr(route, "stale_outputs", ()) or ()),
                 readiness_impact=str(route.readiness_impact or ""),
                 preset_keys=action_presets,
                 in_any_preset=bool(action_presets),

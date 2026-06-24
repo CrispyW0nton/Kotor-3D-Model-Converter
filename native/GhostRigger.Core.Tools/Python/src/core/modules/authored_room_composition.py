@@ -38,6 +38,9 @@ from .authored_room_primitives import (
 from .module_format import WOKData, WOKFace
 
 
+DOOR_TRANSITION_SURFACE_ID = 18
+
+
 BaseRoomPrimitive = Union[
     FloorPrimitive,
     WallPrimitive,
@@ -81,7 +84,7 @@ class AuthoredRoomComposition:
     """Editable primitive collection for one room model."""
 
     room_resref: str
-    floor: FloorPrimitive
+    floor: FloorPrimitive | PlacedRoomPrimitive
     primitives: tuple[RoomPrimitive, ...] = ()
     helper_meshes: tuple[PrimitiveMesh, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -176,6 +179,15 @@ def _base_primitive(primitive: RoomPrimitive) -> BaseRoomPrimitive:
     return primitive.primitive if isinstance(primitive, PlacedRoomPrimitive) else primitive
 
 
+def _floor_base_and_transform(floor: FloorPrimitive | PlacedRoomPrimitive) -> tuple[FloorPrimitive, PrimitiveTransform | None]:
+    if isinstance(floor, PlacedRoomPrimitive):
+        base = floor.primitive
+        if not isinstance(base, FloorPrimitive):
+            raise TypeError(f"Authored room composition floor must be a FloorPrimitive, not {type(base)!r}.")
+        return base, floor.transform
+    return floor, None
+
+
 def _primitive_name(primitive: FloorPrimitive | RoomPrimitive) -> str:
     if isinstance(primitive, PlacedRoomPrimitive):
         return str(primitive.name or getattr(primitive.primitive, "name", "") or "").strip()
@@ -236,10 +248,43 @@ def _append_wok(base: WOKData, extra: WOKData) -> WOKData:
     return base
 
 
+def _build_floor_wok_for_composition(composition: AuthoredRoomComposition) -> WOKData:
+    """Build the base floor WOK, optionally reserving a doorway transition strip."""
+
+    floor, transform = _floor_base_and_transform(composition.floor)
+    if not bool(dict(composition.metadata or {}).get("include_door_transition_surface", False)):
+        wok = build_floor_wok(floor)
+        return transform_wok_data(wok, transform) if transform is not None else wok
+
+    surface_id = resolve_walkmesh_surface_id(floor.surface_id)
+    half_w = float(floor.width) * 0.5
+    half_d = float(floor.depth) * 0.5
+    z = float(floor.z)
+    strip_depth = max(0.25, min(2.0, float(floor.depth) * 0.25))
+    strip_y = half_d - strip_depth
+    wok = WOKData(
+        verts=[
+            (-half_w, -half_d, z),
+            (half_w, -half_d, z),
+            (half_w, strip_y, z),
+            (-half_w, strip_y, z),
+            (half_w, half_d, z),
+            (-half_w, half_d, z),
+        ],
+        faces=[
+            WOKFace(0, 1, 2, surface=surface_id, adj1=-1, adj2=-1, adj3=1),
+            WOKFace(0, 2, 3, surface=surface_id, adj1=0, adj2=2, adj3=-1),
+            WOKFace(3, 2, 4, surface=DOOR_TRANSITION_SURFACE_ID, adj1=1, adj2=-1, adj3=3),
+            WOKFace(3, 4, 5, surface=DOOR_TRANSITION_SURFACE_ID, adj1=2, adj2=-1, adj3=-1),
+        ],
+    )
+    return transform_wok_data(wok, transform) if transform is not None else wok
+
+
 def build_composition_wok(composition: AuthoredRoomComposition) -> WOKData:
     """Build the room WOK from the floor plus walkable authored primitives."""
 
-    wok = build_floor_wok(composition.floor)
+    wok = _build_floor_wok_for_composition(composition)
     for primitive in composition.primitives:
         base = _base_primitive(primitive)
         primitive_wok: WOKData | None = None
@@ -261,14 +306,17 @@ def validate_authored_room_composition(composition: AuthoredRoomComposition) -> 
 
     warnings: list[str] = []
     blocking: list[str] = []
+    floor, floor_transform = _floor_base_and_transform(composition.floor)
     if not _normalise_name(composition.room_resref):
         blocking.append("Authored room composition requires a room resref.")
-    if float(composition.floor.width) <= 0.0 or float(composition.floor.depth) <= 0.0:
+    if float(floor.width) <= 0.0 or float(floor.depth) <= 0.0:
         blocking.append("Authored room floor must have positive width and depth.")
     try:
-        require_walkable_walkmesh_surface(composition.floor.surface_id, context=f"{composition.room_resref} floor")
+        require_walkable_walkmesh_surface(floor.surface_id, context=f"{composition.room_resref} floor")
     except ValueError as exc:
         blocking.append(str(exc))
+    if floor_transform is not None and any(float(value) <= 0.0 for value in floor_transform.scale):
+        blocking.append(f"Placed floor {_primitive_name(composition.floor) or '(unnamed)'} must have positive transform scale.")
     names: set[str] = set()
     for primitive in (composition.floor, *composition.primitives):
         name = _primitive_name(primitive)
@@ -345,8 +393,9 @@ def compile_authored_room_composition(composition: AuthoredRoomComposition) -> A
     validation = validate_authored_room_composition(composition)
     if not validation.ok:
         raise ValueError("; ".join(validation.blocking_issues))
-    floor_mesh = build_floor_mesh(composition.floor)
-    floor_surface_id = resolve_walkmesh_surface_id(composition.floor.surface_id)
+    floor, _floor_transform = _floor_base_and_transform(composition.floor)
+    floor_mesh = _primitive_to_mesh(composition.floor)
+    floor_surface_id = resolve_walkmesh_surface_id(floor.surface_id)
     primitive_meshes = tuple(_primitive_to_mesh(primitive) for primitive in composition.primitives)
     room_resref = _normalise_name(composition.room_resref)
     return AuthoredRoomGeometry(
@@ -361,6 +410,9 @@ def compile_authored_room_composition(composition: AuthoredRoomComposition) -> A
             "floor": floor_mesh.name,
             "floor_surface_id": floor_surface_id,
             "floor_surface_name": walkmesh_surface_name(floor_surface_id),
+            "transition_surface_id": DOOR_TRANSITION_SURFACE_ID
+            if bool(dict(composition.metadata or {}).get("include_door_transition_surface", False))
+            else 0,
             "primitive_count": len(composition.primitives),
             "helper_mesh_count": len(composition.helper_meshes),
             "compiled_mesh_count": 1 + len(primitive_meshes) + len(composition.helper_meshes),
@@ -369,7 +421,9 @@ def compile_authored_room_composition(composition: AuthoredRoomComposition) -> A
                 for primitive in composition.primitives
                 if isinstance(_base_primitive(primitive), (FloorPrimitive, RampPrimitive, StairsPrimitive))
             ),
-            "transformed_primitive_count": sum(1 for primitive in composition.primitives if isinstance(primitive, PlacedRoomPrimitive)),
+            "transformed_primitive_count": sum(
+                1 for primitive in (composition.floor,) + tuple(composition.primitives) if isinstance(primitive, PlacedRoomPrimitive)
+            ),
             "warnings": list(validation.warnings),
         },
     )
@@ -448,6 +502,7 @@ def create_rectangular_room_composition(primitive: RectangularRoomPrimitive) -> 
             "wall_height": wall_height,
             "floor_surface_id": floor_surface_id,
             "floor_surface_name": walkmesh_surface_name(floor_surface_id),
+            "include_door_transition_surface": bool(primitive.include_doorway_marker),
         },
     )
 

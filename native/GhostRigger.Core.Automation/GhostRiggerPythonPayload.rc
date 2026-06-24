@@ -33,3 +33,5 @@ PYTHON_PAYLOAD_KOTORMCP_TOOLS_RETARGETING RCDATA "Python/src/kotormcp/tools/reta
 PYTHON_PAYLOAD_KOTORMCP_TOOLS_WALKMESH RCDATA "Python/src/kotormcp/tools/walkmesh.py"
 PYTHON_PAYLOAD_KOTORMCP_UTILS_INIT RCDATA "Python/src/kotormcp/utils/__init__.py"
 PYTHON_PAYLOAD_KOTORMCP_UTILS_FORMATTING RCDATA "Python/src/kotormcp/utils/formatting.py"
+PYTHON_PAYLOAD_MAX2021_MCP_INIT RCDATA "Python/src/max2021_mcp/__init__.py"
+PYTHON_PAYLOAD_MAX2021_MCP_SERVER RCDATA "Python/src/max2021_mcp/server.py"

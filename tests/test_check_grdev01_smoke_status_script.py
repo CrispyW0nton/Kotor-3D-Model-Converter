@@ -207,14 +207,18 @@ def test_t2698_status_accepts_authored_smoke_package_before_manual_install(tmp_p
     assert payload["ready_for_game_launch"] is False
     assert payload["proof"]["missing_checks"] == [
         "module_loads_in_game",
+        "module_identity_matches_authored_resref",
         "player_spawns_on_floor",
         "test_placeable_visible",
         "player_can_walk_on_floor",
+        "transition_pathing_sanity_confirmed",
+        "no_inherited_base_game_geometry_or_scripted_movers",
         "screenshot_or_video_captured",
     ]
     assert payload["launch_handoff"]["warp_command"] == "warp grdev01"
     assert "record_authored_module_game_proof.py" in payload["launch_handoff"]["proof_recording_command_template"]
     assert "--module-loads-in-game" in payload["launch_handoff"]["proof_recording_command_template"]
+    assert "--transition-pathing-sanity-confirmed" in payload["launch_handoff"]["proof_recording_command_template"]
 
 
 def test_t2698_status_can_write_modder_readable_smoke_report(tmp_path: Path) -> None:
@@ -230,7 +234,7 @@ def test_t2698_status_can_write_modder_readable_smoke_report(tmp_path: Path) -> 
     assert "- Module root: `grdev01`" in text
     assert "- IFO entry area: `grdev01`" in text
     assert "- GIT placeables: `1`" in text
-    assert "- WOK walkable/non-walk: `2 / 8`" in text
+    assert "- WOK walkable/non-walk: `4 / 12`" in text
     assert "- [x] `module.ifo`" in text
     assert "- [ ] module_loads_in_game" in text
 
@@ -282,7 +286,7 @@ def test_t2698_status_accepts_installed_authored_smoke_package(tmp_path: Path) -
     assert "evidence capture command" in payload["next_action"]
     assert payload["launch_handoff"]["warp_command"] == "warp grdev01"
     assert "launch_grdev01_smoke_test.py" in payload["launch_handoff"]["launch_helper_command"]
-    assert "capture_grdev01_smoke_evidence.py" in payload["launch_handoff"]["evidence_capture_command"]
+    assert "capture_authored_module_evidence.py" in payload["launch_handoff"]["evidence_capture_command"]
     assert payload["launch_handoff"]["proof_recording_script_path"].endswith("grdev01_record_game_proof.cmd")
 
 
@@ -328,12 +332,16 @@ def test_t2698_status_uses_room_only_authored_proof_checks(tmp_path: Path) -> No
     assert payload["status"] == "installed_ready_for_game_test"
     assert payload["proof"]["required_checks"] == [
         "module_loads_in_game",
+        "module_identity_matches_authored_resref",
         "player_spawns_on_floor",
         "player_can_walk_on_floor",
+        "transition_pathing_sanity_confirmed",
+        "no_inherited_base_game_geometry_or_scripted_movers",
         "screenshot_or_video_captured",
     ]
     assert "--test-placeable-visible" not in payload["launch_handoff"]["proof_recording_command_template"]
-    assert "floor/walkability" in payload["next_action"]
+    assert "--transition-pathing-sanity-confirmed" in payload["launch_handoff"]["proof_recording_command_template"]
+    assert "floor/walkability/pathing" in payload["next_action"]
     assert "floor/placeable/walkability" not in payload["next_action"]
 
 

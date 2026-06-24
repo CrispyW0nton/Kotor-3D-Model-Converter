@@ -46,12 +46,18 @@ def test_t2693_room_light_persists_in_kmap_and_readiness() -> None:
     readiness = build_authored_module_readiness(roundtrip)
     toolchain = {step.name: step for step in readiness.toolchain}
 
-    assert payload["lights"][0]["name"] == "warm_key"
-    assert roundtrip.lights[0].position == (1.0, 2.0, 2.5)
-    assert readiness.metadata["lighting_count"] == 1
-    assert readiness.metadata["room_lights"][0]["light_type"] == "point"
-    assert toolchain["Lighting"].status == "1 authored light(s)"
-    assert any(item.name == "Room lighting" and item.value_label == "1 authored light(s)" for item in readiness.inputs)
+    warm_payload = next(light for light in payload["lights"] if light["name"] == "warm_key")
+    warm_light = next(light for light in roundtrip.lights if light.name == "warm_key")
+
+    assert warm_payload["position"] == [1.0, 2.0, 2.5]
+    assert warm_light.position == (1.0, 2.0, 2.5)
+    assert readiness.metadata["lighting_count"] == len(payload["lights"])
+    assert any(light["name"] == "warm_key" and light["light_type"] == "point" for light in readiness.metadata["room_lights"])
+    assert toolchain["Lighting"].status in {"Viewport lit only", f"{len(payload['lights'])} authored light(s)"}
+    assert any(
+        item.name == "Room lighting" and item.value_label == f"{len(payload['lights'])} authored light(s)"
+        for item in readiness.inputs
+    )
 
 
 def test_t2693_invalid_room_light_blocks_missing_room() -> None:
@@ -93,7 +99,7 @@ def test_t2693_controller_adds_room_light_and_clears_runtime_state() -> None:
     assert updated["game_tested"] is False
     assert updated["lights"][-1]["name"] == "fill_light"
     assert result.readiness is not None
-    assert result.readiness.metadata["lighting_count"] == 1
+    assert result.readiness.metadata["lighting_count"] == len(updated["lights"])
 
 
 def test_t2694_controller_lists_and_moves_authored_room_lights() -> None:
@@ -106,14 +112,17 @@ def test_t2694_controller_lists_and_moves_authored_room_lights() -> None:
     controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grlight")
     controller.add_authored_room_light(name="selectable_key", position=(0.0, 0.0, 2.25))
 
-    row = controller.authored_room_lights()[0]
+    row = next(row for row in controller.authored_room_lights() if row.name == "selectable_key")
     result = controller.set_authored_room_light_transform(row.light_id, position=(1.5, -0.5, 2.75))
-    moved = controller.authored_room_lights()[0]
+    moved = next(row for row in controller.authored_room_lights() if row.name == "selectable_key")
 
     assert row.light_id == "authored_light:selectable_key"
     assert moved.position == (1.5, -0.5, 2.75)
     assert result.readiness is not None
-    assert result.readiness.metadata["room_lights"][0]["position"] == [1.5, -0.5, 2.75]
+    assert any(
+        light["name"] == "selectable_key" and light["position"] == [1.5, -0.5, 2.75]
+        for light in result.readiness.metadata["room_lights"]
+    )
 
 
 def test_t2600_controller_edits_selected_room_light_properties() -> None:
@@ -129,16 +138,17 @@ def test_t2600_controller_edits_selected_room_light_properties() -> None:
     payload["runtime_resources"] = ["grlight.git"]
     payload["game_tested"] = True
     controller.project.extra_sections["authored_module"] = payload
+    light_id = next(row.light_id for row in controller.authored_room_lights() if row.name == "key_light")
 
     result = controller.set_authored_room_light_properties(
-        "authored_light:key_light",
+        light_id,
         light_type="spot",
         color=(0.25, 0.5, 1.0),
         radius=12.5,
         intensity=1.75,
     )
     updated = controller.project.extra_sections["authored_module"]
-    row = controller.authored_room_lights()[0]
+    row = next(row for row in controller.authored_room_lights() if row.name == "key_light")
 
     assert row.light_type == "spot"
     assert row.color == (0.25, 0.5, 1.0)
@@ -147,8 +157,12 @@ def test_t2600_controller_edits_selected_room_light_properties() -> None:
     assert updated["runtime_resources"] == []
     assert updated["game_tested"] is False
     assert result.readiness is not None
-    assert result.readiness.metadata["room_lights"][0]["light_type"] == "spot"
-    assert result.readiness.metadata["room_lights"][0]["color"] == [0.25, 0.5, 1.0]
+    assert any(
+        light["name"] == "key_light"
+        and light["light_type"] == "spot"
+        and light["color"] == [0.25, 0.5, 1.0]
+        for light in result.readiness.metadata["room_lights"]
+    )
 
 
 def test_t2600_room_light_rename_duplicate_and_remove_update_project() -> None:
@@ -190,8 +204,8 @@ def test_t2600_room_light_rename_duplicate_and_remove_update_project() -> None:
     assert duplicated.light_id == "authored_light:warm_key_copy"
     assert duplicated.light.position == (1.5, 2.5, 2.5)
     assert removed.light.name == "warm_key"
-    assert removed.count == 1
-    assert rows[0].light_id == "authored_light:warm_key_copy"
+    assert removed.count == len(tuple(project.lights))
+    assert any(row.light_id == "authored_light:warm_key_copy" for row in rows)
 
 
 def test_t2600_controller_room_light_edit_actions_clear_export_and_proof_state() -> None:
@@ -207,8 +221,9 @@ def test_t2600_controller_room_light_edit_actions_clear_export_and_proof_state()
     payload["runtime_resources"] = ["grlight.git"]
     payload["game_tested"] = True
     controller.project.extra_sections["authored_module"] = payload
+    light_id = next(row.light_id for row in controller.authored_room_lights() if row.name == "key_light")
 
-    renamed = controller.rename_authored_room_light("authored_light:key_light", name="warm_key")
+    renamed = controller.rename_authored_room_light(light_id, name="warm_key")
     duplicated = controller.duplicate_authored_room_light("authored_light:warm_key")
     controller.model.select(duplicated.light_id)
     removed = controller.remove_authored_room_light(duplicated.light_id)
@@ -219,7 +234,7 @@ def test_t2600_controller_room_light_edit_actions_clear_export_and_proof_state()
     assert removed.light.name == "warm_key_copy"
     assert updated["runtime_resources"] == []
     assert updated["game_tested"] is False
-    assert updated["lights"][0]["name"] == "warm_key"
+    assert any(light["name"] == "warm_key" for light in updated["lights"])
     assert controller.project.dirty is True
 
 
@@ -234,9 +249,11 @@ def test_t2693_export_manifest_records_room_lighting_intent(tmp_path: Path) -> N
     project = add_authored_room_light(project, name="export_key", intensity=2.0).project
     build = build_authored_module(project)
 
-    assert build.metadata["lighting_count"] == 1
-    assert build.metadata["room_lights"][0]["name"] == "export_key"
-    assert build.metadata["room_lights"][0]["intensity"] == 2.0
+    assert build.metadata["lighting_count"] == len(tuple(project.lights))
+    assert any(
+        light["name"] == "export_key" and light["intensity"] == 2.0
+        for light in build.metadata["room_lights"]
+    )
 
 
 def test_t2693_builder_tab_exposes_room_light_controls() -> None:

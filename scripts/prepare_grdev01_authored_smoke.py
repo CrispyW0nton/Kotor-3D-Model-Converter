@@ -202,9 +202,9 @@ def _summary(
         next_actions.append(f"Copy `{export_result.module_path if export_result else module_root + '.mod'}` into a KOTOR `Modules` folder.")
         next_actions.append(f"Launch {game} and run `warp {module_root}`.")
     if includes_placeable_check:
-        next_actions.append("Confirm the module loads, the player is on the floor, the test placeable appears, and walking works.")
+        next_actions.append("Confirm the module loads, the player is on the floor, the test placeable appears, walking works, and pathing/transition sanity holds.")
     else:
-        next_actions.append("Confirm the module loads, the player is on the generated floor, and walking works.")
+        next_actions.append("Confirm the module loads, the player is on the generated floor, walking works, and pathing sanity holds.")
     proof_recorder = str(getattr(result, "proof_recording_script_path", "") or "")
     if proof_recorder:
         next_actions.append(f"After capturing evidence, run `{proof_recorder}` and paste the screenshot/video path.")
@@ -214,6 +214,7 @@ def _summary(
         "player_spawns_on_floor": "--player-spawns-on-floor",
         "test_placeable_visible": "--test-placeable-visible",
         "player_can_walk_on_floor": "--player-can-walk-on-floor",
+        "transition_pathing_sanity_confirmed": "--transition-pathing-sanity-confirmed",
         "no_inherited_base_game_geometry_or_scripted_movers": "--no-inherited-base-game-geometry-or-scripted-movers",
     }
     selected_flags = " ".join(proof_flags[check] for check in acceptance_checks if check in proof_flags)

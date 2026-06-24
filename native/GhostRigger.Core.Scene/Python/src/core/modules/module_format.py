@@ -645,7 +645,7 @@ WOK_SURFACE_NAMES = {
 }
 
 NON_WALK_ID   = 7
-WALKABLE_IDS  = {1,3,4,5,9,10,11,12,13,14,19,20,21}  # materials NPCs can traverse
+WALKABLE_IDS  = {1,3,4,5,9,10,11,12,13,14,18,19,20,21}  # materials NPCs can traverse
 
 @dataclass
 class WOKFace:

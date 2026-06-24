@@ -42,6 +42,7 @@ class BuilderTab(QtWidgets.QWidget):
 
     ACTIONS = (
         "Create grdev01 Dev Room",
+        "Create grgold01 Golden Proof Module",
         "Generate Module Files",
         "Validate Module",
         "Open Output",
@@ -63,7 +64,7 @@ class BuilderTab(QtWidgets.QWidget):
         modeling_box = QtWidgets.QGroupBox("Modeling Mode + Snap")
         modeling_layout = QtWidgets.QFormLayout(modeling_box)
         self.modelingModeGuideLabel = QtWidgets.QLabel(
-            "Manual modeling workspace: switch between Object, Vertex, Edge, Face, and Walkmesh editing. "
+            "Manual modeling workspace: switch between Object, Vertex, Edge, Face, Terrain, and Walkmesh editing. "
             "Use these controls to choose the tool intent before editing primitives, terrain, or WOK surfaces; "
             "Ctrl+T shows Universal Manipulator dimensions, Hold V snaps vertices, and Hold J aligns transforms to one level."
         )
@@ -284,7 +285,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.floorPlanTargetPointSpinBox = QtWidgets.QSpinBox()
         self.floorPlanTargetPointSpinBox.setObjectName("mapStudioFloorPlanTargetPointSpinBox")
         self.floorPlanTargetPointSpinBox.setRange(0, 0)
-        self.floorPlanSelectedPointsLineEdit = QtWidgets.QLineEdit("0,1")
+        self.floorPlanSelectedPointsLineEdit = QtWidgets.QLineEdit("0,2")
         self.floorPlanSelectedPointsLineEdit.setObjectName("mapStudioFloorPlanSelectedPointsLineEdit")
         self.floorPlanSelectedPointsLineEdit.setPlaceholderText("point indices, e.g. 0,1,2")
         self.floorPlanWeldPolicyComboBox = QtWidgets.QComboBox()
@@ -1268,6 +1269,7 @@ class BuilderTab(QtWidgets.QWidget):
             "radius": int(self.terrainRadiusSpinBox.value()),
             "iterations": int(self.terrainSmoothIterationsSpinBox.value()),
             "strength": float(self.terrainSmoothStrengthSpinBox.value()),
+            "hardness": float(self.terrainSmoothStrengthSpinBox.value()),
         }
 
     def _update_terrain_shape_controls(self) -> None:
@@ -1519,12 +1521,29 @@ class BuilderTab(QtWidgets.QWidget):
             self.floorPlanUnionSecondRoomComboBox.setCurrentIndex(1)
         if self.floorPlanBridgeSecondRoomComboBox.count() > 1 and self.floorPlanBridgeSecondRoomComboBox.currentIndex() == self.floorPlanBridgeFirstRoomComboBox.currentIndex():
             self.floorPlanBridgeSecondRoomComboBox.setCurrentIndex(1)
+        self._choose_default_floor_plan_bridge_edges()
         self._update_floor_plan_extrusion_controls()
         self._update_floor_plan_opening_controls()
         self._update_floor_plan_opening_marker_controls(marker_opening_current)
         self._update_floor_plan_vertex_controls()
         self._update_rectangular_union_controls()
         self._update_floor_plan_bridge_controls()
+
+    def _choose_default_floor_plan_bridge_edges(self) -> None:
+        first_data = self._current_floor_plan_bridge_first_data()
+        second_data = self._current_floor_plan_bridge_second_data()
+        first = str(first_data.get("room_resref") or "").strip()
+        second = str(second_data.get("room_resref") or "").strip()
+        second_count = int(second_data.get("point_count", 0) or 0)
+        if (
+            first
+            and second
+            and first != second
+            and second_count >= 3
+            and int(self.floorPlanBridgeFirstEdgeSpinBox.value()) == 0
+            and int(self.floorPlanBridgeSecondEdgeSpinBox.value()) == 0
+        ):
+            self._set_spinbox_clamped(self.floorPlanBridgeSecondEdgeSpinBox, min(1, second_count - 1))
 
     def _current_floor_plan_extrusion_data(self) -> dict:
         data = self.floorPlanExtrusionRoomComboBox.currentData()
