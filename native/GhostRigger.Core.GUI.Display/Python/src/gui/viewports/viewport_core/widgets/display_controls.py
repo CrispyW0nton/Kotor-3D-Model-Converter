@@ -291,6 +291,18 @@ class ViewportDisplayControlsMixin:
             self._gpu_renderer.lightmap_mode = mode_value
         self._request_render()
 
+    def set_module_map_display_defaults(self, request_render: bool = True) -> None:
+        for target in (self._renderer, self._gpu_renderer):
+            if target is None:
+                continue
+            setattr(target, "lighting_mode", "lightmap_preview")
+            setattr(target, "show_lightmap_map", True)
+            setattr(target, "lightmap_intensity", 1.0)
+            setattr(target, "lightmap_mode", "baked")
+        self._set_display_options(self._rebuild_display_options_from_renderer(), announce=False)
+        if request_render:
+            self._request_render(fast=True, reason="module map display defaults", style=True, resources=True, hud=True)
+
     def set_shader_complexity_mode(self, mode: str) -> None:
         value = str(mode or "off").strip().lower()
         if value not in {"off", "basic", "overdraw", "texture_cost", "lighting_cost", "full_complexity"}:

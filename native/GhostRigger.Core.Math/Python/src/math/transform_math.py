@@ -125,6 +125,13 @@ def rotation_angle_from_mouse_delta(
     mouse_pos: tuple[int, int],
     center_screen: tuple[float, float] | None = None,
 ) -> float:
+    """Legacy screen-space rotation angle (kept for backward compatibility).
+
+    New gizmo code should use :func:`rotation_angle_from_ray_plane` instead,
+    which projects the mouse ray onto the plane perpendicular to the rotation
+    axis and measures the angle in world space.  This screen-space fallback is
+    only accurate when the axis faces the camera dead-on.
+    """
     if center_screen is not None:
         cx, cy = center_screen
         a0 = math.atan2(float(start_mouse[1]) - cy, float(start_mouse[0]) - cx)
@@ -134,12 +141,82 @@ def rotation_angle_from_mouse_delta(
     return float(mouse_pos[0] - start_mouse[0]) * 0.01
 
 
+def rotation_angle_from_ray_plane(
+    start_ray_origin: np.ndarray,
+    start_ray_dir: np.ndarray,
+    current_ray_origin: np.ndarray,
+    current_ray_dir: np.ndarray,
+    pivot: Iterable[float],
+    axis_vec: Iterable[float],
+) -> float:
+    """Compute the rotation angle by projecting mouse rays onto the axis plane.
+
+    Casts both the start and current mouse rays onto the plane that passes
+    through *pivot* and is perpendicular to *axis_vec*, then measures the
+    angle between the projected vectors in that plane.  This is the correct
+    approach for a ring gizmo at oblique viewing angles: the cursor's 2-D
+    screen-space angle does not equal the true rotation about a world axis
+    unless the axis faces the camera dead-on.
+
+    Returns the signed angle in radians (positive = counter-clockwise about
+    *axis_vec* when viewed from the positive end of the axis).
+    """
+    axis = normalize(axis_vec)
+    center = _as_vec3(pivot)
+
+    def _project_to_plane(ray_o: np.ndarray, ray_d: np.ndarray) -> np.ndarray:
+        o = _as_vec3(ray_o)
+        d = normalize(ray_d)
+        denom = float(np.dot(d, axis))
+        if abs(denom) <= 1e-9:
+            # Ray is nearly parallel to the axis — fall back to the closest
+            # point on the ray to the center projected onto the plane.
+            t = max(0.0, float(np.dot(center - o, d)))
+            closest = o + d * t
+            return closest - center
+        t = float(np.dot(center - o, axis)) / denom
+        hit = o + d * t
+        return hit - center
+
+    v_start = _project_to_plane(start_ray_origin, start_ray_dir)
+    v_current = _project_to_plane(current_ray_origin, current_ray_dir)
+    len_s = float(np.linalg.norm(v_start))
+    len_c = float(np.linalg.norm(v_current))
+    if len_s <= 1e-9 or len_c <= 1e-9:
+        return 0.0
+    dot = float(np.dot(v_start, v_current)) / (len_s * len_c)
+    cross = np.cross(v_start, v_current)
+    cross_axis = float(np.dot(cross, axis)) / (len_s * len_c)
+    # Clamp for numerical stability
+    dot = max(-1.0, min(1.0, dot))
+    angle = float(math.acos(dot))
+    if cross_axis < 0.0:
+        angle = -angle
+    return angle
+
+
 def axis_quaternion(
     axis: str,
     angle: float,
     axis_vectors: dict[str, Vec3] | None = None,
 ) -> tuple[float, float, float, float]:
     vec = normalize((axis_vectors or AXIS_VECTORS).get(axis, AXIS_VECTORS["Z"]))
+    half = float(angle) * 0.5
+    s = math.sin(half)
+    return (float(vec[0]) * s, float(vec[1]) * s, float(vec[2]) * s, math.cos(half))
+
+
+def axis_quaternion_from_vector(
+    axis_vec: Iterable[float],
+    angle: float,
+) -> tuple[float, float, float, float]:
+    """Build a quaternion for a rotation *angle* (radians) about *axis_vec*.
+
+    Unlike :func:`axis_quaternion` which looks up a named axis, this takes a
+    raw world-space direction vector — needed for LOCAL transform space where
+    the rotation axis is the object's local axis rotated into world space.
+    """
+    vec = normalize(axis_vec)
     half = float(angle) * 0.5
     s = math.sin(half)
     return (float(vec[0]) * s, float(vec[1]) * s, float(vec[2]) * s, math.cos(half))

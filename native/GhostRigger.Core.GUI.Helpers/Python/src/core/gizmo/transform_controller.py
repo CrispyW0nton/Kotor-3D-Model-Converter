@@ -11,9 +11,12 @@ from src.math.transform_math import (
     AXIS_VECTORS,
     axis_drag_delta,
     axis_quaternion,
+    axis_quaternion_from_vector,
     multiply_quaternions,
+    ray_from_mouse,
     rotate_vector,
     rotation_angle_from_mouse_delta,
+    rotation_angle_from_ray_plane,
 )
 from src.measurement.angle_snap import AngleSnap
 from src.measurement.percent_snap import PercentSnap
@@ -56,6 +59,11 @@ class TransformController:
         self.original: TransformSnapshot | None = None
         self.active = False
         self.axis_vectors = dict(AXIS_VECTORS)
+        self._start_ray_origin = None
+        self._start_ray_dir = None
+        self._viewport_width = 1
+        self._viewport_height = 1
+        self._camera = None
 
     def snapshot(self, obj) -> TransformSnapshot:
         vertices = getattr(obj, "vertices", None)
@@ -101,6 +109,7 @@ class TransformController:
         depth: float,
         center_screen: tuple[float, float] | None = None,
         axis_vectors: dict[str, tuple[float, float, float]] | None = None,
+        viewport_size: tuple[int, int] | None = None,
     ) -> None:
         self.object = obj
         self.mode = mode
@@ -111,6 +120,18 @@ class TransformController:
         self.axis_vectors = axis_vectors or dict(AXIS_VECTORS)
         self.original = self.snapshot(obj)
         self.active = True
+        self._camera = camera
+        if viewport_size is not None:
+            self._viewport_width = max(1, int(viewport_size[0]))
+            self._viewport_height = max(1, int(viewport_size[1]))
+        # Capture the start ray for ray-plane rotation (Tier 1 gizmo fix)
+        try:
+            self._start_ray_origin, self._start_ray_dir = ray_from_mouse(
+                self.start_mouse, camera, self._viewport_width, self._viewport_height,
+            )
+        except Exception:
+            self._start_ray_origin = None
+            self._start_ray_dir = None
 
     def drag(self, mouse_pos: tuple[int, int], camera, viewport_height: int) -> None:
         if not self.active or self.object is None or self.original is None or self.mode is None:
@@ -119,7 +140,7 @@ class TransformController:
         if self.mode == GizmoMode.TRANSLATE:
             self._apply_translate(axis, mouse_pos, camera, viewport_height)
         elif self.mode == GizmoMode.ROTATE:
-            self._apply_rotate(axis, mouse_pos)
+            self._apply_rotate(axis, mouse_pos, camera, viewport_height)
         elif self.mode == GizmoMode.SCALE:
             self._apply_scale(axis, mouse_pos, camera, viewport_height)
         self._invalidate()
@@ -222,14 +243,46 @@ class TransformController:
             self.object._gr_pivot_world_dirty = True
             self.object._gr_gizmo_world_position = tuple(self.object._gr_pivot_world)
 
-    def _apply_rotate(self, axis: str, mouse_pos) -> None:
-        # Screen-space drag angles are clockwise-positive in Qt's y-down
-        # coordinate system; world-space quaternion rotation expects the
-        # opposite handedness for the viewport gizmo interaction.
-        angle = -rotation_angle_from_mouse_delta(self.start_mouse, mouse_pos, self.center_screen)
+    def _apply_rotate(self, axis: str, mouse_pos, camera=None, viewport_height: int = 0) -> None:
+        # Resolve the world-space rotation axis vector.
+        world_axis = self.axis_vectors.get(axis, AXIS_VECTORS.get(axis, (0.0, 0.0, 1.0)))
+
+        # For LOCAL transform space, rotate the axis by the object's original
+        # rotation so the gizmo operates on local axes (Tier 1 gizmo fix).
+        transform_space = getattr(self, "transform_space", None)
+        if transform_space is not None and str(transform_space).upper() == "LOCAL" and self.original is not None:
+            world_axis = tuple(rotate_vector(self.original.rotation, world_axis))
+
+        # Use ray-plane projection for accurate rotation at oblique viewing
+        # angles (Tier 1 gizmo fix).  Falls back to legacy screen-space angle
+        # if the camera/ray info is unavailable.
+        pivot = self.original.pivot_world if self.original and self.original.pivot_world else (
+            self.original.position if self.original else (0.0, 0.0, 0.0)
+        )
+        angle = None
+        if camera is not None and self._start_ray_origin is not None and viewport_height > 0:
+            try:
+                cur_origin, cur_dir = ray_from_mouse(
+                    mouse_pos, camera, self._viewport_width, viewport_height,
+                )
+                angle = rotation_angle_from_ray_plane(
+                    self._start_ray_origin, self._start_ray_dir,
+                    cur_origin, cur_dir,
+                    pivot, world_axis,
+                )
+            except Exception:
+                angle = None
+
+        if angle is None:
+            # Legacy screen-space fallback
+            angle = -rotation_angle_from_mouse_delta(self.start_mouse, mouse_pos, self.center_screen)
+
         if self.angle_snap is not None:
             angle = self.angle_snap.snap_radians(angle)
-        delta_q = axis_quaternion(axis, angle, self.axis_vectors)
+
+        # Build the rotation quaternion about the resolved world-space axis.
+        delta_q = axis_quaternion_from_vector(world_axis, angle)
+
         if str(getattr(self.object, "_gr_pivot_edit_mode", "") or "") == "affect_pivot_only":
             base = self.original.pivot_rotation or self.original.rotation
             self.object._gr_pivot_rotation = multiply_quaternions(delta_q, base)

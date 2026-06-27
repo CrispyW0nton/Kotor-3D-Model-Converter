@@ -1,7 +1,7 @@
 """FBX export for GhostRigger retargeted Unity test assets.
 
 Day 4 keeps FBX writing behind a headless Blender subprocess.  GhostRigger
-serializes a deterministic intermediate JSON; Blender 4.2 LTS builds the scene
+serializes a deterministic intermediate JSON; Blender 4.0+ LTS builds the scene
 and uses its production FBX exporter.
 
 References:
@@ -156,14 +156,80 @@ def write_json_deterministic(path: Path, payload: Dict[str, Any]) -> None:
     path.write_text(text + "\n", encoding="utf-8")
 
 
+# Minimum supported Blender version. Any 4.x release >= 4.0 works; the previous
+# hardcoded 4.2 requirement was relaxed so standard installs (4.0, 4.1, 4.2,
+# 4.3, ...) are all accepted.
+MINIMUM_BLENDER_VERSION = (4, 0, 0)
+
+
+def _blender_install_roots() -> list[Path]:
+    """Return Blender install search roots, in priority order.
+
+    Mirrors the locations used by the official Windows installers and the
+    Blender launcher (Program Files, Program Files (x86), and the per-user
+    Programs folder under LOCALAPPDATA).
+    """
+    roots: list[Path] = []
+    program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+    program_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if program_files:
+        roots.append(Path(program_files) / "Blender Foundation")
+    if program_files_x86:
+        roots.append(Path(program_files_x86) / "Blender Foundation")
+    if local_app_data:
+        roots.append(Path(local_app_data) / "Programs" / "Blender")
+    return roots
+
+
+def _parse_version_tuple(text: str) -> tuple[int, ...]:
+    """Extract a numeric version tuple from text such as a folder/version line."""
+    parts = re.findall(r"\d+", text)
+    return tuple(int(p) for p in parts) if parts else ()
+
+
+def _discover_blender_executables() -> list[Path]:
+    """Return Blender executables found in common install locations, newest first."""
+    found: list[tuple[tuple[int, ...], Path]] = []
+    for root in _blender_install_roots():
+        if not root.exists():
+            continue
+        for child in root.iterdir():
+            if not child.is_dir():
+                continue
+            exe = child / "blender.exe"
+            if exe.exists():
+                found.append((_parse_version_tuple(child.name), exe))
+    # Sort by parsed version, descending; missing-version entries sort last.
+    found.sort(key=lambda item: item[0], reverse=True)
+    return [exe for _, exe in found]
+
+
+def _version_meets_minimum(version_text: str) -> bool:
+    parsed = list(_parse_version_tuple(version_text))
+    if not parsed:
+        return False
+    while len(parsed) < len(MINIMUM_BLENDER_VERSION):
+        parsed.append(0)
+    return tuple(parsed) >= MINIMUM_BLENDER_VERSION
+
+
 def find_blender_executable(explicit: str | Path | None = None) -> Path:
+    """Resolve a Blender 4.0+ executable.
+
+    Resolution order:
+      1. ``explicit`` (caller-supplied ``FBXExportOptions.blender_executable``)
+      2. ``GHOSTRIGGER_BLENDER_PATH`` environment variable
+      3. Common Windows install locations (newest version first)
+      4. ``blender`` on ``PATH`` (``shutil.which``)
+    """
     candidates: list[Path] = []
     if explicit:
         candidates.append(Path(explicit))
     env = os.environ.get("GHOSTRIGGER_BLENDER_PATH")
     if env:
         candidates.append(Path(env))
-    candidates.append(Path(r"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe"))
+    candidates.extend(_discover_blender_executables())
     found = shutil.which("blender")
     if found:
         candidates.append(Path(found))
@@ -171,7 +237,13 @@ def find_blender_executable(explicit: str | Path | None = None) -> Path:
     for candidate in candidates:
         if candidate and candidate.exists():
             return candidate
-    raise FBXExportFailure("Blender 4.2 LTS was not found. Set GHOSTRIGGER_BLENDER_PATH or FBXExportOptions.blender_executable.")
+    raise FBXExportFailure(
+        "Blender 4.0 or newer was not found. Install Blender 4.0+ to a standard "
+        "location (C:\\Program Files\\Blender Foundation\\, "
+        "C:\\Program Files (x86)\\Blender Foundation\\, or "
+        "%LOCALAPPDATA%\\Programs\\Blender\\), or set the GHOSTRIGGER_BLENDER_PATH "
+        "environment variable, or pass FBXExportOptions.blender_executable."
+    )
 
 
 def blender_version(blender_executable: str | Path | None = None) -> str:
@@ -186,8 +258,10 @@ def blender_version(blender_executable: str | Path | None = None) -> str:
     if result.returncode != 0:
         raise FBXExportFailure(f"Blender version check failed:\n{result.stdout}\n{result.stderr}")
     first = (result.stdout or "").splitlines()[0].strip()
-    if not re.match(r"^Blender 4\.2\.", first):
-        raise FBXExportFailure(f"Expected Blender 4.2.x LTS, found: {first}")
+    if not _version_meets_minimum(first):
+        raise FBXExportFailure(
+            f"Blender {MINIMUM_BLENDER_VERSION[0]}.{MINIMUM_BLENDER_VERSION[1]}+ is required, found: {first}"
+        )
     return first
 
 

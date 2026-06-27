@@ -25,7 +25,14 @@ from src.core.geometry.model_data import (
 from src.core.retargeting.fbx_exporter import FBXExportFailure, find_blender_executable
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+def _repo_root_for_blender_script() -> Path:
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "scripts" / "blender_extract_fbx_mesh.py").exists():
+            return parent
+    return Path(__file__).resolve().parents[2]
+
+
+REPO_ROOT = _repo_root_for_blender_script()
 BLENDER_MESH_SCRIPT = REPO_ROOT / "scripts" / "blender_extract_fbx_mesh.py"
 
 
@@ -144,10 +151,12 @@ def model_from_blender_fbx_mesh_payload(
     if not isinstance(metadata, dict):
         metadata = {}
         setattr(model, "metadata", metadata)
-    metadata.setdefault(
-        "external_import",
-        {"disable_kotor_uv_seam_fix": True},
-    )
+    external = dict(metadata.get("external_import") or {})
+    external.setdefault("disable_kotor_uv_seam_fix", True)
+    external["source_axis_system"] = "blender_fbx_import_z_up"
+    external["target_axis_system"] = "kotor_z_up"
+    external["axis_conversion"] = "blender_xyz_to_kotor_xz_minus_y"
+    metadata["external_import"] = external
 
     _attach_imported_armature_guides(
         root,
@@ -162,8 +171,8 @@ def model_from_blender_fbx_mesh_payload(
             flags=int(NodeFlags.HEADER | (NodeFlags.SKIN if is_skin else NodeFlags.MESH)),
             parent=root,
         )
-        node.vertices = [_triple(vertex) for vertex in mesh.get("vertices") or []]
-        node.normals = [_triple(normal) for normal in mesh.get("normals") or []]
+        node.vertices = [_blender_to_kotor(vertex) for vertex in mesh.get("vertices") or []]
+        node.normals = [_blender_to_kotor(normal) for normal in mesh.get("normals") or []]
         node.uvs = [_pair(uv) for uv in mesh.get("uvs") or []]
         node.faces = [_face(face) for face in mesh.get("faces") or []]
         materials = list(mesh.get("materials") or [])
@@ -259,15 +268,15 @@ def _attach_imported_armature_guides(
                 node._imported = True
                 node._gr_imported_armature_joint = True
                 node._gr_imported_armature_name = armature_name
-                world = _optional_triple(bone.get("world_position"))
+                world = _optional_blender_to_kotor(bone.get("world_position"))
                 if world is None:
-                    world = _optional_triple(bone.get("head_world_position"))
+                    world = _optional_blender_to_kotor(bone.get("head_world_position"))
                 if world is not None:
                     node.external_world_position = world
-                head = _optional_triple(bone.get("head_world_position"))
+                head = _optional_blender_to_kotor(bone.get("head_world_position"))
                 if head is not None:
                     node._gr_imported_bone_head_world = head
-                tail = _optional_triple(bone.get("tail_world_position"))
+                tail = _optional_blender_to_kotor(bone.get("tail_world_position"))
                 if tail is not None:
                     node._gr_imported_bone_tail_world = tail
                 node._gr_imported_bone_use_deform = bool(bone.get("use_deform", True))
@@ -290,7 +299,7 @@ def _attach_imported_armature_guides(
                     node._imported = True
                     node._gr_imported_armature_joint = True
                     node._gr_imported_armature_name = armature_name
-                    world = _optional_triple(bone.get("world_position"))
+                    world = _optional_blender_to_kotor(bone.get("world_position"))
                     if world is not None:
                         node.external_world_position = world
                     armature_node.children.append(node)
@@ -309,6 +318,19 @@ def _optional_triple(values: Any) -> tuple[float, float, float] | None:
         return (float(raw[0]), float(raw[1]), float(raw[2]))
     except Exception:
         return None
+
+
+def _blender_to_kotor(values: Any) -> tuple[float, float, float]:
+    x, y, z = _triple(values)
+    return (x, z, -y)
+
+
+def _optional_blender_to_kotor(values: Any) -> tuple[float, float, float] | None:
+    point = _optional_triple(values)
+    if point is None:
+        return None
+    x, y, z = point
+    return (x, z, -y)
 
 
 def _output_json_path(source: Path) -> Path:

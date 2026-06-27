@@ -9,7 +9,1059 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-27
+
+### [2026-06-27] Character Builder Auto-Fit And Gizmo Rotation Three-Tier Fix
+
+Owner: LordVaderCW
+Subsystem: Character Studio / mesh auto-orientation / transform gizmo / auto-skinning / Kabsch landmark alignment / heat-diffusion skin weights
+
+Three-tier fix for the Character Builder auto-fit pipeline and transform gizmo, addressing the Drexl OBJ import mis-orientation and the broken gizmo rotation at oblique viewing angles.
+
+#### Tier 1: OBJ Axis Metadata + Gizmo Ray-Plane Projection
+
+- (#T1a) Fixed `_mark_external_import` in `headless_body_workflow.py` to tag `.obj` imports with `target_axis_system="kotor_z_up"` metadata. Previously OBJ imports lacked axis metadata, causing the native-template fit path to return `None` and fall through to the `_creature_bounds_fit_solution` heuristic. The heuristic's 35%-of-extent rule mis-identified the Drexl's thin Y axis as "up," tipping the already-correct Z-up mesh onto its side.
+- (#T1b) Replaced screen-space rotation angle with ray-plane projection in `transform_math.py` (`rotation_angle_from_ray_plane`). The old `rotation_angle_from_mouse_delta` measured the cursor's 2-D screen-space atan2 angle and applied it about a world axis — only accurate when the axis faces the camera dead-on. The new function casts both start and current mouse rays onto the plane perpendicular to the rotation axis (passing through the pivot), then measures the angle in that plane (world space). Added `axis_quaternion_from_vector` for building quaternions about raw world-space axis vectors.
+- (#T1c) Implemented LOCAL transform space in `transform_controller.py`. The `_apply_rotate` method now rotates the world axis by the object's current rotation when `transform_space == LOCAL`, enabling rotation about the object's local axes. The `begin_drag` method captures the start ray and viewport dimensions for ray-plane projection.
+
+#### Tier 2: Landmark-Based Rigid Alignment (Kabsch Algorithm)
+
+- Created `landmark_alignment.py` (`native/GhostRigger.Core.Math/Python/src/math/`) implementing the Kabsch algorithm for optimal mesh-to-skeleton rigid alignment:
+  - `kabsch_optimal_rotation(source, target)` — SVD-based optimal rotation with reflection correction (det(R) = +1 guaranteed)
+  - `compute_rigid_transform(source, target)` — full rigid transform (rotation, translation, uniform scale)
+  - `pca_principal_axes(vertices)` — PCA for axis analysis
+  - `extract_mesh_landmarks` / `extract_bone_landmarks` — geometric extrema (top/bottom/left/right/front/back/centroid)
+  - `align_mesh_to_skeleton(mesh_vertices, bone_positions)` — end-to-end wrapper returning rotation matrix, translation, scale, RMSD, and landmarks
+- Added `_landmark_based_fit_solution` in `headless_body_workflow.py` that uses the donor model's actual bone positions as alignment landmarks instead of guessing from bounding-box extents.
+- Updated auto-fit dispatch order: native-template fit → landmark Kabsch fit (NEW) → creature-bounds heuristic (fallback).
+- Math correctness verified: Kabsch rotation recovery error 3.33e-16, det(R) = 1.0, exact scale/translation recovery on test data.
+
+#### Tier 3: Heat-Diffusion Auto-Skinning
+
+- Created `heat_diffusion_skinning.py` (`native/GhostRigger.Core.Math/Python/src/math/`) implementing surface-diffusion skin weight computation:
+  - `build_adjacency_graph(vertices, faces)` — vertex adjacency from face indices (n-gon aware)
+  - `compute_vertex_bone_distances` — per-vertex distance to each bone within influence radius
+  - `diffuse_weights` — graph-Laplacian diffusion iterations with inverse-distance initial weighting (fixed normalization bug from spec: denominator was per-bone instead of per-voter)
+  - `cap_influences` — KOTOR 4-bone limit with weight renormalization
+  - `compute_heat_diffusion_weights` — full pipeline
+  - `segment_mesh_by_bones` — assigns each vertex to its nearest bone for region analysis
+- Added `_compute_heat_diffusion_skin_weights` in `headless_body_workflow.py` that walks model nodes, gathers bone world positions, runs heat diffusion per mesh node, and writes back skin data in the `VertexSkinData`/`BoneWeight` contract.
+- Added `use_heat_diffusion_skinning` parameter to `generate_skeleton` (opt-in, default `False`). Priority: donor weight transfer → heat diffusion → nearest-bone fallback.
+- Smoke test verified: 4-vertex strip with 2 bones produces weights summing to 1.0, wrist vertex favors root bone (0.79), tip vertex favors tip bone.
+
+#### Files created
+
+- `native/GhostRigger.Core.Math/Python/src/math/landmark_alignment.py` — Kabsch rigid alignment (197 lines)
+- `native/GhostRigger.Core.Math/Python/src/math/heat_diffusion_skinning.py` — Heat-diffusion skinning (326 lines)
+
+#### Files modified
+
+- `native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py` — OBJ metadata fix, landmark dispatch, heat-diffusion skinning integration
+- `native/GhostRigger.Core.Math/Python/src/math/transform_math.py` — ray-plane rotation, axis_quaternion_from_vector
+- `native/GhostRigger.Core.GUI.Helpers/Python/src/core/gizmo/transform_controller.py` — ray-plane rotation, LOCAL space, start-ray capture
+
+#### Verification
+
+- `python -m py_compile` passes on all 5 files.
+- Kabsch math verified to machine precision (3.33e-16 rotation recovery error).
+- Heat-diffusion normalization verified: all vertex weights sum to 1.0 after capping.
+- Visible Debug-app UI retest needed: import C_DrexlF_UV.obj into Character Builder, verify orientation is correct, test gizmo rotation at oblique angles, test Build Skeleton with heat-diffusion enabled.
+
+### [2026-06-27] Comprehensive UI/UX And Code Quality Audit-Driven Corrections
+
+Owner: LordVaderCW
+Subsystem: Main shell / Character Studio / Retarget Studio / Module Studio / Map Studio / shared foundation / knowledge base skills
+
+Fifteen audit-identified corrections across all four studios and the shared UI layer, implemented via delegated agent waves using knowledge-base skills (qtuiskill, pythonengineeringskill, couplingdesignskill, skinningdeformationskill, characterbuilderprinciples, transformskill, mcpvalidationskill, leveldesignskill, gamedesignskill).
+
+#### Critical fixes
+
+- (#1) Routed blocking I/O to background threads: added `BackgroundIOWorker` to `workers.py` and `_run_io_async` helper; converted OBJ/FBX/glTF import, MDL binary export, OBJ/FBX/glTF export, and MDLOps compile/decompile from synchronous UI-thread calls to async `QThread`+`QProgressDialog` with Cancel button. MDLOps `subprocess.run(timeout=30)` no longer freezes the window.
+- (#2) Added global undo/redo foundation: created `undo_stack.py` with `SceneUndoStack`, `SceneEditCommand`, `TransformEditCommand`; wired `_record_transform_event` → `_push_transform_undo` → `_apply_node_transform` in `editor_services.py`; Ctrl+Z/Ctrl+Shift+Z now fall through from viewport undo to scene undo stack.
+- (#3) Created `error_report.py` with `ErrorReport`, `show_error_report`, `show_exception`, and `report_from_exception` that maps common exception types (FileNotFoundError, ImportError, struct.error, PermissionError) to friendly user messages with "Show Details" expander and "Copy to Clipboard". Converted 13 `QMessageBox.critical(self, ..., str(exc))` calls in `model_io.py` to use `show_exception()`.
+- (#4) KOTOR→Unreal honest messaging: rewrote `find_blender_executable()` in `fbx_exporter.py` to search Program Files, LocalAppData, PATH, and `GHOSTRIGGER_BLENDER_PATH` env var; relaxed version from hardcoded 4.2 to >=4.0; `retarget_modes.py` now carries actionable `not_implemented_message` for the KOTOR→Unreal mode.
+- (#14) Skin-failed rollback in `headless_body_workflow.py`: `generate_skeleton` now snapshots the pre-rig model via `copy.deepcopy()` before rigging and restores `entry.model` on auto_skin failure, returning a clear rollback message instead of leaving a half-rigged scene.
+
+#### High-impact UX improvements
+
+- (#5) Workspace presets: created `workspace_presets.py` with Modeling/Rigging/Animation/Level Design presets; `WorkspaceSwitcher` QComboBox in the command bar; persists to QSettings; restores last-used workspace on startup.
+- (#6) Menu restructure: collapsed 10 top-level menus to standard File/Edit/View/Tools/Window/Help; moved panel toggles to Window menu, MDLOps/Retarget under Tools as submenus, IPC behind a Developer separator.
+- (#8) Fixed 7 dangerous keyboard shortcuts: Ctrl+W→Ctrl+Shift+Delete, Ctrl+M→Ctrl+Shift+B, Ctrl+R→Ctrl+Shift+G, Ctrl+A→Ctrl+Shift+A, Ctrl+D→Ctrl+Shift+D, Ctrl+B→Ctrl+Shift+C, F2→Ctrl+Comma; scoped single-key W/B/T/F/R viewport toggles to `Qt.WidgetWithChildrenShortcut`.
+- (#10) Replaced 7 bare `except Exception: pass` blocks in `qt_retarget_window.py` with proper `logger.warning()` calls with descriptive context and `exc_info=True`.
+- (#12) Added Rotation (Euler degrees, -360 to 360) and Scale (0.01 to 100.0) QDoubleSpinBox groups to Properties panel; wired to node transforms via `euler_degrees_to_quat`/`quat_to_euler_degrees`; added Uniform Scale checkbox; Transform section now visible by default.
+- (#13) Clarified module editor naming: "Open Map Studio Level Editor"→"Open Map Studio (KMAP Area Authoring)", "Open Module Editor"→"Open Module Editor (Stock MOD/RIM Patcher)", with descriptive status tips.
+
+#### Medium-impact improvements
+
+- (#7) Hardened `kmap_validator.py` (125→280 lines): added resref validation (lowercase, ≤16 chars, `[a-z0-9__]` only), walkmesh walkable-face sanity checks, transition-target validity, and texture-reference format checks (no file extensions).
+- (#9) Fixed stale docstring in `headless_body_workflow.py` that advertised a nonexistent `validate_and_export` function; updated to reference actual `validate_for_export` and `export_scene`.
+- (#11) Theme-token migration: removed direct `LEGACY_MATRIX_COLORS` access from `window_chrome.py`, `qt_workflow_rail.py`, `splash.py`, `qt_properties_panel.py`, `qt_log_panel.py`; routed through theme-aware `C` palette and semantic tokens.
+- (#15) Collapsed 4 parallel isinstance ladders in `stock_module_export_queue.py` into a single `_DRAFT_DISPATCH` registry; adding an 8th draft type now requires one entry instead of editing four functions.
+
+#### Files created
+
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/dialogs/error_report.py` — ErrorReport abstraction
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/workspace_presets.py` — Workspace preset system
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/undo_stack.py` — Scene undo/redo stack
+
+#### Files modified
+
+- `window_chrome.py` — shortcuts, menu restructure, naming, theme tokens, undo wiring, workspace switcher
+- `model_io.py` — async I/O routing, ErrorReport conversion for all error handlers
+- `workers.py` — BackgroundIOWorker class
+- `main_layout.py` — workspace preset application, undo stack initialization, rotation/scale signal wiring
+- `editor_services.py` — _push_transform_undo + _apply_node_transform methods
+- `qt_properties_panel.py` — Rotation+Scale spin boxes, theme tokens, Uniform Scale checkbox
+- `qt_retarget_window.py` — proper error logging replacing silent except-pass blocks
+- `qt_workflow_rail.py` — theme token migration
+- `qt_log_panel.py` — theme-aware syntax highlighting
+- `splash.py` — theme-aware splash colors
+- `headless_body_workflow.py` — skin-failed rollback, docstring fix
+- `fbx_exporter.py` — robust Blender path discovery
+- `fbx_backend.py` — relaxed version requirement
+- `retarget_modes.py` — honest not_implemented_message
+- `retarget_workbench_readiness.py` — actionable export status
+- `kmap_validator.py` — validation hardening (both Core.Scene and Core.Tools copies)
+- `stock_module_export_queue.py` — isinstance ladder collapse
+- `application_core_lib.py` — registered new shared modules
+- `tests/test_map_studio_level_editor_identity.py` — updated label assertions to match renamed entries
+
+#### Verification
+
+- `python -m py_compile` passes on all 18 modified/created files (verified in batch).
+- `python -m py_compile tests/test_core_contracts.py` passes.
+- `tests/test_map_studio_level_editor_identity.py` source-text assertions updated for renamed labels.
+- Payload manifest staleness is expected after native Python edits and should be regenerated via `python scripts/native_python_payload_generator.py --all` before the next build.
+- Note: Ctrl+Shift+A is now used for both Animation Library and Retarget Workbench — one should be reassigned (e.g., Retarget→Ctrl+Shift+T) in a follow-up.
+- Visible Debug-app UI retest was not run in this turn. All changes need visible workflow testing in the Debug app before merge.
+
+### [2026-06-27] Stock Module Editor Batch Texture Patch Readiness
+
+Owner: LordVaderCW
+Task: Module Editor material-slot texture replacement workflow
+Subsystem: Stock Module Editor / repeated material-slot staging / copied-module export readiness / Native payload packaging
+Intersects: Existing stock Module Editor material-slot selection, texture patchability preflight, edit queue, and safe copied-module export.
+
+- Made the `Stage Matching Texture Uses` action partition matching texture targets into patch-ready and blocked groups before queueing them.
+- Kept patch-ready room material replacements stageable while surfacing skipped targets with validation details, instead of silently omitting them.
+- Extended the focused runtime workflow test with an unpatchable matching room MDL to prove the queue stages only export-safe replacements and reports the blocked target.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_stages_matching_texture_uses_runtime -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Texture Patchability Preflight
+
+Owner: LordVaderCW
+Task: Module Editor material-slot texture replacement workflow
+Subsystem: Stock Module Editor / texture patch validation / copied-module export readiness / RNVcanyon workflow / Native payload packaging
+Intersects: Existing stock Module Editor material-slot preview, fixed-width MDL texture-field patcher, safe copied-module export, and fallback MDL texture-field inventory.
+
+- Added source-MDL patchability validation to texture patch plans so missing room MDLs and unpatchable/ambiguous texture fields are reported before export.
+- Drove Module Editor texture export/stage readiness from the validated patch plan instead of the presence of a preview draft alone.
+- Updated material preview and replacement details to show patch validation state and issue rows when a texture preview cannot be safely exported yet.
+- Updated focused runtime coverage so previews without an opened source module remain visible but are no longer marked export-ready, and missing-room patch plans report `target_room_missing`.
+- Verified the real `C:\Users\NewAdmin\Downloads\RNVcanyon.zip` package still opens through zip intake and a sampled fallback-discovered room slot (`Walker`, `dirt` -> bundled `lko_rock02.tga`) validates as patch-ready.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_patch_plan.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_imported_texture_replacement_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_copy_rebuilds_archive_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor MDL Texture Field Inventory Fallback
+
+Owner: LordVaderCW
+Task: Module Editor material-slot texture replacement workflow
+Subsystem: Stock Module Editor / room material inventory / RNVcanyon package intake / Native payload packaging
+Intersects: Existing stock Module Editor zip-open flow, room MDL/MDX material inspection, fixed-width MDL texture-field patcher, and material-slot texture replacement preview.
+
+- Added a lightweight room-material inventory fallback that reads fixed MDL texture/lightmap fields when the full KOTOR model loader is unavailable in the Tools payload.
+- Kept the fallback scoped to material slot discovery, reporting `texture_fields_only` so face/vertex counts are not overclaimed.
+- Added focused runtime coverage for a minimal room MDL/MDX pair proving a selectable diffuse material slot is still exposed without the full model loader.
+- Verified the real `C:\Users\NewAdmin\Downloads\RNVcanyon.zip` package opens through the existing zip intake and now exposes material slots for eight sampled room MDLs using the fallback path.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_materials.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_material_inventory_falls_back_to_mdl_texture_fields_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_opens_zip_wrapped_module_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor TXI Sidecar Visibility
+
+Owner: LordVaderCW
+Task: Module Editor material-slot texture replacement workflow
+Subsystem: Stock Module Editor / material preview / TXI sidecar visibility / Native payload packaging
+Intersects: Existing stock Module Editor material-slot selection, imported texture replacement, TXI sidecar bundling, and copied-module export readiness.
+
+- Added current and replacement TXI rows to the material preview so users can see whether KOTOR texture policy sidecars are present before exporting a texture swap.
+- Added a TXI sidecar lookup that covers module archive resources, imported/session textures, and game-library resource rows without changing the safe export model.
+- Extended the imported texture replacement runtime test to prove a module-local current TXI and imported replacement TXI are both shown in the material preview.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_imported_texture_replacement_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Texture Pick Validation
+
+Owner: LordVaderCW
+Task: Module Editor material-slot texture replacement workflow
+Subsystem: Stock Module Editor / texture replacement validation / material preview safety / Native payload packaging
+Intersects: Existing stock Module Editor material-slot selection, game-library texture browser, fixed-width MDL texture patch validation, and copied-module export readiness.
+
+- Added early texture replacement draft validation for KOTOR-safe texture ResRefs, rejecting over-16-character or non-ASCII/non-underscore names before they become preview drafts.
+- Cleared stale pending texture previews and disabled export readiness when a selected texture cannot be patched into the MDL texture field.
+- Extended the game-library texture runtime workflow test to prove a valid preview is cleared after selecting an invalid overlong texture name.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_materials.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Texture Pick Hints
+
+Owner: LordVaderCW
+Task: Module Editor material-slot texture replacement workflow
+Subsystem: Stock Module Editor / content browser / material picking / texture replacement preview / Native payload packaging
+Intersects: Existing stock Module Editor room material board, material-slot selection, game-library texture browser, and copied-module export readiness.
+
+- Added contextual content-browser hints when a room material slot is selected so the current texture is identified as harmless and replacement candidates say exactly which room/node slot they will preview against.
+- Added a texture-pick mode tooltip to the content browser after material selection.
+- Extended the game-library texture runtime workflow test to verify current-texture and replacement-candidate tooltip text.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Texture Replacement No-Op Guard
+
+Owner: LordVaderCW
+Task: Module Editor material-slot texture replacement workflow
+Subsystem: Stock Module Editor / material picking / texture browser / replacement preview safety / Native payload packaging
+Intersects: Existing stock Module Editor room material board, content browser texture picking, game-library texture replacement, and copied-module export readiness.
+
+- Prevented same-texture browser selections from creating no-op material replacement drafts.
+- Kept the selected room material target active while clearing replacement/export readiness when the chosen texture is already assigned.
+- Extended the game-library texture runtime workflow test to prove the current texture is harmless while a different game-library texture still creates a valid preview replacement.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Material Texture Browser Priming
+
+Owner: LordVaderCW
+Task: Module Editor material-slot texture replacement workflow
+Subsystem: Stock Module Editor / material picking / texture browser / Native payload packaging
+Intersects: Existing stock Module Editor room material board, content browser texture thumbnails, game-library texture selection, and copied-module texture replacement preview.
+
+- Primed the content browser for texture picking when a room material slot is selected, switching to the texture thumbnail category without accidentally creating a replacement draft.
+- Highlighted the currently referenced texture in the browser when GhostRigger can resolve it, keeping the material target and texture library in the same workflow path.
+- Updated the game-library texture runtime test to exercise the real user gesture: select material target, then select a texture browser item to create the replacement preview.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Audit Row Filters
+
+Owner: LordVaderCW
+Task: Module Editor module audit and resource discovery workflow
+Subsystem: Stock Module Editor / resource safety audit / content browser filtering / Native payload packaging
+Intersects: Existing stock Module Editor audit details, safety-scope summary, content browser search, and preserve-list-only policy.
+
+- Added actionable audit filter targets so status and safety-scope rows can filter the Module Editor content browser directly.
+- Added `status:` and `scope:` content-browser filter directives for safety audit navigation.
+- Added details-row tooltips explaining that audit status/scope rows filter the browser.
+- Extended focused source and runtime coverage for scope/status filtering, including preserve-only and audio/movie payload resources.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_resource_safety_classifies_editable_and_preserved_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Queued Export Preservation Summary
+
+Owner: LordVaderCW
+Task: Module Editor queued export readiness workflow
+Subsystem: Stock Module Editor / queued copied-module export / preservation preflight / Native payload packaging
+Intersects: Existing stock Module Editor staged edit queue, texture/template queued export, copied-module manifest, and source-preservation policy.
+
+- Added preserved source resource enumeration to queued export preflight when the source archive inventory is available.
+- Added preserved source resources to the queued patch manifest so exported module copies record both changed/bundled resources and byte-preserved source resources.
+- Surfaced preserved source resources in the Module Editor queued export tooltip beside patched and bundled resources.
+- Preserved the existing compact queue summary text while improving the detailed readiness tooltip and manifest audit trail.
+- Extended focused queued-export runtime coverage for preserved-resource summaries, manifest output, and UI tooltip text.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_export_queue.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_queued_export_combines_texture_and_template_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Audit Scope Summary
+
+Owner: LordVaderCW
+Task: Module Editor module audit and preservation-readiness workflow
+Subsystem: Stock Module Editor / resource safety audit / preserve-list-only policy / Native payload packaging
+Intersects: Existing stock Module Editor archive audit, content browser resource safety tooltips, copied-module export policy, and unknown-resource preservation.
+
+- Added a scope-level resource safety summary so the module audit distinguishes concrete editor/preservation scopes such as texture replacement, audio/movie preservation, supporting game resources, and unknown binary preservation.
+- Displayed scope counts in the top-level Module Editor audit details so users can understand what will be editable, inspected, or preserved before clicking individual resources.
+- Corrected the safety audit runtime fixture to verify the module-local unknown resource selection instead of a stale texture-library expectation.
+- Extended focused runtime coverage for scope counts and unknown-resource preservation policy.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_resource_safety.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_resource_safety_classifies_editable_and_preserved_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor DLG Logic Field Row Selection
+
+Owner: LordVaderCW
+Task: Module Editor dialogue and script inspection workflow
+Subsystem: Stock Module Editor / DLG top-level field editing / logic-resource inspection / Native payload packaging
+Intersects: Existing stock Module Editor logic editor, details table selection, safe copied-module DLG export, and queued module patch export.
+
+- Wired DLG logic field rows in the details table so selecting editable fields like End Conversation jumps the logic editor combo/value controls to the matching top-level GFF field.
+- Added details-row tooltips for logic resources that distinguish editable DLG fields from list-only script/path fields.
+- Kept NSS/NCS/PTH behavior list-only while preserving the existing dependency/reference inspection rows.
+- Extended focused runtime coverage to prove DLG details-row selection drives the EndConversation edit before previewing and staging a safe copied-module export.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_logic_inventory_summarizes_path_dialogue_and_scripts_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor LYT/VIS Details Row Selection
+
+Owner: LordVaderCW
+Task: Module Editor room layout and visibility editing workflow
+Subsystem: Stock Module Editor / LYT room placement / VIS visibility graph / Native payload packaging
+Intersects: Existing stock Module Editor layout editor, details table selection, safe copied-module LYT/VIS export, and room/visibility graph inspection.
+
+- Wired LYT room rows in the details table so selecting a room row jumps the layout editor to that room and prepares the X coordinate field for editing.
+- Wired VIS visibility rows in the details table so selecting a visibility-source row jumps the layout editor to that room and prepares the first visible-room link when available.
+- Added row tooltips for LYT/VIS details so users can see which room placement or visibility link target will be edited.
+- Extended focused runtime coverage to prove details-row selection drives both a LYT room-coordinate edit and a VIS visibility-link edit before previewing safe copied-module exports.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_layout_inventory_summarizes_lyt_vis_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Template And Metadata Field Row Selection
+
+Owner: LordVaderCW
+Task: Module Editor gameplay-template and module-metadata editing workflow
+Subsystem: Stock Module Editor / template field editing / ARE-IFO metadata editing / Native payload packaging
+Intersects: Existing stock Module Editor details table, gameplay template editor, metadata editor, safe copied-module template/metadata export, and GIT-to-template workflow.
+
+- Wired editable gameplay-template field rows in the details table so selecting fields like Store name jumps the template editor combo/value controls to the matching GFF field.
+- Wired editable ARE/IFO metadata rows in the details table so selecting fields like Module name jumps the metadata editor combo/value controls to the matching GFF field.
+- Added details-row tooltips for template and metadata fields that distinguish editable rows from inspect-only rows.
+- Extended focused runtime coverage to prove details-row selection drives `StoreName` and `Mod_Name` edits before previewing safe copied-module exports.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_metadata_inventory_summarizes_are_ifo_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_template_inventory_summarizes_gameplay_forms_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor WOK Surface Row Selection
+
+Owner: LordVaderCW
+Task: Module Editor walkmesh editing workflow
+Subsystem: Stock Module Editor / WOK walkmesh inventory / surface paint controls / Native payload packaging
+Intersects: Existing stock Module Editor WOK inventory, details table selection, and safe copied-module WOK export.
+
+- Added face-index tracking to WOK surface summaries so parsed walkmesh surface rows know which source face indices use each material.
+- Wired WOK surface rows in the details panel as selectors so choosing a surface summary targets the first matching face and current surface material in the WOK paint controls.
+- Added WOK row tooltips that explain the selected face and surface target before previewing a surface paint edit.
+- Fixed the WOK runtime fixture expectation so it asserts the module-local `.wok` resource selected from the Rooms browser rather than an unrelated texture-library resource.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_walkmesh.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_wok_inventory_summarizes_surfaces_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor GIT Object Filter
+
+Owner: LordVaderCW
+Task: Module Editor placed-object editing workflow
+Subsystem: Stock Module Editor / GIT object inventory / creature-placeable-merchant editing / Native payload packaging
+Intersects: Existing stock Module Editor GIT object preview, safe copied-module export, and details-panel placed object summaries.
+
+- Removed the first-8-objects cap from GIT object inspection so large modules expose every placed creature, placeable, store/merchant, door, trigger, waypoint, sound, and transition row to the editor.
+- Added a searchable placed-object filter to the Module Editor GIT edit strip so dense modules can quickly narrow by object type, index, template ResRef, tag, template type, or list label.
+- Wired GIT object summary rows in the details panel as selectors so choosing a creature/placeable/store/etc. row jumps the GIT editor to that object, clearing the filter when needed.
+- Added an `Open Template` command for selected GIT objects so module-local UTC/UTP/UTD/UTT/UTE/UTW/UTS/UTM resources open directly in the existing gameplay template editor.
+- Kept the field/value editor synchronized with filtered results and disabled the edit controls cleanly when no filtered object has editable fields.
+- Added focused runtime coverage for a 12-placeable GIT fixture, proving object index 11 remains visible, the UI filter narrows to a single target, and a details-row selection jumps back to the chosen object before restoring the full list.
+- Extended the GIT runtime fixture with a module-local `g_snowtroop.utc` template and verified the GIT object editor opens it through the gameplay-template editing workflow.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_git.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_git_inventory_lists_runtime_objects tests\test_map_studio_level_editor_identity.py::test_stock_module_git_inventory_exposes_all_object_rows_with_filter tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Material Target Filter
+
+Owner: LordVaderCW
+Task: Module Editor room material picking workflow
+Subsystem: Stock Module Editor / material board filtering / texture replacement preview / Native payload packaging
+Intersects: Existing stock Module Editor material board paging, material picker, game-library texture replacement, and room material details.
+
+- Added a material target filter field that narrows the room material board, compact tile strip, and material list by room, node, slot kind, or texture ResRef.
+- Updated material-board paging to track page state per room and filter query so filtered results have correct hit maps, page counts, and navigation state.
+- Kept selection and replacement previews synchronized when the filter changes, including filtered board tile picking and clearing the filter back to the full material list.
+- Extended focused source-contract and runtime coverage with a many-slot room filter path that narrows to one target, selects it from the filtered board, clears the filter, and continues replacement preview.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; offscreen smoke test opened `C:/Users/NewAdmin/Downloads/RNVcanyon.zip`, selected `koq200_01a.mdl`, filtered material targets to `CliffBlock09`, selected the only filtered board tile, resolved `CliffBlock09:lko_rock02`, and confirmed temp cleanup on close. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Book-Derived Skill Development For Hermes And Codex Agents
+
+Owner: LordVaderCW
+Subsystem: Knowledge base / agent skills / book-derived learned skills / Codex skills / Hermes skills
+
+- Audited the user's Academy of Art University book library (~110 PDFs) against GhostRigger's development needs, identifying 14 Tier-1/Tier-2 books that fill knowledge gaps on the critical path: Character Studio native DAG lock, package coupling/governance, embedded Python engineering, Map Studio level design, PBR texturing, and native C++ game programming.
+- Delegated 3 parallel subagents to extract table-of-contents and key-chapter text from all 14 books via pymupdf (fitz v1.27.2.3). All books had clean embedded PDF bookmarks producing lossless TOC extraction.
+- Created 14 new learned skill files in `docs/knowledgebase/learned/` distilled from the book knowledge, each GhostRigger-grounded with specific architecture references, critical-path task IDs, validation workflows, and default fixtures:
+  - `couplingdesignskill.md` (Khononov + Constantine): 5 coupling dimensions, 7 cohesion levels, merge/split decision framework for the 109-project native sprawl.
+  - `couplingskill.md`: connascence taxonomy, patterns-as-boundary-tools.
+  - `pythonengineeringskill.md` (Nguyen + Ziade + Mak): profiling, NumPy, concurrency, ctypes DLL bridge, embedded payload packaging.
+  - `advancedpythonskill.md`: Cython, Numba, GIL internals, deadlock/race-condition analysis.
+  - `pythonpackagingskill.md`: payload manifest system, entry points, distribution.
+  - `technicalanimationskill.md` (Lake + Mukundan + Venter): Odyssey DAG lock, joint orientation discipline, hook validation, supermodel semantics.
+  - `unrealcharacterpipelineskill.md`: UE5 retarget lane (IK Rig, Control Rig, Sequencer, MetaHuman, Mixamo).
+  - `pbrtexturingskill.md` (Kumar + Villar): PBR workflow, MDL texture-field patching, Blender axis conversion.
+  - `blenderpipelineskill.md`: UV unwrapping, FBX export, Python scripting.
+  - `leveldesignskill.md` (Totten + Phil Co + Eliasz): spatial typology, grayboxing, modular design, KOTOR module structure.
+  - `proceduralgenerationskill.md`: ISM/HISM instancing, PCG graphs, crowd spawning.
+  - `gamecppskill.md` (Li + Somberg): native host launch flow, C++↔Python ABI boundary, renderer backends, animation FSMs.
+  - `cgameprogrammingskill.md`: runtime architecture, kernel/subsystem split, resource lifecycle.
+  - `meshprocessingskill.md`: half-edge data structures, mesh simplification, quaternion SLERP, CCD/FABRIK.
+- Created 6 Codex-formatted skills in `.codex/skills/` with YAML frontmatter, progressive disclosure structure, and deep references to the repo learned skills: `ghostrigger-coupling-analysis`, `ghostrigger-character-pipeline`, `ghostrigger-native-bridge`, `ghostrigger-map-authoring`, `ghostrigger-texture-material-pipeline`, `ghostrigger-python-engineering`.
+- Created 6 matching Hermes skills via `skill_manage` in `~/AppData/Local/hermes/skills/ghostrigger/` under a new `ghostrigger` category, each self-contained with trigger conditions, actionable workflows, and repo deep-reference paths.
+- Updated `docs/knowledgebase/skills.md` with a restructured routing index organized by domain and expanded the Source Library Map with all new book references.
+- Verification: all 14 learned skill files confirmed present in `docs/knowledgebase/learned/`; all 6 Codex skills confirmed in `.codex/skills/`; all 6 Hermes skills confirmed in `~/AppData/Local/hermes/skills/ghostrigger/`; `skills.md` routing index patch applied successfully. PDF extraction used pymupdf v1.27.2.3 installed via `uv pip`. Visible Debug-app UI retest was not run in this turn (knowledge-base-only change).
+
+### [2026-06-27] Stock Module Editor Texture Usage Board Jump
+
+Owner: LordVaderCW
+Task: Module Editor texture usage lookup workflow
+Subsystem: Stock Module Editor / texture usage details / room material board navigation / Native payload packaging
+Intersects: Existing stock Module Editor texture browser, details table material-slot payloads, material board paging, and matching texture replacement staging.
+
+- Added material-slot tooltips to details rows so `Used by ...` texture usage rows tell users they can select the row to show that material on the room material board.
+- Extended the matching-texture staging runtime fixture so a texture usage row targets a material slot on page 2 of a 14-slot room, proving details selection jumps the board to the correct page.
+- Preserved matching texture staging/export behavior after the board jump so replacing one texture can still stage all matching material slots safely.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_stages_matching_texture_uses_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; offscreen smoke test opened `C:/Users/NewAdmin/Downloads/RNVcanyon.zip`, selected `lko_rock02.tga`, selected the `Used by koq200_01a.CliffBlock09` details row, jumped the board to `13-24 of 282`, selected `CliffBlock09:lko_rock02`, and confirmed temp cleanup on close. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Material Board Paging
+
+Owner: LordVaderCW
+Task: Module Editor room material picking workflow
+Subsystem: Stock Module Editor / room material visual picking / texture replacement preview / Native payload packaging
+Intersects: Existing stock Module Editor material board, material picker, game-library texture replacement, and ZIP package intake workflow.
+
+- Added previous/next navigation and page status for the center room material board so large room MDLs can expose more than the first 12 material slots.
+- Stored material-board page state per room and kept selected material slots in view when selection comes from the material list or details table.
+- Updated material-board hit testing so each page has its own clickable tile map for visual material picking.
+- Extended focused source-contract and runtime coverage with a 14-slot room fixture that verifies page navigation, second-page tile picking, and replacement preview refresh.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; offscreen smoke test opened `C:/Users/NewAdmin/Downloads/RNVcanyon.zip`, selected `koq200_01a.mdl`, paged from `1-12 of 282` to `13-24 of 282`, clicked a second-page board tile, selected `CliffBlock09:lko_rock02`, and confirmed the temporary extraction folder was removed on close. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Safe Export Defaults For ZIP Packages
+
+Owner: LordVaderCW
+Task: Module Editor safe copied module export workflow
+Subsystem: Stock Module Editor / ZIP package intake / export destination safety / Native payload packaging
+Intersects: Existing stock Module Editor texture, queued, WOK, GIT, template, metadata, layout, and logic export dialogs.
+
+- Added a shared export-default path helper so every Module Editor export dialog suggests a user-visible copied module path rather than duplicating path logic.
+- Updated zip-opened module sessions to suggest export copies beside the original ZIP package while keeping the temporary extracted module as the read source.
+- Preserved direct MOD/RIM/ERF behavior so direct module opens still suggest copied exports beside the source module file.
+- Extended focused runtime coverage for zip-opened and direct-module export defaults, plus native payload byte identity.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_opens_zip_wrapped_module_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; offscreen smoke test opened `C:/Users/NewAdmin/Downloads/RNVcanyon.zip` and confirmed the default texture patch export path is `C:/Users/NewAdmin/Downloads/RNVcanyon_texture_patch.mod`, not the temporary extraction folder. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Clickable Room Material Board
+
+Owner: LordVaderCW
+Task: Module Editor room material picking workflow
+Subsystem: Stock Module Editor / room material visual picking / texture replacement preview / Native payload packaging
+Intersects: Existing stock Module Editor room material board, material picker, content browser texture replacement, and ZIP package intake workflow.
+
+- Made the center room material board clickable by storing per-tile material hit rectangles and routing preview clicks through the existing material-slot selection path.
+- Added stale-hit cleanup when the center preview switches away from room material context so hidden board targets cannot be clicked accidentally.
+- Kept texture replacement previews stable while board and picker views refresh, preserving the selected material slot and pending replacement state.
+- Extended focused source-contract and runtime coverage for board hit testing, game-library texture replacement, imported texture replacement, and native payload byte identity.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_imported_texture_replacement_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; offscreen smoke test opened `C:/Users/NewAdmin/Downloads/RNVcanyon.zip`, selected `koq200_01a.mdl`, clicked a material-board tile, selected `BigGoodCrate1:lsl_crate00`, and confirmed the temporary extraction folder was removed on close. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Room Material Board Preview
+
+Owner: LordVaderCW
+Task: Module Editor room material replacement preview workflow
+Subsystem: Stock Module Editor / room material visual context / texture replacement preview / Native payload packaging
+Intersects: Existing stock Module Editor material picker, texture browser, session replacement preview, and copied module export workflow.
+
+- Added a center preview material board for selected room MDL resources that shows up to 12 mesh/material targets with texture swatches, face/vertex counts, and selected-slot highlighting.
+- Updated material selection and texture replacement preview so the room material board stays visible and refreshes to show effective replacement textures instead of only previewing the replacement texture in isolation.
+- Blocked material picker and material tile panel signals while repopulating them, preventing automatic selection churn from clearing a pending texture replacement during refresh.
+- Extended focused source-contract and runtime coverage for the room material board, game-library texture replacement preview, imported texture replacement, and native payload byte identity.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_imported_texture_replacement_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor ZIP Module Package Intake
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM package intake workflow
+Subsystem: Stock Module Editor / module package intake / archive audit metadata / Native payload packaging
+Intersects: Existing stock Module Editor open-module workflow, archive audit details, and copied module export workflow.
+
+- Added a headless package-intake helper that discovers MOD/RIM/ERF archives directly or inside ZIP delivery packages and extracts only the selected module into a session temporary folder.
+- Updated the Module Editor open workflow to accept `.zip` packages, preserve the original package as read-only source context, and show both source package and opened module path in audit details.
+- Added cleanup on window close so zip-opened module copies do not leave temporary extraction folders behind.
+- Added focused source-contract and runtime coverage using a zip-wrapped module fixture, including temp-folder cleanup and content-browser proof.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_package_intake.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_opens_zip_wrapped_module_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Character Builder Bind-Pose Transform Preservation
+
+Owner: LordVaderCW
+Task: Character Builder Drexl creature rigging workflow
+Subsystem: Character Builder skeleton binding / viewport pivot-freeze tools / model-fit transforms / Native payload packaging
+Intersects: Existing Character Builder skeleton apply, imported-mesh model-fit gizmo, and Shift+right-click rig marking menu workflow.
+
+- Marked cleaned imported mesh payloads as world-space after their visible fit transforms are baked, preventing Build KOTOR Skeleton from reinterpreting the aligned mesh as node-local geometry under the donor skeleton.
+- Updated Freeze Transforms to bake the selected/imported object's displayed world vertices, reset mesh transforms, and center the active pivot on the baked mesh bounds.
+- Wired model-fit rotate/scale to respect the active pivot when Center Pivot has been used, making the marking-menu pivot workflow affect Character Builder transforms like a DCC workflow.
+- Regenerated the affected `GhostRigger.Core.Workflow` and `GhostRigger.Core.GUI.Display` native Python payload metadata.
+- Verification: `python -m py_compile native\GhostRigger.Core.Workflow\Python\src\core\characters\character_builder.py native\GhostRigger.Core.Workflow\Python\src\core\characters\headless_body_workflow.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\state_helpers.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\drag_interactions.py tests\test_character_builder_template_rig.py tests\test_skeleton_template_hud_wiring.py`; `python -m pytest tests/test_character_builder_template_rig.py::test_apply_template_rig_strips_imported_armature_and_clears_old_skin tests/test_character_builder_template_rig.py::test_apply_template_rig_does_not_rebake_already_fitted_external_vertices tests/test_skeleton_template_hud_wiring.py::test_shared_viewport_exposes_pivot_and_freeze_toolbar_actions tests/test_skeleton_template_hud_wiring.py::test_import_root_gimbal_transforms_whole_mesh_and_supports_scale tests/test_skeleton_template_hud_wiring.py::test_character_builder_bind_marks_clean_payload_vertices_as_world_space -q`; `python -m pytest tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; `MSBuild.exe native\GhostRigger.Native.Core.Host\GhostRigger.Native.Core.Host.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m:1 /nr:false /v:m`. Pytest reported the existing cache-path warning. Visible Debug-app interaction retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Texture Dependency Rows
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM room material texture audit workflow
+Subsystem: Stock Module Editor / material texture dependency resolution / session override preview / Native payload packaging
+Intersects: Existing stock Module Editor material inventory, texture browser resources, session texture override preview, and copied module export workflow.
+
+- Added a headless room texture dependency summary that resolves source material texture references against module, imported/session, and game-library texture resources.
+- Added room details rows that report resolved versus missing texture dependencies and show the effective replacement texture when a material slot is previewed or staged.
+- Extended focused tests so missing source textures and session replacement textures are visible in both core dependency summaries and room material details.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_materials.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_replacement_draft_is_preview_only_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_queued_export_combines_texture_and_template_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Session Texture Override Preview
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM snowy retexture preview workflow
+Subsystem: Stock Module Editor / material-slot replacement preview / staged texture override display / Native payload packaging
+Intersects: Existing stock Module Editor material inventory, texture replacement drafts, staged edit queue, and copied module export workflow.
+
+- Added headless session texture override summaries that derive preview/staged material texture changes from replacement drafts while preserving immutable source material slots.
+- Updated the material picker, material pick panel, selected material preview, and room material details so pending and staged texture replacements show as `source -> replacement` context before export.
+- Refreshed material views immediately when texture replacements are previewed, staged, batch-staged, or cleared so the visible Module Editor state follows the session override state.
+- Extended focused source-contract, core, and runtime coverage for preview-to-staged texture override display.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_materials.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_replacement_draft_is_preview_only_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_queued_export_combines_texture_and_template_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Resource Safety Audit
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM archive audit and preservation workflow
+Subsystem: Stock Module Editor / resource editability classification / archive audit details / Native payload packaging
+Intersects: Existing stock Module Editor content browser, resource details panel, safe copied export, and list-only preservation policy.
+
+- Added a headless resource safety classifier that labels module resources as editable now, partial editor, inspect/list-only, or preserve-only with explicit workflow, safety, and export policies.
+- Extended the archive type map for common KOTOR resource kinds such as WAV, BIK, 2DA, GUI, DDS, PLT, and other support payloads so module audits do not collapse them into anonymous numeric types.
+- Surfaced resource safety in content-browser tooltips, per-resource detail rows, and archive-level audit counts so unsupported, media, UI/table, script/path, and unknown resources clearly show why they are preserved.
+- Added focused source-contract and runtime coverage for editable texture, list-only table, preserve-only audio/movie, and unknown binary resource audit behavior.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_archive.py native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_resource_safety.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_resource_safety_classifies_editable_and_preserved_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Queued Export Preflight
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM validation-before-export workflow
+Subsystem: Stock Module Editor / staged edit queue / copied module export preflight / Native payload packaging
+Intersects: Existing stock Module Editor staged texture, WOK, GIT, template, metadata, layout, and logic edit export workflow.
+
+- Added a headless queued export preflight summary that reports staged edit count, patched resources, bundled resources, readiness issues, and source-module preservation before the module copy is written.
+- Added a compact queued export preflight label and tooltip above the staged edit list so the Module Editor shows the combined export impact without adding fake edit rows.
+- Added a queued export guard that blocks save/export before the file dialog if staged edits fail preflight validation.
+- Extended focused source-contract and runtime tests around combined texture/template queue preflight details.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_export_queue.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_queued_export_combines_texture_and_template_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Texture Export Preflight
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM snowy retexture workflow
+Subsystem: Stock Module Editor / texture patch plan preflight / material replacement preview / Native payload packaging
+Intersects: Existing stock Module Editor material-slot replacement, imported/generated texture resources, texture patch export, and queued copied module export workflow.
+
+- Added a headless texture patch preflight summary that reports which room MDLs will be patched, which replacement texture/TXI resources will be bundled, and that source module archives stay preserved for copied export.
+- Surfaced those preflight details in both texture replacement detail rows and the material preview table so modders can see the exact copied-export impact before saving.
+- Extended focused source-contract and runtime tests around imported texture/TXI replacements, matching texture-use staging, and texture patch plan preflight accounting.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_patch_plan.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_stages_matching_texture_uses_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_imported_texture_replacement_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_copy_rebuilds_archive_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Pytest reported the existing cache-path warning. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Batch Texture Replacement Staging
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM snowy retexture workflow
+Subsystem: Stock Module Editor / material-slot replacement staging / queued copied module export / Native payload packaging
+Intersects: Existing stock Module Editor material pick panel, imported/generated texture resources, texture patch export, and queued edit export workflow.
+
+- Added a headless material helper that creates validated replacement drafts for every diffuse material slot using the same original texture ResRef.
+- Added a `Stage Matching Texture Uses` Module Editor toolbar action so one previewed replacement can stage all matching room material slots across the open module instead of requiring one-by-one material edits.
+- Added room-level texture usage summaries for selected MDLs and texture detail usage rows that show which room/material slots currently reference a selected texture; selecting a usage row jumps back to that material slot for replacement, and replacement detail rows show how many matching diffuse texture uses can be staged together before export.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_materials.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_stages_matching_texture_uses_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_stages_matching_texture_uses_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_tga_editor_creates_session_replacement_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_imported_texture_replacement_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_bundles_game_library_texture_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_logic_inventory_summarizes_path_dialogue_and_scripts_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_queued_export_combines_texture_and_template_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_layout_inventory_summarizes_lyt_vis_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_metadata_inventory_summarizes_are_ifo_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_template_inventory_summarizes_gameplay_forms_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_git_inventory_lists_runtime_objects tests\test_map_studio_level_editor_identity.py::test_stock_module_wok_inventory_summarizes_surfaces_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor TXI Sidecar Authoring
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM TGA/TXI retexture workflow
+Subsystem: Stock Module Editor / TXI edit drafts / texture sidecar bundling / safe copied module export / Native payload packaging
+Intersects: Existing stock Module Editor TGA adjustment preview, imported texture resources, material-slot replacement drafts, and texture patch export workflow.
+
+- Added a headless TXI text edit draft that validates output ResRefs, ASCII sidecar text, size limits, and produces in-memory TXI payloads without touching source texture bytes.
+- Added a compact TXI sidecar authoring panel to the Module Editor workspace so selected TGA/TPC/TXI resources can create or edit matching `.txi` text alongside texture replacement previews.
+- Reused the memory-backed edited texture resource path so authored TXI sidecars appear in the content browser, can update the active material replacement draft, and bundle into safe copied module export next to edited/imported TGAs.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_txi_editor.py native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_textures.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_preview_decodes_tga_bytes_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_tga_editor_creates_session_replacement_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_tga_editor_creates_session_replacement_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_imported_texture_replacement_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_bundles_game_library_texture_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_logic_inventory_summarizes_path_dialogue_and_scripts_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_queued_export_combines_texture_and_template_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_layout_inventory_summarizes_lyt_vis_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_metadata_inventory_summarizes_are_ifo_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_template_inventory_summarizes_gameplay_forms_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_git_inventory_lists_runtime_objects tests\test_map_studio_level_editor_identity.py::test_stock_module_wok_inventory_summarizes_surfaces_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor TGA Adjustment Preview
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM TGA editing and snowy retexture workflow
+Subsystem: Stock Module Editor / TGA edit drafts / texture replacement preview / safe copied module export / Native payload packaging
+Intersects: Existing stock Module Editor texture browser, imported texture resources, material-slot replacement drafts, and texture patch export workflow.
+
+- Added a headless TGA adjustment draft that decodes a source TGA, applies brightness/contrast/snow adjustments, writes real TGA bytes, and validates the output through a write/read round trip without touching source texture bytes.
+- Added a memory-backed edited texture resource so TGA edits appear in the Module Editor content browser and texture preview/replacement flow without creating temporary files.
+- Added a compact TGA editor row to the Module Editor workspace with output ResRef, brightness, contrast, snow amount, and Preview TGA Edit controls; previewed edits can immediately become the selected material-slot replacement and bundle into safe copied module export.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_tga_editor.py native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_textures.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_preview_decodes_tga_bytes_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_tga_editor_creates_session_replacement_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_tga_editor_creates_session_replacement_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_logic_inventory_summarizes_path_dialogue_and_scripts_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_queued_export_combines_texture_and_template_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_layout_inventory_summarizes_lyt_vis_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_metadata_inventory_summarizes_are_ifo_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_template_inventory_summarizes_gameplay_forms_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_git_inventory_lists_runtime_objects tests\test_map_studio_level_editor_identity.py::test_stock_module_wok_inventory_summarizes_surfaces_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_imported_texture_replacement_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor DLG Field Edit Drafts
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM logic editing workflow
+Subsystem: Stock Module Editor / DLG dependency inspection / safe copied module export / queued edit export / Native payload packaging
+Intersects: Existing stock Module Editor logic inventory, export queue, and module-resource details workflow.
+
+- Added safe DLG top-level primitive field edit drafts so fields such as `EndConversation` can be previewed, validated through a GFF write/read round-trip, and exported only into a copied module archive.
+- Added a compact DLG editor row to the Module Editor workspace with field selection, value editing, preview validation, details rows, staging, and copied export support while keeping nested DLG lists, PTH, NSS, and NCS as inspection-only gates.
+- Extended queued Module Editor export so validated DLG field edits can be staged and rebuilt with the same combined archive export path as texture, WOK, GIT, template, metadata, and layout edits.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_logic.py native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_export_queue.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_logic_inventory_summarizes_path_dialogue_and_scripts_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_logic_inventory_summarizes_path_dialogue_and_scripts_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_queued_export_combines_texture_and_template_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_layout_inventory_summarizes_lyt_vis_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_metadata_inventory_summarizes_are_ifo_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_template_inventory_summarizes_gameplay_forms_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_git_inventory_lists_runtime_objects tests\test_map_studio_level_editor_identity.py::test_stock_module_wok_inventory_summarizes_surfaces_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_imported_texture_replacement_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Character Builder Skeleton Apply Recovery And Pivot Menu
+
+Owner: LordVaderCW
+Task: Character Builder Drexl creature rigging workflow
+Subsystem: Character Builder skeleton template apply / rigging marking menu / Native payload packaging
+Intersects: Existing Character Builder base-skeleton picker and viewport reference-skeleton overlay state.
+
+- Fixed Build/Apply KOTOR Skeleton so it can recover from the already loaded viewport reference skeleton when the picker key is missing or stale, preventing the false "Choose a KOTOR skeleton template before applying" warning after c_drexlf is visibly selected.
+- Added Center Pivot and Freeze Transforms as quick Shift+right-click rig marking menu actions, backed by the viewport's existing pivot and freeze-transform commands.
+- Synced the duplicated Tools and GUI Display Character Builder panel payload sources and regenerated the affected native Python payload metadata.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\panels\qt_character_builder_panel.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\qt_character_builder_panel.py tests\test_skeleton_template_hud_wiring.py`; `python -m pytest tests\test_skeleton_template_hud_wiring.py::test_character_builder_has_rig_tool_belt_and_marking_menus -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`.
+
+### [2026-06-27] Stock Module Editor Material Pick Panel
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM texture replacement workflow
+Subsystem: Stock Module Editor / room material picking / texture replacement preview / Native payload packaging
+Intersects: Existing stock Module Editor material-slot inventory, texture compare preview, and safe texture patch export workflow.
+
+- Added a compact room material pick panel under the Module Editor preview area so room MDL selection exposes clickable mesh/material targets before choosing a replacement texture.
+- Reused the same `ModuleRoomTextureSlot` selection state across the pick panel, existing material list, details table, current/replacement texture preview, and copied module export path.
+- Populated pick targets with existing texture thumbnails when available and stable fallback material icons when the current texture is only referenced.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime -q`; direct `RNVcanyon.mod` probe found `koq200_01a.mdl` parses with 282 material targets across 24 unique referenced textures; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_logic_inventory_summarizes_path_dialogue_and_scripts_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_template_inventory_summarizes_gameplay_forms_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_layout_inventory_summarizes_lyt_vis_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_metadata_inventory_summarizes_are_ifo_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_git_inventory_lists_runtime_objects tests\test_map_studio_level_editor_identity.py::test_stock_module_wok_inventory_summarizes_surfaces_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_bundles_game_library_texture_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Imported Texture Replacement
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM texture replacement workflow
+Subsystem: Stock Module Editor / local TGA/TPC/TXI import / texture replacement preview / safe copied module export / Native payload packaging
+Intersects: Existing stock Module Editor content browser, material-slot selection, game-library texture replacement, and texture patch export workflow.
+
+- Added an Import Replacement Texture action to the Module Editor toolbar so edited local `.tga`, `.tpc`, and `.txi` files can be brought into the current module-editing session without touching the source archive.
+- Added a session-local imported texture resource type that participates in the left content browser, thumbnail previews, text TXI preview, current/replacement compare strip, material replacement draft creation, and copied module export bundling.
+- Ensured imported replacement payload bytes are carried through the existing safe export path so the rebuilt module copy receives the patched MDL texture reference plus the new texture resource.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_textures.py native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_materials.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_imported_texture_replacement_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_imported_texture_replacement_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_bundles_game_library_texture_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor TXI Sidecar Bundling
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM texture replacement workflow
+Subsystem: Stock Module Editor / TXI sidecar import / texture patch manifest / safe copied module export / Native payload packaging
+Intersects: Existing imported texture resource workflow, material-slot replacement draft, and texture patch export manifest.
+
+- Extended texture replacement drafts to carry matching imported TXI sidecar payloads alongside the selected replacement TGA/TPC image.
+- Updated the Module Editor import flow so importing `name.txi` after `name.tga` refreshes the pending replacement and shows the sidecar in the material preview/details rows.
+- Updated safe copied module export to bundle sidecar resources such as `snow_wall.txi` and record their source, bundled state, and payload size in the texture patch manifest.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_materials.py native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_patch_plan.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_imported_texture_replacement_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_imported_texture_replacement_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_bundles_game_library_texture_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor WOK Surface Paint Drafts
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM walkmesh editing workflow
+Subsystem: Stock Module Editor / WOK surface painting / walkmesh validation / safe copied module export / Native payload packaging
+Intersects: Existing stock Module Editor WOK inventory, walkmesh editor service, and copied module export behavior.
+
+- Added a headless stock WOK surface paint draft that parses a module-local BWM/WOK, paints selected face indices to a KOTOR surface material in memory, validates the edited walkmesh, round-trips the binary payload, and remains preview-only until export.
+- Added a compact WOK editing panel in the Module Editor preview column with face-index selection, KOTOR WOK surface material selection, and a Preview WOK Paint action that exposes pending validation/export state in the details panel.
+- Added safe copied module export for WOK surface patches, writing a rebuilt archive and `.ghostrigger_wok_patch_plan.json` manifest while preserving untouched resource payloads.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_walkmesh.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_wok_inventory_summarizes_surfaces_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_wok_inventory_summarizes_surfaces_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_imported_texture_replacement_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Test coverage selects the actual parsed NON_WALK face index because PyKotor BWM serialization may reorder fixture faces. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor GIT Object Edit Drafts
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM placed-object editing workflow
+Subsystem: Stock Module Editor / GIT object forms / typed GFF validation / safe copied module export / Native payload packaging
+Intersects: Existing stock Module Editor GIT inventory, module object inspector, and copied module export behavior.
+
+- Added a headless stock GIT object edit draft that edits existing placed-object `TemplateResRef` or `Tag` fields in memory, serializes through the typed GFF writer, reparses the payload, and stays preview-only until the round-trip validates.
+- Added a compact GIT object editor in the Module Editor preview column with placed-object selection, Template/Tag field choice, value entry, and a Preview GIT Edit action that exposes pending validation/export state in the details panel.
+- Added safe copied module export for GIT object edits, writing a rebuilt archive and `.ghostrigger_git_patch_plan.json` manifest while preserving untouched resource payloads.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_git.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_git_inventory_lists_runtime_objects -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_git_inventory_lists_runtime_objects tests\test_map_studio_level_editor_identity.py::test_stock_module_wok_inventory_summarizes_surfaces_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_imported_texture_replacement_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor GIT Transform Field Editing
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM placed-object editing workflow
+Subsystem: Stock Module Editor / GIT object transforms and links / typed GFF validation / Native payload packaging
+Intersects: Existing stock Module Editor GIT object edit drafts and typed GFF copied module export.
+
+- Extended GIT object inventory rows with safe primitive editable fields discovered from the object inspector, including template/tag, position coordinates, bearing/orientation, and transition/link fields when present.
+- Changed the Module Editor GIT edit panel so the field dropdown is populated from the selected placed object instead of hardcoded Template/Tag options.
+- Expanded GIT edit draft validation to coerce and round-trip numeric GFF fields through the typed GFF writer before export, including a tested creature X-position edit.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_git.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_git_inventory_lists_runtime_objects -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_git_inventory_lists_runtime_objects tests\test_map_studio_level_editor_identity.py::test_stock_module_wok_inventory_summarizes_surfaces_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_imported_texture_replacement_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Gameplay Template Field Editing
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM gameplay-template editing workflow
+Subsystem: Stock Module Editor / UTC UTP UTD UTT UTS UTE UTW UTM UTI form fields / typed GFF validation / safe copied module export / Native payload packaging
+Intersects: Existing stock Module Editor gameplay template inventory, typed GFF writer, and copied module export behavior.
+
+- Added validated gameplay-template field edit drafts for module-local UTC, UTP, UTD, UTT, UTS, UTE, UTW, UTM, and UTI resources, including primitive strings, resrefs, numeric fields, booleans, and localizable names.
+- Added a compact template editor panel in the Module Editor preview column with editable field selection, value entry, and Preview Template Edit action.
+- Added safe copied module export for template field edits, writing a rebuilt archive and `.ghostrigger_template_patch_plan.json` manifest while preserving untouched resource payloads.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_templates.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_template_inventory_summarizes_gameplay_forms_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_template_inventory_summarizes_gameplay_forms_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_git_inventory_lists_runtime_objects tests\test_map_studio_level_editor_identity.py::test_stock_module_wok_inventory_summarizes_surfaces_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_imported_texture_replacement_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor ARE IFO Metadata Field Editing
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM area and module metadata editing workflow
+Subsystem: Stock Module Editor / ARE IFO field forms / typed GFF validation / safe copied module export / Native payload packaging
+Intersects: Existing stock Module Editor ARE/IFO inventory, typed GFF writer, and copied module export behavior.
+
+- Added validated ARE/IFO metadata field edit drafts for module-local area names/tags, fog/time/entry fields, and other primitive metadata values that can round-trip through the typed GFF writer.
+- Added a compact metadata editor panel in the Module Editor preview column with editable field selection, value entry, and Preview Metadata Edit action.
+- Added safe copied module export for metadata field edits, writing a rebuilt archive and `.ghostrigger_metadata_patch_plan.json` manifest while preserving untouched resource payloads.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_metadata.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_metadata_inventory_summarizes_are_ifo_runtime -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor LYT VIS Layout Editing
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM room layout and visibility editing workflow
+Subsystem: Stock Module Editor / LYT room placement / VIS visibility graph / safe copied module export / Native payload packaging
+Intersects: Existing stock Module Editor LYT/VIS inventory, layout parsers, and copied module export behavior.
+
+- Added validated LYT room coordinate edit drafts that move existing room layout entries in memory, block unsafe custom LYT sections, round-trip through the existing LYT writer/parser, and stay preview-only until export.
+- Added validated VIS visibility-link edit drafts that add or remove room-to-room visibility links against known LYT/VIS rooms and round-trip through the VIS writer/parser.
+- Added a compact layout editor panel in the Module Editor preview column with room/axis/value controls for LYT and source/target/visible controls for VIS.
+- Added safe copied module export for layout edits, writing a rebuilt archive and `.ghostrigger_layout_patch_plan.json` manifest while preserving untouched resource payloads.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_layout.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_layout_inventory_summarizes_lyt_vis_runtime -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Multi-Edit Export Queue
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM queued edit export workflow
+Subsystem: Stock Module Editor / staged edit queue / combined copied module export / Native payload packaging
+Intersects: Existing texture, WOK, LYT/VIS, GIT, template, metadata, and copied module export lanes.
+
+- Added a core queued export helper that rebuilds a module copy once while applying staged texture MDL patches, bundled TGA/TXI payloads, and validated single-resource payload edits from WOK, LYT/VIS, GIT, template, and metadata drafts.
+- Added a compact staged-edit queue to the Module Editor with Stage Previewed Edit and Clear Staged Edits actions so multiple validated edits can be exported together.
+- Preserved the existing one-off export behavior when no edits are staged.
+- Added a queued export manifest schema, `.ghostrigger_queued_patch_plan.json`, listing every staged edit, patched resource, bundled resource, and source module.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_export_queue.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_queued_export_combines_texture_and_template_runtime -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Logic Dependency Checks
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM dialogue and script dependency audit workflow
+Subsystem: Stock Module Editor / DLG NSS NCS dependency inspection / Native payload packaging
+Intersects: Existing stock Module Editor logic inventory and resource details panel.
+
+- Added module-local reference detection for DLG GFF resrefs and NSS source calls such as dialogue starts, script execution, and module transitions.
+- Added NCS-to-NSS matching-source checks while keeping compiled bytecode list-only until decompile/compile validation exists.
+- Added resolved/missing reference counts and per-reference detail rows to the Module Editor logic-resource details view.
+- Kept PTH and binary resources byte-preserving/list-only while surfacing dependency checks for the logic resources that can be inspected safely.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_logic.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_logic_inventory_summarizes_path_dialogue_and_scripts_runtime -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Logic Resource Inventory
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM path, dialogue, and script groundwork
+Subsystem: Stock Module Editor / PTH DLG NSS NCS inventory / Native payload packaging
+Intersects: Existing GFF reader, module hydration script/dialog grouping, and stock Module Editor resource browser.
+
+- Added a read-only stock logic inventory helper for PTH, DLG, NSS, and NCS resources, classifying text, binary, compiled script, and GFF payloads without attempting unsafe round-trip edits.
+- Wired PTH/DLG/NSS/NCS selection in the stock Module Editor to show resource kind, list-only editable scope, parse status, byte count, source line count, text preview, GFF field count, and nested list counts for dialogue trees.
+- Added a dedicated Logic content-browser filter and distinct icon colors for PTH, DLG, NSS, and NCS resources.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_logic.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_logic_inventory_summarizes_path_dialogue_and_scripts_runtime -q`; direct `RNVcanyon.mod` probe found 0 PTH/DLG/NSS/NCS resources in the supplied module archive; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_logic_inventory_summarizes_path_dialogue_and_scripts_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_template_inventory_summarizes_gameplay_forms_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_layout_inventory_summarizes_lyt_vis_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_metadata_inventory_summarizes_are_ifo_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_git_inventory_lists_runtime_objects tests\test_map_studio_level_editor_identity.py::test_stock_module_wok_inventory_summarizes_surfaces_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_bundles_game_library_texture_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Gameplay Template Inventory
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM gameplay template groundwork
+Subsystem: Stock Module Editor / UTC UTP UTD UTT UTS UTE UTW UTM UTI template inventory / Native payload packaging
+Intersects: Existing GFF reader, GIT object inventory, and gameplay-template resource grouping.
+
+- Added a read-only stock gameplay template inventory helper that parses module-local UTC, UTP, UTD, UTT, UTS, UTE, UTW, UTM, and UTI resources through GhostRigger's lightweight GFF reader.
+- Wired gameplay-template selection in the stock Module Editor to show template kind, editable template-form scope, parse status, raw GFF field count, common template/tag/name/conversation/script fields, and nested list counts such as store inventory or sound lists.
+- Gave gameplay template resource types distinct content-browser icon colors so creatures/NPCs, placeables, doors, triggers, sounds, encounters, waypoints, merchants/stores, and items are easier to distinguish.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_templates.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_template_inventory_summarizes_gameplay_forms_runtime -q`; direct `RNVcanyon.mod` probe found 7 gameplay templates: 5 UTS sound templates, 1 UTT trigger template, and 1 UTW waypoint template, all parsing cleanly; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_template_inventory_summarizes_gameplay_forms_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_layout_inventory_summarizes_lyt_vis_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_metadata_inventory_summarizes_are_ifo_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_git_inventory_lists_runtime_objects tests\test_map_studio_level_editor_identity.py::test_stock_module_wok_inventory_summarizes_surfaces_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_bundles_game_library_texture_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor LYT/VIS Layout Inventory
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM room layout and visibility groundwork
+Subsystem: Stock Module Editor / LYT layout inventory / VIS visibility inventory / Native payload packaging
+Intersects: Existing LYT/VIS text parsers and stock Module Editor room resource workflow.
+
+- Added a read-only stock layout inventory helper that parses module-local LYT and VIS resources through GhostRigger's existing `LYTLayout` and `VISData` parsers.
+- Wired LYT/VIS selection in the stock Module Editor to show parse status, editable layout/visibility scope, room placement rows, doorhooks, VIS entry/link counts, missing visibility targets, and layout rooms without VIS entries.
+- Gave LYT and VIS resources distinct content-browser icon colors so room layout and visibility resources are easier to distinguish from room models and WOKs.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_layout.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_layout_inventory_summarizes_lyt_vis_runtime -q`; direct `RNVcanyon.mod` probe found `koq200.lyt` with 12 rooms and 0 doorhooks, plus `koq200.vis` with 7 VIS entries, 56 visibility links, and 5 layout rooms without VIS entries; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_layout_inventory_summarizes_lyt_vis_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_metadata_inventory_summarizes_are_ifo_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_git_inventory_lists_runtime_objects tests\test_map_studio_level_editor_identity.py::test_stock_module_wok_inventory_summarizes_surfaces_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_bundles_game_library_texture_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor ARE/IFO Metadata Inventory
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM metadata groundwork
+Subsystem: Stock Module Editor / ARE and IFO metadata inventory / Native payload packaging
+Intersects: Existing ARE/IFO GFF parser and authored module metadata compiler.
+
+- Added a read-only stock metadata inventory helper that parses module-local ARE and IFO resources through GhostRigger's existing `AREData` and `IFOData` parsers.
+- Wired ARE/IFO selection in the stock Module Editor to show parse status, editable metadata scope, area name/tag, lighting/fog/minimap fields, module identity, entry area/position/direction, dawn/dusk hours, and raw GFF field counts.
+- Gave ARE and IFO resources distinct content-browser icon colors so metadata resources are easier to distinguish from GIT and generic resources.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_metadata.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_metadata_inventory_summarizes_are_ifo_runtime -q`; direct `RNVcanyon.mod` probe found `koq200.are` with area name `Secret Excavation Site`, tag `KOQ200`, and lighting/fog rows, plus `module.ifo` with module tag/name `KOQ200`, entry area `KOQ200`, dawn hour 6, dusk hour 18; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_metadata_inventory_summarizes_are_ifo_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_git_inventory_lists_runtime_objects tests\test_map_studio_level_editor_identity.py::test_stock_module_wok_inventory_summarizes_surfaces_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_bundles_game_library_texture_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor GIT Object Inventory
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM placed-object groundwork
+Subsystem: Stock Module Editor / GIT object inventory / object-inspector forms / Native payload packaging
+Intersects: Existing GIT parser and module object inspector service.
+
+- Added a read-only stock GIT inventory helper that parses module-local GIT resources through GhostRigger's existing `GITData` parser and module object inspector form service.
+- Wired GIT selection in the stock Module Editor to show parse status, editable object-form scope, total placed object forms, per-type counts, and sample object rows with template, tag, position, and field counts.
+- Kept the workflow list-only for this slice so raw GFF object data is preserved until the Module Editor has explicit override/edit/export gates for placed objects.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_git.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_git_inventory_lists_runtime_objects -q`; direct `RNVcanyon.mod` probe found one GIT resource `koq200.git` with 16 object forms: 13 sounds, 1 trigger, 1 transition, and 1 waypoint; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_git_inventory_lists_runtime_objects tests\test_map_studio_level_editor_identity.py::test_stock_module_wok_inventory_summarizes_surfaces_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_bundles_game_library_texture_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor WOK Inventory
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM walkmesh groundwork
+Subsystem: Stock Module Editor / WOK walkmesh inventory / walkmesh validation preview / Native payload packaging
+Intersects: Existing walkmesh editor service and stock Module Editor resource details workflow.
+
+- Added a read-only stock WOK inventory helper that parses module-local binary BWM/WOK resources through GhostRigger's existing `WOKData` and walkmesh workbench services.
+- Wired WOK selection in the stock Module Editor to show parse status, editable walkmesh-face-surface scope, vertex/face counts, walkable/non-walk counts, boundary edges, door/transition faces, surface-material distribution, and validation issue summaries.
+- Made unsupported non-BWM WOK payloads explicit with an `unsupported_format` status so the editor preserves source data and reports that a safe parser is still needed instead of treating the resource as editable.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_walkmesh.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_wok_inventory_summarizes_surfaces_runtime -q`; direct `RNVcanyon.mod` probe found 14 WOK resources, 7 binary WOK inventories parsed, 1,415 parsed faces total, 1,193 walkable faces, and 210 non-walk faces, with unsupported `node tri` WOK payloads reported explicitly; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_wok_inventory_summarizes_surfaces_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_bundles_game_library_texture_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Character Builder Rigging Tool Belt And Creature Fit Override
+
+Owner: LordVaderCW
+Task: Character Builder Drexl creature rigging workflow
+Subsystem: Character Builder viewport/tool belt / rigging marking menus / creature import auto-fit / Native payload packaging
+Intersects: Existing Character Builder external mesh fit controls and Map Studio viewport modeling toolbar ownership.
+
+- Hid the generic viewport toolbar and Map Studio modeling/blockout tabs inside Character Builder so the top of the tool no longer exposes terrain, walkmesh, weld, cut, bridge, or other map-editing actions.
+- Added a compact Character Builder rig tool belt with Select, Move, Rotate, Transform, Bones, Weights, Joints, Symmetry, Snap, Undo/Redo Guide, and Validate actions.
+- Added Character Builder-specific right-click marking menus: plain right-click switches rig transform tools; Shift+right-click exposes rig workflow actions such as Bones, Symmetry, Joints, Weights, Re-fit, Validate, Apply Base Skeleton, Build Skeleton + Weights, Range of Motion Test, and Refresh Preview Motions.
+- Updated creature import fitting so Source Forward/Source Up overrides bypass creature bounds auto-rotation, letting Drexl-style OBJ orientation be corrected in Character Builder metadata instead of forcing the source mesh/pivot to be reauthored.
+- Regenerated the affected `GhostRigger.Core.GUI.Display`, `GhostRigger.Core.Tools`, and `GhostRigger.Core.Workflow` native Python payload metadata.
+- Verification: `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\variants.py native\GhostRigger.Core.Tools\Python\src\gui\panels\qt_character_builder_panel.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\qt_character_builder_panel.py native\GhostRigger.Core.Workflow\Python\src\core\characters\headless_body_workflow.py tests\test_retarget_external_import.py tests\test_skeleton_template_hud_wiring.py`; `python -m pytest tests\test_skeleton_template_hud_wiring.py::test_character_builder_has_rig_tool_belt_and_marking_menus -q`; `python -m pytest tests\test_retarget_external_import.py::test_creature_mode_obj_fit_uses_flat_bounds_not_humanoid_height tests\test_retarget_external_import.py::test_creature_mode_orientation_override_bypasses_bounds_autorotation -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. An offscreen Character Builder window smoke test was attempted but timed out before completion, so visible Debug-app UI retest is still needed.
+
+### [2026-06-27] Stock Module Editor Texture Compare Preview
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM texture workflow
+Subsystem: Stock Module Editor / material-slot texture preview / game-library replacement workflow / Native payload packaging
+Intersects: Existing stock Module Editor material preview and texture replacement export workflow.
+
+- Added a current-versus-replacement texture preview strip below the stock Module Editor material preview table so selected material slots show the current referenced texture state and selected replacement texture immediately.
+- Reused the same TGA/TPC decode/cache path as the content browser thumbnails, including game-library texture fallback decode, so replacement previews reflect the actual texture payload that export will bundle.
+- Updated offscreen Qt workflow coverage to prove a game-library replacement texture produces an immediate replacement pixmap while the current side still names missing module-local references as referenced-only.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_bundles_game_library_texture_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Material Preview State
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM texture workflow
+Subsystem: Stock Module Editor / material-slot selection preview / texture replacement readiness / Native payload packaging
+Intersects: Existing stock Module Editor material picker and game-library texture replacement workflow.
+
+- Added a dedicated material preview table under the stock Module Editor's room material picker so the current picked room, mesh node, scope, slot, texture, face count, vertex count, and pending replacement state stay visible while choosing textures.
+- Kept the first milestone aligned with safe material-slot replacement: selecting a material slot now updates the preview bridge that a future viewport face/material click can drive directly, while true per-face material splitting remains out of this slice.
+- Updated game-library texture replacement workflow coverage to prove the preview table moves from selected material state to export-ready replacement state when a TGA/TPC texture is chosen.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_bundles_game_library_texture_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Bundled Texture Export
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM texture workflow
+Subsystem: Stock Module Editor / texture replacement drafts / module archive rebuild / Native payload packaging
+Intersects: Existing stock Module Editor texture patch export and game-library texture browser workflow.
+
+- Added replacement texture payload tracking to Module Editor texture replacement drafts when the selected texture can be loaded from the game-library browser.
+- Updated the safe module export writer to append missing selected TGA/TPC replacement textures into the rebuilt module copy while preserving existing module-local resources and recording bundled texture resources separately from patched MDLs.
+- Extended the texture patch manifest with `bundled_resources`, replacement payload bundled status, and payload size so exported module copies carry clear evidence for MDL patching versus copied texture payloads.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload; refreshed `GhostRigger.Core.GUI.Display` payload metadata after the focused payload identity check found a stale pre-existing packaged hash.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_materials.py native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_patch_plan.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_bundles_game_library_texture_runtime -q`; temporary `RNVcanyon.mod` export patched `koq200_01a.BigGoodCrate1 diffuse: lsl_crate00 -> snow_wall` and bundled `snow_wall.tga`; `mcp__ghostrigger.ghostrigger_audit` on the extracted patched `koq200_01a.mdl` returned `status: ok`, `node_count: 285`, `mesh_node_count: 283`, `bounding_box_ok: true`, with no issues or warnings; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_copy_rebuilds_archive_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_bundles_game_library_texture_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Game-Library Texture Handoff
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM texture workflow
+Subsystem: Main shell Module Editor launch / stock Module Editor game-library texture browser / Native payload packaging
+Intersects: Existing game-library scan and Map Studio resource-manager handoff paths.
+
+- Wired the main shell's dedicated Module Editor opener to pass the scanned `ResourceManager` into the stock MOD/RIM Module Editor when available, choosing the active K2 library first and falling back to K1.
+- Refreshed an already-open stock Module Editor after normal and startup game-library scans complete so newly indexed game textures appear without reopening the window.
+- Updated the stock Module Editor texture discovery to accept GhostRigger's real `ResourceManager` shape: `(resref, game)` texture listings plus `get_texture(resref, game)`, while preserving the existing simpler `get_texture_data` adapter path.
+- Regenerated the affected `GhostRigger.Core.Tools` and `GhostRigger.Core.GUI.Display` native Python payloads.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\resource_panels.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\resource_loading.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\startup_library.py tests\test_map_studio_level_editor_identity.py`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_and_module_editor_are_separate_main_screen_entries tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime -q`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_and_module_editor_are_separate_main_screen_entries tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Workspace Split
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM archive workflow
+Subsystem: Main shell command strip / Module Editor workspace / Map Studio identity / Native payload packaging
+Intersects: Existing Map Studio command-strip identity and module-editor integration registry contracts.
+
+- Added a separate `Open Module Editor` shell action and command-strip button next to Map Studio so KMAP authoring and stock `.mod` / `.rim` editing now have distinct entry points.
+- Added the first dedicated stock Module Editor window for MOD/RIM archive audit work, with a left-side module outliner and a content browser underneath that indexes real archive resources and groups textures, room assets, gameplay objects, and module metadata.
+- Updated tool integration contracts so `module_editor` points at the new stock archive workspace while `map_studio` continues to open the existing KMAP Level Editor.
+- Regenerated the affected `GhostRigger.Core.Tools` and `GhostRigger.Core.GUI.Display` native Python payload manifests, RC payload, and project item metadata.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_archive.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\window_chrome.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\resource_panels.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\qt_main_window.py native\GhostRigger.Core.GUI.Display\Python\src\gui\integration\tool_integration_registry.py native\GhostRigger.Core.GUI.Display\Python\src\gui\libtheme\icon_manager.py`; direct `RNVcanyon.zip` audit through `read_module_archive_resources` confirmed 104 resources and grouped counts `are:1, git:1, ifo:1, lyt:1, mdl:17, mdx:17, tga:34, txi:3, txt:7, uts:5, utt:1, utw:1, vis:1, wok:14`; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_t2600_map_studio_and_module_editor_are_separate_main_screen_entries tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. The older `tests\test_core_contracts.py::test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks` target was attempted but stops before the changed assertion because this checkout has no root `src\gui\windows\qt_main_window.py`; visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Texture Thumbnails
+
+Owner: LordVaderCW
+Task: Module Editor stock MOD/RIM texture preview workflow
+Subsystem: Stock Module Editor / stock module archive resources / texture thumbnails / Native payload packaging
+Intersects: Existing native split-package `src.core.modules` import ownership; the new helpers were placed under `src.core.stock_modules` to avoid the concrete `src.core.modules` package collision.
+
+- Added module-resource payload reads from MOD/RIM archive table entries and expanded the stock archive audit map to recognize TPC resource type `3007`.
+- Added a headless TGA/TPC thumbnail decoder that returns RGBA preview bytes, source dimensions, preview dimensions, and TPC TXI metadata when available.
+- Wired the stock Module Editor content browser to show decoded TGA/TPC thumbnails, show a larger selected texture preview, show dimensions in the details table, and display TXI/TXT resource text in the preview pane.
+- Regenerated the affected `GhostRigger.Core.Tools` native Python payload manifest/RC/project metadata and refreshed stale generated payload hashes for `GhostRigger.Core.IO` and `GhostRigger.Core.Workflow` so the payload identity contract passed.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_archive.py native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_textures.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; direct `RNVcanyon.zip` probe decoded `koq_dmblend.tga` as `256x256` with a `96x96` RGBA preview; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_preview_decodes_tga_bytes_runtime -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Room Material Inventory
+
+Owner: LordVaderCW
+Task: Module Editor stock room material-slot replacement groundwork
+Subsystem: Stock Module Editor / room MDL material inspection / Native payload packaging
+
+- Added a read-only stock module material inventory helper that parses module-local MDL/MDX room pairs through GhostRigger's MDL loader and records mesh-node diffuse/lightmap texture slots, face counts, and vertex counts.
+- Wired stock Module Editor MDL selection to show the current room material slots and referenced textures, explicitly framing the first editing scope as material-slot replacement rather than destructive per-face material splitting.
+- Kept parse failures non-destructive by returning warning/status inventory rows while leaving source archive bytes untouched.
+- Regenerated the `GhostRigger.Core.Tools` native Python payload manifest/RC/project metadata for the new stock material helper.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_archive.py native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_textures.py native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_materials.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; direct `RNVcanyon.zip` material probe parsed all 17 room MDLs with 3,056 material slots, 53 referenced textures, and 0 parse failures; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_preview_decodes_tga_bytes_runtime -q`; import sanity check loaded `StockModuleEditorWindow` and `inspect_module_materials` under the native split-package path; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Texture Replacement Drafts
+
+Owner: LordVaderCW
+Task: Module Editor stock room texture replacement preview
+Subsystem: Stock Module Editor / material-slot replacement draft state / Native payload packaging
+
+- Added a preview-only texture replacement draft model that records the selected room material slot, original diffuse texture, replacement TGA/TPC resource, replacement source label, and editable scope without changing archive bytes.
+- Made Module Editor MDL material rows selectable and retained the selected material slot while the user chooses a TGA/TPC from the content browser.
+- Wired texture selection to build a pending material-slot replacement preview, show the original-to-replacement summary, and keep the export action disabled until a real safe writer exists.
+- Regenerated the `GhostRigger.Core.Tools` native Python payload manifest/RC after the draft workflow update.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_archive.py native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_textures.py native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_materials.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; direct `RNVcanyon.zip` draft probe built preview-only replacement `koq200_01a.BigGoodCrate1 diffuse: lsl_crate00 -> koq_dmblend`; offscreen Qt workflow opened RNV, selected an MDL, selected a material-slot detail row, selected a TGA, and confirmed the window's pending draft with the same summary; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_replacement_draft_is_preview_only_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_preview_decodes_tga_bytes_runtime -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Texture Patch Export Copy
+
+Owner: LordVaderCW
+Task: Module Editor stock room texture replacement safe export groundwork
+Subsystem: Stock Module Editor / texture patch plans / safe export copy / Native payload packaging
+
+- Added a validated texture patch plan model for pending stock-module material-slot replacement drafts, including source-overwrite refusal and resref/format/scope validation before any export path runs.
+- Wired the Module Editor `Export Edited Copy` action to pending texture replacement previews so it writes a new byte-preserved module copy and a sidecar GhostRigger patch manifest that records the intended MDL texture swap.
+- Kept the workflow honest: the exported archive bytes are unchanged until the MDL binary patch writer is implemented and validated, while the manifest preserves the exact room/node/slot/original/replacement evidence for the next stage.
+- Regenerated the `GhostRigger.Core.Tools` native Python payload manifest/RC/project metadata and added the new stock patch-plan helper to the Visual Studio project/filter metadata.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_patch_plan.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; direct `RNVcanyon.zip` export-copy probe indexed 104 resources, built `koq200_01a.BigGoodCrate1 diffuse: lsl_crate00 -> koq_dmblend`, wrote `RNVcanyon_texture_patch.mod.ghostrigger_texture_patch_plan.json`, and confirmed the output module hash matched the source; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_replacement_draft_is_preview_only_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_copy_is_non_destructive_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_preview_decodes_tga_bytes_runtime -q`; `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor MDL Texture Patch Export
+
+Owner: LordVaderCW
+Task: Module Editor stock room texture replacement export
+Subsystem: Stock Module Editor / binary MDL texture-field patching / MOD archive rebuild / Native payload packaging
+Intersects: Supersedes the previous manifest-only stock texture export copy by making the exported module archive contain a patched MDL resource.
+
+- Added a surgical binary MDL patch helper that traverses the model node tree, resolves mesh node names from the MDL name table, verifies the selected diffuse texture field still matches the pending draft, and patches only the target 32-byte texture-reference field.
+- Changed the Module Editor export path from byte-preserved copy to rebuilt module archive: all source resources are read from the original archive, selected room `.mdl` resources are patched, untouched resource payloads are preserved, and the source module is still never overwritten.
+- Added `tpc` resource type `3007` to the module archive writer copies used by the active native package import paths so rebuilt RNV-style modules keep TPC resources instead of losing their type IDs.
+- Updated the export manifest to record `patched_module_export`, changed archive bytes, patched resource labels, and fixed MDL texture-field serializer evidence.
+- Regenerated the affected `GhostRigger.Core.Tools` and `GhostRigger.Core.Scene` native Python payload manifests/RC metadata and added the new stock MDL patch helper to the Tools Visual Studio project/filter metadata.
+- Verification: MCP `compare_model_pipelines(k2, 001ebo1)` baseline matched PyKotor/GhostRigger before the patch work; `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_mdl_patch.py native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_patch_plan.py native\GhostRigger.Core.Tools\Python\src\core\modules\module_save_pipeline.py native\GhostRigger.Core.Scene\Python\src\core\modules\module_save_pipeline.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; direct `RNVcanyon.zip` export probe indexed 104 resources before and after, patched `koq200_01a.BigGoodCrate1 diffuse: lsl_crate00 -> koq_dmblend`, confirmed the output archive hash changed, confirmed the patched MDL field and GhostRigger loader both report `koq_dmblend`, and wrote `RNVcanyon_texture_patch.mod.ghostrigger_texture_patch_plan.json`; MCP `ghostrigger_audit` on the patched local `koq200_01a.mdl/.mdx` pair returned `status=ok`, 285 nodes, 283 mesh nodes, `bounding_box_ok=true`, and no issues or warnings; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_replacement_draft_is_preview_only_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_copy_rebuilds_archive_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_preview_decodes_tga_bytes_runtime -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Material Picker Preview
+
+Owner: LordVaderCW
+Task: Module Editor stock room material selection workflow
+Subsystem: Stock Module Editor / room material picker / texture replacement preview / Native payload packaging
+
+- Added a center-column material picker to the stock Module Editor so selecting a room MDL exposes all parsed material slots without relying on the details table's first dozen rows.
+- Wired material-picker selection through the same pending-draft path as details-table selection, showing the selected slot's current module-local texture preview when available and keeping source archive bytes untouched until export.
+- Updated replacement texture selection to refresh the preview pane with the replacement texture and enable the patched module export action.
+- Regenerated the `GhostRigger.Core.Tools` native Python payload manifest/RC after the UI workflow change.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; offscreen Qt RNV probe opened `RNVcanyon.mod`, selected the first room MDL, populated 282 material-picker rows, selected `koq200_01a.BigGoodCrate1:lsl_crate00`, selected `koq_dmblend.tga`, built pending draft `koq200_01a.BigGoodCrate1 diffuse: lsl_crate00 -> koq_dmblend`, and enabled export; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_replacement_draft_is_preview_only_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_copy_rebuilds_archive_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_preview_decodes_tga_bytes_runtime -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Stock Module Editor Game-Library Texture Browser
+
+Owner: LordVaderCW
+Task: Module Editor game-library texture replacement workflow
+Subsystem: Stock Module Editor / game-library texture resources / texture preview / Native payload packaging
+
+- Added a lightweight `ModuleTextureLibraryResource` wrapper for scanned game-library texture resrefs so the Module Editor content browser can show usable textures from the game library beside module-local TGA/TPC/TXI resources.
+- Added `StockModuleEditorWindow.set_game_library(...)` to attach an already scanned game library, populate K1/K2 texture references, and source previews/replacement drafts through `get_texture_data()` without treating library textures as archive-table resources.
+- Updated texture preview, cache keys, content filtering, source labels, and material-slot lookup so both module-local textures and game-library textures can drive the same pending material replacement workflow.
+- Regenerated the `GhostRigger.Core.Tools` native Python payload manifest/RC after the texture-resource source update.
+- Verification: `python -m py_compile native\GhostRigger.Core.Tools\Python\src\core\stock_modules\stock_module_textures.py native\GhostRigger.Core.Tools\Python\src\gui\windows\stock_module_editor_window.py tests\test_map_studio_level_editor_identity.py`; fake-library offscreen Qt runtime test attached a K2 game library with `snow_wall`, decoded its TGA bytes through the library resource wrapper, selected it from the content browser, built a pending replacement draft, and enabled export; `python -m pytest tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_window_audits_mod_resources_with_content_browser tests\test_map_studio_level_editor_identity.py::test_stock_module_editor_accepts_game_library_textures_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_replacement_draft_is_preview_only_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_patch_export_copy_rebuilds_archive_runtime tests\test_map_studio_level_editor_identity.py::test_stock_module_texture_preview_decodes_tga_bytes_runtime -q`. Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-27] Drexl Re-UV Native Replacement Export Candidate
+
+Owner: LordVaderCW
+Subsystem: Character Builder native-template replacement / FBX import / KOTOR MDL export packaging
+
+- Fixed Blender FBX mesh import so extracted FBX vertices, normals, and armature guide positions are converted from Blender world axes into KOTOR object space (`x, z, -y`) and preserve axis-conversion metadata.
+- Added a native-template KOTOR-space replacement fit path so already-aligned creature replacement meshes such as `C_DrexlF_UV.fbx` keep identity scale/translation instead of being remapped by humanoid bounds fallback.
+- Updated Character Builder launch export to allow native-template workflows to write under the selected target resref, producing `c_drexlf.mdl` / `c_drexlf.mdx` instead of `c_drexlf_uv`.
+- Updated body hook validation so native-template final rigs honor the selected donor snapshot's real hook names, which keeps Drexl creature hooks (`Lhand_g`, `Rhand_g`, `camerahook`) from being blocked by humanoid-only hook expectations.
+- Generated an install-candidate package at `C:\Users\NewAdmin\Documents\KotorMods\HighFidelityKotorCharacters\Drexl\c_drexlf_override_package` containing `c_drexlf.mdl`, `c_drexlf.mdx`, `c_drex01.tga`, and package/texture manifests.
+- Installed the package files into the local KOTOR II Override folder after confirming no existing `c_drexlf.mdl`, `c_drexlf.mdx`, or `c_drex01` override file would be overwritten, and wrote `c_drexlf_installed_validation_report.json` with installed-file hash, skin-row, qbone/tbone influence, hook, animation, and texture evidence.
+- Enabled KOTOR II console readiness with a timestamped `swkotor2.ini` backup in the Drexl package, wrote `c_drexlf_runtime_game_proof_manifest.json` with the exact `dm_spawncreature c_drexl_amb` / `g_drexl_amb01` test targets, and added `scripts/record_drexl_runtime_game_proof.py` plus `CHEETSHEET.md` commands for recording live evidence after the runtime test.
+- Attempted live KOTOR II launch: direct `swkotor2.exe` launch showed a Steam client ownership/login dialog, Steam `-applaunch 208580` started Steam but did not create a `swkotor2.exe` process, and the launch-blocker screenshot was saved as `evidence_kotor2_launch_window.bmp`. Temporary windowed/no-intro launch settings were restored afterward while keeping `EnableCheats=1`.
+- Regenerated affected native Python payload manifests for `GhostRigger.Core.IO`, `GhostRigger.Core.Workflow`, `GhostRigger.Native.Core.Foundation`, and `GhostRigger.Runtime.Core`.
+- Verification: MCP `compare_model_pipelines(k2, c_drexlf)` confirmed the original game donor still matches PyKotor/GhostRigger with 65 nodes, 7 skin nodes, texture slot `c_drex01`, and animations `cwalk`, `cpause1`, `pause2`, `default`; direct FBX import probe confirmed `C_DrexlF_UV.fbx` imports to the original Drexl footprint; native-template launch workflow exported and reloaded `c_drexlf.mdl/.mdx` with hooks `Lhand_g`, `Rhand_g`, `camerahook`, one skinned mesh, `NULL` supermodel, and the four original animations; packaged override reload confirmed model name `c_drexlf`, root `C_DrexlF`, texture reference `c_drex01`, one skinned 4,578-vertex mesh, and readable 4096x4096 `c_drex01.tga`; installed Override file hashes match the package hashes; MCP `ghostrigger_audit` on the installed Override `c_drexlf.mdl` returned `status=ok`, `bounding_box_ok=true`, and no issues or warnings; `c_drexlf_installed_validation_report.json` confirmed installed hooks `Lhand_g`, `Rhand_g`, `head_g`, and `camerahook`, 4,578 valid skin rows, no out-of-range qbone/tbone influences, texture `c_drex01`, and animations `cwalk`, `cpause1`, `pause2`, `default`; K2 `appearance.2da` lookup confirmed direct in-game test target row 517 (`Creature_Drexl_Ambient`, race/model `C_DrexlF`) with stock UTC templates `c_drexl_amb` and `g_drexl_amb01`; `swkotor2.ini` now has `EnableCheats=1` with the previous file backed up under the Drexl package; live launch attempt reached Steam client gating but not a running KOTOR II process; `scripts/record_drexl_runtime_game_proof.py` passed a temporary-manifest smoke test; `python -m py_compile scripts/record_drexl_runtime_game_proof.py src/core/diagnostics/validation_service.py native/GhostRigger.Core.IO/Python/src/converters/blender_fbx_mesh_importer.py native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py native/GhostRigger.Native.Core.Foundation/Python/src/core/diagnostics/validation_service.py native/GhostRigger.Runtime.Core/Python/src/core/diagnostics/validation_service.py tests/test_retarget_external_import.py tests/test_headless_body_workflow.py`; `python -m pytest tests/test_retarget_external_import.py::test_kotor_space_creature_replacement_keeps_identity_fit tests/test_retarget_external_import.py::test_blender_fbx_mesh_payload_preserves_armature_guides_for_autofit -q`; `python -m pytest tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`. In-game KOTOR II runtime testing is still required before marking the replacement game-ready.
+
+### [2026-06-27] Advanced Skinning And Deformation Knowledge Skill
+
+Owner: LordVaderCW
+Subsystem: Knowledge base / Character Builder rigging and skinning guidance
+
+- Added a focused `learned/skinningdeformationskill.md` distilled from Brad Clark's `Inspired 3D Advanced Rigging and Deformations`, aimed at Bendak-style cases where skeleton generation succeeds but imported skin weights, donor transfer, bind pose, or animation deformation fails.
+- Updated the rigging skill and knowledge base router so future Character Builder work loads the new skinning/deformation troubleshooting notes before changing binding or export code.
+- Verification: confirmed the local PDF was readable with `pypdf`; reviewed relevant book sections around smooth binding, weight painting/storage/mirroring, bind pose, deformer order, clusters, and corrective deformation; checked the new Markdown references with targeted repository search.
+
+### [2026-06-27] Character Builder Creature OBJ Import Principles And Fit
+
+Owner: LordVaderCW
+Subsystem: Character Builder custom mesh import / creature auto-fit / OBJ UV preview / knowledge base
+
+- Fixed Creature-mode custom mesh loading so a detected creature import is accepted when the Character Builder is already locked to Creature mode instead of prompting as though the expected workflow were always Headless Body.
+- Updated the mode-mismatch dialog copy to name the actual current mode when a mismatch really occurs.
+- Added a creature-bounds auto-fit path for non-humanoid imports so flat/winged creature meshes such as the Drexl OBJ are fitted to the selected KOTOR creature base instead of using humanoid landmark or tallest-axis fallback logic.
+- Kept OBJ UVs in external DCC convention and marked OBJ imports with `uv_v_flip=False`, preserving the authored basecolor atlas in Character Builder preview instead of double-flipping the texture convention.
+- Added `learned/characterbuilderprinciples.md` and routed rigging/skinning knowledgebase entries through it so future Character Builder development relies on `Inspired 3D Advanced Rigging and Deformations` and the 2017 automatic skinning/weight-retargeting paper for bind pose, skeleton authority, fitting, weighting, deformation ROM, and export proof principles.
+- Verification: `python -m py_compile native\GhostRigger.Core.Workflow\Python\src\core\characters\headless_body_workflow.py native\GhostRigger.Core.Tools\Python\src\gui\panels\qt_character_builder_panel.py native\GhostRigger.Core.IO\Python\src\core\export\gltf_importer.py native\GhostRigger.Core.Tools\Python\src\core\export\gltf_importer.py tests\test_retarget_external_import.py tests\test_regression.py tests\test_headless_body_workflow.py`; `python -m pytest tests/test_retarget_external_import.py::test_creature_mode_obj_fit_uses_flat_bounds_not_humanoid_height tests/test_regression.py::test_obj_import_preserves_mtl_map_kd_texture_metadata -q`; `python -m pytest tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; direct lightweight native workflow probe confirmed Creature-mode `load_body` returns `ok=True` / `code=loaded`; direct Drexl OBJ audit confirmed 765 OBJ positions, 2,120 UV corners, 1,526 faces, and per-corner seam identity, then confirmed GhostRigger import produces 2,120 vertices, 1,526 faces, 2,120 UVs, `uv_v_flip=False`, texture `C_DrexlF_UV_basecolor`, and material `c_drex01`; local `pypdf` extraction reviewed the two named rigging/skinning sources. `tests/test_headless_body_workflow.py` remains skipped in this checkout because root `src/core/characters/headless_body_workflow.py` is absent.
+
 ## 2026-06-24
+
+### [2026-06-24] Large Module Batch Loading Performance
+
+Owner: LordVaderCW
+Subsystem: Content Browser module import / Main viewport scene batching / Native GUI payloads
+
+- Replaced the per-room module import loop with a module batch transaction that resolves all LYT room placements, loads every room MDL/MDX with one resource manager, creates scene instances, and refreshes the scene/viewport once at the end.
+- Deferred the expensive module-load UI work so outliner, lighting, camera, skeleton, properties, diagnostics, animation lists, and sprite/material panels update after the batch rather than after each room.
+- Added a map-friendly viewport default for full-module imports that enables baked lightmap preview without triggering intermediate render requests, and propagated summed prebuilt GPU-buffer counts through scene composites.
+- Regenerated affected `GhostRigger.Core.GUI.Display` and `GhostRigger.Core.Tools` native Python payload manifests.
+- Verification: MCP `compare_model_pipelines(k2, 209TELx)` confirmed representative Czerka office room model/material truth still matches PyKotor; `python -m py_compile native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\resource_loading.py native\GhostRigger.Core.GUI.Display\Python\src\gui\windows\application_core\shared\workers.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\display_controls.py native\GhostRigger.Core.GUI.Display\Python\src\gui\viewports\viewport_core\widgets\scene_models.py native\GhostRigger.Core.Tools\Python\src\gui\windows\application_core\shared\resource_loading.py tests\test_core_contracts.py`; `python -m pytest tests\test_core_contracts.py::test_model_load_worker_uses_single_read_and_gpu_prebuild tests\test_core_contracts.py::test_module_browser_import_uses_single_batch_scene_refresh tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`; `MSBuild.exe native\GhostRigger.Native.Core.Host\GhostRigger.Native.Core.Host.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m:1 /nr:false /v:m`. Visible Debug-app module-load retest was not run in this turn.
 
 ### [2026-06-24] Module Room Texture Prewarm During Append
 

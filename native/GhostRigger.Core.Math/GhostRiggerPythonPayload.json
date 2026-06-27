@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Math",
-    "file_count": 46,
+    "file_count": 51,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -192,10 +192,28 @@
             "sha256": "875c6f53db68dc536a08114a5fceb14693b90e2940482c18e5394904326eb3a8"
         },
         {
+            "resource_name": "PYTHON_PAYLOAD_MATH_HD_INTEGRATION_TEST",
+            "source_path": "src/math/_hd_integration_test.py",
+            "packaged_path": "Python/src/math/_hd_integration_test.py",
+            "sha256": "bdcde5c4dba2bc37c8c9eb040925aa9ccf404f0a6531bda133a281bbba798106"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_MATH_HD_SMOKE_TEST",
+            "source_path": "src/math/_hd_smoke_test.py",
+            "packaged_path": "Python/src/math/_hd_smoke_test.py",
+            "sha256": "8d76d956ac0f34c681469de456c15e000a36457395f4409f67af786912f9e173"
+        },
+        {
             "resource_name": "PYTHON_PAYLOAD_MATH_CAMERA_MATH",
             "source_path": "src/math/camera_math.py",
             "packaged_path": "Python/src/math/camera_math.py",
             "sha256": "ca0dd8f763af5cafbcf96ba194d523ad3671951c140bf387f7d958dad8ce6f71"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_MATH_CONTAINMENT_FIT",
+            "source_path": "src/math/containment_fit.py",
+            "packaged_path": "Python/src/math/containment_fit.py",
+            "sha256": "83b5d62633a49cc4c218189baf4b3fab076ce39d71c2dbc59986ac3b7ce07146"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_FRAME_MATH",
@@ -210,6 +228,18 @@
             "sha256": "078e91f3b54234848f319afa2943a3e7dbe2b38768063e29ef3eca8eb6a951e7"
         },
         {
+            "resource_name": "PYTHON_PAYLOAD_MATH_HEAT_DIFFUSION_SKINNING",
+            "source_path": "src/math/heat_diffusion_skinning.py",
+            "packaged_path": "Python/src/math/heat_diffusion_skinning.py",
+            "sha256": "2a1c4bdd18e2949d14f93f87bc80c79be3dfe43a2dae672f062e43f7fbd3ddcb"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_MATH_LANDMARK_ALIGNMENT",
+            "source_path": "src/math/landmark_alignment.py",
+            "packaged_path": "Python/src/math/landmark_alignment.py",
+            "sha256": "fe960424165ff932c6aaf653582fa7c62862c861701107733f6ac36d61a68cc1"
+        },
+        {
             "resource_name": "PYTHON_PAYLOAD_MATH_MODULE_LAYOUT_MATH",
             "source_path": "src/math/module_layout_math.py",
             "packaged_path": "Python/src/math/module_layout_math.py",
@@ -219,7 +249,7 @@
             "resource_name": "PYTHON_PAYLOAD_MATH_TRANSFORM_MATH",
             "source_path": "src/math/transform_math.py",
             "packaged_path": "Python/src/math/transform_math.py",
-            "sha256": "b22c5dfafadc08011e83cb8539805ef365a1f895c8e2e2cf8f70fc3d43b76e6e"
+            "sha256": "0ca4d4c0d28b8e764509be3d0d1ed9ac871d3bdaf89d3d8deb23b0acfae587a7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_VIEWCUBE_MATH",

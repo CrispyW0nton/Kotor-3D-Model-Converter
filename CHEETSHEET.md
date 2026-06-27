@@ -76,6 +76,29 @@ Seek through the selected/current animation by percent:
 seek_animation(50)
 ```
 
+## Drexl Re-UV Runtime Proof
+
+The Drexl replacement package is staged in the local KOTOR II Override folder.
+Use these after KOTOR II is running with cheats enabled.
+
+In the KOTOR II console, spawn the direct C_DrexlF test template:
+
+```text
+dm_spawncreature c_drexl_amb
+```
+
+Fallback ambient template using the same appearance row:
+
+```text
+dm_spawncreature g_drexl_amb01
+```
+
+After capturing screenshot or video evidence, record the proof:
+
+```powershell
+python scripts/record_drexl_runtime_game_proof.py --proof-manifest "C:\Users\NewAdmin\Documents\KotorMods\HighFidelityKotorCharacters\Drexl\c_drexlf_override_package\c_drexlf_runtime_game_proof_manifest.json" --evidence "C:\path\to\drexl_runtime_evidence.png" --tester "LordVaderCW" --game-launches-with-override --ambient-drexl-spawns --new-texture-visible --uv-alignment-ok --idle-animation-ok --walk-animation-ok --scale-orientation-ok --camera-hook-ok
+```
+
 Copy one animation clip over another on the selected model:
 
 ```python

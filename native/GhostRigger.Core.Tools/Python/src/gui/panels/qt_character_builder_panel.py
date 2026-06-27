@@ -815,12 +815,61 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         toolbar.addSeparator()
 
         # Tool toggles.
+        toolbar.addSeparator()
+        toolbar.addWidget(QtWidgets.QLabel(" Rig: "))
+
+        self._rig_transform_action_group = QtGui.QActionGroup(self)
+        self._rig_transform_action_group.setExclusive(True)
+        self._rig_transform_actions: dict[str, QtGui.QAction] = {}
+        for key, label, tooltip in (
+            ("select", "Select", "Select joints, bones, and imported mesh handles."),
+            ("translate", "Move", "Move selected rig guides or fitted mesh handles."),
+            ("rotate", "Rotate", "Rotate the selected rig or fit handle."),
+            ("transform", "Transform", "Use the universal transform/scale handle."),
+        ):
+            action = QtGui.QAction(label, self)
+            action.setObjectName(f"CharacterBuilderRigToolAction_{key}")
+            action.setCheckable(True)
+            action.setToolTip(tooltip)
+            action.setData(key)
+            action.triggered.connect(
+                lambda _checked=False, tool_key=key: self._run_character_builder_transform_action(tool_key)
+            )
+            self._rig_transform_action_group.addAction(action)
+            self._rig_transform_actions[key] = action
+            toolbar.addAction(action)
+        self._rig_transform_actions["select"].setChecked(True)
+
+        toolbar.addSeparator()
+
         self._symmetry_action = QtGui.QAction("Symmetry", self)
         self._symmetry_action.setCheckable(True)
         self._symmetry_action.setChecked(True)
         self._symmetry_action.setToolTip("Mirror placement across X")
         self._symmetry_action.toggled.connect(self._on_joint_symmetry_toggled)
         toolbar.addAction(self._symmetry_action)
+
+        self._bones_action = QtGui.QAction("Bones", self)
+        self._bones_action.setObjectName("CharacterBuilderBonesToggleAction")
+        self._bones_action.setCheckable(True)
+        self._bones_action.setToolTip("Show or hide the selected base skeleton and generated bones")
+        self._bones_action.toggled.connect(self._on_bones_toggled)
+        toolbar.addAction(self._bones_action)
+
+        self._weights_action = QtGui.QAction("Weights", self)
+        self._weights_action.setObjectName("CharacterBuilderWeightsToggleAction")
+        self._weights_action.setCheckable(True)
+        self._weights_action.setToolTip("Show or hide selected-bone weight heat-map preview")
+        self._weights_action.toggled.connect(self._on_weights_toggled)
+        toolbar.addAction(self._weights_action)
+
+        self._joints_action = QtGui.QAction("Joints", self)
+        self._joints_action.setObjectName("CharacterBuilderJointDotsToggleAction")
+        self._joints_action.setCheckable(True)
+        self._joints_action.setChecked(True)
+        self._joints_action.setToolTip("Show or hide rig guide/joint handles")
+        self._joints_action.toggled.connect(self._on_joint_dots_toggled)
+        toolbar.addAction(self._joints_action)
 
         self._snap_action = QtGui.QAction("Snap", self)
         self._snap_action.setCheckable(True)
@@ -1069,6 +1118,12 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         # overrides, so the next Generate Skeleton uses the edited pins.
         if hasattr(self.viewport, "nodeMoved"):
             self.viewport.nodeMoved.connect(self._on_viewport_node_moved)
+        if hasattr(self.viewport, "rigTransformMarkingMenuRequested"):
+            self.viewport.rigTransformMarkingMenuRequested.connect(
+                self._open_character_builder_transform_marking_menu)
+        if hasattr(self.viewport, "rigToolsMarkingMenuRequested"):
+            self.viewport.rigToolsMarkingMenuRequested.connect(
+                self._open_character_builder_rig_marking_menu)
         # When the user picks a different mode in the properties panel
         # (M1/T105), echo it through the toolbar so the two stay in sync.
         if hasattr(self.properties, "characterModeChanged"):
@@ -1122,6 +1177,87 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         except Exception as exc:                            # pragma: no cover
             log.warning("Camera preset '%s' failed: %s", preset, exc)
 
+    def _set_rig_transform_action_checked(self, key: str) -> None:
+        action = getattr(self, "_rig_transform_actions", {}).get(str(key or ""))
+        if action is None:
+            return
+        action.blockSignals(True)
+        try:
+            action.setChecked(True)
+        finally:
+            action.blockSignals(False)
+
+    def _run_character_builder_transform_action(self, key: str) -> None:
+        """Apply the Character Builder transform tool through viewport state."""
+        tool_key = str(key or "select").strip().lower()
+        viewport = getattr(self, "viewport", None)
+        if tool_key == "select":
+            if viewport is not None and hasattr(viewport, "set_viewport_selection_mode"):
+                viewport.set_viewport_selection_mode("any")
+            self._set_rig_transform_action_checked("select")
+            self.statusBar().showMessage("Rig tool: Select.", 4000)
+            return
+        mode_by_key = {"translate": 1, "rotate": 2, "transform": 3}
+        mode = mode_by_key.get(tool_key, 1)
+        if viewport is not None:
+            renderer = getattr(viewport, "_renderer", None)
+            if (
+                hasattr(viewport, "toggle_gimbal")
+                and not bool(getattr(renderer, "show_gimbal", True))
+            ):
+                viewport.toggle_gimbal(True)
+            if hasattr(viewport, "set_gimbal_mode"):
+                viewport.set_gimbal_mode(mode)
+            if hasattr(viewport, "set_viewport_selection_mode"):
+                viewport.set_viewport_selection_mode("any")
+        checked_key = tool_key if tool_key in mode_by_key else "translate"
+        self._set_rig_transform_action_checked(checked_key)
+        label = "Move" if mode == 1 else "Rotate" if mode == 2 else "Transform"
+        self.statusBar().showMessage(f"Rig tool: {label}.", 4000)
+
+    def _set_viewport_toggle_state(
+        self,
+        action_name: str,
+        setter_name: str,
+        enabled: bool,
+    ) -> None:
+        viewport = getattr(self, "viewport", None)
+        if viewport is not None:
+            setter = getattr(viewport, setter_name, None)
+            if callable(setter):
+                setter(bool(enabled))
+        action = getattr(self, action_name, None)
+        if action is not None and action.isChecked() != bool(enabled):
+            action.blockSignals(True)
+            try:
+                action.setChecked(bool(enabled))
+            finally:
+                action.blockSignals(False)
+
+    @QtCore.Slot(bool)
+    def _on_bones_toggled(self, enabled: bool) -> None:
+        self._set_viewport_toggle_state("_bones_action", "toggle_bones", enabled)
+        self.statusBar().showMessage(
+            "Bones visible." if enabled else "Bones hidden.",
+            3000,
+        )
+
+    @QtCore.Slot(bool)
+    def _on_weights_toggled(self, enabled: bool) -> None:
+        self._set_viewport_toggle_state("_weights_action", "toggle_weight_heatmap", enabled)
+        self.statusBar().showMessage(
+            "Weight heat-map visible." if enabled else "Weight heat-map hidden.",
+            3000,
+        )
+
+    @QtCore.Slot(bool)
+    def _on_joint_dots_toggled(self, enabled: bool) -> None:
+        self._set_viewport_toggle_state("_joints_action", "toggle_joint_dots", enabled)
+        self.statusBar().showMessage(
+            "Joint handles visible." if enabled else "Joint handles hidden.",
+            3000,
+        )
+
     @QtCore.Slot(bool)
     def _on_joint_symmetry_toggled(self, enabled: bool) -> None:
         """Mirror the shared Symmetry toggle into toolbar, inspector, and viewport."""
@@ -1169,6 +1305,140 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             viewport.set_joint_dot_size(round(2 + clamped * 14))
         except Exception:                                   # pragma: no cover
             log.exception("viewport.set_joint_dot_size failed")
+
+    def _build_character_builder_transform_marking_menu(
+        self,
+        parent: QtWidgets.QWidget | None = None,
+    ) -> QtWidgets.QMenu:
+        """Build the plain-RMB Character Builder rig transform marking menu."""
+        menu = QtWidgets.QMenu(parent or self)
+        menu.setObjectName("characterBuilderTransformMarkingMenu")
+        frame = QtWidgets.QFrame(menu)
+        frame.setObjectName("characterBuilderTransformMarkingRadial")
+        layout = QtWidgets.QGridLayout(frame)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setHorizontalSpacing(6)
+        layout.setVerticalSpacing(6)
+        for key, label, row, column in (
+            ("select", "Select", 1, 1),
+            ("translate", "Move", 0, 1),
+            ("rotate", "Rotate", 1, 0),
+            ("transform", "Transform", 1, 2),
+        ):
+            action = QtGui.QAction(label, menu)
+            action.setObjectName(f"characterBuilderTransformMarkingAction_{key}")
+            action.setData(key)
+            action.triggered.connect(
+                lambda _checked=False, tool_key=key: self._run_character_builder_transform_action(tool_key)
+            )
+            action.triggered.connect(menu.close)
+            button = QtWidgets.QToolButton(frame)
+            button.setObjectName(f"characterBuilderTransformMarkingButton_{key}")
+            button.setDefaultAction(action)
+            button.setToolButtonStyle(QtCore.Qt.ToolButtonTextOnly)
+            button.setMinimumWidth(92)
+            layout.addWidget(button, row, column)
+            menu.addAction(action)
+        widget_action = QtWidgets.QWidgetAction(menu)
+        widget_action.setObjectName("characterBuilderTransformMarkingRadialWidgetAction")
+        widget_action.setDefaultWidget(frame)
+        menu.insertAction(menu.actions()[0] if menu.actions() else None, widget_action)
+        menu.insertSeparator(menu.actions()[1] if len(menu.actions()) > 1 else None)
+        return menu
+
+    def _open_character_builder_transform_marking_menu(self, global_pos: QtCore.QPoint) -> None:
+        menu = self._build_character_builder_transform_marking_menu(self)
+        menu.exec(global_pos)
+
+    def _build_character_builder_rig_marking_menu(
+        self,
+        parent: QtWidgets.QWidget | None = None,
+    ) -> QtWidgets.QMenu:
+        """Build the Shift+RMB rigging/deformation marking menu."""
+        menu = QtWidgets.QMenu(parent or self)
+        menu.setObjectName("characterBuilderRigMarkingMenu")
+
+        quick_frame = QtWidgets.QFrame(menu)
+        quick_frame.setObjectName("characterBuilderRigMarkingQuickRadial")
+        quick_layout = QtWidgets.QGridLayout(quick_frame)
+        quick_layout.setContentsMargins(8, 8, 8, 8)
+        quick_layout.setHorizontalSpacing(6)
+        quick_layout.setVerticalSpacing(6)
+        for key, label, row, column, handler in (
+            ("bones", "Bones", 0, 1, self._toggle_bones_from_marking_menu),
+            ("symmetry", "Symmetry", 1, 0, self._toggle_symmetry_from_marking_menu),
+            ("joints", "Joints", 1, 1, self._toggle_joints_from_marking_menu),
+            ("weights", "Weights", 1, 2, self._toggle_weights_from_marking_menu),
+            ("center_pivot", "Center Pivot", 2, 0, self._center_pivot_from_marking_menu),
+            ("refit", "Re-fit", 2, 1, self._on_refit_to_selected_base_requested),
+            ("freeze_transforms", "Freeze", 2, 2, self._freeze_transform_from_marking_menu),
+            ("validate", "Validate", 3, 1, self._on_validate_requested),
+        ):
+            action = QtGui.QAction(label, menu)
+            action.setObjectName(f"characterBuilderRigMarkingQuickAction_{key}")
+            action.triggered.connect(lambda _checked=False, slot=handler: slot())
+            action.triggered.connect(menu.close)
+            button = QtWidgets.QToolButton(quick_frame)
+            button.setObjectName(f"characterBuilderRigMarkingQuickButton_{key}")
+            button.setDefaultAction(action)
+            button.setToolButtonStyle(QtCore.Qt.ToolButtonTextOnly)
+            button.setMinimumWidth(98)
+            quick_layout.addWidget(button, row, column)
+        widget_action = QtWidgets.QWidgetAction(menu)
+        widget_action.setObjectName("characterBuilderRigMarkingQuickWidgetAction")
+        widget_action.setDefaultWidget(quick_frame)
+        menu.addAction(widget_action)
+
+        menu.addSection("Rig Checks")
+        for key, label, handler in (
+            ("reset_fit", "Reset Fit Controls", self._on_fit_adjustment_reset_requested),
+            ("apply_skeleton", "Apply Base Skeleton", self._on_apply_skeleton_template_requested),
+            ("build_skeleton", "Build Skeleton + Weights", self._on_generate_skeleton_requested),
+            ("rom", "Range of Motion Test", self._on_run_rom_test_requested),
+            ("refresh_anims", "Refresh Preview Motions", self._on_refresh_preview_animations_requested),
+        ):
+            action = QtGui.QAction(label, menu)
+            action.setObjectName(f"characterBuilderRigMarkingAction_{key}")
+            action.setData(key)
+            action.triggered.connect(lambda _checked=False, slot=handler: slot())
+            menu.addAction(action)
+        return menu
+
+    def _open_character_builder_rig_marking_menu(self, global_pos: QtCore.QPoint) -> None:
+        menu = self._build_character_builder_rig_marking_menu(self)
+        menu.exec(global_pos)
+
+    def _toggle_bones_from_marking_menu(self, _checked: bool = False) -> None:
+        action = getattr(self, "_bones_action", None)
+        self._on_bones_toggled(not bool(action.isChecked()) if action is not None else True)
+
+    def _toggle_weights_from_marking_menu(self, _checked: bool = False) -> None:
+        action = getattr(self, "_weights_action", None)
+        self._on_weights_toggled(not bool(action.isChecked()) if action is not None else True)
+
+    def _toggle_joints_from_marking_menu(self, _checked: bool = False) -> None:
+        action = getattr(self, "_joints_action", None)
+        self._on_joint_dots_toggled(not bool(action.isChecked()) if action is not None else True)
+
+    def _toggle_symmetry_from_marking_menu(self, _checked: bool = False) -> None:
+        action = getattr(self, "_symmetry_action", None)
+        self._on_joint_symmetry_toggled(not bool(action.isChecked()) if action is not None else True)
+
+    def _center_pivot_from_marking_menu(self) -> None:
+        viewport = getattr(self, "viewport", None)
+        center = getattr(viewport, "center_pivot_to_selection", None)
+        if callable(center) and center():
+            self.statusBar().showMessage("Pivot centered on selected bounds.", 4000)
+            return
+        self.statusBar().showMessage("Select a mesh or object before centering its pivot.", 5000)
+
+    def _freeze_transform_from_marking_menu(self) -> None:
+        viewport = getattr(self, "viewport", None)
+        freeze = getattr(viewport, "freeze_selected_transform", None)
+        if callable(freeze) and freeze():
+            self.statusBar().showMessage("Selected mesh transforms frozen.", 4000)
+            return
+        self.statusBar().showMessage("Select a mesh node before freezing transforms.", 5000)
 
     def _workflow_module(self):
         try:
@@ -1372,17 +1642,21 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             game_version=gv,
             fit_reference_model=self._selected_skeleton_template_model,
             fit_reference_label=fit_label,
+            expected_mode=getattr(self.scene, "mode", None),
         )
 
         # ── Mode mismatch — offer to switch ──────────────────────────
         if result.code == "mode_mismatch" and result.detected_mode is not None:
             detected_label = getattr(result.detected_mode, "display_name",
                                      str(result.detected_mode))
+            current_mode = getattr(self.scene, "mode", None)
+            current_label = getattr(current_mode, "display_name",
+                                    str(current_mode or "current mode"))
             answer = QtWidgets.QMessageBox.question(
                 self,
                 "Wrong character mode?",
                 f"This file looks like a {detected_label} model, not a "
-                "Headless Body.\n\nSwitch the Character Builder to "
+                f"{current_label}.\n\nSwitch the Character Builder to "
                 f"{detected_label} mode and keep this file loaded?",
                 QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
                 QtWidgets.QMessageBox.Yes,
@@ -1816,6 +2090,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             fit_reference_model=self._selected_skeleton_template_model,
             fit_reference_label=fit_label,
             fit_override=fit_override,
+            expected_mode=getattr(self.scene, "mode", None),
         )
         if not result.ok:
             message = str(result.message or "Re-fit failed.")
@@ -2046,6 +2321,50 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if resref:
             return _cb.load_game_skeleton_source(resref, game=game)
         return None
+
+    def _viewport_external_skeleton_model(self) -> Optional[Any]:
+        """Return the reference skeleton currently visible in the viewport."""
+        viewport = getattr(self, "viewport", None)
+        renderer = getattr(viewport, "_renderer", None)
+        model = getattr(renderer, "_ext_skeleton", None)
+        return model if model is not None else None
+
+    def _option_from_loaded_skeleton_template(
+        self,
+        model: Any,
+        *,
+        fallback_key: str = "",
+    ) -> dict[str, Any]:
+        """Build an apply option from an already-loaded KOTOR base skeleton."""
+        game = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
+            getattr(self.scene, "game_version", "K1")
+        requested = (
+            str(getattr(model, "_gr_requested_resref", "") or "")
+            or str(getattr(model, "_gr_target_resref", "") or "")
+            or str(getattr(model, "name", "") or "")
+            or "selected_kotor_base"
+        ).strip().lower()
+        source = (
+            str(getattr(model, "_gr_source_resref", "") or "")
+            or str(getattr(model, "_gr_variant_source_resref", "") or "")
+            or requested
+        ).strip().lower()
+        key = str(fallback_key or f"loaded:{str(game).lower()}:{requested}").strip()
+        option = {
+            "key": key,
+            "source": "loaded",
+            "game": str(game or "K1"),
+            "part": "body",
+            "name": requested,
+            "resref": requested,
+            "source_resref": source,
+            "path": f"loaded:{source}.mdl",
+            "description": "Already loaded KOTOR base skeleton from the viewport.",
+        }
+        if key:
+            self._skeleton_template_options_by_key[key] = option
+            self._selected_skeleton_template_key = key
+        return option
 
     def _typed_skeleton_template_option(self, key: str) -> Optional[dict[str, Any]]:
         """Build a temporary installed-model option from a typed resref."""
@@ -2282,6 +2601,17 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 self._selected_skeleton_template_key = key
                 self._selected_skeleton_template_model = None
         if option is None:
+            loaded_template = (
+                self._selected_skeleton_template_model
+                or self._viewport_external_skeleton_model()
+            )
+            if loaded_template is not None:
+                self._selected_skeleton_template_model = loaded_template
+                option = self._option_from_loaded_skeleton_template(
+                    loaded_template,
+                    fallback_key=str(key or ""),
+                )
+        if option is None:
             message = "Choose a KOTOR skeleton template before applying."
             if hasattr(self.inspector, "set_skeleton_template_status"):
                 self.inspector.set_skeleton_template_status(message, kind="warning")
@@ -2309,7 +2639,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         game = str(self._option_field(option, "game", "") or
                    getattr(self.scene, "game_version", "K1"))
-        template_model = self._selected_skeleton_template_model
+        template_model = (
+            self._selected_skeleton_template_model
+            or self._viewport_external_skeleton_model()
+        )
         if template_model is None:
             template_model = self._load_skeleton_template_model(option)
             self._selected_skeleton_template_model = template_model

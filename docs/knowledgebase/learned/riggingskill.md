@@ -7,6 +7,7 @@ deformation cleanup, retargeting, and animation workflow bugs.
 
 - `Rig it Right`: pivots, hierarchies, zeroed controls, joint orientation, local rotation axes, controllers, skinning, and biped setup.
 - `Digital Creature Rigging`: prepared geometry, naming, layered asset builds, base rig, animation rig, deformation rig, skin-weight polish, and cleanup.
+- `Inspired 3D Advanced Rigging and Deformations`: smooth binding, skin cluster influence behavior, weight painting/storage/mirroring, bind pose nodes, deformation ordering, and corrective deformation passes.
 - `Automatic skinning and weight retargeting`: LBS, joint-area artifacts, PBD-style refinement, bi-harmonic distance, surface matching, and smoothing.
 - `3D Math Primer`: skeletal animation and coordinate/rotation foundations.
 
@@ -45,6 +46,13 @@ deformation cleanup, retargeting, and animation workflow bugs.
 
 ## GhostRigger Checks
 
+- For Character Builder product changes, load
+  `learned/characterbuilderprinciples.md` first. Treat it as the standing
+  contract for import fit, bind/export skeleton authority, skinning, deformation
+  ROM proof, and in-game validation.
+- Load `learned/skinningdeformationskill.md` for Character Builder cases where
+  skeleton generation succeeds but Bendak-style imported skinning, donor weight
+  transfer, or animation deformation fails.
 - For animation testing, use `N_DarthMalak` with the `walk` animation looped unless the user names another fixture.
 - For head/body composition coverage, use Carth body plus Carth head; for cloth coverage, use Bastila body and head.
 - Use MCP pipeline tools for MDL loading/skinning truth and the visible Debug app for actual animation workflow proof.

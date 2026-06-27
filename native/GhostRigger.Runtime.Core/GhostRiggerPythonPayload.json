@@ -27,7 +27,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_DIAGNOSTICS_VALIDATION_SERVICE",
             "source_path": "src/core/diagnostics/validation_service.py",
             "packaged_path": "Python/src/core/diagnostics/validation_service.py",
-            "sha256": "f872b684f7f0bf4197afbfbc02218eeb2d3eb81ce3c5ca446ba6cf395da26a05"
+            "sha256": "3140dd56547c07b4cae6e4d4d7a160e2eb8ea8bafaee2baf7c62d84aeb135e58"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_INFRA_INIT",

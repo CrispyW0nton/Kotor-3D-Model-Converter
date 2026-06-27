@@ -16,6 +16,11 @@ from src.gui.qt_lib.integration.editor_services import (
     SelectionService,
 )
 from src.gui.qt_lib.integration.tool_integration_registry import build_default_tool_integration_registry
+from src.gui.windows.application_core.shared.undo_stack import (
+    CameraEditCommand,
+    LightingEditCommand,
+    TransformEditCommand,
+)
 
 
 class EditorServicesMixin:
@@ -95,6 +100,62 @@ class EditorServicesMixin:
         if bus is not None:
             bus.transformChanged.emit(node)
             bus.record_scene_update("transform changed", node)
+        self._push_transform_undo(node)
+
+    def _push_transform_undo(self, node) -> None:
+        """Push a transform edit onto the scene undo stack.
+
+        Compares the node's current transform against the last snapshot we
+        recorded; only changes are recorded. While an undo/redo is being
+        replayed (``_applying_scene_undo``) recording is suppressed to avoid
+        feedback loops.
+        """
+        if bool(getattr(self, "_applying_scene_undo", False)):
+            return  # Don't record undo while replaying an undo/redo
+        stack = getattr(self, "_scene_undo_stack", None)
+        if stack is None:
+            return
+        new_transform = (getattr(node, "position", None), getattr(node, "rotation", None))
+        snapshots = getattr(self, "_transform_snapshots", None)
+        if snapshots is None:
+            return
+        old = snapshots.get(id(node))
+        if old is not None and tuple(old) != tuple(new_transform):
+            cmd = TransformEditCommand(
+                node_id=id(node),
+                old_transform=old,
+                new_transform=new_transform,
+                apply_fn=self._apply_node_transform,
+            )
+            stack.push(cmd)
+        snapshots[id(node)] = new_transform
+
+    def _apply_node_transform(self, node_id, transform) -> None:
+        """Apply a transform from the undo stack to a node.
+
+        ``node_id`` is the ``id()`` of the node object recorded when the
+        command was created. We locate the node by iterating the active
+        scene's ``objects`` collection, restore position/rotation, and ask the
+        viewport to refresh.
+        """
+        self._applying_scene_undo = True
+        try:
+            scene_manager = getattr(self, "scene_manager", None)
+            active_scene = getattr(scene_manager, "active_scene", None) if scene_manager is not None else None
+            objects = list(getattr(active_scene, "objects", None) or [])
+            for node in objects:
+                if id(node) == node_id:
+                    pos, rot = transform
+                    if pos is not None:
+                        node.position = pos
+                    if rot is not None:
+                        node.rotation = rot
+                    viewport = getattr(self, "viewport", None)
+                    if viewport is not None and hasattr(viewport, "refresh_node_transform"):
+                        viewport.refresh_node_transform(node)
+                    break
+        finally:
+            self._applying_scene_undo = False
 
     def _record_pivot_event(self, node) -> None:
         if bool(getattr(node, "_gr_transform_previewing", False)):

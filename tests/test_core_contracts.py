@@ -284,7 +284,8 @@ def test_qt_main_window_starts_ipc_server_with_visual_qa_callbacks() -> None:
     assert '@app.route("/api/set_light_helpers", methods=["POST"])' in server_source
     assert '@app.route("/api/select_helper", methods=["POST"])' in server_source
     assert '@app.route("/api/capture_viewport", methods=["POST"])' in server_source
-    assert '"module_editor": self._open_module_editor_window' in source
+    assert '"module_editor": self._open_stock_module_editor_window' in source
+    assert '"map_studio": self._open_module_editor_window' in source
     assert '"character_builder": self._open_qt_character_builder_window' in source
     assert '"retarget_workbench": self._open_animation_retarget_window' in source
     assert '"unreal_animator": self._open_unreal_animator_window' in source
@@ -4105,7 +4106,10 @@ def test_model_load_worker_uses_single_read_and_gpu_prebuild() -> None:
         QtProgressToast,
         ResourceModelLoadWorker,
     )
-    from src.gui.windows.application_core.shared.workers import load_resource_model_from_game_resources
+    from src.gui.windows.application_core.shared.workers import (
+        load_module_room_models_from_game_resources,
+        load_resource_model_from_game_resources,
+    )
 
     file_source = inspect.getsource(ModelLoadWorker.run)
     toast_source = inspect.getsource(QtProgressToast)
@@ -4115,6 +4119,7 @@ def test_model_load_worker_uses_single_read_and_gpu_prebuild() -> None:
     get_resource_manager_source = inspect.getsource(QtGhostRiggerMainWindow._get_resource_manager)
     resource_source = inspect.getsource(ResourceModelLoadWorker.run)
     resource_loader_source = inspect.getsource(load_resource_model_from_game_resources)
+    module_loader_source = inspect.getsource(load_module_room_models_from_game_resources)
     viewport_preload_source = inspect.getsource(__import__(
         "src.gui.qt_lib.viewports.qt_viewport",
         fromlist=["QtViewportWidget"],
@@ -4130,6 +4135,10 @@ def test_model_load_worker_uses_single_read_and_gpu_prebuild() -> None:
     assert "_prebuild_gpu_mesh_data_for_model(model)" in file_source
     assert "self.progress.emit" in resource_source
     assert "_prebuild_gpu_mesh_data_for_model(model)" in resource_loader_source
+    assert "placement_list = list(placements or [])" in module_loader_source
+    assert "mgr = ResourceManager()" in module_loader_source
+    assert "for index, placement in enumerate" in module_loader_source
+    assert "_prebuild_gpu_mesh_data_for_model(model)" in module_loader_source
     assert "load_resource_model_from_game_resources" in resource_source
     assert "_load_resource_model_on_ui_thread" in start_resource_source
     assert "ResourceModelLoadWorker(" not in start_resource_source
@@ -4141,6 +4150,34 @@ def test_model_load_worker_uses_single_read_and_gpu_prebuild() -> None:
     assert "existing is not None" in get_resource_manager_source
     assert "_resource_manager_dirs" in get_resource_manager_source
     assert "tex_cache.get" not in viewport_preload_source
+
+
+def test_module_browser_import_uses_single_batch_scene_refresh() -> None:
+    import inspect
+
+    from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+    from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
+
+    start_source = inspect.getsource(QtGhostRiggerMainWindow._start_content_browser_module_load)
+    load_source = inspect.getsource(QtGhostRiggerMainWindow._load_module_rooms_on_ui_thread)
+    finish_source = inspect.getsource(QtGhostRiggerMainWindow._finish_module_batch_load)
+    add_source = inspect.getsource(QtGhostRiggerMainWindow._add_loaded_model_to_scene)
+    composite_source = inspect.getsource(QtViewportWidget._build_scene_composite_model)
+    display_source = inspect.getsource(QtViewportWidget.set_module_map_display_defaults)
+
+    assert "_load_module_rooms_on_ui_thread(tuple(placements), action)" in start_source
+    assert "_start_next_module_room_load()" not in start_source
+    assert "load_module_room_models_from_game_resources" in load_source
+    assert "self._finish_module_batch_load(loaded_rooms, action)" in load_source
+    assert "for model, path, placement in rooms:" in finish_source
+    assert "self._refresh_scene_view()" in finish_source
+    assert "set_module_map_display_defaults" in finish_source
+    assert "module_placement=placement" in finish_source
+    assert "clear_scene=False" in finish_source
+    assert "module_placement: ModuleRoomPlacement | None = None" in add_source
+    assert "prebuilt_mesh_count += int(getattr(runtime_model" in composite_source
+    assert '"lightmap_preview"' in display_source
+    assert '"show_lightmap_map"' in display_source
 
 
 def test_qt_realistic_texture_prewarm_loads_detail_textures_without_paint_stall() -> None:

@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.GUI.Display",
-    "file_count": 286,
+    "file_count": 289,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -82,6 +82,12 @@
             "source_path": "src/gui/dialogs/add_model_to_scene_dialog.py",
             "packaged_path": "Python/src/gui/dialogs/add_model_to_scene_dialog.py",
             "sha256": "d58526ef010651c4e7873969e2083d21bb6a3d24459c9ea61f834e4ee2754b81"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_ERROR_REPORT",
+            "source_path": "src/gui/dialogs/error_report.py",
+            "packaged_path": "Python/src/gui/dialogs/error_report.py",
+            "sha256": "536c0dbadcde3fbeb59f7bfeb1336a6826fb423ae8a2e3899bdaef423f6fda1d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_FBX_SDK_SETUP_DIALOG",
@@ -207,7 +213,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_INTEGRATION_TOOL_INTEGRATION_REGISTRY",
             "source_path": "src/gui/integration/tool_integration_registry.py",
             "packaged_path": "Python/src/gui/integration/tool_integration_registry.py",
-            "sha256": "a24155077b82c523ec89f888d84a29dbb3d39738c9626ca39ced7e132ae7a4be"
+            "sha256": "edfd311053a6a0fd08c2b773c97451863a67d45fdb5fcb3c49cd6df5e0b2238a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_INIT",
@@ -231,7 +237,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_ICON_MANAGER",
             "source_path": "src/gui/libtheme/icon_manager.py",
             "packaged_path": "Python/src/gui/libtheme/icon_manager.py",
-            "sha256": "9edfdde4b63c4c417d80bd5daf7c014eb2d235d386b43223f5c2df2b8538af43"
+            "sha256": "67e6450465996a4f88d6a2cd67e2f8235acf14d0d6586f12d0dbb95e27923ec7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_LAYOUT_APPLIER",
@@ -699,7 +705,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_CHARACTER_BUILDER_PANEL",
             "source_path": "src/gui/panels/qt_character_builder_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_character_builder_panel.py",
-            "sha256": "e622aaef99db18ac3ac8e0866d1fc7d49c77a669df41a966e19581272f78e968"
+            "sha256": "4a25c7958be3ce27c1633771ca4460d0d6336068d89323facf24c9f45b6d05e9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_COMMON_PANELS",
@@ -741,7 +747,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_LOG_PANEL",
             "source_path": "src/gui/panels/qt_log_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_log_panel.py",
-            "sha256": "b298d195bca50b4ac354e6d0b1732a327525b79874e431a58fa281cc5432a306"
+            "sha256": "5450505a257070a9641e13e8c0591f1d2a5c054e451c867491c6253558c821c1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_MESH_OPERATION_OPTIONS",
@@ -777,7 +783,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_PROPERTIES_PANEL",
             "source_path": "src/gui/panels/qt_properties_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_properties_panel.py",
-            "sha256": "b288d780b651f411fc9d84a8a644a64eb7a5d4df4f0a47cf4f9d2bbc5d6d57f1"
+            "sha256": "5750560165a88f118b26367ef82bc9562b0f6448269c6555a94f6a2d2ed1c133"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_RESOURCE_BROWSER_MODEL",
@@ -831,7 +837,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_WORKFLOW_RAIL",
             "source_path": "src/gui/panels/qt_workflow_rail.py",
             "packaged_path": "Python/src/gui/panels/qt_workflow_rail.py",
-            "sha256": "e0a74e9e3a6251bb031f19b208f58905da3f532a67231daa165807a8fa6ed51b"
+            "sha256": "d2a57b6c9001709e8fdad6a152d7d1d42c28c50b6445f69d5194e5b9f62c1a40"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_QT_LIB",
@@ -1389,13 +1395,13 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_DISPLAY_CONTROLS",
             "source_path": "src/gui/viewports/viewport_core/widgets/display_controls.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/display_controls.py",
-            "sha256": "662d7439aa1c2c25901c73d77339d6024e585ed7911e5f4580685b834e6ae1fe"
+            "sha256": "52fdb40615d40f78a204dd01f0d37e922263f81db3f9a6d425fc34825742f47c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_DRAG_INTERACTIONS",
             "source_path": "src/gui/viewports/viewport_core/widgets/drag_interactions.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/drag_interactions.py",
-            "sha256": "0306437ab082477c71e478e87786e1942dadcfd3a68334006654fda2fffd5f6c"
+            "sha256": "40097d1b03f1478d150d4ea3d999090670a66870b223bfc63573d4c01f96d481"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_EVENT_NAVIGATION",
@@ -1449,7 +1455,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_SCENE_MODELS",
             "source_path": "src/gui/viewports/viewport_core/widgets/scene_models.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/scene_models.py",
-            "sha256": "d522b2720065d6d9c35c574df89d748ab738826005670b284b7ffea9ebaf752e"
+            "sha256": "058dc4cd609fd24ec4d41f6d43ff0445a96c5b22be89db5d927697db11b4eb57"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_SELECTION_MESH",
@@ -1467,7 +1473,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_STATE_HELPERS",
             "source_path": "src/gui/viewports/viewport_core/widgets/state_helpers.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/state_helpers.py",
-            "sha256": "4095e67f18c49da15fbae2f0f1722a6daeeccd055399c945585e9f1954f6043d"
+            "sha256": "b17bec6842dfbb59816b2a09e5280a4831e465a7195bd1d2e1125c806cd8460e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_TRANSFORM_CAMERA",
@@ -1479,7 +1485,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_VARIANTS",
             "source_path": "src/gui/viewports/viewport_core/widgets/variants.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/variants.py",
-            "sha256": "08dbec5b5bd33368c14893c56b1252730598df61a73d966514d2a8877b62d8e4"
+            "sha256": "3c81bf696cba17358a908aa9205bca0808af73b7bc7583897e6297cce896a53e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_VIEWPORT_WIDGET",
@@ -1521,7 +1527,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_APPLICATION_CORE_LIB",
             "source_path": "src/gui/windows/application_core/application_core_lib.py",
             "packaged_path": "Python/src/gui/windows/application_core/application_core_lib.py",
-            "sha256": "6b85a44f8cd08277eea8297d35eed9eb3786fb579da711d927100b0bb0132ac6"
+            "sha256": "00b7c11fbf87a4e5856b0fd321c75220652f00708949910121a315bce59c91dc"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_FUNCTIONS_INIT",
@@ -1593,7 +1599,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_EDITOR_SERVICES",
             "source_path": "src/gui/windows/application_core/shared/editor_services.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/editor_services.py",
-            "sha256": "593834ea7b3dcf04f7d8e04fe6ed41ff36f31c70c871ddf60d8639e84f1322bf"
+            "sha256": "ad9e57879079b71bb1854ce7ba6dc1333a6c27d3e2e4372ce06c81c622002e28"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_GEOMETRY",
@@ -1611,13 +1617,13 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_MAIN_LAYOUT",
             "source_path": "src/gui/windows/application_core/shared/main_layout.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/main_layout.py",
-            "sha256": "def7e1a2facb607bd0a5dc05391ef025c504f65637b3cb86b5ab18c1662371da"
+            "sha256": "6267605b22170b62f467c45e0faea5a94d7e133308a4397bd69e5778860463b7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_MODEL_IO",
             "source_path": "src/gui/windows/application_core/shared/model_io.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/model_io.py",
-            "sha256": "a78cf9cc78c0c39fe7405bd0e2a4d02daf1260f363d7c36cc75b50a0f8eaefc8"
+            "sha256": "df8134e12e83af34ffc8385504ecd4b15443838fc4ad4a7a9fa074537c939abd"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_QT_HELPERS",
@@ -1629,13 +1635,13 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_RESOURCE_LOADING",
             "source_path": "src/gui/windows/application_core/shared/resource_loading.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/resource_loading.py",
-            "sha256": "0e2a652e711d307edbc6325c0bde6433173ad1757685ed40bea0aa3ac6cb690f"
+            "sha256": "01ffe197629cbc5a06a4aba16d44bf1d7a721aa3d14a9fd19c6dd8f6a091c88a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_RESOURCE_PANELS",
             "source_path": "src/gui/windows/application_core/shared/resource_panels.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/resource_panels.py",
-            "sha256": "9b3ab5b9c6e5dfb75c32859c730273cea9b6fb5f4a0f6feb1f7fb3d874ef3827"
+            "sha256": "58bffd86d05e2fa45af42e202c3ee69bcc81a3837eeec0611e5ee2e7108d38fc"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_RETARGET_WINDOW_WORKFLOW",
@@ -1659,19 +1665,25 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_SPLASH",
             "source_path": "src/gui/windows/application_core/shared/splash.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/splash.py",
-            "sha256": "6c4df43948c6dc09d65766f393bf6bd7ddea92e2b194f059fceb9af95d5b3ee8"
+            "sha256": "8fe36a8ebae7d8d23f63d16b54076a59345828ca30706493dd3f4d3ad45e9352"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_STARTUP_LIBRARY",
             "source_path": "src/gui/windows/application_core/shared/startup_library.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/startup_library.py",
-            "sha256": "ee50ca763fae483f20f3ba593d842ffbaa338703d3e53be935e5eb0c90cf586d"
+            "sha256": "2b8ea651f130e0b2a748c60bc50fb042a76da470b158d1558a3f583674b58bcb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_THEME_LAYOUT",
             "source_path": "src/gui/windows/application_core/shared/theme_layout.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/theme_layout.py",
             "sha256": "d726b6156d19e1cad97e1402e26193380d44ae4e6162f952ba4a6ac8fedb17f8"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_UNDO_STACK",
+            "source_path": "src/gui/windows/application_core/shared/undo_stack.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/undo_stack.py",
+            "sha256": "5ad93e015863f624351c273fe46994074ae9054ee75dc67ee0670be45bda99b9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_VIEWPORT_TOOLS",
@@ -1683,7 +1695,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WINDOW_CHROME",
             "source_path": "src/gui/windows/application_core/shared/window_chrome.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/window_chrome.py",
-            "sha256": "c14801ec8cc3e741489ee1aa24c9780a2c18a2ba9451f4b17a372b3cf7b2098b"
+            "sha256": "bd9290f2ad7d5052e868a4a2986b269b2f27b292899028a3f515fd266ae15b77"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WINDOW_LIFECYCLE",
@@ -1695,7 +1707,13 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WORKERS",
             "source_path": "src/gui/windows/application_core/shared/workers.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/workers.py",
-            "sha256": "e2fcf38a30a83bc7ef657d18dc84e25e07ab8fc51347bd565fe3dae8f384d0df"
+            "sha256": "f12e1b852581e650f6ff6b2f359441ba744e473628a47ea1ba5c1401afb29495"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WORKSPACE_PRESETS",
+            "source_path": "src/gui/windows/application_core/shared/workspace_presets.py",
+            "packaged_path": "Python/src/gui/windows/application_core/shared/workspace_presets.py",
+            "sha256": "ed57af0c2cd116c99022f518b60081e7415abe118bd41f588f1c2d7f862c0ef4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_TOOLBOXES_INIT",
@@ -1719,7 +1737,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_MAIN_WINDOW",
             "source_path": "src/gui/windows/qt_main_window.py",
             "packaged_path": "Python/src/gui/windows/qt_main_window.py",
-            "sha256": "12ecb0ec2d1509e7deafcf009cc83563b47e9abc4b1a3e7c82ee4fa2a78b9977"
+            "sha256": "c4ce0d72d198a904a31ffa3a8f9856b1a194a800d45d31e857edc9cea97a8ec4"
         }
     ]
 }

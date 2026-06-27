@@ -45,10 +45,12 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "splash",
         "startup_library",
         "theme_layout",
+        "undo_stack",
         "viewport_tools",
         "window_chrome",
         "window_lifecycle",
         "workers",
+        "workspace_presets",
     ),
     "toolboxes": (
         "workspace_docks",

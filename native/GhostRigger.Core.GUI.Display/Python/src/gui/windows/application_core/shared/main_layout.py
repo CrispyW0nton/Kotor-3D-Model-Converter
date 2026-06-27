@@ -31,6 +31,14 @@ from src.gui.qt_lib.windows.qt_blueprint_editor import QtBlueprintEditorWindow
 from src.gui.qt_lib.windows.qt_retarget_preview_controller import QtRetargetViewportAdapter, RetargetPreviewUiController
 from src.gui.qt_lib.windows.qt_retarget_workbench_controller import RetargetWorkbenchController
 from src.gui.windows.application_core.application_core_lib.functions.qt_helpers import _qt_object_alive
+from src.gui.windows.application_core.application_core_lib.shared.workspace_presets import (
+    DEFAULT_WORKSPACE_PRESET,
+    WORKSPACE_PRESETS,
+    WorkspaceSwitcher,
+    load_saved_workspace_preset,
+    save_workspace_preset,
+)
+from src.gui.windows.application_core.application_core_lib.shared.undo_stack import SceneUndoStack
 
 
 class MainWindowLayoutMixin:
@@ -242,6 +250,17 @@ class MainWindowLayoutMixin:
         self.settings_data["last_pivot_edit_mode"] = "affect_object_only"
         self.viewport.set_pivot_edit_mode("affect_object_only")
         self._install_editor_integration_services()
+        # Global scene-level undo/redo stack (#2).
+        self._scene_undo_stack = SceneUndoStack(max_size=100, parent=self)
+        self._transform_snapshots: dict[int, tuple] = {}
+        self._lighting_snapshot = None
+        self._camera_snapshot = None
+        self._applying_scene_undo = False
+        self._active_workspace = DEFAULT_WORKSPACE_PRESET
+        # Wire SceneUndoStack signals to refresh the global undo/redo actions.
+        connect_signals = getattr(self, "_connect_scene_undo_signals", None)
+        if callable(connect_signals):
+            connect_signals()
         self.adjust_pivot_panel.set_pivot_mode(self.viewport.pivot_edit_mode())
         self.adjust_pivot_panel.pivotModeChanged.connect(self._set_pivot_edit_mode)
         self.adjust_pivot_panel.pivotActionRequested.connect(self._apply_pivot_action)
@@ -304,6 +323,18 @@ class MainWindowLayoutMixin:
         self.properties_panel.positionApplied.connect(
             lambda node, _x, _y, _z: self._record_transform_event(node)
         )
+        self.properties_panel.rotationApplied.connect(
+            lambda node, _rx, _ry, _rz: self.viewport.refresh_node_transform(node)
+        )
+        self.properties_panel.rotationApplied.connect(
+            lambda node, _rx, _ry, _rz: self._record_transform_event(node)
+        )
+        self.properties_panel.scaleApplied.connect(
+            lambda node, _sx, _sy, _sz: self.viewport.refresh_node_transform(node)
+        )
+        self.properties_panel.scaleApplied.connect(
+            lambda node, _sx, _sy, _sz: self._record_transform_event(node)
+        )
         self.viewport.measurementSettingsChanged.connect(self._merge_measurement_settings)
         self._apply_measurement_settings()
         self._retarget_preview_viewport = QtRetargetViewportAdapter(self.viewport, parent=self)
@@ -342,6 +373,52 @@ class MainWindowLayoutMixin:
         self.library_list = QtWidgets.QListWidget()
         self.library_filter = QtWidgets.QLineEdit()
         self.props_text = QtWidgets.QTextEdit()
+
+        # Apply the saved workspace preset after the layout is fully assembled.
+        QtCore.QTimer.singleShot(0, self._apply_startup_workspace)
+
+    # ── Workspace presets (#5) ──────────────────────────────────────────
+
+    def apply_workspace(self, preset_name: str) -> None:
+        """Show/hide dock panels according to a named workspace preset."""
+        preset = WORKSPACE_PRESETS.get(preset_name)
+        if preset is None:
+            self._log(f"Unknown workspace preset: {preset_name}", "warning")
+            return
+        panels = getattr(self, "_detachable_panels", {})
+        visible = set(preset.get("visible_docks", []))
+        hidden = set(preset.get("hidden_docks", []))
+
+        for key in preset.get("visible_docks", []):
+            if key in panels:
+                self._show_workspace_dock(key)
+        for key in preset.get("hidden_docks", []):
+            dock = panels.get(key)
+            if dock is not None and _qt_object_alive(dock):
+                self._hide_workspace_dock(key)
+
+        save_workspace_preset(preset_name)
+        self._active_workspace = preset_name
+        switcher = getattr(self, "workspace_switcher", None)
+        if switcher is not None:
+            switcher.set_current_preset(preset_name)
+        self._log(f"Workspace switched to: {preset.get('label', preset_name)}", "info")
+
+    def _apply_startup_workspace(self) -> None:
+        """Restore the last-used (or default) workspace preset on startup."""
+        preset_name = load_saved_workspace_preset()
+        self.apply_workspace(preset_name)
+
+    def _hide_workspace_dock(self, key: str) -> None:
+        """Hide a workspace dock and sync its toggle action."""
+        dock = getattr(self, "_detachable_panels", {}).get(key)
+        if dock is None or not _qt_object_alive(dock):
+            return
+        if dock.isFloating():
+            dock.setFloating(False)
+        dock.hide()
+        self._sync_dock_toggle_action(key, False)
+        self._persist_selected_layout_dock_state()
 
     def _stack_content_browser_under_scene(self) -> None:
         """Keep startup browsing in the left dock column without stealing the output/log row."""

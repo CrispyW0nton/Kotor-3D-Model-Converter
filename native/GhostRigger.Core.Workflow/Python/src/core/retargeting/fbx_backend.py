@@ -2,7 +2,7 @@
 
 This module keeps the Retarget Workbench's FBX backend choices explicit:
 
-* Blender 4.2 headless is the production default.
+* Blender 4.0+ headless is the production default.
 * Autodesk FBX SDK is optional and must be verified in the active Python
   runtime before it is used.
 
@@ -72,8 +72,10 @@ class AbstractFBXImporter(ABC):
 class BlenderFBXImporter(AbstractFBXImporter):
     """Production default backend using headless Blender."""
 
-    DEFAULT_EXECUTABLE_PATH = Path(r"C:\Program Files\Blender Foundation\Blender 4.2\blender.exe")
-    REQUIRED_VERSION = (4, 2, 0)
+    # Minimum supported Blender version. Actual executable discovery is handled
+    # centrally by fbx_exporter.find_blender_executable (GHOSTRIGGER_BLENDER_PATH
+    # override, standard Windows install roots searched newest-first, and PATH).
+    REQUIRED_VERSION = (4, 0, 0)
 
     def __init__(self, blender_executable: str | Path | None = None):
         self.blender_executable = Path(blender_executable) if blender_executable else None

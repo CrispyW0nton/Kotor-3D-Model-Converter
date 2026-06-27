@@ -12,6 +12,11 @@ from src.measurement.measurement_formatter import MeasurementFormatter
 from src.measurement.unit_settings import MeasurementSettings
 from src.measurement.unit_system import UNIT_SYMBOLS, UnitSystem
 
+# Quaternion <-> Euler conversion lives in the shared math package so the
+# convention matches the viewport and camera panels exactly.  (Transform
+# skill: "Shared math belongs in src/math".)
+from src.math.camera_math import euler_degrees_to_quat, quat_to_euler_degrees
+
 # ── CharacterMode wiring (M1 / T105) ────────────────────────────────────────
 # Imported lazily-safe: ``model_data`` is a pure-Python module but the
 # enclosing ``src.core`` package imports the pykotor loader stack at
@@ -39,9 +44,26 @@ _CHARACTER_MODE_BADGE_COLORS = {
     "mode_unsupported":   "#C0392B",   # red
 }
 
+# Maps each badge ``icon_key`` to a semantic theme token.  Themes may
+# override the badge swatch colour by defining ``characterMode.*`` keys;
+# when a token is unset the hex default above is used instead.  (Issue #11
+# theme-token migration: badges no longer bypass the token system.)
+_CHARACTER_MODE_BADGE_TOKENS = {
+    "mode_headless_body": "characterMode.headlessBody",
+    "mode_head":          "characterMode.head",
+    "mode_humanoid":      "characterMode.humanoid",
+    "mode_module":        "characterMode.module",
+    "mode_supermodel":    "characterMode.supermodel",
+    "mode_creature":      "characterMode.creature",
+    "mode_ambiguous":     "characterMode.ambiguous",
+    "mode_unsupported":   "characterMode.unsupported",
+}
+
 
 class QtPropertiesPanel(QtWidgets.QWidget):
     positionApplied = QtCore.Signal(object, float, float, float)
+    rotationApplied = QtCore.Signal(object, float, float, float)
+    scaleApplied = QtCore.Signal(object, float, float, float)
     moduleMeshSelected = QtCore.Signal(object)
     moduleMeshesSelected = QtCore.Signal(list)
     moduleMeshVisibilityChanged = QtCore.Signal()
@@ -67,7 +89,87 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         self.measurement_settings = MeasurementSettings()
         self.dimension_calculator = DimensionCalculator()
         self._suppress_mode_signal = False
+        self._suppress_scale_signal = False
+        # Active theme token resolver; ``None`` until the first theme apply.
+        # Colour helpers below fall back to the shared legacy palette ``C``
+        # (kept in sync by ``update_legacy_palette``) when no theme is set.
+        self._theme = None
+        self._character_mode_icon_key = "mode_ambiguous"
         self._build()
+
+    # ── Theme-token accessors (issue #11) ────────────────────────────
+    def _color(self, token: str, legacy_key: str) -> str:
+        """Resolve a colour through the active theme token system.
+
+        Falls back to the shared compatibility palette ``C`` (kept in sync
+        with the active theme by :func:`update_legacy_palette`) when no
+        theme has been applied yet, preserving the pre-theme appearance.
+        """
+        if self._theme is not None:
+            resolved = self._theme.color(token)
+            if resolved:
+                return resolved
+        return C.get(legacy_key, "")
+
+    def _badge_color(self, icon_key: str) -> str:
+        """Colour for a CharacterMode badge swatch.
+
+        Uses the ``characterMode.<iconKey>`` token when a theme is loaded
+        (allowing themes to override the categorical mode colours),
+        otherwise the hex default from :data:`_CHARACTER_MODE_BADGE_COLORS`.
+        """
+        default = _CHARACTER_MODE_BADGE_COLORS.get(
+            icon_key, _CHARACTER_MODE_BADGE_COLORS["mode_ambiguous"]
+        )
+        token = _CHARACTER_MODE_BADGE_TOKENS.get(icon_key)
+        if token and self._theme is not None:
+            resolved = self._theme.color(token)
+            if resolved:
+                return resolved
+        return default
+
+    def _apply_badge_stylesheet(self) -> None:
+        if getattr(self, "character_mode_badge", None) is None:
+            return
+        color = self._badge_color(self._character_mode_icon_key)
+        self.character_mode_badge.setStyleSheet(
+            "QLabel { "
+            f"background:{color}; "
+            "color:#FFFFFF; "
+            "padding:2px 8px; "
+            "border-radius:6px; "
+            "font-weight:bold; "
+            "}"
+        )
+
+    def apply_ghost_theme(self, theme) -> None:
+        """Re-resolve panel colours through the active theme tokens."""
+        self._theme = theme
+        gold = self._color("text.gold", "gold")
+        if getattr(self, "transform_group", None) is not None:
+            self.transform_group.setStyleSheet(f"QGroupBox {{ color:{gold}; }}")
+        if getattr(self, "character_mode_group", None) is not None:
+            self.character_mode_group.setStyleSheet(f"QGroupBox {{ color:{gold}; }}")
+        text2 = self._color("text.secondary", "text2")
+        for attr in (
+            "module_mesh_count", "module_wall_mesh_count",
+            "module_null_mesh_count", "module_walkmesh_count",
+        ):
+            label = getattr(self, attr, None)
+            if label is not None:
+                label.setStyleSheet(f"color:{text2};")
+        self._apply_badge_stylesheet()
+        # Re-tint mesh-tree rows so an already-populated tree follows the
+        # new theme without requiring a manual reload.
+        if hasattr(self, "_refresh_module_mesh_rows"):
+            try:
+                self._refresh_module_mesh_rows()
+            except Exception:
+                pass
+
+    def apply_native_theme(self) -> None:
+        """Native-mode hook (no token palette); colours fall back to ``C``."""
+        self._theme = None
 
     def _build(self) -> None:
         root = QtWidgets.QVBoxLayout(self)
@@ -96,22 +198,46 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         root.addWidget(self.tabs, 1)
 
         self.transform_group = QtWidgets.QGroupBox("Node Transform (editable)")
-        self.transform_group.setStyleSheet(f"QGroupBox {{ color:{C['gold']}; }}")
-        form = QtWidgets.QGridLayout(self.transform_group)
-        form.addWidget(QtWidgets.QLabel("Pos:"), 0, 0)
+        self.transform_group.setStyleSheet(f"QGroupBox {{ color:{self._color('text.gold', 'gold')}; }}")
+        tform = QtWidgets.QVBoxLayout(self.transform_group)
+        tform.setContentsMargins(6, 6, 6, 6)
+        tform.setSpacing(4)
+
+        # ── Position (scene units) ────────────────────────────────────
+        # x/y/z_spin keep their original names; the measurement-settings
+        # path below keys off them for precision/suffix updates.
         self.x_spin = self._spin()
         self.y_spin = self._spin()
         self.z_spin = self._spin()
-        for col, (label, spin) in enumerate((("X", self.x_spin), ("Y", self.y_spin), ("Z", self.z_spin)), start=1):
-            box = QtWidgets.QHBoxLayout()
-            box.addWidget(QtWidgets.QLabel(f"{label}:"))
-            box.addWidget(spin)
-            form.addLayout(box, 0, col)
-        apply_button = QtWidgets.QPushButton("Apply Position")
+        tform.addLayout(self._transform_row("Pos", (self.x_spin, self.y_spin, self.z_spin)))
+
+        # ── Rotation (Euler degrees, X/Y/Z) ───────────────────────────
+        self.rx_spin = self._rotation_spin()
+        self.ry_spin = self._rotation_spin()
+        self.rz_spin = self._rotation_spin()
+        tform.addLayout(self._transform_row("Rot", (self.rx_spin, self.ry_spin, self.rz_spin)))
+
+        # ── Scale (per-axis multiplier) ───────────────────────────────
+        self.sx_spin = self._scale_spin()
+        self.sy_spin = self._scale_spin()
+        self.sz_spin = self._scale_spin()
+        for spin in (self.sx_spin, self.sy_spin, self.sz_spin):
+            spin.valueChanged.connect(self._on_scale_spin_changed)
+        tform.addLayout(self._transform_row("Scl", (self.sx_spin, self.sy_spin, self.sz_spin)))
+
+        # ── Uniform-scale link ────────────────────────────────────────
+        self.uniform_scale_check = QtWidgets.QCheckBox("Uniform Scale")
+        self.uniform_scale_check.setChecked(False)
+        self.uniform_scale_check.setToolTip(
+            "When checked, editing one axis updates all three scale values."
+        )
+        tform.addWidget(self.uniform_scale_check)
+
+        apply_button = QtWidgets.QPushButton("Apply Transform")
         apply_button.clicked.connect(self._apply_transform)
-        form.addWidget(apply_button, 1, 0, 1, 4)
+        tform.addWidget(apply_button)
         root.addWidget(self.transform_group)
-        self.transform_group.setVisible(False)
+        # Visible by default; show_node()/show_model() manage its state.
 
     def set_measurement_settings(self, values: dict | MeasurementSettings | None) -> None:
         settings = values if isinstance(values, MeasurementSettings) else MeasurementSettings.from_dict(values)
@@ -155,7 +281,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         mesh_layout.setContentsMargins(2, 2, 2, 2)
         mesh_layout.setSpacing(4)
         self.module_mesh_count = QtWidgets.QLabel("No module meshes.")
-        self.module_mesh_count.setStyleSheet(f"color:{C['text2']};")
+        self.module_mesh_count.setStyleSheet(f"color:{self._color('text.secondary', 'text2')};")
         mesh_layout.addWidget(self.module_mesh_count)
 
         self.module_mesh_filter = QtWidgets.QLineEdit()
@@ -183,7 +309,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         wall_layout.setContentsMargins(2, 2, 2, 2)
         wall_layout.setSpacing(4)
         self.module_wall_mesh_count = QtWidgets.QLabel("No walls.")
-        self.module_wall_mesh_count.setStyleSheet(f"color:{C['text2']};")
+        self.module_wall_mesh_count.setStyleSheet(f"color:{self._color('text.secondary', 'text2')};")
         wall_layout.addWidget(self.module_wall_mesh_count)
 
         self.module_wall_mesh_filter = QtWidgets.QLineEdit()
@@ -211,7 +337,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         null_layout.setContentsMargins(2, 2, 2, 2)
         null_layout.setSpacing(4)
         self.module_null_mesh_count = QtWidgets.QLabel("No NULL meshes.")
-        self.module_null_mesh_count.setStyleSheet(f"color:{C['text2']};")
+        self.module_null_mesh_count.setStyleSheet(f"color:{self._color('text.secondary', 'text2')};")
         null_layout.addWidget(self.module_null_mesh_count)
 
         self.module_null_mesh_filter = QtWidgets.QLineEdit()
@@ -239,7 +365,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         walk_layout.setContentsMargins(2, 2, 2, 2)
         walk_layout.setSpacing(4)
         self.module_walkmesh_count = QtWidgets.QLabel("No walkmeshes.")
-        self.module_walkmesh_count.setStyleSheet(f"color:{C['text2']};")
+        self.module_walkmesh_count.setStyleSheet(f"color:{self._color('text.secondary', 'text2')};")
         walk_layout.addWidget(self.module_walkmesh_count)
 
         self.module_walkmesh_filter = QtWidgets.QLineEdit()
@@ -327,6 +453,48 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         spin.setSingleStep(0.05)
         return spin
 
+    def _rotation_spin(self) -> QtWidgets.QDoubleSpinBox:
+        """Euler rotation spin box, degrees, -360..360, 2dp."""
+        spin = QtWidgets.QDoubleSpinBox()
+        spin.setRange(-360.0, 360.0)
+        spin.setDecimals(2)
+        spin.setSingleStep(1.0)
+        spin.setValue(0.0)
+        spin.setSuffix("°")
+        return spin
+
+    def _scale_spin(self) -> QtWidgets.QDoubleSpinBox:
+        """Per-axis scale spin box, 0.01..100.0, 3dp, default 1.0."""
+        spin = QtWidgets.QDoubleSpinBox()
+        spin.setRange(0.01, 100.0)
+        spin.setDecimals(3)
+        spin.setSingleStep(0.1)
+        spin.setValue(1.0)
+        return spin
+
+    def _transform_row(
+        self, label: str, spins
+    ) -> QtWidgets.QHBoxLayout:
+        """A labelled X/Y/Z row of spin boxes for the transform group."""
+        row = QtWidgets.QHBoxLayout()
+        row.setSpacing(4)
+        row.addWidget(QtWidgets.QLabel(f"{label}:"))
+        for axis, spin in zip(("X", "Y", "Z"), spins):
+            row.addWidget(QtWidgets.QLabel(f"{axis}:"))
+            row.addWidget(spin, 1)
+        return row
+
+    def _on_scale_spin_changed(self, value: float) -> None:
+        """Propagate one scale axis to the other two when Uniform Scale is on."""
+        if self._suppress_scale_signal or not self.uniform_scale_check.isChecked():
+            return
+        sender = self.sender()
+        for spin in (self.sx_spin, self.sy_spin, self.sz_spin):
+            if spin is not sender:
+                spin.blockSignals(True)
+                spin.setValue(value)
+                spin.blockSignals(False)
+
     # ── CharacterMode UI (M1 / T105) ──────────────────────────────────────────
 
     def _build_character_mode_row(self, parent_layout: QtWidgets.QBoxLayout) -> None:
@@ -342,7 +510,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         and emits :attr:`characterModeChanged` with ``None``.
         """
         self.character_mode_group = QtWidgets.QGroupBox("Character Mode")
-        self.character_mode_group.setStyleSheet(f"QGroupBox {{ color:{C['gold']}; }}")
+        self.character_mode_group.setStyleSheet(f"QGroupBox {{ color:{self._color('text.gold', 'gold')}; }}")
         self.character_mode_group.setMinimumWidth(0)
         self.character_mode_group.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
         grid = QtWidgets.QGridLayout(self.character_mode_group)
@@ -354,15 +522,8 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         self.character_mode_badge.setAlignment(QtCore.Qt.AlignCenter)
         self.character_mode_badge.setMinimumWidth(0)
         self.character_mode_badge.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
-        self.character_mode_badge.setStyleSheet(
-            "QLabel { "
-            f"background:{_CHARACTER_MODE_BADGE_COLORS['mode_ambiguous']}; "
-            "color:#FFFFFF; "
-            "padding:2px 8px; "
-            "border-radius:6px; "
-            "font-weight:bold; "
-            "}"
-        )
+        self._character_mode_icon_key = "mode_ambiguous"
+        self._apply_badge_stylesheet()
         grid.addWidget(QtWidgets.QLabel("Detected:"), 0, 0)
         grid.addWidget(self.character_mode_badge, 0, 1)
 
@@ -400,24 +561,12 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         """
         if mode is None:
             self.character_mode_badge.setText("(unknown)")
-            color = _CHARACTER_MODE_BADGE_COLORS["mode_ambiguous"]
+            self._character_mode_icon_key = "mode_ambiguous"
         else:
             display = getattr(mode, "display_name", str(mode))
-            icon_key = getattr(mode, "icon_key", "mode_ambiguous")
-            color = _CHARACTER_MODE_BADGE_COLORS.get(
-                icon_key, _CHARACTER_MODE_BADGE_COLORS["mode_ambiguous"]
-            )
+            self._character_mode_icon_key = getattr(mode, "icon_key", "mode_ambiguous")
             self.character_mode_badge.setText(display.upper())
-
-        self.character_mode_badge.setStyleSheet(
-            "QLabel { "
-            f"background:{color}; "
-            "color:#FFFFFF; "
-            "padding:2px 8px; "
-            "border-radius:6px; "
-            "font-weight:bold; "
-            "}"
-        )
+        self._apply_badge_stylesheet()
 
     def set_character_mode(self, mode, *, from_scene: bool = False) -> None:
         """Public API: update the badge + combo to reflect a known mode.
@@ -477,6 +626,15 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         x = self.unit_system.to_system_units(self.x_spin.value())
         y = self.unit_system.to_system_units(self.y_spin.value())
         z = self.unit_system.to_system_units(self.z_spin.value())
+        # Rotation is edited as Euler degrees (X/Y/Z) but stored on the node
+        # as a quaternion (x, y, z, w).  Use the shared camera_math helper so
+        # the convention matches the viewport and camera panels.
+        rx = float(self.rx_spin.value())
+        ry = float(self.ry_spin.value())
+        rz = float(self.rz_spin.value())
+        sx = float(self.sx_spin.value())
+        sy = float(self.sy_spin.value())
+        sz = float(self.sz_spin.value())
         try:
             before = (
                 tuple(getattr(node, "position", (0.0, 0.0, 0.0))),
@@ -484,14 +642,23 @@ class QtPropertiesPanel(QtWidgets.QWidget):
             )
             setattr(node, "_gr_undo_before_transform", before)
             node.position = (x, y, z)
+            node.rotation = euler_degrees_to_quat((rx, ry, rz))
+            # Scale lives on ``_gr_scale`` when present (the dimension
+            # calculator's preferred attribute), otherwise on ``scale`` so the
+            # write lands where the read looks.
+            scale_attr = "_gr_scale" if hasattr(node, "_gr_scale") else "scale"
+            setattr(node, scale_attr, (sx, sy, sz))
         finally:
             self.positionApplied.emit(node, x, y, z)
+            self.rotationApplied.emit(node, rx, ry, rz)
+            self.scaleApplied.emit(node, sx, sy, sz)
 
     def show_model(self, model) -> None:
         if not model:
             self._current_model = None
             self._current_node = None
             self.text.setPlainText("No model loaded.")
+            self.transform_group.setVisible(False)
             if self._module_browser_enabled:
                 self._populate_module_meshes([])
             self._update_character_mode_badge(None)
@@ -502,6 +669,9 @@ class QtPropertiesPanel(QtWidgets.QWidget):
                 self._suppress_mode_signal = False
             return
         self._current_model = model
+        # A model view is not a single node; the per-node transform editor
+        # only applies to a concrete selection.
+        self.transform_group.setVisible(False)
         # Auto-detect CharacterMode for the badge (panel-level preview).
         # The owning scene/toolbar still drives the canonical mode via
         # set_character_mode() — this is a best-effort live indicator.
@@ -557,6 +727,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
 
     def show_scene_object(self, obj) -> None:
         self._current_node = None
+        self.transform_group.setVisible(False)
         transform = getattr(obj, "transform", None)
         source = getattr(obj, "source_ref", None)
         runtime_model = (getattr(obj, "metadata", {}) or {}).get("_runtime_model")
@@ -653,8 +824,25 @@ class QtPropertiesPanel(QtWidgets.QWidget):
         self.x_spin.setValue(self.unit_system.to_display_units(float(pos[0])))
         self.y_spin.setValue(self.unit_system.to_display_units(float(pos[1])))
         self.z_spin.setValue(self.unit_system.to_display_units(float(pos[2])))
+        # Populate the rotation spin boxes from the node quaternion using the
+        # shared camera_math helper (consistent ZYX Euler convention).
+        rot_deg = quat_to_euler_degrees(rot)
+        self.rx_spin.setValue(float(rot_deg[0]))
+        self.ry_spin.setValue(float(rot_deg[1]))
+        self.rz_spin.setValue(float(rot_deg[2]))
         formatter = MeasurementFormatter(self.unit_system, self.measurement_settings.distance_precision)
         dimensions = self.dimension_calculator.calculate(node)
+        # Populate scale spin boxes; suppress the uniform-scale handler while
+        # bulk-setting so we don't cascade.
+        self._suppress_scale_signal = True
+        try:
+            self.sx_spin.setValue(float(dimensions.scale[0]))
+            self.sy_spin.setValue(float(dimensions.scale[1]))
+            self.sz_spin.setValue(float(dimensions.scale[2]))
+        finally:
+            self._suppress_scale_signal = False
+        # The transform editor is only meaningful for a concrete node.
+        self.transform_group.setVisible(True)
         lines = [
             f"Node:  {getattr(node, 'name', '')}",
             f"Type:  {getattr(node, 'type_label', '')}",
@@ -785,7 +973,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
                 item.setData(0, QtCore.Qt.UserRole, node)
                 if visible == "no":
                     for column in range(self.module_mesh_tree.columnCount()):
-                        item.setForeground(column, QtGui.QBrush(QtGui.QColor(C["text2"])))
+                        item.setForeground(column, QtGui.QBrush(QtGui.QColor(self._color("text.secondary", "text2"))))
                 if self._is_wall_mesh_candidate(node):
                     tree = self.module_wall_mesh_tree
                     items = self._wall_items
@@ -979,7 +1167,7 @@ class QtPropertiesPanel(QtWidgets.QWidget):
                 hidden = bool(getattr(node, "_gr_hidden", False))
                 item.setText(4, "no" if hidden else "yes")
                 item.setText(5, str(getattr(node, "_gr_mesh_group", "") or ""))
-                brush = QtGui.QBrush(QtGui.QColor(C["text2"] if hidden else C["text"]))
+                brush = QtGui.QBrush(QtGui.QColor(self._color("text.secondary", "text2") if hidden else self._color("text.primary", "text")))
                 for column in range(tree.columnCount()):
                     item.setForeground(column, brush)
 

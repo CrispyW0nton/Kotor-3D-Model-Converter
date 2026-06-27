@@ -58,6 +58,7 @@ GFF_RESTYPES = {
 RESTYPE_IDS: dict[str, int] = {
     "bmp": 1,
     "tga": 3,
+    "tpc": 3007,
     "wav": 4,
     "plt": 6,
     "ini": 7,

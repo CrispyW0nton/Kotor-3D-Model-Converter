@@ -204,8 +204,8 @@ class ValidationService:
                                   _HEAD_REQUIRED_HOOKS, _HEAD_EXPECTED_HOOKS)
                 self._check_facial_bones(slot, model)
             elif slot == PartSlot.HEADLESS_BODY:
-                self._check_hooks(slot, model,
-                                  _BODY_REQUIRED_HOOKS, _BODY_EXPECTED_HOOKS)
+                required, expected = self._body_hook_requirements(model)
+                self._check_hooks(slot, model, required, expected)
 
             # Per-slot weight validation
             self._check_skin_weights(slot, model)
@@ -317,6 +317,42 @@ class ValidationService:
         except Exception as exc:
             log.debug("_get_node_map: %s", exc)
         return node_map
+
+    def _body_hook_requirements(self, model) -> tuple[List[str], List[str]]:
+        """Return body hook rules, honoring native-template creature donors."""
+        state = getattr(model, "_gr_character_builder_rig_state", None)
+        if isinstance(state, dict):
+            state_name = str(state.get("state") or "")
+            native_snapshot_present = bool(state.get("native_snapshot_present"))
+        else:
+            state_name = str(getattr(state, "state", "") or "")
+            native_snapshot_present = bool(getattr(state, "native_snapshot_present", False))
+
+        metadata = getattr(model, "metadata", None)
+        if not native_snapshot_present and isinstance(metadata, dict):
+            raw_state = metadata.get("character_builder_rig_state")
+            if isinstance(raw_state, dict):
+                state_name = str(raw_state.get("state") or state_name)
+                native_snapshot_present = bool(raw_state.get("native_snapshot_present"))
+
+        if state_name != "native_template_final" or not native_snapshot_present:
+            return list(_BODY_REQUIRED_HOOKS), list(_BODY_EXPECTED_HOOKS)
+
+        snapshot = getattr(model, "_gr_native_skeleton_snapshot", None)
+        hook_names = list(getattr(snapshot, "hook_names", ()) or ())
+        if not hook_names and isinstance(metadata, dict):
+            snap_data = metadata.get("native_skeleton_snapshot")
+            if isinstance(snap_data, dict):
+                hook_names = list(snap_data.get("hook_names") or ())
+        required = [str(name or "") for name in hook_names if str(name or "").strip()]
+        if not required:
+            return list(_BODY_REQUIRED_HOOKS), list(_BODY_EXPECTED_HOOKS)
+        required_lower = {name.lower() for name in required}
+        expected = [
+            name for name in _BODY_EXPECTED_HOOKS
+            if name.lower() not in required_lower
+        ]
+        return required, expected
 
     def _check_hooks(self, slot, model, required: List[str], expected: List[str]) -> None:
         """Rules HOOK_MISSING / HOOK_MISALIGNED."""

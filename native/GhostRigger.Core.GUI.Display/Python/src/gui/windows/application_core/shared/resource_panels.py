@@ -28,6 +28,19 @@ def _load_map_studio_window_class():
     raise ImportError("; ".join(errors))
 
 
+def _load_stock_module_editor_window_class():
+    errors: list[str] = []
+    for module_name in (
+        "src.gui.windows.stock_module_editor_window",
+        "src.gui.qt_lib.windows.stock_module_editor_window",
+    ):
+        try:
+            return getattr(import_module(module_name), "StockModuleEditorWindow")
+        except Exception as exc:  # pragma: no cover - reported through visible opener error
+            errors.append(f"{module_name}: {exc}")
+    raise ImportError("; ".join(errors))
+
+
 class ResourcePanelsMixin:
     """Resource browser, TwoDA, IPC, module-editor, and rig window handlers."""
 
@@ -405,11 +418,62 @@ class ResourcePanelsMixin:
             self,
             "Map Studio Level Editor",
             "GhostRigger Map Studio Level Editor\n\n"
-            "The Module Editor icon opens this unified Map Studio workspace for KMAP "
+            "Map Studio is GhostRigger's KMAP authoring workspace for "
             "projects. It loads LYT/WOK data, tracks terrain, rooms, modules, "
             "blueprints, placements, validation, staged export, install handoff, and "
             "game-test proof without overwriting source KOTOR data.",
         )
+
+    @staticmethod
+    def _stock_module_editor_library_game(manager: object) -> str:
+        for game, getter_name in (("K2", "get_k2"), ("K1", "get_k1")):
+            getter = getattr(manager, getter_name, None)
+            if callable(getter):
+                try:
+                    if getter() is not None:
+                        return game
+                except Exception:
+                    continue
+        return "K2"
+
+    def _configure_stock_module_editor_game_library(self, window: object) -> None:
+        set_game_library = getattr(window, "set_game_library", None)
+        if not callable(set_game_library):
+            return
+        manager = getattr(self, "_resource_manager", None)
+        if manager is None:
+            get_resource_manager = getattr(self, "_get_resource_manager", None)
+            if callable(get_resource_manager):
+                try:
+                    manager = get_resource_manager()
+                except Exception as exc:
+                    self._log(f"Module Editor game-library handoff failed: {exc}", "warning")
+                    return
+        if manager is None:
+            return
+        game = self._stock_module_editor_library_game(manager)
+        set_game_library(manager, game=game)
+
+    def _open_stock_module_editor_window(self):
+        try:
+            if _qt_object_alive(getattr(self, "stock_module_editor_window", None)):
+                window = self.stock_module_editor_window
+            else:
+                window_class = _load_stock_module_editor_window_class()
+                window = window_class(parent=self)
+                self.stock_module_editor_window = window
+            self._configure_stock_module_editor_game_library(window)
+            window.show()
+            window.raise_()
+            window.activateWindow()
+            self._log("Module Editor opened for stock MOD/RIM archives.", "success")
+        except Exception as exc:
+            self._log(f"Module Editor could not open: {exc}", "error")
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Module Editor",
+                f"Module Editor could not open.\n\n{exc}",
+            )
     def _validate_current_character(self):
         try:
             from src.core.geometry.model_data import CharacterScene, PartSlot

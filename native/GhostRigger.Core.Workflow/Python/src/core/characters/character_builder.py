@@ -1415,13 +1415,14 @@ def _clean_mesh_payload_node(node: Any) -> Any:
     cleaned.bone_map_floats = []
     cleaned.qbone_list = []
     cleaned.tbone_list = []
+    cleaned.vertex_space = 1
     setattr(cleaned, "_external_imported", True)
+    setattr(cleaned, "_imported", True)
+    setattr(cleaned, "_gr_vertices_in_kotor_world", True)
     if source_bone_map and source_skin_data:
         setattr(cleaned, "_gr_source_bone_map", source_bone_map)
         setattr(cleaned, "_gr_source_skin_data", source_skin_data)
         setattr(cleaned, "_gr_source_skin_weight_role", "imported_fbx_payload")
-    if vertices_are_world:
-        setattr(cleaned, "_gr_vertices_in_kotor_world", True)
     try:
         cleaned.compute_bounds()
     except Exception:

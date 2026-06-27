@@ -19,9 +19,17 @@ from src.gui.qt_lib.dialogs.qt_dialogs import (
 )
 from src.gui.qt_lib.dialogs.qt_settings_dialog import save_settings
 from src.gui.libtheme.icon_manager import ThemeIconManager
-from src.gui.libtheme.style_tokens import LEGACY_MATRIX_COLORS
+from src.gui.qt_lib.assets.qt_theme import C
+from src.gui.windows.application_core.shared.workspace_presets import (
+    WorkspaceSwitcher,
+    load_saved_workspace_preset,
+)
 
-C = dict(LEGACY_MATRIX_COLORS)
+# ``C`` is the shared, theme-aware compatibility palette.  It is seeded
+# from ``LEGACY_MATRIX_COLORS`` and kept in sync with the active theme by
+# ``update_legacy_palette(theme)`` (invoked from the theme applier), so
+# every colour read below reflects the resolved theme rather than a
+# frozen Matrix-default snapshot.  (Issue #11 theme-token migration.)
 _GUI_DIR = Path(__file__).resolve().parents[3]
 _QT_ICON_DIR = (_GUI_DIR / "icons").as_posix()
 _fallback_icons = ThemeIconManager(_GUI_DIR / "icons")
@@ -56,7 +64,7 @@ class WindowChromeMixin:
         self.open_ascii_action.setShortcut("Ctrl+Shift+O")
         self.open_ascii_action.triggered.connect(lambda _checked=False: self._open_model(ascii_only=True))
         self.clear_model_action = QtGui.QAction("Clear Model", self)
-        self.clear_model_action.setShortcut("Ctrl+W")
+        self.clear_model_action.setShortcut("Ctrl+Shift+Delete")
         self.clear_model_action.triggered.connect(self._clear_model)
         self.import_obj_action = QtGui.QAction("Import OBJ...", self)
         self.import_obj_action.setShortcut("Ctrl+I")
@@ -69,7 +77,7 @@ class WindowChromeMixin:
         self.save_ascii_action.setShortcut("Ctrl+Alt+S")
         self.save_ascii_action.triggered.connect(self._save_ascii_mdl)
         self.export_binary_action = QtGui.QAction("Export Binary MDL...", self)
-        self.export_binary_action.setShortcut("Ctrl+M")
+        self.export_binary_action.setShortcut("Ctrl+Shift+B")
         self.export_binary_action.triggered.connect(self._export_mdl_binary)
         self.export_obj_action = QtGui.QAction("Export OBJ...", self)
         self.export_obj_action.setShortcut("Ctrl+E")
@@ -86,35 +94,40 @@ class WindowChromeMixin:
         self.texture_dir_action = QtGui.QAction("Set Texture Directory...", self)
         self.texture_dir_action.triggered.connect(self._set_texture_dir)
         self.settings_action = QtGui.QAction(self._icon("settings"), "Settings...", self)
-        self.settings_action.setShortcut("F2")
+        self.settings_action.setShortcut("Ctrl+Comma")
         self.settings_action.triggered.connect(self._open_settings_dialog)
         self.theme_editor_action = QtGui.QAction(self._icon("settings"), "Theme Editor...", self)
         self.theme_editor_action.triggered.connect(self._open_theme_editor_window)
         self.autorig_action = QtGui.QAction(self._icon("autorig"), "Auto-Rig Current Model", self)
-        self.autorig_action.setShortcut("Ctrl+R")
+        self.autorig_action.setShortcut("Ctrl+Shift+G")
         self.autorig_action.triggered.connect(self._quick_autorig)
         self.remove_rig_action = QtGui.QAction("Remove Rigging", self)
         self.remove_rig_action.triggered.connect(self._remove_rig)
         self.frame_all_action = QtGui.QAction("Frame All", self)
         self.frame_all_action.setShortcut("F")
+        self.frame_all_action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         self.frame_all_action.triggered.connect(lambda: self._call_viewport("frame_all"))
         self.reset_camera_action = QtGui.QAction("Reset Camera", self)
         self.reset_camera_action.setShortcut("R")
+        self.reset_camera_action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         self.reset_camera_action.triggered.connect(lambda: self._call_viewport("reset_camera"))
-        self.undo_viewport_action = QtGui.QAction("Undo Viewport Edit", self)
+        self.undo_viewport_action = QtGui.QAction("Undo", self)
         self.undo_viewport_action.setShortcut("Ctrl+Z")
-        self.undo_viewport_action.triggered.connect(lambda: self._call_viewport("undo"))
-        self.redo_viewport_action = QtGui.QAction("Redo Viewport Edit", self)
-        self.redo_viewport_action.setShortcut("Ctrl+Y")
-        self.redo_viewport_action.triggered.connect(lambda: self._call_viewport("redo"))
+        self.undo_viewport_action.triggered.connect(self._combined_undo)
+        self.redo_viewport_action = QtGui.QAction("Redo", self)
+        self.redo_viewport_action.setShortcuts(["Ctrl+Y", "Ctrl+Shift+Z", "Ctrl+R"])
+        self.redo_viewport_action.triggered.connect(self._combined_redo)
         self.wire_action = QtGui.QAction("Toggle Wireframe", self)
         self.wire_action.setShortcut("W")
+        self.wire_action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         self.wire_action.triggered.connect(lambda: self._click_viewport_button("wire_button"))
         self.bones_action = QtGui.QAction("Toggle Bones", self)
         self.bones_action.setShortcut("B")
+        self.bones_action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         self.bones_action.triggered.connect(lambda: self._click_viewport_button("bones_button"))
         self.texture_action = QtGui.QAction("Toggle Texture", self)
         self.texture_action.setShortcut("T")
+        self.texture_action.setShortcutContext(QtCore.Qt.WidgetWithChildrenShortcut)
         self.texture_action.triggered.connect(lambda: self._click_viewport_button("texture_button"))
         self.grid_action = QtGui.QAction("Toggle Grid", self)
         self.grid_action.setShortcut("Alt+G")
@@ -122,7 +135,7 @@ class WindowChromeMixin:
         self.uv_action = QtGui.QAction("Open UV Viewer...", self)
         self.uv_action.triggered.connect(self._open_uv_viewer)
         self.diag_action = QtGui.QAction(self._icon("diag"), "Diagnostics...", self)
-        self.diag_action.setShortcut("Ctrl+D")
+        self.diag_action.setShortcut("Ctrl+Shift+D")
         self._configure_dock_toggle_action(self.diag_action, "diagnostics", self._show_diagnostics_panel)
         self.fbx_sdk_status_action = QtGui.QAction("FBX SDK Status", self)
         self.fbx_sdk_status_action.triggered.connect(self._show_fbx_sdk_status)
@@ -134,10 +147,10 @@ class WindowChromeMixin:
         self.refresh_action.setShortcut("F5")
         self.refresh_action.triggered.connect(self._refresh_all)
         self.character_builder_action = QtGui.QAction(self._icon("charbuilder"), "Character Builder (New Window)...", self)
-        self.character_builder_action.setShortcut("Ctrl+B")
+        self.character_builder_action.setShortcut("Ctrl+Shift+C")
         self.character_builder_action.triggered.connect(self._open_qt_character_builder_window)
         self.anims_action = QtGui.QAction(self._icon("anims"), "Animation Library", self)
-        self.anims_action.setShortcut("Ctrl+A")
+        self.anims_action.setShortcut("Ctrl+Shift+A")
         self.anims_action.triggered.connect(lambda: self._show_content_browser("Animation"))
         self.animation_browser_dock_action = QtGui.QAction(self._icon("anims"), "Animation Browser", self)
         self._configure_dock_toggle_action(
@@ -170,8 +183,12 @@ class WindowChromeMixin:
         self.sequence_editor_action = QtGui.QAction(self._icon("sequence"), "Sequence Editor", self)
         self.sequence_editor_action.setShortcut("Ctrl+Alt+Q")
         self._configure_dock_toggle_action(self.sequence_editor_action, "sequence_editor", self._show_sequence_editor_dock)
-        self.modules_action = QtGui.QAction(self._icon("modular"), "Open Map Studio Level Editor", self)
+        self.modules_action = QtGui.QAction(self._icon("modular"), "Open Map Studio (KMAP Area Authoring)", self)
+        self.modules_action.setStatusTip("Author new KMAP areas with room geometry, walkmeshes, and gameplay placements")
         self.modules_action.triggered.connect(self._open_map_studio_modeling_workspace)
+        self.stock_module_editor_action = QtGui.QAction(self._icon("module_meshes"), "Open Module Editor (Stock MOD/RIM Patcher)", self)
+        self.stock_module_editor_action.setStatusTip("Patch textures, walkmeshes, and objects in existing stock .mod/.rim module archives")
+        self.stock_module_editor_action.triggered.connect(self._open_stock_module_editor_window)
         self.rig_window_action = QtGui.QAction(self._icon("rig"), "Open Rigging Window", self)
         self.rig_window_action.triggered.connect(self._open_rig_window)
         self.texture_tool_action = QtGui.QAction(self._icon("texture"), "Texture Tool...", self)
@@ -270,7 +287,7 @@ class WindowChromeMixin:
         self.port_model_action.triggered.connect(self._port_current_model)
         self.generate_module_action = QtGui.QAction("Generate Module Files...", self)
         self.generate_module_action.triggered.connect(self._generate_module_files)
-        self.about_module_action = QtGui.QAction("About Map Studio Level Editor", self)
+        self.about_module_action = QtGui.QAction("About Map Studio (KMAP Area Authoring)", self)
         self.about_module_action.triggered.connect(self._about_modular)
         self.validate_character_action = QtGui.QAction("Validate Current Character...", self)
         self.validate_character_action.triggered.connect(self._validate_current_character)
@@ -290,6 +307,9 @@ class WindowChromeMixin:
         self.quit_action.triggered.connect(self.close)
 
     def _build_menu(self):
+        # Menu structure follows the standard File/Edit/View/Tools/Window/Help
+        # convention. The previous Customise/Model/Modules/MDLOps/Retarget/Create/
+        # IPC top-level menus were consolidated into the roles below.
         file_menu = self.menuBar().addMenu("File")
         file_menu.addAction(self.new_scene_action)
         file_menu.addAction(self.open_scene_action)
@@ -323,49 +343,45 @@ class WindowChromeMixin:
         file_menu.addSeparator()
         file_menu.addAction(self.quit_action)
 
-        customise_menu = self.menuBar().addMenu("Customise")
-        customise_menu.addAction(self.settings_action)
-        customise_menu.addAction(self.theme_editor_action)
+        # Edit: replaces the old 'Customise' menu. Undo/Redo are wired to the
+        # existing viewport-edit actions as placeholders; a full document
+        # undo/redo stack can replace these later.
+        edit_menu = self.menuBar().addMenu("Edit")
+        edit_menu.addAction(self.undo_viewport_action)
+        edit_menu.addAction(self.redo_viewport_action)
+        edit_menu.addSeparator()
+        edit_menu.addAction(self.theme_editor_action)
 
-        model_menu = self.menuBar().addMenu("Model")
+        # View: replaces the old 'Model' menu. Display toggles and viewport
+        # navigation live here; rigging/authoring tools moved to Tools.
+        view_menu = self.menuBar().addMenu("View")
         for action in (
-            self.autorig_action,
-            self.remove_rig_action,
-            None,
-            self.frame_all_action,
-            self.reset_camera_action,
-            None,
-            self.undo_viewport_action,
-            self.redo_viewport_action,
-            None,
             self.wire_action,
             self.bones_action,
             self.texture_action,
             self.grid_action,
             None,
+            self.frame_all_action,
+            self.reset_camera_action,
+            None,
             self.uv_action,
             self.info_action,
             self.refresh_action,
         ):
-            self._add_menu_action(model_menu, action)
+            self._add_menu_action(view_menu, action)
 
-        mdlops_menu = self.menuBar().addMenu("MDLOps")
-        mdlops_menu.addAction(self.set_mdlops_action)
-        mdlops_menu.addAction(self.compile_action)
-        mdlops_menu.addAction(self.decompile_action)
-
-        help_menu = self.menuBar().addMenu("Help")
-        format_action = QtGui.QAction("KotOR MDL Format Reference", self)
-        format_action.triggered.connect(lambda: show_format_reference(self))
-        viewport_controls_action = QtGui.QAction("Viewport Navigation Controls", self)
-        viewport_controls_action.triggered.connect(lambda: show_viewport_navigation_reference(self))
-        help_menu.addAction(self.about_action)
-        help_menu.addAction(viewport_controls_action)
-        help_menu.addAction(format_action)
-        diagnostics_menu = help_menu.addMenu("Diagnostics")
-        diagnostics_menu.addAction(self.fbx_sdk_status_action)
-
-        retarget_menu = self.menuBar().addMenu("Retarget")
+        # Tools: merges the old Tools + Create menus, plus the Retarget, MDLOps
+        # and module-authoring entries that were previously separate top-level
+        # menus. IPC tooling is parked at the end under a Developer separator.
+        tools_menu = self.menuBar().addMenu("Tools")
+        tools_menu.addAction(self.autorig_action)
+        tools_menu.addAction(self.remove_rig_action)
+        tools_menu.addSeparator()
+        tools_menu.addAction(self.modules_action)
+        tools_menu.addAction(self.stock_module_editor_action)
+        tools_menu.addAction(self.rig_window_action)
+        tools_menu.addSeparator()
+        retarget_menu = tools_menu.addMenu("Animation Retargeting")
         retarget_menu.addAction(self.load_retarget_source_clip_action)
         retarget_menu.addAction(self.load_retarget_profile_action)
         retarget_menu.addAction(self.preview_retarget_action)
@@ -373,36 +389,25 @@ class WindowChromeMixin:
         retarget_menu.addSeparator()
         retarget_menu.addAction(self.retarget_workbench_action)
         retarget_menu.addAction(self.unreal_animator_action)
-
-        modules_menu = self.menuBar().addMenu("Modules")
-        modules_menu.addAction(self.modules_action)
-        modules_menu.addAction(self.rig_window_action)
-        modules_menu.addAction(self.retarget_workbench_action)
-        modules_menu.addAction(self.unreal_animator_action)
-        modules_menu.addAction(self.sequence_editor_action)
-        modules_menu.addSeparator()
-        modules_menu.addAction(self.content_browser_action)
-        modules_menu.addAction(self.scene_panel_action)
-        modules_menu.addAction(self.properties_panel_action)
-        modules_menu.addAction(self.body_attachment_panel_action)
-        modules_menu.addAction(self.nodes_panel_action)
-        modules_menu.addAction(self.lighting_panel_action)
-        modules_menu.addAction(self.camera_panel_action)
-        modules_menu.addAction(self.module_meshes_panel_action)
-        modules_menu.addAction(self.mesh_tools_panel_action)
-        modules_menu.addAction(self.sprite_materials_panel_action)
-        modules_menu.addAction(self.adjust_pivot_panel_action)
-        modules_menu.addAction(self.twoda_panel_action)
-        modules_menu.addAction(self.resources_panel_action)
-        modules_menu.addAction(self.output_log_panel_action)
-        modules_menu.addAction(self.python_terminal_panel_action)
-        modules_menu.addSeparator()
-        modules_menu.addAction(self.port_model_action)
-        modules_menu.addAction(self.generate_module_action)
-        modules_menu.addSeparator()
-        modules_menu.addAction(self.about_module_action)
-
-        tools_menu = self.menuBar().addMenu("Tools")
+        tools_menu.addSeparator()
+        mdlops_menu = tools_menu.addMenu("MDLOps")
+        mdlops_menu.addAction(self.set_mdlops_action)
+        mdlops_menu.addAction(self.compile_action)
+        mdlops_menu.addAction(self.decompile_action)
+        tools_menu.addAction(self.port_model_action)
+        tools_menu.addAction(self.generate_module_action)
+        tools_menu.addSeparator()
+        camera_menu = tools_menu.addMenu(self._icon("cameras"), "Camera")
+        camera_menu.addAction(self.create_free_camera_action)
+        camera_menu.addAction(self.create_target_camera_action)
+        camera_menu.addAction(self.create_cinematic_camera_action)
+        light_menu = tools_menu.addMenu(self._icon("lights"), "Light")
+        light_menu.addAction(self.create_point_light_action)
+        light_menu.addAction(self.create_spot_light_action)
+        light_menu.addAction(self.create_directional_light_action)
+        light_menu.addAction(self.create_area_light_action)
+        light_menu.addAction(self.create_ambient_light_action)
+        tools_menu.addSeparator()
         tools_menu.addAction(self.diag_action)
         tools_menu.addAction(self.fbx_sdk_status_action)
         setup_menu = tools_menu.addMenu("Setup")
@@ -412,35 +417,59 @@ class WindowChromeMixin:
         tools_menu.addAction(self.blueprint_editor_action)
         tools_menu.addSeparator()
         tools_menu.addAction(self.character_builder_action)
-        tools_menu.addSeparator()
         tools_menu.addAction(self.validate_character_action)
-
-        create_menu = self.menuBar().addMenu("Create")
-        camera_menu = create_menu.addMenu(self._icon("cameras"), "Camera")
-        camera_menu.addAction(self.create_free_camera_action)
-        camera_menu.addAction(self.create_target_camera_action)
-        camera_menu.addAction(self.create_cinematic_camera_action)
-        light_menu = create_menu.addMenu(self._icon("lights"), "Light")
-        light_menu.addAction(self.create_point_light_action)
-        light_menu.addAction(self.create_spot_light_action)
-        light_menu.addAction(self.create_directional_light_action)
-        light_menu.addAction(self.create_area_light_action)
-        light_menu.addAction(self.create_ambient_light_action)
-
-        ipc_menu = self.menuBar().addMenu("IPC")
+        tools_menu.addSeparator()
+        # Developer / IPC tooling. These low-level diagnostics should be hidden
+        # behind a debug flag in the future rather than shipped on the main menu.
+        developer_label = QtGui.QAction("Developer", self)
+        developer_label.setSeparator(True)
+        tools_menu.addAction(developer_label)
         server_action = QtGui.QAction("GhostRigger Server (port 7001) - This Program", self)
         server_action.setEnabled(False)
-        ipc_menu.addAction(server_action)
-        ipc_menu.addSeparator()
-        ipc_menu.addAction(self.ping_scripter_action)
-        ipc_menu.addAction(self.ping_gmodular_action)
-        ipc_menu.addSeparator()
-        ipc_menu.addAction(self.notify_gmodular_action)
-        ipc_menu.addAction(self.refresh_gmodular_action)
-        ipc_menu.addSeparator()
+        tools_menu.addAction(server_action)
+        tools_menu.addAction(self.ping_scripter_action)
+        tools_menu.addAction(self.ping_gmodular_action)
+        tools_menu.addAction(self.notify_gmodular_action)
+        tools_menu.addAction(self.refresh_gmodular_action)
         ipc_info_action = QtGui.QAction("IPC Protocol Info", self)
         ipc_info_action.triggered.connect(lambda: show_ipc_info(self))
-        ipc_menu.addAction(ipc_info_action)
+        tools_menu.addAction(ipc_info_action)
+
+        # Window: the dock/panel toggles that previously lived under 'Modules'.
+        window_menu = self.menuBar().addMenu("Window")
+        for action in (
+            self.sequence_editor_action,
+            None,
+            self.content_browser_action,
+            self.scene_panel_action,
+            self.properties_panel_action,
+            self.body_attachment_panel_action,
+            self.nodes_panel_action,
+            self.lighting_panel_action,
+            self.camera_panel_action,
+            self.module_meshes_panel_action,
+            self.mesh_tools_panel_action,
+            self.sprite_materials_panel_action,
+            self.adjust_pivot_panel_action,
+            self.twoda_panel_action,
+            self.resources_panel_action,
+            None,
+            self.output_log_panel_action,
+            self.python_terminal_panel_action,
+        ):
+            self._add_menu_action(window_menu, action)
+
+        help_menu = self.menuBar().addMenu("Help")
+        format_action = QtGui.QAction("KotOR MDL Format Reference", self)
+        format_action.triggered.connect(lambda: show_format_reference(self))
+        viewport_controls_action = QtGui.QAction("Viewport Navigation Controls", self)
+        viewport_controls_action.triggered.connect(lambda: show_viewport_navigation_reference(self))
+        help_menu.addAction(self.about_action)
+        help_menu.addAction(self.about_module_action)
+        help_menu.addAction(viewport_controls_action)
+        help_menu.addAction(format_action)
+        diagnostics_menu = help_menu.addMenu("Diagnostics")
+        diagnostics_menu.addAction(self.fbx_sdk_status_action)
 
     def _build_toolbar(self):
         # The original GhostRigger top chrome is rebuilt as regular Qt widgets
@@ -474,6 +503,74 @@ class WindowChromeMixin:
 
     def _not_migrated(self, label: str):
         self._log(f"{label} is waiting for its Qt panel migration.", "warning")
+
+    def _combined_undo(self) -> None:
+        """Global undo: try the viewport stack first, then the scene stack."""
+        viewport = getattr(self, "viewport", None)
+        viewport_undo = getattr(viewport, "undo", None)
+        if callable(viewport_undo):
+            try:
+                if viewport_undo():
+                    self._update_undo_action_state()
+                    return
+            except Exception:
+                pass
+        scene_stack = getattr(self, "_scene_undo_stack", None)
+        if scene_stack is not None:
+            scene_stack.undo()
+            self._update_undo_action_state()
+
+    def _combined_redo(self) -> None:
+        """Global redo: try the viewport stack first, then the scene stack."""
+        viewport = getattr(self, "viewport", None)
+        viewport_redo = getattr(viewport, "redo", None)
+        if callable(viewport_redo):
+            try:
+                if viewport_redo():
+                    self._update_undo_action_state()
+                    return
+            except Exception:
+                pass
+        scene_stack = getattr(self, "_scene_undo_stack", None)
+        if scene_stack is not None:
+            scene_stack.redo()
+            self._update_undo_action_state()
+
+    def _update_undo_action_state(self) -> None:
+        """Refresh the enabled state / tooltip of the global undo/redo actions."""
+        undo_action = getattr(self, "undo_viewport_action", None)
+        redo_action = getattr(self, "redo_viewport_action", None)
+        viewport = getattr(self, "viewport", None)
+        scene_stack = getattr(self, "_scene_undo_stack", None)
+
+        viewport_can_undo = bool(viewport is not None and getattr(viewport, "_undo_stack", []))
+        scene_can_undo = bool(scene_stack is not None and scene_stack.can_undo())
+        can_undo = viewport_can_undo or scene_can_undo
+
+        viewport_can_redo = bool(viewport is not None and getattr(viewport, "_redo_stack", []))
+        scene_can_redo = bool(scene_stack is not None and scene_stack.can_redo())
+        can_redo = viewport_can_redo or scene_can_redo
+
+        if undo_action is not None:
+            undo_action.setEnabled(can_undo)
+            label = ""
+            if scene_stack is not None and scene_stack.undo_text():
+                label = f" — {scene_stack.undo_text()}"
+            undo_action.setText(f"Undo{label}")
+        if redo_action is not None:
+            redo_action.setEnabled(can_redo)
+            label = ""
+            if scene_stack is not None and scene_stack.redo_text():
+                label = f" — {scene_stack.redo_text()}"
+            redo_action.setText(f"Redo{label}")
+
+    def _connect_scene_undo_signals(self) -> None:
+        """Wire SceneUndoStack signals to refresh the undo/redo action state."""
+        scene_stack = getattr(self, "_scene_undo_stack", None)
+        if scene_stack is None:
+            return
+        scene_stack.can_undo_changed.connect(self._update_undo_action_state)
+        scene_stack.can_redo_changed.connect(self._update_undo_action_state)
 
     def _make_header(self) -> QtWidgets.QFrame:
         header = QtMatrixPanel(engine=self._matrix_engine, opacity=0.55)
@@ -557,14 +654,18 @@ class WindowChromeMixin:
         layout.addWidget(self._tool_button("New Scene  Ctrl+N", self.new_scene_action, "new_scene"))
         layout.addWidget(self._tool_button("Open Scene  Ctrl+O", self.open_scene_action, "open"))
         layout.addWidget(self._tool_button("Save  Ctrl+S", self.save_scene_action, "save"))
-        layout.addWidget(self._tool_button("Auto-Rig  R", self.autorig_action, "autorig"))
+        layout.addWidget(self._tool_button("Auto-Rig  Ctrl+Shift+G", self.autorig_action, "autorig"))
         layout.addWidget(self._tool_button("Character Builder", self.character_builder_action, "charbuilder"))
         map_studio_button = self._tool_button("Modules", self.modules_action, "modular")
         map_studio_button.setObjectName("CommandStripMapStudioButton")
-        map_studio_button.setToolTip("Open Map Studio Level Editor")
+        map_studio_button.setToolTip("Open Map Studio (KMAP Area Authoring)")
         layout.addWidget(map_studio_button)
+        module_editor_button = self._tool_button("Module Editor", self.stock_module_editor_action, "module_meshes")
+        module_editor_button.setObjectName("CommandStripModuleEditorButton")
+        module_editor_button.setToolTip("Open Module Editor (Stock MOD/RIM Patcher)")
+        layout.addWidget(module_editor_button)
         layout.addWidget(self._tool_button("Tex Dir", self.texture_dir_action, "texture"))
-        layout.addWidget(self._tool_button("Settings  F2", self.settings_action, "settings", compact=True))
+        layout.addWidget(self._tool_button("Settings  Ctrl+Comma", self.settings_action, "settings", compact=True))
 
         import_button = self._menu_button("Import", "import", [
             self.import_obj_action,
@@ -619,7 +720,7 @@ class WindowChromeMixin:
         layout.addWidget(self._tool_button("Resource Browser", self.resources_panel_action, "resources", compact=True))
         layout.addWidget(self._tool_button("Log", self.output_log_panel_action, "output_log", compact=True))
         layout.addWidget(self._tool_button("Terminal", self.python_terminal_panel_action, "python_terminal", compact=True))
-        layout.addWidget(self._tool_button("Diagnostics  Ctrl+D", self.diag_action, "diag", compact=True))
+        layout.addWidget(self._tool_button("Diagnostics  Ctrl+Shift+D", self.diag_action, "diag", compact=True))
 
         self.visual_profile_combo = QtWidgets.QComboBox()
         self.visual_profile_combo.setObjectName("VisualProfileCombo")
@@ -628,6 +729,10 @@ class WindowChromeMixin:
         self._populate_visual_profile_combo()
         self.visual_profile_combo.currentIndexChanged.connect(self._on_visual_profile_selected)
         bar.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+
+        self.workspace_switcher = WorkspaceSwitcher(self, current=load_saved_workspace_preset())
+        self.workspace_switcher.presetSelected.connect(self.apply_workspace)
+        host_layout.addWidget(self.workspace_switcher, 0, QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         host_layout.addWidget(bar, 1)
         host_layout.addWidget(self.visual_profile_combo, 0, QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         return host

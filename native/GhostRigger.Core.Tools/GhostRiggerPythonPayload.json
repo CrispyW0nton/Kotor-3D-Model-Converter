@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Tools",
-    "file_count": 324,
+    "file_count": 341,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -129,7 +129,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_GLTF_IMPORTER",
             "source_path": "src/core/export/gltf_importer.py",
             "packaged_path": "Python/src/core/export/gltf_importer.py",
-            "sha256": "d17389820fd67a2cc5ea789874273f267676f24c0123794b2a43e36a5da39bc9"
+            "sha256": "ada95f322f3c2cdeec20f3d319fbdc4d3feb469c7f37e55f45030c4a385b2744"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_UNITY_EXPORT_BRIDGE",
@@ -219,7 +219,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_LEVEL_KMAP_VALIDATOR",
             "source_path": "src/core/level/kmap_validator.py",
             "packaged_path": "Python/src/core/level/kmap_validator.py",
-            "sha256": "a70bff2fe1619d9e445d06af693b7369263a9eaca4bb3c4f38c0c5bc561f574f"
+            "sha256": "070c5b252113d1729ea17364b23fd44e0983cc46f5e094889b9907bff0f0fce6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_LEVEL_LEVEL_EXPORT_BRIDGE",
@@ -813,7 +813,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_SAVE_PIPELINE",
             "source_path": "src/core/modules/module_save_pipeline.py",
             "packaged_path": "Python/src/core/modules/module_save_pipeline.py",
-            "sha256": "9734890fa071f742ad7cb85181f66b9fbeffb9dca8aad6e5762cb284357b0c26"
+            "sha256": "5f5a5bbb697731964326c8443c767657f62023f0e7a6d44df12dc199f18aa8f7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_WALKMESH_SERVICE",
@@ -958,6 +958,102 @@
             "source_path": "src/core/special/unity_malak_smoke.py",
             "packaged_path": "Python/src/core/special/unity_malak_smoke.py",
             "sha256": "c5470f623c7f8f8dedbf29c26d66f49ce1affa5a62122088e4dc057804eadc22"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_STOCK_MODULES_STOCK_MODULE_ARCHIVE",
+            "source_path": "src/core/stock_modules/stock_module_archive.py",
+            "packaged_path": "Python/src/core/stock_modules/stock_module_archive.py",
+            "sha256": "eead59855f8c2c6ae91f021625fbac4d8c7d9032c3f6ead1dc99f5927cec0448"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_STOCK_MODULES_STOCK_MODULE_EXPORT_QUEUE",
+            "source_path": "src/core/stock_modules/stock_module_export_queue.py",
+            "packaged_path": "Python/src/core/stock_modules/stock_module_export_queue.py",
+            "sha256": "48bcd9cb0cc3e51c19f9bf2f81394c5641b47cb0222d3d959ef845c0e8fdff7e"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_STOCK_MODULES_STOCK_MODULE_GIT",
+            "source_path": "src/core/stock_modules/stock_module_git.py",
+            "packaged_path": "Python/src/core/stock_modules/stock_module_git.py",
+            "sha256": "64b4c5976d45c422ad46f7932ad5c3baf2f33186c5f3e5b3c6ccb418a30f39dd"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_STOCK_MODULES_STOCK_MODULE_LAYOUT",
+            "source_path": "src/core/stock_modules/stock_module_layout.py",
+            "packaged_path": "Python/src/core/stock_modules/stock_module_layout.py",
+            "sha256": "45bc82540d5d2da4a9e30e683063da20f3c328b3947c7d17cec8ff8caa7edab3"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_STOCK_MODULES_STOCK_MODULE_LOGIC",
+            "source_path": "src/core/stock_modules/stock_module_logic.py",
+            "packaged_path": "Python/src/core/stock_modules/stock_module_logic.py",
+            "sha256": "a377cf7bf33fe4f479b764e4524f4a2a1b78773feddb43d43641443f2e183677"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_STOCK_MODULES_STOCK_MODULE_MATERIALS",
+            "source_path": "src/core/stock_modules/stock_module_materials.py",
+            "packaged_path": "Python/src/core/stock_modules/stock_module_materials.py",
+            "sha256": "c2e0f4d158c219cd63f66ad319740a1d17e146725e6ae4ecb0611722e4901e23"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_STOCK_MODULES_STOCK_MODULE_MDL_PATCH",
+            "source_path": "src/core/stock_modules/stock_module_mdl_patch.py",
+            "packaged_path": "Python/src/core/stock_modules/stock_module_mdl_patch.py",
+            "sha256": "99566d7c0b68be8876fc6dede3cfe32606e4b165241893884c0d658aab0b27bb"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_STOCK_MODULES_STOCK_MODULE_METADATA",
+            "source_path": "src/core/stock_modules/stock_module_metadata.py",
+            "packaged_path": "Python/src/core/stock_modules/stock_module_metadata.py",
+            "sha256": "0db9ef024ec07e8e29b13f14c7ca49b3e67106db673d5b7b229010475cde9d94"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_STOCK_MODULES_STOCK_MODULE_PACKAGE_INTAKE",
+            "source_path": "src/core/stock_modules/stock_module_package_intake.py",
+            "packaged_path": "Python/src/core/stock_modules/stock_module_package_intake.py",
+            "sha256": "ebd74eb2b908e1e2d81636b19ae05c33e401685f6d96d9bc152a61d7e8284ca2"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_STOCK_MODULES_STOCK_MODULE_PATCH_PLAN",
+            "source_path": "src/core/stock_modules/stock_module_patch_plan.py",
+            "packaged_path": "Python/src/core/stock_modules/stock_module_patch_plan.py",
+            "sha256": "4e84688becf3924515f7e751b642b11b5d39fa21456e84760cd94b20833f67f4"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_STOCK_MODULES_STOCK_MODULE_RESOURCE_SAFETY",
+            "source_path": "src/core/stock_modules/stock_module_resource_safety.py",
+            "packaged_path": "Python/src/core/stock_modules/stock_module_resource_safety.py",
+            "sha256": "48bfe19dd7dc66d2b8f5e6a032146f29c7d22973a9c6e3090cfd4b0fc5dea74f"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_STOCK_MODULES_STOCK_MODULE_TEMPLATES",
+            "source_path": "src/core/stock_modules/stock_module_templates.py",
+            "packaged_path": "Python/src/core/stock_modules/stock_module_templates.py",
+            "sha256": "490deadb1b3a63525a24d306d217c11f8d73bc401323c1f246ec3bfa8927b9c2"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_STOCK_MODULES_STOCK_MODULE_TEXTURES",
+            "source_path": "src/core/stock_modules/stock_module_textures.py",
+            "packaged_path": "Python/src/core/stock_modules/stock_module_textures.py",
+            "sha256": "3f591753421f1baa8dce5a7c79ac8c7ff125cab0a5d29996a1c51f4bf0408752"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_STOCK_MODULES_STOCK_MODULE_TGA_EDITOR",
+            "source_path": "src/core/stock_modules/stock_module_tga_editor.py",
+            "packaged_path": "Python/src/core/stock_modules/stock_module_tga_editor.py",
+            "sha256": "d92b0a3743cad65265aabc5d296c2d0e7a215ccf55d53344c0de6767d621b87e"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_STOCK_MODULES_STOCK_MODULE_TXI_EDITOR",
+            "source_path": "src/core/stock_modules/stock_module_txi_editor.py",
+            "packaged_path": "Python/src/core/stock_modules/stock_module_txi_editor.py",
+            "sha256": "ad6b5343e22badc93b7c26b8f1e29604f7998afa3b0f26810f42488dd59fe3a6"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_STOCK_MODULES_STOCK_MODULE_WALKMESH",
+            "source_path": "src/core/stock_modules/stock_module_walkmesh.py",
+            "packaged_path": "Python/src/core/stock_modules/stock_module_walkmesh.py",
+            "sha256": "6d9ff9d72b741d3883643db7aca6db7dbbdc98faa6ff99ef5af098a58a777011"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_WALKMESH_INIT",
@@ -1437,7 +1533,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_CHARACTER_BUILDER_PANEL",
             "source_path": "src/gui/panels/qt_character_builder_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_character_builder_panel.py",
-            "sha256": "e9902efc3882eee8ca920887b944b5c097f2878ccb321ccd2f94f7ec598b610d"
+            "sha256": "4a25c7958be3ce27c1633771ca4460d0d6336068d89323facf24c9f45b6d05e9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_INSPECTOR_PANEL",
@@ -1545,7 +1641,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_RESOURCE_LOADING",
             "source_path": "src/gui/windows/application_core/shared/resource_loading.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/resource_loading.py",
-            "sha256": "5d3dd9f8aa365b2ff3fab36def9967b2d84c5eed9921c3b2afc7786698b8c505"
+            "sha256": "b8c96698e3d7cefe2ce9f9e488b19fa93b625516617e0397d40070310a1e5196"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_RESOURCE_PANELS",
@@ -1581,7 +1677,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_RETARGET_WINDOW",
             "source_path": "src/gui/windows/qt_retarget_window.py",
             "packaged_path": "Python/src/gui/windows/qt_retarget_window.py",
-            "sha256": "bc0c44a34098e6ddcf443e6ef9b06e6c93a19d40c6bb3ab491083ca0261be2b3"
+            "sha256": "5e4d3a77faf0d485def843973b4eb16cf9bab3d506ae91463d75591a54563dbd"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_RETARGET_WORKBENCH_CONTROLLER",
@@ -1600,6 +1696,12 @@
             "source_path": "src/gui/windows/qt_unreal_animator.py",
             "packaged_path": "Python/src/gui/windows/qt_unreal_animator.py",
             "sha256": "fb836dc825043b38fe1480f9f2e2d531f9a7defceb6ff41a6ac4d1b074dd5f66"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_STOCK_MODULE_EDITOR_WINDOW",
+            "source_path": "src/gui/windows/stock_module_editor_window.py",
+            "packaged_path": "Python/src/gui/windows/stock_module_editor_window.py",
+            "sha256": "6201751022d7e82c8761bc707b48198846c7e254d7e9a99cc67455cce414b66d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_TRANSFORM_MATH",

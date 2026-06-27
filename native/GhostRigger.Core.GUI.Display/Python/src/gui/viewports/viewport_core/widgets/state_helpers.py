@@ -279,53 +279,102 @@ class ViewportStateMixin:
         self.statusMessage.emit("Pivot centered on selected bounds.")
         return True
 
-    def freeze_selected_transform(self) -> bool:
-        """Bake the selected mesh node's transform into geometry and reset it.
+    def _mesh_nodes_for_freeze_target(self, target, selected) -> list:
+        mesh_nodes = []
 
-        This deliberately targets a selected mesh node, not a whole KOTOR node
-        hierarchy. Freezing a hierarchy safely needs an export-aware rig pass.
-        """
-        node = getattr(self._renderer, "selected_node", None)
-        if node is None or self._is_external_skeleton_node(node):
-            self.statusMessage.emit("Select a mesh node before freezing transforms.")
-            return False
-        vertices = getattr(node, "vertices", None)
-        if not vertices:
-            self.statusMessage.emit("Freeze Transforms is available for selected mesh nodes with vertices.")
-            return False
-        before_pos = tuple(getattr(node, "position", (0.0, 0.0, 0.0)))
-        before_rot = tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)))
-        before_vertices = self._snapshot_vertices(node)
-        before_scale = self._node_scale(node)
-        before_pivot_world = self._optional_tuple_attr(node, "_gr_pivot_world")
-        before_pivot_rotation = self._optional_tuple_attr(node, "_gr_pivot_rotation")
-        sx, sy, sz = before_scale
-        px, py, pz = (float(v) for v in before_pos[:3])
-        baked = []
-        for vertex in vertices:
+        def add_mesh(candidate) -> None:
+            if candidate is None or self._is_external_skeleton_node(candidate):
+                return
+            if getattr(candidate, "vertices", None) and candidate not in mesh_nodes:
+                mesh_nodes.append(candidate)
+
+        add_mesh(selected)
+        if mesh_nodes:
+            return mesh_nodes
+
+        stack = list(getattr(target, "children", []) or [])
+        while stack:
+            child = stack.pop()
+            add_mesh(child)
+            stack.extend(reversed(list(getattr(child, "children", []) or [])))
+        return mesh_nodes
+
+    def _freeze_world_vertices_for_node(self, node) -> list:
+        world_verts = None
+        getter = getattr(self._renderer, "_get_world_verts_for_node", None)
+        if callable(getter):
             try:
-                local = (
-                    float(vertex[0]) * sx,
-                    float(vertex[1]) * sy,
-                    float(vertex[2]) * sz,
-                )
-                rotated = rotate_vector(before_rot, local)
-                baked.append((rotated[0] + px, rotated[1] + py, rotated[2] + pz))
+                world_verts = list(getter(node) or [])
             except Exception:
-                baked.append(tuple(vertex[:3]))
-        node.vertices = baked
+                world_verts = None
+        if not world_verts:
+            vertices = list(getattr(node, "vertices", []) or [])
+            before_pos = tuple(getattr(node, "position", (0.0, 0.0, 0.0)))
+            before_rot = tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+            sx, sy, sz = self._node_scale(node)
+            px, py, pz = (float(v) for v in before_pos[:3])
+            world_verts = []
+            for vertex in vertices:
+                try:
+                    local = (
+                        float(vertex[0]) * sx,
+                        float(vertex[1]) * sy,
+                        float(vertex[2]) * sz,
+                    )
+                    rotated = rotate_vector(before_rot, local)
+                    world_verts.append((rotated[0] + px, rotated[1] + py, rotated[2] + pz))
+                except Exception:
+                    world_verts.append(tuple(vertex[:3]))
+        return [tuple(float(c) for c in vertex[:3]) for vertex in world_verts]
+
+    def _mark_node_vertices_as_world_space(self, node) -> None:
         node.position = (0.0, 0.0, 0.0)
         node.rotation = (0.0, 0.0, 0.0, 1.0)
         node._gr_scale = (1.0, 1.0, 1.0)
-        compute_bounds = getattr(node, "compute_bounds", None)
-        if callable(compute_bounds):
-            compute_bounds()
+        node.vertex_space = 1
+        node._imported = True
+        node._gr_vertices_in_kotor_world = True
+
+    def freeze_selected_transform(self) -> bool:
+        """Bake the active object's displayed transform into geometry and reset it."""
+        selected = getattr(self._renderer, "selected_node", None)
+        node = self._current_transform_target_node()
+        if node is None or self._is_external_skeleton_node(node):
+            self.statusMessage.emit("Select a mesh or imported object before freezing transforms.")
+            return False
+        mesh_nodes = self._mesh_nodes_for_freeze_target(node, selected)
+        if not mesh_nodes:
+            self.statusMessage.emit("Freeze Transforms is available for selected meshes with vertices.")
+            return False
+        before_pos = tuple(getattr(node, "position", (0.0, 0.0, 0.0)))
+        before_rot = tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        before_vertices = self._snapshot_vertices(mesh_nodes[0])
+        before_scale = self._node_scale(node)
+        before_pivot_world = self._optional_tuple_attr(node, "_gr_pivot_world")
+        before_pivot_rotation = self._optional_tuple_attr(node, "_gr_pivot_rotation")
+        all_baked = []
+        for mesh_node in mesh_nodes:
+            baked = self._freeze_world_vertices_for_node(mesh_node)
+            mesh_node.vertices = baked
+            self._mark_node_vertices_as_world_space(mesh_node)
+            all_baked.extend(baked)
+            compute_bounds = getattr(mesh_node, "compute_bounds", None)
+            if callable(compute_bounds):
+                compute_bounds()
+            self._evict_transform_cache(mesh_node)
+        should_clear_target = (
+            node not in mesh_nodes
+            and not any(bool(getattr(mesh_node, "_gr_bound_to_kotor_skeleton", False)) for mesh_node in mesh_nodes)
+        )
+        if should_clear_target:
+            self._mark_node_vertices_as_world_space(node)
+            self._evict_transform_cache(node)
         try:
-            bounds = self._bounds_from_points(baked, min_extent=0.05)
+            bounds = self._bounds_from_points(all_baked, min_extent=0.05)
             self._set_node_pivot_world(node, self._bounds_center(bounds))
         except Exception:
             pass
-        after_vertices = self._snapshot_vertices(node)
+        after_vertices = self._snapshot_vertices(mesh_nodes[0])
         self._commit_node_transform(
             node,
             before_pos,
@@ -342,11 +391,10 @@ class ViewportStateMixin:
             before_pivot_rotation=before_pivot_rotation,
             after_pivot_rotation=self._optional_tuple_attr(node, "_gr_pivot_rotation"),
         )
-        self._evict_transform_cache(node)
         self._notify_node_moved(node)
         self._sync_transform_typein_bar()
         self._request_render(fast=True)
-        self.statusMessage.emit("Transforms frozen into selected mesh geometry.")
+        self.statusMessage.emit("Transforms frozen into displayed mesh geometry.")
         return True
 
     @property

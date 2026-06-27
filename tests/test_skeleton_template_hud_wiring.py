@@ -172,6 +172,9 @@ def test_shared_viewport_exposes_pivot_and_freeze_toolbar_actions() -> None:
     assert "ViewportFreezeTransformsButton" in viewport
     assert "def center_pivot_to_selection" in viewport
     assert "def freeze_selected_transform" in viewport
+    assert "def _freeze_world_vertices_for_node" in viewport
+    assert "def _mark_node_vertices_as_world_space" in viewport
+    assert "_gr_vertices_in_kotor_world = True" in viewport
 
 
 def test_complete_character_load_and_texture_folder_prompt_are_wired() -> None:
@@ -317,10 +320,21 @@ def test_import_root_gimbal_transforms_whole_mesh_and_supports_scale() -> None:
     assert "apply_external_model_fit_adjustment" in viewport
     assert "translation_delta=translation_delta" in viewport
     assert "scale_delta=scale_delta" in viewport
+    assert "pivot_override=getattr" in viewport
     assert "def _hit_test_model_bounds" in viewport
     assert "def _draw_selected_model_outline" in viewport
     assert "Scale mode (gimbal_mode==3)" in core
     assert "elif self.gimbal_mode == 3" in core
+
+
+def test_character_builder_bind_marks_clean_payload_vertices_as_world_space() -> None:
+    builder = _read("src/core/characters/character_builder.py")
+    workflow = _read("src/core/characters/headless_body_workflow.py")
+
+    assert "cleaned.vertex_space = 1" in builder
+    assert 'setattr(cleaned, "_imported", True)' in builder
+    assert 'setattr(cleaned, "_gr_vertices_in_kotor_world", True)' in builder
+    assert "pivot_override" in workflow
 
 
 def test_rotation_gimbal_rings_are_hit_testable() -> None:
@@ -365,6 +379,36 @@ def test_external_template_skeleton_is_selectable_and_symmetry_aware() -> None:
     assert "def set_symmetry_enabled" in inspector
     assert "def symmetry_enabled" in inspector
     assert "def set_joint_symmetry" in viewport
+
+
+def test_character_builder_has_rig_tool_belt_and_marking_menus() -> None:
+    builder = _read("src/gui/panels/qt_character_builder_panel.py")
+    viewport_variants = _read("src/gui/viewports/viewport_core/widgets/variants.py")
+
+    assert 'QtWidgets.QLabel(" Rig: ")' in builder
+    assert '("select", "Select"' in builder
+    assert '("translate", "Move"' in builder
+    assert '("rotate", "Rotate"' in builder
+    assert '("transform", "Transform"' in builder
+    assert "CharacterBuilderRigToolAction_{key}" in builder
+    assert "characterBuilderTransformMarkingMenu" in builder
+    assert "characterBuilderRigMarkingMenu" in builder
+    assert "characterBuilderRigMarkingQuickButton_{key}" in builder
+    assert '("weights", "Weights"' in builder
+    assert '("center_pivot", "Center Pivot"' in builder
+    assert '("freeze_transforms", "Freeze"' in builder
+    assert "def _center_pivot_from_marking_menu" in builder
+    assert "def _freeze_transform_from_marking_menu" in builder
+    assert "characterBuilderRigMarkingAction_{key}" in builder
+    assert '("rom", "Range of Motion Test"' in builder
+    assert "def _viewport_external_skeleton_model" in builder
+    assert "def _option_from_loaded_skeleton_template" in builder
+    assert "or self._viewport_external_skeleton_model()" in builder
+    assert "rigTransformMarkingMenuRequested" in viewport_variants
+    assert "rigToolsMarkingMenuRequested" in viewport_variants
+    assert "DEFAULT_VIEWPORT_TOOLBAR_VISIBLE = False" in viewport_variants
+    assert "viewport_map_studio_modeling_tabs" in viewport_variants
+    assert "tabs.hide()" in viewport_variants
 
 
 def test_selected_imported_mesh_outline_uses_projected_mesh_hover_path_not_bbox() -> None:

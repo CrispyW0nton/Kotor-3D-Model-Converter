@@ -513,7 +513,8 @@ class QtGhostRiggerMainWindow(
                 self._log(f"IPC open_tool dock: {tool}", "info")
                 return
             tool_actions = {
-                "module_editor": self._open_module_editor_window,
+                "module_editor": self._open_stock_module_editor_window,
+                "map_studio": self._open_module_editor_window,
                 "gmodular": self._open_module_editor_window,
                 "rig": self._open_rig_window,
                 "rigging": self._open_rig_window,

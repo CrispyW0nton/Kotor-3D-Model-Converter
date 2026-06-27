@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from PySide6 import QtCore
+
 from .viewport_widget import QtViewportWidget
 
 
@@ -15,12 +17,51 @@ class QtMainViewportWidget(QtViewportWidget):
 class QtCharacterBuilderViewportWidget(QtViewportWidget):
     """Character Builder viewport with builder-specific HUD affordances."""
 
+    rigTransformMarkingMenuRequested = QtCore.Signal(QtCore.QPoint)
+    rigToolsMarkingMenuRequested = QtCore.Signal(QtCore.QPoint)
+
     VIEWPORT_ROLE = "character_builder"
     DEFAULT_THUMBNAIL_ENABLED = True
+    DEFAULT_VIEWPORT_TOOLBAR_VISIBLE = False
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._mesh_transform_promotes_to_model_root = True
+        tabs = getattr(self, "viewport_map_studio_modeling_tabs", None)
+        if tabs is not None:
+            tabs.hide()
+
+    @staticmethod
+    def _event_global_position(event, fallback_widget=None) -> QtCore.QPoint:
+        global_pos = getattr(event, "globalPosition", lambda: None)()
+        if global_pos is not None:
+            return global_pos.toPoint()
+        global_pos = getattr(event, "globalPos", lambda: None)()
+        if global_pos is not None:
+            return global_pos
+        position = getattr(event, "position", lambda: None)()
+        if position is not None and fallback_widget is not None:
+            return fallback_widget.mapToGlobal(position.toPoint())
+        pos = getattr(event, "pos", lambda: None)()
+        if pos is not None and fallback_widget is not None:
+            return fallback_widget.mapToGlobal(pos)
+        return QtCore.QPoint()
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802 - Qt API
+        if event.type() == QtCore.QEvent.MouseButtonPress:
+            button = getattr(event, "button", lambda: None)()
+            if button == QtCore.Qt.RightButton:
+                focus = getattr(watched, "setFocus", None)
+                if callable(focus):
+                    focus()
+                modifiers = getattr(event, "modifiers", lambda: QtCore.Qt.NoModifier)()
+                global_pos = self._event_global_position(event, watched)
+                if bool(modifiers & QtCore.Qt.ShiftModifier):
+                    self.rigToolsMarkingMenuRequested.emit(global_pos)
+                else:
+                    self.rigTransformMarkingMenuRequested.emit(global_pos)
+                return True
+        return super().eventFilter(watched, event)
 
 
 class QtRetargetViewportWidget(QtViewportWidget):

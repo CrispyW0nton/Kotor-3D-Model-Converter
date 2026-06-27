@@ -27,7 +27,7 @@
             "resource_name": "PYTHON_PAYLOAD_CONVERTERS_BLENDER_FBX_MESH_IMPORTER",
             "source_path": "src/converters/blender_fbx_mesh_importer.py",
             "packaged_path": "Python/src/converters/blender_fbx_mesh_importer.py",
-            "sha256": "ce781a5073193a43adccb7db5dca2eb18f4d60a85f80fe26c1f292ec168f8ebd"
+            "sha256": "792faeb8a04f527343e8cd2a2bbb00052e99b18d07685f62e89a57a8fe1d5119"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CONVERTERS_MESH_CONVERTER",
@@ -57,7 +57,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_GLTF_IMPORTER",
             "source_path": "src/core/export/gltf_importer.py",
             "packaged_path": "Python/src/core/export/gltf_importer.py",
-            "sha256": "d17389820fd67a2cc5ea789874273f267676f24c0123794b2a43e36a5da39bc9"
+            "sha256": "ada95f322f3c2cdeec20f3d319fbdc4d3feb469c7f37e55f45030c4a385b2744"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_UNITY_EXPORT_BRIDGE",

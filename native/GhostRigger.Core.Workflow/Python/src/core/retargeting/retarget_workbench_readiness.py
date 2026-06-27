@@ -92,7 +92,9 @@ def build_retarget_workbench_readiness(state: Any) -> RetargetWorkbenchReadiness
         if can_export:
             export_status = "Ready."
         elif mode == RetargetMode.KOTOR_TO_UNREAL and preview is not None and audit_passed and not invalidation_reason:
-            export_status = "No FBX export backend is configured."
+            export_status = (
+                "No FBX export backend is configured. " + spec.not_implemented_message
+            ).strip()
         elif invalidation_reason:
             export_status = f"Stale preview. Run Preview Retarget again because {invalidation_reason}."
         elif preview is None:

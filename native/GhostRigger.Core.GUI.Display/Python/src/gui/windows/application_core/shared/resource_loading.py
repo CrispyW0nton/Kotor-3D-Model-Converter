@@ -31,6 +31,7 @@ from src.gui.windows.application_core.application_core_lib.shared.workers import
     ModelListItem,
     ModelLoadWorker,
     ResourceModelLoadWorker,
+    load_module_room_models_from_game_resources,
     load_resource_model_from_game_resources,
 )
 from src.systems.bas.attachment_alignment import default_bas_attachment_transform, normalize_bas_transform
@@ -104,6 +105,10 @@ class ResourceLoadingMixin:
         module_editor_window = getattr(self, "module_editor_window", None)
         if module_editor_window is not None:
             module_editor_window.set_library_rows(rows)
+        stock_module_editor_window = getattr(self, "stock_module_editor_window", None)
+        configure_stock_module_editor = getattr(self, "_configure_stock_module_editor_game_library", None)
+        if stock_module_editor_window is not None and callable(configure_stock_module_editor):
+            configure_stock_module_editor(stock_module_editor_window)
         self._unreal_refresh_supermodel_library()
         self._populate_resource_panel()
         self._populate_animation_library_from_current_model()
@@ -191,12 +196,16 @@ class ResourceLoadingMixin:
                 self._pending_scene_import_placement = "origin"
         else:
             action = "add"
-        self._pending_module_room_queue = [(placement.resref, placement.game) for placement in placements]
+        self._pending_module_room_queue = []
         self._pending_module_room_total = len(placements)
         self._pending_module_room_label = placements[0].area_label or placements[0].module_root
         self._pending_module_room_next_action = action
         self._log(f"Loading module {game}:{placements[0].module_root} ({len(placements)} rooms)...")
-        self._start_next_module_room_load()
+        self._show_progress_toast(
+            "Loading module",
+            f"{self._pending_module_room_label}: loading {len(placements)} room resources...",
+        )
+        QtCore.QTimer.singleShot(0, lambda: self._load_module_rooms_on_ui_thread(tuple(placements), action))
         return True
 
     def _start_next_module_room_load(self) -> None:
@@ -220,6 +229,181 @@ class ResourceLoadingMixin:
         label = str(getattr(self, "_pending_module_room_label", "") or "module")
         self._show_progress_toast("Loading module", f"{label}: loading room {loaded}/{total} ({game}:{resref})...")
         self._start_resource_load(resref, game, import_action=action)
+
+    def _load_module_rooms_on_ui_thread(self, placements, action: str) -> None:
+        label = str(getattr(self, "_pending_module_room_label", "") or "module")
+
+        def progress(message: str, step: int, total: int) -> None:
+            self._update_progress_toast("Loading module", message, step, total)
+            app = QtWidgets.QApplication.instance()
+            if app is not None:
+                app.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
+
+        try:
+            loaded_rooms = load_module_room_models_from_game_resources(
+                placements,
+                self.k1_dir_edit.text().strip(),
+                self.k2_dir_edit.text().strip(),
+                progress=progress,
+            )
+            self._finish_module_batch_load(loaded_rooms, action)
+        except Exception:
+            self._pending_module_room_total = 0
+            self._pending_module_room_label = ""
+            self._pending_module_room_next_action = ""
+            self._pending_module_room_queue = []
+            self._pending_gpu_upload_model_id = 0
+            self._pending_gpu_upload_total = 0
+            self._finish_progress_toast("Module load failed", f"{label} could not be loaded.")
+            self._log(f"Module load failed:\n{traceback.format_exc()}", "error")
+            self.statusBar().showMessage("Module load failed")
+
+    def _finish_module_batch_load(self, loaded_rooms, action: str) -> None:
+        rooms = list(loaded_rooms or [])
+        if not rooms:
+            self._pending_module_room_total = 0
+            self._pending_module_room_label = ""
+            self._pending_module_room_next_action = ""
+            self._pending_module_room_queue = []
+            self._finish_progress_toast("Module load failed", "No room models were loaded.")
+            return
+
+        first_placement = rooms[0][2]
+        module_label = str(getattr(first_placement, "area_label", "") or getattr(first_placement, "module_root", "") or "module")
+        module_root = str(getattr(first_placement, "module_root", "") or module_label)
+        game = str(getattr(first_placement, "game", "") or self._current_game or "K1").upper()
+        self._update_progress_toast("Loading module", "Creating scene objects...", 1, 3)
+
+        self._animation_timer.stop()
+        self._animation_engine = None
+        self._animation_last_tick = None
+        self._retarget_timer.stop()
+        self._retarget_engine = None
+        self._retarget_last_tick = None
+        self._bas_body_model = None
+        self._bas_preview_model = None
+        self._bas_attachments.clear()
+        self._bas_attachment_resrefs.clear()
+        self._bas_attachment_transforms.clear()
+        self._bas_active_build_name = ""
+        self._bas_mode = "headless_body"
+        self._current_head_model = None
+        self._current_attachment_model = None
+        self._retarget_target_model = None
+        self._retarget_mapping_report = None
+        self._current_game = game
+        self._model_path = f"{game}:{module_root}"
+        self._texture_dir = ""
+
+        if str(action or "").lower() == "clear":
+            self.scene_manager.clear_scene()
+        self._pending_scene_import_action = "add"
+        self._pending_scene_import_placement = "origin"
+
+        scene_instances = []
+        for model, path, placement in rooms:
+            self._current_model = model
+            instance = self._add_loaded_model_to_scene(
+                model,
+                path,
+                module_placement=placement,
+                clear_scene=False,
+            )
+            if instance is not None:
+                scene_instances.append(instance)
+
+        final_model = rooms[-1][0]
+        self._current_model = final_model
+        self.scene_manager.active_scene.game = game
+        self._update_progress_toast("Loading module", "Refreshing scene and viewport once...", 2, 3)
+        if hasattr(self, "viewport"):
+            apply_defaults = getattr(self.viewport, "set_module_map_display_defaults", None)
+            if callable(apply_defaults):
+                apply_defaults(request_render=False)
+            self._refresh_scene_view()
+        else:
+            total_meshes = sum(len(model.mesh_nodes()) if hasattr(model, "mesh_nodes") else 0 for model, _, _ in rooms)
+            self.viewport_label.setText(f"{module_label}\n\nQt viewport host\n{total_meshes} mesh | {len(rooms)} rooms")
+        active_model = self._active_viewport_model()
+        if hasattr(self, "skeleton_panel"):
+            self.skeleton_panel.load_model(active_model or final_model)
+        if hasattr(self, "camera_panel") and hasattr(self, "viewport"):
+            self.camera_panel.set_model(active_model or final_model)
+            self.camera_panel.manager = self.viewport.camera_manager
+            self.camera_panel.refresh()
+        if hasattr(self, "properties_panel"):
+            self.properties_panel.show_model(active_model or final_model)
+        if hasattr(self, "module_geometry_panel"):
+            self.module_geometry_panel.show_model(active_model or final_model)
+        if hasattr(self, "body_attachment_panel"):
+            if hasattr(self.body_attachment_panel, "set_mode"):
+                self.body_attachment_panel.set_mode(self._bas_mode)
+            self.body_attachment_panel.set_body_model(None)
+            for slot in BAS_SLOT_ORDER:
+                if slot != "body":
+                    self.body_attachment_panel.clear_slot_model(slot)
+            self.body_attachment_panel.set_status(f"Module: {module_label}")
+        if hasattr(self, "animations_panel"):
+            self._load_animation_panel_model(active_model or final_model)
+        if hasattr(self, "animation_retarget_panel"):
+            self.animation_retarget_panel.set_texture_dir(self._texture_dir)
+            self.animation_retarget_panel.set_target_model(None, game)
+        if hasattr(self, "retarget_preview_controller"):
+            self._sync_retarget_preview_target()
+        if hasattr(self, "diagnostics_panel"):
+            self.diagnostics_panel.run_diagnostics(active_model or final_model)
+
+        mesh_count = sum(len(model.mesh_nodes()) if hasattr(model, "mesh_nodes") else 0 for model, _, _ in rooms)
+        node_count = sum(model.node_count() if hasattr(model, "node_count") else 0 for model, _, _ in rooms)
+        prebuilt_meshes = int(getattr(active_model, "_gr_gpu_prebuilt_mesh_count", 0) or 0)
+        if not prebuilt_meshes:
+            prebuilt_meshes = sum(int(getattr(model, "_gr_gpu_prebuilt_mesh_count", 0) or 0) for model, _, _ in rooms)
+        self.props_text.setPlainText(
+            "\n".join(
+                [
+                    f"Name: {module_label}",
+                    f"Path: {game}:{module_root}",
+                    f"Rooms: {len(rooms)}",
+                    f"Meshes: {mesh_count}",
+                    f"Nodes: {node_count}",
+                    "Animations: 0",
+                    "Supermodel: module batch",
+                ]
+            )
+        )
+
+        if prebuilt_meshes:
+            model_id = id(active_model or final_model)
+            self._pending_gpu_upload_model_id = model_id
+            self._pending_gpu_upload_total = prebuilt_meshes
+            self._update_progress_toast(
+                "Uploading mesh buffers",
+                f"Moving module mesh buffers into GPU memory (0/{prebuilt_meshes})...",
+                0,
+                prebuilt_meshes,
+            )
+            QtCore.QTimer.singleShot(5000, lambda model_id=model_id: self._finish_model_load_toast_if_pending(model_id))
+        else:
+            self._pending_gpu_upload_model_id = 0
+            self._pending_gpu_upload_total = 0
+            self._finish_progress_toast("Module ready", f"{module_label} loaded.")
+
+        self._pending_module_room_total = 0
+        self._pending_module_room_label = ""
+        self._pending_module_room_next_action = ""
+        self._pending_module_room_queue = []
+        self._log(
+            f"Loaded module {module_label} ({len(rooms)} rooms, {mesh_count} mesh, {node_count} nodes)",
+            "success",
+        )
+        self.statusBar().showMessage(f"Loaded module {module_label}")
+        bus = getattr(self, "integration_event_bus", None)
+        if bus is not None:
+            bus.record_scene_update("module_imported", active_model or final_model)
+            bus.animationChanged.emit(active_model or final_model)
+        self._invalidate_renderer_resources(f"module loaded: {module_label}")
+        if scene_instances:
+            self._log(f"Scene module objects added: {len(scene_instances)}", "success")
 
     def _ipc_library_row_summary(self, row: dict) -> dict:
         keys = (
@@ -749,9 +933,18 @@ class ResourceLoadingMixin:
                 index += 1
             position = (index * 2.0, 0.0, 0.0)
         return Transform(position=position)
-    def _add_loaded_model_to_scene(self, model, path: str):
+    def _add_loaded_model_to_scene(
+        self,
+        model,
+        path: str,
+        *,
+        module_placement: ModuleRoomPlacement | None = None,
+        clear_scene: bool | None = None,
+    ):
         action = str(self._pending_scene_import_action or "add")
-        if action == "clear":
+        if clear_scene is None:
+            clear_scene = action == "clear"
+        if clear_scene:
             self.scene_manager.clear_scene()
         ref = self._resource_ref_from_loaded_model(model, path)
         texture_dir = ""
@@ -762,7 +955,8 @@ class ResourceLoadingMixin:
                 texture_dir = ""
         if texture_dir and texture_dir not in self._scene_texture_dirs:
             self._scene_texture_dirs.append(texture_dir)
-        module_placement = self._module_room_placement_for_ref(ref)
+        if module_placement is None:
+            module_placement = self._module_room_placement_for_ref(ref)
         module_anchor = self._module_group_anchor_for(module_placement)
         instance = self.scene_manager.add_model_instance(
             ref,

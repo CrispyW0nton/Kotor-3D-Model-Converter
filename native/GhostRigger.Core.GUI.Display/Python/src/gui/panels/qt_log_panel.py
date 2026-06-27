@@ -51,22 +51,29 @@ def _detect_log_level(message: str, level: str | int = "info") -> str:
     return normalised
 
 
+# Semantic theme token (with legacy palette fallback key) for each log
+# syntax colour.  ``token`` resolves via the active theme; ``legacy`` is
+# only used as a pre-theme fallback via the shared ``C`` palette kept in
+# sync by :func:`update_legacy_palette`.  (Issue #11 theme-token migration.)
+_HIGHLIGHT_TOKENS: dict[str, tuple[str, str]] = {
+    "time":    ("accent.secondary", "accent2"),
+    "debug":   ("text.secondary",   "text2"),
+    "info":    ("text.secondary",   "text2"),
+    "success": ("success",          "success"),
+    "warning": ("warning",          "warning"),
+    "error":   ("error",            "error"),
+    "path":    ("accent.secondary", "accent2"),
+    "call":    ("accent.primary",   "accent"),
+    "line":    ("text.gold",        "gold"),
+}
+
+
 class PythonLogSyntaxHighlighter(QtGui.QSyntaxHighlighter):
     """Syntax highlighting for Python logging output and tracebacks."""
 
     def __init__(self, document: QtGui.QTextDocument):
         super().__init__(document)
-        self._colors = {
-            "time": QtGui.QColor(C["accent2"]),
-            "debug": QtGui.QColor(C["text2"]),
-            "info": QtGui.QColor(C["text2"]),
-            "success": QtGui.QColor(C["success"]),
-            "warning": QtGui.QColor(C["warning"]),
-            "error": QtGui.QColor(C["error"]),
-            "path": QtGui.QColor(C["accent2"]),
-            "call": QtGui.QColor(C["accent"]),
-            "line": QtGui.QColor(C["gold"]),
-        }
+        self._colors: dict[str, QtGui.QColor] = {}
         self._rules = [
             (re.compile(r"^\[\d{2}:\d{2}:\d{2}\]"), "time"),
             (re.compile(r"\bDEBUG\b"), "debug"),
@@ -81,6 +88,24 @@ class PythonLogSyntaxHighlighter(QtGui.QSyntaxHighlighter):
             (re.compile(r"\bline \d+\b"), "line"),
             (re.compile(r"\bin [A-Za-z_][\w.<>]*"), "call"),
         ]
+        self.refresh_colors(None)
+
+    def refresh_colors(self, theme) -> None:
+        """Rebuild the QColor set from the active theme (issue #11).
+
+        ``theme`` may be ``None`` during early construction (or in native
+        mode), in which case colours fall back to the shared ``C`` palette
+        that :func:`update_legacy_palette` keeps in sync with the theme.
+        """
+        resolved: dict[str, QtGui.QColor] = {}
+        for key, (token, legacy_key) in _HIGHLIGHT_TOKENS.items():
+            if theme is not None:
+                value = theme.color(token) or C.get(legacy_key, "#FFFFFF")
+            else:
+                value = C.get(legacy_key, "#FFFFFF")
+            resolved[key] = QtGui.QColor(value)
+        self._colors = resolved
+        self.rehighlight()
 
     def _format(self, color_name: str, *, bold: bool = False) -> QtGui.QTextCharFormat:
         fmt = QtGui.QTextCharFormat()
@@ -221,6 +246,7 @@ class QtPythonTerminalPanel(QtWidgets.QWidget):
         input_row.setSpacing(4)
         prompt = QtWidgets.QLabel(">>>")
         prompt.setStyleSheet(f"color:{C['accent2']}; font-family:monospace;")
+        self._python_prompt = prompt
         self.input = _PythonInput()
         self.input.setObjectName("PythonCommandInput")
         self.input.setMinimumHeight(24)
@@ -273,6 +299,10 @@ class QtPythonTerminalPanel(QtWidgets.QWidget):
             "padding: 4px 6px; "
             "}"
         )
+        if getattr(self, "_python_prompt", None) is not None:
+            self._python_prompt.setStyleSheet(
+                f"color:{theme.color('accent.secondary', C.get('accent2'))}; font-family:monospace;"
+            )
 
     def apply_native_theme(self) -> None:
         palette = self.input.palette()
@@ -406,6 +436,7 @@ class QtLogPanel(QtWidgets.QWidget):
         self.text.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
         self.text.setObjectName("PythonLogInspector")
         self.highlighter = PythonLogSyntaxHighlighter(self.text.document())
+        self._theme = None  # set by apply_ghost_theme; drives HTML export colours
 
         self.log_footer = QtWidgets.QFrame()
         self.log_footer.setObjectName("LogFooter")
@@ -424,7 +455,18 @@ class QtLogPanel(QtWidgets.QWidget):
         root.addWidget(self.log_content, 1)
 
     def apply_ghost_theme(self, theme) -> None:
-        return None
+        self._theme = theme
+        if getattr(self, "highlighter", None) is not None:
+            self.highlighter.refresh_colors(theme)
+
+    def _log_color(self, token: str, legacy_key: str) -> str:
+        """Resolve an export colour via the active theme token, falling
+        back to the shared legacy palette ``C`` before the first apply."""
+        if self._theme is not None:
+            resolved = self._theme.color(token)
+            if resolved:
+                return resolved
+        return C.get(legacy_key, "")
 
     def apply_native_theme(self) -> None:
         return None
@@ -446,12 +488,12 @@ class QtLogPanel(QtWidgets.QWidget):
         rows = []
         for stamp, msg, level in self._lines:
             css = {
-                "debug": C["text2"],
-                "info": C["text2"],
-                "success": C["success"],
-                "warning": C["warning"],
-                "error": C["error"],
-            }.get(level, C["text2"])
+                "debug": self._log_color("text.secondary", "text2"),
+                "info": self._log_color("text.secondary", "text2"),
+                "success": self._log_color("success", "success"),
+                "warning": self._log_color("warning", "warning"),
+                "error": self._log_color("error", "error"),
+            }.get(level, self._log_color("text.secondary", "text2"))
             rows.append(
                 f'<div class="log-row {level}"><span class="stamp">[{html.escape(stamp)}]</span> '
                 f'<span style="color:{css}">{html.escape(msg)}</span></div>'

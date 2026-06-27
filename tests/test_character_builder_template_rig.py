@@ -207,6 +207,9 @@ def test_apply_template_rig_strips_imported_armature_and_clears_old_skin() -> No
     assert rigged_mesh.position == (0.0, 0.0, 0.0)
     assert rigged_mesh.rotation == (0.0, 0.0, 0.0, 1.0)
     assert rigged_mesh.vertices[0] == (11.0, 2.0, 3.0)
+    assert getattr(rigged_mesh, "_imported", False) is True
+    assert getattr(rigged_mesh, "_gr_vertices_in_kotor_world", False) is True
+    assert int(getattr(rigged_mesh, "vertex_space", 0) or 0) == 1
     bind = rigged.metadata["character_builder_bind"]
     assert bind["status"] == "bound_to_native_kotor_skeleton"
     assert bind["native_base"]["source_resref"] == "n_mandalorian"
@@ -300,6 +303,8 @@ def test_apply_template_rig_does_not_rebake_already_fitted_external_vertices() -
     assert rigged_mesh.vertices == [(5.0, 0.25, 1.5)]
     assert rigged_mesh.position == (0.0, 0.0, 0.0)
     assert rigged_mesh._gr_vertices_in_kotor_world is True
+    assert rigged_mesh._imported is True
+    assert int(getattr(rigged_mesh, "vertex_space", 0) or 0) == 1
 
 
 def test_apply_template_rig_generated_skin_bind_palette_survives_kotor_parent_flip() -> None:

@@ -218,6 +218,7 @@ class ViewportSceneModelMixin:
         setattr(root, "_gr_scene_composite_root", True)
         composite = KotorModel(name=scene_name or "Untitled Scene", root_node=root)
         first_model = None
+        prebuilt_mesh_count = 0
         for instance in visible:
             object_type = str(getattr(instance, "object_type", "") or "").lower()
             if object_type == "camera":
@@ -235,6 +236,7 @@ class ViewportSceneModelMixin:
             animation_source_model = instance_metadata.get("_runtime_bas_body_model") or runtime_model
             scene_identity = classify_scene_model(runtime_model, getattr(instance, "source_ref", None))
             first_model = first_model or runtime_model
+            prebuilt_mesh_count += int(getattr(runtime_model, "_gr_gpu_prebuilt_mesh_count", 0) or 0)
             try:
                 node = copy.deepcopy(model_root)
             except Exception:
@@ -287,6 +289,7 @@ class ViewportSceneModelMixin:
             composite.game_version = getattr(first_model, "game_version", composite.game_version)
             composite.classification = "scene"
             composite.model_type = getattr(first_model, "model_type", composite.model_type)
+            setattr(composite, "_gr_gpu_prebuilt_mesh_count", prebuilt_mesh_count)
         try:
             composite.compute_bounds()
             setattr(composite, "_gr_bounds_prepared", True)

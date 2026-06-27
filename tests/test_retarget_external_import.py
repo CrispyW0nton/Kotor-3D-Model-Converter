@@ -311,9 +311,9 @@ def test_blender_fbx_mesh_payload_preserves_armature_guides_for_autofit() -> Non
                     "name": "Armature",
                     "bones": [
                         {"name": "Hips", "parent": None, "world_position": [0.0, 0.0, 0.0]},
-                        {"name": "Head", "parent": "Hips", "world_position": [0.0, 10.0, 0.0]},
-                        {"name": "LeftShoulder", "parent": "Hips", "world_position": [-1.0, 8.0, 0.0]},
-                        {"name": "RightShoulder", "parent": "Hips", "world_position": [1.0, 8.0, 0.0]},
+                        {"name": "Head", "parent": "Hips", "world_position": [0.0, -10.0, 0.0]},
+                        {"name": "LeftShoulder", "parent": "Hips", "world_position": [-1.0, -8.0, 0.0]},
+                        {"name": "RightShoulder", "parent": "Hips", "world_position": [1.0, -8.0, 0.0]},
                         {"name": "LeftFoot", "parent": "Hips", "world_position": [-0.4, 0.0, -0.1]},
                         {"name": "RightFoot", "parent": "Hips", "world_position": [0.4, 0.0, -0.1]},
                     ],
@@ -348,7 +348,7 @@ def test_blender_fbx_mesh_payload_preserves_armature_guides_for_autofit() -> Non
         "LeftFoot",
         "RightFoot",
     }
-    assert next(node for node in guide_nodes if node.name == "Head").external_world_position == pytest.approx((0.0, 10.0, 0.0))
+    assert next(node for node in guide_nodes if node.name == "Head").external_world_position == pytest.approx((0.0, 0.0, 10.0))
 
     reference = KotorModel(name="n_mandalorian", game_version=GameVersion.K1)
     root = ModelNode(name="n_mandalorian", flags=int(NodeFlags.HEADER))
@@ -386,6 +386,158 @@ def test_blender_fbx_mesh_payload_preserves_armature_guides_for_autofit() -> Non
     assert report["source_height"] == pytest.approx(10.0)
     assert report["fit_transform"]["landmark_alignment"]["pair_count"] == 6
     assert "Imported skeleton landmarks drove orientation and scale" in report["auto_fit_report"]["notes"]
+
+
+def test_kotor_space_creature_replacement_keeps_identity_fit() -> None:
+    from src.core.characters.headless_body_workflow import normalize_external_model_for_kotor
+    from src.core.geometry.model_data import GameVersion, KotorModel, ModelNode, NodeFlags
+
+    source = KotorModel(name="c_drexlf_uv", game_version=GameVersion.K2)
+    source.metadata = {
+        "external_import": {
+            "source_path": r"C:\mods\C_DrexlF_UV.fbx",
+            "target_axis_system": "kotor_z_up",
+            "axis_conversion": "blender_xyz_to_kotor_xz_minus_y",
+        }
+    }
+    source_root = ModelNode(name="c_drexlf_uv", flags=int(NodeFlags.HEADER))
+    source.root_node = source_root
+    source_mesh = ModelNode(name="C_DrexlF", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=source_root)
+    source_mesh.vertices = [
+        (-4.3794, -5.9490, 0.9094),
+        (4.4521, 2.1383, 2.7630),
+    ]
+    source_root.children.append(source_mesh)
+    source.compute_bounds()
+
+    reference = KotorModel(name="c_drexlf", game_version=GameVersion.K2)
+    reference_root = ModelNode(name="c_drexlf", flags=int(NodeFlags.HEADER))
+    reference.root_node = reference_root
+    reference_mesh = ModelNode(name="native_bounds", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=reference_root)
+    reference_mesh.vertices = [
+        (-4.3895, -5.8350, -1.0691),
+        (4.4420, 2.1641, 1.8930),
+    ]
+    reference_root.children.append(reference_mesh)
+    reference.compute_bounds()
+    before_bounds = (source.bb_min, source.bb_max)
+
+    result = normalize_external_model_for_kotor(
+        source,
+        game_version="K2",
+        reference_model=reference,
+        reference_label="c_drexlf",
+    )
+
+    assert result["fit_policy"] == "native_template_kotor_space_replacement"
+    assert result["scale"] == pytest.approx(1.0)
+    assert result["offset"] == pytest.approx((0.0, 0.0, 0.0))
+    assert source.bb_min == pytest.approx(before_bounds[0])
+    assert source.bb_max == pytest.approx(before_bounds[1])
+    fit_report = source.metadata["kotor_fit_report"]
+    assert fit_report["confidence"] == pytest.approx(0.95)
+    assert fit_report["fallback_used"] is False
+    assert fit_report["fit_transform"]["translation"] == pytest.approx([0.0, 0.0, 0.0])
+
+
+def test_creature_mode_obj_fit_uses_flat_bounds_not_humanoid_height() -> None:
+    from src.core.characters.headless_body_workflow import normalize_external_model_for_kotor
+    from src.core.geometry.model_data import CharacterMode, GameVersion, KotorModel, ModelNode, NodeFlags
+
+    source = KotorModel(name="c_drexlf_uv", game_version=GameVersion.K2)
+    source_root = ModelNode(name="c_drexlf_uv", flags=int(NodeFlags.HEADER))
+    source.root_node = source_root
+    source_mesh = ModelNode(name="C_DrexlF_UV", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=source_root)
+    source_mesh.vertices = [
+        (-0.457855, -0.104942, -0.5),
+        (0.457855, 0.104942, 0.5),
+    ]
+    source_root.children.append(source_mesh)
+    source.compute_bounds()
+
+    reference = KotorModel(name="c_drexlf", game_version=GameVersion.K2)
+    reference_root = ModelNode(name="c_drexlf", flags=int(NodeFlags.HEADER))
+    reference.root_node = reference_root
+    reference_mesh = ModelNode(name="native_bounds", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=reference_root)
+    reference_mesh.vertices = [
+        (-4.3895, -5.8350, -1.0691),
+        (4.4420, 2.1641, 1.8930),
+    ]
+    reference_root.children.append(reference_mesh)
+    reference.compute_bounds()
+
+    result = normalize_external_model_for_kotor(
+        source,
+        game_version="K2",
+        reference_model=reference,
+        reference_label="c_drexlf",
+        expected_mode=CharacterMode.CREATURE,
+    )
+
+    assert result["fit_policy"] == "creature_bounds_basis"
+    assert result["scale"] > 8.0
+    fit_report = source.metadata["kotor_fit_report"]
+    assert fit_report["source_up_axis"] == "+y"
+    assert fit_report["source_forward_axis"] in {"+z", "-z"}
+    assert fit_report["fallback_used"] is False
+    assert source.bb_min[2] == pytest.approx(reference.bb_min[2])
+    assert (source.bb_min[0] + source.bb_max[0]) * 0.5 == pytest.approx(
+        (reference.bb_min[0] + reference.bb_max[0]) * 0.5
+    )
+    assert (source.bb_min[1] + source.bb_max[1]) * 0.5 == pytest.approx(
+        (reference.bb_min[1] + reference.bb_max[1]) * 0.5
+    )
+
+
+def test_creature_mode_orientation_override_bypasses_bounds_autorotation() -> None:
+    from src.core.characters.headless_body_workflow import inspect_external_model_fit, normalize_external_model_for_kotor
+    from src.core.geometry.model_data import CharacterMode, GameVersion, KotorModel, ModelNode, NodeFlags
+
+    source = KotorModel(name="c_drexlf_uv", game_version=GameVersion.K2)
+    source_root = ModelNode(name="c_drexlf_uv", flags=int(NodeFlags.HEADER))
+    source.root_node = source_root
+    source_mesh = ModelNode(name="C_DrexlF_UV", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=source_root)
+    source_mesh.vertices = [
+        (-0.5, -0.1, -0.45),
+        (0.5, 0.1, 0.45),
+    ]
+    source_root.children.append(source_mesh)
+    source.compute_bounds()
+
+    reference = KotorModel(name="c_drexlf", game_version=GameVersion.K2)
+    reference_root = ModelNode(name="c_drexlf", flags=int(NodeFlags.HEADER))
+    reference.root_node = reference_root
+    reference_mesh = ModelNode(name="native_bounds", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=reference_root)
+    reference_mesh.vertices = [
+        (-4.3895, -5.8350, -1.0691),
+        (4.4420, 2.1641, 1.8930),
+    ]
+    reference_root.children.append(reference_mesh)
+    reference.compute_bounds()
+    override = {"source_forward_axis": "+x", "source_up_axis": "+z"}
+
+    report = inspect_external_model_fit(
+        source,
+        game_version="K2",
+        reference_model=reference,
+        reference_label="c_drexlf",
+        expected_mode=CharacterMode.CREATURE,
+        fit_override=override,
+    )
+    result = normalize_external_model_for_kotor(
+        source,
+        game_version="K2",
+        reference_model=reference,
+        reference_label="c_drexlf",
+        expected_mode=CharacterMode.CREATURE,
+        fit_override=override,
+    )
+
+    assert report["fit_policy"] == "manual_axis_override"
+    assert report["source_forward_axis"] == "+x"
+    assert report["source_up_axis"] == "+z"
+    assert result["fit_policy"] == "manual_axis_override"
+    assert source.metadata["kotor_fit_report"]["fit_policy"] == "manual_axis_override"
 
 
 def test_source_clip_preview_model_preserves_fbx_skin_weights_for_playback() -> None:

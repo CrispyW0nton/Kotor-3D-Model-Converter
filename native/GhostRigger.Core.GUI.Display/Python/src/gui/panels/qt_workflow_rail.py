@@ -196,6 +196,10 @@ class QtWorkflowRail(QtWidgets.QWidget):
         self._list.setFocusPolicy(QtCore.Qt.StrongFocus)
         self._list.setIconSize(QtCore.QSize(22, 22))
         self._list.setSpacing(7)
+        # NOTE: the stylesheets below are pre-theme construction defaults.
+        # ``apply_ghost_theme(theme)`` re-resolves every colour through the
+        # semantic token system (``theme.color(...)``), so the hex literals
+        # here are only visible until the first theme apply. (Issue #11.)
         self._list.setStyleSheet(
             "QListWidget { "
             f"background:{C.get('panel', '#111916')}; "
@@ -219,7 +223,9 @@ class QtWorkflowRail(QtWidgets.QWidget):
             "font-weight:bold; "
             "}"
             "QListWidget::item:disabled { "
-            "color:#55665B; border-color:#324438; background:#101713; "
+            f"color:{C.get('text2', '#55665B')}; "
+            f"border-color:{C.get('border', '#324438')}; "
+            f"background:{C.get('panel', '#101713')}; "
             "}"
         )
         self._list.itemClicked.connect(self._on_item_clicked)

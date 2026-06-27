@@ -39,7 +39,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_GIZMO_TRANSFORM_CONTROLLER",
             "source_path": "src/core/gizmo/transform_controller.py",
             "packaged_path": "Python/src/core/gizmo/transform_controller.py",
-            "sha256": "37fa23c159de7872948a8128081e5fa456aa3a0ab386fe17d7bfa3e7e91ae164"
+            "sha256": "39d7ad7c97dcc3fbd0d7a13835b4397f65da7090ba33b6cb42bf6bbe4938ca3b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GIZMO_TRANSFORM_GIZMO",

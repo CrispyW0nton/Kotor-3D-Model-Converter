@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import logging
 from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -18,6 +19,9 @@ from src.gui.qt_lib.windows.qt_source_clip_preview_model import (
 )
 from src.gui.qt_lib.windows.qt_retarget_workbench_controller import populate_retarget_mode_combo
 from src.core.retargeting.retarget_output_naming import KotorOutputAnimationNameMode
+
+
+logger = logging.getLogger(__name__)
 
 
 class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
@@ -614,8 +618,12 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         try:
             if hasattr(self.source_viewport, "set_anim_base_pose"):
                 self.source_viewport.set_anim_base_pose(engine.evaluate(0.0))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                'Failed to set source animation base pose for preview: %s',
+                exc,
+                exc_info=True,
+            )
         self._apply_source_animation_pose()
         self._source_preview_timer.start()
         self.statusBar().showMessage(f"Previewing source animation: {anim_name}")
@@ -752,10 +760,15 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
     def _set_source_clip_pose(self, clip, time_seconds: float) -> None:
         try:
             source_pose = clip.pose_at_time(float(time_seconds))
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                'Failed to sample source clip pose at %s: %s',
+                time_seconds,
+                exc,
+                exc_info=True,
+            )
             return
         pose = AnimPose(time=float(getattr(source_pose, "time_seconds", time_seconds) or time_seconds))
-        model = getattr(self.source_viewport, "model", None)
         global_transforms = getattr(source_pose, "global_transforms", {}) or {}
         local_transforms = getattr(source_pose, "local_transforms", {}) or {}
         for node_name, transform in global_transforms.items():
@@ -763,10 +776,14 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             if model is not None and hasattr(model, "find_node"):
                 try:
                     preview_node = model.find_node(str(node_name))
-                except Exception:
+                except Exception as exc:
+                    logger.debug(
+                        'Source clip preview: find_node failed for %r: %s',
+                        node_name,
+                        exc,
+                    )
                     preview_node = None
             position = self._source_clip_pose_delta(preview_node, str(node_name), global_transforms, transform)
-            local_transform = local_transforms.get(node_name)
             rotation = getattr(local_transform, "rotation", None) if local_transform is not None else None
             pose.nodes[str(node_name).lower()] = NodePose(
                 name=str(node_name),
@@ -874,7 +891,11 @@ class QtClothRetargetDialog(QtWidgets.QDialog):
             from src.autorig.cloth_rig import ClothRigPreset
 
             self.preset_combo.addItems(ClothRigPreset.names())
-        except Exception:
+        except Exception as exc:
+            logger.debug(
+                'Cloth rig presets unavailable, using built-in defaults: %s',
+                exc,
+            )
             self.preset_combo.addItems(["Robe (Loose / K2 default)", "Cape (Light)", "Cape (Heavy)", "Belt / Loin-cloth"])
         self.copy_source_box = QtWidgets.QCheckBox("Copy source cloth parameters")
         self.copy_source_box.setChecked(True)
@@ -933,7 +954,11 @@ class QtClothRetargetDialog(QtWidgets.QDialog):
             from src.autorig.cloth_rig import ClothRigger
 
             patterns = tuple(ClothRigger.CLOTH_NAME_PATTERNS)
-        except Exception:
+        except Exception as exc:
+            logger.debug(
+                'Cloth rig patterns unavailable, using built-in defaults: %s',
+                exc,
+            )
             patterns = ("cloth", "cloak", "cape", "robe", "sash", "skirt", "belt")
         nodes = []
         for node in model.all_nodes():
@@ -989,6 +1014,7 @@ class QtClothRetargetDialog(QtWidgets.QDialog):
             self.summary.setPlainText(f"Applied cloth rigging to {getattr(target, 'name', '?')}.")
             self.workbench.statusBar().showMessage(f"Cloth rigged: {getattr(target, 'name', '?')}")
         except Exception as exc:
+            logger.warning('Cloth rigging apply failed: %s', exc, exc_info=True)
             self.summary.setPlainText(f"Cloth rigging failed: {exc}")
 
     def _remove_cloth(self) -> None:
@@ -1006,6 +1032,7 @@ class QtClothRetargetDialog(QtWidgets.QDialog):
                 f"Removed cloth rigging from {getattr(target, 'name', '?')}." if removed else "Target was not a cloth/dangly mesh."
             )
         except Exception as exc:
+            logger.warning('Cloth rigging removal failed: %s', exc, exc_info=True)
             self.summary.setPlainText(f"Remove cloth failed: {exc}")
 
     def _reparent_target(self, target, bone) -> None:

@@ -214,6 +214,10 @@ class StartupLibraryMixin:
         module_editor_window = getattr(self, "module_editor_window", None)
         if module_editor_window is not None:
             module_editor_window.set_library_rows(rows)
+        stock_module_editor_window = getattr(self, "stock_module_editor_window", None)
+        configure_stock_module_editor = getattr(self, "_configure_stock_module_editor_game_library", None)
+        if stock_module_editor_window is not None and callable(configure_stock_module_editor):
+            configure_stock_module_editor(stock_module_editor_window)
         QtCore.QTimer.singleShot(300, self._finish_preloaded_library_after_first_paint)
         self.statusBar().showMessage(f"{len(rows)} models")
         self._log(f"Startup library preload complete: {len(rows)} models", "success")

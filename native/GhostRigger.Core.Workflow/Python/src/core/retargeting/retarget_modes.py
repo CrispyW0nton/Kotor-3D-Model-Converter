@@ -28,6 +28,7 @@ class RetargetModeSpec:
     supports_export: bool
     implemented: bool
     required_inputs: tuple[str, ...]
+    not_implemented_message: str = ""
 
 
 _MODE_SPECS: dict[RetargetMode, RetargetModeSpec] = {
@@ -67,6 +68,11 @@ _MODE_SPECS: dict[RetargetMode, RetargetModeSpec] = {
         supports_preview=True,
         supports_export=True,
         implemented=True,
+        not_implemented_message=(
+            "KOTOR→Unreal export requires Blender 4.0+ installed. "
+            "Set GHOSTRIGGER_BLENDER_PATH or install Blender to a standard location. "
+            "The Autodesk FBX SDK path is not yet implemented."
+        ),
         required_inputs=(
             "source_kotor_model",
             "source_kotor_animation_slot",

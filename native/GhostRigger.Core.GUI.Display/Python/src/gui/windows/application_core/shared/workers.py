@@ -31,6 +31,104 @@ from src.gui.windows.application_core.application_core_lib.functions.startup_lib
 
 log = logging.getLogger(__name__)
 
+
+class BackgroundIOWorker(QtCore.QObject):
+    """Generic worker that runs a blocking callable on a ``QThread``.
+
+    This is the shared primitive for routing any long/blocking I/O (subprocess
+    calls, file exports, format imports) off the GUI thread, reusing the same
+    QThread + ``moveToThread`` pattern used by :class:`ModelLoadWorker` and
+    friends. The callable may report progress and observe cancellation through
+    the keyword arguments injected by :meth:`run`.
+
+    Signals:
+        progress(str, int): ``message`` + ``percent`` (0-100) updates.
+        finished(object): the callable's return value, or ``None`` if cancelled.
+        error(str, str, object): friendly ``message`` + full ``traceback`` +
+            the original ``exception`` object, so the GUI thread can map common
+            exception types to jargon-free messages.
+
+    The injected kwargs are:
+        ``progress_callback``: ``Callable[[str, int], None]`` -> emit progress.
+        ``is_cancelled``: ``Callable[[], bool]`` -> cooperative cancel check.
+
+    Callables that do not accept those parameters are invoked without them, so a
+    plain ``lambda: do_thing(path)`` works just as well as a function declared as
+    ``def do_thing(path, *, progress_callback=None, is_cancelled=None)``.
+    """
+
+    progress = QtCore.Signal(str, int)
+    finished = QtCore.Signal(object)
+    error = QtCore.Signal(str, str, object)
+
+    def __init__(
+        self,
+        fn,
+        args: Optional[tuple] = None,
+        kwargs: Optional[dict] = None,
+        parent: Optional[QtCore.QObject] = None,
+    ):
+        super().__init__(parent)
+        self._fn = fn
+        self._args: tuple = tuple(args or ())
+        self._kwargs: dict = dict(kwargs or {})
+        self._cancelled = False
+
+    def is_cancelled(self) -> bool:
+        """Cooperative cancellation flag (read on the worker thread)."""
+
+        return self._cancelled
+
+    @QtCore.Slot()
+    def request_cancel(self) -> None:
+        """Request cancellation (called on the GUI thread via signal/slot)."""
+
+        self._cancelled = True
+
+    def report_progress(self, message: str, percent: int) -> None:
+        """Emit a progress update. Safe to call from the worker thread."""
+
+        self.progress.emit(message, max(0, min(100, int(percent))))
+
+    @QtCore.Slot()
+    def run(self) -> None:
+        try:
+            kwargs = dict(self._kwargs)
+            accepts_extra = _callable_accepts_io_hooks(self._fn)
+            if accepts_extra:
+                kwargs.setdefault("progress_callback", self.report_progress)
+                kwargs.setdefault("is_cancelled", self.is_cancelled)
+            result = self._fn(*self._args, **kwargs)
+            if self._cancelled:
+                self.finished.emit(None)
+            else:
+                self.finished.emit(result)
+        except Exception as exc:  # noqa: BLE001 - report any failure to the GUI thread
+            tb = traceback.format_exc()
+            message = tb.strip().splitlines()[-1] if tb.strip() else "Operation failed"
+            self.error.emit(message, tb, exc)
+
+
+def _callable_accepts_io_hooks(fn) -> bool:
+    """Return True if ``fn`` declares the ``progress_callback``/``is_cancelled`` kwargs.
+
+    Falls back to ``True`` for builtins/C callables that cannot be inspected, so
+    that injecting the hooks is attempted harmlessly (extra kwargs to a function
+    that cannot accept them would raise, hence we still inspect when possible).
+    """
+
+    import inspect
+
+    try:
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError):
+        return False
+    params = sig.parameters
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
+        return True
+    return "progress_callback" in params or "is_cancelled" in params
+
+
 class ModelLoadWorker(QtCore.QObject):
     progress = QtCore.Signal(str, int, int)
     finished = QtCore.Signal(object, str, str)
@@ -163,6 +261,61 @@ def load_resource_model_from_game_resources(
     _prebuild_gpu_mesh_data_for_model(model)
     report("Handing model to viewport", 5, 5)
     return model, f"{game}:{resref}"
+
+
+def load_module_room_models_from_game_resources(
+    placements,
+    k1_dir: str = "",
+    k2_dir: str = "",
+    *,
+    progress=None,
+):
+    from src.core.assets.resource_manager import ResourceManager
+    from src.core.game.kotor_loader import load_model_from_bytes
+    from src.core.geometry.model_data import GameVersion
+
+    placement_list = list(placements or [])
+    total_rooms = len(placement_list)
+    total_steps = max(1, total_rooms * 4)
+
+    def report(message: str, step: int, total: int = total_steps) -> None:
+        if progress is not None:
+            progress(message, max(0, min(int(step), int(total))), int(total))
+
+    mgr = ResourceManager()
+    if k1_dir:
+        mgr.set_k1_dir(k1_dir)
+    if k2_dir:
+        mgr.set_k2_dir(k2_dir)
+
+    loaded = []
+    for index, placement in enumerate(placement_list, start=1):
+        resref = str(getattr(placement, "resref", "") or "").strip()
+        game = str(getattr(placement, "game", "") or "").upper()
+        if not resref:
+            continue
+        base_step = (index - 1) * 4
+        report(f"Reading room {index}/{total_rooms}: {game}:{resref}.mdl", base_step + 1)
+        mdl = mgr.get_mdl(resref, game)
+        if not mdl:
+            raise FileNotFoundError(f"{game}:{resref}.mdl")
+        report(f"Reading room {index}/{total_rooms}: {game}:{resref}.mdx", base_step + 2)
+        mdx = mgr.get_mdx(resref, game) or b""
+        game_version = GameVersion.K2 if game == "K2" else GameVersion.K1
+        report(f"Parsing room {index}/{total_rooms}: {game}:{resref}", base_step + 3)
+        model = load_model_from_bytes(mdl, mdx, game_version=game_version)
+        if model is None:
+            raise RuntimeError(f"Could not parse {game}:{resref}.mdl")
+        model.game_version = game_version
+        model._gr_source_mdl_bytes = mdl
+        model._gr_source_mdx_bytes = mdx
+        model._gr_source_resref = resref
+        model._gr_source_game = game
+        report(f"Preparing room {index}/{total_rooms} GPU buffers in RAM", base_step + 4)
+        _prebuild_gpu_mesh_data_for_model(model)
+        loaded.append((model, f"{game}:{resref}", placement))
+    report("Handing module rooms to scene", total_steps, total_steps)
+    return loaded
 
 
 class LibraryScanWorker(QtCore.QObject):

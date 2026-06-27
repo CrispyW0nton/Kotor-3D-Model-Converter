@@ -73,6 +73,19 @@ _LIVE_RENDERERS = ("modern_gl", "wgpu_auto", "wgpu_d3d12", "wgpu_vulkan", "wgpu_
 _DEFAULT_TOOLS = (
     ToolIntegrationInfo(
         "module_editor",
+        "Open Module Editor",
+        "StockModuleEditorWindow",
+        "Modules menu",
+        depends_on_viewport=True,
+        depends_on_scene=True,
+        touches_mesh_material_texture=True,
+        supported_renderers=_LIVE_RENDERERS,
+        null_supported=True,
+        known_limitations="First stock-module slice audits MOD/RIM archives and stages texture/workmesh/object workflows before live room rendering is complete.",
+        integration_notes="Module Editor opens the dedicated stock MOD/RIM archive workspace; Map Studio remains the KMAP level-authoring workspace.",
+    ),
+    ToolIntegrationInfo(
+        "map_studio",
         "Open Map Studio Level Editor",
         "ModuleEditorWindow",
         "Modules menu",
@@ -81,8 +94,8 @@ _DEFAULT_TOOLS = (
         touches_mesh_material_texture=True,
         supported_renderers=_LIVE_RENDERERS,
         null_supported=True,
-        known_limitations="Null Diagnostic opens editor panels but does not render a live module scene.",
-        integration_notes="Module Editor icon opens the existing Level Editor as Map Studio; main shell resource loads route through content browser services.",
+        known_limitations="Null Diagnostic opens editor panels but does not render a live authored module scene.",
+        integration_notes="Map Studio opens the existing KMAP Level Editor and no longer shares the stock Module Editor command-strip slot.",
     ),
     ToolIntegrationInfo(
         "rigging_window",

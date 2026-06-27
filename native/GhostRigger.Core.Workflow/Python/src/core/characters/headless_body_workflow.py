@@ -17,8 +17,8 @@ The seven workflow steps mapped onto this module:
     Step 4  ── Hand Rig      →  :func:`hand_rig`            (T504)
     Step 5  ── Check Actor   →  :func:`select_preview_animation`  (T505)
     Step 6  ── Add Motions   →  reuses :mod:`qt_animation_panel`
-    Step 7  ── Validate +    →  :func:`validate_and_export` (T506)
-              Export
+    Step 7  ── Validate +    →  :func:`validate_for_export` (T506)
+              Export           + :func:`export_scene`        (T506)
 
 Every public function returns a *result dataclass* carrying a structured
 ``ok`` flag plus a human-readable ``message``.  The Qt window converts
@@ -30,12 +30,13 @@ Roadmap reference: knowledge_base/roadmap/02_roadmap_2026_05.md M5/T501-T506.
 
 from __future__ import annotations
 
+import copy
 import logging
 import math
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 try:
     from src.core.characters.character_autofit_report import AutoFitOverride, AutoFitReport
@@ -67,6 +68,19 @@ def _import_validation_service():                           # pragma: no cover -
     except ImportError:
         from core.diagnostics import validation_service as _vs         # type: ignore
     return _vs
+
+
+def _import_heat_diffusion():                               # pragma: no cover - import shim
+    """Lazy import of the heat-diffusion skinning module (Core.Math).
+
+    Mirrors the ``src.math.<module>`` idiom used by
+    ``landmark_alignment`` / ``transform_math`` imports.
+    """
+    try:
+        from src.math import heat_diffusion_skinning as _hd          # type: ignore
+    except ImportError:
+        import heat_diffusion_skinning as _hd                       # type: ignore
+    return _hd
 
 
 def _import_character_builder():                            # pragma: no cover - import shim
@@ -474,6 +488,19 @@ def _axis_vector_from_label(label: Any) -> Optional[Vec3]:
     return None
 
 
+def _mode_token(value: Any) -> str:
+    raw = (
+        getattr(value, "value", None)
+        or getattr(value, "name", None)
+        or str(value or "")
+    )
+    return str(raw).strip().lower()
+
+
+def _is_creature_mode_value(value: Any) -> bool:
+    return _mode_token(value) == "creature"
+
+
 def _bounds_extent_along_axis(
     bounds: Optional[Tuple[Vec3, Vec3]],
     axis: Vec3,
@@ -525,6 +552,396 @@ def _default_target_fit_frame(
         confidence=0.55,
         landmarks={},
     )
+
+
+def _matrix_determinant(matrix: Tuple[Vec3, Vec3, Vec3]) -> float:
+    return (
+        matrix[0][0] * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
+        - matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
+        + matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0])
+    )
+
+
+def _median_positive(values: Iterable[float], fallback: float = 1.0) -> float:
+    clean = sorted(
+        float(value)
+        for value in values
+        if math.isfinite(float(value)) and float(value) > 1.0e-8
+    )
+    if not clean:
+        return float(fallback)
+    mid = len(clean) // 2
+    if len(clean) % 2:
+        return float(clean[mid])
+    return float((clean[mid - 1] + clean[mid]) * 0.5)
+
+
+def _creature_bounds_fit_solution(
+    bounds: Optional[Tuple[Vec3, Vec3]],
+    reference_bounds: Optional[Tuple[Vec3, Vec3]],
+) -> Optional[Dict[str, Any]]:
+    """Fit a non-humanoid external mesh to the selected creature footprint.
+
+    Humanoid fallback fitting assumes the tallest source axis is "up".  Flat or
+    winged creatures often violate that assumption: their vertical thickness can
+    be the shortest axis.  Use the chosen KOTOR creature base as authority and
+    build a proper rotation plus uniform scale from source footprint extents.
+    """
+
+    if bounds is None or reference_bounds is None:
+        return None
+    bb_min, bb_max = bounds
+    ref_min, ref_max = reference_bounds
+    source_extents = tuple(max(0.0, float(bb_max[i]) - float(bb_min[i])) for i in range(3))
+    target_extents = tuple(max(0.0, float(ref_max[i]) - float(ref_min[i])) for i in range(3))
+    if min(source_extents) <= 1.0e-8 or min(target_extents) <= 1.0e-8:
+        return None
+
+    max_source_extent = max(source_extents)
+    min_source_axis = min(range(3), key=lambda i: source_extents[i])
+    source_up_axis = 2
+    if source_extents[min_source_axis] <= max_source_extent * 0.35:
+        source_up_axis = min_source_axis
+
+    horizontal_axes = [axis for axis in range(3) if axis != source_up_axis]
+    if len(horizontal_axes) != 2:
+        return None
+    source_forward_axis = max(horizontal_axes, key=lambda i: source_extents[i])
+    source_right_axis = horizontal_axes[0] if horizontal_axes[1] == source_forward_axis else horizontal_axes[1]
+
+    rotation_rows: List[List[float]] = [
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 0.0],
+    ]
+    rotation_rows[0][source_right_axis] = 1.0
+    rotation_rows[1][source_forward_axis] = 1.0
+    rotation_rows[2][source_up_axis] = 1.0
+    rotation: Tuple[Vec3, Vec3, Vec3] = tuple(tuple(row) for row in rotation_rows)  # type: ignore[assignment]
+    if _matrix_determinant(rotation) < 0.0:
+        rotation_rows[1][source_forward_axis] *= -1.0
+        rotation = tuple(tuple(row) for row in rotation_rows)  # type: ignore[assignment]
+
+    ratios = (
+        target_extents[0] / source_extents[source_right_axis],
+        target_extents[1] / source_extents[source_forward_axis],
+        target_extents[2] / source_extents[source_up_axis],
+    )
+    scale = _median_positive(ratios)
+    linear_matrix = _scale_matrix(rotation, scale)
+
+    def transform_without_offset(point: Vec3) -> Vec3:
+        return _mat_vec(linear_matrix, point)
+
+    mapped_bounds = _transform_bounds(bounds, transform_without_offset)
+    if mapped_bounds is None:
+        return None
+    mapped_min, mapped_max = mapped_bounds
+    mapped_center_x = (mapped_min[0] + mapped_max[0]) * 0.5
+    mapped_center_y = (mapped_min[1] + mapped_max[1]) * 0.5
+    target_center_x = (float(ref_min[0]) + float(ref_max[0])) * 0.5
+    target_center_y = (float(ref_min[1]) + float(ref_max[1])) * 0.5
+    offset = (
+        target_center_x - mapped_center_x,
+        target_center_y - mapped_center_y,
+        float(ref_min[2]) - float(mapped_min[2]),
+    )
+    source_origin = _bounds_ground_center(bounds)
+    target_origin = _vec_add(_mat_vec(linear_matrix, source_origin), offset)
+    fit_transform = _fit_transform_metadata(
+        policy="creature_bounds_basis",
+        scale=scale,
+        rotation_matrix=rotation,
+        source_origin=source_origin,
+        target_origin=target_origin,
+    )
+    return {
+        "scale": float(scale),
+        "rotation_matrix": rotation,
+        "linear_matrix": linear_matrix,
+        "offset": offset,
+        "source_origin": source_origin,
+        "target_origin": target_origin,
+        "fit_transform": fit_transform,
+        "source_up_axis": source_up_axis,
+        "source_forward_axis": source_forward_axis,
+        "source_right_axis": source_right_axis,
+        "source_up_label": _axis_label_from_index(source_up_axis),
+        "source_forward_label": _axis_label_from_index(source_forward_axis),
+        "target_up_label": "+z",
+        "target_forward_label": "+y",
+        "source_height": source_extents[source_up_axis],
+        "target_height": target_extents[2],
+        "scale_ratios": ratios,
+        "source_extents": source_extents,
+        "target_extents": target_extents,
+    }
+
+
+def _landmark_based_fit_solution(
+    model: Any,
+    bounds: Optional[Tuple[Vec3, Vec3]],
+    reference_model: Any,
+    reference_bounds: Optional[Tuple[Vec3, Vec3]],
+) -> Optional[Dict[str, Any]]:
+    """Landmark-based rigid alignment using donor skeleton bone positions.
+
+    Replaces the bounding-box-extent heuristic (:func:`_creature_bounds_fit_solution`)
+    with a Kabsch optimal rigid alignment between the imported mesh's
+    vertex-cloud extrema and the donor model's actual bone/node positions.
+
+    The donor (reference) bone positions are read in the same KOTOR world
+    space that :func:`_reference_model_fit_bounds` reports, via
+    :func:`_node_fit_position` (which prefers ``external_world_position`` /
+    ``bone_world_position`` / ``world_transform`` before the raw local
+    ``position``), so the solved transform lands the mesh in KOTOR world
+    space just like the bounds-based solutions do.
+
+    Returns ``None`` when the donor exposes fewer than four usable bone/node
+    positions — a stable Kabsch fit needs at least three non-collinear
+    points, and we keep a margin.  The caller then falls back to the
+    creature-bounds heuristic.
+    """
+
+    if reference_model is None or bounds is None:
+        return None
+
+    # Heavy imports stay lazy so this module stays importable without NumPy.
+    try:
+        import numpy as np
+        from src.math.landmark_alignment import align_mesh_to_skeleton
+    except Exception:  # pragma: no cover - NumPy/math package are project deps
+        return None
+
+    # --- source landmarks: imported mesh vertex cloud ---------------------
+    mesh_vertex_list: List[Tuple[float, float, float]] = []
+    for node in _iter_model_nodes(model):
+        for vert in list(getattr(node, "vertices", []) or []):
+            if vert is None or len(vert) < 3:
+                continue
+            try:
+                mesh_vertex_list.append((float(vert[0]), float(vert[1]), float(vert[2])))
+            except Exception:
+                continue
+    if len(mesh_vertex_list) < 4:
+        return None
+    mesh_vertices = np.asarray(mesh_vertex_list, dtype=np.float64)
+
+    # --- target landmarks: donor skeleton bone/node positions -------------
+    bone_positions: Dict[str, np.ndarray] = {}
+    for node in _iter_model_nodes(reference_model):
+        pos = _node_fit_position(node)
+        if pos is None:
+            continue
+        name = str(getattr(node, "name", "") or "").strip()
+        key = name or f"node_{len(bone_positions)}"
+        if key in bone_positions:
+            key = f"{key}_{len(bone_positions)}"
+        bone_positions[key] = np.asarray(pos, dtype=np.float64)
+    # Kabsch needs >=3 non-collinear points; keep a small safety margin.
+    if len(bone_positions) < 4:
+        return None
+
+    try:
+        alignment = align_mesh_to_skeleton(mesh_vertices, bone_positions)
+    except Exception:
+        return None
+
+    rotation: Tuple[Vec3, Vec3, Vec3] = alignment["rotation_matrix"]
+    scale = float(alignment["scale"])
+    kabsch_t = alignment["translation"]
+    linear_matrix = _scale_matrix(rotation, scale)
+
+    # Source origin = mesh center of mass; target origin is where that center
+    # lands after the optimal transform.  This keeps the translation reported
+    # by _fit_transform_metadata identical to the offset actually applied
+    # (offset == target_origin - linear_matrix @ source_origin).
+    source_origin = tuple(
+        float(value) for value in alignment["source_landmarks"]["centroid"]
+    )
+    target_origin = _vec_add(_mat_vec(linear_matrix, source_origin), kabsch_t)
+    offset: Vec3 = (float(kabsch_t[0]), float(kabsch_t[1]), float(kabsch_t[2]))
+
+    # Per-landmark residuals for the fit report / validation machinery.
+    linear_np = np.asarray(linear_matrix, dtype=np.float64)
+    t_np = np.asarray(kabsch_t, dtype=np.float64)
+    landmark_keys = ["top", "bottom", "left", "right", "front", "back", "centroid"]
+    pair_errors: List[Dict[str, Any]] = []
+    squared_total = 0.0
+    max_error = 0.0
+    worst_role = ""
+    for role in landmark_keys:
+        source_pt = np.asarray(alignment["source_landmarks"][role], dtype=np.float64)
+        target_pt = np.asarray(alignment["target_landmarks"][role], dtype=np.float64)
+        mapped = linear_np @ source_pt + t_np
+        error = float(np.linalg.norm(mapped - target_pt))
+        squared_total += error * error
+        if error > max_error:
+            max_error = error
+            worst_role = role
+        pair_errors.append({
+            "role": role,
+            "source_position": [float(value) for value in source_pt.tolist()],
+            "target_position": [float(value) for value in target_pt.tolist()],
+            "mapped_position": [float(value) for value in mapped.tolist()],
+            "error": error,
+        })
+    rms_error = math.sqrt(squared_total / float(len(landmark_keys)))
+
+    landmark_alignment_meta = {
+        "method": "landmark_kabsch",
+        "pair_count": len(landmark_keys),
+        "paired_roles": list(landmark_keys),
+        "rms_error": rms_error,
+        "max_error": max_error,
+        "worst_pair_role": worst_role,
+        "pair_errors": pair_errors,
+        "translation_basis": "kabsch_optimal",
+        "error_basis": "mesh_extrema_to_bone_extrema",
+        "similarity_transform_accepted": True,
+        "rotation_basis": "kabsch_svd",
+        "solved_scale": scale,
+        "height_scale": 0.0,
+        "height_scale_basis": "uniform_kabsch_scale",
+        "applied_scale": scale,
+        "applied_scale_basis": "uniform_kabsch_scale",
+    }
+
+    fit_transform = _fit_transform_metadata(
+        policy="landmark_kabsch_basis",
+        scale=scale,
+        rotation_matrix=rotation,
+        source_origin=source_origin,
+        target_origin=target_origin,
+        landmark_alignment=landmark_alignment_meta,
+    )
+
+    return {
+        "scale": scale,
+        "rotation_matrix": rotation,
+        "linear_matrix": linear_matrix,
+        "offset": offset,
+        "source_origin": source_origin,
+        "target_origin": target_origin,
+        "fit_transform": fit_transform,
+        "source_up_label": "+z",
+        "source_forward_label": "+y",
+        "target_up_label": "+z",
+        "target_forward_label": "+y",
+        "source_height": _height_from_bounds(bounds),
+        "target_height": _height_from_bounds(reference_bounds),
+        "rmsd": float(alignment["rmsd"]),
+        "method": "landmark_kabsch",
+        "bone_count": len(bone_positions),
+    }
+
+
+def _containment_based_fit_solution(
+    model: Any,
+    bounds: Optional[Tuple[Vec3, Vec3]],
+    reference_model: Optional[Any],
+    reference_bounds: Optional[Tuple[Vec3, Vec3]],
+) -> Optional[Dict[str, Any]]:
+    """Fit the imported mesh so ALL bones end up inside the mesh faces.
+
+    This is the containment-guaranteed fit: it scales and translates the
+    imported mesh so that every bone position from the donor skeleton is
+    enclosed by the mesh surface.  Uses ray-crossing containment testing
+    and binary-search scale optimization.
+
+    Returns ``None`` if the mesh has too few vertices/faces for containment
+    testing, or if the donor model has no bones.
+    """
+    if reference_model is None:
+        return None
+
+    # Gather imported mesh vertices and faces
+    mesh_vertex_list: List[Tuple[float, float, float]] = []
+    mesh_face_list: List[Tuple[int, ...]] = []
+    vertex_offset = 0
+    for node in _iter_model_nodes(model):
+        verts = list(getattr(node, "vertices", []) or [])
+        faces = list(getattr(node, "faces", []) or [])
+        for vert in verts:
+            if vert is None or len(vert) < 3:
+                continue
+            mesh_vertex_list.append((float(vert[0]), float(vert[1]), float(vert[2])))
+        for face in faces:
+            if face is None or len(face) < 3:
+                continue
+            mesh_face_list.append(tuple(int(idx) + vertex_offset for idx in face))
+        vertex_offset += len(verts)
+    if len(mesh_vertex_list) < 4 or len(mesh_face_list) < 1:
+        return None
+    mesh_vertices = np.asarray(mesh_vertex_list, dtype=np.float64)
+
+    # Gather donor bone positions (world space)
+    bone_positions_list: List[Tuple[float, float, float]] = []
+    for node in _iter_model_nodes(reference_model):
+        pos = _node_fit_position(node)
+        if pos is None:
+            continue
+        bone_positions_list.append((float(pos[0]), float(pos[1]), float(pos[2])))
+    if len(bone_positions_list) < 1:
+        return None
+    bone_positions = np.asarray(bone_positions_list, dtype=np.float64)
+
+    # Run containment optimization
+    try:
+        from src.math.containment_fit import fit_skeleton_inside_mesh
+    except ImportError:
+        try:
+            from math.containment_fit import fit_skeleton_inside_mesh  # type: ignore
+        except ImportError:
+            return None
+
+    result = fit_skeleton_inside_mesh(
+        mesh_vertices=mesh_vertices,
+        mesh_faces=mesh_face_list,
+        bone_positions=bone_positions,
+        max_iterations=30,
+        scale_tolerance=0.005,
+    )
+
+    scale = float(result["scale"])
+    translation = result["translation"]
+    rotation = (
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+    )
+    linear_matrix = tuple(
+        tuple(row[i] * scale for i in range(3))
+        for row in rotation
+    )
+    source_origin = _bounds_ground_center(bounds) if bounds else (0.0, 0.0, 0.0)
+    target_origin = _bounds_ground_center(reference_bounds) if reference_bounds else (0.0, 0.0, 0.0)
+
+    fit_transform = _fit_transform_metadata(
+        policy="containment_bone_inside_mesh",
+        scale=scale,
+        rotation_matrix=rotation,
+        source_origin=source_origin,
+        target_origin=target_origin,
+    )
+
+    return {
+        "ok": True,
+        "scale": scale,
+        "rotation_matrix": rotation,
+        "linear_matrix": linear_matrix,
+        "offset": translation,
+        "source_origin": source_origin,
+        "target_origin": target_origin,
+        "fit_transform": fit_transform,
+        "source_height": _height_from_bounds(bounds) if bounds else 0.0,
+        "target_height": _height_from_bounds(reference_bounds) if reference_bounds else 0.0,
+        "all_inside": bool(result["all_inside"]),
+        "outside_count": int(result["outside_count"]),
+        "max_penetration": float(result["max_penetration"]),
+        "method": "containment_binary_search",
+        "bone_count": len(bone_positions_list),
+    }
 
 
 def _manual_override_frame(
@@ -1438,6 +1855,7 @@ def inspect_external_model_fit(
     reference_model: Optional[Any] = None,
     reference_label: str = "",
     fit_override: Optional[Any] = None,
+    expected_mode: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Return the deterministic auto-fit facts for an external character mesh.
 
@@ -1496,6 +1914,107 @@ def inspect_external_model_fit(
         }
 
     reference_bounds = _reference_model_fit_bounds(reference_model)
+    override = _coerce_auto_fit_override(fit_override)
+    creature_fit = (
+        _creature_bounds_fit_solution(bounds, reference_bounds)
+        if _is_creature_mode_value(expected_mode) and not override.is_active() else None
+    )
+    if creature_fit is not None:
+        auto_fit = AutoFitReport(
+            source_forward_axis=str(creature_fit["source_forward_label"]),
+            source_up_axis=str(creature_fit["source_up_label"]),
+            target_forward_axis=str(creature_fit["target_forward_label"]),
+            target_up_axis=str(creature_fit["target_up_label"]),
+            scale_factor=float(creature_fit["scale"]),
+            height_source="creature_bounds_axes",
+            ground_origin_basis="selected_reference_bounds_bottom",
+            used_landmarks=[
+                "source:creature_bounds",
+                "target:selected_creature_bounds",
+            ],
+            confidence=0.78,
+            fallback_used=False,
+            notes=(
+                "Creature bounds drove orientation and scale from the selected "
+                "KOTOR base skeleton."
+            ),
+        )
+        auto_fit_report = auto_fit.to_dict()
+
+        def transform_point(point: Vec3) -> Vec3:
+            return _vec_add(
+                _mat_vec(creature_fit["linear_matrix"], point),
+                creature_fit["offset"],
+            )
+
+        def transform_direction(direction: Vec3) -> Vec3:
+            rotated = _mat_vec(creature_fit["rotation_matrix"], direction)
+            return _vec_normalize(rotated) or rotated
+
+        def transform_node_position(point: Vec3) -> Vec3:
+            return _mat_vec(creature_fit["linear_matrix"], point)
+
+        return {
+            "ok": True,
+            "code": "fit_inspected",
+            "message": "External creature mesh fit inspected using selected base bounds.",
+            "fit_policy": "creature_bounds_basis",
+            "scale_basis": "creature_bounds_median_extent",
+            "scale": float(creature_fit["scale"]),
+            "source_height": float(creature_fit["source_height"]),
+            "target_height": float(creature_fit["target_height"]),
+            "vertical_axis": str(creature_fit["source_up_label"]).lstrip("+"),
+            "reference": str(reference_label or getattr(reference_model, "name", "") or ""),
+            "source_bounds": _bounds_as_lists(bounds),
+            "reference_bounds": _bounds_as_lists(reference_bounds),
+            "source_frame": {
+                "origin": _vec_as_list(creature_fit["source_origin"]),
+                "landmarks": {"creature_bounds": "source_render_bounds"},
+                "landmark_sources": {"creature_bounds": "render_bounds"},
+            },
+            "target_frame": {
+                "origin": _vec_as_list(_bounds_ground_center(reference_bounds)),
+                "landmarks": {"creature_bounds": "selected_reference_bounds"},
+                "landmark_sources": {"creature_bounds": "render_bounds"},
+            },
+            "source_forward_axis": auto_fit.source_forward_axis,
+            "source_up_axis": auto_fit.source_up_axis,
+            "target_forward_axis": auto_fit.target_forward_axis,
+            "target_up_axis": auto_fit.target_up_axis,
+            "scale_factor": auto_fit.scale_factor,
+            "height_source": auto_fit.height_source,
+            "ground_origin_basis": auto_fit.ground_origin_basis,
+            "used_landmarks": auto_fit_report["used_landmarks"],
+            "confidence": auto_fit.confidence,
+            "fallback_used": auto_fit.fallback_used,
+            "notes": auto_fit.notes,
+            "auto_fit_report": auto_fit_report,
+            "source_imported_armature": imported_armature,
+            "fit_transform": creature_fit["fit_transform"],
+            "visual_overlay": {
+                "coordinate_space": "source_pre_fit_and_kotor_reference",
+                "source": _fit_frame_visual_overlay(model, None, bounds),
+                "target": _fit_frame_visual_overlay(reference_model, None, reference_bounds),
+            },
+            "fitted_visual_overlay": {
+                "coordinate_space": "kotor_world_after_fit",
+                "source": _fit_frame_visual_overlay(
+                    model,
+                    None,
+                    bounds,
+                    transform_point=transform_point,
+                    transform_direction=transform_direction,
+                    axis_length_scale=float(creature_fit["scale"]),
+                ),
+                "target": _fit_frame_visual_overlay(reference_model, None, reference_bounds),
+            },
+            "warnings": [],
+            "kotor_contract": {
+                "native_skeleton_is_authority": True,
+                "imported_mesh_role": "payload_guest",
+                "final_dag_source": "selected_kotor_base",
+            },
+        }
     source_frame = _infer_humanoid_fit_frame(
         model,
         bounds=bounds,
@@ -1505,7 +2024,6 @@ def inspect_external_model_fit(
         _infer_humanoid_fit_frame(reference_model, bounds=reference_bounds)
         if reference_model is not None else None
     )
-    override = _coerce_auto_fit_override(fit_override)
     manual_source_frame = (
         _manual_override_frame(
             model,
@@ -2320,6 +2838,7 @@ def apply_external_model_fit_adjustment(
     rotation_delta_degrees: Tuple[float, float, float] = (0.0, 0.0, 0.0),
     scale_delta: float = 1.0,
     translation_delta: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+    pivot_override: Optional[Tuple[float, float, float]] = None,
 ) -> Dict[str, Any]:
     """Apply a manual post-auto-fit adjustment to an imported model.
 
@@ -2334,6 +2853,15 @@ def apply_external_model_fit_adjustment(
     radians_xyz = tuple(math.radians(float(v or 0.0)) for v in rotation_delta_degrees)
     translation = tuple(float(v or 0.0) for v in translation_delta)
     pivot = _manual_fit_pivot(model)
+    if pivot_override is not None and len(pivot_override) >= 3:
+        try:
+            pivot = (
+                float(pivot_override[0]),
+                float(pivot_override[1]),
+                float(pivot_override[2]),
+            )
+        except Exception:
+            pivot = _manual_fit_pivot(model)
     changed = False
 
     def transform_point(point: Tuple[float, float, float]) -> Tuple[float, float, float]:
@@ -2451,6 +2979,7 @@ def normalize_external_model_for_kotor(
     reference_model: Optional[Any] = None,
     reference_label: str = "",
     fit_override: Optional[Any] = None,
+    expected_mode: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Scale and orient an imported external mesh into KOTOR humanoid space.
 
@@ -2492,7 +3021,226 @@ def normalize_external_model_for_kotor(
         reference_model=reference_model,
         reference_label=reference_label,
         fit_override=override,
+        expected_mode=expected_mode,
     )
+    exact_native_fit = _native_template_exact_bounds_fit(
+        model,
+        bounds=bounds,
+        reference_bounds=reference_bounds,
+        reference_label=reference_label or getattr(reference_model, "name", "") or "",
+        fit_report=fit_report,
+    )
+    # Containment-based fit takes priority for creature mode: it guarantees
+    # all bones end up INSIDE the mesh faces.  Tried before native-template
+    # because the native-template path assumes the mesh is already in KOTOR
+    # space and applies identity rotation, which fails for unit-space OBJs.
+    containment_fit = None
+    if _is_creature_mode_value(expected_mode) and not override.is_active() and reference_model is not None:
+        containment_fit = _containment_based_fit_solution(
+            model, bounds, reference_model, reference_bounds,
+        )
+    if containment_fit is not None:
+        def transform_point(point: Vec3) -> Vec3:
+            return _vec_add(
+                _mat_vec(containment_fit["linear_matrix"], point),
+                containment_fit["offset"],
+            )
+
+        def transform_direction(direction: Vec3) -> Vec3:
+            rotated = _mat_vec(containment_fit["rotation_matrix"], direction)
+            return _vec_normalize(rotated) or rotated
+
+        _apply_point_transform_to_model(
+            model,
+            transform_point=transform_point,
+            transform_direction=transform_direction,
+            mark_vertices_world=True,
+        )
+
+        metadata = getattr(model, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            setattr(model, "metadata", metadata)
+        result = {
+            "ok": True,
+            "code": "normalized",
+            "scale": float(containment_fit["scale"]),
+            "source_height": float(containment_fit["source_height"]),
+            "target_height": float(containment_fit["target_height"]),
+            "reference": reference_label or getattr(reference_model, "name", "") or "",
+            "vertical_axis": "z",
+            "offset": containment_fit["offset"],
+            "fit_policy": "containment_bone_inside_mesh",
+            "scale_basis": "containment_binary_search",
+            "all_bones_inside": containment_fit["all_inside"],
+            "outside_count": containment_fit["outside_count"],
+            "fit_transform": containment_fit["fit_transform"],
+            "fit_report": fit_report,
+        }
+        metadata["kotor_normalization"] = result
+        metadata["kotor_fit_report"] = fit_report
+        return result
+
+    if exact_native_fit is not None:
+        metadata = getattr(model, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            setattr(model, "metadata", metadata)
+        metadata["kotor_normalization"] = exact_native_fit
+        metadata["kotor_fit_report"] = exact_native_fit["fit_report"]
+        return exact_native_fit
+
+    landmark_fit = (
+        _landmark_based_fit_solution(model, bounds, reference_model, reference_bounds)
+        if _is_creature_mode_value(expected_mode) and not override.is_active() else None
+    )
+    if landmark_fit is not None:
+        def transform_point(point: Vec3) -> Vec3:
+            return _vec_add(
+                _mat_vec(landmark_fit["linear_matrix"], point),
+                landmark_fit["offset"],
+            )
+
+        def transform_direction(direction: Vec3) -> Vec3:
+            rotated = _mat_vec(landmark_fit["rotation_matrix"], direction)
+            return _vec_normalize(rotated) or rotated
+
+        fitted_visual_overlay = {
+            "coordinate_space": "kotor_world_after_fit",
+            "source": _fit_frame_visual_overlay(
+                model,
+                None,
+                bounds,
+                transform_point=transform_point,
+                transform_direction=transform_direction,
+                axis_length_scale=float(landmark_fit["scale"]),
+            ),
+            "target": _fit_frame_visual_overlay(
+                reference_model,
+                None,
+                reference_bounds,
+            ) if reference_model is not None else None,
+        }
+        if isinstance(fit_report, dict):
+            fit_report = dict(fit_report)
+            fit_report["fitted_visual_overlay"] = fitted_visual_overlay
+            fit_report["fit_transform"] = landmark_fit["fit_transform"]
+
+        # Landmark Kabsch produces a single consistent similarity transform;
+        # apply it to vertices, normals, node positions and external world
+        # positions uniformly (node positions get the full affine so the
+        # imported mesh's own skeleton lands in KOTOR space too).
+        _apply_point_transform_to_model(
+            model,
+            transform_point=transform_point,
+            transform_direction=transform_direction,
+            mark_vertices_world=True,
+        )
+
+        metadata = getattr(model, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            setattr(model, "metadata", metadata)
+        result = {
+            "ok": True,
+            "code": "normalized",
+            "scale": float(landmark_fit["scale"]),
+            "source_height": float(landmark_fit["source_height"]),
+            "target_height": float(landmark_fit["target_height"]),
+            "reference": reference_label or getattr(reference_model, "name", "") or "",
+            "vertical_axis": "z",
+            "offset": landmark_fit["offset"],
+            "target_center_xy": (
+                float(landmark_fit["target_origin"][0]),
+                float(landmark_fit["target_origin"][1]),
+            ),
+            "target_ground_z": float(landmark_fit["target_origin"][2]),
+            "external_world_positions_fit": True,
+            "fit_policy": "landmark_kabsch_basis",
+            "scale_basis": "donor_bone_landmark_kabsch",
+            "fit_transform": landmark_fit["fit_transform"],
+            "fit_report": fit_report,
+            "fitted_visual_overlay": fitted_visual_overlay,
+        }
+        metadata["kotor_normalization"] = result
+        metadata["kotor_fit_report"] = fit_report
+        return result
+
+    creature_fit = (
+        _creature_bounds_fit_solution(bounds, reference_bounds)
+        if _is_creature_mode_value(expected_mode) and not override.is_active() else None
+    )
+    if creature_fit is not None:
+        def transform_point(point: Vec3) -> Vec3:
+            return _vec_add(
+                _mat_vec(creature_fit["linear_matrix"], point),
+                creature_fit["offset"],
+            )
+
+        def transform_direction(direction: Vec3) -> Vec3:
+            rotated = _mat_vec(creature_fit["rotation_matrix"], direction)
+            return _vec_normalize(rotated) or rotated
+
+        def transform_node_position(point: Vec3) -> Vec3:
+            return _mat_vec(creature_fit["linear_matrix"], point)
+
+        fitted_visual_overlay = {
+            "coordinate_space": "kotor_world_after_fit",
+            "source": _fit_frame_visual_overlay(
+                model,
+                None,
+                bounds,
+                transform_point=transform_point,
+                transform_direction=transform_direction,
+                axis_length_scale=float(creature_fit["scale"]),
+            ),
+            "target": _fit_frame_visual_overlay(
+                reference_model,
+                None,
+                reference_bounds,
+            ) if reference_model is not None else None,
+        }
+        if isinstance(fit_report, dict):
+            fit_report = dict(fit_report)
+            fit_report["fitted_visual_overlay"] = fitted_visual_overlay
+            fit_report["fit_transform"] = creature_fit["fit_transform"]
+
+        _apply_point_transform_to_model(
+            model,
+            transform_point=transform_point,
+            transform_direction=transform_direction,
+            transform_node_position=transform_node_position,
+            mark_vertices_world=True,
+        )
+
+        metadata = getattr(model, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            setattr(model, "metadata", metadata)
+        result = {
+            "ok": True,
+            "code": "normalized",
+            "scale": float(creature_fit["scale"]),
+            "source_height": float(creature_fit["source_height"]),
+            "target_height": float(creature_fit["target_height"]),
+            "reference": reference_label or getattr(reference_model, "name", "") or "",
+            "vertical_axis": str(creature_fit["source_up_label"]).lstrip("+"),
+            "offset": creature_fit["offset"],
+            "target_center_xy": (
+                float(creature_fit["target_origin"][0]),
+                float(creature_fit["target_origin"][1]),
+            ),
+            "target_ground_z": float(creature_fit["target_origin"][2]),
+            "external_world_positions_fit": True,
+            "fit_policy": "creature_bounds_basis",
+            "scale_basis": "creature_bounds_median_extent",
+            "fit_transform": creature_fit["fit_transform"],
+            "fit_report": fit_report,
+            "fitted_visual_overlay": fitted_visual_overlay,
+        }
+        metadata["kotor_normalization"] = result
+        metadata["kotor_fit_report"] = fit_report
+        return result
 
     transform_source_frame = manual_source_frame
     transform_target_frame = manual_target_frame
@@ -2791,8 +3539,246 @@ def normalize_external_model_for_kotor(
     return result
 
 
+def _native_template_exact_bounds_fit(
+    model: Any,
+    *,
+    bounds: Tuple[Vec3, Vec3],
+    reference_bounds: Optional[Tuple[Vec3, Vec3]],
+    reference_label: str,
+    fit_report: Any,
+) -> Optional[Dict[str, Any]]:
+    """Trust an already KOTOR-space mesh when it matches the native base bounds."""
+
+    if reference_bounds is None:
+        return None
+    metadata = getattr(model, "metadata", None)
+    metadata = metadata if isinstance(metadata, dict) else {}
+    external = metadata.get("external_import")
+    external = external if isinstance(external, dict) else {}
+    if external.get("target_axis_system") != "kotor_z_up":
+        return None
+    if not _native_template_replacement_match(
+        bounds,
+        reference_bounds,
+        reference_label=reference_label,
+        source_path=str(external.get("source_path") or ""),
+    ):
+        return None
+
+    origin = _bounds_ground_center(bounds)
+    rotation = (
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+    )
+    # Compute real scale from source/target bounds instead of assuming 1.0.
+    # Unit-space OBJ files (spanning -0.5 to 0.5) need to be scaled up to
+    # match the KOTOR skeleton footprint.
+    source_height = _height_from_bounds(bounds)
+    target_height = _height_from_bounds(reference_bounds)
+    if source_height > 1e-6 and target_height > 1e-6:
+        fit_scale = float(target_height) / float(source_height)
+    else:
+        fit_scale = 1.0
+    target_origin = _bounds_ground_center(reference_bounds)
+    fit_transform = _fit_transform_metadata(
+        policy="native_template_kotor_space_replacement",
+        scale=fit_scale,
+        rotation_matrix=rotation,
+        source_origin=origin,
+        target_origin=target_origin,
+    )
+    source_bounds = _bounds_as_lists(bounds)
+    target_bounds = _bounds_as_lists(reference_bounds)
+    used_landmarks = [
+        "source:head=native_render_bounds",
+        "source:pelvis=native_render_bounds",
+        "source:side_pair=native_render_bounds",
+        "source:left_foot=native_render_bounds",
+        "source:right_foot=native_render_bounds",
+        "target:head=native_render_bounds",
+        "target:pelvis=native_render_bounds",
+        "target:side_pair=native_render_bounds",
+        "target:left_foot=native_render_bounds",
+        "target:right_foot=native_render_bounds",
+    ]
+    report = dict(fit_report) if isinstance(fit_report, dict) else {}
+    auto_fit_report = dict(report.get("auto_fit_report") or {})
+    auto_fit_report.update({
+        "source_forward_axis": "+y",
+        "source_up_axis": "+z",
+        "target_forward_axis": "+y",
+        "target_up_axis": "+z",
+        "scale_factor": fit_scale,
+        "height_source": "native_render_bounds",
+        "ground_origin_basis": "native_render_bounds_bottom",
+        "used_landmarks": list(used_landmarks),
+        "confidence": 0.95,
+        "fallback_used": False,
+        "notes": (
+            "Imported mesh matched the selected native template replacement "
+            "footprint and was scaled to the KOTOR skeleton height."
+        ),
+    })
+    report.update({
+        "ok": True,
+        "code": "native_template_kotor_space_replacement",
+        "message": "External mesh matched the selected native KOTOR replacement footprint and was scaled to fit.",
+        "fit_policy": "native_template_kotor_space_replacement",
+        "scale_basis": "native_render_height_ratio",
+        "scale": fit_scale,
+        "source_height": source_height,
+        "target_height": target_height,
+        "vertical_axis": "z",
+        "reference": str(reference_label or ""),
+        "source_bounds": source_bounds,
+        "reference_bounds": target_bounds,
+        "source_forward_axis": "+y",
+        "source_up_axis": "+z",
+        "target_forward_axis": "+y",
+        "target_up_axis": "+z",
+        "scale_factor": fit_scale,
+        "height_source": "native_render_bounds",
+        "ground_origin_basis": "native_render_bounds_bottom",
+        "used_landmarks": list(used_landmarks),
+        "confidence": 0.95,
+        "fallback_used": False,
+        "notes": auto_fit_report["notes"],
+        "auto_fit_report": auto_fit_report,
+        "source_frame": {
+            "landmarks": {
+                "head": "native_render_bounds",
+                "pelvis": "native_render_bounds",
+                "side_pair": "native_render_bounds",
+                "left_foot": "native_render_bounds",
+                "right_foot": "native_render_bounds",
+            },
+            "landmark_sources": {
+                "head": "native_render_bounds",
+                "pelvis": "native_render_bounds",
+                "side_pair": "native_render_bounds",
+                "left_foot": "native_render_bounds",
+                "right_foot": "native_render_bounds",
+            },
+        },
+        "target_frame": {
+            "landmarks": {
+                "head": "native_render_bounds",
+                "pelvis": "native_render_bounds",
+                "side_pair": "native_render_bounds",
+                "left_foot": "native_render_bounds",
+                "right_foot": "native_render_bounds",
+            },
+            "landmark_sources": {
+                "head": "native_render_bounds",
+                "pelvis": "native_render_bounds",
+                "side_pair": "native_render_bounds",
+                "left_foot": "native_render_bounds",
+                "right_foot": "native_render_bounds",
+            },
+        },
+        "fit_transform": fit_transform,
+        "kotor_contract": {
+            "native_skeleton_is_authority": True,
+            "imported_mesh_role": "payload_guest",
+            "final_dag_source": "selected_kotor_base",
+        },
+        "native_template_kotor_space_replacement": {
+            "source_bounds": source_bounds,
+            "reference_bounds": target_bounds,
+            "source_path": str(external.get("source_path") or ""),
+            "axis_conversion": str(external.get("axis_conversion") or ""),
+            "reference_label": str(reference_label or ""),
+        },
+    })
+    fitted_visual_overlay = {
+        "coordinate_space": "kotor_world_after_fit",
+        "source": {
+            "bounds": source_bounds,
+            "origin": _vec_as_list(origin),
+            "axes": {
+                "right": [1.0, 0.0, 0.0],
+                "forward": [0.0, 1.0, 0.0],
+                "up": [0.0, 0.0, 1.0],
+            },
+            "landmarks": [],
+        },
+        "target": {
+            "bounds": target_bounds,
+            "origin": _vec_as_list(_bounds_ground_center(reference_bounds)),
+            "axes": {
+                "right": [1.0, 0.0, 0.0],
+                "forward": [0.0, 1.0, 0.0],
+                "up": [0.0, 0.0, 1.0],
+            },
+            "landmarks": [],
+        },
+    }
+    report["fitted_visual_overlay"] = fitted_visual_overlay
+    return {
+        "ok": True,
+        "code": "native_template_kotor_space_replacement",
+        "scale": 1.0,
+        "source_height": _height_from_bounds(bounds),
+        "target_height": _height_from_bounds(reference_bounds),
+        "reference": str(reference_label or ""),
+        "vertical_axis": "z",
+        "offset": (0.0, 0.0, 0.0),
+        "target_center_xy": (
+            (float(reference_bounds[0][0]) + float(reference_bounds[1][0])) * 0.5,
+            (float(reference_bounds[0][1]) + float(reference_bounds[1][1])) * 0.5,
+        ),
+        "target_ground_z": float(reference_bounds[0][2]),
+        "external_world_positions_fit": True,
+        "fit_policy": "native_template_kotor_space_replacement",
+        "scale_basis": "native_render_footprint_match",
+        "fit_transform": fit_transform,
+        "fit_report": report,
+        "fitted_visual_overlay": fitted_visual_overlay,
+    }
+
+
+def _native_template_replacement_match(
+    source_bounds: Tuple[Vec3, Vec3],
+    reference_bounds: Tuple[Vec3, Vec3],
+    *,
+    reference_label: str,
+    source_path: str,
+    tolerance: float = 0.15,
+) -> bool:
+    if not _replacement_source_matches_resref(source_path, reference_label):
+        return False
+    return all(
+        abs(float(source_bounds[corner][axis]) - float(reference_bounds[corner][axis])) <= tolerance
+        for corner in (0, 1)
+        for axis in (0, 1)
+    )
+
+
+def _replacement_source_matches_resref(source_path: str, reference_label: str) -> bool:
+    label = _canonical_replacement_resref(reference_label)
+    if not label:
+        return False
+    stem = _canonical_replacement_resref(Path(str(source_path or "")).stem)
+    return bool(stem and (stem == label or stem.startswith(label)))
+
+
+def _canonical_replacement_resref(value: str) -> str:
+    text = str(value or "").strip().lower()
+    for suffix in ("_basecolor", "_diffuse", "_albedo", "_uv", "_reuv"):
+        if text.endswith(suffix):
+            text = text[: -len(suffix)]
+    return text[:32]
+
+
 def _mark_external_import(model: Any, source_path: str) -> None:
-    """Tag external DCC meshes as temporary payloads, not export DAG authority."""
+    """Tag external DCC meshes as temporary payloads, not export DAG authority.
+
+    OBJ files are conventionally Z-up (matching KOTOR's coordinate system) and
+    require identity rotation in the native-template fit path.  Without
+    ``target_axis_system`` metadata the fit pipeline falls through to the
+    creature-bounds heuristic which can mis-orient already-correct meshes.
+    """
     metadata = getattr(model, "metadata", None)
     if not isinstance(metadata, dict):
         metadata = {}
@@ -2805,10 +3791,18 @@ def _mark_external_import(model: Any, source_path: str) -> None:
         model,
         source="headless_body_workflow._mark_external_import",
     )
-    metadata["external_import"] = {
-        "source_path": str(source_path or ""),
-        "disable_kotor_uv_seam_fix": True,
-    }
+    external = dict(metadata.get("external_import") or {})
+    external["source_path"] = str(source_path or external.get("source_path") or "")
+    external.setdefault("disable_kotor_uv_seam_fix", True)
+    # OBJ meshes are Z-up by convention and match KOTOR's coordinate system.
+    # Tag the axis system so the native-template fit path uses identity
+    # rotation instead of falling through to the creature-bounds heuristic.
+    source_lower = str(source_path or "").lower()
+    if source_lower.endswith(".obj") and "target_axis_system" not in external:
+        external["source_axis_system"] = "obj_z_up"
+        external["target_axis_system"] = "kotor_z_up"
+        external["axis_conversion"] = "obj_z_up_to_kotor_z_up_identity"
+    metadata["external_import"] = external
     for node in list(getattr(model, "all_nodes", lambda: [])() or []):
         if getattr(node, "vertices", None) and getattr(node, "uvs", None):
             setattr(node, "_external_imported", True)
@@ -2843,6 +3837,30 @@ def _load_utc(path: str, game_version: str) -> Optional[Any]:
     )
 
 
+def _coerce_expected_character_mode(md: Any, scene: Any, expected_mode: Any = None) -> Any:
+    raw = expected_mode
+    if raw is None:
+        raw = getattr(scene, "mode", None)
+    try:
+        if isinstance(raw, md.CharacterMode):
+            mode = raw
+        else:
+            token = _mode_token(raw)
+            if token:
+                mode = md.CharacterMode(token)
+            else:
+                mode = md.CharacterMode.HEADLESS_BODY
+    except Exception:
+        mode = md.CharacterMode.HEADLESS_BODY
+    if mode in {
+        md.CharacterMode.AMBIGUOUS,
+        md.CharacterMode.UNSUPPORTED,
+        getattr(md.CharacterMode, "MODULE", object()),
+    }:
+        return md.CharacterMode.HEADLESS_BODY
+    return mode
+
+
 # ──────────────────────────────────────────────────────────────────────
 #  T501 — Load Body
 # ──────────────────────────────────────────────────────────────────────
@@ -2856,6 +3874,7 @@ def load_body(
     fit_reference_model: Optional[Any] = None,
     fit_reference_label: str = "",
     fit_override: Optional[Any] = None,
+    expected_mode: Optional[Any] = None,
 ) -> LoadResult:
     """Load a body model from *path* and assign it to *scene*.
 
@@ -2903,6 +3922,8 @@ def load_body(
 
     md = _import_model_data()
     gv = (game_version or getattr(scene, "game_version", "K1") or "K1").upper()
+    expected = _coerce_expected_character_mode(md, scene, expected_mode)
+    expected_label = getattr(expected, "display_name", str(expected))
     ext = _ext_of(path)
 
     # ── Dispatch ────────────────────────────────────────────────────
@@ -2949,6 +3970,7 @@ def load_body(
             reference_model=fit_reference_model,
             reference_label=fit_reference_label,
             fit_override=fit_override,
+            expected_mode=expected,
         )
 
     # ── Detect mode ─────────────────────────────────────────────────
@@ -2967,11 +3989,12 @@ def load_body(
     )
 
     # ── Verdict ─────────────────────────────────────────────────────
-    if detected == md.CharacterMode.HEADLESS_BODY:
+    if detected == expected:
+        loaded_label = getattr(expected, "display_name", str(expected)).lower()
         return LoadResult(
             ok=True, model=model, detected_mode=detected,
             source_path=path, resref=resref,
-            message=f"Loaded headless body: {resref} ({Path(path).name})",
+            message=f"Loaded {loaded_label}: {resref} ({Path(path).name})",
             code="loaded",
         )
 
@@ -3001,7 +4024,7 @@ def load_body(
     # load as successful (the scene already has the slot assigned).
     suggest = getattr(detected, "display_name", str(detected))
     msg = (f"Loaded {Path(path).name}, but it looks like a {suggest} model "
-           f"(expected Headless Body).")
+           f"(expected {expected_label}).")
     return LoadResult(
         ok=allow_mode_correction,
         model=model, detected_mode=detected,
@@ -3222,6 +4245,7 @@ class BodyRigGenerateResult:
     vertices_skinned:  int        = 0
     message:           str        = ""
     code:              str        = "generated"
+    weighting_method:  str        = ""
 
 
 @dataclass
@@ -3671,12 +4695,181 @@ def place_body_guides(
     )
 
 
+def _compute_heat_diffusion_skin_weights(
+    model: Any,
+    *,
+    max_influence_distance: float = 5.0,
+    diffusion_iterations: int = 5,
+    falloff: float = 2.0,
+    max_bones_per_vertex: int = 4,
+) -> Dict[str, Any]:
+    """Paint skin weights on ``model``'s mesh nodes via inverse-distance
+    heat diffusion.
+
+    This is the Character Builder's opt-in alternative to the nearest-bone
+    fallback.  It walks the rigged model, gathers each skeleton bone's
+    world position, then for every mesh node diffuses bone influence
+    across the vertex adjacency graph and writes back ``skin_data`` /
+    ``bone_weights`` / ``bone_indices`` in the same contract the export
+    pipeline expects: one ``VertexSkinData`` row per vertex with <=4
+    normalised influences that sum to 1.0.
+
+    (Character Builder principle: "Normalize, cap, and audit influences
+    after every remap or smoothing pass."  Heat diffusion produces a
+    smoother ownership map than a hard nearest-bone assignment, but it is
+    still a *baseline* — joint/twist areas should be range-of-motion
+    checked before export.)
+
+    Returns a report dict with ``ok``, ``vertices_skinned``,
+    ``mesh_count``, ``method`` and a ``message``.
+    """
+    report: Dict[str, Any] = {
+        "ok": False,
+        "method": "heat_diffusion",
+        "vertices_skinned": 0,
+        "mesh_count": 0,
+        "message": "",
+    }
+    try:
+        import numpy as np  # noqa: F401  (presence check)
+        hd = _import_heat_diffusion()
+        md = _import_model_data()
+    except Exception as exc:                                 # pragma: no cover - deps missing
+        report["message"] = f"Heat-diffusion deps unavailable: {exc}"
+        return report
+
+    VertexSkinData = md.VertexSkinData
+    BoneWeight = md.BoneWeight
+
+    nodes = _iter_model_nodes(model)
+    if not nodes:
+        report["message"] = "No model nodes available for heat diffusion."
+        return report
+
+    # Gather bone world positions from every non-mesh (skeleton) node.
+    bone_positions: Dict[str, Tuple[float, float, float]] = {}
+    for node in nodes:
+        if getattr(node, "vertices", None):
+            continue  # mesh node — not a bone
+        name = str(getattr(node, "name", "") or "").strip()
+        if not name:
+            continue
+        pos = _node_fit_position(node)
+        if pos is None:
+            continue
+        bone_positions.setdefault(
+            name, (float(pos[0]), float(pos[1]), float(pos[2]))
+        )
+
+    if not bone_positions:
+        report["message"] = "No bone positions found for heat diffusion."
+        return report
+
+    total_skinned = 0
+    mesh_count = 0
+    for node in nodes:
+        verts = list(getattr(node, "vertices", []) or [])
+        if not verts:
+            continue
+        faces = list(getattr(node, "faces", []) or [])
+        # Ensure the mesh has a bone map; derive one from the skeleton if
+        # generate_rig / auto_skin did not already populate it.
+        bone_map = list(getattr(node, "bone_map", []) or [])
+        if not bone_map:
+            bone_map = sorted(bone_positions.keys())
+            try:
+                node.bone_map = bone_map
+            except Exception:
+                pass
+        slot_by_name = {str(n): i for i, n in enumerate(bone_map)}
+
+        verts_arr = np.asarray(
+            [
+                [float(v[0]), float(v[1]), float(v[2])]
+                for v in verts
+                if len(v) >= 3
+            ],
+            dtype=np.float64,
+        )
+        if verts_arr.shape[0] == 0:
+            continue
+
+        # Prefer bones that are present in this mesh's bone_map so the
+        # heat weights reference valid slot indices; fall back to the full
+        # skeleton when the map is uninformative.
+        mesh_bones = {
+            bname: bone_positions[bname]
+            for bname in bone_map
+            if bname in bone_positions
+        } or dict(bone_positions)
+
+        try:
+            heat = hd.compute_heat_diffusion_weights(
+                verts_arr,
+                faces,
+                mesh_bones,
+                max_influence_distance=max_influence_distance,
+                diffusion_iterations=diffusion_iterations,
+                falloff=falloff,
+                max_bones_per_vertex=max_bones_per_vertex,
+            )
+        except Exception as exc:                             # pragma: no cover
+            log.exception(
+                "heat diffusion failed for mesh %r",
+                getattr(node, "name", "?"),
+            )
+            report["message"] = f"Heat diffusion failed: {exc}"
+            continue
+
+        skin_rows = []
+        bw_list = []
+        bi_list = []
+        for vi in range(int(verts_arr.shape[0])):
+            row = heat.get(vi, {})
+            influences = []
+            for bname, w in row.items():
+                slot = slot_by_name.get(str(bname))
+                if slot is None:
+                    continue
+                influences.append(BoneWeight(bone_index=int(slot), weight=float(w)))
+            # Sort by weight desc, cap to max_bones_per_vertex, renormalise
+            # so the row still sums to 1.0 (KOTOR export contract).
+            influences.sort(key=lambda bw: bw.weight, reverse=True)
+            influences = influences[:max_bones_per_vertex]
+            total = sum(bw.weight for bw in influences)
+            if total > 0:
+                for bw in influences:
+                    bw.weight = bw.weight / total
+            skin_rows.append(VertexSkinData(influences=influences))
+            bw_list.append([bw.weight for bw in influences])
+            bi_list.append([bw.bone_index for bw in influences])
+
+        try:
+            node.skin_data = skin_rows
+            node.bone_weights = bw_list
+            node.bone_indices = bi_list
+        except Exception:                                    # pragma: no cover
+            pass
+        total_skinned += len(skin_rows)
+        mesh_count += 1
+
+    report["ok"] = mesh_count > 0
+    report["vertices_skinned"] = total_skinned
+    report["mesh_count"] = mesh_count
+    report["message"] = (
+        f"Heat-diffusion skinning: {total_skinned} vertex row(s) across "
+        f"{mesh_count} mesh(es) using {len(bone_positions)} bone(s)."
+    )
+    return report
+
+
 def generate_skeleton(
     scene: Any,
     *,
     acurig: Optional[Any] = None,
     guides: Optional[Dict[str, Any]] = None,
     smooth_iterations: int = 2,
+    use_heat_diffusion_skinning: bool = False,
 ) -> BodyRigGenerateResult:
     """Workflow Step 3b — Generate Skeleton button.
 
@@ -3697,6 +4890,16 @@ def generate_skeleton(
                         internal state.
     smooth_iterations : Number of heat-map smoothing passes
                         (forwarded to ``WeightPainter.smooth_weights``).
+    use_heat_diffusion_skinning
+                        Opt-in alternative skinning method.  When True
+                        (or when the scene carries a matching metadata
+                        flag), bone influence is diffused across the
+                        mesh surface and overwrites the skin rows with
+                        the smoother heat-diffusion distribution.  This
+                        takes priority over the nearest-bone fallback
+                        while leaving the donor-weight-transfer path
+                        untouched.  Default False — existing behaviour
+                        is unchanged.
     """
     body = _get_body_model(scene)
     if body is None:
@@ -3728,6 +4931,13 @@ def generate_skeleton(
                 )
 
     # ── Build skeleton ──────────────────────────────────────────────
+    # Snapshot the body before rigging so a skin-bind failure can roll
+    # the scene back to a clean baseline.  AcuRig may mutate ``body``
+    # in place during ``generate_rig`` (or the scene entry's ``model``
+    # may already alias it), so a deep copy is the only safe restore
+    # point.  (Skinning/Deformation skill: "Start from a known baseline
+    # when repairing a broken bind.")
+    pre_rig_model = copy.deepcopy(body)
     try:
         rigged = acurig.generate_rig(body, guides=guides)
     except Exception as exc:                                # pragma: no cover
@@ -3751,11 +4961,60 @@ def generate_skeleton(
         )
     except Exception as exc:                                # pragma: no cover
         log.exception("generate_skeleton: auto_skin raised")
+        # The skeleton built cleanly but skin binding failed.  Roll the
+        # scene back to its pre-rig baseline so the user can fix the
+        # weights/donor map and retry without a half-rigged model.  We
+        # restore the deep-copied snapshot taken before ``generate_rig``
+        # because ``body`` may have been mutated in place during rigging.
+        md = _import_model_data()
+        entry = scene.get(md.PartSlot.HEADLESS_BODY)
+        if entry is not None and pre_rig_model is not None:
+            entry.model = pre_rig_model
+            entry.dirty = True
+            scene.dirty = True
         return BodyRigGenerateResult(
-            ok=False, bone_count=bone_count,
-            message=f"Skin painting failed: {exc}",
+            ok=False,
+            bone_count=bone_count,
+            message=(
+                "Skeleton generation succeeded but skin binding failed "
+                f"({exc}). The model has been restored to its pre-rig "
+                "state. Check skin weights and donor compatibility."
+            ),
             code="skin_failed",
         )
+
+    # ── Optional heat-diffusion skinning ────────────────────────────
+    # Opt-in alternative to the nearest-bone fallback (priority order:
+    # donor weight transfer → heat diffusion → nearest-bone fallback).
+    # When enabled, diffuse bone influence across the mesh surface and
+    # overwrite the skin rows with the smoother heat-diffusion weights.
+    # auto_skin still ran first as the safety baseline + bone-map setup,
+    # so a heat-diffusion failure gracefully leaves the auto_skin result.
+    # Safe to leave off — the existing auto_skin result is the default.
+    weighting_method = "heat_map"
+    hd_enabled = bool(use_heat_diffusion_skinning)
+    if not hd_enabled:
+        for _attr in ("metadata", "meta", "options"):
+            _meta = getattr(scene, _attr, None)
+            if isinstance(_meta, dict) and _meta.get("use_heat_diffusion_skinning"):
+                hd_enabled = True
+                break
+    if hd_enabled and rigged is not None:
+        try:
+            hd_report = _compute_heat_diffusion_skin_weights(rigged)
+        except Exception as exc:                             # pragma: no cover
+            log.exception("generate_skeleton: heat-diffusion skinning raised")
+            hd_report = {"ok": False, "message": str(exc),
+                         "vertices_skinned": 0, "method": "heat_diffusion"}
+        if hd_report.get("ok"):
+            verts_skinned = hd_report.get("vertices_skinned", verts_skinned)
+            weighting_method = hd_report.get("method", "heat_diffusion")
+        else:
+            log.warning(
+                "generate_skeleton: heat-diffusion skinning did not apply "
+                "(%s); keeping auto_skin result.",
+                hd_report.get("message", "unknown"),
+            )
 
     # Update the scene's slot.model in case generate_rig replaced it.
     md = _import_model_data()
@@ -3772,6 +5031,7 @@ def generate_skeleton(
         message=(f"Generated skeleton with {bone_count} bone(s); "
                  f"skinned {verts_skinned} vertices."),
         code="generated",
+        weighting_method=weighting_method,
     )
 
 
@@ -5012,7 +6272,10 @@ def _per_mode_export_issues(scene: Any) -> List[Any]:
 
     if mode == "creature":
         state = _motion_assignment_state(scene)
-        if str(state.get("source") or "") != MOTION_SOURCE_ROM:
+        if (
+            str(state.get("source") or "") != MOTION_SOURCE_ROM
+            and not _creature_has_native_template_motion_proof(scene)
+        ):
             issues.append(_WorkflowIssue(
                 _WorkflowSeverity("error"),
                 "ROM_CLIP_MISSING",
@@ -5020,6 +6283,24 @@ def _per_mode_export_issues(scene: Any) -> List[Any]:
             ))
 
     return issues
+
+
+def _creature_has_native_template_motion_proof(scene: Any) -> bool:
+    """Return True for native-template creatures with their own animation clips."""
+    body = _get_body_model(scene)
+    if body is None or not _iter_model_animations(body):
+        return False
+    state = getattr(body, "_gr_character_builder_rig_state", None)
+    if isinstance(state, dict):
+        return str(state.get("state") or "") == "native_template_final"
+    if str(getattr(state, "state", "") or "") == "native_template_final":
+        return True
+    metadata = getattr(body, "metadata", None)
+    if isinstance(metadata, dict):
+        raw_state = metadata.get("character_builder_rig_state")
+        if isinstance(raw_state, dict):
+            return str(raw_state.get("state") or "") == "native_template_final"
+    return False
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -5474,7 +6755,9 @@ def _verify_launch_reloaded_model(
     nodes = _model_nodes(model)
     names = [str(getattr(n, "name", "") or "") for n in nodes]
     names_lower = {n.lower() for n in names}
-    hooks = [n for n in names if n.lower() in {"headhook", "rhand", "lhand"}]
+    required_hooks = _native_template_required_hook_names(expected_native_snapshot)
+    required_hook_lowers = {hook.lower() for hook in required_hooks}
+    hooks = [n for n in names if n.lower() in required_hook_lowers]
     mesh_count = sum(
         1 for n in nodes
         if bool(getattr(n, "is_mesh", False))
@@ -5487,7 +6770,7 @@ def _verify_launch_reloaded_model(
     )
     supermodel = str(getattr(model, "supermodel", "") or "")
     problems: List[str] = []
-    for required in ("headhook", "rhand", "lhand"):
+    for required in required_hooks:
         if required not in names_lower:
             problems.append(f"Missing required hook/node: {required}")
     problems.extend(
@@ -5507,6 +6790,15 @@ def _verify_launch_reloaded_model(
     return (not problems), hooks, mesh_count, skin_count, supermodel, "; ".join(problems)
 
 
+def _native_template_required_hook_names(expected_native_snapshot: Optional[Any]) -> Tuple[str, ...]:
+    hook_names = tuple(
+        str(name).strip().lower()
+        for name in (getattr(expected_native_snapshot, "hook_names", None) or ())
+        if str(name).strip()
+    )
+    return hook_names or ("headhook", "rhand", "lhand")
+
+
 def run_external_mesh_launch_workflow(
     mesh_path: str,
     *,
@@ -5519,6 +6811,7 @@ def run_external_mesh_launch_workflow(
     motion_supermodel: str = "S_Female02",
     formats: Optional[List[str]] = None,
     require_animation_library: bool = False,
+    output_resref: str = "",
 ) -> LaunchWorkflowResult:
     """M12/T1205: one-shot external mesh to reloadable KOTOR export.
 
@@ -5579,10 +6872,16 @@ def run_external_mesh_launch_workflow(
         )
 
     rigged_model = applied.get("model")
+    export_resref = str(output_resref or load.resref or _resref_from_path(mesh_path)).strip().lower()
+    if output_resref and rigged_model is not None:
+        try:
+            rigged_model.name = export_resref[:32]
+        except Exception:
+            pass
     scene.assign(
         md.PartSlot.HEADLESS_BODY,
         rigged_model,
-        resref=load.resref or _resref_from_path(mesh_path),
+        resref=export_resref,
         game_version=game_version,
         source_path=mesh_path,
     )
@@ -5728,6 +7027,7 @@ def run_external_mesh_native_template_launch_workflow(
     out_dir: str = "",
     motion_supermodel: str = "",
     formats: Optional[List[str]] = None,
+    output_resref: str = "",
 ) -> LaunchWorkflowResult:
     """Load a custom mesh and bind it to a selected native KOTOR base resref.
 
@@ -5787,6 +7087,7 @@ def run_external_mesh_native_template_launch_workflow(
         ),
         formats=formats,
         require_animation_library=True,
+        output_resref=output_resref or resref,
     )
 
 

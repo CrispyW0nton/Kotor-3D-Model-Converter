@@ -2259,7 +2259,8 @@ def test_obj_import_preserves_mtl_map_kd_texture_metadata(tmp_path) -> None:
 
     assert model is not None
     node = model.root_node.children[0]
-    assert node.uvs == [(0.0, 1.0), (1.0, 1.0), (0.0, 0.0)]
+    assert node.uvs == [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)]
+    assert node.uv_v_flip is False
     assert node.texture == "C_DrexlF_UV_basecolor"
     assert node.texture_names == ["C_DrexlF_UV_basecolor"]
     assert node.source_material_name == "c_drex01"

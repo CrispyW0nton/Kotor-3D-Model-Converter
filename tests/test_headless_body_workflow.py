@@ -378,6 +378,22 @@ class _FakeHeadModel:
         return list(self._nodes)
 
 
+class _FakeCreatureModel:
+    """KotorModel-shaped object that detects as CREATURE."""
+
+    def __init__(self, name: str = "c_drexlf"):
+        self.name = name
+        self.supermodel = "NULL"
+        self.model_type = int(md.ModelClassification.CHARACTER)
+        self._nodes = [
+            _FakeNode("c_drexlf"),
+            _FakeNode("rootdummy"),
+        ]
+
+    def all_nodes(self):
+        return list(self._nodes)
+
+
 class _FakeAmbiguousExternalModel:
     """External mesh before a KOTOR base skeleton has been applied."""
 
@@ -543,6 +559,23 @@ def test_t501_load_body_mode_correction_flag_promotes_to_ok(tmp_path, monkeypatc
     assert result.ok is True
     assert result.code == "loaded"
     assert result.detected_mode == md.CharacterMode.HEAD
+
+
+def test_t501_load_body_respects_selected_creature_mode(tmp_path, monkeypatch):
+    fake = _FakeCreatureModel("c_drexlf")
+    mdl_path = tmp_path / "c_drexlf.mdl"
+    mdl_path.write_bytes(b"stub mdl bytes")
+    monkeypatch.setattr(wf, "_load_mdl", lambda path, gv: fake)
+
+    scene = _make_scene("K2")
+    scene.mode = md.CharacterMode.CREATURE
+    scene.mode_locked = True
+    result = wf.load_body(str(mdl_path), scene)
+
+    assert result.ok is True
+    assert result.code == "loaded"
+    assert result.detected_mode == md.CharacterMode.CREATURE
+    assert "creature" in result.message.lower()
 
 
 def test_t501_load_body_loader_failure_returns_load_failed(tmp_path, monkeypatch):
@@ -3242,6 +3275,42 @@ def test_external_model_normalization_snaps_to_selected_reference_frame():
     assert model.bb_max[2] == pytest.approx(2.25)
     assert (model.bb_min[0] + model.bb_max[0]) * 0.5 == pytest.approx(5.0)
     assert (model.bb_min[1] + model.bb_max[1]) * 0.5 == pytest.approx(-2.0)
+
+
+def test_kotor_space_replacement_mesh_keeps_identity_fit_for_creature_footprint():
+    model = _FakeExternalMeshModel([
+        (-4.3794, -5.9490, 0.9094),
+        (4.4521, 2.1383, 2.7630),
+    ])
+    model.metadata["external_import"] = {
+        "source_path": r"C:\mods\C_DrexlF_UV.fbx",
+        "target_axis_system": "kotor_z_up",
+        "axis_conversion": "blender_xyz_to_kotor_xz_minus_y",
+    }
+    reference = _FakeExternalMeshModel([
+        (-4.3895, -5.8350, -1.0691),
+        (4.4420, 2.1641, 1.8930),
+    ])
+    before_min = model.bb_min
+    before_max = model.bb_max
+
+    result = wf.normalize_external_model_for_kotor(
+        model,
+        game_version="K2",
+        reference_model=reference,
+        reference_label="c_drexlf",
+    )
+
+    assert result["ok"] is True
+    assert result["fit_policy"] == "native_template_kotor_space_replacement"
+    assert result["scale"] == pytest.approx(1.0)
+    assert result["offset"] == pytest.approx((0.0, 0.0, 0.0))
+    assert model.bb_min == pytest.approx(before_min)
+    assert model.bb_max == pytest.approx(before_max)
+    fit_report = model.metadata["kotor_fit_report"]
+    assert fit_report["confidence"] == pytest.approx(0.95)
+    assert fit_report["fallback_used"] is False
+    assert fit_report["fit_transform"]["translation"] == pytest.approx([0.0, 0.0, 0.0])
 
 
 def test_external_model_normalization_uses_bone_landmarks_for_front_axis():

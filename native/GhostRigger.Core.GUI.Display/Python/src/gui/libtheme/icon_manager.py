@@ -15,6 +15,7 @@ _QTA_MAP = {
     "autorig": "fa5s.magic",
     "charbuilder": "fa5s.user-cog",
     "modular": "fa5s.cubes",
+    "module_meshes": "fa5s.archive",
     "texture": "fa5s.image",
     "import": "fa5s.file-import",
     "export": "fa5s.file-export",

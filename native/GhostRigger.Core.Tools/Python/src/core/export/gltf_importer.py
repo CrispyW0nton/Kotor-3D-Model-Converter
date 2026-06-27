@@ -1109,8 +1109,17 @@ class FBXFallbackImporter:
                              for v in mesh.vertex_normals.tolist()]
             if (hasattr(mesh, 'visual') and hasattr(mesh.visual, 'uv')
                     and mesh.visual.uv is not None):
-                n.uvs = [(float(u), 1.0 - float(v))
-                         for u, v in mesh.visual.uv.tolist()]
+                if Path(path).suffix.lower() == ".obj":
+                    # OBJ UVs come from DCC tools in bottom-left texture space.
+                    # Character Builder marks these meshes as external payloads,
+                    # so keep the authored convention and let the renderer's
+                    # external-import path cancel the KotOR/D3D V flip.
+                    n.uvs = [(float(u), float(v))
+                             for u, v in mesh.visual.uv.tolist()]
+                    n.uv_v_flip = False
+                else:
+                    n.uvs = [(float(u), 1.0 - float(v))
+                             for u, v in mesh.visual.uv.tolist()]
             tex_name, tex_path, material_name = _trimesh_texture_reference(mesh, obj_textures)
             if tex_name:
                 n.texture = tex_name[:_MAX_NAME]
