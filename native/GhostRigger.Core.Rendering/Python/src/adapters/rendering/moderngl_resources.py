@@ -799,6 +799,7 @@ class _GpuMesh:
         self.uploaded_source_indices: List[int] = []
         self.uv1_attribute_bound: bool = False
         self.skin_bind_transform: Optional[bool] = None
+        self.skin_vbo_signature: Optional[tuple] = None
         # Per-material-slot draw groups for multi-texture nodes
         self.mat_slots: Dict[int, tuple] = {}  # {slot: (vao, ibo, tri_count)}
 

@@ -81,13 +81,13 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RENDERER_IMPL",
             "source_path": "src/adapters/rendering/moderngl_renderer_impl.py",
             "packaged_path": "Python/src/adapters/rendering/moderngl_renderer_impl.py",
-            "sha256": "b11acaadb5e1d93f857c9d1c9997a84f452b52173a25e4107ca728ca454ddbf5"
+            "sha256": "55708822ce514091eeef3d51e02f6769a4dfba486ea079ce52c05e16a875853c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RESOURCES",
             "source_path": "src/adapters/rendering/moderngl_resources.py",
             "packaged_path": "Python/src/adapters/rendering/moderngl_resources.py",
-            "sha256": "bfb301c0d29fb4c4afef17d09c657d5d656f94e49214d6607255ae662e56e1c8"
+            "sha256": "3e08301a2f6696a79b6b32588685d8b3fc591068a72c643733820a8b5a756a19"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_SCENE_HELPERS",

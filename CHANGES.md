@@ -11,6 +11,108 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-29
 
+### [2026-06-29] Drexl Native Wing Bone Weight Refinement
+
+Owner: LordVaderCW
+T###: T2505
+Subsystem: Character Builder creature skin binding / Drexl animation deformation
+Intersects: Previous Drexl donor bind and GPU skinning cache fixes.
+
+Summary: Fixed the remaining Drexl deformation gap where the imported mesh
+moved with most of the generated skeleton but the wings did not flap with the
+native wing helper bones. The stock `c_drexlf` donor skin map omits
+`Lwing_*`/`Rwing_*`, so the nearest donor transfer produced valid arm/finger
+weights but no vertex influence on the actual animated wing chains. Character
+Builder now keeps native wing helper nodes in the generated bone-map candidates
+and applies a gated creature wing membrane refinement pass for outboard wing
+vertices. Logs and bind metadata now report
+`creature_wing_refinement_vertices` and side counts.
+
+Affected files:
+- `native/GhostRigger.Core.Scene/Python/src/core/skeleton/skeleton_builder.py`
+- `native/GhostRigger.Core.Tools/Python/src/core/skeleton/skeleton_builder.py`
+- `native/GhostRigger.Core.Workflow/Python/src/core/characters/character_builder.py`
+- `tests/test_character_builder_template_rig.py`
+
+Verification: `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/skeleton/skeleton_builder.py native/GhostRigger.Core.Tools/Python/src/core/skeleton/skeleton_builder.py native/GhostRigger.Core.Workflow/Python/src/core/characters/character_builder.py`; `python -m pytest tests/test_character_builder_template_rig.py -q`; `python -m pytest tests/test_native_python_payloads.py -q`; headless Drexl import/bind probe for `C_DrexlF_UV.obj` confirmed 45 skin bone-map slots, 10 native wing slots, 1,159 wing-refined vertices, and animated wing palette deltas.
+
+### [2026-06-29] Character Builder Active DAG Bind Guard
+
+Owner: LordVaderCW
+T###: T2505
+Subsystem: Character Builder native DAG assembly / skin binding / animation preview diagnostics
+Intersects: Previous Drexl donor bind and GPU skinning cache fixes.
+
+Summary: Fixed the live Drexl no-deformation case where `apply_template_rig`
+could attach the imported mesh to a cloned KOTOR skeleton object but still bind
+against a stale two-node imported model walk. The live log showed
+`cleaned_payload.node_count=2`, `candidate_sample=["c_drexlf_uv"]`, and zero
+matches against the 35 native donor skin bones. `apply_template_rig` now
+verifies that the generated result model's active node walk contains the cloned
+native skeleton root before binding. If an imported wrapper keeps a cached
+node list, the workflow rebuilds a clean `KotorModel` shell around the native
+root and logs `apply_template_rig.root_verified` before binding. Bind mesh logs
+now include bone-map samples and used influence-slot counts, and the ModernGL
+preview logs the first Character Builder palette upload with formula,
+inverse-bind source, animation/base-pose node counts, and skin influence
+summary.
+
+Affected files:
+- `native/GhostRigger.Core.Workflow/Python/src/core/characters/character_builder.py`
+- `native/GhostRigger.Core.Scene/Python/src/core/skeleton/skeleton_builder.py`
+- `native/GhostRigger.Core.Tools/Python/src/core/skeleton/skeleton_builder.py`
+- `native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_renderer_impl.py`
+- `tests/test_character_builder_template_rig.py`
+- Native payload manifests for Workflow, Scene, Tools, and Rendering.
+
+Verification:
+- Headless Character Builder reproduction using the actual
+  `headless_body_workflow.load_body()` path for
+  `C_DrexlF_UV.obj` with K2 `c_drexlf`: verified root `C_DrexlF`, 51 nodes,
+  35 generated bone-map slots, 2,120 skin rows, 35 unique influence indices,
+  donor transfer for all 2,120 vertices, nonzero `cpause1` palette delta, and
+  all 2,120 vertices moving under CPU LBS.
+- `python -m py_compile native/GhostRigger.Core.Workflow/Python/src/core/characters/character_builder.py native/GhostRigger.Core.Scene/Python/src/core/skeleton/skeleton_builder.py native/GhostRigger.Core.Tools/Python/src/core/skeleton/skeleton_builder.py native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_renderer_impl.py native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_resources.py`
+- `python -m pytest tests/test_character_builder_template_rig.py -q`
+- `python -m pytest tests/test_native_python_payloads.py -q`
+- `MSBuild GhostRigger.sln /t:Build /p:Configuration=Debug /p:Platform=x64 /m /v:minimal`
+  rebuilt the Debug EXE and embedded Python payload DLLs; the root
+  `GhostRigger.exe` was refreshed from the Debug build.
+
+### [2026-06-29] Character Builder Skin Palette Deformation Fix
+
+Owner: LordVaderCW
+T###: T2505
+Subsystem: Character Builder skeleton binding / GPU animation preview / native payloads
+
+Summary: Fixed the next Drexl deformation blocker where the skeleton animated
+but the imported mesh could remain visually rigid. The binder now treats the
+selected native donor skin's `bone_map` as authoritative deformation evidence
+when building the generated mesh palette, so donor transfer is not dependent on
+fragile node-name heuristics. Added richer `CHARBUILDER-BIND` diagnostics for
+donor bone-map match/miss counts and candidate samples. Hardened the ModernGL
+skin VBO cache with a skin-state signature so an imported mesh cannot keep
+using a stale static buffer after it gains KOTOR skin rows or a new bone map.
+
+Affected files:
+- `native/GhostRigger.Core.Scene/Python/src/core/skeleton/skeleton_builder.py`
+- `native/GhostRigger.Core.Tools/Python/src/core/skeleton/skeleton_builder.py`
+- `native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_renderer_impl.py`
+- `native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_resources.py`
+- `tests/test_character_builder_template_rig.py`
+- Native payload manifests for Scene, Tools, and Rendering.
+
+Verification:
+- `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/skeleton/skeleton_builder.py native/GhostRigger.Core.Tools/Python/src/core/skeleton/skeleton_builder.py native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_renderer_impl.py native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_resources.py`
+- `python -m pytest tests/test_character_builder_template_rig.py -q`
+- Focused Drexl deformation probe: loaded K2 `c_drexlf`, rebuilt an imported
+  Drexl-shaped payload, applied the template rig, and verified 35 bone-map
+  slots, 4,578 donor-weighted vertices, 35 unique influence indices, nonzero
+  palette delta under `cpause1`, and all 4,578 vertices moving under CPU LBS.
+- `python -m pytest tests/test_native_python_payloads.py -q`
+- `MSBuild GhostRigger.sln /t:Build /p:Configuration=Debug /p:Platform=x64 /m /v:minimal`
+  rebuilt the root Debug EXE and refreshed embedded Python payload DLLs.
+
 ### [2026-06-29] Character Builder Donor Bind Diagnostics
 
 Owner: LordVaderCW

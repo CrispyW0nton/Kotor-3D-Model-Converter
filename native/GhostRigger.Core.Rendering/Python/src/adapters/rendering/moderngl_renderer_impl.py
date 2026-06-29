@@ -99,6 +99,64 @@ from src.core.rendering.gpu_shaders import _FRAG_SRC, _GRID_FRAG_SRC, _GRID_VERT
 log = logging.getLogger(__name__)
 
 
+def _skin_vbo_signature_for_node(node):
+    """Return the skin state that must match a cached GPU VBO."""
+    if node is None or not bool(getattr(node, "is_skin", False)):
+        return None
+    skin_data = getattr(node, "skin_data", None)
+    vertices = getattr(node, "vertices", getattr(node, "verts", None))
+    faces = getattr(node, "faces", None)
+    def _safe_len(value):
+        try:
+            return len(value)
+        except Exception:
+            return 0
+    return (
+        tuple(getattr(node, "bone_map", []) or ()),
+        _safe_len(skin_data),
+        id(skin_data),
+        _safe_len(vertices),
+        id(vertices),
+        _safe_len(faces),
+        id(faces),
+        bool(getattr(node, "_gr_bound_to_kotor_skeleton", False)),
+        id(getattr(node, "_gr_skin_binding_report", None)),
+    )
+
+
+def _skin_influence_summary_for_log(node):
+    bone_map = list(getattr(node, "bone_map", []) or [])
+    skin_rows = list(getattr(node, "skin_data", []) or [])
+    used: set[int] = set()
+    max_influences = 0
+    min_sum = None
+    max_sum = None
+    for row in skin_rows:
+        influences = list(getattr(row, "influences", []) or [])
+        max_influences = max(max_influences, len(influences))
+        total = 0.0
+        for influence in influences:
+            try:
+                index = int(getattr(influence, "bone_index", -1))
+                weight = float(getattr(influence, "weight", 0.0))
+            except Exception:
+                continue
+            if 0 <= index < len(bone_map) and weight > 0.0:
+                used.add(index)
+                total += weight
+        min_sum = total if min_sum is None else min(min_sum, total)
+        max_sum = total if max_sum is None else max(max_sum, total)
+    return {
+        "rows": len(skin_rows),
+        "bone_map_count": len(bone_map),
+        "bone_map_sample": [str(name or "") for name in bone_map[:12]],
+        "used_influence_slot_count": len(used),
+        "max_influences_per_vertex": max_influences,
+        "weight_sum_min": float(min_sum or 0.0),
+        "weight_sum_max": float(max_sum or 0.0),
+    }
+
+
 class GpuRenderer:
     """
     GPU renderer for KotOR models.
@@ -216,6 +274,7 @@ class GpuRenderer:
         self._skin_bone_count: int = 0  # number of bones in the current palette
         self._skin_logged: bool = False  # one-shot log for GPU skinning activation
         self._skin_preview_gate_logged: set[tuple[int, int]] = set()
+        self._skin_preview_palette_logged: set[tuple[int, int]] = set()
         self._gl_state_trace_path: str = _gl_state_trace_path()
         self._lm_data_dump_path: str = _lm_data_dump_path()
         self._lm_data_dump_seen: set = set()
@@ -1772,11 +1831,17 @@ class GpuRenderer:
                         (1.0, 1.0, 1.0),
                     )
                 _skin_vbo_mode_changed = False
+                _skin_vbo_signature = (
+                    _skin_vbo_signature_for_node(node)
+                    if _nd_is_skin else None
+                )
                 if _nd_is_skin and node_id in self._mesh_cache:
                     _gm_existing = self._mesh_cache[node_id]
                     _skin_vbo_mode_changed = (
                         getattr(_gm_existing, 'skin_bind_transform', None)
                         != _skin_bind_transform
+                        or getattr(_gm_existing, 'skin_vbo_signature', None)
+                        != _skin_vbo_signature
                     )
                 if is_animated or node_id not in self._mesh_cache or _skin_vbo_mode_changed:
                     if anim_pose is None and not is_animated:
@@ -1808,6 +1873,7 @@ class GpuRenderer:
                         self._mesh_cache[node_id].release()
                     gm = _GpuMesh()
                     gm.skin_bind_transform = _skin_bind_transform if _nd_is_skin else None
+                    gm.skin_vbo_signature = _skin_vbo_signature
                     main_vdata, bone_id_vdata = _split_vbo_attributes_for_gpu(vdata)
                     gm.vbo = ctx.buffer(main_vdata.tobytes())
                     gm.bone_id_vbo = ctx.buffer(bone_id_vdata.tobytes())
@@ -2341,6 +2407,26 @@ class GpuRenderer:
                             _u['u_bones'].write(_skin_uploader.as_flat_bytes())
                         _u['u_skin_enabled'].value = 1 if _skin_local_bone_count > 0 else 0
                         _u['u_bone_count'].value = _skin_local_bone_count
+                        if (
+                            bool(getattr(node, "_gr_bound_to_kotor_skeleton", False))
+                            and _skin_local_bone_count > 0
+                        ):
+                            _palette_key = (_cur_model_id, node_id)
+                            if _palette_key not in self._skin_preview_palette_logged:
+                                self._skin_preview_palette_logged.add(_palette_key)
+                                log.info(
+                                    "GPU-SKINNING: Character Builder palette node=%s "
+                                    "u_skin=%s u_bones=%d formula=%s inv_bind=%s "
+                                    "anim_nodes=%d base_nodes=%d skin=%s",
+                                    getattr(node, "name", "?"),
+                                    1 if _skin_local_bone_count > 0 else 0,
+                                    _skin_local_bone_count,
+                                    str(getattr(_skin_uploader, "_skin_palette_formula", "") or ""),
+                                    str(getattr(_skin_uploader, "_skin_inverse_bind_source", "") or ""),
+                                    len(getattr(_skin_anim_pose, "nodes", {}) or {}),
+                                    len(getattr(_skin_anim_base_pose, "nodes", {}) or {}) if _skin_anim_base_pose is not None else 0,
+                                    _skin_influence_summary_for_log(node),
+                                )
                     except Exception as e:
                         log.debug(f"GPU-SKINNING: per-skin qBone/tBone palette upload failed: {e}")
                         _u['u_skin_enabled'].value = 0

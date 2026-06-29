@@ -550,6 +550,146 @@ def test_apply_template_rig_transfers_native_template_donor_weights_by_nearest_v
     assert skin_binding["mesh_reports"][0]["donor_vertex_count"] == 2
 
 
+def test_apply_template_rig_uses_donor_bone_map_for_creature_deform_nodes() -> None:
+    src_root = _node("import_root")
+    mesh = _node("creature_payload", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=src_root)
+    mesh.vertices = [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0)]
+    mesh.faces = [(0, 1, 1)]
+    mesh_model = KotorModel(name="creature_payload", root_node=src_root)
+
+    kotor_root = _node("CreatureRoot")
+    _node("wingLeading", parent=kotor_root)
+    _node("tailCurl", parent=kotor_root)
+    donor = _node(
+        "CreatureSkin",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=kotor_root,
+    )
+    donor.vertices = [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0)]
+    donor.faces = [(0, 1, 1)]
+    donor.bone_map = ["wingLeading", "tailCurl"]
+    donor.skin_data = [
+        VertexSkinData([BoneWeight(0, 1.0)]),
+        VertexSkinData([BoneWeight(1, 1.0)]),
+    ]
+    template = KotorModel(name="creature_template", root_node=kotor_root)
+
+    result = apply_template_rig(mesh_model, template, game="K2", scale_mode="manual")
+
+    assert result["ok"] is True
+    rigged_mesh = result["model"].find_node("creature_payload")
+    assert rigged_mesh is not None
+    assert rigged_mesh.bone_map == ["wingLeading", "tailCurl"]
+    assert rigged_mesh.skin_data[0].influences[0].bone_index == 0
+    assert rigged_mesh.skin_data[1].influences[0].bone_index == 1
+    skin_binding = result["model"].metadata["character_builder_bind"]["skin_binding"]
+    assert skin_binding["donor_weight_transfer"] is True
+    assert skin_binding["mesh_reports"][0]["donor_vertex_count"] == 2
+
+
+def test_apply_template_rig_refines_creature_wing_membrane_to_native_wing_nodes() -> None:
+    src_root = _node("import_root")
+    mesh = _node("drexl_payload", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=src_root)
+    mesh.vertices = [(-2.7, 1.45, 2.45)]
+    mesh.faces = [(0, 0, 0)]
+    mesh_model = KotorModel(name="drexl_payload", root_node=src_root)
+
+    kotor_root = _node("C_DrexlF")
+    torso = _node("torso3_g", parent=kotor_root)
+    torso.position = (0.0, 1.0, 1.8)
+    lwing_01 = _node("Lwing_01", parent=torso)
+    lwing_01.position = (-0.35, 0.20, 0.40)
+    lwing_02 = _node("Lwing_02", parent=lwing_01)
+    lwing_02.position = (-0.60, 0.10, 0.18)
+    lwing_tip = _node("Lwing_03", parent=lwing_02)
+    lwing_tip.position = (-1.30, 0.12, 0.02)
+    donor = _node(
+        "NativeDrexlSkin",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=kotor_root,
+    )
+    donor.vertices = [(-2.65, 1.42, 2.42)]
+    donor.faces = [(0, 0, 0)]
+    donor.bone_map = ["torso3_g"]
+    donor.skin_data = [VertexSkinData([BoneWeight(0, 1.0)])]
+    template = KotorModel(name="c_drexlf", root_node=kotor_root, supermodel="NULL")
+
+    result = apply_template_rig(mesh_model, template, game="K2", scale_mode="manual")
+
+    assert result["ok"] is True
+    rigged_mesh = result["model"].find_node("drexl_payload")
+    assert rigged_mesh is not None
+    assert "torso3_g" in rigged_mesh.bone_map
+    assert "Lwing_01" in rigged_mesh.bone_map
+    assert "Lwing_02" in rigged_mesh.bone_map
+    wing_indices = {
+        index
+        for index, name in enumerate(rigged_mesh.bone_map)
+        if str(name).lower().startswith("lwing_")
+    }
+    wing_weight = sum(
+        inf.weight
+        for inf in rigged_mesh.skin_data[0].influences
+        if inf.bone_index in wing_indices
+    )
+    assert wing_weight >= 0.85
+    skin_binding = result["model"].metadata["character_builder_bind"]["skin_binding"]
+    assert skin_binding["creature_wing_refinement"] is True
+    assert skin_binding["quality_stage"] == "donor_transfer_first_pass_wing_refined"
+    assert skin_binding["mesh_reports"][0]["creature_wing_refinement_vertices"] == 1
+    assert skin_binding["mesh_reports"][0]["creature_wing_refinement_by_side"] == {"l": 1}
+
+
+def test_apply_template_rig_rebuilds_result_shell_when_import_walk_is_cached() -> None:
+    class CachedImportModel(KotorModel):
+        def __init__(self, *, name: str, root_node: ModelNode):
+            super().__init__(name=name, root_node=root_node)
+            self._cached_nodes = list(super().all_nodes())
+
+        def all_nodes(self):
+            return list(self._cached_nodes)
+
+    src_root = _node("import_root")
+    mesh = _node("creature_payload", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=src_root)
+    mesh.vertices = [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0)]
+    mesh.faces = [(0, 1, 1)]
+    mesh_model = CachedImportModel(name="cached_payload", root_node=src_root)
+
+    kotor_root = _node("CreatureRoot")
+    _node("wingLeading", parent=kotor_root)
+    _node("tailCurl", parent=kotor_root)
+    donor = _node(
+        "CreatureSkin",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=kotor_root,
+    )
+    donor.vertices = [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0)]
+    donor.faces = [(0, 1, 1)]
+    donor.bone_map = ["wingLeading", "tailCurl"]
+    donor.skin_data = [
+        VertexSkinData([BoneWeight(0, 1.0)]),
+        VertexSkinData([BoneWeight(1, 1.0)]),
+    ]
+    template = KotorModel(name="creature_template", root_node=kotor_root)
+
+    result = apply_template_rig(mesh_model, template, game="K2", scale_mode="manual")
+
+    assert result["ok"] is True
+    rigged = result["model"]
+    assert rigged.root_node.name == "CreatureRoot"
+    assert [node.name for node in rigged.all_nodes()[:3]] == [
+        "CreatureRoot",
+        "wingLeading",
+        "tailCurl",
+    ]
+    rigged_mesh = rigged.find_node("creature_payload")
+    assert rigged_mesh is not None
+    assert rigged_mesh.bone_map == ["wingLeading", "tailCurl"]
+    skin_binding = rigged.metadata["character_builder_bind"]["skin_binding"]
+    assert skin_binding["donor_weight_transfer"] is True
+    assert skin_binding["mesh_reports"][0]["fallback_vertices"] == 0
+
+
 def test_apply_template_rig_remaps_imported_source_skin_weights_to_kotor_bones() -> None:
     src_root = _node("import_root")
     mesh = _node(

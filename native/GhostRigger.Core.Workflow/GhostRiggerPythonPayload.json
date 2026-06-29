@@ -345,7 +345,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_BUILDER",
             "source_path": "src/core/characters/character_builder.py",
             "packaged_path": "Python/src/core/characters/character_builder.py",
-            "sha256": "4afa96d67d7cbe43cd9cb427561e0deb12d27e71f720ff46a4b378816601628c"
+            "sha256": "2995c448009b8b1f9b96c9ad824f8276f493b0c0cf151e3ce013ab951b7a9674"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_EXPORT_PREFLIGHT",

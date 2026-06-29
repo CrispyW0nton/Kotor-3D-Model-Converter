@@ -461,6 +461,106 @@ def _model_nodes_for_diag(model: Any) -> list[Any]:
     return [root] if root is not None else []
 
 
+def _node_names_for_character_builder(model: Any, *, limit: int = 32) -> list[str]:
+    return [
+        str(getattr(node, "name", "") or "")
+        for node in _model_nodes_for_diag(model)[: max(0, int(limit))]
+    ]
+
+
+def _ensure_template_rig_root_model(
+    result_model: Any,
+    *,
+    mesh_model: Any,
+    template_model: Any,
+    skel_root: Any,
+    supermodel: str,
+) -> tuple[Any, bool]:
+    """Ensure the generated rig model walks the cloned native skeleton DAG.
+
+    Some imported model wrappers can carry cached node lists.  Setting
+    ``root_node`` on a deep copy then leaves ``all_nodes()`` reporting the old
+    two-node import hierarchy even though the cloned KOTOR skeleton object
+    exists.  Binding against that stale walk collapses creature skins to one
+    fallback slot.  Verify the walk and rebuild a clean KotorModel shell when
+    the selected skeleton root is not active.
+    """
+
+    try:
+        result_model.root_node = skel_root
+    except Exception:
+        pass
+    result_model.supermodel = str(supermodel or "NULL")
+    if _model_walk_contains_root(result_model, skel_root):
+        return result_model, False
+
+    try:
+        from src.core.geometry.model_data import KotorModel  # type: ignore
+    except Exception:  # pragma: no cover
+        KotorModel = type(result_model)  # type: ignore[assignment]
+
+    try:
+        rebuilt = KotorModel(
+            name=str(getattr(mesh_model, "name", "") or getattr(result_model, "name", "") or "character"),
+            supermodel=str(supermodel or "NULL"),
+            root_node=skel_root,
+        )
+    except Exception:
+        rebuilt = result_model
+        rebuilt.root_node = skel_root
+        rebuilt.supermodel = str(supermodel or "NULL")
+        return rebuilt, not _model_walk_contains_root(result_model, skel_root)
+
+    import copy
+
+    for attr in (
+        "classification",
+        "game_version",
+        "model_type",
+        "subclassification",
+        "unknown_byte",
+        "disable_fog",
+        "anim_scale",
+        "bb_min",
+        "bb_max",
+        "radius",
+        "mdl_path",
+        "mdx_path",
+    ):
+        if hasattr(result_model, attr):
+            try:
+                setattr(rebuilt, attr, copy.deepcopy(getattr(result_model, attr)))
+            except Exception:
+                pass
+
+    metadata = getattr(result_model, "metadata", None)
+    if isinstance(metadata, dict):
+        try:
+            rebuilt.metadata = copy.deepcopy(metadata)
+        except Exception:
+            rebuilt.metadata = dict(metadata)
+
+    for key, value in (getattr(result_model, "__dict__", {}) or {}).items():
+        if not key.startswith("_gr_"):
+            continue
+        try:
+            setattr(rebuilt, key, copy.deepcopy(value))
+        except Exception:
+            try:
+                setattr(rebuilt, key, value)
+            except Exception:
+                pass
+    return rebuilt, True
+
+
+def _model_walk_contains_root(model: Any, root: Any) -> bool:
+    if model is None or root is None:
+        return False
+    if getattr(model, "root_node", None) is not root:
+        return False
+    return any(node is root for node in _model_nodes_for_diag(model))
+
+
 def _diag_bounds_for_nodes(nodes: list[Any]) -> dict:
     mins = [float("inf"), float("inf"), float("inf")]
     maxs = [float("-inf"), float("-inf"), float("-inf")]
@@ -1182,10 +1282,33 @@ def apply_template_rig(
                 f"Removed {removed_template_meshes} reference mesh node(s) from the base skeleton."
             )
 
-        result_model.root_node = skel_root
+        result_model, root_shell_rebuilt = _ensure_template_rig_root_model(
+            result_model,
+            mesh_model=mesh_model,
+            template_model=template_model,
+            skel_root=skel_root,
+            supermodel=sm or "NULL",
+        )
+        if root_shell_rebuilt:
+            warnings.append(
+                "Rebuilt the rig result model shell so the native skeleton "
+                "DAG is the active node hierarchy."
+            )
         result_model.animations = list(template_model.animations)
         if native_skeleton_snapshot is not None:
             setattr(result_model, "_gr_native_skeleton_snapshot", native_skeleton_snapshot)
+
+        log_character_builder_event(
+            "apply_template_rig.root_verified",
+            root=str(getattr(getattr(result_model, "root_node", None), "name", "") or ""),
+            node_count=len(_model_nodes_for_diag(result_model)),
+            first_nodes=_node_names_for_character_builder(result_model),
+            rebuilt_shell=bool(root_shell_rebuilt),
+            payload_names=[
+                str(getattr(mesh_node, "name", "") or "")
+                for mesh_node in mesh_payloads
+            ],
+        )
 
         weight_donor_model, weight_donor_source, weight_donor_summary = (
             _resolve_template_weight_donor(template_model, game)
@@ -1279,6 +1402,7 @@ def apply_template_rig(
             donor_weight_transfer = bool(getattr(bind_report, "donor_weight_transfer", False))
             source_skin_remap = bool(getattr(bind_report, "source_skin_remap", False))
             source_hand_refinement = bool(getattr(bind_report, "source_hand_refinement", False))
+            creature_wing_refinement = bool(getattr(bind_report, "creature_wing_refinement", False))
             collapsed_bind_repairs = int(getattr(bind_report, "collapsed_bind_repairs", 0) or 0)
             metadata["character_builder_bind"] = {
                 "status": "bound_to_native_kotor_skeleton",
@@ -1321,9 +1445,15 @@ def apply_template_rig(
                     "donor_weight_transfer": donor_weight_transfer,
                     "source_skin_remap": source_skin_remap,
                     "source_hand_refinement": source_hand_refinement,
+                    "creature_wing_refinement": creature_wing_refinement,
                     "collapsed_bind_repairs": collapsed_bind_repairs,
                     "mesh_reports": list(getattr(bind_report, "mesh_reports", None) or []),
                     "note": (
+                        "Native-template donor weights were transferred by nearest "
+                        "surface vertex, then creature wing membrane weights were "
+                        "refined onto animated native wing helper nodes. Preview "
+                        "inherited animations before claiming launch-quality deformation."
+                        if creature_wing_refinement and donor_weight_transfer else
                         "Imported source skin weights were remapped onto the "
                         "selected native KOTOR skeleton by semantic bone role. "
                         "Native hand/finger refinement was applied. "
@@ -1394,6 +1524,7 @@ def apply_template_rig(
             bone_slots=bind_report.bone_count,
             weighting_method=getattr(bind_report, "weighting_method", ""),
             donor_weight_transfer=bool(getattr(bind_report, "donor_weight_transfer", False)),
+            creature_wing_refinement=bool(getattr(bind_report, "creature_wing_refinement", False)),
             weight_donor_source=weight_donor_source,
             collapsed_bind_repairs=int(getattr(bind_report, "collapsed_bind_repairs", 0) or 0),
             mesh_reports=list(getattr(bind_report, "mesh_reports", None) or []),

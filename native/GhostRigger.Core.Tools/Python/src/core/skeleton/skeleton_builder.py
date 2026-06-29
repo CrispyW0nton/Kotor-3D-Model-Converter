@@ -42,6 +42,7 @@ class SkinBindingReport:
     donor_weight_transfer: bool = False
     source_skin_remap: bool = False
     source_hand_refinement: bool = False
+    creature_wing_refinement: bool = False
     collapsed_bind_repairs: int = 0
     mesh_reports: List[dict] | None = None
 
@@ -121,7 +122,8 @@ def bind_imported_meshes_to_skeleton(
     if not nodes:
         return SkinBindingReport(message="Model has no nodes to bind.", warnings=[])
 
-    candidates = _candidate_bones(nodes)
+    donor_bone_names = _donor_skin_bone_names(donor_model)
+    candidates = _candidate_bones(nodes, preferred_names=donor_bone_names)
     if not candidates:
         return SkinBindingReport(message="No usable KOTOR skeleton bones found.", warnings=[])
 
@@ -141,17 +143,39 @@ def bind_imported_meshes_to_skeleton(
         bone_slots,
         max_influences=max_influences,
     )
+    slot_names_lower = {str(slot[0] or "").strip().lower() for slot in bone_slots}
+    preferred_names_lower = [
+        str(name or "").strip().lower()
+        for name in donor_bone_names
+        if str(name or "").strip()
+    ]
+    preferred_matched = [
+        name for name in preferred_names_lower
+        if name in slot_names_lower
+    ]
+    preferred_missing = [
+        name for name in preferred_names_lower
+        if name not in slot_names_lower
+    ]
     _bind_diag(
         "bind.start",
         model_name=str(getattr(model, "name", "") or ""),
         mesh_count=len(selected_meshes),
         candidate_bones=len(candidates),
         full_bone_slots=len(bone_slots),
+        donor_bone_map_count=len(donor_bone_names),
+        donor_bone_map_matched=len(preferred_matched),
+        donor_bone_map_missing=preferred_missing[:16],
+        candidate_sample=[
+            str(getattr(node, "name", "") or "")
+            for node in candidates[:24]
+        ],
         donor=_donor_diag_summary(donor_model),
         donor_index_count=len(donor_index),
     )
     source_skin_vertices_used = 0
     source_hand_refinement_vertices_used = 0
+    creature_wing_refinement_vertices_used = 0
     donor_vertices_used = 0
     fallback_vertices_used = 0
     collapsed_bind_repairs = 0
@@ -176,6 +200,8 @@ def bind_imported_meshes_to_skeleton(
         )
         mesh_source_skin_vertices = 0
         mesh_source_hand_refinement_vertices = 0
+        mesh_creature_wing_refinement_vertices = 0
+        mesh_creature_wing_refinement_by_side: dict[str, int] = {}
         mesh_donor_vertices = 0
         mesh_fallback_vertices = 0
         for vertex_index, vertex in enumerate(verts):
@@ -241,6 +267,15 @@ def bind_imported_meshes_to_skeleton(
                         "payload to one animated slot."
                     ),
                 }
+        (
+            mesh_creature_wing_refinement_vertices,
+            mesh_creature_wing_refinement_by_side,
+        ) = _refine_creature_wing_weights_with_native_wing_nodes(
+            mesh,
+            verts,
+            bone_slots,
+            max_influences=max_influences,
+        )
         compact_report = _compact_skin_bone_map_to_used_influences(mesh)
         mesh.bone_weights = [
             [bw.weight for bw in sd.influences]
@@ -252,27 +287,17 @@ def bind_imported_meshes_to_skeleton(
         ]
         mesh_report = _mesh_binding_report(
             mesh,
-            weighting_method=(
-                "imported_source_skin_remap"
-                if mesh_source_skin_vertices and not mesh_donor_vertices and not mesh_fallback_vertices else
-                "imported_source_skin_remap_with_fallback"
-                if mesh_source_skin_vertices else
-                "native_template_nearest_vertex_donor"
-                if mesh_donor_vertices and not mesh_fallback_vertices else
-                "native_template_nearest_vertex_donor_with_fallback"
-                if mesh_donor_vertices else
-                "nearest_kotor_bone_segment"
+            weighting_method=_binding_method_name(
+                source_vertices=mesh_source_skin_vertices,
+                donor_vertices=mesh_donor_vertices,
+                fallback_vertices=mesh_fallback_vertices,
+                wing_refined_vertices=mesh_creature_wing_refinement_vertices,
             ),
-            quality_stage=(
-                "source_skin_remap_first_pass"
-                if mesh_source_skin_vertices and not mesh_donor_vertices and not mesh_fallback_vertices else
-                "source_skin_remap_partial"
-                if mesh_source_skin_vertices else
-                "donor_transfer_first_pass"
-                if mesh_donor_vertices and not mesh_fallback_vertices else
-                "donor_transfer_partial"
-                if mesh_donor_vertices else
-                "fallback_first_pass"
+            quality_stage=_binding_quality_stage(
+                source_vertices=mesh_source_skin_vertices,
+                donor_vertices=mesh_donor_vertices,
+                fallback_vertices=mesh_fallback_vertices,
+                wing_refined_vertices=mesh_creature_wing_refinement_vertices,
             ),
             max_influences=max_influences,
             donor_weight_transfer=bool(mesh_donor_vertices),
@@ -280,6 +305,9 @@ def bind_imported_meshes_to_skeleton(
             source_skin_vertices=mesh_source_skin_vertices,
             source_hand_refinement=bool(mesh_source_hand_refinement_vertices),
             source_hand_refinement_vertices=mesh_source_hand_refinement_vertices,
+            creature_wing_refinement=bool(mesh_creature_wing_refinement_vertices),
+            creature_wing_refinement_vertices=mesh_creature_wing_refinement_vertices,
+            creature_wing_refinement_by_side=mesh_creature_wing_refinement_by_side,
             donor_vertices=mesh_donor_vertices,
             fallback_vertices=mesh_fallback_vertices,
             donor_vertex_count=len(donor_index),
@@ -291,6 +319,7 @@ def bind_imported_meshes_to_skeleton(
         _bind_diag("bind.mesh", **mesh_report)
         source_skin_vertices_used += mesh_source_skin_vertices
         source_hand_refinement_vertices_used += mesh_source_hand_refinement_vertices
+        creature_wing_refinement_vertices_used += mesh_creature_wing_refinement_vertices
         donor_vertices_used += mesh_donor_vertices
         fallback_vertices_used += mesh_fallback_vertices
         generated_bone_slot_counts.append(len(list(getattr(mesh, "bone_map", []) or [])))
@@ -329,27 +358,22 @@ def bind_imported_meshes_to_skeleton(
             "Repaired a collapsed one-bone bind by recomputing nearest "
             "KOTOR bone-segment weights so preview animation can deform the mesh."
         )
-    weighting_method = (
-        "imported_source_skin_remap"
-        if source_skin_vertices_used and not donor_vertices_used and not fallback_vertices_used else
-        "imported_source_skin_remap_with_fallback"
-        if source_skin_vertices_used else
-        "native_template_nearest_vertex_donor"
-        if donor_vertices_used and not fallback_vertices_used else
-        "native_template_nearest_vertex_donor_with_fallback"
-        if donor_vertices_used else
-        "nearest_kotor_bone_segment"
+    if creature_wing_refinement_vertices_used:
+        warnings.append(
+            "Refined creature wing membrane weights onto native wing bones so "
+            "animated wing helper chains can drive the imported mesh."
+        )
+    weighting_method = _binding_method_name(
+        source_vertices=source_skin_vertices_used,
+        donor_vertices=donor_vertices_used,
+        fallback_vertices=fallback_vertices_used,
+        wing_refined_vertices=creature_wing_refinement_vertices_used,
     )
-    quality_stage = (
-        "source_skin_remap_first_pass"
-        if source_skin_vertices_used and not donor_vertices_used and not fallback_vertices_used else
-        "source_skin_remap_partial"
-        if source_skin_vertices_used else
-        "donor_transfer_first_pass"
-        if donor_vertices_used and not fallback_vertices_used else
-        "donor_transfer_partial"
-        if donor_vertices_used else
-        "fallback_first_pass"
+    quality_stage = _binding_quality_stage(
+        source_vertices=source_skin_vertices_used,
+        donor_vertices=donor_vertices_used,
+        fallback_vertices=fallback_vertices_used,
+        wing_refined_vertices=creature_wing_refinement_vertices_used,
     )
     max_generated_bone_slots = max(generated_bone_slot_counts, default=0)
 
@@ -364,6 +388,7 @@ def bind_imported_meshes_to_skeleton(
         donor_weight_transfer=bool(donor_vertices_used),
         source_skin_remap=bool(source_skin_vertices_used),
         source_hand_refinement=bool(source_hand_refinement_vertices_used),
+        creature_wing_refinement=bool(creature_wing_refinement_vertices_used),
         collapsed_bind_repairs=collapsed_bind_repairs,
         mesh_reports=mesh_reports,
         message=(
@@ -374,7 +399,31 @@ def bind_imported_meshes_to_skeleton(
     )
 
 
-def _candidate_bones(nodes: Sequence[Any]) -> List[Any]:
+def _candidate_bones(
+    nodes: Sequence[Any],
+    preferred_names: Sequence[str] | None = None,
+) -> List[Any]:
+    preferred_lookup = {
+        str(name or "").strip().lower()
+        for name in (preferred_names or [])
+        if str(name or "").strip()
+    }
+    if preferred_lookup:
+        preferred_bones = [
+            node for node in nodes
+            if _is_preferred_deform_candidate(node, preferred_lookup)
+        ]
+        if preferred_bones:
+            selected = list(preferred_bones)
+            selected_ids = {id(node) for node in selected}
+            for node in nodes:
+                if id(node) in selected_ids:
+                    continue
+                if _is_creature_wing_deform_candidate(node):
+                    selected.append(node)
+                    selected_ids.add(id(node))
+            return selected
+
     bones = [
         node for node in nodes
         if _is_deform_candidate(node)
@@ -389,12 +438,48 @@ def _candidate_bones(nodes: Sequence[Any]) -> List[Any]:
     ]
 
 
+def _donor_skin_bone_names(model: Any | None) -> List[str]:
+    if model is None:
+        return []
+    all_nodes = getattr(model, "all_nodes", None)
+    if not callable(all_nodes):
+        return []
+    out: List[str] = []
+    seen: set[str] = set()
+    try:
+        nodes = list(all_nodes())
+    except Exception:
+        return []
+    for node in nodes:
+        if not bool(getattr(node, "is_skin", False)):
+            continue
+        for raw_name in list(getattr(node, "bone_map", []) or []):
+            name = str(raw_name or "").strip()
+            key = name.lower()
+            if not name or key in seen:
+                continue
+            seen.add(key)
+            out.append(name)
+    return out
+
+
+def _is_preferred_deform_candidate(node: Any, preferred_lookup: set[str]) -> bool:
+    name = str(getattr(node, "name", "") or "").strip().lower()
+    if not name or name not in preferred_lookup:
+        return False
+    if getattr(node, "_external_imported", False):
+        return False
+    return True
+
+
 def _is_deform_candidate(node: Any) -> bool:
     name = str(getattr(node, "name", "") or "").strip().lower()
     if not name or _is_non_deform_hook(name):
         return False
     if getattr(node, "_external_imported", False):
         return False
+    if _is_creature_wing_deform_name(name):
+        return True
     if name.endswith(("_g", "_dum")):
         return True
     return name in {
@@ -406,6 +491,20 @@ def _is_deform_candidate(node: Any) -> bool:
         "lhand",
         "rhand",
     }
+
+
+def _is_creature_wing_deform_candidate(node: Any) -> bool:
+    name = str(getattr(node, "name", "") or "").strip().lower()
+    if not name or _is_non_deform_hook(name):
+        return False
+    if getattr(node, "_external_imported", False):
+        return False
+    return _is_creature_wing_deform_name(name)
+
+
+def _is_creature_wing_deform_name(name: Any) -> bool:
+    text = str(name or "").strip().lower()
+    return text.startswith(("lwing_", "rwing_"))
 
 
 def _imported_mesh_payloads(nodes: Sequence[Any]) -> List[Any]:
@@ -499,6 +598,279 @@ def _should_repair_collapsed_bind(
     if bool(getattr(mesh, "_gr_allow_single_bone_bind", False)):
         return False
     return bool(getattr(mesh, "_external_imported", False) or getattr(mesh, "_imported", False))
+
+
+def _binding_method_name(
+    *,
+    source_vertices: int,
+    donor_vertices: int,
+    fallback_vertices: int,
+    wing_refined_vertices: int = 0,
+) -> str:
+    if source_vertices and not donor_vertices and not fallback_vertices:
+        base = "imported_source_skin_remap"
+    elif source_vertices:
+        base = "imported_source_skin_remap_with_fallback"
+    elif donor_vertices and not fallback_vertices:
+        base = "native_template_nearest_vertex_donor"
+    elif donor_vertices:
+        base = "native_template_nearest_vertex_donor_with_fallback"
+    else:
+        base = "nearest_kotor_bone_segment"
+    if wing_refined_vertices:
+        return f"{base}_with_creature_wing_refinement"
+    return base
+
+
+def _binding_quality_stage(
+    *,
+    source_vertices: int,
+    donor_vertices: int,
+    fallback_vertices: int,
+    wing_refined_vertices: int = 0,
+) -> str:
+    if source_vertices and not donor_vertices and not fallback_vertices:
+        base = "source_skin_remap_first_pass"
+    elif source_vertices:
+        base = "source_skin_remap_partial"
+    elif donor_vertices and not fallback_vertices:
+        base = "donor_transfer_first_pass"
+    elif donor_vertices:
+        base = "donor_transfer_partial"
+    else:
+        base = "fallback_first_pass"
+    if wing_refined_vertices:
+        return f"{base}_wing_refined"
+    return base
+
+
+def _refine_creature_wing_weights_with_native_wing_nodes(
+    mesh: Any,
+    vertices: Sequence[Any],
+    slots: Sequence[Any],
+    *,
+    max_influences: int,
+) -> tuple[int, dict[str, int]]:
+    """Blend membrane vertices onto native Lwing/Rwing helper chains.
+
+    Drexl-style Odyssey creatures can animate visible wing helper chains even
+    when the stock skin map only references arm/finger bones.  A straight donor
+    nearest-vertex transfer therefore produces a technically valid skin with no
+    vertex influence on the flapping wing nodes.  This corrective pass keeps the
+    donor transfer as the base and adds strong spatial influence for vertices
+    that sit outboard of a native wing root.
+    """
+
+    skin_rows = list(getattr(mesh, "skin_data", []) or [])
+    if not vertices or not skin_rows or not slots:
+        return 0, {}
+
+    side_infos = _wing_side_infos(slots)
+    if not side_infos:
+        return 0, {}
+
+    refined = 0
+    by_side = {"l": 0, "r": 0}
+    for vertex_index, vertex in enumerate(vertices[:len(skin_rows)]):
+        point = _vec3(vertex)
+        side = _wing_side_for_vertex(point, side_infos, slots)
+        if not side:
+            continue
+        family = _wing_family_spatial_weights(
+            side,
+            point,
+            slots,
+            max_influences=max_influences,
+        )
+        if not family:
+            continue
+        row = skin_rows[vertex_index]
+        existing = list(getattr(row, "influences", []) or [])
+        merged, changed = _blend_wing_family_into_row(
+            existing,
+            family,
+            blend=_wing_refinement_blend(point, side_infos[side]),
+            max_influences=max_influences,
+        )
+        if not changed:
+            continue
+        row.influences = merged
+        refined += 1
+        by_side[side] = by_side.get(side, 0) + 1
+
+    if refined:
+        _bind_diag(
+            "bind.creature_wing_refinement",
+            mesh_name=str(getattr(mesh, "name", "") or ""),
+            refined_vertices=refined,
+            left_vertices=by_side.get("l", 0),
+            right_vertices=by_side.get("r", 0),
+            wing_slots=[
+                str(slots[index][0] or "")
+                for info in side_infos.values()
+                for index in info.get("indices", [])[:8]
+            ],
+        )
+    return refined, {key: value for key, value in by_side.items() if value}
+
+
+def _wing_side_infos(slots: Sequence[Any]) -> dict[str, dict[str, Any]]:
+    infos: dict[str, dict[str, Any]] = {}
+    for side in ("l", "r"):
+        indices = [
+            index for index, slot in enumerate(slots)
+            if _is_native_wing_slot(side, slot[0])
+        ]
+        if not indices:
+            continue
+        origins = [_vec3(slots[index][3]) for index in indices]
+        root = origins[0]
+        tip = max(
+            origins,
+            key=lambda point: abs(point[0] - root[0]),
+        )
+        direction = -1.0 if side == "l" else 1.0
+        span = max(0.25, abs(tip[0] - root[0]))
+        infos[side] = {
+            "indices": indices,
+            "root": root,
+            "tip": tip,
+            "direction": direction,
+            "span": span,
+            "root_y": root[1],
+            "max_distance": max(1.25, span * 2.15),
+        }
+    return infos
+
+
+def _wing_side_for_vertex(
+    point: Vec3,
+    side_infos: dict[str, dict[str, Any]],
+    slots: Sequence[Any],
+) -> str:
+    best_side = ""
+    best_score = float("inf")
+    for side, info in side_infos.items():
+        direction = float(info["direction"])
+        root = info["root"]
+        outward = (point[0] - root[0]) * direction
+        if outward <= 0.12:
+            continue
+        if point[1] < float(info["root_y"]) - 2.25:
+            continue
+        dist = _distance_to_slot_family(point, info["indices"], slots)
+        if dist > float(info["max_distance"]):
+            continue
+        score = dist / max(0.25, outward)
+        if score < best_score:
+            best_score = score
+            best_side = side
+    return best_side
+
+
+def _distance_to_slot_family(
+    point: Vec3,
+    indices: Sequence[int],
+    slots: Sequence[Any],
+) -> float:
+    return _distance_to_slots(point, [slots[index] for index in indices])
+
+
+def _distance_to_slots(point: Vec3, slots: Sequence[Any]) -> float:
+    best = float("inf")
+    for slot in slots:
+        origin = slot[3]
+        children = slot[5]
+        dist = min(
+            (_distance_point_segment(point, origin, child) for child in children),
+            default=_distance(point, origin),
+        )
+        best = min(best, dist)
+    return best
+
+
+def _wing_family_spatial_weights(
+    side: str,
+    vertex: Vec3,
+    slots: Sequence[Any],
+    *,
+    max_influences: int,
+) -> List[tuple[int, float]]:
+    distances: List[tuple[float, int]] = []
+    for index, slot in enumerate(slots):
+        if not _is_native_wing_slot(side, slot[0]):
+            continue
+        origin = slot[3]
+        children = slot[5]
+        dist = min(
+            (_distance_point_segment(vertex, origin, child) for child in children),
+            default=_distance(vertex, origin),
+        )
+        distances.append((max(dist, 1.0e-5), index))
+    if not distances:
+        return []
+    distances.sort(key=lambda item: item[0])
+    chosen = distances[:max(1, min(4, int(max_influences or 4)))]
+    raw = [(index, 1.0 / (dist * dist)) for dist, index in chosen]
+    total = sum(weight for _index, weight in raw)
+    if not isfinite(total) or total <= 1.0e-12:
+        return []
+    return [(index, weight / total) for index, weight in raw]
+
+
+def _wing_refinement_blend(point: Vec3, info: dict[str, Any]) -> float:
+    direction = float(info["direction"])
+    root = info["root"]
+    span = max(0.25, float(info["span"]))
+    outward_ratio = max(0.0, min(1.0, ((point[0] - root[0]) * direction) / span))
+    return max(0.55, min(0.90, 0.55 + 0.35 * outward_ratio))
+
+
+def _blend_wing_family_into_row(
+    existing: Sequence[BoneWeight],
+    family: Sequence[tuple[int, float]],
+    *,
+    blend: float,
+    max_influences: int,
+) -> tuple[List[BoneWeight], bool]:
+    if not family:
+        return list(existing), False
+    wing_indices = {index for index, _weight in family}
+    existing_wing_weight = sum(
+        float(getattr(influence, "weight", 0.0))
+        for influence in existing
+        if int(getattr(influence, "bone_index", -1)) in wing_indices
+    )
+    blend = max(0.0, min(0.95, float(blend)))
+    if existing_wing_weight >= blend - 0.05:
+        return list(existing), False
+
+    merged: dict[int, float] = {}
+    for influence in existing:
+        try:
+            index = int(getattr(influence, "bone_index", -1))
+            weight = float(getattr(influence, "weight", 0.0))
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if index < 0 or weight <= 0.0:
+            continue
+        merged[index] = merged.get(index, 0.0) + weight * (1.0 - blend)
+    for index, weight in family:
+        merged[index] = merged.get(index, 0.0) + float(weight) * blend
+    normalized = _normalize_influences(
+        [BoneWeight(index, weight) for index, weight in merged.items()],
+        max_influences=max_influences,
+    )
+    return normalized or list(existing), bool(normalized)
+
+
+def _is_native_wing_slot(side: str, name: Any) -> bool:
+    text = str(name or "").strip().lower()
+    if side == "l":
+        return text.startswith("lwing_")
+    if side == "r":
+        return text.startswith("rwing_")
+    return False
 
 
 def _source_skin_rows_for_mesh(
@@ -985,6 +1357,9 @@ def _mesh_binding_report(
     source_skin_vertices: int = 0,
     source_hand_refinement: bool = False,
     source_hand_refinement_vertices: int = 0,
+    creature_wing_refinement: bool = False,
+    creature_wing_refinement_vertices: int = 0,
+    creature_wing_refinement_by_side: dict | None = None,
     donor_vertices: int = 0,
     fallback_vertices: int = 0,
     donor_vertex_count: int = 0,
@@ -1014,6 +1389,8 @@ def _mesh_binding_report(
         0.0
     )
     compact_report = dict(compact_report or {})
+    bone_map = list(getattr(mesh, "bone_map", []) or [])
+    used_indices = _used_influence_indices(skin_rows, len(bone_map))
     return {
         "mesh_name": str(getattr(mesh, "name", "") or ""),
         "is_skinmesh": bool(getattr(mesh, "is_skin", False)),
@@ -1024,7 +1401,9 @@ def _mesh_binding_report(
         "skin_rows": len(skin_rows),
         "weighted_vertices": max(0, len(skin_rows) - zero_weight_vertices),
         "zero_weight_vertices": zero_weight_vertices,
-        "bone_map_count": len(list(getattr(mesh, "bone_map", []) or [])),
+        "bone_map_count": len(bone_map),
+        "bone_map_sample": [str(name or "") for name in bone_map[:16]],
+        "used_influence_slot_count": len(used_indices),
         "max_influences_per_vertex": max(influence_counts, default=0),
         "average_influences_per_vertex": average_count,
         "weight_sum_min": min(weight_sums, default=0.0),
@@ -1036,6 +1415,9 @@ def _mesh_binding_report(
         "source_skin_vertices": int(source_skin_vertices),
         "source_hand_refinement": bool(source_hand_refinement),
         "source_hand_refinement_vertices": int(source_hand_refinement_vertices),
+        "creature_wing_refinement": bool(creature_wing_refinement),
+        "creature_wing_refinement_vertices": int(creature_wing_refinement_vertices),
+        "creature_wing_refinement_by_side": dict(creature_wing_refinement_by_side or {}),
         "donor_vertices": int(donor_vertices),
         "fallback_vertices": int(fallback_vertices),
         "donor_vertex_count": int(donor_vertex_count),
