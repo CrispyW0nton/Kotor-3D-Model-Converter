@@ -175,6 +175,7 @@ def iter_mesh_render_data(
                     skinning,
                     node_anim_pose,
                     model=model,
+                    anim_base_pose=anim_base_pose,
                 )
                 if skinned_positions is not positions:
                     positions = skinned_positions
@@ -203,6 +204,7 @@ def iter_mesh_render_data(
                     skinning,
                     node_anim_pose,
                     model=model,
+                    anim_base_pose=anim_base_pose,
                 )
                 if skinned_positions is not positions:
                     positions = skinned_positions
@@ -276,14 +278,28 @@ def _node_is_renderable_mesh(node) -> bool:
     return bool(getattr(node, "vertices", getattr(node, "verts", [])) and getattr(node, "faces", []))
 
 
+def _node_vertices_are_model_world(node) -> bool:
+    if bool(getattr(node, "_gr_vertices_in_kotor_world", False)):
+        return True
+    try:
+        return int(getattr(node, "vertex_space", 0) or 0) == 1
+    except Exception:
+        return False
+
+
 def _extract_node_arrays(node, *, anim_pose=None, vbo_builder=None):
     import numpy as np
 
     is_skin = bool(getattr(node, "is_skin", False))
     is_bas_attachment = bool(getattr(node, "_gr_bas_attachment_layer", False))
     bas_root = _bas_attachment_root_for_node(node) if is_bas_attachment else None
+    vertices_are_model_world = _node_vertices_are_model_world(node)
     world_pos, world_orient = _node_world_transform(node, anim_pose=anim_pose)
     world_matrix = node_world_matrix(node, anim_pose=anim_pose)
+    if vertices_are_model_world and not is_bas_attachment:
+        world_pos = (0.0, 0.0, 0.0)
+        world_orient = (0.0, 0.0, 0.0, 1.0)
+        world_matrix = np.eye(4, dtype=np.float32)
     if is_skin and bas_root is not None:
         # BAS skin attachments must stay out of the body palette, but their
         # bind-shape should remain local to the attachment root.  Keeping large
@@ -619,6 +635,10 @@ def bas_attachment_palette_model_for_node(node):
 def mesh_model_matrix_for_node(node, *, anim_pose=None):
     """Return the world/model matrix a renderer should apply to one mesh node."""
 
+    if _node_vertices_are_model_world(node) and not bool(getattr(node, "_gr_bas_attachment_layer", False)):
+        import numpy as np
+
+        return np.eye(4, dtype=np.float32)
     anim_pose = _effective_animation_pose_for_node(node, anim_pose)
     if bool(getattr(node, "_gr_bas_attachment_layer", False)):
         root = _bas_attachment_root_for_node(node)
@@ -1450,11 +1470,13 @@ def _material_color(node) -> tuple[float, float, float, float]:
     return (_clamp01(r), _clamp01(g), _clamp01(b), _clamp01(alpha))
 
 
-def _node_revision(node) -> tuple[int, int, int]:
+def _node_revision(node) -> tuple[int, ...]:
     return (
         len(getattr(node, "vertices", getattr(node, "verts", [])) or []),
         len(getattr(node, "faces", []) or []),
         int(getattr(node, "_gr_revision", 0) or 0),
+        int(getattr(node, "vertex_space", 0) or 0),
+        1 if bool(getattr(node, "_gr_vertices_in_kotor_world", False)) else 0,
     )
 
 

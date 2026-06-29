@@ -45,10 +45,12 @@ class FbxSdkSetupDialog(QtWidgets.QDialog):
         self.sdk_root_edit = QtWidgets.QLineEdit()
         self.bindings_edit = QtWidgets.QLineEdit()
         self.fbxcommon_edit = QtWidgets.QLineEdit()
+        self.library_edit = QtWidgets.QLineEdit()
         rows = [
             ("SDK root", self.sdk_root_edit, self._browse_sdk_root),
             ("Python bindings folder", self.bindings_edit, self._browse_bindings),
             ("FbxCommon.py folder", self.fbxcommon_edit, self._browse_fbxcommon),
+            ("SDK library/bin folder", self.library_edit, self._browse_library),
         ]
         for row, (label, edit, callback) in enumerate(rows):
             form.addWidget(QtWidgets.QLabel(label), row, 0)
@@ -92,6 +94,7 @@ class FbxSdkSetupDialog(QtWidgets.QDialog):
         self.sdk_root_edit.setText(str(self.fbx_settings.get("sdk_root") or ""))
         self.bindings_edit.setText(str(self.fbx_settings.get("python_bindings_path") or ""))
         self.fbxcommon_edit.setText(str(self.fbx_settings.get("fbxcommon_path") or ""))
+        self.library_edit.setText(";".join(str(item) for item in self.fbx_settings.get("library_paths") or []))
 
     def _collect_settings(self) -> dict[str, Any]:
         data = normalize_fbx_sdk_settings(self.fbx_settings)
@@ -100,6 +103,7 @@ class FbxSdkSetupDialog(QtWidgets.QDialog):
                 "sdk_root": self.sdk_root_edit.text().strip(),
                 "python_bindings_path": self.bindings_edit.text().strip(),
                 "fbxcommon_path": self.fbxcommon_edit.text().strip(),
+                "library_paths": [item.strip() for item in self.library_edit.text().split(";") if item.strip()],
             }
         )
         return data
@@ -135,6 +139,12 @@ class FbxSdkSetupDialog(QtWidgets.QDialog):
         if file_path:
             self.fbxcommon_edit.setText(str(Path(file_path).parent))
 
+    def _browse_library(self) -> None:
+        start = self.library_edit.text().split(";", 1)[0] or self.sdk_root_edit.text()
+        path = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Autodesk FBX SDK Library/Bin Folder", start)
+        if path:
+            self.library_edit.setText(path)
+
     def _scan_root(self) -> None:
         root = self.sdk_root_edit.text().strip()
         if not root:
@@ -144,6 +154,13 @@ class FbxSdkSetupDialog(QtWidgets.QDialog):
             self.bindings_edit.setText(str(Path(found["bindings"][0]).parent))
         if found["fbxcommon"] and not self.fbxcommon_edit.text().strip():
             self.fbxcommon_edit.setText(str(Path(found["fbxcommon"][0]).parent))
+        if found["libraries"] and not self.library_edit.text().strip():
+            library_dirs = []
+            for path in found["libraries"]:
+                parent = str(Path(path).parent)
+                if parent not in library_dirs:
+                    library_dirs.append(parent)
+            self.library_edit.setText(";".join(library_dirs[:3]))
         self.result_text.setPlainText(
             "\n".join(
                 [
@@ -169,6 +186,8 @@ class FbxSdkSetupDialog(QtWidgets.QDialog):
             f"Empty scene create: {result.scene_create_ok}",
             f"SDK version: {result.detected_sdk_version or 'unknown'}",
         ]
+        if result.tested_paths:
+            lines.extend(["Tested paths:", *(f"- {path}" for path in result.tested_paths)])
         if result.error_message:
             lines.append(f"Error: {result.error_message}")
         if result.recommended_fix:

@@ -43,6 +43,7 @@ def compatibility_guidance(settings: dict[str, Any] | None = None) -> str:
             "Action:",
             "Download Autodesk FBX Python SDK / Python bindings matching your Python version and platform from Autodesk's official FBX SDK page.",
             "GhostRigger cannot bundle Autodesk SDK files due to external licensing.",
+            "If the SDK library/bin folder is separate from the Python binding folder, configure both paths.",
             "",
             "Important:",
             "Autodesk's older documentation references Python 3.1-era bindings. Modern users may need a newer Autodesk FBX SDK release or matching Python binding package.",

@@ -120,6 +120,38 @@ def generate_project(project: str) -> None:
     ]
     rc_lines.extend(f'{row["resource_name"]} RCDATA "{row["packaged_path"]}"' for row in rows)
     write_text_if_changed(project_dir / "GhostRiggerPythonPayload.rc", "\n".join(rc_lines) + "\n")
+    ensure_project_payload_items(project, [Path(row["packaged_path"]) for row in rows])
+
+
+def ensure_project_payload_items(project: str, packaged_paths: list[Path]) -> None:
+    project_dir = NATIVE_ROOT / project
+    vcxproj = project_dir / f"{project}.vcxproj"
+    if not vcxproj.exists():
+        return
+
+    text = vcxproj.read_text(encoding="utf-8")
+    match = re.search(r'(<ItemGroup Label="PythonPayload">)(.*?)(</ItemGroup>)', text, flags=re.DOTALL)
+    if not match:
+        raise RuntimeError(f"cannot find Python payload item group in {vcxproj}")
+
+    body = match.group(2)
+    existing = set(re.findall(r'<None Include="([^"]+)"\s*/>', body))
+    required = [
+        str(path).replace("/", "\\")
+        for path in packaged_paths
+    ]
+    missing = [
+        item
+        for item in required
+        if item not in existing
+    ]
+    if not missing:
+        return
+
+    addition = "".join(f'<None Include="{item}" />' for item in missing)
+    updated_group = f"{match.group(1)}{body}{addition}{match.group(3)}"
+    updated = text[:match.start()] + updated_group + text[match.end():]
+    write_text_if_changed(vcxproj, updated)
 
 
 def _insert_after_once(text: str, anchor: str, addition: str, exists: str, path: Path) -> str:

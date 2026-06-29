@@ -426,6 +426,13 @@ class RendererGeometryMixin:
           - Non-skin (trimesh/dangly) + identity orientation → translate by wp only.
           - Non-skin + non-identity orientation → full world transform (rotate + translate).
         """
+        if bool(getattr(node, "_gr_vertices_in_kotor_world", False)):
+            return (float(v[0]), float(v[1]), float(v[2]))
+        try:
+            if int(getattr(node, "vertex_space", 0) or 0) == 1:
+                return (float(v[0]), float(v[1]), float(v[2]))
+        except Exception:
+            pass
         if is_identity_rot:
             return (v[0] + wp[0], v[1] + wp[1], v[2] + wp[2])
         rx, ry, rz = _quat_rotate(wo, v)
@@ -739,7 +746,12 @@ class RendererGeometryMixin:
 
         try:
             uploader = self._gpu_parity_skin_uploader
-            uploader.compute_skin_node_palette(node, node_anim_pose)
+            node_anim_base_pose = animation_pose_for_node(node, getattr(self, "_anim_base_pose", None))
+            uploader.compute_skin_node_palette(
+                node,
+                node_anim_pose,
+                anim_base_pose=node_anim_base_pose,
+            )
             palette = uploader.as_numpy_array()
         except Exception as exc:
             log.debug("GPU-parity overlay skin palette failed for %s: %s", getattr(node, "name", "?"), exc)

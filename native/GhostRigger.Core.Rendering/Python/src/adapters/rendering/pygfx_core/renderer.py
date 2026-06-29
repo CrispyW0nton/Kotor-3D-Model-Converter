@@ -263,7 +263,11 @@ class PygfxViewportRenderer(ViewportRendererPort):
                 self.scene_bridge.update_lighting(kwargs.get("lighting_render_data"))
             if dirty_flags.get("animation"):
                 if self.scene_bridge.can_update_animation_only():
-                    self.scene_bridge.update_animation(scene, anim_pose=kwargs.get("anim_pose"))
+                    self.scene_bridge.update_animation(
+                        scene,
+                        anim_pose=kwargs.get("anim_pose"),
+                        anim_base_pose=kwargs.get("anim_base_pose"),
+                    )
                 else:
                     self.scene_bridge.update_scene(
                         scene,

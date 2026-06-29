@@ -346,7 +346,8 @@ def test_moderngl_scene_animation_uses_node_scoped_skin_and_rigid_transforms():
     assert "_node_anim_pose = animation_pose_for_node(node, anim_pose)" in source
     assert "_pose_node_for_transform(node, _node_anim_pose)" in source
     assert "_acheck_pose = animation_pose_for_node(_acheck, anim_pose)" in source
-    assert "compute_skin_node_palette(node, _skin_anim_pose)" in source
+    assert "_skin_anim_base_pose = (" in source
+    assert "anim_base_pose=_skin_anim_base_pose" in source
     assert "_skin_uploaders_by_scope" in source
     assert "item is root or getattr(item, \"_gr_scene_object_root_ref\", None) is root" in source
     assert "_skin_uploader_for_node(node)" in source

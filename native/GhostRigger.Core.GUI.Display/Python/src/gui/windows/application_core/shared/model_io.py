@@ -71,11 +71,23 @@ def _work_import_fbx_blender(path: str, *, game_version, progress_callback=None,
 
 
 def _work_export_obj(model, path: str, *, tex_cache, progress_callback=None, is_cancelled=None):
-    from src.converters.mesh_converter import OBJExporter
+    from src.converters.mesh_converter import OBJExporter, _export_rigging_data
+    from pathlib import Path as _Path
 
     if progress_callback:
-        progress_callback("Writing OBJ file\u2026", 40)
-    OBJExporter().export(model, path, tex_cache=tex_cache, export_rigging=True)
+        progress_callback("Writing OBJ geometry…", 15)
+    # Phase 1: geometry only (fast)
+    OBJExporter().export(model, path, tex_cache=tex_cache, export_rigging=False)
+
+    if progress_callback:
+        progress_callback("Exporting skeleton and skin weights…", 50)
+    # Phase 2: rigging data (potentially slow — animations)
+    out_dir = _Path(path).parent
+    try:
+        rig_count = _export_rigging_data(model, out_dir)
+    except Exception:
+        rig_count = 0
+
     if progress_callback:
         progress_callback("OBJ export complete", 100)
     return path
@@ -112,12 +124,14 @@ def _work_export_mdl_binary(model, path: str, *, game_version, progress_callback
     return path, mdx_path
 
 
-def _work_export_fbx(model, path: str, *, fbx_sdk_settings, progress_callback=None, is_cancelled=None):
-    from src.io.fbx.fbx_exporter import export_fbx
+def _work_export_fbx(model, path: str, *, tex_cache=None, progress_callback=None, is_cancelled=None):
+    from src.converters.mesh_converter import FBXExporter
 
     if progress_callback:
-        progress_callback("Exporting FBX via Autodesk SDK\u2026", 40)
-    export_fbx(model, path, {"fbx_sdk": fbx_sdk_settings})
+        progress_callback("Writing FBX geometry and rigging\u2026", 40)
+    ok = FBXExporter().export(model, path, tex_cache=tex_cache, export_rigging=True)
+    if not ok:
+        raise RuntimeError("FBX export failed. Check the export log for details.")
     if progress_callback:
         progress_callback("FBX export complete", 100)
     return path
@@ -127,6 +141,99 @@ def _work_run_mdlops(cmd, cwd, *, progress_callback=None, is_cancelled=None):
     if progress_callback:
         progress_callback("Running MDLOps\u2026", 30)
     return subprocess.run(cmd, capture_output=True, text=True, timeout=30, cwd=str(cwd))
+
+
+class _IoGuiCallbackBridge(QtCore.QObject):
+    """Receive background I/O signals on the GUI thread."""
+
+    def __init__(
+        self,
+        owner,
+        description: str,
+        worker: BackgroundIOWorker,
+        thread: QtCore.QThread,
+        progress_dialog: QtWidgets.QProgressDialog,
+        on_complete,
+        on_error,
+        error_category: str,
+    ):
+        super().__init__(owner)
+        self._owner = owner
+        self._description = description
+        self._worker = worker
+        self._thread = thread
+        self._progress_dialog = progress_dialog
+        self._on_complete = on_complete
+        self._on_error = on_error
+        self._error_category = error_category
+        self._done = False
+
+    def _cleanup(self) -> None:
+        if self._done:
+            return
+        self._done = True
+        try:
+            self._progress_dialog.reset()
+            self._progress_dialog.close()
+            self._progress_dialog.deleteLater()
+        except RuntimeError:
+            pass
+        try:
+            self._worker.deleteLater()
+        except RuntimeError:
+            pass
+        try:
+            self._thread.quit()
+        except RuntimeError:
+            pass
+        self._owner._io_worker = None
+        self._owner._io_thread = None
+        self._owner._io_progress_dialog = None
+        self._owner._io_callback_bridge = None
+        self.deleteLater()
+
+    @QtCore.Slot(str, int)
+    def on_progress(self, message, percent):
+        try:
+            self._progress_dialog.setLabelText(message or self._description)
+            self._progress_dialog.setValue(max(0, min(100, int(percent))))
+        except RuntimeError:
+            pass
+
+    @QtCore.Slot(object)
+    def on_finished(self, result):
+        cancelled = self._worker.is_cancelled()
+        self._cleanup()
+        try:
+            if self._on_complete is not None:
+                self._on_complete(result, cancelled=cancelled)
+        except Exception as exc:  # noqa: BLE001 - post-processing must not crash UI
+            log.error("Post-processing error after %s", self._description, exc_info=True)
+            show_exception(self._owner, "io_error", exc, context=f"Finishing {self._description}")
+
+    @QtCore.Slot(str, str, object)
+    def on_error(self, message, tb, exc):
+        self._cleanup()
+        self._owner._log(f"{self._description} failed:\n{tb}", "error")
+        handled = False
+        if self._on_error is not None:
+            try:
+                handled = bool(self._on_error(exc))
+            except Exception:  # noqa: BLE001 - error handler must not crash UI
+                log.error("on_error handler failed", exc_info=True)
+        if not handled:
+            show_exception(self._owner, self._error_category, exc, context=self._description)
+
+    @QtCore.Slot()
+    def on_canceled(self):
+        try:
+            QtCore.QMetaObject.invokeMethod(
+                self._worker,
+                "request_cancel",
+                QtCore.Qt.QueuedConnection,
+            )
+        except RuntimeError:
+            pass
 
 
 class ModelIoMixin:
@@ -188,67 +295,24 @@ class ModelIoMixin:
         progress_dialog.setValue(0)
         progress_dialog.setMinimumWidth(360)
         self._io_progress_dialog = progress_dialog
-
-        finished = {"done": False}
-
-        def _cleanup() -> None:
-            if finished["done"]:
-                return
-            finished["done"] = True
-            try:
-                progress_dialog.reset()
-                progress_dialog.close()
-                progress_dialog.deleteLater()
-            except RuntimeError:
-                pass
-            try:
-                thread.quit()
-                thread.wait(2000)
-            except RuntimeError:
-                pass
-            worker.deleteLater()
-            thread.deleteLater()
-            self._io_worker = None
-            self._io_thread = None
-            self._io_progress_dialog = None
-
-        def _on_progress(message, percent):
-            try:
-                progress_dialog.setLabelText(message or description)
-                progress_dialog.setValue(max(0, min(100, int(percent))))
-            except RuntimeError:
-                pass
-
-        def _on_finished(result):
-            cancelled = worker.is_cancelled()
-            _cleanup()
-            try:
-                if on_complete is not None:
-                    on_complete(result, cancelled=cancelled)
-            except Exception as exc:  # noqa: BLE001 - post-processing must not crash UI
-                log.error("Post-processing error after %s", description, exc_info=True)
-                show_exception(self, "io_error", exc, context=f"Finishing {description}")
-
-        def _on_error(message, tb, exc):
-            _cleanup()
-            self._log(f"{description} failed:\n{tb}", "error")
-            handled = False
-            if on_error is not None:
-                try:
-                    handled = bool(on_error(exc))
-                except Exception:  # noqa: BLE001 - error handler must not crash UI
-                    log.error("on_error handler failed", exc_info=True)
-            if not handled:
-                show_exception(self, error_category, exc, context=description)
-
-        def _on_canceled():
-            worker.request_cancel()
+        bridge = _IoGuiCallbackBridge(
+            self,
+            description,
+            worker,
+            thread,
+            progress_dialog,
+            on_complete,
+            on_error,
+            error_category,
+        )
+        self._io_callback_bridge = bridge
 
         thread.started.connect(worker.run)
-        worker.progress.connect(_on_progress)
-        worker.error.connect(_on_error)
-        worker.finished.connect(_on_finished)
-        progress_dialog.canceled.connect(_on_canceled)
+        thread.finished.connect(thread.deleteLater)
+        worker.progress.connect(bridge.on_progress, QtCore.Qt.QueuedConnection)
+        worker.error.connect(bridge.on_error, QtCore.Qt.QueuedConnection)
+        worker.finished.connect(bridge.on_finished, QtCore.Qt.QueuedConnection)
+        progress_dialog.canceled.connect(bridge.on_canceled)
         thread.start()
         return worker
 
@@ -547,8 +611,6 @@ class ModelIoMixin:
             error_category="export_error",
         )
     def _export_fbx(self):
-        if not self._ensure_fbx_sdk_available_for_action("Export FBX"):
-            return
         model = self._require_model("Export FBX")
         if model is None:
             return
@@ -560,7 +622,7 @@ class ModelIoMixin:
         )
         if not path:
             return
-        fbx_sdk_settings = self.settings_data.get("fbx_sdk")
+        tex_cache = self._get_tex_cache_for_export()
 
         def _on_complete(result, cancelled=False):
             if cancelled or result is None:
@@ -582,14 +644,12 @@ class ModelIoMixin:
             _work_export_fbx,
             model,
             path,
-            fbx_sdk_settings=fbx_sdk_settings,
+            tex_cache=tex_cache,
             on_complete=_on_complete,
             on_error=_on_error,
             error_category="export_error",
         )
     def _export_selected_fbx(self):
-        if not self._ensure_fbx_sdk_available_for_action("Export Selected FBX"):
-            return
         selected = self.scene_manager.get_selected_objects()
         if not selected:
             QtWidgets.QMessageBox.information(self, "Export Selected FBX", "Select a scene object first.")
@@ -602,6 +662,27 @@ class ModelIoMixin:
         )
         if not path:
             return
+        if len(selected) == 1:
+            model_getter = getattr(self, "_runtime_model_for_scene_object", None)
+            model = model_getter(selected[0]) if callable(model_getter) else (getattr(selected[0], "metadata", {}) or {}).get("_runtime_model")
+            if model is not None:
+                tex_cache = self._get_tex_cache_for_export()
+
+                def _on_complete(result, cancelled=False):
+                    if cancelled or result is None:
+                        return
+                    self._log(f"Exported selected FBX -> {Path(result).name}", "success")
+
+                self._run_io_async(
+                    f"Exporting selected FBX \u2014 {Path(path).name}",
+                    _work_export_fbx,
+                    model,
+                    path,
+                    tex_cache=tex_cache,
+                    on_complete=_on_complete,
+                    error_category="export_error",
+                )
+                return
         try:
             from src.io.fbx.fbx_exporter import FbxSdkUnavailableError, export_fbx
 

@@ -109,7 +109,7 @@ class PygfxSceneBridge:
             )
             is_bas_attachment = bool(getattr(getattr(mesh_data, "source", None), "_gr_bas_attachment_layer", False))
             if bool(getattr(mesh_data, "is_skinned", False)) and (anim_pose is not None or is_bas_attachment):
-                self.mesh_cache.update_skin_palette(record, anim_pose, model=model)
+                self.mesh_cache.update_skin_palette(record, anim_pose, model=model, anim_base_pose=anim_base_pose)
             self._apply_world_matrix(record.mesh, self._mesh_model_matrix(mesh_data), record)
             if getattr(record, "edge_mesh", None) is not None:
                 self._apply_world_matrix(record.edge_mesh, self._mesh_model_matrix(mesh_data), record)
@@ -130,7 +130,7 @@ class PygfxSceneBridge:
             if not record.transform_dirty:
                 continue
             try:
-                matrix = node_world_matrix(record.source)
+                matrix = mesh_model_matrix_for_node(record.source)
             except Exception:
                 record.transform_dirty = False
                 continue
@@ -159,13 +159,13 @@ class PygfxSceneBridge:
                 return False
         return True
 
-    def update_animation(self, model, *, anim_pose=None) -> None:
+    def update_animation(self, model, *, anim_pose=None, anim_base_pose=None) -> None:
         """Update retained animation state without rebuilding mesh DTOs."""
 
         for record in self.mesh_cache.records.values():
             source = getattr(record, "source", None)
             if bool(getattr(record, "is_skinned", False)):
-                self.mesh_cache.update_skin_palette(record, anim_pose, model=model)
+                self.mesh_cache.update_skin_palette(record, anim_pose, model=model, anim_base_pose=anim_base_pose)
             if bool(getattr(record, "is_skinned", False)) and not bool(getattr(source, "_gr_bas_attachment_layer", False)):
                 matrix = np.eye(4, dtype=np.float32)
             else:

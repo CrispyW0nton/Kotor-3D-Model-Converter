@@ -10,10 +10,14 @@ Algorithm:
 1. Start from an initial guess (bounds-ratio scale + centroid alignment).
 2. Cast a ray from each bone position and count triangle crossings
    (odd = inside, even = outside).
-3. If any bone is outside, compute the distance to the nearest face and use
-   it to drive a scale increase.
+3. If any bone is outside, compute the distance to the nearest face for
+   diagnostics while the scale search expands.
 4. Binary-search the minimum scale where ALL bones are inside (tightest fit).
-5. Optimize translation to center the bone cloud inside the mesh.
+5. Keep translation centroid-anchored for the tested scale.
+
+This module assumes the caller has already proven that the mesh is a closed,
+watertight surface.  Open meshes do not have a reliable inside/outside volume;
+the Character Builder workflow must use a bounds-staging fallback for those.
 
 Primitives reused from the rendering layer:
 - Möller–Trumbore ray-triangle intersection (same algorithm as picking.py).
@@ -209,7 +213,9 @@ def fit_skeleton_inside_mesh(
         'rmsd': float
 
     The mesh is treated as fixed (in its own local space); bones are
-    translated and scaled to fit inside it.
+    inverse-transformed into that local space for each candidate mesh scale.
+    ``all_inside`` only means true surface containment when ``mesh_faces`` form
+    a closed, watertight volume.
     """
     if len(mesh_vertices) < 4 or len(bone_positions) < 1:
         return _fallback_fit(mesh_vertices, bone_positions)
@@ -272,9 +278,15 @@ def fit_skeleton_inside_mesh(
     # Binary search for the minimum scale where all bones are inside.
     # Translation: center the mesh on the bone centroid.
     # Start with scale where mesh matches bone extent, then grow if needed.
+    #
+    # We need to scale the MESH so that its extent is at least as large as
+    # the bone extent.  The minimum scale is approximately:
+    #   scale_min ≈ bone_extent / mesh_extent
+    # (NOT mesh_extent / bone_extent — that ratio is inverted and produces
+    #  a mesh that's far too small.)
 
-    lo = max(0.01, mesh_extent / max(bone_extent, 0.01) * 0.5)  # generous lower bound
-    hi = lo * 10.0  # generous upper bound
+    lo = max(0.01, bone_extent / max(mesh_extent, 0.01) * 0.8)  # just under tight fit
+    hi = lo * 5.0  # generous upper bound
 
     # First, find a scale that contains all bones (expand hi until it works)
     best_translation = bone_centroid - mesh_centroid * lo

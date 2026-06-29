@@ -876,6 +876,24 @@ class ViewportSceneModelMixin:
 
     def set_resource_manager(self, manager, game_tag: str = "K1") -> None:
         self._renderer.tex_cache.set_resource_manager(manager, game_tag)
+        model = getattr(self, "model", None)
+        if model is not None:
+            try:
+                self._gpu_tex_preload_model_id = 0
+                self._gpu_texture_snapshot_key = None
+                self._gpu_texture_snapshot_cache = {}
+                self._prewarm_textures(model)
+            except Exception:
+                log.debug("Viewport texture rewarm after resource manager change failed", exc_info=True)
+            request_render = getattr(self, "_request_render", None)
+            if callable(request_render):
+                request_render(
+                    reason="resource manager changed",
+                    resources=True,
+                    scene=True,
+                    overlay=True,
+                    hud=True,
+                )
 
     @property
     def tex_cache(self):

@@ -213,7 +213,7 @@
             "resource_name": "PYTHON_PAYLOAD_MATH_CONTAINMENT_FIT",
             "source_path": "src/math/containment_fit.py",
             "packaged_path": "Python/src/math/containment_fit.py",
-            "sha256": "83b5d62633a49cc4c218189baf4b3fab076ce39d71c2dbc59986ac3b7ce07146"
+            "sha256": "0b984cf4f62eb1094cf00db06d3db71c8237b76a9db1a4961c2addee28d8af74"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_FRAME_MATH",

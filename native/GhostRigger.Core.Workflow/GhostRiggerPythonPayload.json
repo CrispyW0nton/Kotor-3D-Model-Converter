@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Workflow",
-    "file_count": 116,
+    "file_count": 117,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -345,7 +345,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_BUILDER",
             "source_path": "src/core/characters/character_builder.py",
             "packaged_path": "Python/src/core/characters/character_builder.py",
-            "sha256": "87c6e2301bb6fd80e30be6a376d72055d52efd38b3d31008302f95265cf77957"
+            "sha256": "4afa96d67d7cbe43cd9cb427561e0deb12d27e71f720ff46a4b378816601628c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_EXPORT_PREFLIGHT",
@@ -384,6 +384,12 @@
             "sha256": "8137d103959ff1b2a704dfe41d2d312640ebf103cf316c537680d5531608ea27"
         },
         {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CREATURE_PACKAGE_BUILDER",
+            "source_path": "src/core/characters/creature_package_builder.py",
+            "packaged_path": "Python/src/core/characters/creature_package_builder.py",
+            "sha256": "be85affd9fee80fbe594fe603291ad2e90f9f2584a9f510a41090ab469fae168"
+        },
+        {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEAD_WORKFLOW",
             "source_path": "src/core/characters/head_workflow.py",
             "packaged_path": "Python/src/core/characters/head_workflow.py",
@@ -393,7 +399,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEADLESS_BODY_WORKFLOW",
             "source_path": "src/core/characters/headless_body_workflow.py",
             "packaged_path": "Python/src/core/characters/headless_body_workflow.py",
-            "sha256": "f37de412a27b35c7ddc74c83991154ca6bc4aef258c64b5d7a2e4dad6203c391"
+            "sha256": "c57b8da33b8714efad9f8bdcae654f9a3f6e4083df2b681c4d628df5bbac8b4e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_KOTOR_CONSTANTS",

@@ -353,7 +353,7 @@
     },
     {
         "project": "GhostRigger.Core.IO",
-        "python_file_count": 34,
+        "python_file_count": 35,
         "files": [
             "src\\adapters\\files\\__init__.py",
             "src\\adapters\\files\\local_file_writer.py",
@@ -364,6 +364,7 @@
             "src\\core\\export\\__init__.py",
             "src\\core\\export\\export_job.py",
             "src\\core\\export\\gltf_importer.py",
+            "src\\core\\export\\kotor_fbx_manifest.py",
             "src\\core\\export\\unity_export_bridge.py",
             "src\\core\\export\\unity_import_validator.py",
             "src\\core\\mdl\\__init__.py",
@@ -1094,7 +1095,7 @@
     },
     {
         "project": "GhostRigger.Core.Workflow",
-        "python_file_count": 116,
+        "python_file_count": 117,
         "files": [
             "src\\autorig\\__init__.py",
             "src\\autorig\\accurig.py",
@@ -1159,6 +1160,7 @@
             "src\\core\\characters\\character_rig_state.py",
             "src\\core\\characters\\character_validation_report.py",
             "src\\core\\characters\\creature_appearance.py",
+            "src\\core\\characters\\creature_package_builder.py",
             "src\\core\\characters\\head_workflow.py",
             "src\\core\\characters\\headless_body_workflow.py",
             "src\\core\\characters\\kotor_constants.py",

@@ -91,7 +91,10 @@ def inspect_fbx_skin_objects(asset_path: Path) -> dict[str, Any]:
     cluster_ids = re.findall(r'\bDeformer:\s+(\d+),\s+"[^"]*",\s+"Cluster"', text)
     legacy_cluster_ids = re.findall(r'\bSubDeformer:\s+(\d+),\s+"[^"]*",\s+"Cluster"', text)
     texture_ids = re.findall(r'\bTexture:\s+(\d+),', text)
-    skeleton_attrs = re.findall(r'\bNodeAttribute:\s+\d+,\s+"[^"]*",\s+"Skeleton"', text)
+    skeleton_attrs = re.findall(
+        r'\bNodeAttribute:\s+\d+,\s+"[^"]*",\s+"(?:LimbNode|Limb|Skeleton)"',
+        text,
+    )
     limb_models = re.findall(r'\bModel:\s+\d+,\s+"[^"]*",\s+"LimbNode"', text)
     bind_poses = re.findall(r'\bPose:\s+\d+,\s+"[^"]*",\s+"BindPose"', text)
     pose_nodes = re.findall(r'\bPoseNode:\s+{', text)

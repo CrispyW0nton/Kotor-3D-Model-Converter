@@ -9,6 +9,8 @@ cloned into the model.
 
 from __future__ import annotations
 
+import json
+import logging
 from dataclasses import dataclass
 from math import isfinite, sqrt
 from typing import Any, Iterable, List, Sequence, Tuple
@@ -21,6 +23,8 @@ except ImportError:  # pragma: no cover
     from model_data import BoneWeight, NodeFlags, VertexSkinData  # type: ignore
 
 Vec3 = Tuple[float, float, float]
+
+log = logging.getLogger(__name__)
 
 _WEIGHTABLE_HOOKS = {"rhand", "lhand"}
 
@@ -38,7 +42,60 @@ class SkinBindingReport:
     donor_weight_transfer: bool = False
     source_skin_remap: bool = False
     source_hand_refinement: bool = False
+    collapsed_bind_repairs: int = 0
     mesh_reports: List[dict] | None = None
+
+
+def _bind_diag(event: str, **fields: Any) -> None:
+    payload = {"event": str(event or "unknown")}
+    payload.update({str(key): _diag_safe(value) for key, value in fields.items()})
+    try:
+        text = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    except Exception:
+        text = json.dumps({"event": payload["event"], "error": "diag_serialize_failed"})
+    log.info("CHARBUILDER-BIND %s", text)
+
+
+def _diag_safe(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, tuple):
+        return [_diag_safe(item) for item in value]
+    if isinstance(value, list):
+        return [_diag_safe(item) for item in value[:64]]
+    if isinstance(value, dict):
+        return {str(key): _diag_safe(item) for key, item in value.items()}
+    return str(value)
+
+
+def _donor_diag_summary(model: Any | None) -> dict:
+    if model is None:
+        return {"present": False}
+    all_nodes = getattr(model, "all_nodes", None)
+    try:
+        nodes = list(all_nodes()) if callable(all_nodes) else []
+    except Exception:
+        nodes = []
+    skin_nodes = []
+    for node in nodes:
+        if not bool(getattr(node, "is_skin", False)):
+            continue
+        verts = list(getattr(node, "vertices", []) or [])
+        rows = list(getattr(node, "skin_data", []) or [])
+        bone_map = list(getattr(node, "bone_map", []) or [])
+        if verts and rows and bone_map:
+            skin_nodes.append((node, verts, rows, bone_map))
+    return {
+        "present": True,
+        "name": str(getattr(model, "name", "") or ""),
+        "source_resref": str(getattr(model, "_gr_source_resref", "") or ""),
+        "node_count": len(nodes),
+        "skin_node_count": len(skin_nodes),
+        "skin_vertices": sum(len(item[1]) for item in skin_nodes),
+        "skin_rows": sum(len(item[2]) for item in skin_nodes),
+        "max_bone_map": max((len(item[3]) for item in skin_nodes), default=0),
+        "skin_node_names": [str(getattr(item[0], "name", "") or "") for item in skin_nodes[:8]],
+    }
 
 
 def bind_imported_meshes_to_skeleton(
@@ -84,10 +141,20 @@ def bind_imported_meshes_to_skeleton(
         bone_slots,
         max_influences=max_influences,
     )
+    _bind_diag(
+        "bind.start",
+        model_name=str(getattr(model, "name", "") or ""),
+        mesh_count=len(selected_meshes),
+        candidate_bones=len(candidates),
+        full_bone_slots=len(bone_slots),
+        donor=_donor_diag_summary(donor_model),
+        donor_index_count=len(donor_index),
+    )
     source_skin_vertices_used = 0
     source_hand_refinement_vertices_used = 0
     donor_vertices_used = 0
     fallback_vertices_used = 0
+    collapsed_bind_repairs = 0
     skinned_meshes = 0
     weighted_vertices = 0
     generated_bone_slot_counts: List[int] = []
@@ -137,6 +204,43 @@ def bind_imported_meshes_to_skeleton(
                 mesh_donor_vertices += 1
             else:
                 mesh_fallback_vertices += 1
+        collapsed_bind_repair = None
+        used_before_compact = _used_influence_indices(mesh.skin_data, len(bone_slots))
+        if _should_repair_collapsed_bind(
+            mesh,
+            used_before_compact,
+            bone_slots,
+            verts,
+            donor_model=donor_model,
+            donor_vertices=mesh_donor_vertices,
+            fallback_vertices=mesh_fallback_vertices,
+        ):
+            fallback_rows = [
+                _weights_for_vertex(
+                    _vec3(vertex),
+                    bone_slots,
+                    max_influences=max_influences,
+                )
+                for vertex in verts
+            ]
+            repaired_used = _used_influence_indices(fallback_rows, len(bone_slots))
+            if len(repaired_used) > len(used_before_compact):
+                mesh.skin_data = fallback_rows
+                mesh_source_skin_vertices = 0
+                mesh_source_hand_refinement_vertices = 0
+                mesh_donor_vertices = 0
+                mesh_fallback_vertices = len(fallback_rows)
+                collapsed_bind_repairs += 1
+                collapsed_bind_repair = {
+                    "single_slot_repaired": True,
+                    "original_used_bone_map_count": len(used_before_compact),
+                    "fallback_used_bone_map_count": len(repaired_used),
+                    "method": "nearest_kotor_bone_segment_repair",
+                    "reason": (
+                        "Donor transfer collapsed a full imported creature "
+                        "payload to one animated slot."
+                    ),
+                }
         compact_report = _compact_skin_bone_map_to_used_influences(mesh)
         mesh.bone_weights = [
             [bw.weight for bw in sd.influences]
@@ -180,9 +284,11 @@ def bind_imported_meshes_to_skeleton(
             fallback_vertices=mesh_fallback_vertices,
             donor_vertex_count=len(donor_index),
             compact_report=compact_report,
+            collapsed_bind_repair=collapsed_bind_repair,
         )
         mesh_reports.append(mesh_report)
         setattr(mesh, "_gr_skin_binding_report", mesh_report)
+        _bind_diag("bind.mesh", **mesh_report)
         source_skin_vertices_used += mesh_source_skin_vertices
         source_hand_refinement_vertices_used += mesh_source_hand_refinement_vertices
         donor_vertices_used += mesh_donor_vertices
@@ -217,6 +323,11 @@ def bind_imported_meshes_to_skeleton(
         warnings.append(
             "Using nearest KOTOR bone-segment fallback weights. "
             "Use native-template/donor weight transfer for launch-quality deformation."
+        )
+    if collapsed_bind_repairs:
+        warnings.append(
+            "Repaired a collapsed one-bone bind by recomputing nearest "
+            "KOTOR bone-segment weights so preview animation can deform the mesh."
         )
     weighting_method = (
         "imported_source_skin_remap"
@@ -253,6 +364,7 @@ def bind_imported_meshes_to_skeleton(
         donor_weight_transfer=bool(donor_vertices_used),
         source_skin_remap=bool(source_skin_vertices_used),
         source_hand_refinement=bool(source_hand_refinement_vertices_used),
+        collapsed_bind_repairs=collapsed_bind_repairs,
         mesh_reports=mesh_reports,
         message=(
             f"Skinned {skinned_meshes} mesh(es), {weighted_vertices} vertices, "
@@ -362,6 +474,31 @@ def _weights_for_vertex_with_donor(
         if influences:
             return VertexSkinData(influences), True
     return _weights_for_vertex(vertex, slots, max_influences=max_influences), False
+
+
+def _should_repair_collapsed_bind(
+    mesh: Any,
+    used_indices: Sequence[int],
+    bone_slots: Sequence[Any],
+    vertices: Sequence[Any],
+    *,
+    donor_model: Any | None,
+    donor_vertices: int,
+    fallback_vertices: int,
+) -> bool:
+    """Return True when a full imported payload collapsed to one bone slot."""
+
+    if len(used_indices) > 1:
+        return False
+    if len(bone_slots) < 4 or len(vertices) < 64:
+        return False
+    if donor_model is None:
+        return False
+    if not (donor_vertices or fallback_vertices):
+        return False
+    if bool(getattr(mesh, "_gr_allow_single_bone_bind", False)):
+        return False
+    return bool(getattr(mesh, "_external_imported", False) or getattr(mesh, "_imported", False))
 
 
 def _source_skin_rows_for_mesh(
@@ -852,6 +989,7 @@ def _mesh_binding_report(
     fallback_vertices: int = 0,
     donor_vertex_count: int = 0,
     compact_report: dict | None = None,
+    collapsed_bind_repair: dict | None = None,
 ) -> dict:
     skin_rows = list(getattr(mesh, "skin_data", []) or [])
     influence_counts: List[int] = []
@@ -878,6 +1016,8 @@ def _mesh_binding_report(
     compact_report = dict(compact_report or {})
     return {
         "mesh_name": str(getattr(mesh, "name", "") or ""),
+        "is_skinmesh": bool(getattr(mesh, "is_skin", False)),
+        "node_flags": int(getattr(mesh, "flags", 0) or 0),
         "weighting_method": weighting_method,
         "quality_stage": quality_stage,
         "vertex_count": vertex_count,
@@ -899,6 +1039,7 @@ def _mesh_binding_report(
         "donor_vertices": int(donor_vertices),
         "fallback_vertices": int(fallback_vertices),
         "donor_vertex_count": int(donor_vertex_count),
+        "collapsed_bind_repair": dict(collapsed_bind_repair or {}),
         **compact_report,
     }
 

@@ -9,7 +9,751 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-29
+
+### [2026-06-29] Character Builder Donor Bind Diagnostics
+
+Owner: LordVaderCW
+T###: T2505
+Subsystem: Character Builder skeleton binding / creature animation preview / diagnostics
+Intersects: Existing uncommitted Drexl containment-fit, animation preview, and native payload work.
+
+Summary: Fixed the live Drexl case where Build Skeleton could bind the imported
+mesh as a rigid one-bone fallback when the selected base skeleton object did not
+carry usable native skin rows. The rig builder now resolves a real weight donor
+from the selected KOTOR source resref and reloads the game MDL when needed, so
+skeleton-only template views still transfer donor skin weights. Added structured
+`CHARBUILDER-DIAG` and `CHARBUILDER-BIND` log events for template selection,
+apply-skeleton requests, pre-bind donor/payload summaries, binder donor-index
+counts, per-mesh skin reports, and preview animation starts. Creature mode now
+requests creature base options from the skeleton picker instead of body-only
+options. The mesh binding report also records `is_skinmesh` and node flags so
+live logs confirm imported render payload nodes are exported as KOTOR skinmesh
+nodes.
+
+Affected files:
+- `native/GhostRigger.Core.Workflow/Python/src/core/characters/character_builder.py`
+- `native/GhostRigger.Core.Scene/Python/src/core/skeleton/skeleton_builder.py`
+- `native/GhostRigger.Core.Tools/Python/src/core/skeleton/skeleton_builder.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/qt_character_builder_panel.py`
+- `native/GhostRigger.Core.Tools/Python/src/gui/panels/qt_character_builder_panel.py`
+- `tests/test_character_builder_template_rig.py`
+
+Verification:
+- `python -m py_compile native/GhostRigger.Core.Workflow/Python/src/core/characters/character_builder.py native/GhostRigger.Core.Scene/Python/src/core/skeleton/skeleton_builder.py native/GhostRigger.Core.Tools/Python/src/core/skeleton/skeleton_builder.py native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/qt_character_builder_panel.py native/GhostRigger.Core.Tools/Python/src/gui/panels/qt_character_builder_panel.py tests/test_character_builder_template_rig.py`
+- `python -m pytest tests/test_character_builder_template_rig.py -q`
+- Focused Drexl donor-reload probe: loaded `C_DrexlF_UV.obj`, fitted it to K2
+  `c_drexlf`, stripped the active template to skeleton-only, applied the rig,
+  and verified `reloaded_game_mdl:c_drexlf`, donor-transfer binding, 2120 skin
+  rows, and 35 used bone-map slots.
+- `MSBuild GhostRigger.sln /t:Build /p:Configuration=Debug /p:Platform=x64 /m /v:minimal`
+  rebuilt the root launcher and refreshed the Debug x64 native payload DLLs.
+
+### [2026-06-29] Character Builder Drexl Skin Bind Slot Guard
+
+Owner: LordVaderCW
+T###: T2505
+Subsystem: Character Builder skeleton binding / creature animation preview / mode toolbar
+Intersects: Existing uncommitted Drexl containment-fit, animation-base bind, and native payload work.
+
+Summary: Hardened the KOTOR template skeleton binder so an imported full-body
+creature payload cannot quietly collapse to a one-bone skin bind when a native
+donor model and multi-bone skeleton are available. If a donor/fallback pass
+leaves a large imported payload using only one animated slot, the binder now
+recomputes nearest KOTOR bone-segment weights before compacting the mesh-local
+bone map, records the repair in the mesh binding report, and logs the final
+bone-slot count from `apply_template_rig`. Removed `Supermodel` from the top
+Character Builder authoring-mode toolbar while preserving supermodel inheritance
+controls in the animation section.
+
+Affected files:
+- `native/GhostRigger.Core.Scene/Python/src/core/skeleton/skeleton_builder.py`
+- `native/GhostRigger.Core.Tools/Python/src/core/skeleton/skeleton_builder.py`
+- `native/GhostRigger.Core.Workflow/Python/src/core/characters/character_builder.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/qt_character_builder_panel.py`
+- `native/GhostRigger.Core.Tools/Python/src/gui/panels/qt_character_builder_panel.py`
+
+Verification:
+- `python -m py_compile native/GhostRigger.Core.Scene/Python/src/core/skeleton/skeleton_builder.py native/GhostRigger.Core.Tools/Python/src/core/skeleton/skeleton_builder.py native/GhostRigger.Core.Workflow/Python/src/core/characters/character_builder.py native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/qt_character_builder_panel.py native/GhostRigger.Core.Tools/Python/src/gui/panels/qt_character_builder_panel.py`
+- Focused Drexl bind/palette probe: loaded `C_DrexlF_UV.obj`, fitted it to K2
+  `c_drexlf`, applied the template rig, verified 35 generated bone-map slots,
+  2120 skin rows, no collapsed-bind repair on the good path, and a non-identity
+  animation palette for `cpause1`.
+- Rebuilt `GhostRigger.exe` at the repository root with the Debug x64 native
+  host build after the app was closed.
+
+### [2026-06-29] Character Builder Preview Texture Rewarm And Skin Gate Trace
+
+Owner: LordVaderCW
+T###: T2505
+Subsystem: Character Builder animation preview / viewport texture residency / ModernGL skinning diagnostics
+Intersects: Existing uncommitted Drexl containment-fit, animation-base bind, and native payload work.
+
+Summary: Fixed the Drexl preview path where starting animation attached the K2
+resource manager, cleared the viewport texture cache, and left the generated
+OBJ skin rendering with the white fallback material. The viewport now resets
+its GPU texture snapshot and rewarms the current model's external texture names
+immediately after a resource-manager change. Added a one-shot ModernGL
+Character Builder skin-preview gate log so live retests report whether the
+animated skin draw enabled the node-scoped bone palette, including bone-map row
+counts and animation-base-pose availability.
+
+Affected files:
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/scene_models.py`
+- `native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_renderer_impl.py`
+
+Verification:
+- `python -m py_compile native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/scene_models.py native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_renderer_impl.py`
+- Focused Drexl render probe: loaded `C_DrexlF_UV.obj`, fitted and bound it to
+  K2 `c_drexlf`, played `cwalk`, found `c_drexlf_uv_basecolor`, rendered two
+  ModernGL frames with both texture and skin feature bits active, and measured
+  a non-zero frame difference between t=0.0 and t=0.5.
+
+## 2026-06-28
+
+### [2026-06-28] Character Builder Pre-Bind Template Refit
+
+Owner: LordVaderCW
+T###: T2505
+Subsystem: Character Builder skeleton binding / Drexl creature restoration
+Intersects: Existing uncommitted Drexl containment-fit, animation preview, and native payload work.
+
+Summary: Hardened the Build KOTOR Skeleton step so it does not bind a raw
+external OBJ/FBX/GLB coordinate-space mesh when a selected native KOTOR base is
+available. Before applying the template rig, Character Builder now compares the
+current body mesh bounds against the selected skeleton template bounds. If the
+mesh is clearly still in import space and the original source path is known, it
+reloads the source through the same template-aware fit pipeline used by Load
+Custom Mesh, then binds the fitted geometry. This prevents the Drexl
+replacement from collapsing to a tiny four-bone donor transfer that leaves the
+mesh visually static while the skeleton animates, and keeps the external JPG
+texture folder available after the rigged model is reloaded.
+
+Affected files:
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/qt_character_builder_panel.py`
+- `native/GhostRigger.Core.Tools/Python/src/gui/panels/qt_character_builder_panel.py`
+
+Verification:
+- `python -m py_compile native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/qt_character_builder_panel.py native/GhostRigger.Core.Tools/Python/src/gui/panels/qt_character_builder_panel.py`
+- Focused Drexl recovery probe: raw `C_DrexlF_UV.obj` load, template refit to
+  K2 `c_drexlf`, `apply_template_rig`, verified 35 generated bone-map slots,
+  2120 weighted vertices, and found `C_DrexlF_UV_basecolor.jpg`.
+
+### [2026-06-28] Character Builder Animation-Base Skin Preview
+
+Owner: LordVaderCW
+T###: T2505
+Subsystem: Character Builder preview skinning / renderer skin palettes / native payload
+Intersects: Existing uncommitted Drexl containment-fit, FBX export, and native payload work.
+
+Summary: Fixed the generated Character Builder skin preview path so imported
+payload meshes bound onto a KOTOR skeleton deform relative to the selected
+animation's first frame instead of falling back to mismatched qBone/tBone
+inverse-bind data. Preview playback now seeds the viewport with an animation
+base pose, ModernGL/WGPU/PyGFX/CPU skinning paths pass the node-scoped base
+pose into `compute_skin_node_palette`, and the preview fallback once again uses
+the live viewport. The native payload generator now also appends missing
+Visual Studio Python payload items during regeneration so rebuilt DLL payloads
+stay aligned with their manifests.
+
+Affected files:
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/qt_character_builder_panel.py`
+- `native/GhostRigger.Core.Tools/Python/src/gui/panels/qt_character_builder_panel.py`
+- `native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_renderer_impl.py`
+- `native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/wgpu_core/renderer.py`
+- `native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/wgpu_core/resources.py`
+- `native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/pygfx_core/renderer.py`
+- `native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/pygfx_core/scene_bridge.py`
+- `native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/pygfx_core/mesh_cache.py`
+- `native/GhostRigger.Core.Rendering/Python/src/core/rendering/frame_core/renderer_geometry.py`
+- `native/GhostRigger.Core.Rendering/Python/src/core/rendering/mesh_render_data.py`
+- `native/GhostRigger.Core.Rendering/Python/src/core/rendering/skeleton_render_data.py`
+- `scripts/native_python_payload_generator.py`
+- `tests/test_motion_assignment_wiring.py`
+- `tests/test_native_python_payloads.py`
+- `tests/test_pygfx_renderer_backend.py`
+- `tests/test_sequence_multichar_runtime.py`
+- Native payload manifests/project metadata
+
+Verification:
+- `compare_model_pipelines(k2, c_drexlf)` matched PyKotor and GhostRigger at
+  51 nodes, 1 skin mesh, 4,578 vertices, and the `cwalk/cpause1/pause2/default`
+  animation set.
+- `python -m py_compile` on the touched Character Builder, renderer, payload
+  generator, and test files.
+- `python -m pytest tests/test_regression.py::test_character_builder_payload_preview_uses_animation_base_bind -q`
+- `python -m pytest tests/test_character_builder_template_rig.py -q`
+- `python -m pytest tests/test_sequence_multichar_runtime.py::test_moderngl_scene_animation_uses_node_scoped_skin_and_rigid_transforms -q`
+- `python -m pytest tests/test_pygfx_renderer_backend.py::test_cpu_skinning_reuses_model_inverse_bind_uploader tests/test_pygfx_renderer_backend.py::test_pygfx_skin_palette_uses_bas_attachment_local_model -q`
+- `python -m pytest tests/test_motion_assignment_wiring.py -q`
+- `python scripts/native_python_payload_generator.py --all`
+- `python -m pytest tests/test_native_python_payloads.py -q`
+- Rebuild not completed in this turn because a root `GhostRigger.exe` process
+  was still running and locking the output executable.
+
+### [2026-06-28] FBX Rancor Blender Skin Binding And Face UV Follow-Up
+
+Owner: LordVaderCW
+Subsystem: IO FBX exporter / KOTOR creature animation handoff / native payload
+Intersects: Existing uncommitted FBX Rancor export and native payload work.
+
+Summary: Tightened the native FBX exporter for the latest `c_rancorS` Blender
+round-trip. The exporter now emits skeleton `NodeAttribute` objects as
+FBX-compatible `LimbNode` attributes, promotes a character root to `LimbNode`
+when skin weights actually reference it, and keeps skin cluster links pointing
+at bone/alias limb models so Blender-style importers can bind body meshes to the
+animated skeleton instead of only animating rigid jaw/eye attachments. The
+follow-up also removes the rigid-alias UV exemption so `Ran_Jaw`,
+`Rancor_eyeL`, and `Rancor_eyeR` receive the same FBX V-coordinate conversion as
+the rest of the exported meshes.
+
+Affected files:
+- `native/GhostRigger.Core.IO/Python/src/converters/mesh_converter.py`
+- `native/GhostRigger.Core.IO/Python/src/core/export/kotor_fbx_manifest.py`
+- `native/GhostRigger.Core.Tools/Python/src/core/export/unity_export_bridge.py`
+- `tests/test_unity_export_bridge.py`
+- Native payload manifests/resources for `GhostRigger.Core.IO` and
+  `GhostRigger.Core.Tools`
+
+Verification:
+- Temporary real `c_rancorS` FBX export reported 5 skin deformers, 52 clusters,
+  53 skeleton node attributes, 53 `LimbNode` attributes, 10 animation stacks,
+  1,731 animation curves, and `skin_contract_ok=true`.
+- `compare_model_pipelines(k1, c_rancorS)` matched PyKotor and GhostRigger at
+  57 nodes, 5 skin meshes, 7,716 vertices, and 10 animations.
+- `python -m py_compile native\GhostRigger.Core.IO\Python\src\converters\mesh_converter.py native\GhostRigger.Core.IO\Python\src\core\export\kotor_fbx_manifest.py native\GhostRigger.Core.Tools\Python\src\core\export\unity_export_bridge.py tests\test_unity_export_bridge.py`
+- `python -m pytest tests\test_unity_export_bridge.py -q`
+- `python -m pytest tests\test_regression_export.py::test_fbx_export_flips_kotor_uvs_for_unity_import -q`
+- `python scripts\native_python_payload_generator.py GhostRigger.Core.IO`
+- `python scripts\native_python_payload_generator.py GhostRigger.Core.Tools`
+- Payload hash checks passed for `GhostRigger.Core.IO` and
+  `GhostRigger.Core.Tools`.
+
+### [2026-06-28] FBX Rancor Finger Bone Display Scale
+
+Owner: LordVaderCW
+Subsystem: IO FBX exporter / Blender armature handoff / native payload
+Intersects: Existing uncommitted FBX Rancor export and native payload work.
+
+Summary: Reduced imported Blender finger-bone clutter by scaling FBX skeleton
+`Size` and `LimbLength` metadata from the real local parent/child distances
+instead of emitting every limb node at size `1`. Tiny finger chains such as
+`Ran_Index_01_R`, `Ran_Index_02_R`, and the mirrored left-hand chain now export
+with small display lengths around their actual segment sizes, while the skin
+clusters, texture links, jaw/eye aliases, and animation objects remain intact.
+
+Affected files:
+- `native/GhostRigger.Core.IO/Python/src/converters/mesh_converter.py`
+- `tests/test_unity_export_bridge.py`
+- Native payload manifests/resources for `GhostRigger.Core.IO`
+
+Verification:
+- `compare_model_pipelines(k1, c_rancorS)` matched PyKotor and GhostRigger at
+  57 nodes, 5 skin meshes, 7,716 vertices, and 10 animations.
+- Temporary real `c_rancorS` FBX export reported 5 skin deformers, 52 clusters,
+  52 transform links, 53 skeleton node attributes, 10 animation stacks, 1,731
+  animation curves, `skin_contract_ok=true`, and `texture_contract_ok=true`.
+- The real `c_rancorS` probe exported finger display sizes such as
+  `Ran_Index_01_R=0.250830`, `Ran_Index_02_R=0.217159`,
+  `Ran_Index_01_L=0.237997`, and `Ran_Mid_01_L=0.250134`.
+- `python -m py_compile native\GhostRigger.Core.IO\Python\src\converters\mesh_converter.py tests\test_unity_export_bridge.py`
+- `python -m pytest tests\test_unity_export_bridge.py -q`
+- `python -m pytest tests\test_regression_export.py::test_fbx_skin_bind_matrices_use_unity_fbx_ascii_order -q`
+- `python scripts\native_python_payload_generator.py GhostRigger.Core.IO`
+- `python -m pytest tests\test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`
+- Blender 5.0.1 headless import could not be used as an automated visible check
+  because the bundled importer rejected ASCII FBX files.
+
+### [2026-06-28] Drexl Native-Cloud Orientation Fit
+
+Owner: LordVaderCW
+T###: T2503
+Subsystem: Character Builder fit workflow / creature replacement orientation / native payload
+Intersects: Existing uncommitted Drexl containment-fit and Character Builder workflow work.
+
+Summary: Fixed the remaining Drexl replacement orientation issue by upgrading
+same-resref creature fitting from bounds-only axis selection to native mesh
+vertex-cloud scoring when the selected KOTOR base model is available. Bounds
+still stage the replacement into the native frame, but the final axis/sign
+candidate is now chosen by nearest-neighbor similarity to the native Drexl mesh,
+which distinguishes head/tail sign flips that share identical extents. The fit
+report also records donor skin-bone containment evidence for the selected
+candidate.
+
+Affected files:
+- `native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`
+- `tests/test_retarget_external_import.py`
+- Native payload manifests/resources for `GhostRigger.Core.Workflow`
+
+Verification:
+- Real-file probe with `C_DrexlF_UV.obj` and installed K2 `c_drexlf`: selected
+  `source_forward_axis=+x`, `source_up_axis=+y`, `orientation_score_basis=native_vertex_cloud_chamfer`,
+  `native_vertex_cloud_score=0.04432496005729806`, `deformation_bone_count=35`,
+  and `outside_count=0`.
+- `python -m py_compile native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py tests/test_retarget_external_import.py`
+- `python -m pytest tests/test_retarget_external_import.py::test_unit_scale_same_resref_creature_replacement_uses_native_bounds tests/test_retarget_external_import.py::test_same_resref_creature_replacement_uses_native_cloud_to_choose_orientation tests/test_retarget_external_import.py::test_creature_containment_fit_uses_skin_bone_map_and_open_mesh_axis_seed tests/test_retarget_external_import.py::test_creature_containment_fit_marks_watertight_surface_volume -q`
+- `python scripts/native_python_payload_generator.py GhostRigger.Core.Workflow`
+- `python -m pytest tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`
+- `MSBuild GhostRigger.sln /m /p:Configuration=Debug /p:Platform=x64 /verbosity:minimal`
+- Visible Character Builder retest is still needed in the rebuilt Debug app.
+
+### [2026-06-28] FBX Rancor Eye Jaw UV And Animated Rigid Alias Fix
+
+Owner: LordVaderCW
+Subsystem: IO FBX exporter / KOTOR creature animation handoff / native payload
+Intersects: Existing uncommitted FBX Rancor export and native payload work.
+
+Summary: Fixed the next `c_rancorS` FBX export issue where animated rigid mesh
+parts such as `Rancor_eyeL`, `Rancor_eyeR`, and jaw-style parts could still be
+treated as directly animated mesh objects when they were absent from skin cluster
+bone maps. The exporter now creates skeleton aliases for animation-only rigid
+mesh nodes too, routes their animation curves to the alias, keeps the visible
+mesh identity-local under that alias, and preserves KOTOR-space UV orientation
+for those rigid alias meshes so the eye and jaw islands are not inverted while
+body/skinned mesh UV conversion remains unchanged.
+
+Affected files:
+- `native/GhostRigger.Core.IO/Python/src/converters/mesh_converter.py`
+- `tests/test_unity_export_bridge.py`
+- Native payload manifests/resources for `GhostRigger.Core.IO`
+
+Verification:
+- `compare_model_pipelines(k1, c_rancorS)` matched PyKotor and GhostRigger at
+  57 nodes, 5 skin meshes, 7,716 vertices, and 10 animations.
+- `inspect_mdl(k1, c_rancorS)` confirmed the source creature contains the
+  expected skin meshes, rigid eye/jaw nodes, and animation set.
+- `python -m py_compile native/GhostRigger.Core.IO/Python/src/converters/mesh_converter.py tests/test_unity_export_bridge.py`
+- `python -m pytest tests/test_unity_export_bridge.py -q`
+- `python -m pytest tests/test_regression_export.py::test_fbx_skin_clusters_are_deformer_records tests/test_regression_export.py::test_fbx_export_flips_kotor_uvs_for_unity_import tests/test_regression_export.py::test_fbx_skin_bind_matrices_use_unity_fbx_ascii_order -q`
+- `python scripts/native_python_payload_generator.py GhostRigger.Core.IO`
+- IO-only payload hash check passed for `GhostRigger.Core.IO`.
+- The all-package payload identity test is currently blocked by an unrelated
+  `GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`
+  hash mismatch in the existing worktree.
+
+### [2026-06-28] Drexl Fit Render-Space Contract Fix
+
+Owner: LordVaderCW
+T###: T2503
+Subsystem: Character Builder fit workflow / renderer mesh-space contract / native payload
+Intersects: Existing uncommitted Drexl containment-fit and Character Builder workflow work.
+
+Summary: Fixed the fitted custom-mesh render contract so Character Builder
+replacement meshes whose fit is baked into vertices are also tagged as
+world/model-space geometry. Rendering extraction, ModernGL VBO generation,
+frame-renderer vertex transforms, PyGFX retained transforms, and GPU bounds now
+honor that fitted-world marker so the viewport does not apply the mesh node
+transform a second time and visually offset the Drexl mesh away from the donor
+skeleton.
+
+Affected files:
+- `native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`
+- `native/GhostRigger.Core.Rendering/Python/src/core/rendering/mesh_render_data.py`
+- `native/GhostRigger.Core.Rendering/Python/src/core/rendering/frame_core/renderer_geometry.py`
+- `native/GhostRigger.Core.Rendering/Python/src/core/rendering/gpu_scene_helpers.py`
+- `native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_resources.py`
+- `native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/pygfx_core/scene_bridge.py`
+- `tests/test_retarget_external_import.py`
+- Native payload manifests/resources for `GhostRigger.Core.Workflow` and `GhostRigger.Core.Rendering`
+
+Verification:
+- `python -m py_compile native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py native/GhostRigger.Core.Rendering/Python/src/core/rendering/frame_core/renderer_geometry.py native/GhostRigger.Core.Rendering/Python/src/core/rendering/mesh_render_data.py native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_resources.py native/GhostRigger.Core.Rendering/Python/src/core/rendering/gpu_scene_helpers.py native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/pygfx_core/scene_bridge.py tests/test_retarget_external_import.py`
+- `python -m pytest tests/test_retarget_external_import.py::test_unit_scale_same_resref_creature_replacement_uses_native_bounds -q`
+- `python -m pytest tests/test_retarget_external_import.py::test_creature_containment_fit_uses_skin_bone_map_and_open_mesh_axis_seed tests/test_retarget_external_import.py::test_creature_containment_fit_marks_watertight_surface_volume -q`
+- `python scripts/native_python_payload_generator.py GhostRigger.Core.Workflow`
+- `python scripts/native_python_payload_generator.py GhostRigger.Core.Rendering`
+- `python -m pytest tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`
+- `MSBuild GhostRigger.sln /m /p:Configuration=Debug /p:Platform=x64 /verbosity:minimal`
+- Visible Character Builder retest is still needed in the rebuilt Debug app.
+
+### [2026-06-28] FBX Rancor Blender Rig And UV Follow-Up
+
+Owner: LordVaderCW
+Subsystem: IO FBX exporter / DCC animation handoff / texture sidecars / native payload
+Intersects: Existing uncommitted FBX Rancor export and mesh-as-bone alias work.
+
+Summary: Fixed the second `c_rancorS` Blender export failure. Mesh-bone alias
+resolution is now case-insensitive, so bone-map references such as
+`Rancor_EyeL` correctly resolve to mesh nodes such as `Rancor_eyeL` and route
+clusters/animation curves through `Rancor_eyeL_bone` instead of the mesh object.
+FBX rotation curves now write absolute local Euler values because FBX
+`Lcl Rotation` curves drive the transform property directly; the previous
+rest-delta export made the jaw and rig evaluate incorrectly in Blender. Texture
+sidecars are now exported as top-down PNGs instead of renderer-oriented TGA
+images so Blender reads the same orientation expected by the FBX UV conversion.
+
+Affected files:
+- `native/GhostRigger.Core.IO/Python/src/converters/mesh_converter.py`
+- `tests/test_unity_export_bridge.py`
+- Native payload manifests/resources for `GhostRigger.Core.IO`
+
+Verification:
+- Inspected the latest user-exported `c_rancorS.fbx`; confirmed `Ran_Jaw` had
+  alias routing but rotation curves were exported as deltas, and the eye meshes
+  still received curves directly because the bone-map casing did not match the
+  mesh node names.
+- `python -m py_compile native/GhostRigger.Core.IO/Python/src/converters/mesh_converter.py tests/test_unity_export_bridge.py`
+- `python -m pytest tests/test_unity_export_bridge.py -q`
+- `python -m pytest tests/test_regression_export.py::test_fbx_skin_clusters_are_deformer_records tests/test_regression_export.py::test_fbx_export_flips_kotor_uvs_for_unity_import tests/test_regression_export.py::test_fbx_skin_bind_matrices_use_unity_fbx_ascii_order -q`
+- `python scripts/native_python_payload_generator.py GhostRigger.Core.IO`
+- `python -m pytest tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`
+- Visible Blender re-import was not run in this session; the already-exported
+  FBX was inspected directly and the exporter regressions cover the identified
+  failure modes.
+
+### [2026-06-28] FBX Rigid Mesh-Bone Placement And Texture Link Fix
+
+Owner: LordVaderCW
+Subsystem: IO FBX exporter / DCC animation handoff / texture sidecars / native payload
+Intersects: Existing uncommitted FBX mesh-as-bone alias, animation target, and Rancor export work.
+
+Summary: Tuned the native ASCII FBX exporter for the `c_rancorS` Blender/Maya
+failure. Rigid renderable mesh nodes that also act as bones, such as
+`Ran_Jaw`, `Rancor_eyeL`, and `Rancor_eyeR`, now keep their transform and
+animation on the generated skeleton alias while the visible mesh is parented
+under that alias at identity. FBX texture references now point at exported
+`textures/<name>.tga` sidecars when a texture cache is available, and the Qt
+export path now passes the viewport texture cache into FBX export.
+
+Affected files:
+- `native/GhostRigger.Core.IO/Python/src/converters/mesh_converter.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/viewport_tools.py`
+- `tests/test_unity_export_bridge.py`
+- Native payload manifests/resources for `GhostRigger.Core.IO` and `GhostRigger.Core.GUI.Display`
+
+Verification:
+- Confirmed the user-provided `c_rancorS.fbx` still has the old failure shape:
+  no `Ran_Jaw_bone`/eye alias nodes, animation curves target mesh models, and
+  texture paths are bare `c_rancor01.tga`.
+- `python -m py_compile native/GhostRigger.Core.IO/Python/src/converters/mesh_converter.py native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/viewport_tools.py tests/test_unity_export_bridge.py`
+- `python -m pytest tests/test_unity_export_bridge.py -q`
+- `python -m pytest tests/test_regression_export.py::test_fbx_skin_clusters_are_deformer_records tests/test_regression_export.py::test_fbx_export_flips_kotor_uvs_for_unity_import tests/test_regression_export.py::test_fbx_skin_bind_matrices_use_unity_fbx_ascii_order -q`
+- `python scripts/native_python_payload_generator.py GhostRigger.Core.IO`
+- `python scripts/native_python_payload_generator.py GhostRigger.Core.GUI.Display`
+- `python -m pytest tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`
+- Visible Blender re-import was not run because the K2 install/source `c_rancorS`
+  MDL was not mounted in this session; the attached already-exported FBX was
+  inspected directly.
+
+### [2026-06-28] FBX Alias Bone Animation Target Fix
+
+Owner: LordVaderCW
+Subsystem: IO FBX exporter / DCC animation handoff / skinning graph / native payload
+Intersects: Existing uncommitted FBX mesh-as-bone alias fix and Rancor export work.
+
+Summary: Fixed FBX animation targeting for KOTOR nodes that are both
+renderable mesh objects and skin bones. After the mesh-as-bone DCC import fix,
+skin clusters correctly targeted alias limb nodes such as `Ran_Jaw_bone`, but
+animation curve nodes still targeted the original mesh model node. The exporter
+now resolves animation targets through the same bone model lookup used by skin
+clusters, so animated mesh-as-bone nodes drive their skeleton aliases instead
+of animating the static mesh object separately.
+
+Affected files:
+- `native/GhostRigger.Core.IO/Python/src/converters/mesh_converter.py`
+- `tests/test_unity_export_bridge.py`
+- Native payload manifests/resources for `GhostRigger.Core.IO`
+
+Verification:
+- `python -m py_compile native/GhostRigger.Core.IO/Python/src/converters/mesh_converter.py tests/test_unity_export_bridge.py`
+- `python -m pytest tests/test_unity_export_bridge.py::test_fbx_export_animates_skeleton_alias_when_mesh_node_is_bone tests/test_unity_export_bridge.py::test_fbx_export_uses_skeleton_alias_when_mesh_node_is_bone -q`
+- Fresh K1/K2 `c_rancorS` exports wrote `artifacts/codex_k1_c_rancorS_anim_alias_fixed.fbx` and `artifacts/codex_k2_c_rancorS_anim_alias_fixed.fbx`; inspection confirmed alias bones receive animation property connections while the corresponding mesh objects do not.
+- `python scripts/native_python_payload_generator.py GhostRigger.Core.IO`
+- `python -m pytest tests/test_unity_export_bridge.py -q`
+- `python -m pytest tests/test_regression_export.py::test_fbx_skin_clusters_are_deformer_records tests/test_regression_export.py::test_fbx_export_flips_kotor_uvs_for_unity_import tests/test_regression_export.py::test_fbx_skin_bind_matrices_use_unity_fbx_ascii_order -q`
+- `python -m pytest tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`
+- Visible Blender animation retest was not run in this turn.
+
+### [2026-06-28] FBX Mesh-As-Bone DCC Import Fix
+
+Owner: LordVaderCW
+Subsystem: IO FBX exporter / DCC handoff / skinning graph / native payload
+Intersects: Existing uncommitted FBX exporter, Rancor export, and native payload manifest work.
+
+Summary: Fixed a DCC import problem exposed by `c_rancorS.fbx` in Maya and
+Blender. Some KOTOR creature skin `bone_map` entries point at nodes that are
+also renderable mesh objects, such as `RArm`, `Ran_Jaw`, and the Rancor eye
+meshes. The ASCII FBX exporter was linking skin clusters directly to those mesh
+objects, leaving DCCs with mesh nodes acting as both geometry and joints. The
+exporter now creates separate skeleton alias limb nodes for renderable mesh
+nodes used as bones, connects clusters to the alias limbs, keeps the real mesh
+objects connected only as geometry, and includes those aliases in FBX
+definitions, bind pose, NodeAttribute skeleton records, and hierarchy
+connections.
+
+Affected files:
+- `native/GhostRigger.Core.IO/Python/src/converters/mesh_converter.py`
+- `tests/test_unity_export_bridge.py`
+- Native payload manifests/resources for `GhostRigger.Core.IO`
+
+Verification:
+- `python -m py_compile native/GhostRigger.Core.IO/Python/src/converters/mesh_converter.py tests/test_unity_export_bridge.py`
+- `python -m pytest tests/test_unity_export_bridge.py::test_fbx_export_uses_skeleton_alias_when_mesh_node_is_bone tests/test_unity_export_bridge.py::test_fbx_export_merges_duplicate_bone_map_clusters tests/test_unity_export_bridge.py::test_fbx_export_writes_kotor_unreal_sidecar_manifest -q`
+- Fresh K1 `c_rancorS` export wrote `artifacts/codex_c_rancorS_alias_fixed.fbx`; inspection confirmed `RArm_bone` and `Ran_Jaw_bone` clusters target alias limbs, not mesh model nodes.
+- Fresh K2 `c_rancorS` export wrote `artifacts/codex_k2_c_rancorS_alias_fixed.fbx`; inspection confirmed `RArm_bone`, `Rancor_eyeL_bone`, `Rancor_eyeR_bone`, and `Ran_Jaw_bone` clusters target alias limbs, not mesh model nodes.
+- `python -m pytest tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`
+- `python -m pytest tests/test_unity_export_bridge.py -q`
+- `python -m pytest tests/test_regression_export.py::test_fbx_skin_clusters_are_deformer_records tests/test_regression_export.py::test_fbx_export_flips_kotor_uvs_for_unity_import tests/test_regression_export.py::test_fbx_skin_bind_matrices_use_unity_fbx_ascii_order -q`
+- Visible Maya/Blender retest was not run in this turn.
+
+### [2026-06-28] Character Builder Containment Fit Axis Audit
+
+Owner: LordVaderCW
+Subsystem: Character Studio / creature replacement auto-fit / containment math / native payload
+Intersects: Existing uncommitted Drexl Character Builder containment and native payload work.
+
+Summary: Deep-audited the creature containment-fit path against rigging and
+geometry principles. Same-resref creature replacements now choose the
+least-distorting right-handed axis permutation before baking native bounds,
+with a semantic preference for preserving source right and assigning the
+thinnest source axis to KOTOR up. This keeps the real `C_DrexlF_UV.obj` fit
+near-uniform while still matching the selected `c_drexlf` bounds exactly.
+Open/non-watertight meshes now report `oriented_bounds_only` instead of
+implying true surface containment, while watertight meshes report
+`watertight_surface_volume`. Non-uniform baked fits now transform normals with
+the inverse-transpose matrix.
+
+Affected files:
+- `native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`
+- `native/GhostRigger.Core.Math/Python/src/math/containment_fit.py`
+- `tests/test_retarget_external_import.py`
+- Native payload manifests/resources for `GhostRigger.Core.Workflow` and `GhostRigger.Core.Math`
+
+Verification:
+- MCP donor truth check: `compare_model_pipelines("k2", "c_drexlf")` returned `match=True`, 51 PyKotor nodes, 51 GhostRigger nodes, and zero discrepancies.
+- Real Drexl OBJ probe with `C_DrexlF_UV.obj` + K2 `c_drexlf` returned `fit_policy=native_template_scaled_bounds_replacement`, axis scales `[9.644440, 8.087262, 8.831607]`, `source_forward_axis=-z`, `source_up_axis=+y`, and fitted bounds exactly matching native `c_drexlf`.
+- `python -m pytest tests/test_retarget_external_import.py::test_unit_scale_same_resref_creature_replacement_uses_native_bounds tests/test_retarget_external_import.py::test_creature_containment_fit_uses_skin_bone_map_and_open_mesh_axis_seed tests/test_retarget_external_import.py::test_creature_containment_fit_marks_watertight_surface_volume -q`
+- `python -m py_compile native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py native/GhostRigger.Core.Math/Python/src/math/containment_fit.py tests/test_retarget_external_import.py`
+- `python scripts/native_python_payload_generator.py GhostRigger.Core.Workflow`
+- `python scripts/native_python_payload_generator.py GhostRigger.Core.Math`
+- `python -m pytest tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`
+
+### [2026-06-28] FBX Export UI Freeze After Rancor Export
+
+Owner: LordVaderCW
+Subsystem: GUI Display background I/O / FBX export workflow / native payload
+Intersects: Existing uncommitted FBX exporter, SDK setup, and native payload manifest work.
+
+Summary: Investigated a live `c_rancorS` FBX export where GhostRigger became
+nonresponsive after the export. The session log showed the FBX, rigging
+sidecars, and `.ghostrigger.json` manifest all completed successfully, so the
+freeze was in the post-export UI handoff rather than the FBX writer. Reworked
+the shared background I/O runner to route progress, completion, error, and
+cancel callbacks through a GUI-thread `QObject` bridge using queued Qt
+connections. Removed the blocking `thread.wait(2000)` cleanup from the GUI
+handoff path and regenerated the GUI Display payload.
+
+Affected files:
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/model_io.py`
+- `tests/test_qt_only_imports.py`
+- Native payload manifests for `GhostRigger.Core.GUI.Display`
+
+Verification:
+- Live log check: `c_rancorS.fbx`, rigging sidecars, and `c_rancorS.ghostrigger.json` were written before the UI remained nonresponsive.
+- MCP-backed targeted check with diagnostics bypass: `compare_model_pipelines("k1", "c_rancorS")` reported `match=True`.
+- `python -m py_compile native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/model_io.py tests/test_qt_only_imports.py`
+- `python -m pytest tests/test_qt_only_imports.py::test_background_io_worker_callbacks_are_queued_to_gui_thread -q`
+- `python scripts/native_python_payload_generator.py GhostRigger.Core.GUI.Display`
+- `python -m pytest tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`
+- Visible Debug-app UI retest was not run in this turn because the active app process was already hung with the previous code loaded.
+
+### [2026-06-28] Native FBX KOTOR Manifest Export
+
+Owner: LordVaderCW
+Subsystem: IO FBX exporter / KOTOR metadata handoff / Unreal pipeline / native payload
+Intersects: Existing uncommitted FBX exporter, Autodesk SDK setup, and native payload manifest work.
+
+Summary: Made the built-in FBX exporter write a `.ghostrigger.json` sidecar
+manifest beside successful FBX exports by default. The manifest preserves KOTOR
+data that FBX cannot reliably carry on its own, including node flags, hook
+roles, supermodel identity, texture/lightmap/bump/TXI slots, qbone/tbone skin
+state, bone-map validation, animation summaries, coordinate-system notes, FBX
+diagnostics, and Unreal import guidance. The Unity export bridge now reuses the
+same KOTOR manifest builder while preserving its existing Unity-facing metadata
+contract. The manifest module is owned by `GhostRigger.Core.IO` because the
+active FBX exporter and Unity bridge source currently live in that package with
+no matching root `src` source module.
+
+Affected files:
+- `native/GhostRigger.Core.IO/Python/src/core/export/kotor_fbx_manifest.py`
+- `native/GhostRigger.Core.IO/Python/src/converters/mesh_converter.py`
+- `native/GhostRigger.Core.IO/Python/src/core/export/unity_export_bridge.py`
+- `tests/test_unity_export_bridge.py`
+- Native payload manifests/resources for `GhostRigger.Core.IO`
+
+Verification:
+- `python -m py_compile native/GhostRigger.Core.IO/Python/src/core/export/kotor_fbx_manifest.py native/GhostRigger.Core.IO/Python/src/core/export/unity_export_bridge.py native/GhostRigger.Core.IO/Python/src/converters/mesh_converter.py tests/test_unity_export_bridge.py`
+- `python -m pytest tests/test_unity_export_bridge.py::test_fbx_export_writes_kotor_unreal_sidecar_manifest tests/test_unity_export_bridge.py::test_fbx_export_merges_duplicate_bone_map_clusters tests/test_unity_export_bridge.py::test_unity_export_sidecar_records_fbx_skin_diagnostics -q`
+- `python -m pytest tests/test_unity_export_bridge.py -q`
+- `python scripts/native_python_payload_generator.py GhostRigger.Core.IO`
+- `python -m pytest tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`
+- Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-28] Autodesk FBX SDK Assisted Setup Hardening
+
+Owner: LordVaderCW
+Subsystem: IO FBX SDK adapter / setup assistant / native payload
+Intersects: Existing uncommitted FBX export and native payload manifest work.
+
+Summary: Hardened Autodesk SDK setup so GhostRigger records and applies
+separate SDK library/bin folders in addition to Python binding and FbxCommon
+folders. The SDK loader now registers configured DLL/library directories for
+the current process before importing Autodesk's `fbx` module, and the setup
+assistant exposes a dedicated library/bin path field. Updated the FBX setup
+docs to clarify that GitHub releases should be SDK-ready but should not bundle
+Autodesk SDK binaries without explicit redistribution permission.
+
+Affected files:
+- `native/GhostRigger.Core.IO/Python/src/io/fbx/fbx_sdk_paths.py`
+- `native/GhostRigger.Core.IO/Python/src/io/fbx/fbx_sdk_setup.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/dialogs/fbx_sdk_setup_dialog.py`
+- `scripts/print_fbx_python_environment.py`
+- `docs/FBX_SDK_SETUP.md`
+- `tests/test_fbx_sdk_paths.py`
+- Native payload manifests for Core.IO and GUI.Display
+
+Verification:
+- `python -m py_compile native/GhostRigger.Core.IO/Python/src/io/fbx/fbx_sdk_paths.py native/GhostRigger.Core.IO/Python/src/io/fbx/fbx_sdk_setup.py native/GhostRigger.Core.GUI.Display/Python/src/gui/dialogs/fbx_sdk_setup_dialog.py tests/test_fbx_sdk_paths.py`
+- `python -m pytest tests/test_fbx_sdk_paths.py -q`
+- `python scripts/print_fbx_python_environment.py` now runs in the native-split checkout and reports Python 3.14.0 with `fbx` and `FbxCommon` missing, confirming no local Autodesk binding is currently installed/configured.
+- `python scripts/native_python_payload_generator.py GhostRigger.Core.IO`
+- `python scripts/native_python_payload_generator.py GhostRigger.Core.GUI.Display`
+- Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-28] FBX Export Without Autodesk SDK Gate
+
+Owner: LordVaderCW
+Subsystem: Main Viewport / model export / FBX DCC handoff
+Intersects: Existing uncommitted `model_io.py` OBJ export progress work.
+
+Summary: Removed the Autodesk FBX SDK preflight blocker from the main
+`Export FBX...` action so GhostRigger can use its built-in FBX exporter when
+the external SDK is not installed. Single selected scene-object FBX export now
+also resolves the selected runtime model and uses the same built-in exporter
+before falling back to the SDK-only scene export path.
+
+Affected files:
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/model_io.py`
+
+Verification:
+- `python -m py_compile native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/model_io.py`
+- Direct FBX smoke export with native package paths loaded wrote
+  `artifacts/codex_fbx_export_smoke.fbx` successfully without Autodesk SDK
+  (`ok=True`, size 2552 bytes).
+- `python -m pytest tests/test_qt_only_imports.py::test_main_window_routes_fbx_menu_to_optional_sdk_bridge -q` was attempted, but the test is currently blocked by an existing checkout layout mismatch: it reads root `src/gui/windows/qt_main_window.py`, which is absent while the active file lives under `native/GhostRigger.Core.GUI.Display/Python/src/...`.
+- Visible Debug-app UI retest was not run in this turn.
+
+### [2026-06-28] Character Builder Drexl Replacement Fit Diagnosis
+
+Owner: LordVaderCW
+Subsystem: Character Studio / creature replacement auto-fit / native payload
+
+Summary: Diagnosed the live Drexl load where the mesh appeared separated from
+the selected `c_drexlf` skeleton. The running process was using the new
+containment code, but the model metadata exposed the older
+`creature_bounds_basis` fit report to the Inspector. Added a direct
+same-resref replacement path for unit-scale `C_DrexlF_UV` imports: when the
+custom mesh filename resolves to the selected native template, the workflow now
+bakes a per-axis replacement transform from the native render bounds instead of
+falling back to generic creature containment. Generic creature containment
+still runs for non-replacement imports, and its persisted fit report now says
+`containment_bone_inside_mesh` with the actual containment method/evidence.
+
+Affected files:
+- `native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`
+- `native/GhostRigger.Core.Workflow/GhostRiggerPythonPayload.json`
+- `native/GhostRigger.Core.Workflow/GhostRiggerPythonPayload.rc`
+- `native/GhostRigger.PythonPayloadManifest.json`
+- `tests/test_retarget_external_import.py`
+
+Verification:
+- MCP `compare_model_pipelines(kotor2, c_drexlf)` showed PyKotor and
+  GhostRigger agree on the native donor hierarchy: 51 nodes, one skinned mesh,
+  and no discrepancies.
+- Real Drexl probe with `C_DrexlF_UV.obj` + K2 `c_drexlf` now returns
+  `fit_policy=native_template_scaled_bounds_replacement`; the fitted OBJ bounds
+  exactly match native `c_drexlf` bounds and all 35 donor deformation bones are
+  inside the fitted bounds.
+- `python -m py_compile native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`
+- `python -m pytest tests/test_retarget_external_import.py::test_unit_scale_same_resref_creature_replacement_uses_native_bounds tests/test_retarget_external_import.py::test_creature_containment_fit_uses_skin_bone_map_and_open_mesh_axis_seed -q`
+- `python scripts/native_python_payload_generator.py GhostRigger.Core.Workflow`
+
+### [2026-06-28] Character Builder Drexl Containment Fit Repair
+
+Owner: LordVaderCW
+Subsystem: Character Studio / creature OBJ auto-fit / skin bone-map containment
+Intersects: Existing uncommitted Drexl Character Builder work in
+`headless_body_workflow.py` and native payload manifests.
+
+Summary: Fixed the creature containment fit path so it uses the selected
+donor model's skin `bone_map` as deformation authority instead of fitting to
+the skinned mesh node origin. Open/non-watertight OBJ meshes now reuse the
+creature-bounds orientation seed and perform fast oriented-bounds containment,
+avoiding expensive and invalid ray-volume tests on Drexl's non-watertight OBJ.
+The fit result now records method, containment volume, mesh closure, bone
+source, and deformation-bone count for inspector/log evidence.
+
+Affected files:
+- `native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`
+- `tests/test_retarget_external_import.py`
+
+Verification:
+- Real Drexl probe with `C_DrexlF_UV.obj` + K2 `c_drexlf` returned
+  `scale=8.831607`, 35 `skin_bone_map` deformation positions, non-identity
+  flat-creature rotation, `outside=0`, and `oriented_bounds_reference_seed`.
+- `python -m py_compile native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py tests/test_retarget_external_import.py`
+- `python -m pytest tests/test_retarget_external_import.py::test_kotor_space_creature_replacement_keeps_identity_fit tests/test_retarget_external_import.py::test_creature_mode_obj_fit_uses_flat_bounds_not_humanoid_height tests/test_retarget_external_import.py::test_creature_containment_fit_uses_skin_bone_map_and_open_mesh_axis_seed tests/test_retarget_external_import.py::test_creature_mode_orientation_override_bypasses_bounds_autorotation -q`
+- `python scripts/native_python_payload_generator.py GhostRigger.Core.Workflow`
+- `python -m pytest tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested -q`
+- `MSBuild.exe native\GhostRigger.Native.Core.Host\GhostRigger.Native.Core.Host.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m:1 /nr:false /v:m`
+  refreshed root `GhostRigger.exe` at `2026-06-27 23:30:55`.
+- Hidden root-exe smoke launch stayed running for 12 seconds; the hidden
+  process did not respond to `CloseMainWindow` and was stopped. Full visible
+  Character Builder retest was not run in this turn.
+
 ## 2026-06-27
+
+### [2026-06-27] Creature Package Builder — Full c_drexlf Restoration Pipeline
+
+**Owner: LordVaderCW**
+
+**Summary:** Implemented the complete creature spawn pipeline needed to restore
+c_drexlf (cut content from KOTOR 2) as a spawned enemy. When the Character
+Builder exports an MDL, it now automatically generates a full creature
+installation package including appearance.2da row, UTC creature template,
+NWScript spawn script, and installation readme.
+
+**New module:**
+- `native/GhostRigger.Core.Workflow/Python/src/core/characters/creature_package_builder.py`
+  — Orchestrates GFF writer + 2DA writer + MDL export into a complete creature
+    package. Generates:
+    - `appearance.2da` (appends row to game's existing 2DA or generates minimal)
+    - `<resref>.utc` (binary GFF UTC with appearance type, stats, faction,
+      standard KOTOR2 OnSpawn/OnDeath/OnCombat script references)
+    - `spawn_<resref>.nss` (NWScript source using CreateObject for in-game spawn)
+    - `INSTALL_README.txt` (quick override install + full spawn install +
+      troubleshooting guide)
+
+**Modified files:**
+- `qt_character_builder_panel.py` — Added `_generate_creature_package()` method
+  called after MDL export succeeds. Auto-detects resref from scene, builds
+  CreatureSpec, generates full package alongside the exported MDL.
+- `headless_body_workflow.py` — Containment fit now classifies bones as
+  deformation vs dummy/helper (camerahook, head_g, Lhand_g etc. excluded from
+  containment). Reports classification in fit result metadata.
+- `mesh_converter.py` — glTF exporter: added inverseBindMatrices (column-major
+  MAT4 per joint), auto-select UNSIGNED_SHORT joints for >255 bones, normalized
+  legacy dict-keyed animation controllers, correct GLB/GLTF buffer URI handling,
+  bufferView targets for vertex/index buffers.
+- `model_io.py` — OBJ export split into geometry + rigging phases with progress.
+
+**Verification:**
+- `python -m py_compile` passes on all modified files
+- Creature package builder uses existing GFF writer (gff_writer.py) and 2DA
+  writer (twoda.py) — both production-tested
+- UTC references KOTOR 2's built-in scripts (k_def_spawn01, k_def_death01,
+  k_def_combat01) for basic AI without requiring script compilation
+- Spawn script (.nss) is source-only; user compiles with nwnnsscomp
 
 ### [2026-06-27] Character Builder Auto-Fit And Gizmo Rotation Three-Tier Fix
 

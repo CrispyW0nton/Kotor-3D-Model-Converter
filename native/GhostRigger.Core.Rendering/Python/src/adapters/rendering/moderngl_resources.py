@@ -465,7 +465,11 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     #   KotOR.js OdysseyModel3D.ts NodeMeshBuilder — matrixWorld for GPU
     #   reone mdlreader.cpp — reads verts as-is, applies node transform in renderer
     #   KotorBlender parser.py — verts loaded into Blender mesh, Blender applies hierarchy
-    _node_vs = getattr(node, 'vertex_space', 0)  # default NODE_LOCAL
+    _node_vs = (
+        1
+        if bool(getattr(node, '_gr_vertices_in_kotor_world', False))
+        else getattr(node, 'vertex_space', 0)
+    )  # default NODE_LOCAL
 
     _apply_node_transform = (
         _node_vs == 0

@@ -7,9 +7,24 @@ import pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
+NATIVE_SOURCE_FALLBACKS = {
+    "src/gui/panels/qt_inspector_panel.py": (
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/qt_inspector_panel.py"
+    ),
+    "src/gui/panels/qt_character_builder_panel.py": (
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/qt_character_builder_panel.py"
+    ),
+    "src/core/characters/headless_body_workflow.py": (
+        "native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py"
+    ),
+}
+
 
 def _read(path: str) -> str:
-    return (ROOT / path).read_text(encoding="utf-8")
+    resolved = ROOT / path
+    if not resolved.exists() and path in NATIVE_SOURCE_FALLBACKS:
+        resolved = ROOT / NATIVE_SOURCE_FALLBACKS[path]
+    return resolved.read_text(encoding="utf-8")
 
 
 def _method_block(source: str, name: str) -> str:

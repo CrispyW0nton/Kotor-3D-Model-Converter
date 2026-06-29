@@ -50,7 +50,11 @@ def _compute_model_bounds(model) -> dict:
         except Exception:
             continue
 
-        _node_vs = getattr(node, "vertex_space", 0)
+        _node_vs = (
+            1
+            if bool(getattr(node, "_gr_vertices_in_kotor_world", False))
+            else getattr(node, "vertex_space", 0)
+        )
 
         if _node_vs == 0:
             try:

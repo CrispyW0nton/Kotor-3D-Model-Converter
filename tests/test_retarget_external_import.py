@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import importlib.util
 import inspect
+import math
 import os
+import pathlib
 import sys
 from types import SimpleNamespace
 
@@ -15,6 +18,17 @@ from PySide6 import QtCore, QtWidgets
 
 def _qapp():
     return QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
+
+def _load_native_python_module(module_name: str, relative_path: str):
+    path = pathlib.Path(__file__).resolve().parents[1] / relative_path
+    spec = importlib.util.spec_from_file_location(module_name, str(path))
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _sample_clip(
@@ -390,7 +404,7 @@ def test_blender_fbx_mesh_payload_preserves_armature_guides_for_autofit() -> Non
 
 def test_kotor_space_creature_replacement_keeps_identity_fit() -> None:
     from src.core.characters.headless_body_workflow import normalize_external_model_for_kotor
-    from src.core.geometry.model_data import GameVersion, KotorModel, ModelNode, NodeFlags
+    from src.core.geometry.model_data import CharacterMode, GameVersion, KotorModel, ModelNode, NodeFlags
 
     source = KotorModel(name="c_drexlf_uv", game_version=GameVersion.K2)
     source.metadata = {
@@ -403,21 +417,37 @@ def test_kotor_space_creature_replacement_keeps_identity_fit() -> None:
     source_root = ModelNode(name="c_drexlf_uv", flags=int(NodeFlags.HEADER))
     source.root_node = source_root
     source_mesh = ModelNode(name="C_DrexlF", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=source_root)
+    native_min = (-4.3794, -5.9490, 0.9094)
+    native_max = (4.4521, 2.1383, 2.7630)
     source_mesh.vertices = [
-        (-4.3794, -5.9490, 0.9094),
-        (4.4521, 2.1383, 2.7630),
+        (x, y, z)
+        for x in (native_min[0], native_max[0])
+        for y in (native_min[1], native_max[1])
+        for z in (native_min[2], native_max[2])
     ]
+    source_mesh.faces = [(0, 1, 3), (0, 3, 2), (4, 5, 7)]
     source_root.children.append(source_mesh)
     source.compute_bounds()
 
     reference = KotorModel(name="c_drexlf", game_version=GameVersion.K2)
     reference_root = ModelNode(name="c_drexlf", flags=int(NodeFlags.HEADER))
     reference.root_node = reference_root
-    reference_mesh = ModelNode(name="native_bounds", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=reference_root)
-    reference_mesh.vertices = [
-        (-4.3895, -5.8350, -1.0691),
-        (4.4420, 2.1641, 1.8930),
-    ]
+    for name, position in {
+        "pelvis_g": (0.0, 0.0, 1.4),
+        "tail_g": (0.0, -4.0, 1.5),
+        "head_g": (0.0, 1.5, 2.0),
+    }.items():
+        bone = ModelNode(name=name, flags=int(NodeFlags.HEADER), parent=reference_root)
+        bone.external_world_position = position
+        reference_root.children.append(bone)
+    reference_mesh = ModelNode(
+        name="native_bounds",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=reference_root,
+    )
+    reference_mesh.vertices = list(source_mesh.vertices)
+    reference_mesh.bone_map = ["pelvis_g", "tail_g", "head_g"]
+    reference_mesh.skin_data = [object()] * len(reference_mesh.vertices)
     reference_root.children.append(reference_mesh)
     reference.compute_bounds()
     before_bounds = (source.bb_min, source.bb_max)
@@ -427,6 +457,7 @@ def test_kotor_space_creature_replacement_keeps_identity_fit() -> None:
         game_version="K2",
         reference_model=reference,
         reference_label="c_drexlf",
+        expected_mode=CharacterMode.CREATURE,
     )
 
     assert result["fit_policy"] == "native_template_kotor_space_replacement"
@@ -438,6 +469,215 @@ def test_kotor_space_creature_replacement_keeps_identity_fit() -> None:
     assert fit_report["confidence"] == pytest.approx(0.95)
     assert fit_report["fallback_used"] is False
     assert fit_report["fit_transform"]["translation"] == pytest.approx([0.0, 0.0, 0.0])
+
+
+def test_unit_scale_same_resref_creature_replacement_uses_native_bounds() -> None:
+    from src.core.characters.headless_body_workflow import _vertex_bounds, normalize_external_model_for_kotor
+    from src.core.geometry.model_data import CharacterMode, GameVersion, KotorModel, ModelNode, NodeFlags
+
+    source = KotorModel(name="c_drexlf_uv", game_version=GameVersion.K2)
+    source.metadata = {
+        "external_import": {
+            "source_path": r"C:\mods\C_DrexlF_UV.obj",
+            "target_axis_system": "kotor_z_up",
+            "axis_conversion": "obj_native_axes",
+        }
+    }
+    source_root = ModelNode(name="c_drexlf_uv", flags=int(NodeFlags.HEADER))
+    source.root_node = source_root
+    source_mesh = ModelNode(name="C_DrexlF_UV", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=source_root)
+    source_mesh.vertices = [
+        (-0.457855, -0.104942, -0.5),
+        (0.457855, 0.104942, 0.5),
+    ]
+    source_mesh.normals = [(1.0, 1.0, 0.0)]
+    source_root.children.append(source_mesh)
+    source.compute_bounds()
+
+    reference = KotorModel(name="c_drexlf", game_version=GameVersion.K2)
+    reference_root = ModelNode(name="c_drexlf", flags=int(NodeFlags.HEADER))
+    reference.root_node = reference_root
+    reference_mesh = ModelNode(
+        name="native_bounds",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=reference_root,
+    )
+    native_min = (-4.37943696975708, -5.948987007141113, 0.9093970060348511)
+    native_max = (4.452073097229004, 2.138275146484375, 2.763010025024414)
+    reference_mesh.vertices = [
+        (x, y, z)
+        for x in (native_min[0], native_max[0])
+        for y in (native_min[1], native_max[1])
+        for z in (native_min[2], native_max[2])
+    ]
+    reference_mesh.bone_map = ["pelvis_g", "tail6_g", "head_g"]
+    reference_mesh.skin_data = [object()] * len(reference_mesh.vertices)
+    reference_root.children.append(reference_mesh)
+    reference.compute_bounds()
+
+    result = normalize_external_model_for_kotor(
+        source,
+        game_version="K2",
+        reference_model=reference,
+        reference_label="c_drexlf",
+        expected_mode=CharacterMode.CREATURE,
+    )
+
+    assert result["fit_policy"] == "native_template_scaled_bounds_replacement"
+    assert result["scale_basis"] == "native_template_axis_bounds_ratio"
+    assert len(result["axis_scales"]) == 3
+    assert getattr(source_mesh, "_gr_vertices_in_kotor_world", False) is True
+    assert int(getattr(source_mesh, "vertex_space", 0) or 0) == 1
+    fitted_min, fitted_max = _vertex_bounds(source)
+    assert fitted_min == pytest.approx(native_min)
+    assert fitted_max == pytest.approx(native_max)
+    mesh_render_data = _load_native_python_module(
+        "ghostrigger_mesh_render_data_under_test",
+        r"native\GhostRigger.Core.Rendering\Python\src\core\rendering\mesh_render_data.py",
+    )
+    render_matrix = mesh_render_data.mesh_model_matrix_for_node(source_mesh)
+    assert [
+        float(value)
+        for row in render_matrix.tolist()
+        for value in row
+    ] == pytest.approx([
+        1.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0,
+    ])
+    fit_report = source.metadata["kotor_fit_report"]
+    assert fit_report["fit_policy"] == "native_template_scaled_bounds_replacement"
+    assert fit_report["fit_transform"]["non_uniform_scale_baked"] is True
+    assert fit_report["source_forward_axis"] == "-z"
+    assert fit_report["source_up_axis"] == "+y"
+    assert max(result["axis_scales"]) / min(result["axis_scales"]) < 1.2
+    rotation_values = [
+        value
+        for row in fit_report["fit_transform"]["rotation_matrix"]
+        for value in row
+    ]
+    assert rotation_values == pytest.approx([
+        1.0, 0.0, 0.0,
+        0.0, 0.0, -1.0,
+        0.0, 1.0, 0.0,
+    ])
+    assert fit_report["fitted_visual_overlay"]["source"]["bounds"]["min"] == pytest.approx(native_min)
+    assert fit_report["fitted_visual_overlay"]["source"]["bounds"]["max"] == pytest.approx(native_max)
+    linear = fit_report["fit_transform"]["linear_matrix"]
+    a, b, c = linear[0]
+    d, e, f = linear[1]
+    g, h, i = linear[2]
+    det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
+    inverse = (
+        ((e * i - f * h) / det, (c * h - b * i) / det, (b * f - c * e) / det),
+        ((f * g - d * i) / det, (a * i - c * g) / det, (c * d - a * f) / det),
+        ((d * h - e * g) / det, (b * g - a * h) / det, (a * e - b * d) / det),
+    )
+    normal_matrix = (
+        (inverse[0][0], inverse[1][0], inverse[2][0]),
+        (inverse[0][1], inverse[1][1], inverse[2][1]),
+        (inverse[0][2], inverse[1][2], inverse[2][2]),
+    )
+    expected_raw = tuple(
+        sum(normal_matrix[row][col] * (1.0, 1.0, 0.0)[col] for col in range(3))
+        for row in range(3)
+    )
+    expected_len = math.sqrt(sum(value * value for value in expected_raw))
+    assert source_mesh.normals[0] == pytest.approx(tuple(value / expected_len for value in expected_raw))
+
+
+def test_same_resref_creature_replacement_uses_native_cloud_to_choose_orientation() -> None:
+    from src.core.characters.headless_body_workflow import _vertex_bounds, normalize_external_model_for_kotor
+    from src.core.geometry.model_data import CharacterMode, GameVersion, KotorModel, ModelNode, NodeFlags
+
+    source = KotorModel(name="c_drexlf_uv", game_version=GameVersion.K2)
+    source.metadata = {
+        "external_import": {
+            "source_path": r"C:\mods\C_DrexlF_UV.obj",
+            "target_axis_system": "kotor_z_up",
+            "axis_conversion": "obj_native_axes",
+        }
+    }
+    source_root = ModelNode(name="c_drexlf_uv", flags=int(NodeFlags.HEADER))
+    source.root_node = source_root
+    source_mesh = ModelNode(name="C_DrexlF_UV", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=source_root)
+    source_mesh.vertices = [
+        (-0.45, -0.10, -0.50),
+        (0.45, -0.10, -0.48),
+        (0.40, 0.10, -0.18),
+        (-0.35, 0.10, -0.15),
+        (-0.20, -0.08, 0.05),
+        (0.30, -0.07, 0.20),
+        (0.42, 0.07, 0.50),
+        (-0.44, 0.09, 0.47),
+    ]
+    source_mesh.faces = [
+        (0, 1, 2), (0, 2, 3),
+        (4, 5, 6), (4, 6, 7),
+        (0, 4, 5), (0, 5, 1),
+        (2, 6, 7), (2, 7, 3),
+    ]
+    source_root.children.append(source_mesh)
+    source.compute_bounds()
+
+    scale = 3.0
+    offset = (1.25, -2.0, 0.75)
+
+    def native_point(point):
+        # Native target x<-source z, y<-source x, z<-source y.  This is the
+        # Drexl replacement orientation that bounds alone could not identify.
+        return (
+            point[2] * scale + offset[0],
+            point[0] * scale + offset[1],
+            point[1] * scale + offset[2],
+        )
+
+    reference = KotorModel(name="c_drexlf", game_version=GameVersion.K2)
+    reference_root = ModelNode(name="c_drexlf", flags=int(NodeFlags.HEADER))
+    reference.root_node = reference_root
+    donor_bones = {
+        "pelvis_g": native_point((0.0, 0.0, 0.0)),
+        "tail6_g": native_point((0.2, 0.0, 0.25)),
+        "head_g": native_point((-0.25, 0.0, -0.25)),
+    }
+    for name, position in donor_bones.items():
+        bone = ModelNode(name=name, flags=int(NodeFlags.HEADER), parent=reference_root)
+        bone.external_world_position = position
+        reference_root.children.append(bone)
+    reference_mesh = ModelNode(
+        name="native_bounds",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=reference_root,
+    )
+    reference_mesh.vertices = [native_point(point) for point in source_mesh.vertices]
+    reference_mesh.faces = list(source_mesh.faces)
+    reference_mesh.bone_map = list(donor_bones)
+    reference_mesh.skin_data = [object()] * len(reference_mesh.vertices)
+    reference_root.children.append(reference_mesh)
+    reference.compute_bounds()
+
+    result = normalize_external_model_for_kotor(
+        source,
+        game_version="K2",
+        reference_model=reference,
+        reference_label="c_drexlf",
+        expected_mode=CharacterMode.CREATURE,
+    )
+
+    fit_report = source.metadata["kotor_fit_report"]
+    assert result["fit_policy"] == "native_template_scaled_bounds_replacement"
+    assert result["orientation_score_basis"] == "native_vertex_cloud_chamfer"
+    assert result["native_vertex_cloud_score"] < 0.001
+    assert result["all_bones_inside"] is True
+    assert result["outside_count"] == 0
+    assert result["bone_position_source"] == "skin_bone_map"
+    assert fit_report["source_forward_axis"] == "+x"
+    assert fit_report["source_up_axis"] == "+y"
+    assert max(result["axis_scales"]) / min(result["axis_scales"]) < 1.001
+    fitted_min, fitted_max = _vertex_bounds(source)
+    assert fitted_min == pytest.approx(reference.bb_min)
+    assert fitted_max == pytest.approx(reference.bb_max)
 
 
 def test_creature_mode_obj_fit_uses_flat_bounds_not_humanoid_height() -> None:
@@ -487,6 +727,165 @@ def test_creature_mode_obj_fit_uses_flat_bounds_not_humanoid_height() -> None:
     assert (source.bb_min[1] + source.bb_max[1]) * 0.5 == pytest.approx(
         (reference.bb_min[1] + reference.bb_max[1]) * 0.5
     )
+
+
+def test_creature_containment_fit_uses_skin_bone_map_and_open_mesh_axis_seed() -> None:
+    from src.core.characters.headless_body_workflow import _vertex_bounds, normalize_external_model_for_kotor
+    from src.core.geometry.model_data import CharacterMode, GameVersion, KotorModel, ModelNode, NodeFlags
+
+    source = KotorModel(name="c_drexlf_uv", game_version=GameVersion.K2)
+    source_root = ModelNode(name="c_drexlf_uv", flags=int(NodeFlags.HEADER))
+    source.root_node = source_root
+    source_mesh = ModelNode(name="C_DrexlF_UV", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=source_root)
+    source_mesh.vertices = [
+        (-0.457855, -0.104942, -0.5),
+        (0.457855, -0.104942, -0.5),
+        (0.457855, 0.104942, -0.5),
+        (-0.457855, 0.104942, -0.5),
+        (-0.457855, -0.104942, 0.5),
+        (0.457855, -0.104942, 0.5),
+        (0.457855, 0.104942, 0.5),
+        (-0.457855, 0.104942, 0.5),
+    ]
+    source_mesh.faces = [(0, 1, 2), (0, 2, 3), (4, 5, 6)]
+    source_root.children.append(source_mesh)
+    source.compute_bounds()
+
+    reference = KotorModel(name="c_drexlf", game_version=GameVersion.K2)
+    reference_root = ModelNode(name="c_drexlf", flags=int(NodeFlags.HEADER))
+    reference.root_node = reference_root
+    donor_bones = {
+        "pelvis_g": (0.01, -0.06, 1.45),
+        "tail6_g": (0.25, -4.91, 1.71),
+        "Lhand_g": (-0.84, 0.10, 1.49),
+        "Rhand_g": (0.87, 0.10, 1.41),
+        "head_g": (0.03, 1.72, 2.03),
+    }
+    for name, position in donor_bones.items():
+        bone = ModelNode(name=name, flags=int(NodeFlags.HEADER), parent=reference_root)
+        bone.external_world_position = position
+        reference_root.children.append(bone)
+    reference_mesh = ModelNode(
+        name="C_DrexlF",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=reference_root,
+    )
+    reference_mesh.vertices = [
+        (-4.3794, -5.9490, 0.9094),
+        (4.4521, 2.1383, 2.7630),
+    ]
+    reference_mesh.bone_map = list(donor_bones)
+    reference_mesh.skin_data = [object(), object()]
+    reference_root.children.append(reference_mesh)
+    reference.compute_bounds()
+
+    result = normalize_external_model_for_kotor(
+        source,
+        game_version="K2",
+        reference_model=reference,
+        reference_label="c_drexlf",
+        expected_mode=CharacterMode.CREATURE,
+    )
+
+    assert result["fit_policy"] == "containment_bone_inside_mesh"
+    assert result["scale"] > 8.0
+    assert result["fit_method"] == "oriented_bounds_reference_seed"
+    assert result["containment_volume"] == "oriented_bounds"
+    assert result["surface_containment_checked"] is False
+    assert result["containment_guarantee"] == "oriented_bounds_only"
+    assert result["bone_position_source"] == "skin_bone_map"
+    assert result["deformation_bone_count"] == len(donor_bones)
+    assert result["mesh_watertight"] is False
+    assert result["outside_count"] == 0
+    fit_report = source.metadata["kotor_fit_report"]
+    assert fit_report["fit_policy"] == "containment_bone_inside_mesh"
+    assert fit_report["scale_basis"] == "oriented_bounds_reference_seed"
+    assert fit_report["fit_transform"] == result["fit_transform"]
+    assert fit_report["containment_fit"]["bone_position_source"] == "skin_bone_map"
+    assert fit_report["containment_fit"]["surface_containment_checked"] is False
+    assert fit_report["containment_fit"]["containment_guarantee"] == "oriented_bounds_only"
+    rotation_values = [
+        value
+        for row in result["fit_transform"]["rotation_matrix"]
+        for value in row
+    ]
+    assert rotation_values == pytest.approx([
+        1.0, 0.0, 0.0,
+        0.0, 0.0, -1.0,
+        0.0, 1.0, 0.0,
+    ])
+    fitted_bounds = _vertex_bounds(source)
+    assert fitted_bounds is not None
+    assert fitted_bounds[0][2] == pytest.approx(reference.bb_min[2])
+
+
+def test_creature_containment_fit_marks_watertight_surface_volume() -> None:
+    from src.core.characters.headless_body_workflow import normalize_external_model_for_kotor
+    from src.core.geometry.model_data import CharacterMode, GameVersion, KotorModel, ModelNode, NodeFlags
+
+    source = KotorModel(name="closed_creature_shell", game_version=GameVersion.K2)
+    source_root = ModelNode(name="closed_creature_shell", flags=int(NodeFlags.HEADER))
+    source.root_node = source_root
+    source_mesh = ModelNode(name="closed_shell", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=source_root)
+    source_mesh.vertices = [
+        (-0.5, -0.5, -0.5),
+        (0.5, -0.5, -0.5),
+        (0.5, 0.5, -0.5),
+        (-0.5, 0.5, -0.5),
+        (-0.5, -0.5, 0.5),
+        (0.5, -0.5, 0.5),
+        (0.5, 0.5, 0.5),
+        (-0.5, 0.5, 0.5),
+    ]
+    source_mesh.faces = [
+        (0, 1, 2), (0, 2, 3),
+        (4, 6, 5), (4, 7, 6),
+        (0, 4, 5), (0, 5, 1),
+        (1, 5, 6), (1, 6, 2),
+        (2, 6, 7), (2, 7, 3),
+        (3, 7, 4), (3, 4, 0),
+    ]
+    source_root.children.append(source_mesh)
+    source.compute_bounds()
+
+    reference = KotorModel(name="c_closed", game_version=GameVersion.K2)
+    reference_root = ModelNode(name="c_closed", flags=int(NodeFlags.HEADER))
+    reference.root_node = reference_root
+    donor_bones = {
+        "pelvis_g": (0.0, 0.0, 0.0),
+        "head_g": (0.0, 0.0, 0.7),
+        "Lhand_g": (-0.72, 0.08, 0.05),
+        "Rhand_g": (0.76, -0.07, -0.04),
+    }
+    for name, position in donor_bones.items():
+        bone = ModelNode(name=name, flags=int(NodeFlags.HEADER), parent=reference_root)
+        bone.external_world_position = position
+        reference_root.children.append(bone)
+    reference_mesh = ModelNode(
+        name="closed_reference_skin",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=reference_root,
+    )
+    reference_mesh.vertices = list(source_mesh.vertices)
+    reference_mesh.bone_map = list(donor_bones)
+    reference_mesh.skin_data = [object()] * len(reference_mesh.vertices)
+    reference_root.children.append(reference_mesh)
+    reference.compute_bounds()
+
+    result = normalize_external_model_for_kotor(
+        source,
+        game_version="K2",
+        reference_model=reference,
+        reference_label="c_closed",
+        expected_mode=CharacterMode.CREATURE,
+    )
+
+    assert result["fit_policy"] == "containment_bone_inside_mesh"
+    assert result["containment_volume"] == "ray_cast_surface"
+    assert result["surface_containment_checked"] is True
+    assert result["containment_guarantee"] == "watertight_surface_volume"
+    assert result["mesh_watertight"] is True
+    assert result["outside_count"] == 0
 
 
 def test_creature_mode_orientation_override_bypasses_bounds_autorotation() -> None:

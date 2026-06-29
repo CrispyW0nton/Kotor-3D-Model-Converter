@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+import json
 from pathlib import Path
 from typing import Any, List, Optional, Tuple, Dict, Set
 
@@ -316,6 +317,188 @@ def load_game_skeleton_source(
     except Exception as exc:
         log.error("load_game_skeleton_source: failed for %s/%s: %s", game, name, exc)
         return None
+
+
+def log_character_builder_event(event: str, **fields: Any) -> None:
+    """Emit one structured Character Builder diagnostic event.
+
+    These logs are intentionally compact JSON inside the normal GhostRigger log
+    stream.  A live retest can filter for ``CHARBUILDER-DIAG`` and see which
+    source mesh, base skeleton, donor skin rows, bone-map slots, and preview
+    gates were actually used.
+    """
+
+    payload = {"event": str(event or "unknown")}
+    payload.update({str(key): _diag_safe(value) for key, value in fields.items()})
+    try:
+        text = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    except Exception:
+        text = json.dumps({"event": payload["event"], "error": "diag_serialize_failed"})
+    log.info("CHARBUILDER-DIAG %s", text)
+
+
+def summarize_model_for_character_builder(model: Any) -> dict:
+    """Return a small diagnostic summary for a KOTOR/imported model."""
+
+    nodes = _model_nodes_for_diag(model)
+    mesh_nodes = [
+        node for node in nodes
+        if bool(getattr(node, "vertices", None))
+    ]
+    skin_nodes = [
+        node for node in nodes
+        if bool(getattr(node, "is_skin", False))
+        and bool(getattr(node, "vertices", None))
+        and bool(getattr(node, "skin_data", None))
+        and bool(getattr(node, "bone_map", None))
+    ]
+    return {
+        "name": str(getattr(model, "name", "") or ""),
+        "source_resref": str(getattr(model, "_gr_source_resref", "") or ""),
+        "requested_resref": str(getattr(model, "_gr_requested_resref", "") or ""),
+        "target_resref": str(getattr(model, "_gr_target_resref", "") or ""),
+        "source_game": str(getattr(model, "_gr_source_game", "") or ""),
+        "supermodel": str(getattr(model, "supermodel", "") or "NULL"),
+        "node_count": len(nodes),
+        "mesh_node_count": len(mesh_nodes),
+        "vertex_count": sum(len(list(getattr(node, "vertices", []) or [])) for node in mesh_nodes),
+        "face_count": sum(len(list(getattr(node, "faces", []) or [])) for node in mesh_nodes),
+        "bounds": _diag_bounds_for_nodes(mesh_nodes),
+        "skin": _skin_donor_summary(model),
+    }
+
+
+def _resolve_template_weight_donor(template_model: Any, game: str) -> tuple[Any, str, dict]:
+    """Return a donor model with usable skin rows for weight transfer.
+
+    The selected skeleton seen in the viewport can be skeleton-only.  Binding
+    needs the real native render payload too, because donor surface weights are
+    what prevent a creature replacement from collapsing to a rigid one-bone
+    bind.  When the active template has no usable donor skin, reload the real
+    game MDL by its source/target resref and use that only as the weight donor.
+    """
+
+    summary = _skin_donor_summary(template_model)
+    if _skin_donor_summary_is_usable(summary):
+        return template_model, "selected_template", summary
+
+    for resref in _template_resref_candidates(template_model):
+        donor = load_game_skeleton_source(resref, game=game)
+        donor_summary = _skin_donor_summary(donor)
+        if _skin_donor_summary_is_usable(donor_summary):
+            return donor, f"reloaded_game_mdl:{resref}", donor_summary
+
+    return template_model, "selected_template_no_usable_skin", summary
+
+
+def _template_resref_candidates(model: Any) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    values = [
+        getattr(model, "_gr_source_resref", ""),
+        getattr(model, "_gr_variant_source_resref", ""),
+        getattr(model, "_gr_requested_resref", ""),
+        getattr(model, "_gr_target_resref", ""),
+    ]
+    if (
+        getattr(model, "_gr_source_layer", "")
+        or getattr(model, "_gr_source_game", "")
+        or any(str(value or "").strip() for value in values)
+    ):
+        values.append(getattr(model, "name", ""))
+    for value in values:
+        token = str(value or "").strip().lower()
+        token = "".join(ch for ch in token if ch.isalnum() or ch == "_")
+        if token and token not in seen:
+            seen.add(token)
+            out.append(token)
+    return out
+
+
+def _skin_donor_summary(model: Any) -> dict:
+    nodes = _model_nodes_for_diag(model)
+    skin_nodes = []
+    for node in nodes:
+        verts = list(getattr(node, "vertices", []) or [])
+        skin_rows = list(getattr(node, "skin_data", []) or [])
+        bone_map = list(getattr(node, "bone_map", []) or [])
+        if not bool(getattr(node, "is_skin", False)):
+            continue
+        if not verts or not skin_rows or not bone_map:
+            continue
+        skin_nodes.append((node, verts, skin_rows, bone_map))
+    return {
+        "model_name": str(getattr(model, "name", "") or ""),
+        "skin_node_count": len(skin_nodes),
+        "skin_vertices": sum(len(item[1]) for item in skin_nodes),
+        "skin_rows": sum(len(item[2]) for item in skin_nodes),
+        "max_bone_map": max((len(item[3]) for item in skin_nodes), default=0),
+        "skin_node_names": [
+            str(getattr(item[0], "name", "") or "")
+            for item in skin_nodes[:8]
+        ],
+    }
+
+
+def _skin_donor_summary_is_usable(summary: dict) -> bool:
+    return (
+        int(summary.get("skin_node_count") or 0) > 0
+        and int(summary.get("skin_rows") or 0) > 0
+        and int(summary.get("max_bone_map") or 0) > 0
+    )
+
+
+def _model_nodes_for_diag(model: Any) -> list[Any]:
+    if model is None:
+        return []
+    all_nodes = getattr(model, "all_nodes", None)
+    if callable(all_nodes):
+        try:
+            return list(all_nodes())
+        except Exception:
+            return []
+    root = getattr(model, "root_node", None)
+    return [root] if root is not None else []
+
+
+def _diag_bounds_for_nodes(nodes: list[Any]) -> dict:
+    mins = [float("inf"), float("inf"), float("inf")]
+    maxs = [float("-inf"), float("-inf"), float("-inf")]
+    found = False
+    for node in nodes:
+        for vertex in list(getattr(node, "vertices", []) or []):
+            try:
+                x, y, z = float(vertex[0]), float(vertex[1]), float(vertex[2])
+            except Exception:
+                continue
+            mins[0] = min(mins[0], x)
+            mins[1] = min(mins[1], y)
+            mins[2] = min(mins[2], z)
+            maxs[0] = max(maxs[0], x)
+            maxs[1] = max(maxs[1], y)
+            maxs[2] = max(maxs[2], z)
+            found = True
+    if not found:
+        return {}
+    return {
+        "min": [round(v, 6) for v in mins],
+        "max": [round(v, 6) for v in maxs],
+        "extent": [round(maxs[i] - mins[i], 6) for i in range(3)],
+    }
+
+
+def _diag_safe(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, tuple):
+        return [_diag_safe(item) for item in value]
+    if isinstance(value, list):
+        return [_diag_safe(item) for item in value[:32]]
+    if isinstance(value, dict):
+        return {str(key): _diag_safe(item) for key, item in value.items()}
+    return str(value)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1004,6 +1187,23 @@ def apply_template_rig(
         if native_skeleton_snapshot is not None:
             setattr(result_model, "_gr_native_skeleton_snapshot", native_skeleton_snapshot)
 
+        weight_donor_model, weight_donor_source, weight_donor_summary = (
+            _resolve_template_weight_donor(template_model, game)
+        )
+        log_character_builder_event(
+            "apply_template_rig.pre_bind",
+            game=game,
+            template=summarize_model_for_character_builder(template_model),
+            weight_donor_source=weight_donor_source,
+            weight_donor=weight_donor_summary,
+            imported_payload=summarize_model_for_character_builder(mesh_model),
+            cleaned_payload=summarize_model_for_character_builder(result_model),
+            payload_names=[
+                str(getattr(mesh_node, "name", "") or "")
+                for mesh_node in mesh_payloads
+            ],
+        )
+
         try:
             try:
                 from ..skeleton.skeleton_builder import bind_imported_meshes_to_skeleton
@@ -1012,7 +1212,7 @@ def apply_template_rig(
             bind_report = bind_imported_meshes_to_skeleton(
                 result_model,
                 mesh_nodes=mesh_payloads,
-                donor_model=template_model,
+                donor_model=weight_donor_model,
             )
             if not bind_report.ok:
                 return {"ok": False, "model": None,
@@ -1079,6 +1279,7 @@ def apply_template_rig(
             donor_weight_transfer = bool(getattr(bind_report, "donor_weight_transfer", False))
             source_skin_remap = bool(getattr(bind_report, "source_skin_remap", False))
             source_hand_refinement = bool(getattr(bind_report, "source_hand_refinement", False))
+            collapsed_bind_repairs = int(getattr(bind_report, "collapsed_bind_repairs", 0) or 0)
             metadata["character_builder_bind"] = {
                 "status": "bound_to_native_kotor_skeleton",
                 "skeleton_root": str(getattr(skel_root, "name", "") or ""),
@@ -1090,6 +1291,8 @@ def apply_template_rig(
                     "dag_authority": "native_kotor_base",
                     "dag_fingerprint": native_dag_fingerprint,
                     "dag_fingerprint_algorithm": native_dag_fingerprint_algorithm,
+                    "weight_donor_source": weight_donor_source,
+                    "weight_donor": weight_donor_summary,
                     "replaced_render_payload_nodes": replaced_native_render_nodes,
                     "replaced_render_payload_count": len(replaced_native_render_nodes),
                 },
@@ -1118,6 +1321,7 @@ def apply_template_rig(
                     "donor_weight_transfer": donor_weight_transfer,
                     "source_skin_remap": source_skin_remap,
                     "source_hand_refinement": source_hand_refinement,
+                    "collapsed_bind_repairs": collapsed_bind_repairs,
                     "mesh_reports": list(getattr(bind_report, "mesh_reports", None) or []),
                     "note": (
                         "Imported source skin weights were remapped onto the "
@@ -1167,12 +1371,32 @@ def apply_template_rig(
 
         log.info(
             "apply_template_rig: success  game=%s  scale=%.3f  "
-            "skel_bones=%d  skinned=%d  weighted=%d  anims=%d",
+            "skel_bones=%d  skinned=%d  weighted=%d  bone_slots=%d  "
+            "bind=%s  donor=%s  donor_source=%s  repairs=%d  anims=%d",
             game, applied_scale,
             template_model.node_count(),
             bind_report.skinned_meshes,
             bind_report.weighted_vertices,
+            bind_report.bone_count,
+            getattr(bind_report, "weighting_method", ""),
+            bool(getattr(bind_report, "donor_weight_transfer", False)),
+            weight_donor_source,
+            int(getattr(bind_report, "collapsed_bind_repairs", 0) or 0),
             len(result_model.animations),
+        )
+        log_character_builder_event(
+            "apply_template_rig.result",
+            ok=True,
+            game=game,
+            skel_bones=template_model.node_count(),
+            skinned=bind_report.skinned_meshes,
+            weighted_vertices=bind_report.weighted_vertices,
+            bone_slots=bind_report.bone_count,
+            weighting_method=getattr(bind_report, "weighting_method", ""),
+            donor_weight_transfer=bool(getattr(bind_report, "donor_weight_transfer", False)),
+            weight_donor_source=weight_donor_source,
+            collapsed_bind_repairs=int(getattr(bind_report, "collapsed_bind_repairs", 0) or 0),
+            mesh_reports=list(getattr(bind_report, "mesh_reports", None) or []),
         )
         return {
             "ok": True,

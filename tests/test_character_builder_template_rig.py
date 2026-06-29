@@ -4,6 +4,7 @@ import inspect
 import math
 from types import SimpleNamespace
 
+from src.core.characters import character_builder as character_builder_module
 from src.core.characters.character_builder import apply_template_rig
 from src.core.characters.character_rig_state import get_character_rig_state
 from src.core.animation.animation_engine import AnimPose, NodePose
@@ -275,6 +276,81 @@ def test_apply_template_rig_strips_imported_armature_and_clears_old_skin() -> No
             "replacement": "imported_mesh_payload",
         }
     ]
+
+
+def test_apply_template_rig_reloads_weight_donor_for_skeleton_only_template(monkeypatch) -> None:
+    src_root = _node("Imported")
+    mesh = _node(
+        "creature_payload",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH),
+        parent=src_root,
+    )
+    mesh.vertices = [(0.0, 0.0, 0.0), (10.0, 0.0, 0.0)]
+    mesh.faces = [(0, 1, 1)]
+    mesh_model = KotorModel(name="creature_payload", root_node=src_root)
+
+    template_root = _node("C_TestCreature")
+    _node("rootdummy", parent=template_root)
+    pelvis = _node("pelvis_g", parent=template_root)
+    pelvis.position = (0.0, 0.0, 0.0)
+    tail = _node("tail1_g", parent=template_root)
+    tail.position = (10.0, 0.0, 0.0)
+    template = KotorModel(name="c_testcreature", root_node=template_root, supermodel="NULL")
+    template._gr_source_resref = "c_testcreature"
+    template._gr_requested_resref = "c_testcreature"
+    template._gr_source_game = "K2"
+
+    donor_root = _node("C_TestCreature")
+    _node("rootdummy", parent=donor_root)
+    _node("pelvis_g", parent=donor_root)
+    _node("tail1_g", parent=donor_root)
+    donor_skin = _node(
+        "C_TestCreatureSkin",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=donor_root,
+    )
+    donor_skin.vertices = [(0.0, 0.0, 0.0), (10.0, 0.0, 0.0)]
+    donor_skin.faces = [(0, 1, 1)]
+    donor_skin.bone_map = ["pelvis_g", "tail1_g"]
+    donor_skin.bone_map_floats = [0.0, 1.0]
+    donor_skin.qbone_list = [(0.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0, 1.0)]
+    donor_skin.tbone_list = [(0.0, 0.0, 0.0), (10.0, 0.0, 0.0)]
+    donor_skin.skin_data = [
+        VertexSkinData([BoneWeight(0, 1.0)]),
+        VertexSkinData([BoneWeight(1, 1.0)]),
+    ]
+    donor = KotorModel(name="c_testcreature", root_node=donor_root, supermodel="NULL")
+    donor._gr_source_resref = "c_testcreature"
+    donor._gr_source_game = "K2"
+
+    def _fake_load_game_skeleton_source(resref: str, *, game: str = "K1", game_dir=None):
+        assert resref == "c_testcreature"
+        assert game == "K2"
+        return donor
+
+    monkeypatch.setattr(
+        character_builder_module,
+        "load_game_skeleton_source",
+        _fake_load_game_skeleton_source,
+    )
+
+    result = apply_template_rig(mesh_model, template, game="K2", scale_mode="manual")
+
+    assert result["ok"] is True
+    rigged = result["model"]
+    bind = rigged.metadata["character_builder_bind"]
+    assert bind["native_base"]["weight_donor_source"] == "reloaded_game_mdl:c_testcreature"
+    skin_binding = bind["skin_binding"]
+    assert skin_binding["weighting_method"] == "native_template_nearest_vertex_donor"
+    assert skin_binding["donor_weight_transfer"] is True
+    assert skin_binding["mesh_reports"][0]["donor_vertex_count"] == 2
+
+    rigged_mesh = rigged.find_node("creature_payload")
+    assert rigged_mesh is not None
+    assert rigged_mesh.bone_map == ["pelvis_g", "tail1_g"]
+    assert len(rigged_mesh.skin_data) == 2
+    assert rigged_mesh.skin_data[0].influences[0].bone_index == 0
+    assert rigged_mesh.skin_data[1].influences[0].bone_index == 1
 
 
 def test_apply_template_rig_does_not_rebake_already_fitted_external_vertices() -> None:

@@ -9,6 +9,7 @@ PYTHON_PAYLOAD_CONVERTERS_NORMAL_MAP RCDATA "Python/src/converters/normal_map.py
 PYTHON_PAYLOAD_CORE_EXPORT_INIT RCDATA "Python/src/core/export/__init__.py"
 PYTHON_PAYLOAD_CORE_EXPORT_EXPORT_JOB RCDATA "Python/src/core/export/export_job.py"
 PYTHON_PAYLOAD_CORE_EXPORT_GLTF_IMPORTER RCDATA "Python/src/core/export/gltf_importer.py"
+PYTHON_PAYLOAD_CORE_EXPORT_KOTOR_FBX_MANIFEST RCDATA "Python/src/core/export/kotor_fbx_manifest.py"
 PYTHON_PAYLOAD_CORE_EXPORT_UNITY_EXPORT_BRIDGE RCDATA "Python/src/core/export/unity_export_bridge.py"
 PYTHON_PAYLOAD_CORE_EXPORT_UNITY_IMPORT_VALIDATOR RCDATA "Python/src/core/export/unity_import_validator.py"
 PYTHON_PAYLOAD_CORE_MDL_INIT RCDATA "Python/src/core/mdl/__init__.py"

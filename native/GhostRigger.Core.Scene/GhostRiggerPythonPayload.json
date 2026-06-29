@@ -531,7 +531,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_SKELETON_SKELETON_BUILDER",
             "source_path": "src/core/skeleton/skeleton_builder.py",
             "packaged_path": "Python/src/core/skeleton/skeleton_builder.py",
-            "sha256": "f5c4d10af8e034a68cb7a7486dacaa09d1fec4642098897b215776617b0b8253"
+            "sha256": "193684aba7460c73b2096626dde8e6b78efc5f171f7a43f0e26311af987c5d4b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_WALKMESH_INIT",

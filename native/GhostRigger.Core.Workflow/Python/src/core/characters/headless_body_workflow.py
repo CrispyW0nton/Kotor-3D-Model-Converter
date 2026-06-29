@@ -31,6 +31,7 @@ Roadmap reference: knowledge_base/roadmap/02_roadmap_2026_05.md M5/T501-T506.
 from __future__ import annotations
 
 import copy
+import itertools
 import logging
 import math
 import os
@@ -562,6 +563,50 @@ def _matrix_determinant(matrix: Tuple[Vec3, Vec3, Vec3]) -> float:
     )
 
 
+def _matrix_inverse(matrix: Tuple[Vec3, Vec3, Vec3]) -> Optional[Tuple[Vec3, Vec3, Vec3]]:
+    det = _matrix_determinant(matrix)
+    if abs(det) <= 1.0e-12:
+        return None
+    a, b, c = matrix[0]
+    d, e, f = matrix[1]
+    g, h, i = matrix[2]
+    inv_det = 1.0 / det
+    return (
+        (
+            (e * i - f * h) * inv_det,
+            (c * h - b * i) * inv_det,
+            (b * f - c * e) * inv_det,
+        ),
+        (
+            (f * g - d * i) * inv_det,
+            (a * i - c * g) * inv_det,
+            (c * d - a * f) * inv_det,
+        ),
+        (
+            (d * h - e * g) * inv_det,
+            (b * g - a * h) * inv_det,
+            (a * e - b * d) * inv_det,
+        ),
+    )
+
+
+def _matrix_transpose(matrix: Tuple[Vec3, Vec3, Vec3]) -> Tuple[Vec3, Vec3, Vec3]:
+    return (
+        (matrix[0][0], matrix[1][0], matrix[2][0]),
+        (matrix[0][1], matrix[1][1], matrix[2][1]),
+        (matrix[0][2], matrix[1][2], matrix[2][2]),
+    )
+
+
+def _normal_transform_from_linear_matrix(
+    linear_matrix: Tuple[Vec3, Vec3, Vec3],
+) -> Tuple[Vec3, Vec3, Vec3]:
+    inverse = _matrix_inverse(linear_matrix)
+    if inverse is None:
+        return linear_matrix
+    return _matrix_transpose(inverse)
+
+
 def _median_positive(values: Iterable[float], fallback: float = 1.0) -> float:
     clean = sorted(
         float(value)
@@ -675,6 +720,675 @@ def _creature_bounds_fit_solution(
         "scale_ratios": ratios,
         "source_extents": source_extents,
         "target_extents": target_extents,
+    }
+
+
+def _axis_scaled_matrix(
+    rotation_matrix: Tuple[Vec3, Vec3, Vec3],
+    axis_scales: Sequence[float],
+) -> Tuple[Vec3, Vec3, Vec3]:
+    """Return a baked affine matrix with one scale per target axis."""
+
+    return tuple(
+        tuple(float(value) * float(axis_scales[row_index]) for value in row)
+        for row_index, row in enumerate(rotation_matrix)
+    )  # type: ignore[return-value]
+
+
+def _axis_fit_distortion(axis_scales: Sequence[float]) -> float:
+    values = [float(value) for value in axis_scales if float(value) > 1.0e-8]
+    if len(values) != 3:
+        return float("inf")
+    return math.log(max(values) / min(values))
+
+
+def _mesh_vertex_cloud(model: Any) -> List[Vec3]:
+    """Collect render-payload vertices for direct replacement fit scoring."""
+
+    vertices: List[Vec3] = []
+    if model is None:
+        return vertices
+    for node in _iter_model_nodes(model):
+        if bool(getattr(node, "_gr_hidden", False)):
+            continue
+        if getattr(node, "render", True) is False:
+            continue
+        if int(getattr(node, "vertex_space", 0) or 0) == 2:
+            continue
+        verts = list(getattr(node, "vertices", []) or [])
+        if not verts:
+            continue
+        # Prefer actual mesh payload nodes.  Some imported/native models carry
+        # helper nodes with vertices but no faces; those should not drive a
+        # same-resref surface match.
+        if not list(getattr(node, "faces", []) or []):
+            continue
+        for vert in verts:
+            if vert is None or len(vert) < 3:
+                continue
+            try:
+                vertices.append((float(vert[0]), float(vert[1]), float(vert[2])))
+            except Exception:
+                continue
+    return vertices
+
+
+def _sample_cloud_array(vertices: Sequence[Vec3], *, max_points: int = 1200):
+    import numpy as np
+
+    arr = np.asarray(vertices, dtype=np.float64)
+    if arr.ndim != 2 or arr.shape[1] != 3 or arr.shape[0] < 4:
+        return None
+    if arr.shape[0] > max_points:
+        indices = np.linspace(0, arr.shape[0] - 1, max_points, dtype=np.int64)
+        arr = arr[indices]
+    return arr
+
+
+def _nearest_cloud_mean_square(source, target) -> float:
+    import numpy as np
+
+    mins = []
+    for start in range(0, int(source.shape[0]), 256):
+        chunk = source[start:start + 256]
+        diff = chunk[:, None, :] - target[None, :, :]
+        distances = np.sum(diff * diff, axis=2)
+        mins.append(np.min(distances, axis=1))
+    if not mins:
+        return float("inf")
+    return float(np.concatenate(mins).mean())
+
+
+def _point_cloud_fit_score(
+    source_vertices: Optional[Sequence[Vec3]],
+    reference_vertices: Optional[Sequence[Vec3]],
+    *,
+    linear_matrix: Tuple[Vec3, Vec3, Vec3],
+    offset: Vec3,
+) -> Optional[float]:
+    """Symmetric nearest-neighbor score for same-resref replacement geometry."""
+
+    if not source_vertices or not reference_vertices:
+        return None
+    try:
+        import numpy as np
+    except Exception:  # pragma: no cover - project dependency
+        return None
+    source = _sample_cloud_array(source_vertices)
+    reference = _sample_cloud_array(reference_vertices)
+    if source is None or reference is None:
+        return None
+    linear = np.asarray(linear_matrix, dtype=np.float64)
+    translation = np.asarray(offset, dtype=np.float64)
+    mapped = (source @ linear.T) + translation
+    source_to_ref = _nearest_cloud_mean_square(mapped, reference)
+    ref_to_source = _nearest_cloud_mean_square(reference, mapped)
+    if not math.isfinite(source_to_ref) or not math.isfinite(ref_to_source):
+        return None
+    return math.sqrt(max(0.0, (source_to_ref + ref_to_source) * 0.5))
+
+
+def _replacement_axis_fit_seed(
+    bounds: Tuple[Vec3, Vec3],
+    reference_bounds: Tuple[Vec3, Vec3],
+    *,
+    prefer_identity: bool = False,
+    source_vertices: Optional[Sequence[Vec3]] = None,
+    reference_vertices: Optional[Sequence[Vec3]] = None,
+) -> Optional[Dict[str, Any]]:
+    """Find the signed axis frame that fits native bounds with least distortion."""
+
+    bb_min, bb_max = bounds
+    ref_min, ref_max = reference_bounds
+    source_extents = tuple(max(0.0, float(bb_max[i]) - float(bb_min[i])) for i in range(3))
+    target_extents = tuple(max(0.0, float(ref_max[i]) - float(ref_min[i])) for i in range(3))
+    if min(source_extents) <= 1.0e-8 or min(target_extents) <= 1.0e-8:
+        return None
+
+    source_thin_axis = min(range(3), key=lambda axis: source_extents[axis])
+    identity_rotation: Tuple[Vec3, Vec3, Vec3] = (
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+    )
+    best: Optional[Dict[str, Any]] = None
+    for source_axes in itertools.permutations((0, 1, 2), 3):
+        try:
+            axis_scales = tuple(
+                float(target_extents[target_axis]) / float(source_extents[source_axis])
+                for target_axis, source_axis in enumerate(source_axes)
+            )
+        except Exception:
+            continue
+        if any((not math.isfinite(value)) or value <= 1.0e-8 for value in axis_scales):
+            continue
+        distortion = _axis_fit_distortion(axis_scales)
+        semantic_penalty = 0.0
+        if prefer_identity and source_axes[0] != 0:
+            semantic_penalty += 0.25
+        if source_axes[2] != source_thin_axis:
+            semantic_penalty += 0.40
+        for signs in itertools.product((-1.0, 1.0), repeat=3):
+            rows: List[List[float]] = [
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+            ]
+            for target_axis, source_axis in enumerate(source_axes):
+                rows[target_axis][source_axis] = signs[target_axis]
+            rotation: Tuple[Vec3, Vec3, Vec3] = tuple(tuple(row) for row in rows)  # type: ignore[assignment]
+            if _matrix_determinant(rotation) < 0.0:
+                continue
+            identity_penalty = 0.0
+            if prefer_identity and rotation != identity_rotation:
+                identity_penalty = 0.02
+            sign_penalty = sum(0.001 for sign in signs if sign < 0.0)
+            if signs[0] < 0.0:
+                sign_penalty += 0.004
+            if signs[2] < 0.0:
+                sign_penalty += 0.002
+            linear_matrix = _axis_scaled_matrix(rotation, axis_scales)
+            cloud_score = None
+            mapped_bounds = _transform_bounds(
+                bounds,
+                lambda point, matrix=linear_matrix: _mat_vec(matrix, point),
+            )
+            if mapped_bounds is not None:
+                mapped_min, _mapped_max = mapped_bounds
+                offset = (
+                    float(ref_min[0]) - float(mapped_min[0]),
+                    float(ref_min[1]) - float(mapped_min[1]),
+                    float(ref_min[2]) - float(mapped_min[2]),
+                )
+                cloud_score = _point_cloud_fit_score(
+                    source_vertices,
+                    reference_vertices,
+                    linear_matrix=linear_matrix,
+                    offset=offset,
+                )
+            if cloud_score is not None:
+                score = float(cloud_score) + (distortion * 0.01) + (sign_penalty * 0.001)
+                score_basis = "native_vertex_cloud_chamfer"
+            else:
+                score = distortion + semantic_penalty + identity_penalty + sign_penalty
+                score_basis = "bounds_extent_distortion"
+            candidate = {
+                "score": score,
+                "score_basis": score_basis,
+                "distortion": distortion,
+                "native_vertex_cloud_score": cloud_score,
+                "axis_scales": axis_scales,
+                "source_axes": source_axes,
+                "rotation_matrix": rotation,
+                "source_extents": source_extents,
+                "target_extents": target_extents,
+                "source_right_axis": int(source_axes[0]),
+                "source_forward_axis": int(source_axes[1]),
+                "source_up_axis": int(source_axes[2]),
+                "source_right_label": _axis_label_from_vector(rotation[0]),
+                "source_forward_label": _axis_label_from_vector(rotation[1]),
+                "source_up_label": _axis_label_from_vector(rotation[2]),
+                "target_forward_label": "+y",
+                "target_up_label": "+z",
+            }
+            if best is None or float(candidate["score"]) < float(best["score"]):
+                best = candidate
+    return best
+
+
+def _fit_transform_metadata_from_matrix(
+    *,
+    policy: str,
+    linear_matrix: Tuple[Vec3, Vec3, Vec3],
+    rotation_matrix: Tuple[Vec3, Vec3, Vec3],
+    scale: float,
+    source_origin: Vec3,
+    target_origin: Vec3,
+    translation: Vec3,
+    axis_scales: Optional[Sequence[float]] = None,
+) -> Dict[str, Any]:
+    result = _fit_transform_metadata(
+        policy=policy,
+        scale=scale,
+        rotation_matrix=rotation_matrix,
+        source_origin=source_origin,
+        target_origin=target_origin,
+        translation=translation,
+    )
+    result["linear_matrix"] = _matrix_as_lists(linear_matrix)
+    if axis_scales is not None:
+        result["axis_scales"] = [float(value) for value in axis_scales]
+        result["non_uniform_scale_baked"] = True
+    return result
+
+
+def _native_template_scaled_bounds_fit(
+    model: Any,
+    *,
+    bounds: Tuple[Vec3, Vec3],
+    reference_bounds: Optional[Tuple[Vec3, Vec3]],
+    reference_model: Any,
+    reference_label: str,
+    fit_report: Any,
+) -> Optional[Dict[str, Any]]:
+    """Fit a same-resref replacement OBJ to the selected native mesh frame.
+
+    A re-UV'd OBJ exported from a KOTOR creature often arrives normalized around
+    its DCC origin.  With no imported skeleton landmarks, generic containment
+    can only put the donor bones inside the source bounds.  For a direct
+    replacement whose filename resolves to the selected native resref, the
+    native render bounds are stronger evidence than the OBJ pivot.
+    """
+
+    if reference_bounds is None:
+        return None
+    metadata = getattr(model, "metadata", None)
+    metadata = metadata if isinstance(metadata, dict) else {}
+    external = metadata.get("external_import")
+    external = external if isinstance(external, dict) else {}
+    source_path = str(external.get("source_path") or "")
+    label = reference_label or getattr(reference_model, "name", "") or ""
+    if not _replacement_source_matches_resref(source_path, str(label)):
+        return None
+
+    seed = _replacement_axis_fit_seed(
+        bounds,
+        reference_bounds,
+        prefer_identity=external.get("target_axis_system") == "kotor_z_up",
+        source_vertices=_mesh_vertex_cloud(model),
+        reference_vertices=_mesh_vertex_cloud(reference_model),
+    )
+    if seed is None:
+        seed = _creature_bounds_fit_solution(bounds, reference_bounds)
+    if seed is None:
+        return None
+    source_extents = tuple(float(value) for value in seed.get("source_extents", ()))
+    target_extents = tuple(float(value) for value in seed.get("target_extents", ()))
+    if len(source_extents) != 3 or len(target_extents) != 3:
+        return None
+    source_axes = (
+        int(seed["source_right_axis"]),
+        int(seed["source_forward_axis"]),
+        int(seed["source_up_axis"]),
+    )
+    rotation = seed["rotation_matrix"]
+    try:
+        axis_scales = tuple(
+            float(target_extents[target_axis]) / float(source_extents[source_axis])
+            for target_axis, source_axis in enumerate(source_axes)
+        )
+    except Exception:
+        return None
+    if any((not math.isfinite(value)) or value <= 1.0e-8 for value in axis_scales):
+        return None
+
+    linear_matrix = _axis_scaled_matrix(rotation, axis_scales)
+
+    def transform_without_offset(point: Vec3) -> Vec3:
+        return _mat_vec(linear_matrix, point)
+
+    mapped_bounds = _transform_bounds(bounds, transform_without_offset)
+    if mapped_bounds is None:
+        return None
+    ref_min, ref_max = reference_bounds
+    mapped_min, _mapped_max = mapped_bounds
+    offset = (
+        float(ref_min[0]) - float(mapped_min[0]),
+        float(ref_min[1]) - float(mapped_min[1]),
+        float(ref_min[2]) - float(mapped_min[2]),
+    )
+
+    def transform_point(point: Vec3) -> Vec3:
+        return _vec_add(_mat_vec(linear_matrix, point), offset)
+
+    source_origin = _bounds_ground_center(bounds)
+    target_origin = transform_point(source_origin)
+    scale = _median_positive(axis_scales)
+    fit_transform = _fit_transform_metadata_from_matrix(
+        policy="native_template_scaled_bounds_replacement",
+        linear_matrix=linear_matrix,
+        rotation_matrix=rotation,
+        scale=scale,
+        source_origin=source_origin,
+        target_origin=target_origin,
+        translation=offset,
+        axis_scales=axis_scales,
+    )
+    fitted_visual_overlay = {
+        "coordinate_space": "kotor_world_after_fit",
+        "source": _fit_frame_visual_overlay(
+            model,
+            None,
+            bounds,
+            transform_point=transform_point,
+            axis_length_scale=scale,
+        ),
+        "target": _fit_frame_visual_overlay(reference_model, None, reference_bounds),
+    }
+    fitted_bounds = _transform_bounds(bounds, transform_point)
+    deformation_bones, skipped_bones, bone_source = _skin_bone_map_fit_positions(reference_model)
+    bone_positions = [point for _name, point in deformation_bones]
+    if fitted_bounds is not None and bone_positions:
+        all_bones_inside, outside_count = _bounds_contains_points(fitted_bounds, bone_positions)
+    else:
+        all_bones_inside, outside_count = False, len(bone_positions)
+    source_bounds = _bounds_as_lists(bounds)
+    target_bounds = _bounds_as_lists(reference_bounds)
+    auto_fit_report = dict(
+        (fit_report.get("auto_fit_report") if isinstance(fit_report, dict) else None)
+        or {}
+    )
+    auto_fit_report.update({
+        "source_forward_axis": str(seed["source_forward_label"]),
+        "source_up_axis": str(seed["source_up_label"]),
+        "target_forward_axis": str(seed["target_forward_label"]),
+        "target_up_axis": str(seed["target_up_label"]),
+        "scale_factor": float(scale),
+        "axis_scales": [float(value) for value in axis_scales],
+        "height_source": "native_template_render_bounds",
+        "ground_origin_basis": "native_template_bounds_min_corner",
+        "used_landmarks": [
+            "source:replacement_filename",
+            "source:render_bounds",
+            "source:least_distorting_axis_permutation",
+            "target:selected_native_render_bounds",
+        ],
+        "confidence": 0.9,
+        "fallback_used": False,
+        "notes": (
+            "Imported mesh filename matches the selected native template; "
+            "native render bounds and least-distorting axis fit drove the baked replacement fit."
+        ),
+    })
+    report = dict(fit_report) if isinstance(fit_report, dict) else {}
+    report.update({
+        "ok": True,
+        "code": "native_template_scaled_bounds_replacement",
+        "message": "External replacement mesh fit to the selected native KOTOR template bounds.",
+        "fit_policy": "native_template_scaled_bounds_replacement",
+        "scale_basis": "native_template_axis_bounds_ratio",
+        "scale": float(scale),
+        "axis_scales": [float(value) for value in axis_scales],
+        "axis_fit_distortion": float(seed.get("distortion", _axis_fit_distortion(axis_scales))),
+        "orientation_score_basis": str(seed.get("score_basis") or "bounds_extent_distortion"),
+        "native_vertex_cloud_score": seed.get("native_vertex_cloud_score"),
+        "all_bones_inside": bool(all_bones_inside),
+        "outside_count": int(outside_count),
+        "bone_position_source": bone_source,
+        "deformation_bone_count": len(deformation_bones),
+        "dummy_bone_count": len(skipped_bones),
+        "source_height": float(source_extents[int(seed["source_up_axis"])]),
+        "target_height": float(target_extents[2]),
+        "vertical_axis": str(seed["source_up_label"]).lstrip("+"),
+        "reference": str(label or ""),
+        "source_bounds": source_bounds,
+        "reference_bounds": target_bounds,
+        "source_forward_axis": str(seed["source_forward_label"]),
+        "source_up_axis": str(seed["source_up_label"]),
+        "target_forward_axis": str(seed["target_forward_label"]),
+        "target_up_axis": str(seed["target_up_label"]),
+        "scale_factor": float(scale),
+        "height_source": auto_fit_report["height_source"],
+        "ground_origin_basis": auto_fit_report["ground_origin_basis"],
+        "used_landmarks": list(auto_fit_report["used_landmarks"]),
+        "confidence": float(auto_fit_report["confidence"]),
+        "fallback_used": False,
+        "notes": str(auto_fit_report["notes"]),
+        "auto_fit_report": auto_fit_report,
+        "fit_transform": fit_transform,
+        "fitted_visual_overlay": fitted_visual_overlay,
+        "native_template_scaled_bounds_replacement": {
+            "source_bounds": source_bounds,
+            "reference_bounds": target_bounds,
+            "source_path": source_path,
+            "axis_scales": [float(value) for value in axis_scales],
+            "axis_fit_distortion": float(seed.get("distortion", _axis_fit_distortion(axis_scales))),
+            "orientation_score_basis": str(seed.get("score_basis") or "bounds_extent_distortion"),
+            "native_vertex_cloud_score": seed.get("native_vertex_cloud_score"),
+            "all_bones_inside": bool(all_bones_inside),
+            "outside_count": int(outside_count),
+            "bone_position_source": bone_source,
+            "deformation_bone_count": len(deformation_bones),
+            "source_axes": [int(value) for value in source_axes],
+            "reference_label": str(label or ""),
+        },
+        "kotor_contract": {
+            "native_skeleton_is_authority": True,
+            "imported_mesh_role": "payload_guest",
+            "final_dag_source": "selected_kotor_base",
+        },
+    })
+    return {
+        "scale": float(scale),
+        "axis_scales": axis_scales,
+        "axis_fit_distortion": float(seed.get("distortion", _axis_fit_distortion(axis_scales))),
+        "orientation_score_basis": str(seed.get("score_basis") or "bounds_extent_distortion"),
+        "native_vertex_cloud_score": seed.get("native_vertex_cloud_score"),
+        "all_bones_inside": bool(all_bones_inside),
+        "outside_count": int(outside_count),
+        "bone_position_source": bone_source,
+        "deformation_bone_count": len(deformation_bones),
+        "rotation_matrix": rotation,
+        "linear_matrix": linear_matrix,
+        "offset": offset,
+        "source_origin": source_origin,
+        "target_origin": target_origin,
+        "source_height": float(source_extents[int(seed["source_up_axis"])]),
+        "target_height": float(target_extents[2]),
+        "source_up_label": str(seed["source_up_label"]),
+        "source_forward_label": str(seed["source_forward_label"]),
+        "fit_transform": fit_transform,
+        "fit_report": report,
+        "fitted_visual_overlay": fitted_visual_overlay,
+    }
+
+
+_NON_DEFORMING_ATTACHMENT_NAMES = {
+    "camerahook",
+    "camera_hook",
+    "camhook",
+    "impact_bolt",
+    "handconjure",
+    "chestconjure",
+}
+
+
+def _node_lookup_by_name(model: Any) -> Dict[str, Any]:
+    nodes: Dict[str, Any] = {}
+    if model is None:
+        return nodes
+    for node in _iter_model_nodes(model):
+        raw = str(getattr(node, "name", "") or "").strip()
+        if not raw:
+            continue
+        nodes.setdefault(raw.lower(), node)
+        clean = _clean_landmark_name(raw)
+        if clean:
+            nodes.setdefault(clean, node)
+    return nodes
+
+
+def _skin_bone_map_fit_positions(
+    reference_model: Any,
+) -> Tuple[List[Tuple[str, Vec3]], List[str], str]:
+    """Return donor deformation positions from actual skin bone palettes.
+
+    KOTOR skin meshes store the deformation authority in their compact
+    ``bone_map`` palette.  The skinned mesh node itself is only render payload;
+    fitting to that node's origin makes replacement meshes shrink around
+    ``(0, 0, 0)`` instead of around the skeleton that will animate them.
+    """
+
+    if reference_model is None:
+        return [], [], "none"
+    lookup = _node_lookup_by_name(reference_model)
+    positions: List[Tuple[str, Vec3]] = []
+    skipped: List[str] = []
+    seen: set[str] = set()
+    for node in _iter_model_nodes(reference_model):
+        bone_map = list(getattr(node, "bone_map", []) or [])
+        if not bone_map:
+            continue
+        has_skin_evidence = (
+            bool(getattr(node, "is_skin", False))
+            or bool(getattr(node, "skin_data", None))
+            or bool(getattr(node, "vertices", None))
+        )
+        if not has_skin_evidence:
+            continue
+        for bone_name in bone_map:
+            raw = str(bone_name or "").strip()
+            key = raw.lower()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            clean = _clean_landmark_name(raw)
+            if key in _NON_DEFORMING_ATTACHMENT_NAMES or clean in _NON_DEFORMING_ATTACHMENT_NAMES:
+                skipped.append(raw)
+                continue
+            bone_node = lookup.get(key) or lookup.get(clean)
+            pos = _node_fit_position(bone_node) if bone_node is not None else None
+            if pos is None:
+                skipped.append(raw)
+                continue
+            positions.append((raw, (float(pos[0]), float(pos[1]), float(pos[2]))))
+    return positions, skipped, "skin_bone_map" if positions else "none"
+
+
+def _mesh_face_closure_summary(faces: Sequence[Sequence[int]]) -> Dict[str, Any]:
+    """Fast manifold-edge check used before expensive ray containment."""
+
+    edge_counts: Dict[Tuple[int, int], int] = {}
+    polygon_count = 0
+    for face in faces:
+        if face is None or len(face) < 3:
+            continue
+        polygon_count += 1
+        indices = [int(index) for index in face]
+        for index, start in enumerate(indices):
+            end = indices[(index + 1) % len(indices)]
+            edge = (start, end) if start <= end else (end, start)
+            edge_counts[edge] = edge_counts.get(edge, 0) + 1
+    boundary_edges = sum(1 for count in edge_counts.values() if count == 1)
+    nonmanifold_edges = sum(1 for count in edge_counts.values() if count > 2)
+    return {
+        "face_count": polygon_count,
+        "edge_count": len(edge_counts),
+        "boundary_edge_count": boundary_edges,
+        "nonmanifold_edge_count": nonmanifold_edges,
+        "watertight": bool(edge_counts) and boundary_edges == 0 and nonmanifold_edges == 0,
+    }
+
+
+def _bounds_contains_points(
+    bounds: Tuple[Vec3, Vec3],
+    points: Sequence[Vec3],
+    *,
+    tolerance: float = 1.0e-5,
+) -> Tuple[bool, int]:
+    bb_min, bb_max = bounds
+    outside = 0
+    for point in points:
+        if any(
+            float(point[i]) < float(bb_min[i]) - tolerance
+            or float(point[i]) > float(bb_max[i]) + tolerance
+            for i in range(3)
+        ):
+            outside += 1
+    return outside == 0, outside
+
+
+def _oriented_bounds_containment_solution(
+    *,
+    mesh_vertices: Any,
+    bounds: Tuple[Vec3, Vec3],
+    reference_bounds: Optional[Tuple[Vec3, Vec3]],
+    bone_positions: Sequence[Vec3],
+    orientation_seed: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """Fit an open mesh by rotated bounds when surface volume is invalid."""
+
+    try:
+        import numpy as np
+    except Exception:  # pragma: no cover - project dependency
+        return None
+    if not bone_positions:
+        return None
+    seed = orientation_seed or _creature_bounds_fit_solution(bounds, reference_bounds)
+    if seed is None:
+        return None
+    rotation: Tuple[Vec3, Vec3, Vec3] = seed["rotation_matrix"]
+    linear_matrix: Tuple[Vec3, Vec3, Vec3] = seed["linear_matrix"]
+    offset: Vec3 = seed["offset"]
+    bone_list = [
+        (float(point[0]), float(point[1]), float(point[2]))
+        for point in bone_positions
+    ]
+
+    def transform_point(point: Vec3) -> Vec3:
+        return _vec_add(_mat_vec(linear_matrix, point), offset)
+
+    mapped_bounds = _transform_bounds(bounds, transform_point)
+    if mapped_bounds is None:
+        return None
+    all_inside, outside_count = _bounds_contains_points(mapped_bounds, bone_list)
+    scale = float(seed["scale"])
+    method = "oriented_bounds_reference_seed"
+
+    if not all_inside:
+        mesh_np = np.asarray(mesh_vertices, dtype=np.float64)
+        rot_np = np.asarray(rotation, dtype=np.float64)
+        rotated = (rot_np @ mesh_np.T).T
+        mesh_min = rotated.min(axis=0)
+        mesh_max = rotated.max(axis=0)
+        mesh_extent = np.maximum(mesh_max - mesh_min, 1.0e-9)
+        mesh_center = (mesh_min + mesh_max) * 0.5
+        bone_np = np.asarray(bone_list, dtype=np.float64)
+        bone_min = bone_np.min(axis=0)
+        bone_max = bone_np.max(axis=0)
+        bone_extent = np.maximum(bone_max - bone_min, 1.0e-9)
+        bone_center = (bone_min + bone_max) * 0.5
+        scale = max(scale, float(np.max(bone_extent / mesh_extent)) * 1.02)
+        offset_arr = bone_center - mesh_center * scale
+        offset = (float(offset_arr[0]), float(offset_arr[1]), float(offset_arr[2]))
+        linear_matrix = _scale_matrix(rotation, scale)
+
+        def adjusted_transform(point: Vec3) -> Vec3:
+            return _vec_add(_mat_vec(linear_matrix, point), offset)
+
+        mapped_bounds = _transform_bounds(bounds, adjusted_transform)
+        if mapped_bounds is None:
+            return None
+        all_inside, outside_count = _bounds_contains_points(mapped_bounds, bone_list)
+        method = "oriented_bounds_bone_bbox_expand"
+
+    source_origin = _bounds_ground_center(bounds)
+    target_origin = _vec_add(_mat_vec(linear_matrix, source_origin), offset)
+    fit_transform = _fit_transform_metadata(
+        policy="containment_bone_inside_mesh",
+        scale=scale,
+        rotation_matrix=rotation,
+        source_origin=source_origin,
+        target_origin=target_origin,
+        translation=offset,
+    )
+    return {
+        "scale": scale,
+        "rotation_matrix": rotation,
+        "linear_matrix": linear_matrix,
+        "offset": offset,
+        "source_origin": source_origin,
+        "target_origin": target_origin,
+        "fit_transform": fit_transform,
+        "all_inside": bool(all_inside),
+        "outside_count": int(outside_count),
+        "max_penetration": 0.0,
+        "method": method,
+        "containment_volume": "oriented_bounds",
+        "surface_containment_checked": False,
+        "containment_guarantee": "oriented_bounds_only",
+        "source_up_label": str(seed.get("source_up_label") or "unknown"),
+        "source_forward_label": str(seed.get("source_forward_label") or "unknown"),
     }
 
 
@@ -842,16 +1556,19 @@ def _containment_based_fit_solution(
     reference_model: Optional[Any],
     reference_bounds: Optional[Tuple[Vec3, Vec3]],
 ) -> Optional[Dict[str, Any]]:
-    """Fit the imported mesh so ALL bones end up inside the mesh faces.
+    """Fit the imported mesh around donor deformation bones.
 
-    This is the containment-guaranteed fit: it scales and translates the
-    imported mesh so that every bone position from the donor skeleton is
-    enclosed by the mesh surface.  Uses ray-crossing containment testing
-    and binary-search scale optimization.
+    Watertight meshes can use ray-cast volume tests, where every deformation
+    bone position from the donor skeleton is enclosed by the mesh surface.
+    Open/nonmanifold meshes do not define a reliable inside volume, so those
+    assets use an oriented-bounds staging fit and report that surface
+    containment was not checked.  Dummy/helper bones (camerahook, head_g, etc.)
+    are excluded from containment — see the classification logic below.
 
     Returns ``None`` if the mesh has too few vertices/faces for containment
-    testing, or if the donor model has no bones.
+    testing, or if the donor model has no deformation bones.
     """
+    import numpy as np
     if reference_model is None:
         return None
 
@@ -873,74 +1590,150 @@ def _containment_based_fit_solution(
         vertex_offset += len(verts)
     if len(mesh_vertex_list) < 4 or len(mesh_face_list) < 1:
         return None
-    mesh_vertices = np.asarray(mesh_vertex_list, dtype=np.float64)
 
-    # Gather donor bone positions (world space)
-    bone_positions_list: List[Tuple[float, float, float]] = []
-    for node in _iter_model_nodes(reference_model):
-        pos = _node_fit_position(node)
-        if pos is None:
-            continue
-        bone_positions_list.append((float(pos[0]), float(pos[1]), float(pos[2])))
-    if len(bone_positions_list) < 1:
+    mesh_arr = np.asarray(mesh_vertex_list, dtype=np.float64)
+    closure = _mesh_face_closure_summary(mesh_face_list)
+    reference_name = str(getattr(reference_model, "name", "") or "")
+    log.info(
+        "CharacterBuilder containment fit: entered reference=%s vertices=%d faces=%d watertight=%s",
+        reference_name,
+        len(mesh_vertex_list),
+        len(mesh_face_list),
+        closure["watertight"],
+    )
+
+    orientation_seed = _creature_bounds_fit_solution(bounds, reference_bounds)
+    if orientation_seed is not None:
+        rotation: Tuple[Vec3, Vec3, Vec3] = orientation_seed["rotation_matrix"]
+    else:
+        rotation = (
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, 0.0, 1.0),
+        )
+    rotation_np = np.asarray(rotation, dtype=np.float64)
+    mesh_vertices = (rotation_np @ mesh_arr.T).T
+
+    deformation_bones, skipped_bones, bone_source = _skin_bone_map_fit_positions(reference_model)
+    if len(deformation_bones) < 1:
+        log.info(
+            "CharacterBuilder containment fit: no skin bone-map deformation bones found for %s",
+            reference_name,
+        )
         return None
+    bone_positions_list = [bp[1] for bp in deformation_bones]
     bone_positions = np.asarray(bone_positions_list, dtype=np.float64)
 
-    # Run containment optimization
-    try:
-        from src.math.containment_fit import fit_skeleton_inside_mesh
-    except ImportError:
-        try:
-            from math.containment_fit import fit_skeleton_inside_mesh  # type: ignore
-        except ImportError:
+    if not bool(closure["watertight"]):
+        open_mesh_fit = _oriented_bounds_containment_solution(
+            mesh_vertices=mesh_arr,
+            bounds=bounds,
+            reference_bounds=reference_bounds,
+            bone_positions=bone_positions_list,
+            orientation_seed=orientation_seed,
+        )
+        if open_mesh_fit is None:
+            log.info(
+                "CharacterBuilder containment fit: open mesh fallback failed for %s",
+                reference_name,
+            )
             return None
+        fit_core = open_mesh_fit
+    else:
+        try:
+            from src.math.containment_fit import fit_skeleton_inside_mesh
+        except ImportError:
+            try:
+                from math.containment_fit import fit_skeleton_inside_mesh  # type: ignore
+            except ImportError:
+                return None
 
-    result = fit_skeleton_inside_mesh(
-        mesh_vertices=mesh_vertices,
-        mesh_faces=mesh_face_list,
-        bone_positions=bone_positions,
-        max_iterations=30,
-        scale_tolerance=0.005,
-    )
+        result = fit_skeleton_inside_mesh(
+            mesh_vertices=mesh_vertices,
+            mesh_faces=mesh_face_list,
+            bone_positions=bone_positions,
+            max_iterations=30,
+            scale_tolerance=0.005,
+        )
+        scale = float(result["scale"])
+        offset = tuple(float(value) for value in result["translation"])
+        linear_matrix = _scale_matrix(rotation, scale)
+        source_origin = _bounds_ground_center(bounds) if bounds else (0.0, 0.0, 0.0)
+        target_origin = _vec_add(_mat_vec(linear_matrix, source_origin), offset)
+        fit_transform = _fit_transform_metadata(
+            policy="containment_bone_inside_mesh",
+            scale=scale,
+            rotation_matrix=rotation,
+            source_origin=source_origin,
+            target_origin=target_origin,
+            translation=offset,
+        )
+        fit_core = {
+            "scale": scale,
+            "rotation_matrix": rotation,
+            "linear_matrix": linear_matrix,
+            "offset": offset,
+            "source_origin": source_origin,
+            "target_origin": target_origin,
+            "fit_transform": fit_transform,
+            "all_inside": bool(result["all_inside"]),
+            "outside_count": int(result["outside_count"]),
+            "max_penetration": float(result["max_penetration"]),
+            "method": str(result.get("method") or "containment_binary_search"),
+            "containment_volume": "ray_cast_surface",
+            "surface_containment_checked": True,
+            "containment_guarantee": "watertight_surface_volume",
+        }
 
-    scale = float(result["scale"])
-    translation = result["translation"]
-    rotation = (
-        (1.0, 0.0, 0.0),
-        (0.0, 1.0, 0.0),
-        (0.0, 0.0, 1.0),
-    )
-    linear_matrix = tuple(
-        tuple(row[i] * scale for i in range(3))
-        for row in rotation
-    )
-    source_origin = _bounds_ground_center(bounds) if bounds else (0.0, 0.0, 0.0)
-    target_origin = _bounds_ground_center(reference_bounds) if reference_bounds else (0.0, 0.0, 0.0)
-
-    fit_transform = _fit_transform_metadata(
-        policy="containment_bone_inside_mesh",
-        scale=scale,
-        rotation_matrix=rotation,
-        source_origin=source_origin,
-        target_origin=target_origin,
+    log.info(
+        "CharacterBuilder containment fit: exit reference=%s method=%s scale=%.6f bones=%d outside=%d source=%s",
+        reference_name,
+        fit_core["method"],
+        float(fit_core["scale"]),
+        len(deformation_bones),
+        int(fit_core["outside_count"]),
+        bone_source,
     )
 
     return {
         "ok": True,
-        "scale": scale,
-        "rotation_matrix": rotation,
-        "linear_matrix": linear_matrix,
-        "offset": translation,
-        "source_origin": source_origin,
-        "target_origin": target_origin,
-        "fit_transform": fit_transform,
+        "scale": float(fit_core["scale"]),
+        "rotation_matrix": fit_core["rotation_matrix"],
+        "linear_matrix": fit_core["linear_matrix"],
+        "offset": fit_core["offset"],
+        "source_origin": fit_core["source_origin"],
+        "target_origin": fit_core["target_origin"],
+        "fit_transform": fit_core["fit_transform"],
         "source_height": _height_from_bounds(bounds) if bounds else 0.0,
         "target_height": _height_from_bounds(reference_bounds) if reference_bounds else 0.0,
-        "all_inside": bool(result["all_inside"]),
-        "outside_count": int(result["outside_count"]),
-        "max_penetration": float(result["max_penetration"]),
-        "method": "containment_binary_search",
+        "all_inside": bool(fit_core["all_inside"]),
+        "outside_count": int(fit_core["outside_count"]),
+        "max_penetration": float(fit_core["max_penetration"]),
+        "method": str(fit_core["method"]),
+        "containment_volume": str(fit_core.get("containment_volume") or ""),
+        "surface_containment_checked": bool(fit_core.get("surface_containment_checked", False)),
+        "containment_guarantee": str(fit_core.get("containment_guarantee") or ""),
+        "mesh_watertight": bool(closure["watertight"]),
+        "mesh_boundary_edge_count": int(closure["boundary_edge_count"]),
+        "mesh_nonmanifold_edge_count": int(closure["nonmanifold_edge_count"]),
+        "bone_position_source": bone_source,
         "bone_count": len(bone_positions_list),
+        "deformation_bone_count": len(deformation_bones),
+        "dummy_bone_count": len(skipped_bones),
+        "deformation_bone_names": [bp[0] for bp in deformation_bones],
+        "dummy_bone_names": skipped_bones,
+        "source_up_label": str(fit_core.get("source_up_label") or (
+            orientation_seed.get("source_up_label") if orientation_seed else "unknown"
+        )),
+        "source_forward_label": str(fit_core.get("source_forward_label") or (
+            orientation_seed.get("source_forward_label") if orientation_seed else "unknown"
+        )),
+        "notes": (
+            f"Containment fit used {len(deformation_bones)} donor skin bone-map positions. "
+            f"Mesh watertight={bool(closure['watertight'])}; "
+            f"surface containment checked={bool(fit_core.get('surface_containment_checked', False))}; "
+            f"method={fit_core['method']}."
+        ),
     }
 
 
@@ -2605,14 +3398,16 @@ def _fit_transform_metadata(
     rotation_matrix: Tuple[Vec3, Vec3, Vec3],
     source_origin: Vec3,
     target_origin: Vec3,
+    translation: Optional[Vec3] = None,
     landmark_alignment: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     linear_matrix = _scale_matrix(rotation_matrix, scale)
-    translation = _translation_for_affine(
-        linear_matrix,
-        source_origin,
-        target_origin,
-    )
+    if translation is None:
+        translation = _translation_for_affine(
+            linear_matrix,
+            source_origin,
+            target_origin,
+        )
     result = {
         "coordinate_space": "source_model_to_kotor_world",
         "policy": str(policy),
@@ -2805,6 +3600,10 @@ def _apply_point_transform_to_model(
             node.vertices = new_verts
             if mark_vertices_world:
                 setattr(node, "_gr_vertices_in_kotor_world", True)
+                try:
+                    setattr(node, "vertex_space", 1)
+                except Exception:
+                    pass
             try:
                 node.compute_bounds()
             except Exception:
@@ -3030,10 +3829,84 @@ def normalize_external_model_for_kotor(
         reference_label=reference_label or getattr(reference_model, "name", "") or "",
         fit_report=fit_report,
     )
-    # Containment-based fit takes priority for creature mode: it guarantees
-    # all bones end up INSIDE the mesh faces.  Tried before native-template
-    # because the native-template path assumes the mesh is already in KOTOR
-    # space and applies identity rotation, which fails for unit-space OBJs.
+    if exact_native_fit is not None:
+        metadata = getattr(model, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            setattr(model, "metadata", metadata)
+        metadata["kotor_normalization"] = exact_native_fit
+        metadata["kotor_fit_report"] = exact_native_fit["fit_report"]
+        return exact_native_fit
+
+    native_scaled_fit = None
+    if _is_creature_mode_value(expected_mode) and not override.is_active() and reference_model is not None:
+        native_scaled_fit = _native_template_scaled_bounds_fit(
+            model,
+            bounds=bounds,
+            reference_bounds=reference_bounds,
+            reference_model=reference_model,
+            reference_label=reference_label or getattr(reference_model, "name", "") or "",
+            fit_report=fit_report,
+        )
+    if native_scaled_fit is not None:
+        def transform_point(point: Vec3) -> Vec3:
+            return _vec_add(
+                _mat_vec(native_scaled_fit["linear_matrix"], point),
+                native_scaled_fit["offset"],
+            )
+
+        normal_matrix = _normal_transform_from_linear_matrix(native_scaled_fit["linear_matrix"])
+
+        def transform_direction(direction: Vec3) -> Vec3:
+            rotated = _mat_vec(normal_matrix, direction)
+            return _vec_normalize(rotated) or rotated
+
+        _apply_point_transform_to_model(
+            model,
+            transform_point=transform_point,
+            transform_direction=transform_direction,
+            mark_vertices_world=True,
+        )
+
+        metadata = getattr(model, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            setattr(model, "metadata", metadata)
+        result = {
+            "ok": True,
+            "code": "normalized",
+            "scale": float(native_scaled_fit["scale"]),
+            "axis_scales": tuple(float(value) for value in native_scaled_fit["axis_scales"]),
+            "axis_fit_distortion": float(native_scaled_fit.get("axis_fit_distortion", 0.0)),
+            "orientation_score_basis": str(native_scaled_fit.get("orientation_score_basis") or ""),
+            "native_vertex_cloud_score": native_scaled_fit.get("native_vertex_cloud_score"),
+            "all_bones_inside": bool(native_scaled_fit.get("all_bones_inside", False)),
+            "outside_count": int(native_scaled_fit.get("outside_count", 0)),
+            "bone_position_source": str(native_scaled_fit.get("bone_position_source") or ""),
+            "deformation_bone_count": int(native_scaled_fit.get("deformation_bone_count", 0)),
+            "source_height": float(native_scaled_fit["source_height"]),
+            "target_height": float(native_scaled_fit["target_height"]),
+            "reference": reference_label or getattr(reference_model, "name", "") or "",
+            "vertical_axis": str(native_scaled_fit["source_up_label"]).lstrip("+"),
+            "offset": native_scaled_fit["offset"],
+            "target_center_xy": (
+                float(native_scaled_fit["target_origin"][0]),
+                float(native_scaled_fit["target_origin"][1]),
+            ),
+            "target_ground_z": float(native_scaled_fit["target_origin"][2]),
+            "external_world_positions_fit": True,
+            "fit_policy": "native_template_scaled_bounds_replacement",
+            "scale_basis": "native_template_axis_bounds_ratio",
+            "fit_transform": native_scaled_fit["fit_transform"],
+            "fit_report": native_scaled_fit["fit_report"],
+            "fitted_visual_overlay": native_scaled_fit["fitted_visual_overlay"],
+        }
+        metadata["kotor_normalization"] = result
+        metadata["kotor_fit_report"] = native_scaled_fit["fit_report"]
+        return result
+
+    # Containment-based fit handles creature-mode external meshes after the
+    # already-KOTOR-space exact-template path has had first refusal.
     containment_fit = None
     if _is_creature_mode_value(expected_mode) and not override.is_active() and reference_model is not None:
         containment_fit = _containment_based_fit_solution(
@@ -3049,6 +3922,87 @@ def normalize_external_model_for_kotor(
         def transform_direction(direction: Vec3) -> Vec3:
             rotated = _mat_vec(containment_fit["rotation_matrix"], direction)
             return _vec_normalize(rotated) or rotated
+
+        fitted_visual_overlay = {
+            "coordinate_space": "kotor_world_after_fit",
+            "source": _fit_frame_visual_overlay(
+                model,
+                None,
+                bounds,
+                transform_point=transform_point,
+                transform_direction=transform_direction,
+                axis_length_scale=float(containment_fit["scale"]),
+            ),
+            "target": _fit_frame_visual_overlay(
+                reference_model,
+                None,
+                reference_bounds,
+            ) if reference_model is not None else None,
+        }
+        if isinstance(fit_report, dict):
+            fit_report = dict(fit_report)
+        else:
+            fit_report = {}
+        auto_fit_report = dict(fit_report.get("auto_fit_report") or {})
+        auto_fit_report.update({
+            "source_forward_axis": str(containment_fit.get("source_forward_label") or "unknown"),
+            "source_up_axis": str(containment_fit.get("source_up_label") or "unknown"),
+            "target_forward_axis": "+y",
+            "target_up_axis": "+z",
+            "scale_factor": float(containment_fit["scale"]),
+            "height_source": str(containment_fit.get("method") or "containment_fit"),
+            "ground_origin_basis": "donor_skin_bone_containment",
+            "used_landmarks": [
+                "source:mesh_surface_or_oriented_bounds",
+                "target:donor_skin_bone_map",
+            ],
+            "confidence": 0.84,
+            "fallback_used": False,
+            "notes": str(containment_fit.get("notes") or "Containment fit used donor deformation bones."),
+        })
+        fit_report.update({
+            "ok": True,
+            "code": "containment_bone_inside_mesh",
+            "message": "External creature mesh fit inspected using donor deformation-bone containment.",
+            "fit_policy": "containment_bone_inside_mesh",
+            "scale_basis": str(containment_fit.get("method") or "containment_fit"),
+            "scale": float(containment_fit["scale"]),
+            "source_height": float(containment_fit["source_height"]),
+            "target_height": float(containment_fit["target_height"]),
+            "vertical_axis": str(containment_fit.get("source_up_label") or "+z").lstrip("+"),
+            "reference": reference_label or getattr(reference_model, "name", "") or "",
+            "source_bounds": _bounds_as_lists(bounds),
+            "reference_bounds": _bounds_as_lists(reference_bounds),
+            "source_forward_axis": auto_fit_report["source_forward_axis"],
+            "source_up_axis": auto_fit_report["source_up_axis"],
+            "target_forward_axis": "+y",
+            "target_up_axis": "+z",
+            "scale_factor": float(containment_fit["scale"]),
+            "height_source": auto_fit_report["height_source"],
+            "ground_origin_basis": auto_fit_report["ground_origin_basis"],
+            "used_landmarks": list(auto_fit_report["used_landmarks"]),
+            "confidence": float(auto_fit_report["confidence"]),
+            "fallback_used": False,
+            "notes": auto_fit_report["notes"],
+            "auto_fit_report": auto_fit_report,
+            "fit_transform": containment_fit["fit_transform"],
+            "fitted_visual_overlay": fitted_visual_overlay,
+            "containment_fit": {
+                "method": str(containment_fit.get("method") or ""),
+                "containment_volume": str(containment_fit.get("containment_volume") or ""),
+                "surface_containment_checked": bool(containment_fit.get("surface_containment_checked", False)),
+                "containment_guarantee": str(containment_fit.get("containment_guarantee") or ""),
+                "mesh_watertight": bool(containment_fit.get("mesh_watertight", False)),
+                "outside_count": int(containment_fit.get("outside_count", 0)),
+                "deformation_bone_count": int(containment_fit.get("deformation_bone_count", 0)),
+                "bone_position_source": str(containment_fit.get("bone_position_source") or ""),
+            },
+            "kotor_contract": {
+                "native_skeleton_is_authority": True,
+                "imported_mesh_role": "payload_guest",
+                "final_dag_source": "selected_kotor_base",
+            },
+        })
 
         _apply_point_transform_to_model(
             model,
@@ -3071,24 +4025,23 @@ def normalize_external_model_for_kotor(
             "vertical_axis": "z",
             "offset": containment_fit["offset"],
             "fit_policy": "containment_bone_inside_mesh",
-            "scale_basis": "containment_binary_search",
+            "scale_basis": str(containment_fit.get("method") or "containment_fit"),
             "all_bones_inside": containment_fit["all_inside"],
             "outside_count": containment_fit["outside_count"],
+            "fit_method": containment_fit.get("method", ""),
+            "containment_volume": containment_fit.get("containment_volume", ""),
+            "surface_containment_checked": containment_fit.get("surface_containment_checked", False),
+            "containment_guarantee": containment_fit.get("containment_guarantee", ""),
+            "mesh_watertight": containment_fit.get("mesh_watertight", False),
+            "deformation_bone_count": containment_fit.get("deformation_bone_count", 0),
+            "bone_position_source": containment_fit.get("bone_position_source", ""),
             "fit_transform": containment_fit["fit_transform"],
             "fit_report": fit_report,
+            "fitted_visual_overlay": fitted_visual_overlay,
         }
         metadata["kotor_normalization"] = result
         metadata["kotor_fit_report"] = fit_report
         return result
-
-    if exact_native_fit is not None:
-        metadata = getattr(model, "metadata", None)
-        if not isinstance(metadata, dict):
-            metadata = {}
-            setattr(model, "metadata", metadata)
-        metadata["kotor_normalization"] = exact_native_fit
-        metadata["kotor_fit_report"] = exact_native_fit["fit_report"]
-        return exact_native_fit
 
     landmark_fit = (
         _landmark_based_fit_solution(model, bounds, reference_model, reference_bounds)

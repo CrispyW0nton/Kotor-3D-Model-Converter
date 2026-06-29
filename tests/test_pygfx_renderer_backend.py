@@ -2604,7 +2604,7 @@ def test_cpu_skinning_reuses_model_inverse_bind_uploader(monkeypatch) -> None:
             calls["build"] += 1
             return len(model.all_nodes())
 
-        def compute_skin_node_palette(self, _node, _anim_pose):
+        def compute_skin_node_palette(self, _node, _anim_pose, anim_base_pose=None):
             calls["palette"] += 1
 
         def as_numpy_array(self):
@@ -2727,7 +2727,7 @@ def test_pygfx_skin_palette_uses_bas_attachment_local_model(monkeypatch) -> None
             calls["build_nodes"].append([getattr(node, "name", "") for node in nodes])
             return len(nodes)
 
-        def compute_skin_node_palette(self, _node, _anim_pose):
+        def compute_skin_node_palette(self, _node, _anim_pose, anim_base_pose=None):
             pass
 
         def as_numpy_array(self):

@@ -215,6 +215,7 @@ class GpuRenderer:
         self._skin_model_id: int = 0  # id() of model for which bind-pose was built
         self._skin_bone_count: int = 0  # number of bones in the current palette
         self._skin_logged: bool = False  # one-shot log for GPU skinning activation
+        self._skin_preview_gate_logged: set[tuple[int, int]] = set()
         self._gl_state_trace_path: str = _gl_state_trace_path()
         self._lm_data_dump_path: str = _lm_data_dump_path()
         self._lm_data_dump_seen: set = set()
@@ -1716,6 +1717,10 @@ class GpuRenderer:
                         (1.0, 1.0, 1.0),
                     )
                 _skin_anim_pose = _node_anim_pose
+                _skin_anim_base_pose = (
+                    animation_pose_for_node(node, anim_base_pose)
+                    if anim_base_pose is not None else None
+                )
                 _skin_uploader = _skin_uploader_for_node(node) if _nd_is_skin and _has_skin_nodes else None
                 _skin_can_lbs = bool(
                     _nd_is_skin
@@ -1727,6 +1732,26 @@ class GpuRenderer:
                     and getattr(node, 'bone_map', None)
                     and getattr(node, 'skin_data', None)
                 )
+                if (
+                    _nd_is_skin
+                    and bool(getattr(node, "_gr_bound_to_kotor_skeleton", False))
+                    and _node_anim_pose is not None
+                ):
+                    _preview_key = (_cur_model_id, node_id)
+                    if _preview_key not in self._skin_preview_gate_logged:
+                        self._skin_preview_gate_logged.add(_preview_key)
+                        log.info(
+                            "GPU-SKINNING: Character Builder preview node=%s enabled=%s "
+                            "skin_nodes=%s uploader=%s applies=%s bones=%d rows=%d base_pose=%s",
+                            getattr(node, "name", "?"),
+                            bool(_skin_can_lbs),
+                            bool(_has_skin_nodes),
+                            _skin_uploader is not None,
+                            bool(animation_pose_applies_to_node(node, _skin_anim_pose)),
+                            len(getattr(node, "bone_map", []) or []),
+                            len(getattr(node, "skin_data", []) or []),
+                            _skin_anim_base_pose is not None,
+                        )
                 _skin_bind_transform = bool(_nd_is_skin and not _skin_can_lbs)
                 is_animated = False
                 if _node_anim_pose is not None and hasattr(_node_anim_pose, 'nodes') and not _nd_is_skin:
@@ -2305,7 +2330,11 @@ class GpuRenderer:
                         and 'u_skin_enabled' in _u
                         and 'u_bone_count' in _u):
                     try:
-                        _skin_uploader.compute_skin_node_palette(node, _skin_anim_pose)
+                        _skin_uploader.compute_skin_node_palette(
+                            node,
+                            _skin_anim_pose,
+                            anim_base_pose=_skin_anim_base_pose,
+                        )
                         _skin_local_bone_count = len(getattr(node, 'bone_map', []) or [])
                         _skin_local_bone_count = min(_skin_local_bone_count, _SKIN_MAX_BONES)
                         if 'u_bones' in _u and _skin_local_bone_count > 0:

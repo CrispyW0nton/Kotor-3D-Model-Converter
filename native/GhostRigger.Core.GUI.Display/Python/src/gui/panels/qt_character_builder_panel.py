@@ -385,7 +385,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
     Layout (audit §4.1)::
 
         ┌─ TOP TOOLBAR ────────────────────────────────────────────────────┐
-        │ [Mode: Headless | Head | Supermodel | Creature]  [K1 | K2]      │
+        │ [Mode: Headless | Head | Humanoid | Creature]  [K1 | K2]        │
         │ [Front][Back][L][R][T][B][Persp][Ortho]  [Sym][Snap][Validate]  │
         ├──────────────┬─────────────────────────────────────┬─────────────┤
         │ LEFT RAIL    │ CENTER VIEWPORT (QtViewportWidget)  │ RIGHT INSPECTOR
@@ -751,7 +751,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         toolbar.addSeparator()
         toolbar.addWidget(QtWidgets.QLabel(" Mode: "))
 
-        # Four exclusive QToolButtons wired to CharacterMode (T205).
+        # Exclusive QToolButtons wired to authoring CharacterMode values (T205).
         self._mode_action_group = QtGui.QActionGroup(self)
         self._mode_action_group.setExclusive(True)
 
@@ -759,7 +759,6 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             ("HEADLESS_BODY", "Headless"),
             ("HEAD",          "Head"),
             ("HUMANOID",      "Humanoid"),
-            ("SUPERMODEL",    "Supermodel"),
             ("CREATURE",      "Creature"),
         ]
         for mode_name, label in mode_specs:
@@ -1938,6 +1937,114 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         model = getattr(entry, "model", None) if entry is not None else None
         return entry, model
 
+    def _model_render_bounds_for_template_check(
+        self,
+        model: Any,
+    ) -> Optional[tuple[tuple[float, float, float], tuple[float, float, float]]]:
+        nodes = []
+        try:
+            nodes = list(model.all_nodes()) if model is not None and hasattr(model, "all_nodes") else []
+        except Exception:
+            nodes = []
+        mins = [float("inf"), float("inf"), float("inf")]
+        maxs = [float("-inf"), float("-inf"), float("-inf")]
+        found = False
+        for node in nodes:
+            if not getattr(node, "vertices", None):
+                continue
+            if bool(getattr(node, "_gr_hidden", False)):
+                continue
+            for vertex in list(getattr(node, "vertices", []) or []):
+                try:
+                    x, y, z = float(vertex[0]), float(vertex[1]), float(vertex[2])
+                except Exception:
+                    continue
+                mins[0] = min(mins[0], x)
+                mins[1] = min(mins[1], y)
+                mins[2] = min(mins[2], z)
+                maxs[0] = max(maxs[0], x)
+                maxs[1] = max(maxs[1], y)
+                maxs[2] = max(maxs[2], z)
+                found = True
+        if not found:
+            return None
+        return (tuple(mins), tuple(maxs))
+
+    @staticmethod
+    def _bounds_diag(bounds: tuple[tuple[float, float, float], tuple[float, float, float]]) -> float:
+        return sum((float(bounds[1][axis]) - float(bounds[0][axis])) ** 2 for axis in range(3)) ** 0.5
+
+    @staticmethod
+    def _bounds_center(bounds: tuple[tuple[float, float, float], tuple[float, float, float]]) -> tuple[float, float, float]:
+        return tuple((float(bounds[0][axis]) + float(bounds[1][axis])) * 0.5 for axis in range(3))
+
+    def _mesh_bounds_match_template_for_binding(self, mesh_model: Any, template_model: Any) -> bool:
+        mesh_bounds = self._model_render_bounds_for_template_check(mesh_model)
+        template_bounds = self._model_render_bounds_for_template_check(template_model)
+        if mesh_bounds is None or template_bounds is None:
+            return True
+        mesh_diag = self._bounds_diag(mesh_bounds)
+        template_diag = self._bounds_diag(template_bounds)
+        if mesh_diag <= 1.0e-6 or template_diag <= 1.0e-6:
+            return True
+        scale_ratio = mesh_diag / template_diag
+        mesh_center = self._bounds_center(mesh_bounds)
+        template_center = self._bounds_center(template_bounds)
+        center_delta = sum((mesh_center[axis] - template_center[axis]) ** 2 for axis in range(3)) ** 0.5
+        return 0.55 <= scale_ratio <= 1.80 and center_delta <= max(template_diag * 0.45, 0.25)
+
+    def _ensure_template_fitted_body_for_binding(
+        self,
+        mesh_model: Any,
+        entry: Any,
+        template_model: Any,
+        option: Any,
+        game: str,
+    ) -> Any:
+        """Re-fit the source import before binding if the scene holds raw OBJ space."""
+        if self._mesh_bounds_match_template_for_binding(mesh_model, template_model):
+            return mesh_model
+        source_path = self._external_import_source_path(mesh_model, entry)
+        if not source_path or not os.path.isfile(source_path):
+            return mesh_model
+        try:
+            from core.characters import headless_body_workflow as _wf
+            from core.geometry import model_data as _md
+        except ImportError:                                 # pragma: no cover
+            from src.core.characters import headless_body_workflow as _wf  # type: ignore
+            from src.core.geometry import model_data as _md  # type: ignore
+
+        fit_override = {}
+        if hasattr(self.inspector, "selected_fit_override"):
+            try:
+                fit_override = self.inspector.selected_fit_override()
+            except Exception:
+                fit_override = {}
+        fit_label = self._skeleton_template_status_label(option)
+        result = _wf.load_body(
+            source_path,
+            self.scene,
+            game_version=game,
+            allow_mode_correction=True,
+            fit_reference_model=template_model,
+            fit_reference_label=fit_label,
+            fit_override=fit_override,
+            expected_mode=getattr(self.scene, "mode", None),
+        )
+        if not result.ok:
+            log.warning(
+                "Character Builder: pre-bind template refit failed for %s: %s",
+                source_path,
+                getattr(result, "message", ""),
+            )
+            return mesh_model
+        refreshed = self.scene.get(_md.PartSlot.HEADLESS_BODY)
+        fitted_model = getattr(refreshed, "model", None) if refreshed is not None else None
+        if fitted_model is not None:
+            self.bottom_strip.set_log_tail("pre-bind fit refreshed from selected KOTOR base")
+            return fitted_model
+        return mesh_model
+
     @QtCore.Slot(float, float, float, float, float, float, float)
     def _on_fit_adjustment_changed(
         self,
@@ -2447,9 +2554,14 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         game = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
             getattr(self.scene, "game_version", "K1")
         game_models = self._installed_skeleton_template_rows(game)
+        part = (
+            "creature" if self._is_scene_mode("creature") else
+            "head" if self._is_scene_mode("head") else
+            "body"
+        )
         result = _picker.list_skeleton_templates(
             game=game,
-            part="body",
+            part=part,
             game_models=game_models,
             max_results=8000,
         )
@@ -2573,6 +2685,26 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             setattr(template_model, "_gr_source_resref", source_resref)
             setattr(template_model, "_gr_variant_source_resref", source_resref)
             setattr(template_model, "_gr_variant_resolution", "npc_numbered_variant_base")
+        try:
+            from core.characters import character_builder as _cb
+        except ImportError:                                 # pragma: no cover
+            from src.core.characters import character_builder as _cb  # type: ignore
+        try:
+            _cb.log_character_builder_event(
+                "ui.skeleton_template_selected",
+                key=self._selected_skeleton_template_key,
+                option={
+                    "source": self._option_field(option, "source", ""),
+                    "game": self._option_field(option, "game", ""),
+                    "part": self._option_field(option, "part", ""),
+                    "resref": self._option_field(option, "resref", ""),
+                    "source_resref": self._option_field(option, "source_resref", ""),
+                    "path": self._option_field(option, "path", ""),
+                },
+                template=_cb.summarize_model_for_character_builder(template_model),
+            )
+        except Exception:
+            log.debug("Character Builder template selection diagnostic failed", exc_info=True)
 
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "set_external_skeleton"):
@@ -2646,6 +2778,35 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if template_model is None:
             template_model = self._load_skeleton_template_model(option)
             self._selected_skeleton_template_model = template_model
+        try:
+            _cb.log_character_builder_event(
+                "ui.apply_skeleton.requested",
+                key=str(key or ""),
+                option={
+                    "source": self._option_field(option, "source", ""),
+                    "game": self._option_field(option, "game", ""),
+                    "part": self._option_field(option, "part", ""),
+                    "resref": self._option_field(option, "resref", ""),
+                    "source_resref": self._option_field(option, "source_resref", ""),
+                    "path": self._option_field(option, "path", ""),
+                },
+                template=_cb.summarize_model_for_character_builder(template_model),
+                body=_cb.summarize_model_for_character_builder(mesh_model),
+                manual_fit={
+                    "scale": float(self._manual_fit_scale or 1.0),
+                    "rotation_degrees": tuple(float(v or 0.0) for v in self._manual_fit_rotation),
+                    "translation": tuple(float(v or 0.0) for v in self._manual_fit_translation),
+                },
+            )
+        except Exception:
+            log.debug("Character Builder apply-skeleton diagnostic failed", exc_info=True)
+        mesh_model = self._ensure_template_fitted_body_for_binding(
+            mesh_model,
+            entry,
+            template_model,
+            option,
+            game,
+        )
         result = _cb.apply_template_rig(
             mesh_model,
             template_model,
@@ -3093,6 +3254,95 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         self.bottom_strip.set_validation(severity, tag, issues=issues)
         self.statusBar().showMessage(result.message, 6000)
+
+        # ── Creature Package Generation ────────────────────────────────
+        # When the MDL export succeeds, automatically generate the full
+        # creature installation package (appearance.2da + UTC + spawn script)
+        # so the creature can be spawned in-game as an enemy.
+        if result.ok and any("mdl" in f.lower() for f in formats):
+            try:
+                self._generate_creature_package(out_dir, result)
+            except Exception as exc:
+                log.exception("Creature package generation failed")
+                self.statusBar().showMessage(
+                    f"Creature package generation failed: {exc}", 5000)
+
+    def _generate_creature_package(self, out_dir: str, export_result) -> None:
+        """Generate appearance.2da, UTC, spawn script, and readme alongside
+        the exported MDL.  This wraps the creature_package_builder module.
+        """
+        try:
+            from src.core.characters.creature_package_builder import (
+                CreatureSpec, build_creature_package,
+            )
+        except ImportError:
+            from core.characters.creature_package_builder import (
+                CreatureSpec, build_creature_package,
+            )
+
+        # Determine the resref from the scene
+        md = None
+        try:
+            from src.core.geometry import model_data as md
+        except Exception:
+            try:
+                from core.geometry import model_data as md  # type: ignore
+            except Exception:
+                md = None
+
+        resref = ""
+        if md is not None:
+            entry = self.scene.get(md.PartSlot.HEADLESS_BODY)
+            if entry is not None:
+                resref = (entry.resref or "").lower()
+
+        if not resref:
+            return  # Can't generate without a resref
+
+        # Find the exported MDL path
+        mdl_path = Path(out_dir) / f"{resref}.mdl"
+        if not mdl_path.exists():
+            return
+
+        # Build creature spec
+        display_name = resref.replace("c_", "").replace("_", " ").title()
+        spec = CreatureSpec(
+            resref=resref,
+            display_name=display_name,
+            app_type="S",  # creature animations (crun, cwalk)
+            faction_id=1,  # hostile
+            level=5,
+            max_hp=45,
+            str_stat=14,
+            dex_stat=10,
+            con_stat=12,
+            game_version="K2",
+        )
+
+        # Try to read the game's appearance.2da for row appending
+        existing_2da = None
+        try:
+            if hasattr(self, "_resource_manager") and self._resource_manager:
+                for game_key in ("K2", "K1"):
+                    data = self._resource_manager.get_resource(
+                        "appearance", "2da", game_key)
+                    if data:
+                        existing_2da = data
+                        break
+        except Exception:
+            pass
+
+        pkg_result = build_creature_package(
+            spec,
+            out_dir,
+            mdl_path=mdl_path,
+            existing_appearance_2da=existing_2da,
+        )
+
+        msg = (f"Creature package generated: appearance row "
+               f"{pkg_result.appearance_row}, {len(pkg_result.files_written)} files")
+        self.statusBar().showMessage(msg, 5000)
+        log.info(msg)
 
     # ── M5 / T503 — Body-rig step slots ──────────────────────────────────
 
@@ -3605,7 +3855,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         result = self._start_preview_animation(anim_name)
         if result is None:
             result = _wf.play_preview_animation(
-                self.scene, anim_name, viewport=None,
+                self.scene, anim_name, viewport=getattr(self, "viewport", None),
             )
 
         if hasattr(self.inspector, "set_preview_status"):
@@ -3681,15 +3931,31 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._animation_last_tick = None
         anim = engine.current_animation
         length = float(getattr(anim, "length", 0.0) or 0.0) if anim else 0.0
-        pose = engine.evaluate(0.0)
+        base_pose = engine.evaluate(0.0)
+        pose = base_pose
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "set_animation_pose"):
+            if hasattr(viewport, "set_anim_base_pose"):
+                viewport.set_anim_base_pose(base_pose)
             viewport.set_animation_pose(
                 pose,
                 name=str(getattr(anim, "name", anim_name) if anim else anim_name),
                 time=0.0,
                 length=length,
             )
+        try:
+            from core.characters import character_builder as _cb
+        except ImportError:                                 # pragma: no cover
+            from src.core.characters import character_builder as _cb  # type: ignore
+        try:
+            _cb.log_character_builder_event(
+                "ui.preview_animation.started",
+                animation=str(getattr(anim, "name", anim_name) if anim else anim_name),
+                length=length,
+                body=_cb.summarize_model_for_character_builder(body),
+            )
+        except Exception:
+            log.debug("Character Builder preview diagnostic failed", exc_info=True)
         self._animation_timer.start()
         _wf = self._workflow_module()
         return _wf.CheckActorResult(

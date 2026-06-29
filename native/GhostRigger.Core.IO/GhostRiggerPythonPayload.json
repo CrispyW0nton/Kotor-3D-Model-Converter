@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.IO",
-    "file_count": 34,
+    "file_count": 35,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -33,7 +33,7 @@
             "resource_name": "PYTHON_PAYLOAD_CONVERTERS_MESH_CONVERTER",
             "source_path": "src/converters/mesh_converter.py",
             "packaged_path": "Python/src/converters/mesh_converter.py",
-            "sha256": "8fe201d6e035e02f5e52e62320ac66ae6c85711a0eb62a7fa77e6a0d362c3ffe"
+            "sha256": "854f34341c4c7100aca4733d07724a7bea4cd67e74673dcb6bd77469edd4c2a9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CONVERTERS_NORMAL_MAP",
@@ -60,10 +60,16 @@
             "sha256": "ada95f322f3c2cdeec20f3d319fbdc4d3feb469c7f37e55f45030c4a385b2744"
         },
         {
+            "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_KOTOR_FBX_MANIFEST",
+            "source_path": "src/core/export/kotor_fbx_manifest.py",
+            "packaged_path": "Python/src/core/export/kotor_fbx_manifest.py",
+            "sha256": "ee12be9e7bbe87d12eb1cdf49708bd193055ca07158968546fede0d871dc2007"
+        },
+        {
             "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_UNITY_EXPORT_BRIDGE",
             "source_path": "src/core/export/unity_export_bridge.py",
             "packaged_path": "Python/src/core/export/unity_export_bridge.py",
-            "sha256": "d1faac9d56e747631919144f6bb350dd9e70af6564e64a01abe2b4755506ff93"
+            "sha256": "9358ae2b456a743ed8c5f9564404dfe51b8bcf045cebf160dc49d0d05cfb923c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_UNITY_IMPORT_VALIDATOR",
@@ -201,13 +207,13 @@
             "resource_name": "PYTHON_PAYLOAD_IO_FBX_FBX_SDK_PATHS",
             "source_path": "src/io/fbx/fbx_sdk_paths.py",
             "packaged_path": "Python/src/io/fbx/fbx_sdk_paths.py",
-            "sha256": "757f62970c9a342475da59eb0abd8139e7b90fde1f84e2e4faa92f6928091170"
+            "sha256": "ff22db7683412ea8e6a6ba8d4f55547c55aeb3ea2e3d458b4f478a830bb33994"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_FBX_FBX_SDK_SETUP",
             "source_path": "src/io/fbx/fbx_sdk_setup.py",
             "packaged_path": "Python/src/io/fbx/fbx_sdk_setup.py",
-            "sha256": "4a8bd773286e44d2c8b9116e7dec3642ba9187b21379011ca7b63243417401a6"
+            "sha256": "a03d2dcb15284ef56ed2da29618fb0860ddd7de18377c224b6689e3c38027810"
         }
     ]
 }

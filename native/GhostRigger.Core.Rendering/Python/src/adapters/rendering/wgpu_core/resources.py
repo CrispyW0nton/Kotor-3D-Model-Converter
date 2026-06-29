@@ -137,7 +137,7 @@ class WgpuResourceCache:
         self._recount()
         return resource
 
-    def get_or_update_skin_palette(self, mesh_data, anim_pose, model) -> WgpuSkinResource | None:
+    def get_or_update_skin_palette(self, mesh_data, anim_pose, model, anim_base_pose=None) -> WgpuSkinResource | None:
         import wgpu
 
         is_bas_attachment = bool(getattr(getattr(mesh_data, "source", None), "_gr_bas_attachment_layer", False))
@@ -167,6 +167,7 @@ class WgpuResourceCache:
         if bool(getattr(mesh_data.source, "_gr_bas_attachment_layer", False)):
             source_model = bas_attachment_palette_model_for_node(mesh_data.source) or model
         node_anim_pose = animation_pose_for_node(mesh_data.source, anim_pose) if anim_pose is not None else None
+        node_anim_base_pose = animation_pose_for_node(mesh_data.source, anim_base_pose) if anim_base_pose is not None else None
         if anim_pose is not None and node_anim_pose is None:
             if not bool(getattr(mesh_data.source, "_gr_bas_attachment_layer", False)):
                 return None
@@ -215,9 +216,15 @@ class WgpuResourceCache:
             self.skins[mesh_id] = cached
 
         pose_revision = self._pose_revision(anim_pose, mesh_data)
+        if node_anim_base_pose is not None:
+            pose_revision = (pose_revision, id(node_anim_base_pose))
         if cached.pose_revision != pose_revision:
             started = time.perf_counter()
-            palette = cached.uploader.compute_skin_node_palette(mesh_data.source, anim_pose)
+            palette = cached.uploader.compute_skin_node_palette(
+                mesh_data.source,
+                anim_pose,
+                anim_base_pose=node_anim_base_pose,
+            )
             palette_arr = cached.uploader.as_numpy_array()
             palette_arr = bas_attachment_root_local_skin_palette(mesh_data.source, palette_arr, anim_pose)
             payload = skin_palette_flat_bytes(palette_arr, cached.max_bones) or cached.uploader.as_flat_bytes()

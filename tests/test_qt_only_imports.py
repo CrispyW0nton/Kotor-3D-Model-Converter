@@ -116,6 +116,28 @@ def test_theme_precache_uses_startup_logger_instead_of_direct_console_prints():
     assert "Theme precache built %s in %.1f ms" in source
 
 
+def test_background_io_worker_callbacks_are_queued_to_gui_thread():
+    model_io = (
+        _REPO_ROOT
+        / "native"
+        / "GhostRigger.Core.GUI.Display"
+        / "Python"
+        / "src"
+        / "gui"
+        / "windows"
+        / "application_core"
+        / "shared"
+        / "model_io.py"
+    )
+    source = model_io.read_text(encoding="utf-8")
+
+    assert "class _IoGuiCallbackBridge(QtCore.QObject):" in source
+    assert "worker.progress.connect(bridge.on_progress, QtCore.Qt.QueuedConnection)" in source
+    assert "worker.error.connect(bridge.on_error, QtCore.Qt.QueuedConnection)" in source
+    assert "worker.finished.connect(bridge.on_finished, QtCore.Qt.QueuedConnection)" in source
+    assert "thread.wait(2000)" not in source
+
+
 def test_startup_log_cleanup_removes_prior_run_logs(monkeypatch, tmp_path):
     import main
 

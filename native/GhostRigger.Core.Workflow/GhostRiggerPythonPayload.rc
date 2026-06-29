@@ -63,6 +63,7 @@ PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_OVERRIDE_PACKAGE RCDATA "Python/src/cor
 PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_RIG_STATE RCDATA "Python/src/core/characters/character_rig_state.py"
 PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_VALIDATION_REPORT RCDATA "Python/src/core/characters/character_validation_report.py"
 PYTHON_PAYLOAD_CORE_CHARACTERS_CREATURE_APPEARANCE RCDATA "Python/src/core/characters/creature_appearance.py"
+PYTHON_PAYLOAD_CORE_CHARACTERS_CREATURE_PACKAGE_BUILDER RCDATA "Python/src/core/characters/creature_package_builder.py"
 PYTHON_PAYLOAD_CORE_CHARACTERS_HEAD_WORKFLOW RCDATA "Python/src/core/characters/head_workflow.py"
 PYTHON_PAYLOAD_CORE_CHARACTERS_HEADLESS_BODY_WORKFLOW RCDATA "Python/src/core/characters/headless_body_workflow.py"
 PYTHON_PAYLOAD_CORE_CHARACTERS_KOTOR_CONSTANTS RCDATA "Python/src/core/characters/kotor_constants.py"

@@ -10,8 +10,22 @@ import struct
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+root_text = str(ROOT)
+if root_text not in sys.path:
+    sys.path.insert(0, root_text)
+try:
+    from scripts.mcp.start_kotormcp_stdio import _python_roots
+
+    import_roots = _python_roots(ROOT)
+    core_io_root = ROOT / "native" / "GhostRigger.Core.IO" / "Python" / "src"
+    if core_io_root.exists():
+        import_roots = [core_io_root, *[path for path in import_roots if path != core_io_root]]
+except Exception:
+    import_roots = [ROOT / "src", ROOT]
+for import_root in reversed(import_roots):
+    text = str(import_root)
+    if import_root.exists() and text not in sys.path:
+        sys.path.insert(0, text)
 
 from src.io.fbx.fbx_sdk_paths import apply_configured_sdk_paths, get_python_runtime_info, load_fbx_settings_from_file  # noqa: E402
 

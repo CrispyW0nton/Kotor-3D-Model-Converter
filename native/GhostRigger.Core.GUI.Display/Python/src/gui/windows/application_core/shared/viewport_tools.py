@@ -163,7 +163,11 @@ class ViewportToolsMixin:
         default_game = str(self.settings_data.get("default_game") or "K1").upper()
         return GameVersion.K2 if default_game == "K2" else GameVersion.K1
     def _get_tex_cache_for_export(self):
-        return None
+        viewport = getattr(self, "viewport", None)
+        if viewport is None:
+            return None
+        tex_cache = getattr(viewport, "tex_cache", None)
+        return tex_cache() if callable(tex_cache) else tex_cache
     def _open_lightmap_baker(self) -> None:
         if self._current_model is None:
             QtWidgets.QMessageBox.information(self, "Lightmap Baker", "Load a model or module before baking lightmaps.")

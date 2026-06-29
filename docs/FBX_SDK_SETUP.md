@@ -2,7 +2,7 @@
 
 Autodesk FBX SDK is an external optional dependency. GhostRigger does not bundle or redistribute Autodesk SDK files. You must download and install it separately under Autodesk's licence terms.
 
-GhostRigger's FBX import/export feature stays disabled until the Autodesk Python FBX bindings are detected in the current Python environment.
+GhostRigger can export basic FBX through its built-in exporter, but SDK-backed FBX import/export stays disabled until the Autodesk Python FBX bindings are detected in the current Python environment.
 
 ## Official Source
 
@@ -30,11 +30,24 @@ The Autodesk FBX Python binding must match your Python ABI and architecture. For
 2. Read the external dependency notice.
 3. Use `Open Autodesk FBX SDK Download Page` to open Autodesk's official download page.
 4. Download and install/extract the SDK using Autodesk's licence flow.
-5. Select the local SDK root, the folder containing `fbx.pyd`/`fbx.so`, and the folder containing `FbxCommon.py`.
+5. Select the local SDK root, the folder containing `fbx.pyd`/`fbx.so`, the folder containing `FbxCommon.py`, and the SDK library/bin folder containing `fbxsdk.dll`/`libfbxsdk.*` if it is separate.
 6. Click `Test Selected Path`.
 7. Click `Save Configuration` only after the test succeeds.
 
-GhostRigger stores only paths in `settings.json` under `fbx_sdk`. It does not copy Autodesk files into the repository or application folders.
+GhostRigger stores only paths in `settings.json` under `fbx_sdk`. It does not copy Autodesk files into the repository or application folders. On Windows, GhostRigger registers the configured SDK library/bin folders with the process DLL loader before importing Autodesk's `fbx` module.
+
+## GitHub Release Policy
+
+GitHub source archives and public release builds should not include Autodesk SDK binaries, Python bindings, headers, libraries, or installers unless the project has explicit redistribution permission for those exact files.
+
+The supported release model is:
+
+1. Ship GhostRigger with the setup assistant, diagnostics, and built-in fallback exporter.
+2. Let users download and install Autodesk FBX SDK from Autodesk under Autodesk's licence flow.
+3. Store only local paths to the user's installed SDK.
+4. Treat SDK-backed import/export as enabled only after `Test Selected Path` succeeds.
+
+If the project later receives Autodesk redistribution permission, add that grant to the repository documentation before changing `.gitignore`, release packaging, or installer behavior.
 
 ## If Your Python Version Is Unsupported
 
@@ -55,5 +68,5 @@ This prints Python version, executable, architecture, `sys.path`, import status 
 Common failures:
 
 - `No module named 'fbx'`: choose the folder containing Autodesk's Python binding binary.
-- DLL/shared-library load error: add the SDK binary/library folder for the same platform and architecture.
+- DLL/shared-library load error: add the SDK binary/library folder for the same platform and architecture. On Windows this is commonly the folder containing `fbxsdk.dll`.
 - Wrong architecture or ABI error: choose bindings matching the exact Python major/minor version and 32-bit/64-bit architecture.
