@@ -11,6 +11,41 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-30
 
+### [2026-06-30] Align Drexl Auto-Fit To Visible Template Skeleton
+
+Owner: LordVaderCW
+T###: T2505
+Subsystem: Character Builder creature auto-fit / native template containment
+Intersects: `789acaad` weighted containment-anchor restoration.
+
+Summary: Fixed the remaining Drexl auto-fit failure where the imported mesh
+matched the vanilla render bounds but the visible/base skeleton still sat above
+the shell. Same-resref native-template replacement now uses the selected base's
+skin bone-map pivots as the final containment target, filters only extreme
+outlier pivots, and applies a minimal per-axis containment offset after the
+native vertex-cloud orientation/scale solve. For `c_drexlf`, this preserves the
+good X/Y snap and shifts the fitted mesh on Z so all 54 raw template pivots are
+inside the imported Drexl mesh before and after Build Skeleton.
+
+Affected files:
+- `native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`
+- `native/GhostRigger.Core.Workflow/GhostRiggerPythonPayload.json`
+- `tests/test_retarget_external_import.py`
+
+Verification:
+- Real Drexl probe loaded
+  `C:\Users\NewAdmin\Documents\KotorMods\HighFidelityKotorCharacters\Drexl\C_DrexlF_UV.obj`
+  against K2 `c_drexlf` and returned
+  `bone_position_source=skin_bone_map_template_pivots`,
+  `skeleton_containment_adjusted_axes=["z"]`, 54 deformation pivots,
+  `raw_template_pivots_inside_after_load=True`, and 0 outside pivots.
+- The same probe ran `apply_template_rig(...)`; the rigged model kept all raw
+  Drexl pivots inside its mesh bounds after Build Skeleton.
+- `python -m py_compile native\GhostRigger.Core.Workflow\Python\src\core\characters\headless_body_workflow.py tests\test_retarget_external_import.py`
+- `python -m pytest tests\test_retarget_external_import.py -k "same_resref or creature_containment"` returned 4 passed.
+- `python -m pytest tests\test_character_builder_template_rig.py` returned 20 passed.
+- `python -m pytest tests\test_native_python_payloads.py -k "Workflow or manifest"` returned 3 passed after regenerating the Workflow payload manifest.
+
 ### [2026-06-30] Restore Drexl Auto-Fit With Skin-Weighted Containment Anchors
 
 Owner: LordVaderCW

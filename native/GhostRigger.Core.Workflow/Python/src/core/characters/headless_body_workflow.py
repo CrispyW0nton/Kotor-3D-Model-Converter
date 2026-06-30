@@ -1154,6 +1154,20 @@ def _native_template_scaled_bounds_fit(
     if any((not math.isfinite(value)) or value <= 1.0e-8 for value in axis_scales):
         return None
 
+    pivot_bones, pivot_skipped, pivot_source = _skin_bone_map_fit_positions(reference_model)
+    pivot_fit_bones, pivot_outliers = _filter_reference_nearby_points(
+        pivot_bones,
+        reference_bounds,
+    )
+    if pivot_fit_bones:
+        deformation_bones = pivot_fit_bones
+        skipped_bones = list(pivot_skipped) + [name for name, _point in pivot_outliers]
+        bone_source = f"{pivot_source}_template_pivots"
+    else:
+        deformation_bones, skipped_bones, bone_source = _reference_containment_fit_positions(reference_model)
+    bone_positions = [point for _name, point in deformation_bones]
+    bone_bounds = _bounds_for_points(bone_positions)
+
     linear_matrix = _axis_scaled_matrix(rotation, axis_scales)
 
     def transform_without_offset(point: Vec3) -> Vec3:
@@ -1162,12 +1176,10 @@ def _native_template_scaled_bounds_fit(
     mapped_bounds = _transform_bounds(bounds, transform_without_offset)
     if mapped_bounds is None:
         return None
-    ref_min, ref_max = reference_bounds
-    mapped_min, _mapped_max = mapped_bounds
-    offset = (
-        float(ref_min[0]) - float(mapped_min[0]),
-        float(ref_min[1]) - float(mapped_min[1]),
-        float(ref_min[2]) - float(mapped_min[2]),
+    offset, containment_adjusted_axes = _containment_offset_from_bounds(
+        mapped_bounds,
+        reference_bounds,
+        bone_bounds,
     )
 
     def transform_point(point: Vec3) -> Vec3:
@@ -1198,8 +1210,6 @@ def _native_template_scaled_bounds_fit(
         "target": _fit_frame_visual_overlay(reference_model, None, reference_bounds),
     }
     fitted_bounds = _transform_bounds(bounds, transform_point)
-    deformation_bones, skipped_bones, bone_source = _reference_containment_fit_positions(reference_model)
-    bone_positions = [point for _name, point in deformation_bones]
     if fitted_bounds is not None and bone_positions:
         all_bones_inside, outside_count = _bounds_contains_points(fitted_bounds, bone_positions)
     else:
@@ -1218,16 +1228,25 @@ def _native_template_scaled_bounds_fit(
         "scale_factor": float(scale),
         "axis_scales": [float(value) for value in axis_scales],
         "height_source": "native_template_render_bounds",
-        "ground_origin_basis": "native_template_bounds_min_corner",
+        "ground_origin_basis": (
+            "native_template_bounds_with_skeleton_containment"
+            if containment_adjusted_axes else
+            "native_template_bounds_min_corner"
+        ),
         "used_landmarks": [
             "source:replacement_filename",
             "source:render_bounds",
             "source:least_distorting_axis_permutation",
             "target:selected_native_render_bounds",
+            "target:selected_native_skin_bone_pivots",
         ],
         "confidence": 0.9,
         "fallback_used": False,
         "notes": (
+            "Imported mesh filename matches the selected native template; "
+            "native render bounds and least-distorting axis fit drove the baked replacement fit. "
+            "The final offset was adjusted to contain the selected base skeleton pivots."
+            if containment_adjusted_axes else
             "Imported mesh filename matches the selected native template; "
             "native render bounds and least-distorting axis fit drove the baked replacement fit."
         ),
@@ -1249,6 +1268,9 @@ def _native_template_scaled_bounds_fit(
         "bone_position_source": bone_source,
         "deformation_bone_count": len(deformation_bones),
         "dummy_bone_count": len(skipped_bones),
+        "skeleton_containment_adjusted_axes": list(containment_adjusted_axes),
+        "skeleton_pivot_outlier_count": len(pivot_outliers),
+        "skeleton_pivot_outlier_names": [name for name, _point in pivot_outliers],
         "source_height": float(source_extents[int(seed["source_up_axis"])]),
         "target_height": float(target_extents[2]),
         "vertical_axis": str(seed["source_up_label"]).lstrip("+"),
@@ -1281,6 +1303,8 @@ def _native_template_scaled_bounds_fit(
             "outside_count": int(outside_count),
             "bone_position_source": bone_source,
             "deformation_bone_count": len(deformation_bones),
+            "skeleton_containment_adjusted_axes": list(containment_adjusted_axes),
+            "skeleton_pivot_outlier_count": len(pivot_outliers),
             "source_axes": [int(value) for value in source_axes],
             "reference_label": str(label or ""),
         },
@@ -1300,6 +1324,8 @@ def _native_template_scaled_bounds_fit(
         "outside_count": int(outside_count),
         "bone_position_source": bone_source,
         "deformation_bone_count": len(deformation_bones),
+        "skeleton_containment_adjusted_axes": list(containment_adjusted_axes),
+        "skeleton_pivot_outlier_count": len(pivot_outliers),
         "rotation_matrix": rotation,
         "linear_matrix": linear_matrix,
         "offset": offset,
@@ -1521,6 +1547,91 @@ def _bounds_contains_points(
         ):
             outside += 1
     return outside == 0, outside
+
+
+def _filter_reference_nearby_points(
+    points: Sequence[Tuple[str, Vec3]],
+    reference_bounds: Optional[Tuple[Vec3, Vec3]],
+    *,
+    expansion_fraction: float = 0.45,
+    min_expansion: float = 0.75,
+) -> Tuple[List[Tuple[str, Vec3]], List[Tuple[str, Vec3]]]:
+    """Split plausible native pivots from true outliers.
+
+    A few KOTOR creature pivots are authored just outside the render shell and
+    must drive fit staging.  A corrupted/imported helper hundreds of units away
+    should not.  The threshold is intentionally generous relative to the native
+    reference extents so Drexl wing pivots survive while pathological points do
+    not explode the fit.
+    """
+
+    if reference_bounds is None:
+        return list(points), []
+    ref_min, ref_max = reference_bounds
+    limits: List[Tuple[float, float]] = []
+    for axis in range(3):
+        extent = max(float(ref_max[axis]) - float(ref_min[axis]), 1.0e-6)
+        pad = max(extent * float(expansion_fraction), float(min_expansion))
+        limits.append((float(ref_min[axis]) - pad, float(ref_max[axis]) + pad))
+    nearby: List[Tuple[str, Vec3]] = []
+    outliers: List[Tuple[str, Vec3]] = []
+    for name, point in points:
+        try:
+            pos = (float(point[0]), float(point[1]), float(point[2]))
+        except Exception:
+            outliers.append((str(name), point))
+            continue
+        if all(limits[axis][0] <= pos[axis] <= limits[axis][1] for axis in range(3)):
+            nearby.append((str(name), pos))
+        else:
+            outliers.append((str(name), pos))
+    return nearby, outliers
+
+
+def _bounds_for_points(points: Sequence[Vec3]) -> Optional[Tuple[Vec3, Vec3]]:
+    if not points:
+        return None
+    return (
+        tuple(min(float(point[axis]) for point in points) for axis in range(3)),  # type: ignore[return-value]
+        tuple(max(float(point[axis]) for point in points) for axis in range(3)),  # type: ignore[return-value]
+    )
+
+
+def _containment_offset_from_bounds(
+    mapped_bounds: Tuple[Vec3, Vec3],
+    reference_bounds: Tuple[Vec3, Vec3],
+    bone_bounds: Optional[Tuple[Vec3, Vec3]],
+) -> Tuple[Vec3, List[str]]:
+    """Return an offset that preserves native placement but contains bones."""
+
+    mapped_min, mapped_max = mapped_bounds
+    ref_min, ref_max = reference_bounds
+    adjusted_axes: List[str] = []
+    offset: List[float] = [
+        float(ref_min[axis]) - float(mapped_min[axis])
+        for axis in range(3)
+    ]
+    if bone_bounds is None:
+        return (offset[0], offset[1], offset[2]), adjusted_axes
+    bone_min, bone_max = bone_bounds
+    axis_names = ("x", "y", "z")
+    for axis in range(3):
+        mesh_min = float(mapped_min[axis]) + offset[axis]
+        mesh_max = float(mapped_max[axis]) + offset[axis]
+        b_min = float(bone_min[axis])
+        b_max = float(bone_max[axis])
+        if b_min >= mesh_min - 1.0e-5 and b_max <= mesh_max + 1.0e-5:
+            continue
+        mesh_extent = max(float(mapped_max[axis]) - float(mapped_min[axis]), 1.0e-6)
+        bone_extent = max(b_max - b_min, 0.0)
+        if bone_extent <= mesh_extent + 1.0e-5:
+            mesh_center_no_offset = (float(mapped_min[axis]) + float(mapped_max[axis])) * 0.5
+            bone_center = (b_min + b_max) * 0.5
+            offset[axis] = bone_center - mesh_center_no_offset
+        else:
+            offset[axis] = b_min - float(mapped_min[axis])
+        adjusted_axes.append(axis_names[axis])
+    return (offset[0], offset[1], offset[2]), adjusted_axes
 
 
 def _split_reference_containment_bones(
@@ -4273,6 +4384,12 @@ def normalize_external_model_for_kotor(
             "outside_count": int(native_scaled_fit.get("outside_count", 0)),
             "bone_position_source": str(native_scaled_fit.get("bone_position_source") or ""),
             "deformation_bone_count": int(native_scaled_fit.get("deformation_bone_count", 0)),
+            "skeleton_containment_adjusted_axes": list(
+                native_scaled_fit.get("skeleton_containment_adjusted_axes") or []
+            ),
+            "skeleton_pivot_outlier_count": int(
+                native_scaled_fit.get("skeleton_pivot_outlier_count", 0) or 0
+            ),
             "source_height": float(native_scaled_fit["source_height"]),
             "target_height": float(native_scaled_fit["target_height"]),
             "reference": reference_label or getattr(reference_model, "name", "") or "",

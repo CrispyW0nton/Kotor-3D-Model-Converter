@@ -644,11 +644,13 @@ def test_same_resref_creature_replacement_uses_native_cloud_to_choose_orientatio
     reference = KotorModel(name="c_drexlf", game_version=GameVersion.K2)
     reference_root = ModelNode(name="c_drexlf", flags=int(NodeFlags.HEADER))
     reference.root_node = reference_root
+    native_vertices = [native_point(point) for point in source_mesh.vertices]
+    high_wing_pivot_z = max(point[2] for point in native_vertices) + 0.25
     donor_bones = {
         "pelvis_g": native_point((0.0, 0.0, 0.0)),
         "tail6_g": native_point((0.2, 0.0, 0.25)),
         "head_g": native_point((-0.25, 0.0, -0.25)),
-        "outboard_g": (100.0, 100.0, 100.0),
+        "wingtip_g": (0.0, -2.0, high_wing_pivot_z),
     }
     for name, position in donor_bones.items():
         bone = ModelNode(name=name, flags=int(NodeFlags.HEADER), parent=reference_root)
@@ -659,7 +661,7 @@ def test_same_resref_creature_replacement_uses_native_cloud_to_choose_orientatio
         flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
         parent=reference_root,
     )
-    reference_mesh.vertices = [native_point(point) for point in source_mesh.vertices]
+    reference_mesh.vertices = native_vertices
     reference_mesh.faces = list(source_mesh.faces)
     reference_mesh.bone_map = list(donor_bones)
     reference_mesh.skin_data = [
@@ -683,15 +685,20 @@ def test_same_resref_creature_replacement_uses_native_cloud_to_choose_orientatio
     assert result["native_vertex_cloud_score"] < 0.001
     assert result["all_bones_inside"] is True
     assert result["outside_count"] == 0
-    assert result["bone_position_source"] == "skin_weighted_vertex_centroids"
+    assert result["bone_position_source"] == "skin_bone_map_template_pivots"
     assert result["deformation_bone_count"] == len(donor_bones)
-    assert fit_report["bone_position_source"] == "skin_weighted_vertex_centroids"
+    assert result["skeleton_containment_adjusted_axes"] == ["z"]
+    assert fit_report["bone_position_source"] == "skin_bone_map_template_pivots"
+    assert fit_report["skeleton_containment_adjusted_axes"] == ["z"]
     assert fit_report["source_forward_axis"] == "+x"
     assert fit_report["source_up_axis"] == "+y"
     assert max(result["axis_scales"]) / min(result["axis_scales"]) < 1.001
     fitted_min, fitted_max = _vertex_bounds(source)
-    assert fitted_min == pytest.approx(reference.bb_min)
-    assert fitted_max == pytest.approx(reference.bb_max)
+    assert fitted_min[:2] == pytest.approx(reference.bb_min[:2])
+    assert fitted_max[:2] == pytest.approx(reference.bb_max[:2])
+    assert fitted_min[2] > reference.bb_min[2]
+    assert fitted_max[2] > reference.bb_max[2]
+    assert fitted_max[2] >= high_wing_pivot_z - 1.0e-6
 
 
 def test_creature_mode_obj_fit_uses_flat_bounds_not_humanoid_height() -> None:
