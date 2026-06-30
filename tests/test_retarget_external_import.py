@@ -589,7 +589,15 @@ def test_unit_scale_same_resref_creature_replacement_uses_native_bounds() -> Non
 
 def test_same_resref_creature_replacement_uses_native_cloud_to_choose_orientation() -> None:
     from src.core.characters.headless_body_workflow import _vertex_bounds, normalize_external_model_for_kotor
-    from src.core.geometry.model_data import CharacterMode, GameVersion, KotorModel, ModelNode, NodeFlags
+    from src.core.geometry.model_data import (
+        BoneWeight,
+        CharacterMode,
+        GameVersion,
+        KotorModel,
+        ModelNode,
+        NodeFlags,
+        VertexSkinData,
+    )
 
     source = KotorModel(name="c_drexlf_uv", game_version=GameVersion.K2)
     source.metadata = {
@@ -640,6 +648,7 @@ def test_same_resref_creature_replacement_uses_native_cloud_to_choose_orientatio
         "pelvis_g": native_point((0.0, 0.0, 0.0)),
         "tail6_g": native_point((0.2, 0.0, 0.25)),
         "head_g": native_point((-0.25, 0.0, -0.25)),
+        "outboard_g": (100.0, 100.0, 100.0),
     }
     for name, position in donor_bones.items():
         bone = ModelNode(name=name, flags=int(NodeFlags.HEADER), parent=reference_root)
@@ -653,7 +662,10 @@ def test_same_resref_creature_replacement_uses_native_cloud_to_choose_orientatio
     reference_mesh.vertices = [native_point(point) for point in source_mesh.vertices]
     reference_mesh.faces = list(source_mesh.faces)
     reference_mesh.bone_map = list(donor_bones)
-    reference_mesh.skin_data = [object()] * len(reference_mesh.vertices)
+    reference_mesh.skin_data = [
+        VertexSkinData([BoneWeight(index % len(reference_mesh.bone_map), 1.0)])
+        for index, _vertex in enumerate(reference_mesh.vertices)
+    ]
     reference_root.children.append(reference_mesh)
     reference.compute_bounds()
 
@@ -671,7 +683,9 @@ def test_same_resref_creature_replacement_uses_native_cloud_to_choose_orientatio
     assert result["native_vertex_cloud_score"] < 0.001
     assert result["all_bones_inside"] is True
     assert result["outside_count"] == 0
-    assert result["bone_position_source"] == "skin_bone_map"
+    assert result["bone_position_source"] == "skin_weighted_vertex_centroids"
+    assert result["deformation_bone_count"] == len(donor_bones)
+    assert fit_report["bone_position_source"] == "skin_weighted_vertex_centroids"
     assert fit_report["source_forward_axis"] == "+x"
     assert fit_report["source_up_axis"] == "+y"
     assert max(result["axis_scales"]) / min(result["axis_scales"]) < 1.001

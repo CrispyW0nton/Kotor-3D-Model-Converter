@@ -1198,7 +1198,7 @@ def _native_template_scaled_bounds_fit(
         "target": _fit_frame_visual_overlay(reference_model, None, reference_bounds),
     }
     fitted_bounds = _transform_bounds(bounds, transform_point)
-    deformation_bones, skipped_bones, bone_source = _skin_bone_map_fit_positions(reference_model)
+    deformation_bones, skipped_bones, bone_source = _reference_containment_fit_positions(reference_model)
     bone_positions = [point for _name, point in deformation_bones]
     if fitted_bounds is not None and bone_positions:
         all_bones_inside, outside_count = _bounds_contains_points(fitted_bounds, bone_positions)
@@ -1385,6 +1385,99 @@ def _skin_bone_map_fit_positions(
                 continue
             positions.append((raw, (float(pos[0]), float(pos[1]), float(pos[2]))))
     return positions, skipped, "skin_bone_map" if positions else "none"
+
+
+def _skin_weighted_bone_map_fit_positions(
+    reference_model: Any,
+) -> Tuple[List[Tuple[str, Vec3]], List[str], str]:
+    """Return donor bone fit anchors from weighted skin vertices.
+
+    KOTOR creature joint pivots are not guaranteed to live inside the visible
+    surface.  Drexl is the sharp example: several wing/torso pivots sit above
+    the vanilla mesh bounds even though their weighted vertex regions are
+    correct.  For replacement-mesh containment we therefore use the donor's
+    skinned deformation envelopes as the primary fit anchors and fall back to
+    raw pivot positions only when no weight evidence exists.
+    """
+
+    if reference_model is None:
+        return [], [], "none"
+    positions: List[Tuple[str, Vec3]] = []
+    skipped: List[str] = []
+    seen_skipped: set[str] = set()
+    accum: Dict[str, List[float]] = {}
+    order: List[str] = []
+
+    for node in _iter_model_nodes(reference_model):
+        bone_map = list(getattr(node, "bone_map", []) or [])
+        skin_data = list(getattr(node, "skin_data", []) or [])
+        vertices = list(getattr(node, "vertices", []) or [])
+        if not bone_map or not skin_data or not vertices:
+            continue
+        for index, vertex in enumerate(vertices[:len(skin_data)]):
+            if vertex is None or len(vertex) < 3:
+                continue
+            vertex_skin = skin_data[index]
+            influences = list(getattr(vertex_skin, "influences", []) or [])
+            if not influences:
+                continue
+            try:
+                vx, vy, vz = float(vertex[0]), float(vertex[1]), float(vertex[2])
+            except Exception:
+                continue
+            for influence in influences:
+                try:
+                    bone_index = int(getattr(influence, "bone_index"))
+                    weight = float(getattr(influence, "weight"))
+                except Exception:
+                    continue
+                if weight <= 1.0e-8 or bone_index < 0 or bone_index >= len(bone_map):
+                    continue
+                raw = str(bone_map[bone_index] or "").strip()
+                key = raw.lower()
+                clean = _clean_landmark_name(raw)
+                if not key:
+                    continue
+                if key in _NON_DEFORMING_ATTACHMENT_NAMES or clean in _NON_DEFORMING_ATTACHMENT_NAMES:
+                    if key not in seen_skipped:
+                        skipped.append(raw)
+                        seen_skipped.add(key)
+                    continue
+                if key not in accum:
+                    accum[key] = [raw, 0.0, 0.0, 0.0, 0.0]
+                    order.append(key)
+                row = accum[key]
+                row[1] += vx * weight
+                row[2] += vy * weight
+                row[3] += vz * weight
+                row[4] += weight
+
+    for key in order:
+        raw, sx, sy, sz, total_weight = accum[key]
+        if total_weight <= 1.0e-8:
+            continue
+        positions.append((
+            str(raw),
+            (
+                float(sx) / float(total_weight),
+                float(sy) / float(total_weight),
+                float(sz) / float(total_weight),
+            ),
+        ))
+    return positions, skipped, "skin_weighted_vertex_centroids" if positions else "none"
+
+
+def _reference_containment_fit_positions(
+    reference_model: Any,
+) -> Tuple[List[Tuple[str, Vec3]], List[str], str]:
+    """Return the safest donor points for replacement-mesh containment."""
+
+    weighted_positions, weighted_skipped, weighted_source = _skin_weighted_bone_map_fit_positions(
+        reference_model,
+    )
+    if weighted_positions:
+        return weighted_positions, weighted_skipped, weighted_source
+    return _skin_bone_map_fit_positions(reference_model)
 
 
 def _mesh_face_closure_summary(faces: Sequence[Sequence[int]]) -> Dict[str, Any]:
@@ -1860,14 +1953,6 @@ def _containment_based_fit_solution(
     mesh_arr = np.asarray(mesh_vertex_list, dtype=np.float64)
     closure = _mesh_face_closure_summary(mesh_face_list)
     reference_name = str(getattr(reference_model, "name", "") or "")
-    metadata = getattr(model, "metadata", None)
-    metadata = metadata if isinstance(metadata, dict) else {}
-    external = metadata.get("external_import")
-    external = external if isinstance(external, dict) else {}
-    same_resref_replacement = _replacement_source_matches_resref(
-        str(external.get("source_path") or ""),
-        reference_name,
-    )
     log.info(
         "CharacterBuilder containment fit: entered reference=%s vertices=%d faces=%d watertight=%s",
         reference_name,
@@ -1893,14 +1978,14 @@ def _containment_based_fit_solution(
     rotation_np = np.asarray(rotation, dtype=np.float64)
     mesh_vertices = (rotation_np @ mesh_arr.T).T
 
-    deformation_bones, skipped_bones, bone_source = _skin_bone_map_fit_positions(reference_model)
+    deformation_bones, skipped_bones, bone_source = _reference_containment_fit_positions(reference_model)
     if len(deformation_bones) < 1:
         log.info(
             "CharacterBuilder containment fit: no skin bone-map deformation bones found for %s",
             reference_name,
         )
         return None
-    if bool(closure["watertight"]) or same_resref_replacement:
+    if bool(closure["watertight"]):
         containment_bones = list(deformation_bones)
         soft_bones: List[Tuple[str, Vec3]] = []
     else:

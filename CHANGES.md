@@ -11,6 +11,46 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-30
 
+### [2026-06-30] Restore Drexl Auto-Fit With Skin-Weighted Containment Anchors
+
+Owner: LordVaderCW
+T###: T2505
+Subsystem: Character Builder creature auto-fit / containment fit
+Intersects: Prior Drexl containment restoration on `qt-ghostrigger`.
+
+Summary: Repaired the Drexl containment-fit regression by changing the donor
+fit driver from raw skeleton pivot positions to skin-weighted deformation
+anchors derived from the selected KOTOR base mesh. The vanilla K2 `c_drexlf`
+joint pivots include 24 positions outside the vanilla mesh bounds, so forcing
+those pivots to be contained made the imported replacement inflate and drift.
+The new anchor source uses each donor bone's weighted vertex centroid first and
+falls back to the old bone-pivot method only when skin-weight evidence is not
+available. Same-resref replacement imports can now safely use the native
+template bounds again after proving the donor's actual skinned regions are
+inside the staged mesh.
+
+Affected files:
+- `native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`
+- `native/GhostRigger.Core.Workflow/GhostRiggerPythonPayload.json`
+- `tests/test_retarget_external_import.py`
+
+Verification:
+- Direct Drexl donor probe: old `skin_bone_map` pivots returned 54 anchors
+  with 24 outside the vanilla `c_drexlf` mesh bounds; new
+  `skin_weighted_vertex_centroids` returned 53 anchors with 0 outside.
+- Headless real import probe loaded
+  `C:\Users\NewAdmin\Documents\KotorMods\HighFidelityKotorCharacters\Drexl\C_DrexlF_UV.obj`
+  against K2 `c_drexlf` and returned
+  `fit_policy=native_template_scaled_bounds_replacement`,
+  `bone_position_source=skin_weighted_vertex_centroids`,
+  `all_bones_inside=True`, `outside_count=0`, and fitted bounds exactly
+  matching the vanilla Drexl reference bounds.
+- `python -m py_compile native\GhostRigger.Core.Workflow\Python\src\core\characters\headless_body_workflow.py tests\test_retarget_external_import.py`
+- `python -m pytest tests\test_retarget_external_import.py -k "same_resref or creature_containment"` returned 4 passed.
+- `python -m pytest tests\test_character_builder_template_rig.py` returned 20 passed.
+- `python -m pytest tests\test_native_python_payloads.py -k "Workflow or manifest"` returned 3 passed after regenerating the Workflow payload manifest.
+- Full `python -m pytest tests\test_retarget_external_import.py` currently has 2 unrelated Retarget Window playback failures from `qt_retarget_window.py` referencing undefined `model`; the 23 other tests in that file pass.
+
 ### [2026-06-30] Restore Drexl Containment Fit And Node Splitter
 
 Owner: LordVaderCW
