@@ -828,6 +828,154 @@ def _point_cloud_fit_score(
     return math.sqrt(max(0.0, (source_to_ref + ref_to_source) * 0.5))
 
 
+def _nearest_cloud_pairs(source, target, *, chunk_size: int = 256):
+    import numpy as np
+
+    nearest = []
+    distances = []
+    for start in range(0, int(source.shape[0]), chunk_size):
+        chunk = source[start:start + chunk_size]
+        diff = chunk[:, None, :] - target[None, :, :]
+        squared = np.sum(diff * diff, axis=2)
+        indices = np.argmin(squared, axis=1)
+        nearest.append(target[indices])
+        distances.append(np.min(squared, axis=1))
+    if not nearest:
+        return None, None
+    return np.vstack(nearest), np.concatenate(distances)
+
+
+def _surface_refined_axis_fit(
+    source_vertices: Optional[Sequence[Vec3]],
+    reference_vertices: Optional[Sequence[Vec3]],
+    *,
+    rotation_matrix: Tuple[Vec3, Vec3, Vec3],
+    axis_scales: Sequence[float],
+    offset: Vec3,
+    max_iterations: int = 8,
+) -> Optional[Dict[str, Any]]:
+    """Refine a same-resref fit by registering source surface to native surface.
+
+    Bounds get the replacement mesh into roughly the right frame, but a creature
+    shell such as Drexl is too thin and irregular for bounding-box containment
+    to be the final objective.  This pass keeps the already-selected signed axis
+    frame, then iteratively solves one scale and one translation per target axis
+    from trimmed nearest-surface correspondences.
+    """
+
+    if not source_vertices or not reference_vertices:
+        return None
+    try:
+        import numpy as np
+    except Exception:  # pragma: no cover - project dependency
+        return None
+
+    source = _sample_cloud_array(source_vertices, max_points=1600)
+    reference = _sample_cloud_array(reference_vertices, max_points=1800)
+    if source is None or reference is None:
+        return None
+    try:
+        rotation = np.asarray(rotation_matrix, dtype=np.float64)
+        initial_scales = np.asarray(tuple(float(value) for value in axis_scales), dtype=np.float64)
+        current_scales = initial_scales.copy()
+        current_offset = np.asarray(offset, dtype=np.float64)
+    except Exception:
+        return None
+    if rotation.shape != (3, 3) or initial_scales.shape != (3,) or current_offset.shape != (3,):
+        return None
+    if not np.all(np.isfinite(initial_scales)) or np.any(initial_scales <= 1.0e-8):
+        return None
+
+    rotated_source = source @ rotation.T
+
+    def mapped_cloud(scales, translation):
+        return (rotated_source * scales) + translation
+
+    def score(scales, translation) -> float:
+        mapped = mapped_cloud(scales, translation)
+        source_to_ref = _nearest_cloud_mean_square(mapped, reference)
+        ref_to_source = _nearest_cloud_mean_square(reference, mapped)
+        if not math.isfinite(source_to_ref) or not math.isfinite(ref_to_source):
+            return float("inf")
+        return math.sqrt(max(0.0, (source_to_ref + ref_to_source) * 0.5))
+
+    current_score = score(current_scales, current_offset)
+    if not math.isfinite(current_score):
+        return None
+    best_scales = current_scales.copy()
+    best_offset = current_offset.copy()
+    best_score = current_score
+    trace: List[Dict[str, Any]] = []
+
+    min_scales = initial_scales * 0.35
+    max_scales = initial_scales * 2.75
+    for iteration in range(max(0, int(max_iterations))):
+        nearest, squared_distances = _nearest_cloud_pairs(
+            mapped_cloud(current_scales, current_offset),
+            reference,
+        )
+        if nearest is None or squared_distances is None or int(nearest.shape[0]) < 8:
+            break
+        cutoff = float(np.percentile(squared_distances, 80.0))
+        mask = squared_distances <= cutoff
+        if int(np.count_nonzero(mask)) < 20:
+            mask = np.ones(int(squared_distances.shape[0]), dtype=bool)
+
+        source_fit = rotated_source[mask]
+        target_fit = nearest[mask]
+        candidate_scales: List[float] = []
+        candidate_offset: List[float] = []
+        for axis in range(3):
+            source_axis = source_fit[:, axis]
+            target_axis = target_fit[:, axis]
+            source_centered = source_axis - float(np.mean(source_axis))
+            target_centered = target_axis - float(np.mean(target_axis))
+            denom = float(np.sum(source_centered * source_centered))
+            if denom <= 1.0e-12:
+                scale = float(current_scales[axis])
+            else:
+                scale = float(np.sum(source_centered * target_centered) / denom)
+            scale = max(float(min_scales[axis]), min(float(max_scales[axis]), scale))
+            translation = float(np.mean(target_axis) - scale * np.mean(source_axis))
+            candidate_scales.append(scale)
+            candidate_offset.append(translation)
+
+        next_scales = np.asarray(candidate_scales, dtype=np.float64)
+        next_offset = np.asarray(candidate_offset, dtype=np.float64)
+        next_score = score(next_scales, next_offset)
+        trace.append({
+            "iteration": int(iteration),
+            "score_before": float(current_score),
+            "score_after": float(next_score),
+            "kept_pairs": int(np.count_nonzero(mask)),
+        })
+        if not math.isfinite(next_score) or next_score > current_score * 1.03:
+            break
+        current_scales = next_scales
+        current_offset = next_offset
+        current_score = next_score
+        if next_score < best_score:
+            best_score = next_score
+            best_scales = next_scales.copy()
+            best_offset = next_offset.copy()
+
+    if best_score >= current_score and best_score >= score(initial_scales, np.asarray(offset, dtype=np.float64)):
+        return None
+
+    linear_matrix: Tuple[Vec3, Vec3, Vec3] = tuple(
+        tuple(float(rotation[row, col]) * float(best_scales[row]) for col in range(3))
+        for row in range(3)
+    )  # type: ignore[assignment]
+    return {
+        "axis_scales": tuple(float(value) for value in best_scales),
+        "offset": tuple(float(value) for value in best_offset),
+        "linear_matrix": linear_matrix,
+        "native_vertex_cloud_score": float(best_score),
+        "iterations": len(trace),
+        "trace": trace,
+    }
+
+
 def _replacement_axis_fit_seed(
     bounds: Tuple[Vec3, Vec3],
     reference_bounds: Tuple[Vec3, Vec3],
@@ -1123,12 +1271,14 @@ def _native_template_scaled_bounds_fit(
     if not _replacement_source_matches_resref(source_path, str(label)):
         return None
 
+    source_vertices = _mesh_vertex_cloud(model)
+    reference_vertices = _mesh_vertex_cloud(reference_model)
     seed = _replacement_axis_fit_seed(
         bounds,
         reference_bounds,
         prefer_identity=external.get("target_axis_system") == "kotor_z_up",
-        source_vertices=_mesh_vertex_cloud(model),
-        reference_vertices=_mesh_vertex_cloud(reference_model),
+        source_vertices=source_vertices,
+        reference_vertices=reference_vertices,
     )
     if seed is None:
         seed = _creature_bounds_fit_solution(bounds, reference_bounds)
@@ -1154,20 +1304,6 @@ def _native_template_scaled_bounds_fit(
     if any((not math.isfinite(value)) or value <= 1.0e-8 for value in axis_scales):
         return None
 
-    pivot_bones, pivot_skipped, pivot_source = _skin_bone_map_fit_positions(reference_model)
-    pivot_fit_bones, pivot_outliers = _filter_reference_nearby_points(
-        pivot_bones,
-        reference_bounds,
-    )
-    if pivot_fit_bones:
-        deformation_bones = pivot_fit_bones
-        skipped_bones = list(pivot_skipped) + [name for name, _point in pivot_outliers]
-        bone_source = f"{pivot_source}_template_pivots"
-    else:
-        deformation_bones, skipped_bones, bone_source = _reference_containment_fit_positions(reference_model)
-    bone_positions = [point for _name, point in deformation_bones]
-    bone_bounds = _bounds_for_points(bone_positions)
-
     linear_matrix = _axis_scaled_matrix(rotation, axis_scales)
 
     def transform_without_offset(point: Vec3) -> Vec3:
@@ -1176,11 +1312,64 @@ def _native_template_scaled_bounds_fit(
     mapped_bounds = _transform_bounds(bounds, transform_without_offset)
     if mapped_bounds is None:
         return None
-    offset, containment_adjusted_axes = _containment_offset_from_bounds(
-        mapped_bounds,
-        reference_bounds,
-        bone_bounds,
+    ref_min, _ref_max = reference_bounds
+    mapped_min, _mapped_max = mapped_bounds
+    offset: Vec3 = (
+        float(ref_min[0]) - float(mapped_min[0]),
+        float(ref_min[1]) - float(mapped_min[1]),
+        float(ref_min[2]) - float(mapped_min[2]),
     )
+    surface_refinement = _surface_refined_axis_fit(
+        source_vertices,
+        reference_vertices,
+        rotation_matrix=rotation,
+        axis_scales=axis_scales,
+        offset=offset,
+    )
+    surface_refined = False
+    surface_iterations = 0
+    if surface_refinement is not None:
+        axis_scales = tuple(float(value) for value in surface_refinement["axis_scales"])
+        linear_matrix = surface_refinement["linear_matrix"]
+        offset = surface_refinement["offset"]
+        surface_refined = True
+        surface_iterations = int(surface_refinement.get("iterations", 0) or 0)
+    native_cloud_score = (
+        surface_refinement.get("native_vertex_cloud_score")
+        if surface_refinement is not None else
+        seed.get("native_vertex_cloud_score")
+    )
+
+    deformation_bones, skipped_bones, bone_source = _reference_containment_fit_positions(reference_model)
+    pivot_bones, pivot_skipped, _pivot_source = _skin_bone_map_fit_positions(reference_model)
+    _pivot_fit_bones, pivot_outliers = _filter_reference_nearby_points(
+        pivot_bones,
+        reference_bounds,
+    )
+    skipped_bones = list(skipped_bones) + list(pivot_skipped) + [name for name, _point in pivot_outliers]
+    bone_positions = [point for _name, point in deformation_bones]
+    containment_adjusted_axes: List[str] = []
+    containment_padding = _axis_scale_padding_to_contain_points(
+        bounds=bounds,
+        rotation_matrix=rotation,
+        axis_scales=axis_scales,
+        offset=offset,
+        target_points=bone_positions,
+        source_vertices=source_vertices,
+        reference_vertices=reference_vertices,
+        baseline_score=(
+            float(native_cloud_score)
+            if native_cloud_score is not None and math.isfinite(float(native_cloud_score))
+            else None
+        ),
+    )
+    if containment_padding is not None:
+        axis_scales = tuple(float(value) for value in containment_padding["axis_scales"])
+        linear_matrix = containment_padding["linear_matrix"]
+        offset = containment_padding["offset"]
+        containment_adjusted_axes = list(containment_padding.get("adjusted_axes") or [])
+        if containment_padding.get("native_vertex_cloud_score") is not None:
+            native_cloud_score = containment_padding.get("native_vertex_cloud_score")
 
     def transform_point(point: Vec3) -> Vec3:
         return _vec_add(_mat_vec(linear_matrix, point), offset)
@@ -1229,8 +1418,10 @@ def _native_template_scaled_bounds_fit(
         "axis_scales": [float(value) for value in axis_scales],
         "height_source": "native_template_render_bounds",
         "ground_origin_basis": (
-            "native_template_bounds_with_skeleton_containment"
+            "native_template_surface_registration_with_anchor_padding"
             if containment_adjusted_axes else
+            "native_template_surface_registration"
+            if surface_refined else
             "native_template_bounds_min_corner"
         ),
         "used_landmarks": [
@@ -1238,15 +1429,19 @@ def _native_template_scaled_bounds_fit(
             "source:render_bounds",
             "source:least_distorting_axis_permutation",
             "target:selected_native_render_bounds",
-            "target:selected_native_skin_bone_pivots",
+            "target:selected_native_surface_vertices",
+            "target:selected_native_weighted_skin_regions",
         ],
         "confidence": 0.9,
         "fallback_used": False,
         "notes": (
             "Imported mesh filename matches the selected native template; "
-            "native render bounds and least-distorting axis fit drove the baked replacement fit. "
-            "The final offset was adjusted to contain the selected base skeleton pivots."
+            "native render bounds seeded the fit, native surface registration refined placement, "
+            "and a bounded center-preserving axis pad covered donor deformation anchors."
             if containment_adjusted_axes else
+            "Imported mesh filename matches the selected native template; "
+            "native render bounds seeded the fit and native surface registration refined the final placement."
+            if surface_refined else
             "Imported mesh filename matches the selected native template; "
             "native render bounds and least-distorting axis fit drove the baked replacement fit."
         ),
@@ -1261,8 +1456,14 @@ def _native_template_scaled_bounds_fit(
         "scale": float(scale),
         "axis_scales": [float(value) for value in axis_scales],
         "axis_fit_distortion": float(seed.get("distortion", _axis_fit_distortion(axis_scales))),
-        "orientation_score_basis": str(seed.get("score_basis") or "bounds_extent_distortion"),
-        "native_vertex_cloud_score": seed.get("native_vertex_cloud_score"),
+        "orientation_score_basis": (
+            "native_vertex_cloud_iterative_surface"
+            if surface_refined else
+            str(seed.get("score_basis") or "bounds_extent_distortion")
+        ),
+        "native_vertex_cloud_score": native_cloud_score,
+        "surface_registration_refined": bool(surface_refined),
+        "surface_registration_iterations": int(surface_iterations),
         "all_bones_inside": bool(all_bones_inside),
         "outside_count": int(outside_count),
         "bone_position_source": bone_source,
@@ -1297,8 +1498,14 @@ def _native_template_scaled_bounds_fit(
             "source_path": source_path,
             "axis_scales": [float(value) for value in axis_scales],
             "axis_fit_distortion": float(seed.get("distortion", _axis_fit_distortion(axis_scales))),
-            "orientation_score_basis": str(seed.get("score_basis") or "bounds_extent_distortion"),
-            "native_vertex_cloud_score": seed.get("native_vertex_cloud_score"),
+            "orientation_score_basis": (
+                "native_vertex_cloud_iterative_surface"
+                if surface_refined else
+                str(seed.get("score_basis") or "bounds_extent_distortion")
+            ),
+            "native_vertex_cloud_score": native_cloud_score,
+            "surface_registration_refined": bool(surface_refined),
+            "surface_registration_iterations": int(surface_iterations),
             "all_bones_inside": bool(all_bones_inside),
             "outside_count": int(outside_count),
             "bone_position_source": bone_source,
@@ -1318,8 +1525,14 @@ def _native_template_scaled_bounds_fit(
         "scale": float(scale),
         "axis_scales": axis_scales,
         "axis_fit_distortion": float(seed.get("distortion", _axis_fit_distortion(axis_scales))),
-        "orientation_score_basis": str(seed.get("score_basis") or "bounds_extent_distortion"),
-        "native_vertex_cloud_score": seed.get("native_vertex_cloud_score"),
+        "orientation_score_basis": (
+            "native_vertex_cloud_iterative_surface"
+            if surface_refined else
+            str(seed.get("score_basis") or "bounds_extent_distortion")
+        ),
+        "native_vertex_cloud_score": native_cloud_score,
+        "surface_registration_refined": bool(surface_refined),
+        "surface_registration_iterations": int(surface_iterations),
         "all_bones_inside": bool(all_bones_inside),
         "outside_count": int(outside_count),
         "bone_position_source": bone_source,
@@ -1632,6 +1845,95 @@ def _containment_offset_from_bounds(
             offset[axis] = b_min - float(mapped_min[axis])
         adjusted_axes.append(axis_names[axis])
     return (offset[0], offset[1], offset[2]), adjusted_axes
+
+
+def _axis_scale_padding_to_contain_points(
+    *,
+    bounds: Tuple[Vec3, Vec3],
+    rotation_matrix: Tuple[Vec3, Vec3, Vec3],
+    axis_scales: Sequence[float],
+    offset: Vec3,
+    target_points: Sequence[Vec3],
+    source_vertices: Optional[Sequence[Vec3]] = None,
+    reference_vertices: Optional[Sequence[Vec3]] = None,
+    baseline_score: Optional[float] = None,
+    max_axis_factor: float = 1.12,
+    max_score_factor: float = 1.15,
+) -> Optional[Dict[str, Any]]:
+    """Gently expand target axes so donor anchors fit without translating.
+
+    This is intentionally different from ``_containment_offset_from_bounds``:
+    for direct replacements, translating the mesh to chase pivots breaks the
+    native surface registration.  A small center-preserving scale pad can cover
+    authoring tolerances while keeping the registered surface in place.
+    """
+
+    if not target_points:
+        return None
+    try:
+        scales = [float(value) for value in axis_scales]
+        translation = [float(value) for value in offset]
+    except Exception:
+        return None
+    linear_matrix = _axis_scaled_matrix(rotation_matrix, scales)
+
+    def transform_point(point: Vec3) -> Vec3:
+        return _vec_add(_mat_vec(linear_matrix, point), (translation[0], translation[1], translation[2]))
+
+    fitted_bounds = _transform_bounds(bounds, transform_point)
+    rotated_bounds = _transform_bounds(bounds, lambda point: _mat_vec(rotation_matrix, point))
+    bone_bounds = _bounds_for_points(target_points)
+    if fitted_bounds is None or rotated_bounds is None or bone_bounds is None:
+        return None
+    fitted_min, fitted_max = fitted_bounds
+    rotated_min, rotated_max = rotated_bounds
+    bone_min, bone_max = bone_bounds
+    adjusted_axes: List[str] = []
+    axis_names = ("x", "y", "z")
+    for axis in range(3):
+        current_min = float(fitted_min[axis])
+        current_max = float(fitted_max[axis])
+        current_half = max((current_max - current_min) * 0.5, 1.0e-8)
+        center = (current_min + current_max) * 0.5
+        desired_half = max(
+            center - float(bone_min[axis]),
+            float(bone_max[axis]) - center,
+        )
+        if desired_half <= current_half + 1.0e-5:
+            continue
+        factor = (desired_half / current_half) * 1.01
+        if factor <= 1.0 or factor > float(max_axis_factor):
+            continue
+        scales[axis] *= factor
+        rotated_center = (float(rotated_min[axis]) + float(rotated_max[axis])) * 0.5
+        translation[axis] = center - (rotated_center * scales[axis])
+        adjusted_axes.append(axis_names[axis])
+    if not adjusted_axes:
+        return None
+
+    padded_linear = _axis_scaled_matrix(rotation_matrix, scales)
+    padded_offset: Vec3 = (translation[0], translation[1], translation[2])
+    padded_score = _point_cloud_fit_score(
+        source_vertices,
+        reference_vertices,
+        linear_matrix=padded_linear,
+        offset=padded_offset,
+    )
+    if (
+        baseline_score is not None
+        and padded_score is not None
+        and math.isfinite(float(baseline_score))
+        and math.isfinite(float(padded_score))
+        and float(padded_score) > float(baseline_score) * float(max_score_factor)
+    ):
+        return None
+    return {
+        "axis_scales": tuple(float(value) for value in scales),
+        "offset": padded_offset,
+        "linear_matrix": padded_linear,
+        "adjusted_axes": adjusted_axes,
+        "native_vertex_cloud_score": padded_score,
+    }
 
 
 def _split_reference_containment_bones(
@@ -4344,6 +4646,8 @@ def normalize_external_model_for_kotor(
     native_scaled_fit_is_safe = (
         native_scaled_fit is not None
         and (
+            bool(native_scaled_fit.get("surface_registration_refined", False))
+            or
             int(native_scaled_fit.get("deformation_bone_count", 0)) <= 0
             or bool(native_scaled_fit.get("all_bones_inside", False))
         )
@@ -4380,6 +4684,8 @@ def normalize_external_model_for_kotor(
             "axis_fit_distortion": float(native_scaled_fit.get("axis_fit_distortion", 0.0)),
             "orientation_score_basis": str(native_scaled_fit.get("orientation_score_basis") or ""),
             "native_vertex_cloud_score": native_scaled_fit.get("native_vertex_cloud_score"),
+            "surface_registration_refined": bool(native_scaled_fit.get("surface_registration_refined", False)),
+            "surface_registration_iterations": int(native_scaled_fit.get("surface_registration_iterations", 0) or 0),
             "all_bones_inside": bool(native_scaled_fit.get("all_bones_inside", False)),
             "outside_count": int(native_scaled_fit.get("outside_count", 0)),
             "bone_position_source": str(native_scaled_fit.get("bone_position_source") or ""),

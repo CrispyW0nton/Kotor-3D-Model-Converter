@@ -685,20 +685,60 @@ def test_same_resref_creature_replacement_uses_native_cloud_to_choose_orientatio
     assert result["native_vertex_cloud_score"] < 0.001
     assert result["all_bones_inside"] is True
     assert result["outside_count"] == 0
-    assert result["bone_position_source"] == "skin_bone_map_template_pivots"
+    assert result["bone_position_source"] == "skin_weighted_vertex_centroids"
     assert result["deformation_bone_count"] == len(donor_bones)
-    assert result["skeleton_containment_adjusted_axes"] == ["z"]
-    assert fit_report["bone_position_source"] == "skin_bone_map_template_pivots"
-    assert fit_report["skeleton_containment_adjusted_axes"] == ["z"]
+    assert result["skeleton_containment_adjusted_axes"] == []
+    assert fit_report["bone_position_source"] == "skin_weighted_vertex_centroids"
+    assert fit_report["skeleton_containment_adjusted_axes"] == []
     assert fit_report["source_forward_axis"] == "+x"
     assert fit_report["source_up_axis"] == "+y"
     assert max(result["axis_scales"]) / min(result["axis_scales"]) < 1.001
     fitted_min, fitted_max = _vertex_bounds(source)
     assert fitted_min[:2] == pytest.approx(reference.bb_min[:2])
     assert fitted_max[:2] == pytest.approx(reference.bb_max[:2])
-    assert fitted_min[2] > reference.bb_min[2]
-    assert fitted_max[2] > reference.bb_max[2]
-    assert fitted_max[2] >= high_wing_pivot_z - 1.0e-6
+    assert fitted_min[2] == pytest.approx(reference.bb_min[2])
+    assert fitted_max[2] == pytest.approx(reference.bb_max[2])
+
+
+def test_same_resref_anchor_padding_scales_without_retranslating() -> None:
+    from src.core.characters.headless_body_workflow import (
+        _axis_scale_padding_to_contain_points,
+        _axis_scaled_matrix,
+        _mat_vec,
+        _transform_bounds,
+        _vec_add,
+    )
+
+    bounds = ((-1.0, -0.5, -1.0), (1.0, 0.5, 1.0))
+    rotation = (
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+    )
+    axis_scales = (2.0, 2.0, 2.0)
+    offset = (0.0, 0.0, 0.0)
+    target_points = [(0.0, -1.06, 0.0), (0.0, 1.06, 0.0)]
+
+    result = _axis_scale_padding_to_contain_points(
+        bounds=bounds,
+        rotation_matrix=rotation,
+        axis_scales=axis_scales,
+        offset=offset,
+        target_points=target_points,
+    )
+
+    assert result is not None
+    assert result["adjusted_axes"] == ["y"]
+    assert result["offset"] == pytest.approx(offset)
+    assert result["axis_scales"][1] > axis_scales[1]
+    padded_matrix = result["linear_matrix"]
+
+    def transform_point(point):
+        return _vec_add(_mat_vec(padded_matrix, point), result["offset"])
+
+    fitted_min, fitted_max = _transform_bounds(bounds, transform_point)
+    assert fitted_min[1] <= target_points[0][1]
+    assert fitted_max[1] >= target_points[1][1]
 
 
 def test_creature_mode_obj_fit_uses_flat_bounds_not_humanoid_height() -> None:

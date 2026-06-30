@@ -11,6 +11,52 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-30
 
+### [2026-06-30] Restore Drexl Surface-Registration Auto-Fit
+
+Owner: LordVaderCW
+T###: T2505
+Subsystem: Character Builder creature auto-fit / containment fit
+Intersects: Prior Drexl containment and skinning fixes on `qt-ghostrigger`.
+
+Summary: Reworked the same-resref creature replacement fit so a re-UV'd
+native creature mesh is staged by native surface registration first, then
+checked against donor deformation anchors. The prior containment pass could
+translate the mesh to satisfy raw skeleton/AABB tests while making the visible
+surface match worse. The new path keeps the signed axis frame, refines
+per-axis scale and translation with trimmed nearest-surface correspondences,
+then applies only a bounded center-preserving axis pad for skin-weighted donor
+anchors. For `C_DrexlF_UV.obj` against K2 `c_drexlf`, the workflow now reports
+`native_template_scaled_bounds_replacement`, surface refinement, and all
+weighted deformation anchors inside the fitted mesh.
+
+Affected files:
+- `native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`
+- `native/GhostRigger.Core.Workflow/GhostRiggerPythonPayload.json`
+- `tests/test_retarget_external_import.py`
+
+Verification:
+- MCP `compare_model_pipelines(k2, c_drexlf)` matched PyKotor and
+  GhostRigger: 65 nodes, 60 mesh nodes, 7 skin nodes, and the expected
+  `cwalk`, `cpause1`, `pause2`, and `default` animations.
+- Real Drexl OBJ probe loaded
+  `C:\Users\NewAdmin\Documents\KotorMods\HighFidelityKotorCharacters\Drexl\C_DrexlF_UV.obj`
+  against K2 `c_drexlf` and returned
+  `fit_policy=native_template_scaled_bounds_replacement`,
+  `orientation_score_basis=native_vertex_cloud_iterative_surface`,
+  `surface_registration_refined=True`, `surface_registration_iterations=8`,
+  `all_bones_inside=True`, `outside_count=0`, and
+  `bone_position_source=skin_weighted_vertex_centroids`.
+- `python -m py_compile native\GhostRigger.Core.Workflow\Python\src\core\characters\headless_body_workflow.py tests\test_retarget_external_import.py`
+- `python -m pytest tests\test_retarget_external_import.py::test_unit_scale_same_resref_creature_replacement_uses_native_bounds tests\test_retarget_external_import.py::test_same_resref_creature_replacement_uses_native_cloud_to_choose_orientation tests\test_retarget_external_import.py::test_same_resref_anchor_padding_scales_without_retranslating tests\test_retarget_external_import.py::test_creature_containment_fit_uses_skin_bone_map_and_open_mesh_axis_seed -q`
+  returned 4 passed.
+- `python -m pytest tests\test_native_python_payloads.py -k "Workflow or manifest" -q`
+  returned 3 passed.
+- `python -m pytest tests\test_character_builder_template_rig.py -q`
+  returned 20 passed.
+- Built `native\GhostRigger.Native.Core.Host\GhostRigger.Native.Core.Host.vcxproj`
+  in `Debug|x64`; MSBuild produced the native host and refreshed the root
+  `GhostRigger.exe`.
+
 ### [2026-06-30] Align Drexl Auto-Fit To Visible Template Skeleton
 
 Owner: LordVaderCW
