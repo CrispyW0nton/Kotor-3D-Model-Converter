@@ -124,6 +124,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
     skeletonTemplateSelected  = QtCore.Signal(str)        # (option_key,)
     browseSkeletonTemplateRequested = QtCore.Signal()
     applySkeletonTemplateRequested = QtCore.Signal()
+    splitMeshNodesRequested = QtCore.Signal()
     # M5 / T504 — Hand-rig step.
     placeHandGuidesRequested  = QtCore.Signal()
     handMaskChanged           = QtCore.Signal(str, bool)  # (bone, masked?)
@@ -171,6 +172,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
         # M12 / T1202 — AccuRig-style skeleton picker on the body-rig HUD.
         self._skeleton_template_combo: Optional[QtWidgets.QComboBox] = None
         self._skeleton_template_status: Optional[QtWidgets.QLabel] = None
+        self._node_splitter_status: Optional[QtWidgets.QLabel] = None
         self._skeleton_template_status_labels: List[QtWidgets.QLabel] = []
         self._skeleton_template_completer: Optional[QtWidgets.QCompleter] = None
         self._apply_skeleton_template_btn: Optional[QtWidgets.QPushButton] = None
@@ -483,6 +485,23 @@ class QtInspectorPanel(QtWidgets.QWidget):
             self.applySkeletonTemplateRequested.emit
         )
         build_layout.addWidget(self._apply_skeleton_template_btn)
+
+        self._split_mesh_nodes_btn = QtWidgets.QPushButton("Node Splitter")
+        self._split_mesh_nodes_btn.setToolTip(
+            "Split the imported mesh into connected render nodes before building the KOTOR skeleton."
+        )
+        self._split_mesh_nodes_btn.clicked.connect(self.splitMeshNodesRequested.emit)
+        build_layout.addWidget(self._split_mesh_nodes_btn)
+
+        splitter_status = QtWidgets.QLabel(
+            "Optional: split disconnected mesh islands before binding."
+        )
+        splitter_status.setStyleSheet(
+            f"color:{C.get('text2', '#888')}; font-size:8pt;"
+        )
+        splitter_status.setWordWrap(True)
+        self._node_splitter_status = splitter_status
+        build_layout.addWidget(splitter_status)
 
         build_status = QtWidgets.QLabel(
             "No skeleton has been built for this mesh yet."
@@ -1089,6 +1108,21 @@ class QtInspectorPanel(QtWidgets.QWidget):
                 "No skeleton templates found for this game/mode.",
                 kind="warning",
             )
+
+    def set_node_splitter_status(self, message: str, *, kind: str = "info") -> None:
+        """Update the Step 2 Node Splitter result label."""
+
+        label = getattr(self, "_node_splitter_status", None)
+        if label is None:
+            return
+        colour = {
+            "ok": C.get("green", "#00ff66"),
+            "warning": C.get("yellow", "#ffcc33"),
+            "error": C.get("red", "#ff3366"),
+            "info": C.get("text2", "#888"),
+        }.get(str(kind or "info").lower(), C.get("text2", "#888"))
+        label.setText(str(message or ""))
+        label.setStyleSheet(f"color:{colour}; font-size:8pt;")
 
     def selected_skeleton_template_key(self) -> str:
         combo = getattr(self, "_skeleton_template_combo", None)

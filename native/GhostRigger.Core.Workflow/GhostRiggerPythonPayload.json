@@ -345,7 +345,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_BUILDER",
             "source_path": "src/core/characters/character_builder.py",
             "packaged_path": "Python/src/core/characters/character_builder.py",
-            "sha256": "2995c448009b8b1f9b96c9ad824f8276f493b0c0cf151e3ce013ab951b7a9674"
+            "sha256": "fa966339984d23edbf668a26b73cf6eae292b52959dc00b128d10c57527e2168"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_EXPORT_PREFLIGHT",
@@ -399,7 +399,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEADLESS_BODY_WORKFLOW",
             "source_path": "src/core/characters/headless_body_workflow.py",
             "packaged_path": "Python/src/core/characters/headless_body_workflow.py",
-            "sha256": "c57b8da33b8714efad9f8bdcae654f9a3f6e4083df2b681c4d628df5bbac8b4e"
+            "sha256": "0fd49cf60597d0d3f0ecfac15bcfa9fd239a8e11e020a8e092d4c11140ed6328"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_KOTOR_CONSTANTS",

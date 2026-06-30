@@ -9,6 +9,51 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-06-30
+
+### [2026-06-30] Restore Drexl Containment Fit And Node Splitter
+
+Owner: LordVaderCW
+T###: N/A
+Subsystem: Character Builder creature auto-fit / Step 2 skeleton tools / FBX preview import
+
+Summary: Restored containment as the final authority for Drexl same-resref
+creature imports. The native vertex-cloud match can still seed orientation, but
+it no longer overrides the fit when deformation bones remain outside the
+imported character shell. `C_DrexlF_UV.obj` now stages against the selected K2
+`c_drexlf` base with all 54 deformation bones contained. Step 2 now also exposes
+an explicit Node Splitter action that safely separates unskinned imported mesh
+islands before binding without exploding UV seams into fake parts. The FBX
+preview import path still prefers the stable Blender 4.2 executable and factory
+startup so Blender 5.0 user add-ons/importer light bugs do not prevent files
+such as `RancorTamedConceptFinal.fbx` from loading.
+
+Affected files:
+- `native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/qt_character_builder_panel.py`
+- `native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/qt_inspector_panel.py`
+- `native/GhostRigger.Core.Tools/Python/src/gui/panels/qt_character_builder_panel.py`
+- `native/GhostRigger.Core.Tools/Python/src/gui/panels/qt_inspector_panel.py`
+- `native/GhostRigger.Core.IO/Python/src/converters/blender_fbx_mesh_importer.py`
+
+Verification:
+- `python -m py_compile native\GhostRigger.Core.Workflow\Python\src\core\characters\headless_body_workflow.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\qt_character_builder_panel.py native\GhostRigger.Core.Tools\Python\src\gui\panels\qt_character_builder_panel.py native\GhostRigger.Core.GUI.Display\Python\src\gui\panels\qt_inspector_panel.py native\GhostRigger.Core.Tools\Python\src\gui\panels\qt_inspector_panel.py`
+- Real Drexl probe loaded `C_DrexlF_UV.obj` with vanilla K2 `c_drexlf` and
+  returned `fit_policy=containment_bone_inside_mesh`,
+  `scale_basis=oriented_bounds_reference_anchor_expand`,
+  `source_forward_axis=+x`, `source_up_axis=+y`, 54 hard containment bones,
+  0 soft containment bones, and `outside_count=0`.
+- Real Drexl Node Splitter probe kept the OBJ as one welded character shell
+  after accounting for duplicate UV-seam vertices instead of splitting it into
+  hundreds of one-face fragments.
+- Headless Rancor FBX probe loaded `RancorTamedConceptFinal.fbx` through
+  Blender 4.2 and returned a 14,349-vertex preview mesh instead of the Blender
+  5.0 light-import crash.
+- `python -m pytest tests/test_retarget_external_import.py -k "same_resref or creature_containment or blender_fbx"` returned 7 passed.
+- `python -m pytest tests/test_character_builder_template_rig.py` returned 20 passed, preserving the recent rig/node splitting and wing-helper refinement behavior.
+- `python -m pytest tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested` returned 1 passed after regenerating Workflow, GUI Display, Tools, and IO payload manifests.
+- Rebuilt root `GhostRigger.exe` through `native/GhostRigger.Native.Core.Host.vcxproj` in Debug x64.
+
 ## 2026-06-29
 
 ### [2026-06-29] Drexl Native Wing Bone Weight Refinement

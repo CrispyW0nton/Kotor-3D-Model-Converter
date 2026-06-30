@@ -1060,6 +1060,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if hasattr(self.inspector, "applySkeletonTemplateRequested"):
             self.inspector.applySkeletonTemplateRequested.connect(
                 self._on_apply_skeleton_template_requested)
+        if hasattr(self.inspector, "splitMeshNodesRequested"):
+            self.inspector.splitMeshNodesRequested.connect(
+                self._on_split_mesh_nodes_requested)
         # M5 / T504 — hand-rig action buttons.
         if hasattr(self.inspector, "placeHandGuidesRequested"):
             self.inspector.placeHandGuidesRequested.connect(
@@ -2867,6 +2870,47 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self.statusBar().showMessage(message, 6000)
         self._update_title()
         self._schedule_live_validation("skeleton_template_applied")
+
+    @QtCore.Slot()
+    def _on_split_mesh_nodes_requested(self) -> None:
+        """Split imported mesh islands before binding the KOTOR skeleton."""
+
+        _wf = self._workflow_module()
+        result = _wf.split_imported_mesh_nodes(self.scene)
+        message = str(result.get("message") or "Node Splitter finished.")
+        ok = bool(result.get("ok"))
+        kind = "ok" if ok and int(result.get("split_nodes", 0) or 0) else "info"
+        if not ok:
+            kind = "error"
+        if hasattr(self.inspector, "set_node_splitter_status"):
+            self.inspector.set_node_splitter_status(message, kind=kind)
+        if hasattr(self.inspector, "set_skeleton_template_status") and ok:
+            self.inspector.set_skeleton_template_status(message, kind=kind)
+        try:
+            from core.geometry import model_data as _md
+        except ImportError:                                 # pragma: no cover
+            from src.core.geometry import model_data as _md  # type: ignore
+        entry = self.scene.get(_md.PartSlot.HEADLESS_BODY)
+        model = getattr(entry, "model", None) if entry is not None else None
+        source_path = getattr(entry, "source_path", "") if entry is not None else ""
+        viewport = getattr(self, "viewport", None)
+        if model is not None and viewport is not None and hasattr(viewport, "load_model"):
+            try:
+                self._load_model_in_viewport_with_textures(
+                    model,
+                    source_path=source_path,
+                    prompt=False,
+                )
+            except Exception:                               # pragma: no cover
+                log.exception("Failed to refresh viewport after node split")
+        if hasattr(self, "bottom_strip"):
+            self.bottom_strip.set_validation(
+                "info" if ok else "error",
+                "NODE_SPLITTER",
+                issues=[message],
+            )
+        self.statusBar().showMessage(message, 6000)
+        self._schedule_live_validation("node_splitter")
 
     @QtCore.Slot()
     def _on_validate_requested(self) -> None:

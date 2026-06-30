@@ -36,6 +36,21 @@ REPO_ROOT = _repo_root_for_blender_script()
 BLENDER_MESH_SCRIPT = REPO_ROOT / "scripts" / "blender_extract_fbx_mesh.py"
 
 
+def _stable_blender_for_fbx_import(explicit: str | Path | None = None) -> Path:
+    """Resolve Blender for FBX preview import, preferring the stable 4.2 importer."""
+
+    if explicit:
+        return find_blender_executable(explicit)
+    env = os.environ.get("GHOSTRIGGER_BLENDER_PATH")
+    if env:
+        return find_blender_executable(env)
+    program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+    preferred = Path(program_files) / "Blender Foundation" / "Blender 4.2" / "blender.exe"
+    if preferred.exists():
+        return preferred
+    return find_blender_executable(None)
+
+
 class BlenderFbxMeshImportError(RuntimeError):
     """Raised when Blender cannot produce preview mesh data from an FBX file."""
 
@@ -59,13 +74,14 @@ def import_fbx_mesh_with_blender(
         raise BlenderFbxMeshImportError(f"Blender mesh extraction script not found: {BLENDER_MESH_SCRIPT}")
 
     try:
-        blender = find_blender_executable(blender_executable)
+        blender = _stable_blender_for_fbx_import(blender_executable)
     except FBXExportFailure as exc:
         raise BlenderFbxMeshImportError(str(exc)) from exc
 
     output_json = _output_json_path(source)
     cmd = [
         str(blender),
+        "--factory-startup",
         "--background",
         "--python",
         str(BLENDER_MESH_SCRIPT),

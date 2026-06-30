@@ -936,6 +936,138 @@ def _replacement_axis_fit_seed(
     return best
 
 
+def _uniform_creature_bounds_fit_from_axis_seed(
+    bounds: Tuple[Vec3, Vec3],
+    reference_bounds: Tuple[Vec3, Vec3],
+    seed: Dict[str, Any],
+    *,
+    method: str = "creature_bounds_axis_candidates",
+) -> Optional[Dict[str, Any]]:
+    """Build a uniform creature fit from an already-scored axis frame."""
+
+    bb_min, bb_max = bounds
+    ref_min, ref_max = reference_bounds
+    try:
+        source_extents = tuple(float(value) for value in seed["source_extents"])
+        target_extents = tuple(float(value) for value in seed["target_extents"])
+        source_axes = (
+            int(seed["source_right_axis"]),
+            int(seed["source_forward_axis"]),
+            int(seed["source_up_axis"]),
+        )
+        rotation: Tuple[Vec3, Vec3, Vec3] = seed["rotation_matrix"]
+    except Exception:
+        return None
+    if len(source_extents) != 3 or len(target_extents) != 3:
+        return None
+    try:
+        ratios = tuple(
+            float(target_extents[target_axis]) / float(source_extents[source_axis])
+            for target_axis, source_axis in enumerate(source_axes)
+        )
+    except Exception:
+        return None
+    if any((not math.isfinite(value)) or value <= 1.0e-8 for value in ratios):
+        return None
+
+    scale = _median_positive(ratios)
+    linear_matrix = _scale_matrix(rotation, scale)
+
+    def transform_without_offset(point: Vec3) -> Vec3:
+        return _mat_vec(linear_matrix, point)
+
+    mapped_bounds = _transform_bounds(bounds, transform_without_offset)
+    if mapped_bounds is None:
+        return None
+    mapped_min, mapped_max = mapped_bounds
+    mapped_center_x = (mapped_min[0] + mapped_max[0]) * 0.5
+    mapped_center_y = (mapped_min[1] + mapped_max[1]) * 0.5
+    target_center_x = (float(ref_min[0]) + float(ref_max[0])) * 0.5
+    target_center_y = (float(ref_min[1]) + float(ref_max[1])) * 0.5
+    offset = (
+        target_center_x - mapped_center_x,
+        target_center_y - mapped_center_y,
+        float(ref_min[2]) - float(mapped_min[2]),
+    )
+    source_origin = _bounds_ground_center(bounds)
+    target_origin = _vec_add(_mat_vec(linear_matrix, source_origin), offset)
+    fit_transform = _fit_transform_metadata(
+        policy="creature_bounds_basis",
+        scale=scale,
+        rotation_matrix=rotation,
+        source_origin=source_origin,
+        target_origin=target_origin,
+        translation=offset,
+    )
+    return {
+        "scale": float(scale),
+        "rotation_matrix": rotation,
+        "linear_matrix": linear_matrix,
+        "offset": offset,
+        "source_origin": source_origin,
+        "target_origin": target_origin,
+        "fit_transform": fit_transform,
+        "source_up_axis": source_axes[2],
+        "source_forward_axis": source_axes[1],
+        "source_right_axis": source_axes[0],
+        "source_up_label": str(seed.get("source_up_label") or _axis_label_from_index(source_axes[2])),
+        "source_forward_label": str(seed.get("source_forward_label") or _axis_label_from_index(source_axes[1])),
+        "target_up_label": str(seed.get("target_up_label") or "+z"),
+        "target_forward_label": str(seed.get("target_forward_label") or "+y"),
+        "source_height": source_extents[source_axes[2]],
+        "target_height": target_extents[2],
+        "scale_ratios": ratios,
+        "source_extents": source_extents,
+        "target_extents": target_extents,
+        "axis_scales": [float(value) for value in seed.get("axis_scales", ratios)],
+        "axis_fit_distortion": float(seed.get("distortion", _axis_fit_distortion(ratios))),
+        "orientation_score_basis": str(seed.get("score_basis") or "bounds_extent_distortion"),
+        "native_vertex_cloud_score": seed.get("native_vertex_cloud_score"),
+        "method": method,
+    }
+
+
+def _creature_containment_orientation_seed(
+    model: Any,
+    bounds: Optional[Tuple[Vec3, Vec3]],
+    reference_model: Optional[Any],
+    reference_bounds: Optional[Tuple[Vec3, Vec3]],
+) -> Optional[Dict[str, Any]]:
+    """Choose an open-creature orientation seed before containment staging."""
+
+    if bounds is None or reference_bounds is None:
+        return _creature_bounds_fit_solution(bounds, reference_bounds)
+    metadata = getattr(model, "metadata", None)
+    metadata = metadata if isinstance(metadata, dict) else {}
+    external = metadata.get("external_import")
+    external = external if isinstance(external, dict) else {}
+    reference_name = str(getattr(reference_model, "name", "") or "")
+    source_path = str(external.get("source_path") or "")
+    same_resref = _replacement_source_matches_resref(source_path, reference_name)
+    if same_resref:
+        seed = _replacement_axis_fit_seed(
+            bounds,
+            reference_bounds,
+            prefer_identity=external.get("target_axis_system") == "kotor_z_up",
+            source_vertices=_mesh_vertex_cloud(model),
+            reference_vertices=_mesh_vertex_cloud(reference_model),
+        )
+        if seed is not None:
+            fitted = _uniform_creature_bounds_fit_from_axis_seed(
+                bounds,
+                reference_bounds,
+                seed,
+                method=(
+                    "native_vertex_cloud_containment_seed"
+                    if str(seed.get("score_basis") or "") == "native_vertex_cloud_chamfer"
+                    else "same_resref_axis_candidate_seed"
+                ),
+            )
+            if fitted is not None:
+                return fitted
+    return _creature_bounds_fit_solution(bounds, reference_bounds)
+
+
 def _fit_transform_metadata_from_matrix(
     *,
     policy: str,
@@ -1298,12 +1430,44 @@ def _bounds_contains_points(
     return outside == 0, outside
 
 
+def _split_reference_containment_bones(
+    deformation_bones: Sequence[Tuple[str, Vec3]],
+    reference_bounds: Optional[Tuple[Vec3, Vec3]],
+    *,
+    tolerance: float = 0.02,
+) -> Tuple[List[Tuple[str, Vec3]], List[Tuple[str, Vec3]]]:
+    """Split donor bones into hard fit drivers and soft reported outliers."""
+
+    if reference_bounds is None:
+        return list(deformation_bones), []
+    bb_min, bb_max = reference_bounds
+    hard: List[Tuple[str, Vec3]] = []
+    soft: List[Tuple[str, Vec3]] = []
+    for name, point in deformation_bones:
+        try:
+            pos = (float(point[0]), float(point[1]), float(point[2]))
+        except Exception:
+            soft.append((str(name), point))
+            continue
+        inside = True
+        for axis in range(3):
+            if pos[axis] < float(bb_min[axis]) - tolerance or pos[axis] > float(bb_max[axis]) + tolerance:
+                inside = False
+                break
+        if inside:
+            hard.append((str(name), pos))
+        else:
+            soft.append((str(name), pos))
+    return hard, soft
+
+
 def _oriented_bounds_containment_solution(
     *,
     mesh_vertices: Any,
     bounds: Tuple[Vec3, Vec3],
     reference_bounds: Optional[Tuple[Vec3, Vec3]],
     bone_positions: Sequence[Vec3],
+    report_bone_positions: Optional[Sequence[Vec3]] = None,
     orientation_seed: Optional[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
     """Fit an open mesh by rotated bounds when surface volume is invalid."""
@@ -1324,6 +1488,10 @@ def _oriented_bounds_containment_solution(
         (float(point[0]), float(point[1]), float(point[2]))
         for point in bone_positions
     ]
+    report_bone_list = [
+        (float(point[0]), float(point[1]), float(point[2]))
+        for point in (report_bone_positions or bone_positions)
+    ]
 
     def transform_point(point: Vec3) -> Vec3:
         return _vec_add(_mat_vec(linear_matrix, point), offset)
@@ -1332,10 +1500,11 @@ def _oriented_bounds_containment_solution(
     if mapped_bounds is None:
         return None
     all_inside, outside_count = _bounds_contains_points(mapped_bounds, bone_list)
+    total_inside, total_outside_count = _bounds_contains_points(mapped_bounds, report_bone_list)
     scale = float(seed["scale"])
     method = "oriented_bounds_reference_seed"
 
-    if not all_inside:
+    def bone_bbox_expand_fit():
         mesh_np = np.asarray(mesh_vertices, dtype=np.float64)
         rot_np = np.asarray(rotation, dtype=np.float64)
         rotated = (rot_np @ mesh_np.T).T
@@ -1348,19 +1517,114 @@ def _oriented_bounds_containment_solution(
         bone_max = bone_np.max(axis=0)
         bone_extent = np.maximum(bone_max - bone_min, 1.0e-9)
         bone_center = (bone_min + bone_max) * 0.5
-        scale = max(scale, float(np.max(bone_extent / mesh_extent)) * 1.02)
-        offset_arr = bone_center - mesh_center * scale
-        offset = (float(offset_arr[0]), float(offset_arr[1]), float(offset_arr[2]))
-        linear_matrix = _scale_matrix(rotation, scale)
+        candidate_scale = max(scale, float(np.max(bone_extent / mesh_extent)) * 1.02)
+        candidate_offset_arr = bone_center - mesh_center * candidate_scale
+        candidate_offset = (
+            float(candidate_offset_arr[0]),
+            float(candidate_offset_arr[1]),
+            float(candidate_offset_arr[2]),
+        )
+        candidate_linear = _scale_matrix(rotation, candidate_scale)
 
         def adjusted_transform(point: Vec3) -> Vec3:
-            return _vec_add(_mat_vec(linear_matrix, point), offset)
+            return _vec_add(_mat_vec(candidate_linear, point), candidate_offset)
 
-        mapped_bounds = _transform_bounds(bounds, adjusted_transform)
-        if mapped_bounds is None:
+        candidate_mapped = _transform_bounds(bounds, adjusted_transform)
+        if candidate_mapped is None:
             return None
-        all_inside, outside_count = _bounds_contains_points(mapped_bounds, bone_list)
-        method = "oriented_bounds_bone_bbox_expand"
+        candidate_inside, candidate_outside = _bounds_contains_points(candidate_mapped, bone_list)
+        return (
+            candidate_scale,
+            candidate_linear,
+            candidate_offset,
+            candidate_mapped,
+            candidate_inside,
+            candidate_outside,
+        )
+
+    if not all_inside:
+        if reference_bounds is not None:
+            ref_min, ref_max = reference_bounds
+
+            def anchored_fit(candidate_scale: float):
+                candidate_linear = _scale_matrix(rotation, candidate_scale)
+
+                def candidate_no_offset(point: Vec3) -> Vec3:
+                    return _mat_vec(candidate_linear, point)
+
+                candidate_bounds = _transform_bounds(bounds, candidate_no_offset)
+                if candidate_bounds is None:
+                    return None
+                candidate_min, candidate_max = candidate_bounds
+                candidate_offset = (
+                    ((float(ref_min[0]) + float(ref_max[0])) * 0.5)
+                    - ((candidate_min[0] + candidate_max[0]) * 0.5),
+                    ((float(ref_min[1]) + float(ref_max[1])) * 0.5)
+                    - ((candidate_min[1] + candidate_max[1]) * 0.5),
+                    float(ref_min[2]) - float(candidate_min[2]),
+                )
+
+                def candidate_transform(point: Vec3) -> Vec3:
+                    return _vec_add(_mat_vec(candidate_linear, point), candidate_offset)
+
+                candidate_mapped = _transform_bounds(bounds, candidate_transform)
+                if candidate_mapped is None:
+                    return None
+                candidate_inside, candidate_outside = _bounds_contains_points(
+                    candidate_mapped,
+                    bone_list,
+                )
+                return (
+                    candidate_scale,
+                    candidate_linear,
+                    candidate_offset,
+                    candidate_mapped,
+                    candidate_inside,
+                    candidate_outside,
+                )
+
+            max_scale = scale * 1.40
+            high = anchored_fit(max_scale)
+            for _ in range(8):
+                if high is None or bool(high[4]):
+                    break
+                max_scale *= 1.35
+                high = anchored_fit(max_scale)
+            if high is None:
+                return None
+            if bool(high[4]):
+                lo = scale
+                hi = max_scale
+                best = high
+                for _ in range(18):
+                    mid = (lo + hi) * 0.5
+                    candidate = anchored_fit(mid)
+                    if candidate is None:
+                        break
+                    if bool(candidate[4]):
+                        best = candidate
+                        hi = mid
+                    else:
+                        lo = mid
+                scale, linear_matrix, offset, mapped_bounds, all_inside, outside_count = best
+                method = "oriented_bounds_reference_anchor_expand"
+            else:
+                expanded = bone_bbox_expand_fit()
+                if expanded is None:
+                    return None
+                scale, linear_matrix, offset, mapped_bounds, all_inside, outside_count = expanded
+                method = "oriented_bounds_bone_bbox_expand"
+        else:
+            expanded = bone_bbox_expand_fit()
+            if expanded is None:
+                return None
+            scale, linear_matrix, offset, mapped_bounds, all_inside, outside_count = expanded
+            method = "oriented_bounds_bone_bbox_expand"
+
+        total_inside, total_outside_count = _bounds_contains_points(
+            mapped_bounds,
+            report_bone_list,
+        )
 
     source_origin = _bounds_ground_center(bounds)
     target_origin = _vec_add(_mat_vec(linear_matrix, source_origin), offset)
@@ -1382,6 +1646,8 @@ def _oriented_bounds_containment_solution(
         "fit_transform": fit_transform,
         "all_inside": bool(all_inside),
         "outside_count": int(outside_count),
+        "total_bones_inside": bool(total_inside),
+        "total_outside_count": int(total_outside_count),
         "max_penetration": 0.0,
         "method": method,
         "containment_volume": "oriented_bounds",
@@ -1594,6 +1860,14 @@ def _containment_based_fit_solution(
     mesh_arr = np.asarray(mesh_vertex_list, dtype=np.float64)
     closure = _mesh_face_closure_summary(mesh_face_list)
     reference_name = str(getattr(reference_model, "name", "") or "")
+    metadata = getattr(model, "metadata", None)
+    metadata = metadata if isinstance(metadata, dict) else {}
+    external = metadata.get("external_import")
+    external = external if isinstance(external, dict) else {}
+    same_resref_replacement = _replacement_source_matches_resref(
+        str(external.get("source_path") or ""),
+        reference_name,
+    )
     log.info(
         "CharacterBuilder containment fit: entered reference=%s vertices=%d faces=%d watertight=%s",
         reference_name,
@@ -1602,7 +1876,12 @@ def _containment_based_fit_solution(
         closure["watertight"],
     )
 
-    orientation_seed = _creature_bounds_fit_solution(bounds, reference_bounds)
+    orientation_seed = _creature_containment_orientation_seed(
+        model,
+        bounds,
+        reference_model,
+        reference_bounds,
+    )
     if orientation_seed is not None:
         rotation: Tuple[Vec3, Vec3, Vec3] = orientation_seed["rotation_matrix"]
     else:
@@ -1621,7 +1900,18 @@ def _containment_based_fit_solution(
             reference_name,
         )
         return None
-    bone_positions_list = [bp[1] for bp in deformation_bones]
+    if bool(closure["watertight"]) or same_resref_replacement:
+        containment_bones = list(deformation_bones)
+        soft_bones: List[Tuple[str, Vec3]] = []
+    else:
+        containment_bones, soft_bones = _split_reference_containment_bones(
+            deformation_bones,
+            reference_bounds,
+        )
+    if not containment_bones:
+        containment_bones = list(deformation_bones)
+        soft_bones = []
+    bone_positions_list = [bp[1] for bp in containment_bones]
     bone_positions = np.asarray(bone_positions_list, dtype=np.float64)
 
     if not bool(closure["watertight"]):
@@ -1630,6 +1920,7 @@ def _containment_based_fit_solution(
             bounds=bounds,
             reference_bounds=reference_bounds,
             bone_positions=bone_positions_list,
+            report_bone_positions=[bp[1] for bp in deformation_bones],
             orientation_seed=orientation_seed,
         )
         if open_mesh_fit is None:
@@ -1690,7 +1981,7 @@ def _containment_based_fit_solution(
         reference_name,
         fit_core["method"],
         float(fit_core["scale"]),
-        len(deformation_bones),
+        len(containment_bones),
         int(fit_core["outside_count"]),
         bone_source,
     )
@@ -1718,9 +2009,14 @@ def _containment_based_fit_solution(
         "mesh_nonmanifold_edge_count": int(closure["nonmanifold_edge_count"]),
         "bone_position_source": bone_source,
         "bone_count": len(bone_positions_list),
-        "deformation_bone_count": len(deformation_bones),
+        "deformation_bone_count": len(containment_bones),
+        "total_deformation_bone_count": len(deformation_bones),
+        "hard_containment_bone_count": len(containment_bones),
+        "soft_containment_bone_count": len(soft_bones),
+        "total_outside_count": int(fit_core["outside_count"]) + len(soft_bones),
         "dummy_bone_count": len(skipped_bones),
-        "deformation_bone_names": [bp[0] for bp in deformation_bones],
+        "deformation_bone_names": [bp[0] for bp in containment_bones],
+        "soft_containment_bone_names": [bp[0] for bp in soft_bones],
         "dummy_bone_names": skipped_bones,
         "source_up_label": str(fit_core.get("source_up_label") or (
             orientation_seed.get("source_up_label") if orientation_seed else "unknown"
@@ -1729,8 +2025,9 @@ def _containment_based_fit_solution(
             orientation_seed.get("source_forward_label") if orientation_seed else "unknown"
         )),
         "notes": (
-            f"Containment fit used {len(deformation_bones)} donor skin bone-map positions. "
-            f"Mesh watertight={bool(closure['watertight'])}; "
+            f"Containment fit used {len(containment_bones)} hard donor skin bone-map positions"
+            + (f" and reported {len(soft_bones)} native outlier bones. " if soft_bones else ". ")
+            + f"Mesh watertight={bool(closure['watertight'])}; "
             f"surface containment checked={bool(fit_core.get('surface_containment_checked', False))}; "
             f"method={fit_core['method']}."
         ),
@@ -3848,7 +4145,14 @@ def normalize_external_model_for_kotor(
             reference_label=reference_label or getattr(reference_model, "name", "") or "",
             fit_report=fit_report,
         )
-    if native_scaled_fit is not None:
+    native_scaled_fit_is_safe = (
+        native_scaled_fit is not None
+        and (
+            int(native_scaled_fit.get("deformation_bone_count", 0)) <= 0
+            or bool(native_scaled_fit.get("all_bones_inside", False))
+        )
+    )
+    if native_scaled_fit_is_safe:
         def transform_point(point: Vec3) -> Vec3:
             return _vec_add(
                 _mat_vec(native_scaled_fit["linear_matrix"], point),
@@ -3994,7 +4298,18 @@ def normalize_external_model_for_kotor(
                 "containment_guarantee": str(containment_fit.get("containment_guarantee") or ""),
                 "mesh_watertight": bool(containment_fit.get("mesh_watertight", False)),
                 "outside_count": int(containment_fit.get("outside_count", 0)),
+                "total_outside_count": int(
+                    containment_fit.get("total_outside_count", containment_fit.get("outside_count", 0))
+                ),
                 "deformation_bone_count": int(containment_fit.get("deformation_bone_count", 0)),
+                "total_deformation_bone_count": int(
+                    containment_fit.get("total_deformation_bone_count", containment_fit.get("deformation_bone_count", 0))
+                ),
+                "hard_containment_bone_count": int(
+                    containment_fit.get("hard_containment_bone_count", containment_fit.get("deformation_bone_count", 0))
+                ),
+                "soft_containment_bone_count": int(containment_fit.get("soft_containment_bone_count", 0)),
+                "soft_containment_bone_names": list(containment_fit.get("soft_containment_bone_names") or []),
                 "bone_position_source": str(containment_fit.get("bone_position_source") or ""),
             },
             "kotor_contract": {
@@ -4028,12 +4343,26 @@ def normalize_external_model_for_kotor(
             "scale_basis": str(containment_fit.get("method") or "containment_fit"),
             "all_bones_inside": containment_fit["all_inside"],
             "outside_count": containment_fit["outside_count"],
+            "total_outside_count": containment_fit.get(
+                "total_outside_count",
+                containment_fit["outside_count"],
+            ),
             "fit_method": containment_fit.get("method", ""),
             "containment_volume": containment_fit.get("containment_volume", ""),
             "surface_containment_checked": containment_fit.get("surface_containment_checked", False),
             "containment_guarantee": containment_fit.get("containment_guarantee", ""),
             "mesh_watertight": containment_fit.get("mesh_watertight", False),
             "deformation_bone_count": containment_fit.get("deformation_bone_count", 0),
+            "total_deformation_bone_count": containment_fit.get(
+                "total_deformation_bone_count",
+                containment_fit.get("deformation_bone_count", 0),
+            ),
+            "hard_containment_bone_count": containment_fit.get(
+                "hard_containment_bone_count",
+                containment_fit.get("deformation_bone_count", 0),
+            ),
+            "soft_containment_bone_count": containment_fit.get("soft_containment_bone_count", 0),
+            "soft_containment_bone_names": list(containment_fit.get("soft_containment_bone_names") or []),
             "bone_position_source": containment_fit.get("bone_position_source", ""),
             "fit_transform": containment_fit["fit_transform"],
             "fit_report": fit_report,
@@ -4759,6 +5088,263 @@ def _mark_external_import(model: Any, source_path: str) -> None:
     for node in list(getattr(model, "all_nodes", lambda: [])() or []):
         if getattr(node, "vertices", None) and getattr(node, "uvs", None):
             setattr(node, "_external_imported", True)
+
+
+def _connected_face_components(
+    faces: Sequence[Sequence[int]],
+    vertices: Sequence[Sequence[float]],
+) -> List[List[int]]:
+    """Return connected face islands, joined by welded vertex positions."""
+
+    def vertex_key(index: int) -> Tuple[int, int, int]:
+        try:
+            point = vertices[index]
+            return (
+                int(round(float(point[0]) * 100000.0)),
+                int(round(float(point[1]) * 100000.0)),
+                int(round(float(point[2]) * 100000.0)),
+            )
+        except Exception:
+            return (int(index), int(index), int(index))
+
+    vertex_to_faces: Dict[Tuple[int, int, int], List[int]] = {}
+    valid_faces: List[int] = []
+    for face_index, face in enumerate(faces or []):
+        if face is None or len(face) < 3:
+            continue
+        try:
+            indices = [int(value) for value in face[:3]]
+        except Exception:
+            continue
+        if len(set(indices)) < 3:
+            continue
+        valid_faces.append(face_index)
+        for vertex_index in indices:
+            vertex_to_faces.setdefault(vertex_key(vertex_index), []).append(face_index)
+
+    remaining = set(valid_faces)
+    components: List[List[int]] = []
+    while remaining:
+        start = remaining.pop()
+        component = [start]
+        stack = [start]
+        while stack:
+            current = stack.pop()
+            for vertex_index in faces[current][:3]:
+                for neighbor in vertex_to_faces.get(vertex_key(int(vertex_index)), []):
+                    if neighbor not in remaining:
+                        continue
+                    remaining.remove(neighbor)
+                    component.append(neighbor)
+                    stack.append(neighbor)
+        components.append(sorted(component))
+    return components
+
+
+def _split_mesh_node_by_components(node: Any) -> List[Any]:
+    """Split one unskinned render node into connected component nodes."""
+
+    faces = list(getattr(node, "faces", []) or [])
+    vertices = list(getattr(node, "vertices", []) or [])
+    if len(faces) < 2 or not vertices:
+        return []
+    if getattr(node, "skin_data", None) or getattr(node, "bone_map", None):
+        return []
+
+    components = _connected_face_components(faces, vertices)
+    if len(components) <= 1:
+        return []
+
+    split_nodes: List[Any] = []
+    base_name = str(getattr(node, "name", "") or "mesh").strip() or "mesh"
+    normals = list(getattr(node, "normals", []) or [])
+    tangents = list(getattr(node, "tangents", []) or [])
+    uvs = list(getattr(node, "uvs", []) or [])
+    face_uvs = list(getattr(node, "face_uvs", []) or [])
+    face_mats = list(getattr(node, "face_mats", []) or [])
+
+    for component_index, face_indices in enumerate(components, start=1):
+        vertex_map: Dict[int, int] = {}
+        uv_map: Dict[int, int] = {}
+        new_vertices: List[Tuple[float, float, float]] = []
+        new_normals: List[Tuple[float, float, float]] = []
+        new_tangents: List[Tuple[float, float, float]] = []
+        new_uvs: List[Tuple[float, float]] = []
+        new_faces: List[Tuple[int, int, int]] = []
+        new_face_uvs: List[Tuple[int, int, int]] = []
+        new_face_mats: List[int] = []
+
+        def map_vertex(old_index: int) -> int:
+            if old_index in vertex_map:
+                return vertex_map[old_index]
+            new_index = len(new_vertices)
+            vertex_map[old_index] = new_index
+            new_vertices.append(vertices[old_index])
+            if old_index < len(normals):
+                new_normals.append(normals[old_index])
+            if old_index < len(tangents):
+                new_tangents.append(tangents[old_index])
+            if not face_uvs and old_index < len(uvs):
+                new_uvs.append(uvs[old_index])
+            return new_index
+
+        def map_uv(old_index: int) -> int:
+            if old_index in uv_map:
+                return uv_map[old_index]
+            new_index = len(new_uvs)
+            uv_map[old_index] = new_index
+            new_uvs.append(uvs[old_index] if old_index < len(uvs) else (0.0, 0.0))
+            return new_index
+
+        for face_index in face_indices:
+            face = faces[face_index]
+            try:
+                mapped_face = tuple(map_vertex(int(value)) for value in face[:3])
+            except Exception:
+                continue
+            if len(set(mapped_face)) < 3:
+                continue
+            new_faces.append(mapped_face)  # type: ignore[arg-type]
+            if face_index < len(face_uvs):
+                fu = face_uvs[face_index]
+                try:
+                    new_face_uvs.append(tuple(map_uv(int(value)) for value in fu[:3]))  # type: ignore[arg-type]
+                except Exception:
+                    new_face_uvs.append((0, 0, 0))
+            if face_index < len(face_mats):
+                try:
+                    new_face_mats.append(int(face_mats[face_index]))
+                except Exception:
+                    new_face_mats.append(0)
+
+        if not new_faces:
+            continue
+        split_node = copy.deepcopy(node)
+        split_node.name = f"{base_name}_part{component_index:02d}"
+        split_node.parent = getattr(node, "parent", None)
+        split_node.children = []
+        split_node.vertices = new_vertices
+        split_node.normals = new_normals
+        split_node.tangents = new_tangents
+        split_node.uvs = new_uvs
+        split_node.face_uvs = new_face_uvs
+        split_node.faces = new_faces
+        split_node.face_mats = new_face_mats
+        split_node.skin_data = []
+        split_node.bone_map = []
+        setattr(split_node, "_external_imported", True)
+        setattr(split_node, "_gr_node_splitter_component", True)
+        try:
+            split_node.compute_bounds()
+        except Exception:
+            pass
+        split_nodes.append(split_node)
+    return split_nodes
+
+
+def split_imported_mesh_nodes(scene: Any) -> Dict[str, Any]:
+    """Split imported unskinned mesh nodes into connected render islands."""
+
+    md = _import_model_data()
+    entry = scene.get(md.PartSlot.HEADLESS_BODY) if scene is not None else None
+    model = getattr(entry, "model", None) if entry is not None else None
+    if model is None:
+        return {
+            "ok": False,
+            "code": "no_body_mesh",
+            "message": "Load a custom mesh before using Node Splitter.",
+            "split_nodes": 0,
+        }
+
+    candidates = [
+        node for node in _iter_model_nodes(model)
+        if getattr(node, "vertices", None) and getattr(node, "faces", None)
+    ]
+    split_source_count = 0
+    split_node_count = 0
+    skipped_skinned = 0
+    for node in list(candidates):
+        if getattr(node, "skin_data", None) or getattr(node, "bone_map", None):
+            skipped_skinned += 1
+            continue
+        parts = _split_mesh_node_by_components(node)
+        if not parts:
+            continue
+        split_source_count += 1
+        split_node_count += len(parts)
+        parent = getattr(node, "parent", None)
+        if parent is None and getattr(model, "root_node", None) is node:
+            existing_children = list(getattr(node, "children", []) or [])
+            for child in parts + existing_children:
+                child.parent = node
+            node.children = parts + existing_children
+            node.vertices = []
+            node.normals = []
+            node.tangents = []
+            node.uvs = []
+            node.face_uvs = []
+            node.faces = []
+            node.face_mats = []
+            node.skin_data = []
+            node.bone_map = []
+            node.name = f"{str(getattr(node, 'name', '') or 'mesh')}_parts"
+            try:
+                node.compute_bounds()
+            except Exception:
+                pass
+            continue
+        if parent is None:
+            continue
+        siblings = list(getattr(parent, "children", []) or [])
+        try:
+            index = siblings.index(node)
+        except ValueError:
+            index = len(siblings)
+        for part in parts:
+            part.parent = parent
+        parent.children = siblings[:index] + parts + siblings[index + 1:]
+
+    try:
+        model.compute_bounds()
+    except Exception:
+        bounds = _vertex_bounds(model)
+        if bounds is not None:
+            model.bb_min, model.bb_max = bounds
+    metadata = getattr(model, "metadata", None)
+    if not isinstance(metadata, dict):
+        metadata = {}
+        setattr(model, "metadata", metadata)
+    metadata["character_builder_node_splitter"] = {
+        "source_nodes_split": split_source_count,
+        "component_nodes_created": split_node_count,
+        "skipped_skinned_nodes": skipped_skinned,
+        "method": "connected_face_components",
+    }
+
+    if split_node_count:
+        message = (
+            f"Node Splitter separated {split_source_count} mesh node(s) into "
+            f"{split_node_count} connected render node(s)."
+        )
+        return {
+            "ok": True,
+            "code": "split",
+            "message": message,
+            "split_nodes": split_node_count,
+            "source_nodes": split_source_count,
+            "skipped_skinned_nodes": skipped_skinned,
+        }
+    message = "Node Splitter found no unskinned multi-island mesh nodes to split."
+    if skipped_skinned:
+        message += f" Skipped {skipped_skinned} already-skinned node(s)."
+    return {
+        "ok": True,
+        "code": "no_split_needed",
+        "message": message,
+        "split_nodes": 0,
+        "source_nodes": 0,
+        "skipped_skinned_nodes": skipped_skinned,
+    }
 
 
 def _load_utc(path: str, game_version: str) -> Optional[Any]:
