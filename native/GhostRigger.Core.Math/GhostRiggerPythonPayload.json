@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Math",
-    "file_count": 51,
+    "file_count": 52,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -213,7 +213,7 @@
             "resource_name": "PYTHON_PAYLOAD_MATH_CONTAINMENT_FIT",
             "source_path": "src/math/containment_fit.py",
             "packaged_path": "Python/src/math/containment_fit.py",
-            "sha256": "0b984cf4f62eb1094cf00db06d3db71c8237b76a9db1a4961c2addee28d8af74"
+            "sha256": "9b273e08cce2bb02e88b376298e5d1e048829a4774faa5cf5067fdfc81db11f9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_FRAME_MATH",
@@ -256,6 +256,12 @@
             "source_path": "src/math/viewcube_math.py",
             "packaged_path": "Python/src/math/viewcube_math.py",
             "sha256": "64b19ca3f3ef2a72c4daaa33cb877147dcf1b0883fda8530ae7a978eb5e46ad3"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_MATH_WINDING_NUMBER",
+            "source_path": "src/math/winding_number.py",
+            "packaged_path": "Python/src/math/winding_number.py",
+            "sha256": "f718d45ffed3d41eb3241b60f9063508f4224a3e7e56048405e59b1a3e20276a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_INIT",

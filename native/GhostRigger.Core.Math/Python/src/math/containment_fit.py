@@ -243,11 +243,20 @@ def fit_skeleton_inside_mesh(
     #
     # We want to find the minimum s such that all bones are inside.
 
-    # Use 3 ray directions to reduce degenerate cases
+    # Use 7 well-spread, non-axis-aligned ray directions to reduce
+    # degenerate coplanarity with triangle edges.  Axis-aligned rays are
+    # more likely to hit shared edges/faces edge-on; cube-vertex and face
+    # diagonals avoid this.  Majority vote requires >= 4 of 7.
+    _s = 1.0 / math.sqrt(3.0)       # cube-vertex diagonal (normalized)
+    _h = 1.0 / math.sqrt(2.0)       # face diagonal (normalized)
     ray_dirs = [
-        np.array([1.0, 0.0, 0.0]),
-        np.array([0.0, 1.0, 0.0]),
-        np.array([0.7071, 0.5, 0.5]),
+        np.array([ _s,  _s,  _s]),
+        np.array([ _s,  _s, -_s]),
+        np.array([ _s, -_s,  _s]),
+        np.array([-_s,  _s,  _s]),
+        np.array([0.0,  _h,  _h]),
+        np.array([ _h, 0.0,  _h]),
+        np.array([ _h,  _h, 0.0]),
     ]
 
     def check_containment(scale: float, translation: np.ndarray) -> tuple[bool, int, float]:
@@ -266,7 +275,7 @@ def fit_skeleton_inside_mesh(
             for d in ray_dirs:
                 if surface.is_point_inside(local_bone, d):
                     votes += 1
-            if votes >= 2:  # majority of 3 directions
+            if votes >= 4:  # majority of 7 directions
                 inside_count += 1
             else:
                 dist = surface.nearest_surface_distance(local_bone)

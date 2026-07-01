@@ -1,0 +1,628 @@
+{
+  "_meta": {
+    "captured": "2026-06-30",
+    "entry_point": "src.core.characters.headless_body_workflow.normalize_external_model_for_kotor",
+    "purpose": "Golden baseline for containment-v2 (winding_number/containment_fit). Diff future open-shell Drexl fits against this trace.",
+    "python": "3.14.0",
+    "source_test": "tests/test_retarget_external_import.py::test_creature_containment_fit_uses_skin_bone_map_and_open_mesh_axis_seed"
+  },
+  "fit_report": {
+    "auto_fit_report": {
+      "confidence": 0.84,
+      "fallback_used": false,
+      "ground_origin_basis": "donor_skin_bone_containment",
+      "height_source": "oriented_bounds_reference_seed",
+      "notes": "Containment fit used 5 hard donor skin bone-map positions. Mesh watertight=False; surface containment checked=False; method=oriented_bounds_reference_seed.",
+      "scale_factor": 8.831545043929028,
+      "source_forward_axis": "+z",
+      "source_up_axis": "+y",
+      "target_forward_axis": "+y",
+      "target_up_axis": "+z",
+      "used_landmarks": [
+        "source:mesh_surface_or_oriented_bounds",
+        "target:donor_skin_bone_map"
+      ]
+    },
+    "code": "containment_bone_inside_mesh",
+    "confidence": 0.84,
+    "containment_fit": {
+      "bone_position_source": "skin_bone_map",
+      "containment_guarantee": "oriented_bounds_only",
+      "containment_volume": "oriented_bounds",
+      "deformation_bone_count": 5,
+      "hard_containment_bone_count": 5,
+      "mesh_watertight": false,
+      "method": "oriented_bounds_reference_seed",
+      "outside_count": 0,
+      "soft_containment_bone_count": 0,
+      "soft_containment_bone_names": [],
+      "surface_containment_checked": false,
+      "total_deformation_bone_count": 5,
+      "total_outside_count": 0
+    },
+    "fallback_used": false,
+    "fit_policy": "containment_bone_inside_mesh",
+    "fit_transform": {
+      "coordinate_space": "source_model_to_kotor_world",
+      "formula": "kotor_point = linear_matrix * source_point + translation",
+      "linear_matrix": [
+        [
+          8.831545043929028,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -8.831545043929028
+        ],
+        [
+          0.0,
+          8.831545043929028,
+          0.0
+        ]
+      ],
+      "policy": "containment_bone_inside_mesh",
+      "rotation_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "scale": 8.831545043929028,
+      "source_origin": [
+        0.0,
+        0.0,
+        -0.5
+      ],
+      "target_origin": [
+        0.03634999999999966,
+        2.510422521964514,
+        1.8361999999999998
+      ],
+      "translation": [
+        0.03634999999999966,
+        -1.9053499999999999,
+        1.8361999999999998
+      ]
+    },
+    "fitted_visual_overlay": {
+      "coordinate_space": "kotor_world_after_fit",
+      "source": {
+        "axes": {},
+        "bounds": {
+          "max": [
+            4.079917056088124,
+            2.510422521964514,
+            2.763
+          ],
+          "min": [
+            -4.007217056088125,
+            -6.321122521964513,
+            0.9093999999999999
+          ]
+        },
+        "landmarks": [],
+        "origin": null
+      },
+      "target": {
+        "axes": {},
+        "bounds": {
+          "max": [
+            4.4521,
+            2.1383,
+            2.763
+          ],
+          "min": [
+            -4.3794,
+            -5.949,
+            0.9094
+          ]
+        },
+        "landmarks": [],
+        "origin": null
+      }
+    },
+    "ground_origin_basis": "donor_skin_bone_containment",
+    "height_source": "oriented_bounds_reference_seed",
+    "kotor_contract": {
+      "final_dag_source": "selected_kotor_base",
+      "imported_mesh_role": "payload_guest",
+      "native_skeleton_is_authority": true
+    },
+    "message": "External creature mesh fit inspected using donor deformation-bone containment.",
+    "notes": "Containment fit used 5 hard donor skin bone-map positions. Mesh watertight=False; surface containment checked=False; method=oriented_bounds_reference_seed.",
+    "ok": true,
+    "reference": "c_drexlf",
+    "reference_bounds": {
+      "max": [
+        4.4521,
+        2.1383,
+        2.763
+      ],
+      "min": [
+        -4.3794,
+        -5.949,
+        0.9094
+      ]
+    },
+    "scale": 8.831545043929028,
+    "scale_basis": "oriented_bounds_reference_seed",
+    "scale_factor": 8.831545043929028,
+    "source_bounds": {
+      "max": [
+        0.457855,
+        0.104942,
+        0.5
+      ],
+      "min": [
+        -0.457855,
+        -0.104942,
+        -0.5
+      ]
+    },
+    "source_forward_axis": "+z",
+    "source_frame": {
+      "landmark_sources": {
+        "creature_bounds": "render_bounds"
+      },
+      "landmarks": {
+        "creature_bounds": "source_render_bounds"
+      },
+      "origin": [
+        0.0,
+        0.0,
+        -0.5
+      ]
+    },
+    "source_height": 1.0,
+    "source_imported_armature": {
+      "armature_names": [],
+      "guide_joint_count": 0,
+      "scene_guide_joint_count": 0,
+      "source": "none"
+    },
+    "source_up_axis": "+y",
+    "target_forward_axis": "+y",
+    "target_frame": {
+      "landmark_sources": {
+        "creature_bounds": "render_bounds"
+      },
+      "landmarks": {
+        "creature_bounds": "selected_reference_bounds"
+      },
+      "origin": [
+        0.03634999999999966,
+        -1.9053499999999999,
+        0.9094
+      ]
+    },
+    "target_height": 1.8536,
+    "target_up_axis": "+z",
+    "used_landmarks": [
+      "source:mesh_surface_or_oriented_bounds",
+      "target:donor_skin_bone_map"
+    ],
+    "vertical_axis": "y",
+    "visual_overlay": {
+      "coordinate_space": "source_pre_fit_and_kotor_reference",
+      "source": {
+        "axes": {},
+        "bounds": {
+          "max": [
+            0.457855,
+            0.104942,
+            0.5
+          ],
+          "min": [
+            -0.457855,
+            -0.104942,
+            -0.5
+          ]
+        },
+        "landmarks": [],
+        "origin": null
+      },
+      "target": {
+        "axes": {},
+        "bounds": {
+          "max": [
+            4.4521,
+            2.1383,
+            2.763
+          ],
+          "min": [
+            -4.3794,
+            -5.949,
+            0.9094
+          ]
+        },
+        "landmarks": [],
+        "origin": null
+      }
+    },
+    "warnings": []
+  },
+  "result": {
+    "all_bones_inside": true,
+    "bone_position_source": "skin_bone_map",
+    "code": "normalized",
+    "containment_guarantee": "oriented_bounds_only",
+    "containment_volume": "oriented_bounds",
+    "deformation_bone_count": 5,
+    "fit_method": "oriented_bounds_reference_seed",
+    "fit_policy": "containment_bone_inside_mesh",
+    "fit_report": {
+      "auto_fit_report": {
+        "confidence": 0.84,
+        "fallback_used": false,
+        "ground_origin_basis": "donor_skin_bone_containment",
+        "height_source": "oriented_bounds_reference_seed",
+        "notes": "Containment fit used 5 hard donor skin bone-map positions. Mesh watertight=False; surface containment checked=False; method=oriented_bounds_reference_seed.",
+        "scale_factor": 8.831545043929028,
+        "source_forward_axis": "+z",
+        "source_up_axis": "+y",
+        "target_forward_axis": "+y",
+        "target_up_axis": "+z",
+        "used_landmarks": [
+          "source:mesh_surface_or_oriented_bounds",
+          "target:donor_skin_bone_map"
+        ]
+      },
+      "code": "containment_bone_inside_mesh",
+      "confidence": 0.84,
+      "containment_fit": {
+        "bone_position_source": "skin_bone_map",
+        "containment_guarantee": "oriented_bounds_only",
+        "containment_volume": "oriented_bounds",
+        "deformation_bone_count": 5,
+        "hard_containment_bone_count": 5,
+        "mesh_watertight": false,
+        "method": "oriented_bounds_reference_seed",
+        "outside_count": 0,
+        "soft_containment_bone_count": 0,
+        "soft_containment_bone_names": [],
+        "surface_containment_checked": false,
+        "total_deformation_bone_count": 5,
+        "total_outside_count": 0
+      },
+      "fallback_used": false,
+      "fit_policy": "containment_bone_inside_mesh",
+      "fit_transform": {
+        "coordinate_space": "source_model_to_kotor_world",
+        "formula": "kotor_point = linear_matrix * source_point + translation",
+        "linear_matrix": [
+          [
+            8.831545043929028,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            -8.831545043929028
+          ],
+          [
+            0.0,
+            8.831545043929028,
+            0.0
+          ]
+        ],
+        "policy": "containment_bone_inside_mesh",
+        "rotation_matrix": [
+          [
+            1.0,
+            0.0,
+            0.0
+          ],
+          [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          [
+            0.0,
+            1.0,
+            0.0
+          ]
+        ],
+        "scale": 8.831545043929028,
+        "source_origin": [
+          0.0,
+          0.0,
+          -0.5
+        ],
+        "target_origin": [
+          0.03634999999999966,
+          2.510422521964514,
+          1.8361999999999998
+        ],
+        "translation": [
+          0.03634999999999966,
+          -1.9053499999999999,
+          1.8361999999999998
+        ]
+      },
+      "fitted_visual_overlay": {
+        "coordinate_space": "kotor_world_after_fit",
+        "source": {
+          "axes": {},
+          "bounds": {
+            "max": [
+              4.079917056088124,
+              2.510422521964514,
+              2.763
+            ],
+            "min": [
+              -4.007217056088125,
+              -6.321122521964513,
+              0.9093999999999999
+            ]
+          },
+          "landmarks": [],
+          "origin": null
+        },
+        "target": {
+          "axes": {},
+          "bounds": {
+            "max": [
+              4.4521,
+              2.1383,
+              2.763
+            ],
+            "min": [
+              -4.3794,
+              -5.949,
+              0.9094
+            ]
+          },
+          "landmarks": [],
+          "origin": null
+        }
+      },
+      "ground_origin_basis": "donor_skin_bone_containment",
+      "height_source": "oriented_bounds_reference_seed",
+      "kotor_contract": {
+        "final_dag_source": "selected_kotor_base",
+        "imported_mesh_role": "payload_guest",
+        "native_skeleton_is_authority": true
+      },
+      "message": "External creature mesh fit inspected using donor deformation-bone containment.",
+      "notes": "Containment fit used 5 hard donor skin bone-map positions. Mesh watertight=False; surface containment checked=False; method=oriented_bounds_reference_seed.",
+      "ok": true,
+      "reference": "c_drexlf",
+      "reference_bounds": {
+        "max": [
+          4.4521,
+          2.1383,
+          2.763
+        ],
+        "min": [
+          -4.3794,
+          -5.949,
+          0.9094
+        ]
+      },
+      "scale": 8.831545043929028,
+      "scale_basis": "oriented_bounds_reference_seed",
+      "scale_factor": 8.831545043929028,
+      "source_bounds": {
+        "max": [
+          0.457855,
+          0.104942,
+          0.5
+        ],
+        "min": [
+          -0.457855,
+          -0.104942,
+          -0.5
+        ]
+      },
+      "source_forward_axis": "+z",
+      "source_frame": {
+        "landmark_sources": {
+          "creature_bounds": "render_bounds"
+        },
+        "landmarks": {
+          "creature_bounds": "source_render_bounds"
+        },
+        "origin": [
+          0.0,
+          0.0,
+          -0.5
+        ]
+      },
+      "source_height": 1.0,
+      "source_imported_armature": {
+        "armature_names": [],
+        "guide_joint_count": 0,
+        "scene_guide_joint_count": 0,
+        "source": "none"
+      },
+      "source_up_axis": "+y",
+      "target_forward_axis": "+y",
+      "target_frame": {
+        "landmark_sources": {
+          "creature_bounds": "render_bounds"
+        },
+        "landmarks": {
+          "creature_bounds": "selected_reference_bounds"
+        },
+        "origin": [
+          0.03634999999999966,
+          -1.9053499999999999,
+          0.9094
+        ]
+      },
+      "target_height": 1.8536,
+      "target_up_axis": "+z",
+      "used_landmarks": [
+        "source:mesh_surface_or_oriented_bounds",
+        "target:donor_skin_bone_map"
+      ],
+      "vertical_axis": "y",
+      "visual_overlay": {
+        "coordinate_space": "source_pre_fit_and_kotor_reference",
+        "source": {
+          "axes": {},
+          "bounds": {
+            "max": [
+              0.457855,
+              0.104942,
+              0.5
+            ],
+            "min": [
+              -0.457855,
+              -0.104942,
+              -0.5
+            ]
+          },
+          "landmarks": [],
+          "origin": null
+        },
+        "target": {
+          "axes": {},
+          "bounds": {
+            "max": [
+              4.4521,
+              2.1383,
+              2.763
+            ],
+            "min": [
+              -4.3794,
+              -5.949,
+              0.9094
+            ]
+          },
+          "landmarks": [],
+          "origin": null
+        }
+      },
+      "warnings": []
+    },
+    "fit_transform": {
+      "coordinate_space": "source_model_to_kotor_world",
+      "formula": "kotor_point = linear_matrix * source_point + translation",
+      "linear_matrix": [
+        [
+          8.831545043929028,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -8.831545043929028
+        ],
+        [
+          0.0,
+          8.831545043929028,
+          0.0
+        ]
+      ],
+      "policy": "containment_bone_inside_mesh",
+      "rotation_matrix": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ]
+      ],
+      "scale": 8.831545043929028,
+      "source_origin": [
+        0.0,
+        0.0,
+        -0.5
+      ],
+      "target_origin": [
+        0.03634999999999966,
+        2.510422521964514,
+        1.8361999999999998
+      ],
+      "translation": [
+        0.03634999999999966,
+        -1.9053499999999999,
+        1.8361999999999998
+      ]
+    },
+    "fitted_visual_overlay": {
+      "coordinate_space": "kotor_world_after_fit",
+      "source": {
+        "axes": {},
+        "bounds": {
+          "max": [
+            4.079917056088124,
+            2.510422521964514,
+            2.763
+          ],
+          "min": [
+            -4.007217056088125,
+            -6.321122521964513,
+            0.9093999999999999
+          ]
+        },
+        "landmarks": [],
+        "origin": null
+      },
+      "target": {
+        "axes": {},
+        "bounds": {
+          "max": [
+            4.4521,
+            2.1383,
+            2.763
+          ],
+          "min": [
+            -4.3794,
+            -5.949,
+            0.9094
+          ]
+        },
+        "landmarks": [],
+        "origin": null
+      }
+    },
+    "hard_containment_bone_count": 5,
+    "mesh_watertight": false,
+    "offset": [
+      0.03634999999999966,
+      -1.9053499999999999,
+      1.8361999999999998
+    ],
+    "ok": true,
+    "outside_count": 0,
+    "reference": "c_drexlf",
+    "scale": 8.831545043929028,
+    "scale_basis": "oriented_bounds_reference_seed",
+    "soft_containment_bone_count": 0,
+    "soft_containment_bone_names": [],
+    "source_height": 1.0,
+    "surface_containment_checked": false,
+    "target_height": 1.8536,
+    "total_deformation_bone_count": 5,
+    "total_outside_count": 0,
+    "trace_version": "ghostrigger.fit/v1",
+    "vertical_axis": "z"
+  }
+}

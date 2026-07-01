@@ -4679,6 +4679,7 @@ def normalize_external_model_for_kotor(
         result = {
             "ok": True,
             "code": "normalized",
+            "trace_version": "ghostrigger.fit/v1",
             "scale": float(native_scaled_fit["scale"]),
             "axis_scales": tuple(float(value) for value in native_scaled_fit["axis_scales"]),
             "axis_fit_distortion": float(native_scaled_fit.get("axis_fit_distortion", 0.0)),
@@ -4841,6 +4842,7 @@ def normalize_external_model_for_kotor(
         result = {
             "ok": True,
             "code": "normalized",
+            "trace_version": "ghostrigger.fit/v1",
             "scale": float(containment_fit["scale"]),
             "source_height": float(containment_fit["source_height"]),
             "target_height": float(containment_fit["target_height"]),

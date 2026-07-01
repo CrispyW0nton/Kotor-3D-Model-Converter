@@ -11,6 +11,94 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-30
 
+### [2026-06-30] Add Generalized-Winding-Number Containment Foundation (PR A)
+
+Owner: LordVaderCW
+T###: T2505
+Subsystem: Core Math containment primitives (containment-v2 foundation)
+Intersects: Upcoming containment-v2 rework of
+`native/GhostRigger.Core.Math/Python/src/math/containment_fit.py` and the
+open-shell fallback at `headless_body_workflow.py:1970`
+(`_oriented_bounds_containment_solution`).
+
+Summary: Added a new, additive-only foundation module
+`winding_number.py` providing a robust inside/outside oracle for open-shell
+creature meshes (Drexl, Rancor) that the current ray-parity test cannot handle.
+The module implements the Generalized Winding Number (Jacobson, Kavan &
+Sorkine-Hornung 2013) via the van Oosterom & Strackee (1983) closed-form signed
+solid angle, vectorized over query points with `np.einsum`; trimesh-backed
+signed distance (negated to an outside-positive convention) as a margin-only
+signal; normal-repair trust diagnostics; an Otsu-based adaptive winding
+threshold with unimodality detection; and an end-to-end `classify_points`
+convenience wrapper. No callers are wired up — this is purely the foundation for
+a future containment-v2 PR that will extend
+`fit_skeleton_inside_mesh` to use GWN as its inside-test oracle. Pure
+NumPy/SciPy/trimesh; no new native dependencies (RCDATA-embedded payload
+safe). Also records the pre-flight Drexl baseline artifacts captured for the
+upcoming PR B diff reference.
+
+Also swept in two previously-drafted, uncommitted working-tree changes that had
+landed in a prior session but never had their RCDATA payload manifest
+regenerated (confirmed single-author/owner work via `git log`, and already
+reflected in the captured baseline fixture): the 3->7 non-axis-aligned ray
+directions with a >=4/7 majority vote in `fit_skeleton_inside_mesh`
+(`containment_fit.py`) and the `trace_version: "ghostrigger.fit/v1"` result key
+in `normalize_external_model_for_kotor` (`headless_body_workflow.py`).
+Regenerated the `GhostRigger.Core.Math` and `GhostRigger.Core.Workflow` payload
+manifests so `winding_number.py` is registered and the pre-existing sha256 drift
+is cleared, leaving a clean tree for the upcoming containment-v2 PR.
+
+Affected files:
+- `native/GhostRigger.Core.Math/Python/src/math/winding_number.py` (new)
+- `tests/test_winding_number.py` (new)
+- `tests/fixtures/drexl_baseline_2026_06_30.json` (new; pre-flight Drexl golden
+  baseline trace — diff reference for containment-v2 PR B, not consumed by PR A)
+- `scripts/capture_drexl_baseline.py` (new; re-runnable capture for the above
+  fixture, reproducing the
+  `test_creature_containment_fit_uses_skin_bone_map_and_open_mesh_axis_seed`
+  fixture exactly)
+- `scripts/drexl_gwn_gate.py` (new; Layer-2 numerical-sanity gate that runs GWN
+  against the real `C_DrexlF_UV.obj` and the baseline anchors)
+- `native/GhostRigger.Core.Math/GhostRiggerPythonPayload.json`,
+  `native/GhostRigger.Core.Math/GhostRiggerPythonPayload.rc`,
+  `native/GhostRigger.Core.Math/GhostRigger.Core.Math.vcxproj`,
+  `native/GhostRigger.Core.Workflow/GhostRiggerPythonPayload.json`,
+  `native/GhostRigger.PythonPayloadManifest.json` (payload regeneration)
+- `native/GhostRigger.Core.Math/Python/src/math/containment_fit.py`,
+  `native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`
+  (previously-drafted items above; content unchanged by this step, only
+  re-manifested)
+
+Verification:
+- `python -m pytest tests/test_winding_number.py -v` returned 8 passed
+  (cube inside/outside GWN, degenerate zero-area faces produce no NaN, Otsu
+  valley near 0.498 on the bimodal cube sample, unimodal fallback on uniform
+  noise, normal-repair trust on a watertight icosphere vs rejection of triangle
+  soup, end-to-end open-shell icosphere-with-hole classification at 100/100
+  inside and outside correct, and the signed-distance sign convention).
+- Empirically measured Otsu separation scores to tune the unimodal cutoff
+  (`OTSU_UNIMODAL_SEPARATION = 6.0`): uniform noise 3.10, Gaussian 1.72 (both
+  unimodal), bimodal cube ∞ (bimodal, threshold 0.498).
+- Confirmed `containment_fit.py`, `headless_body_workflow.py`, and the captured
+  Drexl baseline fixture/script were not modified by this PR.
+- Pre-flight: the Drexl regression
+  `test_creature_containment_fit_uses_skin_bone_map_and_open_mesh_axis_seed`
+  and its watertight sibling both pass at HEAD; the captured baseline records
+  `fit_policy=containment_bone_inside_mesh`, `scale=8.83`,
+  `containment_guarantee=oriented_bounds_only`, `mesh_watertight=false`,
+  `outside_count=0`.
+- After payload regeneration,
+  `python -m pytest tests/test_native_python_payloads.py::test_python_payload_copies_are_byte_identical_and_manifested`
+  returned 1 passed (pre-existing Core.Math/Core.Workflow sha256 drift cleared).
+- Layer-2 GWN gate on the real `C_DrexlF_UV.obj` (2120 verts / 1526 faces, open
+  shell): deep-inside vertex-centroid GWN = 1.0000, far-outside GWN = 0.0, and a
+  crisply bimodal bbox-sample histogram (1975 near 0, 25 near 1, empty valley;
+  Otsu threshold 0.498, `unimodal=False`). GWN also correctly finds all 5
+  baseline deformation-bone anchors OUTSIDE the real open shell under today's
+  oriented-bounds transform (which reports `outside_count=0` against the
+  bounding box only) — quantifying the box-vs-shell gap that containment-v2
+  must close.
+
 ### [2026-06-30] Restore Drexl Surface-Registration Auto-Fit
 
 Owner: LordVaderCW

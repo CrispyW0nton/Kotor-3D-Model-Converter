@@ -394,7 +394,7 @@
     },
     {
         "project": "GhostRigger.Core.Math",
-        "python_file_count": 51,
+        "python_file_count": 52,
         "files": [
             "src\\core\\camera\\__init__.py",
             "src\\core\\camera\\arcball_camera.py",
@@ -438,6 +438,7 @@
             "src\\math\\module_layout_math.py",
             "src\\math\\transform_math.py",
             "src\\math\\viewcube_math.py",
+            "src\\math\\winding_number.py",
             "src\\measurement\\__init__.py",
             "src\\measurement\\angle_snap.py",
             "src\\measurement\\dimension_calculator.py",

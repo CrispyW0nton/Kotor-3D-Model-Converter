@@ -42,6 +42,7 @@ PYTHON_PAYLOAD_MATH_LANDMARK_ALIGNMENT RCDATA "Python/src/math/landmark_alignmen
 PYTHON_PAYLOAD_MATH_MODULE_LAYOUT_MATH RCDATA "Python/src/math/module_layout_math.py"
 PYTHON_PAYLOAD_MATH_TRANSFORM_MATH RCDATA "Python/src/math/transform_math.py"
 PYTHON_PAYLOAD_MATH_VIEWCUBE_MATH RCDATA "Python/src/math/viewcube_math.py"
+PYTHON_PAYLOAD_MATH_WINDING_NUMBER RCDATA "Python/src/math/winding_number.py"
 PYTHON_PAYLOAD_MEASUREMENT_INIT RCDATA "Python/src/measurement/__init__.py"
 PYTHON_PAYLOAD_MEASUREMENT_ANGLE_SNAP RCDATA "Python/src/measurement/angle_snap.py"
 PYTHON_PAYLOAD_MEASUREMENT_DIMENSION_CALCULATOR RCDATA "Python/src/measurement/dimension_calculator.py"
