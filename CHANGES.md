@@ -11,6 +11,114 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-30
 
+### [2026-06-30] Add GWN Shell-Containment Fit v2 (PR B)
+
+Owner: LordVaderCW
+T###: T2506
+Subsystem: Core Math containment optimizer (containment-v2)
+Intersects: Consumes the PR A foundation
+`native/GhostRigger.Core.Math/Python/src/math/winding_number.py`; a future PR
+(after PR C) will wire `fit_skeleton_inside_mesh_v2` into
+`headless_body_workflow._oriented_bounds_containment_solution` (untouched here).
+
+NOT WIRED / PR C IS A PREREQUISITE: v2 is additive only and is not wired into
+`normalize_external_model_for_kotor`'s dispatch ladder in this PR, so runtime
+behaviour is unchanged by default. The Drexl finding below shows that
+anatomically complex ("Drexl-class") creatures cannot be contained inside their
+shell by a single rigid transform at a sane scale; they require the anatomical
+node splitter (PR C) so each region's sub-skeleton is fit inside its own
+sub-mesh. v2 should only become the default containment policy once PR C makes
+that decomposition available — the balloon documented here is the reason PR C is
+load-bearing, not polish.
+
+Summary: Added `fit_skeleton_inside_mesh_v2` to `containment_fit.py` — an
+additive, gated v2 fit that uses the Generalized Winding Number as its
+authoritative inside/outside oracle (replacing v1's 7-ray parity test, which is
+only valid on closed surfaces) and signed distance as a margin-only signal. The
+algorithm: repair-normals trust preflight; margin calibration (default
+`target_margin=0.3` resolved relative to the shell diagonal so it scales across
+creatures); a multi-start rotation search (6 axis-aligned + 1 PCA/Kabsch
+landmark seed via `landmark_alignment` + 3 seeded random rotations, deduped to
+~5 deg); per-hypothesis uniform-scale binary search using the similarity
+invariance of GWN and signed distance (so the mesh is never rebuilt inside the
+inner loop); tightest-feasible hypothesis selection; a bounded per-axis
+escalation (clamped `[0.85, 1.30]`) that only commits if it strictly improves;
+and honest partial-fit reporting with `v2_unresolved_anchors` instead of a
+silent downgrade.
+
+Schema is extended, not replaced: `use_v2=False` returns v1 byte-identically;
+`use_v2=True` returns a v1-superset with a `containment_fit` sub-dict that keeps
+every existing (v1) key name/type and adds only `v2_`-prefixed optional fields
+(including per-bone positions, signed distances, GWN values, inside/margin
+masks — closing the CHECK-4 fragility where bone positions had to be
+reconstructed from donor knowledge). `trace_version` stays
+`"ghostrigger.fit/v1"`; new optional fields are additive and never a version
+bump.
+
+Margin calibration rationale: PR A's real-mesh gate measured all 5 Drexl
+deformation bones sitting 1.0-1.6 units OUTSIDE the shell under today's
+oriented-bounds transform (which reports `outside_count=0` against a bounding
+box, not the shell). The 0.3 target margin ensures bones sit in flesh rather
+than skinning the surface.
+
+FINDING (splitter-relevant): on the real `C_DrexlF_UV.obj`, v2 achieves true
+shell containment with margin for all 5 bones (GWN=1.0, signed distances
+-0.25..-1.81, all <= -0.15) — a genuine correctness win over the baseline — but
+only at scale ~87.2, ~10x the baseline ~8.83. Per-hypothesis analysis showed
+EVERY rotation needs scale ~80-200 to engulf the tail (`tail6_g`) and hand
+extremities, which lie outside the torso silhouette at body scale. This is
+direct evidence that the anatomical node splitter (PR C) is a prerequisite, not
+polish: a single rigid containment volume cannot fit Drexl's full deformation
+skeleton at a sane scale. The Drexl regression test
+(`test_v2_drexl_regression_documents_single_mesh_balloon`) encodes this balloon
+as a documented guard (`scale > 25`) that should be inverted once PR C provides
+per-region fitting.
+
+Caller-side hardening: v2 samples the mesh's own (unpadded) bbox for the Otsu
+threshold, matching `winding_number.classify_points`. A box that IS its own
+bbox yields an all-interior sample that trips
+`adaptive_winding_threshold`'s `np.histogram` ("Too many bins for data range");
+since `winding_number.py` is out of scope for this PR, the v2 caller catches
+that and falls back to `DEFAULT_WINDING_THRESHOLD`. (Padding the sample box was
+rejected: it collapses thin shells like Drexl to an all-exterior sample and a
+degenerate ~0 threshold.)
+
+Also aligned the stale payload-manifest file-count assertion in
+`tests/test_native_python_payloads.py` (1183 -> 1184): PR A added
+`winding_number.py` to the root manifest but left the hardcoded count behind, so
+the count test was red at HEAD. The manifest is the source of truth per AGENTS.
+
+Affected files:
+- `native/GhostRigger.Core.Math/Python/src/math/containment_fit.py`
+  (`fit_skeleton_inside_mesh_v2` + private helpers added; v1
+  `fit_skeleton_inside_mesh`/`_fallback_fit` untouched)
+- `tests/test_containment_fit_v2.py` (new; 7 tests)
+- `tests/test_native_python_payloads.py` (stale count 1183 -> 1184)
+- `.gitignore` (allow-list `!/tests/test_containment_fit_v2.py`)
+- `native/GhostRigger.Core.Math/GhostRiggerPythonPayload.json`,
+  `native/GhostRigger.PythonPayloadManifest.json` (payload sha regeneration for
+  the edited `containment_fit.py`)
+
+Verification:
+- `python -m pytest tests/test_containment_fit_v2.py -v` -> 7 passed
+  (v1 byte-identical passthrough under `use_v2=False`; real-Drexl converged with
+  margin; watertight-sphere converges; untrustworthy triangle-soup delegates to
+  v1 with reason; geometrically infeasible thin-slab returns honest partial_fit
+  with non-empty unresolved anchors; v1-compatible schema by prefix; trace
+  version unchanged).
+- `python -m pytest tests/test_native_python_payloads.py -q` -> 17 passed
+  (byte-identity + count aligned to the 1184-file manifest).
+- `python -m pytest tests/test_winding_number.py -q` -> 8 passed (PR A intact).
+- v2 gate on real `C_DrexlF_UV.obj`: status=converged, scale=87.17, threshold
+  0.498, per-bone signed distances pelvis -1.05, tail6 -0.31, Lhand -0.25,
+  Rhand -1.81, head -0.71 (all inside, all margin met), per-axis escalation not
+  fired.
+- Confirmed `headless_body_workflow.py`,
+  `_oriented_bounds_containment_solution`, the dispatch ladder,
+  `tests/fixtures/drexl_baseline_2026_06_30.json`,
+  `scripts/capture_drexl_baseline.py`, and `scripts/drexl_gwn_gate.py` were not
+  modified.
+
 ### [2026-06-30] Add Generalized-Winding-Number Containment Foundation (PR A)
 
 Owner: LordVaderCW

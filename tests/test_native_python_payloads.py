@@ -51,7 +51,7 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     }
 
     assert len(entries) == 18
-    assert len(payload_files) == 1183
+    assert len(payload_files) == 1184
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 
