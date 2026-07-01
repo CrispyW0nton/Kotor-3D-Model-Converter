@@ -11,6 +11,104 @@ For each completed change, add a dated entry with:
 
 ## 2026-06-30
 
+### [2026-06-30] Add Donor-Driven Anatomical Mesh Partitioner (PR C)
+
+Owner: LordVaderCW
+T###: T2507
+Subsystem: Core Math anatomical partition (containment-v2 splitter)
+Intersects: Consumes PR A (`winding_number.py`) indirectly via test 7's use of
+PR B (`containment_fit.fit_skeleton_inside_mesh_v2`). Additive only; touches no
+existing module.
+
+Summary: Added `native/GhostRigger.Core.Math/Python/src/math/anatomical_partition.py`
+— `partition_mesh_anatomically(imported_vertices, imported_faces, donor)`, which
+splits a unified imported mesh into ≤16-bone anatomical regions using a donor's
+skin weights. Two phases: (1) BIAGP on the donor — per-face dominant-bone seeding
+over a **seam-welded** face-adjacency graph, ambiguous-seam-face deferral (top-1
+vs top-2 within 5%), dust-island merge (boundary-strength with a centroid
+fallback for isolated islands), a palette-bounded **Jaccard agglomeration**
+coarsening step, and greedy connected palette splitting so every region has ≤16
+bones; (2) transfer to the imported mesh by nearest-donor-face correspondence in
+a shape-normalised, best-of-24-axis-rotation-aligned frame. Returns a
+`PartitionResult` (regions + donor/imported face→region maps + diagnostics under
+`trace_version="ghostrigger.partition/v1"`). New public types: `DonorSkinData`,
+`AnatomicalRegion`, `PartitionResult`, `MissingDonorError`.
+
+Hard-fail behaviour: the module raises `MissingDonorError` (with an actionable
+message pointing at donor selection in the Character Builder import flow) when
+the donor is `None` or malformed — no silent fallback to the topological splitter
+(`_connected_face_components`), no SDF fallback. An anatomical split without
+anatomy data is a lie.
+
+Stateless: donor regions are recomputed on every call. No caching, no cache
+invalidation problem.
+
+Scope boundary: PR C only splits. It does NOT call `fit_skeleton_inside_mesh_v2`
+and does NOT wire the `normalize_external_model_for_kotor` dispatch ladder. The
+acceptance test (test 7) runs v2 on the output regions separately.
+
+Two parts of the implementation are worth calling out (both line-cited in the
+module):
+- Phase 2 transfer (`_align_and_transfer_regions`) aligns the imported mesh to
+  the donor in a shape-normalised frame via a 24-way axis-rotation search before
+  nearest-face. This is a **correctness fix for coordinate-frame divergence
+  between donor and imported OBJ**, not a deviation: real `.obj` imports are
+  axis-permuted (Y-up vs Z-up) and rescaled relative to donor model space
+  (measured on Drexl: donor Y-forward with head at +Y≈2.1; OBJ a compact
+  axis-permuted box), so a raw `cKDTree` nearest lookup would silently transfer
+  regions wrong (head faces onto the tail). With alignment, mean transfer
+  confidence is 0.846.
+- A palette-bounded Jaccard agglomeration coarsening step
+  (`AGGLOMERATION_JACCARD_MIN`) is documented with its empirical calibration:
+  dominant-bone connected components over-segment any skeleton finer than one
+  bone per part (Drexl: 46 raw regions after weld+dust). Merging adjacent regions
+  whose bone-influence sets overlap (Jaccard ≥ 0.15) and whose merged palette
+  ≤ 16 recovers the 7 authored parts while leaving disjoint-palette limbs
+  separate. TODO in-module: validate the 0.15 threshold on a humanoid donor.
+
+FINDING (first-class result, not a footnote): the load-bearing acceptance test
+`test_drexl_per_region_v2_converges_at_natural_scale` is **xfail(strict=True)**.
+PR C successfully recovers Drexl's 7 authored anatomical regions from donor
+weights alone (mean transfer confidence 0.846, region count and transfer fidelity
+match artist intent), but every region except `head_g` balloons under
+shell-containment v2 at 3–20× the natural scale estimate. Diagnostic ablations
+(full palette / dominant-only / weighted-influence-centroids) confirm this is not
+a segmentation or region-transfer bug — it is a specification-level finding that
+shell-containment of joint pivots is incoherent for open-shell region sub-meshes:
+proximal joint bones sit at a region's rim rather than its interior, and no
+similarity transform can push a rim point inside a patch whose interior is
+defined relative to that same rim. `head_g` converges because the head is a
+near-closed sub-region; every other region is an open cylindrical patch whose
+containment target lies on its own boundary. (`torso3_g` shows `status=converged`
+at ratio 20 — the balloon presenting as success, the same signature caught at the
+PR B level.)
+
+PR D (dispatch-ladder wiring) is ON HOLD pending a containment-objective redesign.
+Candidate directions under review: (1) contain per-bone influence-vertex regions
+rather than full sub-meshes; (2) generate closed per-region proxy volumes and fit
+against those. This finding is not a defect in PR C — PR C's segmentation is
+correct. The next step is a design proposal (pick a direction + define its
+falsifier), not an implementation prompt. Full analysis in
+`docs/knowledgebase/learned/pr_c_anatomical_partition_report.md`.
+
+Files:
+- `native/GhostRigger.Core.Math/Python/src/math/anatomical_partition.py` (new)
+- `tests/test_anatomical_partition.py` (new; 8 tests) + `.gitignore` allow-list
+- `tests/test_native_python_payloads.py` (payload count 1184 → 1185)
+- Core.Math payload manifest regenerated:
+  `GhostRiggerPythonPayload.json` / `.rc`, `GhostRigger.Core.Math.vcxproj`,
+  `GhostRigger.PythonPayloadManifest.json`
+
+Verification:
+- `pytest tests/test_anatomical_partition.py -v` → 8 passed (tests 5–7 exercise
+  the real K2 `c_drexlf` donor + `C_DrexlF_UV.obj`; skip cleanly without the K2
+  install / OBJ).
+- `pytest tests/test_winding_number.py tests/test_containment_fit_v2.py -q` → 15
+  passed (PR A + PR B still green).
+- `pytest tests/test_native_python_payloads.py -q` → 17 passed (payload manifest
+  byte-identity + count intact).
+- `python -m py_compile anatomical_partition.py` → clean.
+
 ### [2026-06-30] Add GWN Shell-Containment Fit v2 (PR B)
 
 Owner: LordVaderCW

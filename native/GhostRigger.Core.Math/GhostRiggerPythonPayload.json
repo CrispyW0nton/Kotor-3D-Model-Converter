@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Math",
-    "file_count": 52,
+    "file_count": 53,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -202,6 +202,12 @@
             "source_path": "src/math/_hd_smoke_test.py",
             "packaged_path": "Python/src/math/_hd_smoke_test.py",
             "sha256": "8d76d956ac0f34c681469de456c15e000a36457395f4409f67af786912f9e173"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_MATH_ANATOMICAL_PARTITION",
+            "source_path": "src/math/anatomical_partition.py",
+            "packaged_path": "Python/src/math/anatomical_partition.py",
+            "sha256": "b69e553183b12b466f30dfa9aa2d34313bcdb3e911c3ec8f7c79dce2bd8c8815"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_CAMERA_MATH",
