@@ -11,6 +11,45 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-01
 
+### [2026-07-01] T2508a: PR C.1a — Migrate donor builder to canonical world_transform()
+
+Owner: LordVaderCW
+T###: T2508a
+Subsystem: Core.Resources loader (donor builder vertex placement)
+Intersects: Follow-up to PR C.1 (T2508); prerequisite-quality insurance for
+T2509 (correspondence fit) generality. No behavior change on Drexl.
+
+Summary: PR C.1's `build_donor_skin_data_from_model` computed bind-world vertices
+with a hand-written parent-chain walk applying each node's raw `.rotation`. That
+is byte-identical to the canonical `ModelNode.world_transform()` on Drexl (all 7
+skin nodes, max diff 0.000000, `tailGeo` included) but does not collapse parent
+180° bind-flips — the documented `world_transform()` fix for droids (c_brith /
+Wardroid). A donor with such a parent chain would be misplaced.
+
+- `_verts_to_world` now uses `node.world_transform()` matching
+  `OBJExporter._node_bind_world_verts` (the shared export-path consumer):
+  identity-quat → translate-only; else rotate-by-`wo` then translate. `_quat_rotate`
+  is retained (still used for the rotation branch); nothing deleted.
+- Bone resolution (`bone_world_position()`) and the `frame="world_space_v1"`
+  marker are unchanged.
+- New test `test_donor_builder_matches_canonical_world_transform` cross-checks
+  builder vertices against `OBJExporter._node_bind_world_verts` (different module,
+  not a self-check) to lock the invariant.
+
+Zero regression on Drexl (byte-identical); correctness fix for non-Drexl donors
+with parent 180°-flipped chains. Baseline preserved: `final_region_count=7`,
+`max_bones_in_any_region=16`, `mean_transfer_confidence>=0.99`.
+
+Files: `native/GhostRigger.Core.Resources/Python/src/core/game/kotor_loader.py`,
+`tests/test_anatomical_partition.py`, regenerated Core.Resources
+`GhostRiggerPythonPayload.json` (count unchanged at 1185),
+`docs/knowledgebase/learned/pr_c_anatomical_partition_report.md` (addendum).
+
+Verification: `tests/test_anatomical_partition.py` → 9 passed + 1 xfailed (new
+equivalence test; ballooning xfail preserved). `tests/test_winding_number.py`,
+`tests/test_containment_fit_v2.py`, `tests/test_native_python_payloads.py` → 32
+passed. Core.Math (`anatomical_partition.py`) untouched.
+
 ### [2026-07-01] T2508: PR C.1 — Donor frame hygiene correction
 
 Owner: LordVaderCW

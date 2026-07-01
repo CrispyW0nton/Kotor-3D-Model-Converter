@@ -431,6 +431,37 @@ def test_donor_builder_applies_world_frame() -> None:
     )
 
 
+def test_donor_builder_matches_canonical_world_transform() -> None:
+    """Builder vertex placement == canonical `ModelNode.world_transform()` (PR C.1a).
+
+    Locks the migration: the donor builder must produce the same bind-world
+    vertices as `OBJExporter._node_bind_world_verts` (the shared export-path
+    consumer of `world_transform()`), which — unlike a raw parent-chain walk —
+    collapses parent 180° bind-flips.  Cross-module comparison, not a self-check.
+    """
+    from src.core.game.kotor_loader import build_donor_skin_data_from_model
+
+    try:
+        from src.converters.mesh_converter import OBJExporter
+    except Exception as exc:  # pragma: no cover - environment dependent
+        pytest.skip(f"mesh_converter unavailable: {exc}")
+
+    model = _load_drexl_model()
+    donor = build_donor_skin_data_from_model(model)
+
+    skin = [n for n in model.all_nodes() if getattr(n, "is_skin", False) and n.vertices]
+    expected = np.vstack(
+        [np.asarray(OBJExporter._node_bind_world_verts(n), dtype=np.float64) for n in skin]
+    )
+    assert expected.shape == donor.vertices.shape, (
+        f"canonical {expected.shape} vs builder {donor.vertices.shape} — node mismatch"
+    )
+    assert np.allclose(donor.vertices, expected, atol=1e-9, rtol=0), (
+        "builder vertices diverge from canonical world_transform placement; "
+        f"max diff {float(np.max(np.abs(donor.vertices - expected)))}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # 7. FALSIFIER: per-region v2 containment on Drexl
 # ---------------------------------------------------------------------------

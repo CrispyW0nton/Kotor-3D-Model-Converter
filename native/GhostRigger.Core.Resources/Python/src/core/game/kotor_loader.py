@@ -1685,17 +1685,17 @@ def build_donor_skin_data_from_model(model):
         _qrot = _quat_rotate_xyzw
 
     def _verts_to_world(node, verts):
-        out = np.asarray(verts, dtype=np.float64).copy()
-        cur = node
-        while cur is not None:
-            rot = getattr(cur, "rotation", (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
-            pos = np.asarray(
-                getattr(cur, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0),
-                dtype=np.float64,
-            )
-            out = np.array([_qrot(tuple(rot), tuple(p)) for p in out], dtype=np.float64) + pos
-            cur = getattr(cur, "parent", None)
-        return out
+        # PR C.1a: use the canonical ModelNode.world_transform() bind-world
+        # placement — the same accessor OBJExporter._node_bind_world_verts uses.
+        # Unlike a raw parent-chain walk, world_transform() collapses parent 180°
+        # bind-flips (the c_brith / Wardroid fix), so this is correct for
+        # non-Drexl donors too (byte-identical to the old walk on Drexl).
+        v = np.asarray(verts, dtype=np.float64)
+        wp, wo = node.world_transform()
+        wp = np.asarray(wp, dtype=np.float64)
+        if (wo[0] ** 2 + wo[1] ** 2 + wo[2] ** 2) ** 0.5 < 0.001:
+            return v + wp  # identity rotation → translation only
+        return np.array([_qrot(tuple(wo), tuple(p)) for p in v], dtype=np.float64) + wp
 
     nodes = list(model.all_nodes())
     lookup = {str(n.name).lower(): n for n in nodes}

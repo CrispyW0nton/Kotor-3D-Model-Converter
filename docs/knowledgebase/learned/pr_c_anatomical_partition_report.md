@@ -252,3 +252,21 @@ Downstream implication for the correspondence-fit redesign (T2509): the earlier
 `0.846` was a symptom of this bug, not topological drift between donor and
 import. Under the corrected frame the surface correspondence is effectively
 perfect on Drexl.
+
+## PR C.1a — Canonical `world_transform` Migration (2026-07-01)
+
+PR C.1's builder computed bind-world vertices with a hand-written parent-chain
+walk applying each node's raw `.rotation`/`.position`. That is byte-identical to
+the canonical `ModelNode.world_transform()` on Drexl (verified: all 7 skin
+nodes, max diff 0.000000, `tailGeo` included), but the manual walk does **not**
+collapse parent 180° bind-flips — the documented `world_transform()` fix for
+droids like `c_brith` / Wardroid. For a donor whose parent chain carries those
+flips, the manual walk would misplace vertices.
+
+PR C.1a migrates `build_donor_skin_data_from_model`'s `_verts_to_world` to
+`node.world_transform()`, matching `OBJExporter._node_bind_world_verts` (the
+shared export-path consumer). Zero regression on Drexl (byte-identical);
+correctness improvement for non-Drexl donors. A new test
+`test_donor_builder_matches_canonical_world_transform` cross-checks builder
+vertices against `OBJExporter._node_bind_world_verts` to lock the invariant.
+Drexl baseline unchanged: 7 / 16 / 1.0.
