@@ -9,6 +9,60 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-07-01
+
+### [2026-07-01] T2508: PR C.1 — Donor frame hygiene correction
+
+Owner: LordVaderCW
+T###: T2508
+Subsystem: Core.Resources loader (donor builder) + Core.Math anatomical partition
+Intersects: Corrects metrics reported by PR C (T2507); prerequisite for T2509
+(correspondence fit). No behavior change to the partition algorithm.
+
+Summary: Fixed a coordinate-frame-mixing bug in donor assembly. Drexl's seven
+skin nodes carry distinct local transforms (translations up to ~2 units;
+`tailGeo` also a rotation), and the donor was built by concatenating
+`node.vertices` in node-local space while `bone_positions` came from
+`node.bone_world_position()` (world) — vertices and bones in different frames.
+
+- Added a real production builder `build_donor_skin_data_from_model` in
+  `native/GhostRigger.Core.Resources/Python/src/core/game/kotor_loader.py`
+  (next to `_read_skin_weights`), which transforms every skin node's vertices by
+  the node's full parent-chain world transform before accumulation, so vertices
+  and bone pivots share one world frame. Only vertex accumulation changed; bone
+  positions were already world-correct. Reuses `extract_skinning_arrays`
+  (Core.Rendering) and `_quat_rotate` (Core.Math `model_data`, with an inline
+  XYZW fallback), imported lazily at call time. Core.Math stays model-agnostic.
+- Added a `frame` marker field to `DonorSkinData`
+  (`native/GhostRigger.Core.Math/Python/src/math/anatomical_partition.py`); the
+  builder sets `"world_space_v1"`, synthetic donors default `"unspecified"`.
+- Added a defense-in-depth `max_bones_in_any_region <= 16` assertion before
+  `PartitionResult` construction.
+- Refactored the `_build_drexl_donor` test helper to delegate to the production
+  builder so tests exercise the real path.
+
+Drexl baseline corrected: `max_bones_in_any_region` 14→16,
+`mean_transfer_confidence` 0.846→1.000 (a self-fit, since `C_DrexlF_UV.obj` is
+geometrically the donor). `final_region_count` unchanged at 7 — the anatomical
+topology was already correct; the bug degraded only the metrics. The 0.846
+reported by PR C was a symptom of this frame bug, not donor/import drift.
+
+Files: `native/GhostRigger.Core.Resources/Python/src/core/game/kotor_loader.py`,
+`native/GhostRigger.Core.Math/Python/src/math/anatomical_partition.py`,
+`tests/test_anatomical_partition.py`, regenerated
+`GhostRiggerPythonPayload.json` for Core.Math and Core.Resources
+(payload file count unchanged at 1185 — no new files),
+`docs/knowledgebase/learned/pr_c_anatomical_partition_report.md` (addendum).
+
+Verification: `tests/test_anatomical_partition.py` → 8 passed + 1 xfailed
+(new `test_donor_builder_applies_world_frame` proves the world transform is
+applied; `test_drexl_donor_partition_shape` tightened to 7 / 16 / ≥0.99; the
+ballooning `test_drexl_per_region_v2_converges_at_natural_scale` xfail preserved).
+`tests/test_winding_number.py`, `tests/test_containment_fit_v2.py`,
+`tests/test_native_python_payloads.py` → 32 passed (payload count/byte-identity
+hold). Builder home was chosen as Core.Resources (co-located with the skin-weight
+reader); the merged-`src`-namespace import topology was verified empirically.
+
 ## 2026-06-30
 
 ### [2026-06-30] Add Donor-Driven Anatomical Mesh Partitioner (PR C)

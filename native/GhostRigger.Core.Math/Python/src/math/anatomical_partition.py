@@ -108,12 +108,21 @@ class MissingDonorError(ValueError):
 class DonorSkinData:
     """Ground-truth donor skinning input to partitioning.
 
-    Every field is required.  If the caller cannot construct this, they don't
-    have a donor and should not be calling this module.
+    Every field except ``frame`` is required.  If the caller cannot construct
+    this, they don't have a donor and should not be calling this module.
 
     ``bone_indices`` are *local* indices into ``bone_names`` / ``bone_positions``
     (row ``i`` of ``bone_positions`` is the rest-pose position of the bone named
     ``bone_names[i]``).  A value ``< 0`` marks an unused influence slot.
+
+    ``vertices`` and ``bone_positions`` MUST share a single coordinate frame.
+    KotOR donors are assembled from several skin nodes with distinct local
+    transforms, so a naive concatenation mixes node-local vertices with
+    world-space bone pivots (a bug that silently degrades every downstream
+    metric).  ``frame`` records which frame the data is in: the production
+    builder (``build_donor_skin_data_from_model`` in the Core.Resources loader)
+    sets ``"world_space_v1"``; small synthetic/test donors that are trivially
+    single-frame may leave the default ``"unspecified"``.
     """
 
     vertices: np.ndarray  # (V, 3) donor mesh vertices
@@ -122,6 +131,7 @@ class DonorSkinData:
     bone_weights: np.ndarray  # (V, K) per-vertex weights, sum(axis=1) ~= 1
     bone_names: List[str]  # length = number of bones (= bone_positions rows)
     bone_positions: np.ndarray  # (B, 3) rest-pose bone positions
+    frame: str = "unspecified"  # coordinate frame of vertices+bone_positions
 
 
 @dataclass(frozen=True)
@@ -861,6 +871,16 @@ def partition_mesh_anatomically(
                 transfer_confidence=per_region_confidence.get(rid, 0.0),
             )
         )
+
+    # Defense-in-depth: the KotOR skin-node palette limit is 16 bones/region.
+    # Phase 2's greedy palette split already guarantees this; assert it here so a
+    # future regression in either phase (or a donor-frame change like PR C.1)
+    # fails loudly instead of silently emitting an over-palette region.
+    max_bones_observed = max((r.bone_indices_in_region.size for r in regions), default=0)
+    assert max_bones_observed <= 16, (
+        f"Palette invariant violated: max_bones={max_bones_observed} > 16. "
+        f"Region sizes: {[int(r.bone_indices_in_region.size) for r in regions]}"
+    )
 
     diagnostics = {
         "trace_version": TRACE_VERSION,

@@ -207,7 +207,7 @@
             "resource_name": "PYTHON_PAYLOAD_MATH_ANATOMICAL_PARTITION",
             "source_path": "src/math/anatomical_partition.py",
             "packaged_path": "Python/src/math/anatomical_partition.py",
-            "sha256": "b69e553183b12b466f30dfa9aa2d34313bcdb3e911c3ec8f7c79dce2bd8c8815"
+            "sha256": "f96f0ab89cda9e5f3e07fc0eefe82517ba2d6ba1270089811e5fd864b37f7ba2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_CAMERA_MATH",

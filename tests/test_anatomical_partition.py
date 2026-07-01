@@ -288,88 +288,43 @@ def _resolve_k2_dir() -> Optional[str]:
 _DREXL_DONOR_CACHE: Optional["ap.DonorSkinData"] = None
 
 
-def _build_drexl_donor() -> "ap.DonorSkinData":
-    """Load K2 ``c_drexlf`` and assemble a unified DonorSkinData.
-
-    Drexl ships as 7 separate skin nodes (head/chest/each arm/each wing/tail),
-    each with its own ≤16-bone palette.  We concatenate them into one donor mesh
-    in shared model space, remap each node's local bone indices to a global bone
-    list, and read rest-pose bone pivots via ``node.bone_world_position()``.
-    """
-    global _DREXL_DONOR_CACHE
-    if _DREXL_DONOR_CACHE is not None:
-        return _DREXL_DONOR_CACHE
-
+def _load_drexl_model():
+    """Load K2 ``c_drexlf``, skipping cleanly when the install is unavailable."""
     k2_dir = _resolve_k2_dir()
     if k2_dir is None:
         pytest.skip("K2 install not available (set K2_PATH)")
-
     try:
         from src.core.assets.resource_manager import ResourceManager
-        from src.core.rendering.skeleton_render_data import extract_skinning_arrays
     except Exception as exc:  # pragma: no cover - environment dependent
         pytest.skip(f"GhostRigger core imports unavailable: {exc}")
-
     mgr = ResourceManager()
     if not mgr.set_k2_dir(k2_dir):
         pytest.skip(f"Could not index K2 install at {k2_dir}")
     model = mgr.load_model("c_drexlf", "K2")
     if model is None:
         pytest.skip("c_drexlf not found in K2 install (cut content / needs Override)")
+    return model
 
-    nodes = list(model.all_nodes())
-    lookup = {str(n.name).lower(): n for n in nodes}
-    skin = [n for n in nodes if getattr(n, "is_skin", False) and n.vertices]
-    if not skin:
-        pytest.skip("c_drexlf has no skin nodes in this install")
 
-    all_v, all_f, all_bi, all_bw = [], [], [], []
-    gnames: List[str] = []
-    gidx: dict = {}
-    voff = 0
-    for node in skin:
-        v = np.asarray(node.vertices, dtype=np.float64)
-        f = np.asarray(node.faces, dtype=np.int64)
-        sk = extract_skinning_arrays(node, len(v))
-        bi = np.asarray(sk.bone_indices, dtype=np.int64)
-        bw = np.asarray(sk.bone_weights, dtype=np.float64)
-        local_to_global = []
-        for name in node.bone_map:
-            key = str(name).lower()
-            if key not in gidx:
-                gidx[key] = len(gnames)
-                gnames.append(str(name))
-            local_to_global.append(gidx[key])
-        l2g = np.asarray(local_to_global, dtype=np.int64)
-        valid = (bi >= 0) & (bi < len(node.bone_map))
-        bi_g = np.where(valid, l2g[np.clip(bi, 0, len(node.bone_map) - 1)], -1)
-        all_v.append(v)
-        all_f.append(f + voff)
-        all_bi.append(bi_g)
-        all_bw.append(bw)
-        voff += len(v)
+def _build_drexl_donor() -> "ap.DonorSkinData":
+    """Load K2 ``c_drexlf`` and assemble a unified, world-frame DonorSkinData.
 
-    vertices = np.vstack(all_v)
-    faces = np.vstack(all_f)
-    bone_indices = np.vstack(all_bi)
-    bone_weights = np.vstack(all_bw)
-    bone_positions = np.zeros((len(gnames), 3), dtype=np.float64)
-    for i, name in enumerate(gnames):
-        nd = lookup.get(str(name).lower())
-        if nd is not None:
-            try:
-                bone_positions[i] = nd.bone_world_position()
-            except Exception:
-                pass
-
-    _DREXL_DONOR_CACHE = ap.DonorSkinData(
-        vertices=vertices,
-        faces=faces,
-        bone_indices=bone_indices,
-        bone_weights=bone_weights,
-        bone_names=gnames,
-        bone_positions=bone_positions,
-    )
+    Delegates to the production builder
+    ``src.core.game.kotor_loader.build_donor_skin_data_from_model`` (PR C.1) so
+    the tests exercise the real code path.  Drexl ships as 7 separate skin nodes
+    (head/chest/each arm/each wing/tail); the builder concatenates them into one
+    world-frame donor mesh, remaps each node's local bone indices to a global
+    bone list, and reads rest-pose pivots via ``node.bone_world_position()``.
+    """
+    global _DREXL_DONOR_CACHE
+    if _DREXL_DONOR_CACHE is not None:
+        return _DREXL_DONOR_CACHE
+    try:
+        from src.core.game.kotor_loader import build_donor_skin_data_from_model
+    except Exception as exc:  # pragma: no cover - environment dependent
+        pytest.skip(f"donor builder unavailable: {exc}")
+    model = _load_drexl_model()
+    _DREXL_DONOR_CACHE = build_donor_skin_data_from_model(model)
     return _DREXL_DONOR_CACHE
 
 
@@ -396,9 +351,13 @@ def test_drexl_donor_partition_shape() -> None:
     result = ap.partition_mesh_anatomically(imported_v, imported_f, donor)
     diag = result.diagnostics
 
-    # Rough anatomical expectation: torso + head + arms + wings + tail.
-    assert 4 <= diag["final_region_count"] <= 12
-    assert diag["max_bones_in_any_region"] <= 16
+    # Corrected world-frame baseline (PR C.1).  Drexl's 7 authored skin nodes are
+    # recovered exactly; the donor is a self-fit of C_DrexlF_UV.obj so transfer
+    # confidence is ~1.0.  Tighten, never loosen: if these move, halt and report.
+    assert diag["final_region_count"] == 7            # halt & report if different
+    assert diag["max_bones_in_any_region"] <= 16      # hard invariant
+    assert diag["max_bones_in_any_region"] == 16      # observed world-frame baseline
+    assert diag["mean_transfer_confidence"] >= 0.99   # was 0.846 pre-PR-C.1
 
     # Every donor deformation bone (any nonzero weight) appears in some region.
     total_weight = np.zeros(len(donor.bone_names))
@@ -433,9 +392,43 @@ def test_drexl_region_transfer_to_imported_obj() -> None:
     assert result.imported_face_to_region.shape[0] == imported_f.shape[0]
     assert np.all(result.imported_face_to_region >= 0)
 
-    # Correspondence is good enough to trust the transfer (empirically ~0.85).
-    assert result.diagnostics["mean_transfer_confidence"] > 0.3
+    # Self-fit under the corrected world frame (PR C.1): confidence ~1.0.
+    assert result.diagnostics["mean_transfer_confidence"] >= 0.99
     assert isinstance(result.diagnostics["regions_with_low_transfer_confidence"], list)
+
+
+# ---------------------------------------------------------------------------
+# 6b. Donor builder applies the world-frame transform (PR C.1 / T2508)
+# ---------------------------------------------------------------------------
+
+
+def test_donor_builder_applies_world_frame() -> None:
+    """The production donor-builder must place vertices in world space.
+
+    Proves the PR C.1 fix: donor vertices are transformed by each skin node's
+    parent-chain world transform, not concatenated node-local.  We compare the
+    built donor against the raw node-local concatenation (the pre-PR-C.1
+    behaviour) and require a meaningful shift plus the ``frame`` marker.
+    """
+    from src.core.game.kotor_loader import build_donor_skin_data_from_model
+
+    model = _load_drexl_model()
+    donor = build_donor_skin_data_from_model(model)
+
+    assert donor.frame == "world_space_v1"
+
+    # Raw node-local concatenation (same node filter/order the builder uses).
+    skin = [n for n in model.all_nodes() if getattr(n, "is_skin", False) and n.vertices]
+    raw = np.vstack([np.asarray(n.vertices, dtype=np.float64) for n in skin])
+    assert raw.shape == donor.vertices.shape, (
+        f"raw {raw.shape} vs built {donor.vertices.shape} — node set/order mismatch"
+    )
+
+    max_shift = float(np.max(np.linalg.norm(donor.vertices - raw, axis=1)))
+    assert max_shift > 0.5, (
+        f"world-frame transform barely moved vertices (max shift {max_shift:.3f}); "
+        "builder may not be applying node transforms"
+    )
 
 
 # ---------------------------------------------------------------------------

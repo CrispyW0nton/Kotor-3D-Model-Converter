@@ -1622,3 +1622,155 @@ def reparent_head_nodes(model: KotorModel) -> int:
         log.info("reparent_head_nodes: reparented %d node(s) to root",
                  reparented)
     return reparented
+
+
+# =============================================================================
+#  build_donor_skin_data_from_model — anatomical-partition donor assembly
+# =============================================================================
+#
+# Ownership note (PR C.1 / T2508): the anatomical partitioner
+# (``src.math.anatomical_partition``) consumes a frame-consistent
+# ``DonorSkinData`` but does not build one — building it from a loaded model is a
+# resource/extraction concern, so it lives here next to ``_read_skin_weights``
+# (which already reads the same qBone/tBone skin arrays).  Core.Math stays
+# model-agnostic; this function only *reads* duck-typed model/node attributes.
+#
+# Frame correctness (the whole reason PR C.1 exists): a KotOR creature ships as
+# several skin nodes with distinct local transforms (Drexl: offsets up to ~2u,
+# ``tailGeo`` also carries a rotation).  Concatenating ``node.vertices`` raw
+# mixes node-local vertices with world-space bone pivots.  We therefore transform
+# every node's vertices by the node's full parent-chain WORLD transform before
+# accumulation, so vertices and ``bone_positions`` share one world frame.  Bone
+# pivots already come from ``node.bone_world_position()`` (world) and are left as
+# they are.
+
+def _quat_rotate_xyzw(q, v):
+    """Rotate ``v`` by quaternion ``q=[x,y,z,w]`` (matches model_data._quat_rotate)."""
+    qx, qy, qz, qw = q
+    vx, vy, vz = v
+    tx = 2.0 * (qy * vz - qz * vy)
+    ty = 2.0 * (qz * vx - qx * vz)
+    tz = 2.0 * (qx * vy - qy * vx)
+    return (
+        vx + qw * tx + (qy * tz - qz * ty),
+        vy + qw * ty + (qz * tx - qx * tz),
+        vz + qw * tz + (qx * ty - qy * tx),
+    )
+
+
+def build_donor_skin_data_from_model(model):
+    """Assemble a frame-consistent ``DonorSkinData`` from a loaded KotOR model.
+
+    Concatenates every skin node's geometry into a single WORLD-frame donor:
+
+    - each node's vertices are transformed by the node's full parent-chain world
+      transform (translation AND rotation) before accumulation;
+    - ``bone_positions`` come from ``node.bone_world_position()`` (already world);
+    - per-vertex bone indices are remapped from each node's local ``bone_map`` to
+      a shared global bone table.
+
+    Returns a ``DonorSkinData`` with ``frame="world_space_v1"``.  Raises
+    ``ValueError`` if the model exposes no usable skin nodes.
+    """
+    import numpy as np
+
+    # Canonical (merged-``src``-namespace) imports; lazy so module import stays
+    # cheap and so the Rendering/Math dependencies are only touched at call time
+    # (avoids any load-order cycle between the loader and the renderer helper).
+    from src.math.anatomical_partition import DonorSkinData
+    from src.core.rendering.skeleton_render_data import extract_skinning_arrays
+    try:
+        from src.core.geometry.model_data import _quat_rotate as _qrot
+    except Exception:  # pragma: no cover - defensive across import styles
+        _qrot = _quat_rotate_xyzw
+
+    def _verts_to_world(node, verts):
+        out = np.asarray(verts, dtype=np.float64).copy()
+        cur = node
+        while cur is not None:
+            rot = getattr(cur, "rotation", (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
+            pos = np.asarray(
+                getattr(cur, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0),
+                dtype=np.float64,
+            )
+            out = np.array([_qrot(tuple(rot), tuple(p)) for p in out], dtype=np.float64) + pos
+            cur = getattr(cur, "parent", None)
+        return out
+
+    nodes = list(model.all_nodes())
+    lookup = {str(n.name).lower(): n for n in nodes}
+    skin_nodes = [
+        n for n in nodes if bool(getattr(n, "is_skin", False)) and getattr(n, "vertices", None)
+    ]
+    if not skin_nodes:
+        raise ValueError(
+            "build_donor_skin_data_from_model: model has no skin nodes; "
+            "cannot assemble an anatomical-partition donor."
+        )
+
+    all_v, all_f, all_bi, all_bw = [], [], [], []
+    global_names: List[str] = []
+    global_index: Dict[str, int] = {}
+    vert_offset = 0
+    for node in skin_nodes:
+        v_local = np.asarray(node.vertices, dtype=np.float64)
+        n_local = len(v_local)
+        skin = extract_skinning_arrays(node, n_local)
+        if skin.bone_indices is None or skin.bone_weights is None:
+            continue  # skin node without usable weights — skip (offset unchanged)
+
+        v_world = _verts_to_world(node, v_local)
+        faces = np.asarray(node.faces, dtype=np.int64)
+        bi_local = np.asarray(skin.bone_indices, dtype=np.int64)
+        bw = np.asarray(skin.bone_weights, dtype=np.float64)
+
+        bone_map = list(getattr(node, "bone_map", []) or [])
+        local_to_global = []
+        for name in bone_map:
+            key = str(name).lower()
+            if key not in global_index:
+                global_index[key] = len(global_names)
+                global_names.append(str(name))
+            local_to_global.append(global_index[key])
+        l2g = np.asarray(local_to_global, dtype=np.int64)
+
+        valid = (bi_local >= 0) & (bi_local < len(bone_map))
+        bi_global = np.where(
+            valid, l2g[np.clip(bi_local, 0, max(len(bone_map) - 1, 0))], -1
+        )
+
+        all_v.append(v_world)
+        all_f.append(faces + vert_offset)
+        all_bi.append(bi_global)
+        all_bw.append(bw)
+        vert_offset += n_local
+
+    if not all_v:
+        raise ValueError(
+            "build_donor_skin_data_from_model: skin nodes present but none had "
+            "usable skin weights."
+        )
+
+    vertices = np.vstack(all_v)
+    faces = np.vstack(all_f)
+    bone_indices = np.vstack(all_bi)
+    bone_weights = np.vstack(all_bw)
+
+    bone_positions = np.zeros((len(global_names), 3), dtype=np.float64)
+    for i, name in enumerate(global_names):
+        nd = lookup.get(str(name).lower())
+        if nd is not None:
+            try:
+                bone_positions[i] = np.asarray(nd.bone_world_position()[:3], dtype=np.float64)
+            except Exception:
+                pass
+
+    return DonorSkinData(
+        vertices=vertices,
+        faces=faces,
+        bone_indices=bone_indices,
+        bone_weights=bone_weights,
+        bone_names=global_names,
+        bone_positions=bone_positions,
+        frame="world_space_v1",
+    )

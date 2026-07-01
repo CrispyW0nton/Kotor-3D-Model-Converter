@@ -57,7 +57,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_GAME_KOTOR_LOADER",
             "source_path": "src/core/game/kotor_loader.py",
             "packaged_path": "Python/src/core/game/kotor_loader.py",
-            "sha256": "a54e20a03a02ad366b7d80dbc274365f540e30fad8951d32ff8a58a9b20e9c98"
+            "sha256": "14bf69df02fcc93af726d52e11ec029a5bf0b16786709692cf2b041d22df492f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GAME_PYKOTOR_BRIDGE",

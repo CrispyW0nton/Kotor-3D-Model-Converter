@@ -204,3 +204,51 @@ diagnostic, not a parameter tweak to PR C.
 - **PR D (dispatch-ladder wiring) is on hold.** Test 7 falsified the "splitting
   alone → natural-scale containment" thesis. The next PR should be a containment
   **objective** diagnostic, not the ladder wiring.
+
+---
+
+## PR C.1 Frame Hygiene Correction (2026-07-01)
+
+The Drexl metrics reported above (`0.846` transfer confidence, `max_bones=14`)
+were **frame-degraded**. Drexl ships as seven skin nodes with distinct local
+transforms (translations up to ~2 units; `tailGeo` also carries a rotation). The
+original `_build_drexl_donor` test helper concatenated each node's
+`node.vertices` *raw* — i.e. in node-local space — while `bone_positions` were
+resolved via `node.bone_world_position()` (world space). Vertices and bones thus
+lived in different frames, which degraded seam-welding (body parts were not
+actually spatially coincident, so cross-node welds under-fired) and nearest-face
+transfer.
+
+PR C.1 introduces a real production builder,
+`build_donor_skin_data_from_model` in the Core.Resources loader
+(`src/core/game/kotor_loader.py`, next to `_read_skin_weights`), which transforms
+every node's vertices by the node's full parent-chain **world** transform before
+accumulation, so vertices and bone pivots share one frame. `DonorSkinData` gains
+a `frame` marker (`"world_space_v1"`); the test helper now delegates to the
+builder so the tests exercise the real code path. Only vertex accumulation
+changed — bone resolution was already correct.
+
+| Metric | PR C (frame-degraded) | PR C.1 (corrected) |
+|--------|----------------------|--------------------|
+| `final_region_count` | 7 | 7 |
+| `max_bones_in_any_region` | 14 | 16 |
+| `mean_transfer_confidence` | 0.846 | 1.000 |
+
+Notes:
+
+- **Region count unchanged at 7** → PR C's anatomical decomposition (the seven
+  authored skin nodes) was already correct; the frame bug did not corrupt the
+  topology, only the metrics.
+- **`max_bones=16` still satisfies the KotOR ≤16 palette invariant**, now guarded
+  by a defense-in-depth assertion before `PartitionResult` construction.
+- **`mean_transfer_confidence=1.0` is expected** because `C_DrexlF_UV.obj` is
+  geometrically the donor mesh (a self-fit case). This is why Drexl cannot
+  calibrate a ratio-preservation falsifier for the correspondence fit — a
+  proportion-mismatched mesh is needed (tracked as T2510).
+- The **test 7 xfail is unaffected** — PR C.1 does not touch the containment
+  objective; the ballooning finding stands.
+
+Downstream implication for the correspondence-fit redesign (T2509): the earlier
+`0.846` was a symptom of this bug, not topological drift between donor and
+import. Under the corrected frame the surface correspondence is effectively
+perfect on Drexl.
