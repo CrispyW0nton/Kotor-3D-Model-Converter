@@ -399,7 +399,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEADLESS_BODY_WORKFLOW",
             "source_path": "src/core/characters/headless_body_workflow.py",
             "packaged_path": "Python/src/core/characters/headless_body_workflow.py",
-            "sha256": "f7928e5f683556afc5e09d17107c91581097c2060504c396985b3a3b34b2f36b"
+            "sha256": "1de7697918b02364d7ca03532db014f6a279b2b0a4942f4cb7cc16493749a12f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_KOTOR_CONSTANTS",

@@ -6392,6 +6392,20 @@ def _split_skinned_node_by_anatomical_regions(
                 split_node.bone_map_floats = []
             except Exception:
                 pass
+        # qBone/tBone bind-pose arrays are per-bonemap-entry (T2513 round-trip
+        # finding): subset them by the same local indices so the writer emits
+        # bind data aligned with the region palette.  Mismatched/absent source
+        # arrays are cleared rather than carried stale.
+        source_qbones = list(getattr(node, "qbone_list", []) or [])
+        source_tbones = list(getattr(node, "tbone_list", []) or [])
+        if source_qbones and len(source_qbones) == len(bone_map):
+            split_node.qbone_list = [source_qbones[old] for old in used_local_indices]
+        elif hasattr(split_node, "qbone_list"):
+            split_node.qbone_list = []
+        if source_tbones and len(source_tbones) == len(bone_map):
+            split_node.tbone_list = [source_tbones[old] for old in used_local_indices]
+        elif hasattr(split_node, "tbone_list"):
+            split_node.tbone_list = []
         setattr(split_node, "_external_imported", True)
         setattr(split_node, "_gr_node_splitter_component", True)
         setattr(split_node, "_gr_weight_remap_split", True)

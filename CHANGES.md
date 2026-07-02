@@ -11,6 +11,67 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-01
 
+### [2026-07-01] T2513: P4 — Full-pipeline round-trip: split multi-node export, reload, audit
+
+Owner: LordVaderCW
+T###: T2513
+Subsystem: Export round-trip validation (writer + loader + audit) / splitter bind-data fix
+Intersects: Fifth PR of the six-PR c_drexl_uv completion chain. Consumes
+T2512 splitter + Core.IO writer + Core.Resources loader + Core.Automation
+audit. Parent: T2512 (`b5569a8c`).
+
+Summary: proves the one previously-unattested claim in the chain — a
+BIAGP-split MULTI-NODE skinned model survives `MDLBinaryWriter`, reloads via
+the `read_mdl_safe` path, and audits cleanly relative to vanilla. New
+`tests/test_full_pipeline_export.py`: real `c_drexlf` → consolidate its 7 skin
+nodes into ONE 55-bone unified skin node (the custom-import shape) →
+`split_skinned_mesh_nodes_with_weight_remap` (7 region nodes, palettes ≤16) →
+binary export → reload → headless `ghostrigger_audit` → artifact + SHA-256
+manifest in `exports/t2513_c_drexlf/`.
+
+Splitter fix surfaced by the round-trip (applied in
+`headless_body_workflow.py`): per-bonemap-entry **qBone/tBone bind arrays are
+now subset by the same local indices as the palette** — previously the split
+deep-copied the source node's full-length arrays, leaving bind data misaligned
+with the region bone_map (invalid skin payload for the writer). Mismatched or
+absent source arrays are cleared rather than carried stale.
+
+T2513 FINDING (audit baseline): vanilla `c_drexlf` itself audits
+`issues_found` with 60 "UV count mismatch" issues — every bone-geometry node
+carries vertices but no UVs in the shipped game data (analyzer strictness).
+T2505's `status=ok` was for a single-mesh override with no bone-geometry
+nodes. The correct full-DAG acceptance is therefore **no NEW issues vs the
+vanilla baseline**, not `status == ok`. The split export produces **15 issues,
+all present in vanilla** (baseline 60) — strictly cleaner than shipped data.
+
+Round-trip acceptance (all green): 7 `bodyGeo_anatNN` skin nodes reload with
+palettes ≤16 and texture `c_drex01`; hooks `Lhand_g`/`Rhand_g`/`camerahook`/
+`head_g` preserved; animations `cwalk`/`cpause1`/`pause2`/`default` preserved;
+1526 faces exact; per-vertex (bone_name, weight) multisets byte-identical
+through the FULL binary round-trip (reloaded → split-part → source chain);
+`bounding_box_ok=true`; zero warnings. Artifact: `c_drexlf.mdl` 570,724 B +
+`c_drexlf.mdx` 171,536 B + `manifest.json` (hashes, audit, install hint).
+Hash comparison to the T2505 single-mesh baseline: those Override files are no
+longer present on disk; divergence is expected regardless (multi-node split vs
+single mesh — structurally different by design).
+
+Override install is env-gated (`GHOSTRIGGER_P4_INSTALL_OVERRIDE=1`) with
+pre-existing-hash recording, so normal pytest runs never mutate the game
+install. kotormcp shadowing workaround documented in the test module
+docstring (sibling KotorMCP package shadows the repo-local Core.Automation
+copy; purge + path-prepend before import). In-game observation (warp, walk +
+attack) is the owner's manual acceptance step, out of scope.
+
+Files: `native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`
+(qbone/tbone subset fix), `tests/test_full_pipeline_export.py` (new),
+`tests/test_skinned_node_splitter.py` untouched, `.gitignore` allow-list,
+regenerated Core.Workflow payload (count unchanged at 1186).
+
+Verification: `tests/test_full_pipeline_export.py` 1 passed (full round-trip).
+Project suites (pipeline + splitter + correspondence + landmark + anatomical)
+39 passed + 1 xfailed (ballooning xfail preserved). Cross-suite winding + v2 +
+payloads 32 passed at count 1186.
+
 ### [2026-07-01] T2512: PR E — Anatomical skinned-node splitter with weight remap
 
 Owner: LordVaderCW
