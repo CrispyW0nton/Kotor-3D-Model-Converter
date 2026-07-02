@@ -11,6 +11,46 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-01
 
+### [2026-07-02] T2520: Export texture rename is now export-scoped — viewport keeps its textures
+
+Owner: LordVaderCW
+T###: T2520
+Subsystem: Character Builder export workflow (Core.Workflow payload)
+Intersects: Owner's 2026-07-02 09:06 manual export — MDL/MDX wrote correctly,
+but the model in the viewport turned untextured afterwards ("7 texture(s)
+referenced but none loaded").
+
+Root cause: the T2518 `normalize_texture_resrefs_for_kotor` step permanently
+mutated the live model's texture fields (`C_DrexlF_UV_basecolor` →
+`c_drexlf_uv_t00`) so the MDL writer would emit engine-loadable ≤16-char
+resrefs. After the export returned, the viewport looked for the short name in
+the user's source texture directory — where only the original file exists —
+and every mesh dropped to untextured. The exported MDL itself was correct
+(verified by parsing the owner's `c_drexlf_uv.mdl`: all seven skin nodes
+reference `c_drexlf_uv_t00`, and `c_drexlf_uv_t00.tga` sits next to it).
+
+Fix in `native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`
+(package-local module, no root `src` counterpart):
+
+- `normalize_texture_resrefs_for_kotor` now preserves the original casing of
+  each renamed texture in its `{new: original}` return map.
+- New `restore_texture_resrefs(model, renames)` undoes the rename on the live
+  model.
+- `export_scene` wraps the format writers + texture exporter in `try/finally`
+  and restores the original names afterwards, so the rename is visible only to
+  the writers. The `texture_resref_renames` sidecar metadata still records
+  what the export produced.
+
+Files: Core.Workflow payload module (+ regenerated payload manifest),
+`tests/test_character_export_pipeline.py` (now also reloads the written MDL to
+assert short resrefs on disk, and asserts the live model's texture names are
+byte-identical before/after `export_scene`).
+
+Verification: `tests/test_character_export_pipeline.py` end-to-end Drexl
+OBJ→MDL test passed with the new restore assertions; Core.Workflow payload
+byte-identity test passed. Owner's exported MDL parsed headlessly to confirm
+the on-disk texture references were already correct.
+
 ### [2026-07-02] T2519: Creature rigs are no longer judged by humanoid hook expectations
 
 Owner: LordVaderCW

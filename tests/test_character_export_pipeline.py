@@ -91,6 +91,12 @@ def test_creature_obj_to_mdl_export_end_to_end() -> None:
         part_names,
     )
 
+    texture_names_before_export = {
+        node.name: str(getattr(node, "texture", "") or "")
+        for node in rigged.all_nodes()
+        if str(getattr(node, "texture", "") or "").strip()
+    }
+
     entry = SimpleNamespace(model=rigged, resref="c_drexlf", source_path=str(obj_path))
     scene = SimpleNamespace(
         game_version="K2",
@@ -109,14 +115,35 @@ def test_creature_obj_to_mdl_export_end_to_end() -> None:
     assert "c_drexlf.mdl" in files and "c_drexlf.mdx" in files, files
     assert (Path(out_dir) / "c_drexlf.mdl").stat().st_size > 1024
 
-    # Fix 3: every texture resref on the exported model fits the engine limit
-    # and the rename mapping was recorded for the texture exporter.
-    for node in rigged.all_nodes():
-        for field in ("texture", "lightmap"):
-            name = str(getattr(node, field, "") or "")
-            assert len(name) <= _KOTOR_RESREF_LIMIT, (node.name, field, name)
+    # Fix 3: the rename mapping was recorded for the texture exporter and the
+    # written MDL carries only engine-loadable (<=16 char) texture resrefs.
     renames = scene.metadata.get("texture_resref_renames", {})
     assert renames, "over-long OBJ texture name should have been renamed"
     for new_name, original in renames.items():
         assert len(new_name) <= _KOTOR_RESREF_LIMIT
         assert len(original) > _KOTOR_RESREF_LIMIT
+
+    from src.core.game.kotor_loader import load_model_from_file
+
+    reloaded = load_model_from_file(
+        str(Path(out_dir) / "c_drexlf.mdl"), str(Path(out_dir) / "c_drexlf.mdx")
+    )
+    assert reloaded is not None
+    exported_textures = {
+        str(getattr(node, "texture", "") or "")
+        for node in reloaded.all_nodes()
+        if str(getattr(node, "texture", "") or "").strip()
+    }
+    assert exported_textures, "exported MDL should reference textures"
+    for name in exported_textures:
+        assert len(name) <= _KOTOR_RESREF_LIMIT, name
+        assert name in renames, name
+
+    # T2520: the rename is export-scoped — the live model must get its
+    # original texture names back so the viewport keeps rendering textured.
+    texture_names_after_export = {
+        node.name: str(getattr(node, "texture", "") or "")
+        for node in rigged.all_nodes()
+        if str(getattr(node, "texture", "") or "").strip()
+    }
+    assert texture_names_after_export == texture_names_before_export

@@ -9650,16 +9650,19 @@ def normalize_texture_resrefs_for_kotor(model: Any, resref: str) -> Dict[str, st
     field referencing it is rewritten so the exported MDL and TGA stay
     consistent.  Returns ``{new_name: original_name}`` (empty when nothing
     needed renaming) — the texture exporter uses it to find source images by
-    their original filename.
+    their original filename, and :func:`restore_texture_resrefs` uses it to
+    put the live model back after the export completes (T2520).
     """
-    existing: set = set()
+    # lowercase name -> first-seen original casing, so the restore step can
+    # hand the viewport back exactly the name it had before export.
+    existing: Dict[str, str] = {}
     for node in _model_nodes(model):
         for field in _TEXTURE_RESREF_FIELDS:
             name = str(getattr(node, field, "") or "").strip()
             if name:
-                existing.add(name.lower())
+                existing.setdefault(name.lower(), name)
 
-    renames: Dict[str, str] = {}  # original -> new
+    renames: Dict[str, str] = {}  # original (lowercase) -> new
     counter = 0
     base = "".join(c for c in str(resref or "tex").lower() if c.isalnum() or c == "_")
     base = (base or "tex")[: _KOTOR_RESREF_LIMIT - 4]
@@ -9691,7 +9694,31 @@ def normalize_texture_resrefs_for_kotor(model: Any, resref: str) -> Dict[str, st
         len(renames),
         {orig: new for orig, new in renames.items()},
     )
-    return {new: orig for orig, new in renames.items()}  # new -> original
+    # new -> original (original casing preserved for the restore step).
+    return {new: existing[orig] for orig, new in renames.items()}
+
+
+def restore_texture_resrefs(model: Any, renames: Dict[str, str]) -> None:
+    """Undo :func:`normalize_texture_resrefs_for_kotor` on the live model.
+
+    T2520: the rename mutates the in-memory model so the MDL writer picks the
+    short names up, but the live scene keeps rendering after the export.  If
+    the short names are left behind the viewport looks for e.g.
+    ``c_drexlf_uv_t00`` in the user's source texture directory — where only
+    the original ``C_DrexlF_UV_basecolor`` file exists — and the model turns
+    untextured.  ``renames`` is the ``{new_name: original_name}`` mapping the
+    normalizer returned.
+    """
+    if not renames:
+        return
+    for node in _model_nodes(model):
+        for field in _TEXTURE_RESREF_FIELDS:
+            name = str(getattr(node, field, "") or "").strip()
+            if name and name.lower() in renames:
+                try:
+                    setattr(node, field, renames[name.lower()])
+                except Exception:
+                    pass
 
 
 def model_texture_names(model: Any) -> List[str]:
@@ -10463,24 +10490,34 @@ def export_scene(
         scene_metadata["texture_resref_renames"] = dict(texture_renames)
 
     # Build the per-format dispatch list (preserving caller order).
+    # T2520: the writers (and the texture exporter, which needs the rename
+    # map to locate source images) run while the short names are applied;
+    # the finally-block hands the live model its original texture names back
+    # so the viewport keeps rendering textured after the export.
     label_by_key = {key: label for key, label, _exts in EXPORT_FORMATS}
     rows: List[ExportFormatResult] = []
-    for fmt_key in requested:
-        if fmt_key not in label_by_key:
-            rows.append(ExportFormatResult(
-                key=fmt_key, label=fmt_key, ok=False,
-                message=f"Unknown format '{fmt_key}'.",
-                code="failed",
-            ))
-            continue
-        rows.append(
-            _export_single_format(
-                scene, body, fmt_key,
-                label_by_key[fmt_key], out_dir, resref,
+    try:
+        for fmt_key in requested:
+            if fmt_key not in label_by_key:
+                rows.append(ExportFormatResult(
+                    key=fmt_key, label=fmt_key, ok=False,
+                    message=f"Unknown format '{fmt_key}'.",
+                    code="failed",
+                ))
+                continue
+            rows.append(
+                _export_single_format(
+                    scene, body, fmt_key,
+                    label_by_key[fmt_key], out_dir, resref,
+                )
             )
-        )
 
-    tex_export = export_external_textures(scene, body, out_dir)
+        tex_export = export_external_textures(scene, body, out_dir)
+    finally:
+        try:
+            restore_texture_resrefs(body, texture_renames)
+        except Exception:  # pragma: no cover - defensive
+            log.exception("texture resref restore failed")
     if tex_export.get("written") or tex_export.get("missing"):
         rows.append(ExportFormatResult(
             key="textures",
