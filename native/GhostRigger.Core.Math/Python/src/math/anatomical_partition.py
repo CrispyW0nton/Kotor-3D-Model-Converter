@@ -57,7 +57,6 @@ import trimesh
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial import cKDTree
-from scipy.spatial.transform import Rotation
 
 
 # ---------------------------------------------------------------------------
@@ -674,13 +673,40 @@ def _partition_donor_biagp(
 # ---------------------------------------------------------------------------
 
 
+def _load_landmark_alignment():
+    """Import the sibling ``landmark_alignment`` module robustly.
+
+    Mirrors ``containment_fit._load_math_sibling``: this module may be imported
+    as ``src.math.anatomical_partition`` in the embedded runtime, or loaded by
+    file path in tests (no package context).  Try package-qualified and bare
+    imports, then fall back to loading the file next to this one.
+    """
+    from importlib import import_module
+
+    for candidate in ("src.math.landmark_alignment", "landmark_alignment"):
+        try:
+            return import_module(candidate)
+        except Exception:
+            pass
+    import importlib.util
+    import pathlib
+
+    path = pathlib.Path(__file__).with_name("landmark_alignment.py")
+    spec = importlib.util.spec_from_file_location("_gr_sibling_landmark_alignment", str(path))
+    if spec is None or spec.loader is None:  # pragma: no cover - defensive
+        raise ImportError("cannot load sibling math module landmark_alignment")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _normalise_cloud(points: np.ndarray) -> Tuple[np.ndarray, np.ndarray, float]:
-    """Zero-centre and unit-RMS-scale a point cloud; return ``(norm, centre, rms)``."""
-    centre = points.mean(axis=0)
-    centred = points - centre
-    rms = float(np.sqrt(np.mean(np.sum(centred * centred, axis=1))))
-    rms = max(rms, 1e-9)
-    return centred / rms, centre, rms
+    """Zero-centre and unit-RMS-scale a point cloud; return ``(norm, centre, rms)``.
+
+    T2509a: delegates to :func:`landmark_alignment.normalise_cloud` (canonical
+    home).  Kept as a thin private wrapper so this module's API is unchanged.
+    """
+    return _load_landmark_alignment().normalise_cloud(points)
 
 
 def _best_alignment_rotation(
@@ -696,22 +722,11 @@ def _best_alignment_rotation(
     A raw world-space nearest lookup would map head faces onto the tail and yield
     ~0 transfer confidence, silently transferring regions wrong.
 
-    So transfer runs in a *shape-normalised* frame (zero-mean, unit-RMS) and we
-    search the 24 proper axis-aligned rotations (the octahedral group) for the
-    one minimising mean nearest-neighbour distance.  Identity is a member of the
-    group, so this never does worse than no rotation.  This keeps the transfer a
-    pure geometric correspondence (no skinning, no fit) while making it robust to
-    the frame mismatch that real imports exhibit (Drexl: confidence 0.846).
+    T2509a: the 24-rotation octahedral search migrated verbatim to
+    :func:`landmark_alignment.best_alignment_rotation` so correspondence fit
+    (T2509b) shares one implementation; this wrapper preserves the Phase-2 API.
     """
-    best_rotation = np.eye(3)
-    best_cost = np.inf
-    for rotation in Rotation.create_group("O").as_matrix():
-        distances, _ = donor_tree.query(imported_norm @ rotation.T)
-        cost = float(np.mean(distances))
-        if cost < best_cost:
-            best_cost = cost
-            best_rotation = rotation
-    return best_rotation
+    return _load_landmark_alignment().best_alignment_rotation(imported_norm, donor_tree)
 
 
 def _align_and_transfer_regions(

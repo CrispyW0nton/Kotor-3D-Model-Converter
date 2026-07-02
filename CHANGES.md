@@ -11,6 +11,53 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-01
 
+### [2026-07-01] T2509a: Correspondence-fit foundation math (weighted Umeyama + alignment migration)
+
+Owner: LordVaderCW
+T###: T2509a
+Subsystem: Core.Math landmark alignment (foundation for correspondence fit)
+Intersects: First PR of the six-PR c_drexl_uv completion chain (charter scope
+Option A + P5-min). Consumed by T2509b (`correspondence_fit.py`). Parent:
+T2508a (`087f0f4a`).
+
+Summary: Added the pure-math foundation the correspondence fit needs, in
+`native/GhostRigger.Core.Math/Python/src/math/landmark_alignment.py`:
+
+- `compute_weighted_rigid_transform(source, target, weights)` — weighted
+  Umeyama similarity minimising Σ wᵢ‖s·R·xᵢ + t − yᵢ‖². Matches the existing
+  unweighted `compute_rigid_transform` exactly in convention (cross-covariance
+  orientation, SVD reflection correction, RMS-ratio uniform scale); with uniform
+  weights the two return identical results (locked by test at 1e-10). Weights
+  must be non-negative and sum > 0 (`ValueError` otherwise); rank-<2 degenerate
+  geometry falls back to translation-only (R=I, scale=1).
+- `normalise_cloud` and `best_alignment_rotation` — migrated verbatim from
+  `anatomical_partition._normalise_cloud` / `_best_alignment_rotation` (PR C's
+  coordinate-frame correctness fix: shape-normalise + 24-rotation octahedral
+  search) so T2509b and the partitioner share one implementation.
+  `best_alignment_rotation` accepts an `(M,3)` array or a prebuilt `cKDTree`;
+  scipy is imported lazily so `landmark_alignment` stays NumPy-only at import.
+- `anatomical_partition.py` Phase-2 wrappers now delegate to the canonical
+  functions via a robust sibling loader (same pattern as
+  `containment_fit._load_math_sibling`); its scipy `Rotation` import dropped.
+  Public API unchanged; behavior byte-identical (delegation locked by
+  cross-module test).
+
+Files: `native/GhostRigger.Core.Math/Python/src/math/landmark_alignment.py`,
+`native/GhostRigger.Core.Math/Python/src/math/anatomical_partition.py`,
+`tests/test_landmark_alignment.py` (new), `.gitignore` allow-list, regenerated
+Core.Math `GhostRiggerPythonPayload.json` (count unchanged at 1185 — no new
+payload file; tests are not payloads).
+
+Verification: `tests/test_landmark_alignment.py` → 11 passed (uniform-weight
+equivalence, exact similarity recovery, heavy-pair preference, zero-weight
+exclusion, reflection correction det(R)=+1, all-zero/negative weights raise,
+colinear translation-only fallback, normalise contract, 24-rotation recovery on
+array + tree targets, identity when aligned, anatomical_partition delegation
+lock). `tests/test_anatomical_partition.py` → 9 passed + 1 xfailed (Drexl
+baseline 7 / 16 / 1.0 intact with delegation live; ballooning xfail preserved).
+`tests/test_winding_number.py`, `tests/test_containment_fit_v2.py`,
+`tests/test_native_python_payloads.py` → 32 passed.
+
 ### [2026-07-01] T2508a: PR C.1a — Migrate donor builder to canonical world_transform()
 
 Owner: LordVaderCW

@@ -207,7 +207,7 @@
             "resource_name": "PYTHON_PAYLOAD_MATH_ANATOMICAL_PARTITION",
             "source_path": "src/math/anatomical_partition.py",
             "packaged_path": "Python/src/math/anatomical_partition.py",
-            "sha256": "f96f0ab89cda9e5f3e07fc0eefe82517ba2d6ba1270089811e5fd864b37f7ba2"
+            "sha256": "cded8b75e846d317fb047e7906dda2b4301ddc48daa2fbadd7ceb5575390a500"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_CAMERA_MATH",
@@ -243,7 +243,7 @@
             "resource_name": "PYTHON_PAYLOAD_MATH_LANDMARK_ALIGNMENT",
             "source_path": "src/math/landmark_alignment.py",
             "packaged_path": "Python/src/math/landmark_alignment.py",
-            "sha256": "fe960424165ff932c6aaf653582fa7c62862c861701107733f6ac36d61a68cc1"
+            "sha256": "1c1f80080ae7dfd12c600c1a1b6c58bf22e9ef6bfd0f7635066d8fcb82a0aa4a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_MODULE_LAYOUT_MATH",
