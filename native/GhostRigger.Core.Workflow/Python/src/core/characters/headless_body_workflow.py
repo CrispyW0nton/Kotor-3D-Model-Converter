@@ -6445,16 +6445,6 @@ def split_skinned_mesh_nodes_with_weight_remap(
             "message": "Load a custom mesh before splitting.",
             "split_nodes": 0,
         }
-    if reference_model is None:
-        return {
-            "ok": False,
-            "code": "missing_donor",
-            "message": (
-                "Anatomical split requires a weight donor. Select a "
-                "reference/base model before splitting a skinned mesh."
-            ),
-            "split_nodes": 0,
-        }
 
     candidates = [
         node
@@ -6465,6 +6455,9 @@ def split_skinned_mesh_nodes_with_weight_remap(
         and len(list(getattr(node, "bone_map", []) or [])) > _SKIN_PALETTE_LIMIT
     ]
     if not candidates:
+        # Nothing needs an anatomical split — demanding a donor here would
+        # gratuitously block unskinned/in-palette flows (P5-min UI wiring
+        # sends every Node Splitter click through this path).
         palettes = validate_skin_node_palettes(model)
         return {
             "ok": True,
@@ -6472,6 +6465,16 @@ def split_skinned_mesh_nodes_with_weight_remap(
             "message": "No skinned node exceeds the 16-bone palette limit.",
             "split_nodes": 0,
             "palette_validation": palettes,
+        }
+    if reference_model is None:
+        return {
+            "ok": False,
+            "code": "missing_donor",
+            "message": (
+                "Anatomical split requires a weight donor. Select a "
+                "reference/base model before splitting a skinned mesh."
+            ),
+            "split_nodes": 0,
         }
 
     split_source_count = 0

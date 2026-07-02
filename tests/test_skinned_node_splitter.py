@@ -180,6 +180,50 @@ def test_missing_donor_hard_fails() -> None:
     assert result["code"] == "missing_donor"
 
 
+def test_no_donor_is_fine_when_nothing_needs_splitting() -> None:
+    """P5-min guard order: the missing-donor hard-fail only fires when an
+    over-palette skinned node actually needs splitting — an in-palette mesh
+    with no donor selected must sail through (the UI now routes every Node
+    Splitter click through this path)."""
+    verts = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]
+    faces = [(0, 1, 2)]
+    rows = _skin_rows_from_arrays([[0, -1, -1, -1]] * 3, [[1.0, 0, 0, 0]] * 3)
+    model = _FakeModel(
+        _FakeSkinNode("in_palette", verts, faces, rows, [f"b{i}" for i in range(8)])
+    )
+    result = wf.split_skinned_mesh_nodes_with_weight_remap(model, None)
+    assert result["ok"]
+    assert result["code"] == "no_over_palette_nodes"
+
+
+def test_split_failure_dialog_copy_both_panel_copies() -> None:
+    """P5-min: the pure dialog-copy helper maps the two hard-fail codes to
+    actionable (title, body) pairs and returns None otherwise — verified on
+    BOTH package-local panel copies (Core.GUI.Display and Core.Tools)."""
+    pytest.importorskip("PySide6")
+    for pkg in ("GhostRigger.Core.GUI.Display", "GhostRigger.Core.Tools"):
+        panel = _load_module(
+            f"gr_cb_panel_{pkg.replace('.', '_')}",
+            f"native/{pkg}/Python/src/gui/panels/qt_character_builder_panel.py",
+        )
+        fn = panel._split_failure_dialog_copy
+
+        title, body = fn({"ok": False, "code": "missing_donor", "message": "x"})
+        assert "Base Skeleton Required" in title
+        assert "weight donor" in body and "KOTOR Base Skeleton" in body
+
+        title, body = fn(
+            {"ok": False, "code": "palette_overflow",
+             "message": "region 3 needs 19 bones (> 16)"}
+        )
+        assert "Palette Overflow" in title
+        assert "19 bones" in body and "16" in body
+
+        assert fn({"ok": True, "code": "split"}) is None
+        assert fn({"ok": False, "code": "no_body_mesh"}) is None
+        assert fn(None) is None
+
+
 def test_default_mode_skips_skinned_nodes_unchanged() -> None:
     """respect_skinned='skip' (default) must be byte-for-byte the pre-T2512
     behavior: skinned nodes counted, never split."""

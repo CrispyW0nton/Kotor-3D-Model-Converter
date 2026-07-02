@@ -411,7 +411,9 @@ class QtInspectorPanel(QtWidgets.QWidget):
 
     def _add_skeleton_template_picker(self, layout: QtWidgets.QVBoxLayout) -> None:
         """AccuRig-style base-skeleton picker shown before custom import."""
-        template_group = QtWidgets.QGroupBox("KOTOR Base Skeleton")
+        # P5-min (T2514): one selection now serves two roles — skeleton
+        # reference AND anatomical-split weight donor (T2512).
+        template_group = QtWidgets.QGroupBox("KOTOR Base Skeleton (weight donor)")
         template_layout = QtWidgets.QVBoxLayout(template_group)
         template_layout.setSpacing(4)
 

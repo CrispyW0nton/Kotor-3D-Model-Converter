@@ -11,6 +11,52 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-01
 
+### [2026-07-01] T2514: P5-min — Character Builder wiring for the anatomical splitter + hard-fail dialogs
+
+Owner: LordVaderCW
+T###: T2514
+Subsystem: Character Builder panel (Node Splitter UI wiring) + Core.Workflow guard order
+Intersects: Sixth (final) PR of the six-PR c_drexl_uv completion chain.
+Consumes T2512. Charter scope only — no layout changes, no new buttons/steps;
+the P5 redesign is a separate design-gated phase. Parent: T2513 (`10770cc7`).
+
+Summary:
+- The Node Splitter button now routes through
+  `split_imported_mesh_nodes(scene, respect_skinned="split_with_weight_remap",
+  reference_model=<selected base skeleton>)` in BOTH package-local panel
+  copies (`Core.GUI.Display` + `Core.Tools`
+  `qt_character_builder_panel._on_split_mesh_nodes_requested`). Unskinned
+  behavior is unchanged; over-palette skinned meshes now split anatomically
+  using the selected base skeleton as weight donor.
+- The two hard-fail paths surface as actionable `QMessageBox.critical`
+  dialogs, not tracebacks: `missing_donor` → "select a KOTOR base skeleton
+  (weight donor)"; `palette_overflow` → region/bone-count detail +
+  re-partition guidance. Dialog copy lives in a pure module-level helper
+  `_split_failure_dialog_copy` (headlessly unit-tested on both copies); all
+  other results keep the existing status-strip UX.
+- Guard-order fix in `split_skinned_mesh_nodes_with_weight_remap`
+  (Core.Workflow): the missing-donor hard-fail now fires only when an
+  over-palette node actually needs splitting — an in-palette mesh with no
+  donor selected sails through (the UI routes every click through this path).
+- Inspector label: "KOTOR Base Skeleton" → "KOTOR Base Skeleton (weight
+  donor)" in both inspector copies — one selection serves two roles.
+
+Files: `native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/qt_character_builder_panel.py`,
+`native/GhostRigger.Core.Tools/Python/src/gui/panels/qt_character_builder_panel.py`,
+`native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/qt_inspector_panel.py`,
+`native/GhostRigger.Core.Tools/Python/src/gui/panels/qt_inspector_panel.py`,
+`native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`,
+`tests/test_skinned_node_splitter.py` (+2 tests), regenerated payloads for
+Core.Workflow + Core.GUI.Display + Core.Tools (count unchanged at 1186).
+
+Verification: `tests/test_skinned_node_splitter.py` 8 passed (new: guard-order
+test; dialog-copy helper tested headlessly on BOTH panel copies). Project
+suites 33 passed + 1 xfailed; cross-suite 32 passed. NOTE: visible UI
+acceptance (dialogs appearing, label rendering, full Load→fit→split→export
+walkthrough) requires the owner's Debug-app walkthrough per repo law — a
+step-by-step manual protocol is in the T2514 checkpoint report; backend tests
+here prove routing and dialog copy only, not visible behavior.
+
 ### [2026-07-01] T2513: P4 — Full-pipeline round-trip: split multi-node export, reload, audit
 
 Owner: LordVaderCW

@@ -379,6 +379,39 @@ class QtCharacterBuilderPanel(QtWidgets.QWidget):
         self._builder_window.activateWindow()
 
 
+def _split_failure_dialog_copy(result) -> "tuple[str, str] | None":
+    """Map a Node Splitter hard-fail result to (dialog_title, dialog_body).
+
+    P5-min (T2514): the two anatomical-split hard-fail paths (T2512 D-4 missing
+    donor; palette overflow) must surface as actionable dialogs, not
+    tracebacks or silent status-strip lines.  Pure function (no widgets) so the
+    dialog copy is unit-testable headlessly.  Returns ``None`` for every other
+    result (success and soft/info outcomes keep the existing status-strip UX).
+    """
+    if not isinstance(result, dict) or result.get("ok", False):
+        return None
+    code = str(result.get("code") or "")
+    if code == "missing_donor":
+        return (
+            "Node Splitter — Base Skeleton Required",
+            "Character Builder requires a base skeleton (weight donor) to "
+            "split a skinned mesh into KOTOR-sized bone regions.\n\n"
+            "Please select a KOTOR base skeleton (step 1, Inspector → "
+            "\"KOTOR Base Skeleton (weight donor)\") before splitting.",
+        )
+    if code == "palette_overflow":
+        detail = str(result.get("message") or "")
+        return (
+            "Node Splitter — Export Blocked (Palette Overflow)",
+            "A split region still needs more than 16 bones, so this mesh "
+            "cannot be exported as a KOTOR skin node.\n\n"
+            f"{detail}\n\n"
+            "Try re-partitioning (different donor / cleaner weight painting) "
+            "or reducing the skinning complexity of the affected area.",
+        )
+    return None
+
+
 class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
     """AccuRig-style Character Builder window shell (M2 / T201).
 
@@ -2873,10 +2906,23 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
     @QtCore.Slot()
     def _on_split_mesh_nodes_requested(self) -> None:
-        """Split imported mesh islands before binding the KOTOR skeleton."""
+        """Split imported mesh islands before binding the KOTOR skeleton.
+
+        P5-min (T2514): the button also handles SKINNED meshes now — over-
+        palette skinned nodes are split anatomically with weight remap
+        (T2512), using the selected base skeleton as the weight donor.  The
+        two hard-fail paths surface as actionable dialogs, not tracebacks.
+        """
 
         _wf = self._workflow_module()
-        result = _wf.split_imported_mesh_nodes(self.scene)
+        result = _wf.split_imported_mesh_nodes(
+            self.scene,
+            respect_skinned="split_with_weight_remap",
+            reference_model=getattr(self, "_selected_skeleton_template_model", None),
+        )
+        dialog_copy = _split_failure_dialog_copy(result)
+        if dialog_copy is not None:
+            QtWidgets.QMessageBox.critical(self, dialog_copy[0], dialog_copy[1])
         message = str(result.get("message") or "Node Splitter finished.")
         ok = bool(result.get("ok"))
         kind = "ok" if ok and int(result.get("split_nodes", 0) or 0) else "info"

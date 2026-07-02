@@ -705,7 +705,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_CHARACTER_BUILDER_PANEL",
             "source_path": "src/gui/panels/qt_character_builder_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_character_builder_panel.py",
-            "sha256": "e48037b16c4356b578b5233579a49c6abd8ed3bfa1457e50ef4ca28f3fd8474e"
+            "sha256": "4337490bd9f7b99c722759f627c038739a01b0db2f33e1d0632de3d35e6d8ca4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_COMMON_PANELS",
@@ -729,7 +729,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_INSPECTOR_PANEL",
             "source_path": "src/gui/panels/qt_inspector_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_inspector_panel.py",
-            "sha256": "15708b59deb6668f692180b758975d45553d8c2c8ed26f2627a49261a385f44a"
+            "sha256": "124a81ac818b9718fdeb4d6fcc3353544c8d8900c90c482192e9cc6c60f21ecc"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_LIBRARY_PANEL",

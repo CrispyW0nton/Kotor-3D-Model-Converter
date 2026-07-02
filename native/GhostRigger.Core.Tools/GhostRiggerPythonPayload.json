@@ -1533,13 +1533,13 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_CHARACTER_BUILDER_PANEL",
             "source_path": "src/gui/panels/qt_character_builder_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_character_builder_panel.py",
-            "sha256": "be76f55a6e3a8332002c49d8ee9966d5482ded8e93d606309d31f07773477e95"
+            "sha256": "b1000dc6bc27f778008d4ed1ab7020ee2ad23324845e483e78e25a5eb17f91d6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_INSPECTOR_PANEL",
             "source_path": "src/gui/panels/qt_inspector_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_inspector_panel.py",
-            "sha256": "15708b59deb6668f692180b758975d45553d8c2c8ed26f2627a49261a385f44a"
+            "sha256": "124a81ac818b9718fdeb4d6fcc3353544c8d8900c90c482192e9cc6c60f21ecc"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_LIGHTING_PANEL",
