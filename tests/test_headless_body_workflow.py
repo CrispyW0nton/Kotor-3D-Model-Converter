@@ -3157,6 +3157,29 @@ def test_external_texture_resolution_includes_skinned_fbx_meshes(tmp_path):
     assert report["found"]["BendakStarkiller_basecolor"] == str(tex)
 
 
+def test_external_texture_resolution_matches_unique_truncated_fbx_sidecar(tmp_path):
+    """FBX imports can inherit a 32-char KOTOR texture field before viewport load."""
+    model = _FakeTexturedSkinModel(texture="RancorTamedConceptFinal_basecolo")
+    fbx = tmp_path / "RancorTamedConceptFinal.fbx"
+    fbx.write_bytes(b"fbx")
+    tex_dir = tmp_path / "RancorTamedConceptFinal.fbm"
+    tex_dir.mkdir()
+    tex = tex_dir / "RancorTamedConceptFinal_basecolor.jpg"
+    tex.write_bytes(b"stub")
+
+    dirs = wf.candidate_texture_dirs(str(fbx))
+    rewrites = wf.reconcile_external_texture_names(model, dirs)
+    report = wf.texture_resolution_report(model, dirs)
+
+    assert rewrites == {
+        "RancorTamedConceptFinal_basecolo": "RancorTamedConceptFinal_basecolor"
+    }
+    assert model.all_nodes()[0].texture == "RancorTamedConceptFinal_basecolor"
+    assert report["found_count"] == 1
+    assert report["missing"] == []
+    assert report["found"]["RancorTamedConceptFinal_basecolor"] == str(tex)
+
+
 def test_external_texture_export_writes_game_tga_for_skinned_mesh(tmp_path):
     Image = pytest.importorskip("PIL.Image")
 

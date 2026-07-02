@@ -375,6 +375,59 @@ class TextureCache:
                     return None
                 except Exception as e:
                     log.debug(f"Texture load error {path}: {e}")
+            # Case-insensitive stem/prefix match for DCC sidecars (FBX .fbm folders).
+            # Some FBX import paths inherit KOTOR's 32-byte texture field cap before
+            # the renderer sees the source texture name.  The sidecar image keeps its
+            # full DCC stem, so accept a unique longer on-disk stem that starts with
+            # the requested name.
+            try:
+                prefix_matches = []
+                for child in os.scandir(search_dir):
+                    if not child.is_file():
+                        continue
+                    stem, ext = os.path.splitext(child.name)
+                    stem_key = stem.lower()
+                    if ext.lower() not in (
+                        '.tga', '.tpc', '.png', '.dds', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff',
+                    ):
+                        continue
+                    if stem_key == name:
+                        prefix_matches = [child]
+                        break
+                    if stem_key.startswith(name) or name.startswith(stem_key):
+                        prefix_matches.append(child)
+                if len(prefix_matches) != 1:
+                    continue
+                child = prefix_matches[0]
+                stem, ext = os.path.splitext(child.name)
+                if ext.lower() not in (
+                    '.tga', '.tpc', '.png', '.dds', '.jpg', '.jpeg', '.bmp', '.tif', '.tiff',
+                ):
+                    continue
+                path = child.path
+                try:
+                    img = self._load_file(path)
+                    if img is not None:
+                        img = self._resize_if_needed(img, name)
+                        try:
+                            with open(path, 'rb') as fraw:
+                                raw_bytes = fraw.read(512)
+                            txi_s = getattr(img, '_txi_str', None)
+                            if txi_s is None:
+                                txi_s = self.get_txi(name)
+                            txi_m = _parse_txi_string(txi_s) if txi_s else _parse_txi_string('')
+                            img = self._apply_kotor_alpha(raw_bytes, img, txi_m)
+                        except Exception:
+                            pass
+                        log.debug(f"Texture '{name}' loaded from {os.path.basename(path)}")
+                        return img
+                except MemoryError:
+                    log.warning(f"Texture '{name}': out of memory — skipping")
+                    return None
+                except Exception as e:
+                    log.debug(f"Texture load error {path}: {e}")
+            except OSError:
+                pass
         # ── 2. ResourceManager (unified BIF/ERF/Override, <2ms) ─────────────
         # New primary archive backend — replaces the split installation/game_library path.
         # Checks: Override > module ERFs > TexturePacks ERFs > BIF in correct priority.

@@ -11,6 +11,107 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-01
 
+### [2026-07-02] T2522: Rancor FBX splitter now follows authored KOTOR skin regions
+
+Owner: LordVaderCW
+T###: T2522
+Subsystem: Character Builder creature node splitting and Rancor FBX workflow
+(Core.Workflow payload)
+Intersects: Owner's RancorTamedConceptFinal FBX import video — the custom
+Rancor built on the K2 Rancor skeleton, but the Node Splitter produced
+non-proportionate chunks and animation preview deformed hands/forearms because
+automatic donor regions were not aligned with the Rancor's authored anatomy.
+
+Root cause: the splitter always recomputed BIAGP regions from the selected
+donor's unified skin data. For K2 Rancor variants, the shipped donor already
+contains clean skin nodes (arms, legs, tail, torso), each under the 16-bone
+palette limit. Recomputing regions on top of that could either overflow
+(``c_rancorS``: one region needed 18 bones) or split into less meaningful
+palette chunks (``c_rancor``: seven generated pieces instead of the authored
+anatomical nodes).
+
+Fix:
+
+- ``_split_skinned_node_by_anatomical_regions`` now first tries
+  ``authored_donor_skin_node_weight_remap`` when the selected KOTOR donor has
+  authored skin nodes whose palettes are already legal.
+- The authored path transfers imported faces to the donor's original skin-node
+  regions using the same shape-normalized donor/import face-centroid alignment
+  used by the existing anatomical transfer path.
+- The path validates the actual imported skin rows per proposed region before
+  accepting it; if any proposed region still exceeds the 16-bone limit, the
+  previous BIAGP partition remains the fallback.
+- Split parts now record the selected method and donor region names (for
+  example ``LArm``, ``RArm``, ``Legs``, ``tail``, ``torso``) in the model
+  diagnostics.
+
+Files: Core.Workflow ``headless_body_workflow.py``,
+``tests/test_fbx_texture_resolution.py`` (focused synthetic authored-region
+splitter contract), regenerated Core.Workflow payload manifest.
+
+Verification: ``tests/test_fbx_texture_resolution.py`` 5 passed; payload
+byte-identity check ``tests/test_native_python_payloads.py -q -k "Workflow or
+Rendering"`` passed; actual
+``RancorTamedConceptFinal.fbx`` + ``RancorTamedConceptFinal.fbm`` headless
+fixture with K2 ``c_rancorS`` fit via correspondence surface registration,
+resolved 1/1 texture, and split into 5 authored regions with palettes
+``[13, 14, 4, 6, 15]``. ``GhostRigger.sln`` rebuilt ``Debug|x64``
+successfully so embedded payload DLLs are refreshed.
+
+### [2026-07-02] T2521: FBX embedded-texture (.fbm) folders now resolve in Character Builder
+
+Owner: LordVaderCW
+T###: T2521
+Subsystem: Character Builder external texture resolution (Core.Workflow,
+Core.Rendering, Core.GUI.Display/Tools payloads)
+Intersects: Owner's Rancor FBX import — GhostRigger prompted for the
+``RancorTamedConceptFinal.fbm`` sidecar folder, but textures stayed white in
+the viewport after manual selection.
+
+Root cause (four layers):
+
+1. ``candidate_texture_dirs`` never searched the standard FBX embedded-media
+   folder ``<model>.fbm`` beside the source file, so the first import pass
+   always missed extracted sidecars unless the user picked the folder manually.
+2. Blender FBX preview import recorded ``image.name`` (often a material label
+   like ``Material``) instead of the resolved on-disk filepath stem inside the
+   ``.fbm`` directory, so even a correctly chosen folder could not match.
+3. ``TextureCache`` only tried exact ``<stem><ext>`` paths on disk and did not
+   perform the case-insensitive filename scan already used by the workflow
+   resolver.
+4. FBX-imported texture names can inherit KOTOR's fixed 32-byte texture-field
+   cap before viewport load, so the Rancor material arrived as
+   ``RancorTamedConceptFinal_basecolo`` while the sidecar file remained
+   ``RancorTamedConceptFinal_basecolor.jpg``.
+
+Fix:
+
+- ``candidate_texture_dirs`` now includes ``<fbx_stem>.fbm`` and any sibling
+  ``*.fbm`` directory.
+- New ``reconcile_external_texture_names(model, dirs)`` rewrites unresolved
+  node texture fields to actual image stems (single-atlas fallback when the
+  folder contains exactly one image).
+- Character Builder calls reconcile before loading the viewport and after the
+  manual folder prompt.
+- Blender mesh extraction script now prefers ``bpy.path.abspath(image.filepath)``
+  for the texture stem.
+- Workflow and renderer texture lookup now accept a unique stem/prefix match,
+  so truncated imported names resolve back to the full on-disk sidecar stem.
+- ``TextureCache._load`` adds a case-insensitive directory scan fallback for
+  DCC sidecars and the same unique long-stem fallback.
+
+Files: Core.Workflow ``headless_body_workflow.py``, Core.Rendering
+``texture_cache.py``, Core.GUI.Display + Core.Tools
+``qt_character_builder_panel.py``, ``scripts/blender_extract_fbx_mesh.py``,
+``tests/test_fbx_texture_resolution.py`` (new), regenerated payloads for
+Core.Workflow, Core.Rendering, Core.GUI.Display, Core.Tools.
+
+Verification: ``tests/test_fbx_texture_resolution.py`` 5 passed (.fbm auto
+discovery, material-name reconcile, truncated Rancor sidecar stem, renderer
+cache long-stem fallback, authored-region splitter contract). Payload
+byte-identity checks for the touched Workflow/Rendering packages passed, and
+``GhostRigger.sln`` rebuilt ``Debug|x64`` successfully.
+
 ### [2026-07-02] T2520: Export texture rename is now export-scoped — viewport keeps its textures
 
 Owner: LordVaderCW

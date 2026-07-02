@@ -32,8 +32,19 @@ def _material_info(material):
     texture = ""
     if material.use_nodes and material.node_tree is not None:
         for node in material.node_tree.nodes:
-            if getattr(node, "type", "") == "TEX_IMAGE" and getattr(node, "image", None) is not None:
-                texture = Path(str(node.image.name)).stem
+            if getattr(node, "type", "") != "TEX_IMAGE":
+                continue
+            image = getattr(node, "image", None)
+            if image is None:
+                continue
+            filepath = str(getattr(image, "filepath", "") or "").strip()
+            if filepath:
+                # FBX embedded media lands in ``<model>.fbm/``; Blender stores a
+                # relative ``//`` path here.  Resolve to the actual file stem.
+                texture = Path(bpy.path.abspath(filepath)).stem
+            else:
+                texture = Path(str(image.name)).stem
+            if texture:
                 break
     diffuse = list(getattr(material, "diffuse_color", (0.8, 0.8, 0.8, 1.0))[:3])
     return {

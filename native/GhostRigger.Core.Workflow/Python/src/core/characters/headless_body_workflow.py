@@ -6229,6 +6229,176 @@ def _bone_bind_arrays_by_name(model: Any) -> Dict[str, Tuple[Tuple[float, float,
     return out
 
 
+def _rotate_vec_by_quat_xyzw(q: Sequence[float], v: Sequence[float]) -> Vec3:
+    """Rotate vector ``v`` by quaternion ``q`` in GhostRigger's XYZW convention."""
+    qx, qy, qz, qw = (float(q[0]), float(q[1]), float(q[2]), float(q[3]))
+    vx, vy, vz = (float(v[0]), float(v[1]), float(v[2]))
+    tx = 2.0 * (qy * vz - qz * vy)
+    ty = 2.0 * (qz * vx - qx * vz)
+    tz = 2.0 * (qx * vy - qy * vx)
+    return (
+        vx + qw * tx + (qy * tz - qz * ty),
+        vy + qw * ty + (qz * tx - qx * tz),
+        vz + qw * tz + (qx * ty - qy * tx),
+    )
+
+
+def _node_world_vertices_for_split(node: Any, np_module: Any) -> Any:
+    """Return node vertices in donor world space for authored-region transfer."""
+    local = np_module.asarray(getattr(node, "vertices", []) or [], dtype=np_module.float64)
+    try:
+        pos, rot = node.world_transform()
+    except Exception:
+        pos = getattr(node, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
+        rot = getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
+    world_pos = np_module.asarray([float(pos[0]), float(pos[1]), float(pos[2])], dtype=np_module.float64)
+    try:
+        rot_len = math.sqrt(float(rot[0]) ** 2 + float(rot[1]) ** 2 + float(rot[2]) ** 2)
+    except Exception:
+        rot_len = 0.0
+    if rot_len < 0.001:
+        return local + world_pos
+    return np_module.asarray(
+        [_rotate_vec_by_quat_xyzw(rot, point) for point in local],
+        dtype=np_module.float64,
+    ) + world_pos
+
+
+def _authored_donor_skin_node_regions(
+    reference_model: Any,
+    imported_vertices: Any,
+    imported_faces: Any,
+    *,
+    max_bones_per_region: int,
+) -> Optional[Dict[str, Any]]:
+    """Transfer imported faces to the donor's authored skin-node regions.
+
+    Stock KOTOR creatures are already split into artist-authored skin nodes whose
+    palettes obey the engine limit.  When those nodes are present, they are a
+    stronger anatomical prior than recomputing BIAGP from the unified donor
+    surface, especially for Rancor variants where the small animation model and
+    full donor use slightly different region palettes.
+    """
+    if reference_model is None:
+        return None
+    try:
+        import numpy as np
+        from importlib import import_module
+        from scipy.spatial import cKDTree
+
+        ap = import_module("src.math.anatomical_partition")
+    except Exception:
+        return None
+
+    donor_centroids: List[Any] = []
+    donor_labels: List[int] = []
+    region_names: Dict[int, str] = {}
+    region_palettes: Dict[int, List[str]] = {}
+
+    for node in _iter_model_nodes(reference_model):
+        if not (
+            bool(getattr(node, "is_skin", False))
+            and getattr(node, "vertices", None)
+            and getattr(node, "faces", None)
+        ):
+            continue
+        bone_map = [
+            str(name)
+            for name in list(getattr(node, "bone_map", []) or [])
+            if str(name or "").strip()
+        ]
+        if not bone_map or len(bone_map) > max_bones_per_region:
+            continue
+        try:
+            faces = np.asarray(
+                [(int(f[0]), int(f[1]), int(f[2])) for f in list(getattr(node, "faces", []) or [])],
+                dtype=np.int64,
+            )
+            verts = _node_world_vertices_for_split(node, np)
+        except Exception:
+            continue
+        if faces.ndim != 2 or faces.shape[0] < 1 or verts.shape[0] < 3:
+            continue
+        region_id = len(region_names)
+        try:
+            centroids = verts[faces].mean(axis=1)
+        except Exception:
+            continue
+        donor_centroids.append(centroids)
+        donor_labels.extend([region_id] * int(centroids.shape[0]))
+        region_names[region_id] = str(getattr(node, "name", "") or f"region_{region_id}")
+        region_palettes[region_id] = bone_map
+
+    if len(region_names) <= 1 or not donor_centroids:
+        return None
+
+    try:
+        donor_centroids_arr = np.vstack(donor_centroids)
+        imported_centroids = np.asarray(imported_vertices, dtype=np.float64)[
+            np.asarray(imported_faces, dtype=np.int64)
+        ].mean(axis=1)
+        donor_norm, _, _ = ap._normalise_cloud(donor_centroids_arr)
+        imported_norm, _, _ = ap._normalise_cloud(imported_centroids)
+        tree = cKDTree(donor_norm)
+        rotation = ap._best_alignment_rotation(imported_norm, tree)
+        distances, nearest = tree.query(imported_norm @ rotation.T)
+        labels = np.asarray(donor_labels, dtype=np.int64)
+        face_to_region = labels[nearest].astype(np.int64)
+    except Exception:
+        return None
+
+    per_region_confidence: Dict[int, float] = {}
+    per_face_conf = 1.0 / (1.0 + distances)
+    for region_id in region_names:
+        mask = face_to_region == int(region_id)
+        per_region_confidence[int(region_id)] = (
+            float(np.mean(per_face_conf[mask])) if np.any(mask) else 0.0
+        )
+    return {
+        "face_to_region": face_to_region,
+        "region_names": region_names,
+        "region_palettes": region_palettes,
+        "mean_transfer_confidence": float(np.mean(per_face_conf)) if per_face_conf.size else 0.0,
+        "per_region_confidence": per_region_confidence,
+        "method": "authored_donor_skin_nodes",
+    }
+
+
+def _region_palette_sizes_from_assignment(
+    face_to_region: Any,
+    faces: Sequence[Any],
+    skin_data: Sequence[Any],
+    bone_map: Sequence[Any],
+) -> Dict[int, int]:
+    """Count real source-bone influences used by each proposed face region."""
+    sizes: Dict[int, set[int]] = {}
+    for face_index, region_value in enumerate(list(face_to_region)):
+        try:
+            region_id = int(region_value)
+        except Exception:
+            continue
+        if region_id < 0 or face_index >= len(faces):
+            continue
+        used = sizes.setdefault(region_id, set())
+        for vertex_index in list(faces[face_index] or [])[:3]:
+            try:
+                row = skin_data[int(vertex_index)]
+            except Exception:
+                continue
+            for influence in list(getattr(row, "influences", []) or []):
+                try:
+                    bone_index = int(getattr(influence, "bone_index", -1))
+                    weight = float(getattr(influence, "weight", 0.0) or 0.0)
+                except Exception:
+                    continue
+                if weight <= 1.0e-9 or bone_index < 0 or bone_index >= len(bone_map):
+                    continue
+                if not str(bone_map[bone_index] or "").strip():
+                    continue
+                used.add(bone_index)
+    return {region_id: len(indices) for region_id, indices in sizes.items()}
+
+
 def _split_skinned_node_by_anatomical_regions(
     model: Any,
     node: Any,
@@ -6284,11 +6454,58 @@ def _split_skinned_node_by_anatomical_regions(
         np_faces = np.asarray(
             [(int(f[0]), int(f[1]), int(f[2])) for f in faces], dtype=np.int64
         )
-        partition = ap.partition_mesh_anatomically(np_vertices, np_faces, donor)
     except Exception as exc:
-        return [], f"partition_failed:{exc}"
+        return [], f"partition_input_failed:{exc}"
 
-    face_to_region = np.asarray(partition.imported_face_to_region, dtype=np.int64)
+    partition_method = "anatomical_partition_weight_remap"
+    partition_region_names: Dict[int, str] = {}
+    partition_diag: Dict[str, Any] = {}
+
+    authored = _authored_donor_skin_node_regions(
+        reference_model,
+        np_vertices,
+        np_faces,
+        max_bones_per_region=_SKIN_PALETTE_LIMIT,
+    )
+    if authored is not None:
+        authored_face_to_region = np.asarray(authored["face_to_region"], dtype=np.int64)
+        authored_palette_sizes = _region_palette_sizes_from_assignment(
+            authored_face_to_region,
+            faces,
+            skin_data,
+            bone_map,
+        )
+        if (
+            len(authored_palette_sizes) > 1
+            and all(size <= _SKIN_PALETTE_LIMIT for size in authored_palette_sizes.values())
+        ):
+            face_to_region = authored_face_to_region
+            partition_method = "authored_donor_skin_node_weight_remap"
+            partition_region_names = dict(authored.get("region_names") or {})
+            partition_diag = {
+                "method": str(authored.get("method") or "authored_donor_skin_nodes"),
+                "palette_sizes": dict(authored_palette_sizes),
+                "mean_transfer_confidence": float(authored.get("mean_transfer_confidence") or 0.0),
+                "per_region_confidence": dict(authored.get("per_region_confidence") or {}),
+            }
+        else:
+            partition_diag = {
+                "authored_donor_skin_nodes_rejected": True,
+                "palette_sizes": dict(authored_palette_sizes),
+            }
+            face_to_region = None
+    else:
+        face_to_region = None
+
+    if face_to_region is None:
+        try:
+            partition = ap.partition_mesh_anatomically(np_vertices, np_faces, donor)
+        except Exception as exc:
+            return [], f"partition_failed:{exc}"
+        face_to_region = np.asarray(partition.imported_face_to_region, dtype=np.int64)
+        if not partition_diag:
+            partition_diag = dict(getattr(partition, "diagnostics", {}) or {})
+
     region_ids = sorted(int(r) for r in np.unique(face_to_region) if int(r) >= 0)
     if len(region_ids) <= 1:
         return [], "single_region_no_split_needed"
@@ -6476,6 +6693,11 @@ def _split_skinned_node_by_anatomical_regions(
         setattr(split_node, "_gr_node_splitter_component", True)
         setattr(split_node, "_gr_weight_remap_split", True)
         setattr(split_node, "_gr_anatomical_region_id", int(region_id))
+        setattr(split_node, "_gr_anatomical_split_method", partition_method)
+        if region_id in partition_region_names:
+            setattr(split_node, "_gr_anatomical_region_name", partition_region_names[region_id])
+        if partition_diag:
+            setattr(split_node, "_gr_anatomical_partition_diagnostics", dict(partition_diag))
         # Provenance: new vertex i came from source vertex
         # _gr_source_vertex_indices[i].  Enables byte-identity audits (D-5).
         source_indices = [0] * len(new_vertices)
@@ -6569,6 +6791,14 @@ def split_skinned_mesh_nodes_with_weight_remap(
                 "source_node": str(getattr(node, "name", "") or "?"),
                 "regions": len(parts),
                 "palette_sizes": [len(p.bone_map) for p in parts],
+                "method": str(
+                    getattr(parts[0], "_gr_anatomical_split_method", "")
+                    or "anatomical_partition_weight_remap"
+                ),
+                "region_names": [
+                    str(getattr(p, "_gr_anatomical_region_name", "") or "")
+                    for p in parts
+                ],
             }
         )
         parent = getattr(node, "parent", None)
@@ -6663,7 +6893,11 @@ def split_skinned_mesh_nodes_with_weight_remap(
     metadata["character_builder_skinned_node_splitter"] = {
         "source_nodes_split": split_source_count,
         "region_nodes_created": split_node_count,
-        "method": "anatomical_partition_weight_remap",
+        "method": (
+            str(per_node_report[0].get("method") or "anatomical_partition_weight_remap")
+            if len(per_node_report) == 1 else
+            "mixed_anatomical_weight_remap"
+        ),
         "per_node": per_node_report,
         "palette_validation": palettes,
     }
@@ -9748,7 +9982,7 @@ def model_texture_names(model: Any) -> List[str]:
             key = clean.lower()
             if key not in seen:
                 seen.add(key)
-                names.append(clean[:32])
+                names.append(clean)
     return names
 
 
@@ -9756,8 +9990,19 @@ def candidate_texture_dirs(source_path: str) -> List[str]:
     """Likely folders beside an imported FBX/OBJ/glTF that hold textures."""
     if not source_path:
         return []
-    base = Path(source_path).resolve().parent
-    names = ("", "Texture", "Textures", "texture", "textures", "Materials", "materials")
+    source = Path(source_path).resolve()
+    base = source.parent
+    stem = source.stem
+    names = (
+        "",
+        "Texture",
+        "Textures",
+        "texture",
+        "textures",
+        "Materials",
+        "materials",
+        f"{stem}.fbm",
+    )
     out: List[str] = []
     seen: set[str] = set()
     for name in names:
@@ -9768,7 +10013,119 @@ def candidate_texture_dirs(source_path: str) -> List[str]:
             if key not in seen:
                 seen.add(key)
                 out.append(resolved)
+    # FBX embedded-media folders are often named ``<anything>.fbm`` beside the file.
+    try:
+        for child in base.iterdir():
+            if not child.is_dir():
+                continue
+            if not child.name.lower().endswith(".fbm"):
+                continue
+            resolved = str(child)
+            key = os.path.normcase(os.path.abspath(resolved))
+            if key not in seen:
+                seen.add(key)
+                out.append(resolved)
+    except OSError:
+        pass
     return out
+
+
+def _texture_stems_in_dirs(dirs: List[str]) -> Dict[str, str]:
+    """Return ``{lowercase_stem: canonical_stem}`` for every image in *dirs*."""
+    stems: Dict[str, str] = {}
+    for directory in dirs:
+        if not directory or not os.path.isdir(directory):
+            continue
+        try:
+            for child in Path(directory).iterdir():
+                if not child.is_file():
+                    continue
+                if child.suffix.lower() not in _TEXTURE_EXTS:
+                    continue
+                key = child.stem.lower()
+                stems.setdefault(key, child.stem)
+        except OSError:
+            continue
+    return stems
+
+
+def reconcile_external_texture_names(model: Any, dirs: List[str]) -> Dict[str, str]:
+    """Rewrite node texture fields so they match on-disk image stems.
+
+    FBX imports often store Blender material names or relative ``.fbm`` paths
+    that do not match the extracted sidecar filenames.  When a referenced name
+    cannot be resolved but a unique image stem exists in *dirs*, the node field
+    is rewritten to that stem so the viewport and export pipeline can load it.
+    Returns ``{old_name: new_name}`` for every rewrite performed.
+    """
+    dirs = list(dirs or [])
+    if not dirs:
+        return {}
+    available = _texture_stems_in_dirs(dirs)
+    if not available:
+        return {}
+    single_fallback = next(iter(available.values())) if len(available) == 1 else ""
+    rewrites: Dict[str, str] = {}
+
+    def _resolve_stem(raw: str) -> str:
+        stem = Path(str(raw or "").strip()).stem
+        if not stem:
+            return ""
+        prefix_matches: List[Path] = []
+        for directory in dirs:
+            prefix_matches.extend(_texture_file_candidates_for_name(stem, directory))
+        exact = [path for path in prefix_matches if path.stem.lower() == stem.lower()]
+        if exact:
+            return exact[0].stem
+        if len(prefix_matches) == 1:
+            return prefix_matches[0].stem
+        key = stem.lower()
+        if key in available:
+            return available[key]
+        if single_fallback:
+            return single_fallback
+        return ""
+
+    for node in _model_nodes(model):
+        if not (
+            bool(getattr(node, "is_mesh", False))
+            or bool(getattr(node, "is_skin", False))
+            or bool(getattr(node, "vertices", None))
+        ):
+            continue
+        for field in ("texture", "lightmap"):
+            raw = str(getattr(node, field, "") or "").strip()
+            if not raw or raw.upper() in {"NULL", "NONE"}:
+                continue
+            resolved = _resolve_stem(raw)
+            if not resolved or resolved == raw:
+                continue
+            try:
+                setattr(node, field, resolved)
+                rewrites[raw] = resolved
+            except Exception:
+                pass
+    return rewrites
+
+
+def _texture_file_candidates_for_name(name: str, directory: str) -> List[Path]:
+    stem = Path(str(name or "").strip()).stem
+    if not stem or not directory or not os.path.isdir(directory):
+        return []
+    key = stem.lower()
+    candidates: List[Path] = []
+    try:
+        for child in Path(directory).iterdir():
+            if not child.is_file() or child.suffix.lower() not in _TEXTURE_EXTS:
+                continue
+            child_key = child.stem.lower()
+            if child_key == key:
+                return [child]
+            if child_key.startswith(key) or key.startswith(child_key):
+                candidates.append(child)
+    except OSError:
+        return []
+    return candidates
 
 
 def texture_file_for_name(name: str, dirs: List[str]) -> str:
@@ -9784,8 +10141,11 @@ def texture_file_for_name(name: str, dirs: List[str]) -> str:
             if direct.is_file():
                 return str(direct)
         try:
-            for child in Path(directory).iterdir():
-                if child.is_file() and child.stem.lower() == stem.lower():
+            matches = _texture_file_candidates_for_name(stem, directory)
+            if len(matches) == 1:
+                return str(matches[0])
+            for child in matches:
+                if child.stem.lower() == stem.lower():
                     return str(child)
         except OSError:
             continue

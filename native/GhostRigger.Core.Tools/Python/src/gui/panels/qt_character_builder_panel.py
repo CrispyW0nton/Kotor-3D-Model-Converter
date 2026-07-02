@@ -2301,6 +2301,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 seen_dirs.add(key)
                 dirs.append(directory)
 
+        _wf.reconcile_external_texture_names(model, dirs)
         report = _wf.texture_resolution_report(model, dirs)
         names = list(report.get("expected", []) or [])
         missing = list(report.get("missing", []) or [])
@@ -2316,6 +2317,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 if chosen_key not in seen_dirs:
                     seen_dirs.add(chosen_key)
                     dirs.insert(0, chosen)
+                _wf.reconcile_external_texture_names(model, dirs)
                 report = _wf.texture_resolution_report(model, dirs)
                 missing = list(report.get("missing", []) or [])
 
