@@ -294,3 +294,151 @@ def test_drexl_correspondence_self_fit(capsys) -> None:
     # Plenty of real bones remain for Falsifier A to score.
     assert result.real_bone_count >= 40
     assert result.falsifier_a["passed"], result.falsifier_a["violations"]
+
+
+# ---------------------------------------------------------------------------
+# PR D (T2511): dispatch wiring in normalize_external_model_for_kotor
+# ---------------------------------------------------------------------------
+
+
+def _load_workflow():
+    """Load the native workflow module by file path (root src/ has no mirror)."""
+    return _load_module(
+        "gr_headless_body_workflow_cf",
+        "native/GhostRigger.Core.Workflow/Python/src/core/characters/"
+        "headless_body_workflow.py",
+    )
+
+
+class _FakeImportNode:
+    def __init__(self, vertices, faces):
+        self.name = "imported_mesh"
+        self.parent = None
+        self.children: list = []
+        self.is_skin = False
+        self.is_mesh = True
+        self.render = True
+        self.vertices = [tuple(float(x) for x in v) for v in vertices]
+        self.faces = [tuple(int(i) for i in f) for f in faces]
+        self.normals: list = []
+
+
+class _FakeImportModel:
+    def __init__(self, vertices, faces):
+        self.name = "imported_obj"
+        self.root_node = _FakeImportNode(vertices, faces)
+        self.metadata: dict = {}
+
+    def all_nodes(self):
+        return [self.root_node]
+
+
+def _drexl_dispatch_fixtures():
+    from tests.test_anatomical_partition import _load_drexl_model, _load_imported_drexl
+
+    reference_model = _load_drexl_model()
+    iv, if_ = _load_imported_drexl()
+    return _FakeImportModel(iv, if_), reference_model
+
+
+def test_dispatch_drexl_takes_correspondence_path_by_default(monkeypatch) -> None:
+    """PR D regression: at default settings the Drexl creature import must be
+    normalized by Policy 0 (correspondence), with trace v2 and high confidence."""
+    monkeypatch.delenv("GHOSTRIGGER_DISABLE_CORRESPONDENCE_FIT", raising=False)
+    wf = _load_workflow()
+    model, reference = _drexl_dispatch_fixtures()
+
+    result = wf.normalize_external_model_for_kotor(
+        model,
+        game_version="K2",
+        reference_model=reference,
+        reference_label="c_drexlf",
+        expected_mode="creature",
+    )
+
+    assert result["ok"], result
+    assert result["fit_policy"] == "correspondence_surface_registration", result.get(
+        "fit_report", {}
+    ).get("correspondence_fallback_reason")
+    assert result["trace_version"] == "ghostrigger.fit/v2"
+    assert result["surface_confidence"] >= 0.99
+    trace = result["correspondence_fit"]
+    assert trace["falsifier_b"]["passed"]
+    assert trace["region_count"] == 7
+    assert all(r["falsifier_b_passed"] for r in trace["region_validation"])
+    # v1 consumer fields preserved (additive schema).
+    for key in ("scale", "offset", "fit_transform", "fit_report", "vertical_axis"):
+        assert key in result, key
+    assert result["fit_report"]["fit_policy"] == "correspondence_surface_registration"
+    # The applied transform is imported->KOTOR: inverse of donor->imported.
+    assert result["scale"] == pytest.approx(
+        1.0 / trace["total_scale_donor_to_imported"], rel=1e-6
+    )
+
+
+def test_dispatch_falls_back_when_falsifier_b_fails(monkeypatch) -> None:
+    """Synthetic Falsifier B failure: dispatch must fall back to the June-30
+    ladder and record fallback_reason in the trace — a signal, not an error."""
+    from importlib import import_module
+    from types import SimpleNamespace
+
+    monkeypatch.delenv("GHOSTRIGGER_DISABLE_CORRESPONDENCE_FIT", raising=False)
+    wf = _load_workflow()
+    model, reference = _drexl_dispatch_fixtures()
+
+    cf_mod = import_module("src.math.correspondence_fit")
+
+    def _ballooned(*args, **kwargs):
+        return SimpleNamespace(
+            scale=20.0,
+            rotation=np.eye(3),
+            translation=np.zeros(3),
+            fitted_bone_positions=np.zeros((1, 3)),
+            surface_confidence=0.5,
+            falsifier_a={"passed": True, "n_real_bones_scored": 0,
+                         "tolerance_used": 0.5, "violations": []},
+            falsifier_b={"passed": False, "refinement_scale": 20.0,
+                         "bracket": [0.5, 2.0]},
+            degenerate_donor_bones={},
+            real_bone_count=0,
+            initial_scale_estimate=1.0,
+            trace_version="ghostrigger.correspondence/v1",
+            diagnostics={"refinement_scale": 20.0, "pre_alignment_scale": 1.0,
+                         "total_scale": 20.0},
+        )
+
+    monkeypatch.setattr(cf_mod, "fit_skeleton_by_correspondence", _ballooned)
+
+    result = wf.normalize_external_model_for_kotor(
+        model,
+        game_version="K2",
+        reference_model=reference,
+        reference_label="c_drexlf",
+        expected_mode="creature",
+    )
+
+    assert result["ok"], result
+    assert result["fit_policy"] != "correspondence_surface_registration"
+    report = result.get("fit_report") or model.metadata.get("kotor_fit_report") or {}
+    reason = report.get("correspondence_fallback_reason", "")
+    assert reason.startswith("falsifier_b_failed"), (result["fit_policy"], reason)
+
+
+def test_dispatch_env_disable(monkeypatch) -> None:
+    """GHOSTRIGGER_DISABLE_CORRESPONDENCE_FIT=1 must skip Policy 0 entirely."""
+    monkeypatch.setenv("GHOSTRIGGER_DISABLE_CORRESPONDENCE_FIT", "1")
+    wf = _load_workflow()
+    model, reference = _drexl_dispatch_fixtures()
+
+    result = wf.normalize_external_model_for_kotor(
+        model,
+        game_version="K2",
+        reference_model=reference,
+        reference_label="c_drexlf",
+        expected_mode="creature",
+    )
+
+    assert result["ok"], result
+    assert result["fit_policy"] != "correspondence_surface_registration"
+    report = result.get("fit_report") or model.metadata.get("kotor_fit_report") or {}
+    assert report.get("correspondence_fallback_reason") == "disabled_by_env"

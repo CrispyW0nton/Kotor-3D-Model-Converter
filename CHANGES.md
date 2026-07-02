@@ -11,6 +11,57 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-01
 
+### [2026-07-01] T2511: PR D — Wire correspondence fit into the normalization dispatch ladder
+
+Owner: LordVaderCW
+T###: T2511
+Subsystem: Core.Workflow headless body workflow (creature-mode fit dispatch)
+Intersects: Third PR of the six-PR c_drexl_uv completion chain. Consumes
+T2507/T2508/T2509a/T2509b. Character Builder now invokes the correspondence
+pipeline by default in creature mode. Parent: T2509b (`0c13c78f`).
+
+Summary: `normalize_external_model_for_kotor` gains **Policy 0** at the top of
+the creature-mode ladder: build world-frame donor from the reference model →
+`partition_mesh_anatomically` → whole-mesh `fit_skeleton_by_correspondence` →
+**per-region correspondence fits as validation** (every region ≥20 faces must
+pass Falsifier B). The applied transform is the INVERSE of the single
+whole-mesh donor→imported similarity (per-region transforms are validators
+only — applying different rigid transforms per region would tear the connected
+mesh and violate the rigid-supermodel contract). On any failure (donor build,
+partition, fit error, any Falsifier B), dispatch records
+`correspondence_fallback_reason` in the fit report and the June-30 ladder runs
+unchanged.
+
+- New keyword `use_correspondence_fit: bool = True`; env kill-switch
+  `GHOSTRIGGER_DISABLE_CORRESPONDENCE_FIT=1` (reason `disabled_by_env`).
+- Policy 0 is gated to creature mode + reference model + no manual axis
+  override (manual override keeps priority, matching the other donor fits).
+- Correspondence results carry `trace_version="ghostrigger.fit/v2"` —
+  additive: all v1 consumer fields (`scale`, `offset`, `fit_transform`,
+  `fit_report`, `vertical_axis`, ...) preserved; new `correspondence_fit`
+  trace block holds surface confidence, pre-alignment/refinement/total scales,
+  falsifier A/B reports, degenerate-bone bucket, per-region validation table,
+  and the applied-transform direction. Fallback results keep their v1 shape
+  plus the additive `correspondence_fallback_reason`.
+
+Drexl regression (default settings): fit_policy
+`correspondence_surface_registration`, trace v2, surface_confidence ≥ 0.99
+(0.9989), all 7 regions pass Falsifier B, applied scale = 1/total (≈ 8.99).
+
+Files: `native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`
+(+ `_model_mesh_arrays`, `_correspondence_fit_solution`, Policy 0 dispatch),
+`tests/test_correspondence_fit.py` (3 new dispatch tests), regenerated
+Core.Workflow payload manifest (count unchanged at 1186 — existing file).
+
+Verification: `tests/test_correspondence_fit.py` 12 passed (incl. Drexl
+default-path regression, synthetic Falsifier-B-failure fallback via
+monkeypatched fit, env-disable). Anatomical + landmark suites 20 passed +
+1 xfailed (ballooning xfail preserved). Cross-suite winding + v2 + payloads 32
+passed. NOTE (pre-existing, not a regression): `tests/test_headless_body_workflow.py`
+module-skips in this native-only layout because it loads the workflow from the
+root `src/` path, which does not exist here — it skipped identically before
+this change; the new dispatch tests load the native file path directly.
+
 ### [2026-07-01] T2509b: Correspondence fit — align-then-refine skeleton fit behind use_v3 flag
 
 Owner: LordVaderCW

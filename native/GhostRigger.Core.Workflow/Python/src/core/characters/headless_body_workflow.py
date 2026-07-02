@@ -4565,6 +4565,269 @@ def apply_external_model_fit_adjustment(
     }
 
 
+def _model_mesh_arrays(model: Any):
+    """Concatenate renderable mesh-node vertices + faces as numpy arrays.
+
+    Follows the same node-selection convention as ``_vertex_bounds`` /
+    ``_mesh_vertex_cloud`` (raw node vertex arrays, skip hidden/non-render
+    nodes), but keeps faces so the correspondence fit can build a surface.
+    Returns ``(vertices (V,3) float64, faces (F,3) int64)`` or ``None``.
+    """
+    import numpy as np
+
+    all_v: List[Any] = []
+    all_f: List[Any] = []
+    offset = 0
+    for node in _iter_model_nodes(model):
+        if bool(getattr(node, "_gr_hidden", False)):
+            continue
+        if getattr(node, "render", True) is False:
+            continue
+        verts = list(getattr(node, "vertices", []) or [])
+        faces = list(getattr(node, "faces", []) or [])
+        if not verts or not faces:
+            continue
+        try:
+            v = np.asarray([(float(p[0]), float(p[1]), float(p[2])) for p in verts])
+            f = np.asarray([(int(t[0]), int(t[1]), int(t[2])) for t in faces])
+        except Exception:
+            continue
+        if v.size == 0 or f.size == 0:
+            continue
+        all_v.append(v)
+        all_f.append(f + offset)
+        offset += len(v)
+    if not all_v or not all_f:
+        return None
+    return np.vstack(all_v), np.vstack(all_f).astype(np.int64)
+
+
+#: Regions with fewer imported/donor faces than this are skipped by the
+#: per-region correspondence validation (too small for a meaningful surface
+#: registration; recorded in the trace as skipped, never as failures).
+_CORRESPONDENCE_REGION_MIN_FACES = 20
+
+
+def _correspondence_fit_solution(
+    model: Any,
+    bounds: Tuple[Vec3, Vec3],
+    reference_model: Any,
+    reference_bounds: Optional[Tuple[Vec3, Vec3]],
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """Policy 0 (T2511): correspondence-based fit of the imported mesh.
+
+    Pipeline: build a world-frame donor from the reference model (T2508) →
+    anatomical partition (T2507) → whole-mesh correspondence fit (T2509b) →
+    per-region correspondence fits as *validation* (all Falsifier B must pass).
+    The applied transform is the INVERSE of the whole-mesh donor→imported
+    similarity (a single rigid similarity — per-region transforms are
+    validators only; applying different rigid transforms per region would tear
+    the connected imported mesh and violate the rigid-supermodel contract).
+
+    Returns ``(solution, None)`` on success or ``(None, fallback_reason)`` —
+    a fallback is a *signal* to continue down the June-30 ladder, never an
+    exception.
+    """
+    try:
+        import numpy as np
+        from importlib import import_module
+
+        kotor_loader = import_module("src.core.game.kotor_loader")
+        ap = import_module("src.math.anatomical_partition")
+        cf = import_module("src.math.correspondence_fit")
+    except Exception as exc:
+        return None, f"imports_unavailable:{exc}"
+
+    mesh_arrays = _model_mesh_arrays(model)
+    if mesh_arrays is None:
+        return None, "no_imported_mesh_faces"
+    imported_vertices, imported_faces = mesh_arrays
+
+    try:
+        donor = kotor_loader.build_donor_skin_data_from_model(reference_model)
+    except Exception as exc:
+        return None, f"donor_build_failed:{exc}"
+
+    try:
+        partition = ap.partition_mesh_anatomically(
+            imported_vertices, imported_faces, donor
+        )
+    except Exception as exc:
+        return None, f"partition_failed:{exc}"
+
+    try:
+        whole = cf.fit_skeleton_by_correspondence(
+            imported_vertices, imported_faces, donor, use_v3=True
+        )
+    except Exception as exc:
+        return None, f"correspondence_fit_failed:{exc}"
+    if whole is None:  # pragma: no cover - use_v3=True always returns a result
+        return None, "correspondence_fit_returned_none"
+
+    # ---- Per-region correspondence fits (validation only) -------------------
+    donor_faces_arr = np.asarray(donor.faces, dtype=np.int64)
+    donor_verts_arr = np.asarray(donor.vertices, dtype=np.float64)
+    donor_bi = np.asarray(donor.bone_indices, dtype=np.int64)
+    donor_bw = np.asarray(donor.bone_weights, dtype=np.float64)
+
+    region_validation: List[Dict[str, Any]] = []
+    regions_skipped: List[Dict[str, Any]] = []
+    failed_regions: List[str] = []
+    for region in partition.regions:
+        imported_face_ids = np.asarray(region.imported_face_indices, dtype=np.int64)
+        donor_face_ids = np.asarray(region.donor_face_indices, dtype=np.int64)
+        if (
+            imported_face_ids.size < _CORRESPONDENCE_REGION_MIN_FACES
+            or donor_face_ids.size < _CORRESPONDENCE_REGION_MIN_FACES
+        ):
+            regions_skipped.append(
+                {
+                    "region_id": int(region.region_id),
+                    "dominant_bone": str(region.dominant_bone_name),
+                    "imported_faces": int(imported_face_ids.size),
+                    "donor_faces": int(donor_face_ids.size),
+                    "reason": "too_few_faces",
+                }
+            )
+            continue
+
+        # Imported sub-mesh (re-indexed).
+        sub_f = imported_faces[imported_face_ids]
+        used_imp = np.unique(sub_f.reshape(-1))
+        remap_imp = np.full(imported_vertices.shape[0], -1, dtype=np.int64)
+        remap_imp[used_imp] = np.arange(used_imp.size)
+        region_iv = imported_vertices[used_imp]
+        region_if = remap_imp[sub_f]
+
+        # Donor sub-mesh (re-indexed) with matching per-vertex skin rows;
+        # bone tables stay global so bone indices remain valid.
+        dsub_f = donor_faces_arr[donor_face_ids]
+        used_don = np.unique(dsub_f.reshape(-1))
+        remap_don = np.full(donor_verts_arr.shape[0], -1, dtype=np.int64)
+        remap_don[used_don] = np.arange(used_don.size)
+        region_donor = ap.DonorSkinData(
+            vertices=donor_verts_arr[used_don],
+            faces=remap_don[dsub_f],
+            bone_indices=donor_bi[used_don],
+            bone_weights=donor_bw[used_don],
+            bone_names=list(donor.bone_names),
+            bone_positions=np.asarray(donor.bone_positions, dtype=np.float64),
+            frame=getattr(donor, "frame", "unspecified"),
+        )
+
+        try:
+            region_fit = cf.fit_skeleton_by_correspondence(
+                region_iv, region_if, region_donor, use_v3=True
+            )
+        except Exception as exc:
+            failed_regions.append(f"region {int(region.region_id)} error:{exc}")
+            continue
+        entry = {
+            "region_id": int(region.region_id),
+            "dominant_bone": str(region.dominant_bone_name),
+            "imported_faces": int(imported_face_ids.size),
+            "refinement_scale": float(region_fit.diagnostics["refinement_scale"]),
+            "surface_confidence": float(region_fit.surface_confidence),
+            "falsifier_b_passed": bool(region_fit.falsifier_b["passed"]),
+        }
+        region_validation.append(entry)
+        if not entry["falsifier_b_passed"]:
+            failed_regions.append(
+                f"region {entry['region_id']} ({entry['dominant_bone']}) "
+                f"refinement_scale={entry['refinement_scale']:.3f}"
+            )
+
+    # ---- All Falsifier B must pass (whole mesh + every validated region) ----
+    if not bool(whole.falsifier_b["passed"]):
+        return None, (
+            "falsifier_b_failed:whole_mesh refinement_scale="
+            f"{float(whole.falsifier_b['refinement_scale']):.3f}"
+        )
+    if failed_regions:
+        return None, "falsifier_b_failed:" + "; ".join(failed_regions)
+
+    # ---- Invert donor→imported into the applied imported→KOTOR transform ----
+    scale_fwd = float(whole.scale)
+    if scale_fwd <= 1e-12:
+        return None, "degenerate_total_scale"
+    rot_fwd = np.asarray(whole.rotation, dtype=np.float64)
+    t_fwd = np.asarray(whole.translation, dtype=np.float64)
+    scale_inv = 1.0 / scale_fwd
+    rot_inv = rot_fwd.T
+    t_inv = -scale_inv * (rot_inv @ t_fwd)
+
+    rotation_matrix: Tuple[Vec3, Vec3, Vec3] = tuple(
+        tuple(float(rot_inv[r, c]) for c in range(3)) for r in range(3)
+    )  # type: ignore[assignment]
+    linear_matrix = _scale_matrix(rotation_matrix, scale_inv)
+    offset: Vec3 = (float(t_inv[0]), float(t_inv[1]), float(t_inv[2]))
+
+    source_origin = _bounds_ground_center(bounds)
+    target_origin = _vec_add(_mat_vec(linear_matrix, source_origin), offset)
+    fit_transform = _fit_transform_metadata(
+        policy="correspondence_surface_registration",
+        scale=scale_inv,
+        rotation_matrix=rotation_matrix,
+        source_origin=source_origin,
+        target_origin=target_origin,
+        translation=offset,
+    )
+
+    bb_min, bb_max = bounds
+    source_height = float(bb_max[2]) - float(bb_min[2])
+    if reference_bounds is not None:
+        target_height = float(reference_bounds[1][2]) - float(reference_bounds[0][2])
+    else:
+        target_height = source_height * scale_inv
+
+    diag = whole.diagnostics
+    trace_block: Dict[str, Any] = {
+        "trace_version": str(whole.trace_version),
+        "surface_confidence": float(whole.surface_confidence),
+        "pre_alignment_scale": float(diag["pre_alignment_scale"]),
+        "refinement_scale": float(diag["refinement_scale"]),
+        "total_scale_donor_to_imported": float(diag["total_scale"]),
+        "applied_scale_imported_to_kotor": float(scale_inv),
+        "applied_transform_direction": "imported_to_kotor(inverse_of_donor_to_imported)",
+        "falsifier_a": {
+            "passed": bool(whole.falsifier_a["passed"]),
+            "n_real_bones_scored": int(whole.falsifier_a["n_real_bones_scored"]),
+            "tolerance_used": float(whole.falsifier_a["tolerance_used"]),
+            "violation_count": len(whole.falsifier_a["violations"]),
+        },
+        "falsifier_b": {
+            "passed": bool(whole.falsifier_b["passed"]),
+            "refinement_scale": float(whole.falsifier_b["refinement_scale"]),
+            "bracket": [float(x) for x in whole.falsifier_b["bracket"]],
+        },
+        "degenerate_donor_bones": dict(whole.degenerate_donor_bones),
+        "real_bone_count": int(whole.real_bone_count),
+        "region_count": int(partition.diagnostics["final_region_count"]),
+        "region_validation": region_validation,
+        "regions_skipped": regions_skipped,
+        "mean_transfer_confidence": float(
+            partition.diagnostics["mean_transfer_confidence"]
+        ),
+    }
+
+    return (
+        {
+            "scale": scale_inv,
+            "rotation_matrix": rotation_matrix,
+            "linear_matrix": linear_matrix,
+            "offset": offset,
+            "source_origin": source_origin,
+            "target_origin": target_origin,
+            "fit_transform": fit_transform,
+            "surface_confidence": float(whole.surface_confidence),
+            "source_height": source_height,
+            "target_height": target_height,
+            "correspondence_trace": trace_block,
+        },
+        None,
+    )
+
+
 def normalize_external_model_for_kotor(
     model: Any,
     *,
@@ -4574,6 +4837,7 @@ def normalize_external_model_for_kotor(
     reference_label: str = "",
     fit_override: Optional[Any] = None,
     expected_mode: Optional[Any] = None,
+    use_correspondence_fit: bool = True,
 ) -> Dict[str, Any]:
     """Scale and orient an imported external mesh into KOTOR humanoid space.
 
@@ -4617,6 +4881,158 @@ def normalize_external_model_for_kotor(
         fit_override=override,
         expected_mode=expected_mode,
     )
+
+    # ---- Policy 0 (T2511): correspondence fit — top of the ladder -----------
+    # Donor-driven surface registration (partition → whole-mesh correspondence
+    # fit → per-region Falsifier B validation).  Applies only in creature mode
+    # with a reference model and no manual override; on any failure it records
+    # a fallback reason in the trace and the June-30 ladder below runs
+    # unchanged.  Env kill-switch: GHOSTRIGGER_DISABLE_CORRESPONDENCE_FIT=1.
+    correspondence_enabled = (
+        bool(use_correspondence_fit)
+        and os.environ.get("GHOSTRIGGER_DISABLE_CORRESPONDENCE_FIT", "") != "1"
+    )
+    if (
+        _is_creature_mode_value(expected_mode)
+        and reference_model is not None
+        and not override.is_active()
+    ):
+        if not correspondence_enabled:
+            if isinstance(fit_report, dict):
+                fit_report["correspondence_fallback_reason"] = (
+                    "disabled_by_env"
+                    if os.environ.get("GHOSTRIGGER_DISABLE_CORRESPONDENCE_FIT", "") == "1"
+                    else "disabled_by_caller"
+                )
+        else:
+            correspondence_fit, correspondence_fallback_reason = (
+                _correspondence_fit_solution(
+                    model, bounds, reference_model, reference_bounds
+                )
+            )
+            if correspondence_fit is None:
+                if isinstance(fit_report, dict):
+                    fit_report["correspondence_fallback_reason"] = str(
+                        correspondence_fallback_reason or "unknown"
+                    )
+            else:
+                def transform_point(point: Vec3) -> Vec3:
+                    return _vec_add(
+                        _mat_vec(correspondence_fit["linear_matrix"], point),
+                        correspondence_fit["offset"],
+                    )
+
+                def transform_direction(direction: Vec3) -> Vec3:
+                    rotated = _mat_vec(
+                        correspondence_fit["rotation_matrix"], direction
+                    )
+                    return _vec_normalize(rotated) or rotated
+
+                fitted_visual_overlay = {
+                    "coordinate_space": "kotor_world_after_fit",
+                    "source": _fit_frame_visual_overlay(
+                        model,
+                        None,
+                        bounds,
+                        transform_point=transform_point,
+                        transform_direction=transform_direction,
+                        axis_length_scale=float(correspondence_fit["scale"]),
+                    ),
+                    "target": _fit_frame_visual_overlay(
+                        reference_model,
+                        None,
+                        reference_bounds,
+                    ),
+                }
+                trace_block = correspondence_fit["correspondence_trace"]
+                if isinstance(fit_report, dict):
+                    fit_report = dict(fit_report)
+                else:
+                    fit_report = {}
+                auto_fit_report = dict(fit_report.get("auto_fit_report") or {})
+                auto_fit_report.update({
+                    "scale_factor": float(correspondence_fit["scale"]),
+                    "height_source": "correspondence_surface_registration",
+                    "ground_origin_basis": "donor_surface_correspondence",
+                    "used_landmarks": [
+                        "source:mesh_surface",
+                        "target:donor_mesh_surface",
+                    ],
+                    "confidence": float(correspondence_fit["surface_confidence"]),
+                    "fallback_used": False,
+                    "notes": (
+                        "Correspondence fit registered the imported surface "
+                        "onto the donor surface and carried the skeleton "
+                        "rigidly (T2509b)."
+                    ),
+                })
+                fit_report.update({
+                    "ok": True,
+                    "code": "correspondence_surface_registration",
+                    "message": (
+                        "External creature mesh fit via donor surface "
+                        "correspondence (partition + weighted registration)."
+                    ),
+                    "fit_policy": "correspondence_surface_registration",
+                    "scale_basis": "correspondence_surface_registration",
+                    "scale": float(correspondence_fit["scale"]),
+                    "source_height": float(correspondence_fit["source_height"]),
+                    "target_height": float(correspondence_fit["target_height"]),
+                    "reference": reference_label
+                    or getattr(reference_model, "name", "")
+                    or "",
+                    "confidence": float(correspondence_fit["surface_confidence"]),
+                    "fallback_used": False,
+                    "auto_fit_report": auto_fit_report,
+                    "fit_transform": correspondence_fit["fit_transform"],
+                    "fitted_visual_overlay": fitted_visual_overlay,
+                    "correspondence_fit": trace_block,
+                    "kotor_contract": {
+                        "native_skeleton_is_authority": True,
+                        "imported_mesh_role": "payload_guest",
+                        "final_dag_source": "selected_kotor_base",
+                    },
+                })
+
+                _apply_point_transform_to_model(
+                    model,
+                    transform_point=transform_point,
+                    transform_direction=transform_direction,
+                    mark_vertices_world=True,
+                )
+
+                metadata = getattr(model, "metadata", None)
+                if not isinstance(metadata, dict):
+                    metadata = {}
+                    setattr(model, "metadata", metadata)
+                result = {
+                    "ok": True,
+                    "code": "normalized",
+                    # v2 is additive: every v1 consumer field below is intact.
+                    "trace_version": "ghostrigger.fit/v2",
+                    "scale": float(correspondence_fit["scale"]),
+                    "source_height": float(correspondence_fit["source_height"]),
+                    "target_height": float(correspondence_fit["target_height"]),
+                    "reference": reference_label
+                    or getattr(reference_model, "name", "")
+                    or "",
+                    "vertical_axis": "z",
+                    "offset": correspondence_fit["offset"],
+                    "fit_policy": "correspondence_surface_registration",
+                    "scale_basis": "correspondence_surface_registration",
+                    "surface_confidence": float(
+                        correspondence_fit["surface_confidence"]
+                    ),
+                    "correspondence_fit": trace_block,
+                    "external_world_positions_fit": True,
+                    "fit_transform": correspondence_fit["fit_transform"],
+                    "fit_report": fit_report,
+                    "fitted_visual_overlay": fitted_visual_overlay,
+                }
+                metadata["kotor_normalization"] = result
+                metadata["kotor_fit_report"] = fit_report
+                return result
+
     exact_native_fit = _native_template_exact_bounds_fit(
         model,
         bounds=bounds,
