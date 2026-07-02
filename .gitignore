@@ -103,6 +103,10 @@ native/GhostRigger.Core.IO.MDL/**/*.py[cod]
 !/tests/test_skinned_node_splitter.py
 !/tests/test_full_pipeline_export.py
 !/tests/test_donor_wing_refinement_guard.py
+!/tests/test_character_export_pipeline.py
+
+# Staged debug symbols next to the root launcher (never commit)
+/GhostRigger.pdb
 !/tests/test_kotor_to_unreal_preview_mode.py
 !/tests/test_kotor_to_unreal_export.py
 !/tests/test_ghostrigger_kotor_to_unreal_workbench_controller.py

@@ -351,13 +351,13 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_EXPORT_PREFLIGHT",
             "source_path": "src/core/characters/character_export_preflight.py",
             "packaged_path": "Python/src/core/characters/character_export_preflight.py",
-            "sha256": "19ac1237f588b47f5b4122cd7780daf02df2c4afe568bbc9c0993396e2584b75"
+            "sha256": "a7a3cea42dcfd5162b4b23f9863461ed0c9041448c49415767e5fb6f619e3c4d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_EXPORT_TRANSACTION",
             "source_path": "src/core/characters/character_export_transaction.py",
             "packaged_path": "Python/src/core/characters/character_export_transaction.py",
-            "sha256": "c86448672d4d3836b65d724de8a9d3ed35181b1939d29fe5065da28602b1e62e"
+            "sha256": "3c1f34e80c82113c181ee16e13f256cd3f96c60d9ee232d22540a64bca68fac9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_OVERRIDE_PACKAGE",
@@ -399,7 +399,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEADLESS_BODY_WORKFLOW",
             "source_path": "src/core/characters/headless_body_workflow.py",
             "packaged_path": "Python/src/core/characters/headless_body_workflow.py",
-            "sha256": "81f921ea61d33d252b10197237e585a444bb191a13ef0825765787c7433fbd85"
+            "sha256": "b9de73008bdcadab1b1848af45bec393049a9fc58bbe5fce7a7731c4f046be51"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_KOTOR_CONSTANTS",

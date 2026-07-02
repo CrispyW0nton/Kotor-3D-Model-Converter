@@ -428,6 +428,12 @@ def _validate_skin_binding_evidence(
     mesh_reports = list(skin_binding.get("mesh_reports") or [])
     if donor_weight_transfer:
         landmark_gaps = _donor_weight_fit_landmark_gaps(fit_report)
+        # T2518: the correspondence fit (trace v2, T2511) registers the whole
+        # imported surface onto the donor surface — it neither uses nor records
+        # role landmarks, so "incomplete landmark evidence" is vacuous noise
+        # for that policy rather than a review signal.
+        if _fit_policy_is_correspondence(fit_report):
+            landmark_gaps = {}
         if landmark_gaps:
             report.add(_issue(
                 "warning",
@@ -477,6 +483,15 @@ def _validate_skin_binding_evidence(
                 "mesh_reports": mesh_reports,
             },
         ))
+
+
+def _fit_policy_is_correspondence(fit_report: Any) -> bool:
+    """True when the fit came from the T2511 correspondence dispatch path."""
+    fit = fit_report if isinstance(fit_report, dict) else {}
+    return (
+        str(fit.get("fit_policy") or "").strip()
+        == "correspondence_surface_registration"
+    )
 
 
 def _donor_weight_fit_landmark_gaps(fit_report: Any) -> dict[str, Any]:
@@ -651,7 +666,16 @@ def _validate_auto_fit_evidence(
         ))
 
     landmark_sources = _auto_fit_source_landmark_sources(fit_report)
-    if not landmark_sources:
+    # T2518: correspondence-fit results (fit_policy
+    # "correspondence_surface_registration", trace v2/T2511) register the whole
+    # imported surface onto the donor surface; role landmarks are neither used
+    # nor recorded, so the landmark-source advisories below would fire on every
+    # correspondence export as unfixable noise.  Skip them for that policy —
+    # the correspondence trace carries its own evidence (surface confidence,
+    # falsifier reports).
+    if fit_policy == "correspondence_surface_registration":
+        pass
+    elif not landmark_sources:
         report.add(_issue(
             "warning",
             "character.export.auto_fit_landmark_sources_not_recorded",
@@ -1805,10 +1829,22 @@ def _validate_skin_payload(
         name = str(getattr(node, "name", "") or "")
         vertices = list(getattr(node, "vertices", []) or [])
         faces = list(getattr(node, "faces", []) or [])
-        bone_map = list(getattr(node, "bone_map", []) or [])
+        bone_map_full = list(getattr(node, "bone_map", []) or [])
+        # T2518: the MDL loader materializes the engine's fixed 16-slot bonemap
+        # with blank trailing padding, while builder-shaped live models carry
+        # exact-count arrays.  Strip TRAILING blanks before the structural
+        # checks so reload verification of a <16-bone skin node is not
+        # structurally guaranteed to fail; blanks BEFORE a real name remain
+        # hard errors (checked below over the trimmed list).
+        bone_map = list(bone_map_full)
+        while bone_map and not str(bone_map[-1] or "").strip():
+            bone_map.pop()
         qbone_list = list(getattr(node, "qbone_list", []) or [])
         tbone_list = list(getattr(node, "tbone_list", []) or [])
         skin_data = list(getattr(node, "skin_data", []) or [])
+        # Loader-padded qbone/tbone arrays (full 16) are as valid as
+        # exact-count ones; both lengths are accepted by the checks below.
+        _valid_bind_lengths = {len(bone_map), len(bone_map_full)}
 
         if not vertices or not faces:
             report.add(_issue(
@@ -1848,7 +1884,7 @@ def _validate_skin_payload(
                 navigation=ValidationNavigationTarget(node_name=name),
                 fix_hint="Bind the mesh to the KOTOR skeleton before export.",
             ))
-        if bone_map and len(qbone_list) != len(bone_map):
+        if bone_map and len(qbone_list) not in _valid_bind_lengths:
             report.add(_issue(
                 "blocking",
                 "character.export.qbone_mismatch",
@@ -1865,7 +1901,7 @@ def _validate_skin_payload(
                 expected_components=4,
                 report=report,
             )
-        if bone_map and len(tbone_list) != len(bone_map):
+        if bone_map and len(tbone_list) not in _valid_bind_lengths:
             report.add(_issue(
                 "blocking",
                 "character.export.tbone_mismatch",

@@ -249,7 +249,7 @@
             "resource_name": "PYTHON_PAYLOAD_MATH_LANDMARK_ALIGNMENT",
             "source_path": "src/math/landmark_alignment.py",
             "packaged_path": "Python/src/math/landmark_alignment.py",
-            "sha256": "1c1f80080ae7dfd12c600c1a1b6c58bf22e9ef6bfd0f7635066d8fcb82a0aa4a"
+            "sha256": "49526666869f9f219802715014ef6eb3502d0595acdb8e58cee315a71a9980a3"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_MODULE_LAYOUT_MATH",

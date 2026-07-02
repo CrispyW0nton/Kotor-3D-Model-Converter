@@ -11,6 +11,76 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-01
 
+### [2026-07-02] T2518: Fix creature MDL export — bind arrays, payload provenance, texture resrefs, reload padding
+
+Owner: LordVaderCW
+T###: T2518
+Subsystem: Skinned splitter bind data / export transaction contracts / texture export / export preflight
+Intersects: Post-charter finding #2 from the 2026-07-01 22:38 manual export
+(owner report: no .mdl written, only an over-long .tga, plus persistent
+warnings). Reproduced headlessly via the full app flow (OBJ import →
+Policy 0 normalize → apply_template_rig → anatomical split →
+export_scene("kotor")), then fixed at four integration points:
+
+1. **Splitter bind arrays** (`headless_body_workflow.py`): when a source
+   node's qBone/tBone arrays are absent or misaligned with its bone map, the
+   split parts now REBUILD them per palette name from the model's bone nodes
+   (bone_world_position + world_transform, mirroring the binder) instead of
+   clearing them — cleared arrays made every region fail the export
+   preflight's qbone/tbone gates. Blank-named source palette slots are
+   excluded from region palettes and their influences zeroed (they never had a
+   resolvable bone).
+2. **Payload provenance** (`headless_body_workflow.py`): the splitter now
+   re-records payload mesh names as the region part names in BOTH the bind
+   metadata and the frozen `CharacterRigState` (via `dataclasses.replace` +
+   `_write_state` — a plain setattr silently failed on the frozen dataclass
+   and tripped `bind_provenance_mismatch`). Reload verification then checks
+   each region part survives writer/readback, which is exactly the right
+   contract post-split.
+3. **Texture resrefs** (`headless_body_workflow.py`):
+   `normalize_texture_resrefs_for_kotor` runs at the top of `export_scene` —
+   texture names over KOTOR's 16-char resref limit (the manual export produced
+   `C_DrexlF_UV_basecolor`, 21 chars, unloadable by the engine) are renamed to
+   deterministic `<resref>_tNN` and every node field rewritten consistently;
+   the TGA exporter resolves source images through the recorded rename map and
+   caps output stems at 16 chars.
+4. **Reload padding tolerance** (`character_export_preflight.py`,
+   `character_export_transaction.py`): the MDL loader materializes the
+   engine's fixed 16-slot bonemap with blank trailing padding, so reloaded
+   <16-bone skin nodes structurally failed qbone/tbone/bonemap checks and
+   "bone-map count changed" verification against their exact-count live twins.
+   Structural checks now trim trailing blanks (interior blanks remain hard
+   errors) and accept loader-padded bind-array lengths.
+   Also: the two auto-fit landmark advisories
+   (`donor_skin_binding_landmarks_incomplete`,
+   `auto_fit_source_landmarks_need_review` — the "warnings that always show
+   up") are suppressed when `fit_policy == "correspondence_surface_registration"`:
+   the correspondence fit neither uses nor records role landmarks, so they
+   fired on every correspondence export as unfixable noise; its own evidence
+   (surface confidence, falsifiers) lives in the trace.
+
+End-to-end result (locked by new `tests/test_character_export_pipeline.py`):
+the full headless app flow now writes `c_drexlf.mdl` + `c_drexlf.mdx` +
+validation reports, with reload verification green, palettes ≤16, aligned bind
+arrays, provenance accepted, and all texture resrefs ≤16 chars.
+
+Files: `native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`,
+`.../character_export_preflight.py`, `.../character_export_transaction.py`,
+`tests/test_character_export_pipeline.py` (new), `.gitignore`
+(allow-list + `/GhostRigger.pdb` ignore), regenerated Core.Workflow payload
+(+ Core.Math payload manifest resync — `landmark_alignment.py` SHA drifted via
+CRLF normalization during isolation testing; count unchanged at 1186).
+
+Verification: new pipeline test 1 passed; splitter + full-pipeline + wing-guard
++ correspondence suites 23 passed; math/payload suites 35 passed + 1 xfailed +
+17 passed (payload byte-identity restored). KNOWN PRE-EXISTING (not a T2518
+regression — reproduced at pre-charter baseline `cccbff8b` with all of today's
+changes stashed): `test_character_builder_export_preflight.py`
+`::test_character_export_preflight_warns_on_fallback_skin_binding` and
+`::test_character_export_transaction_stages_verifies_and_writes_reports` fail;
+needs its own investigation (T2519 candidate). Visible re-test required: owner
+re-runs Export MDL from the app.
+
 ### [2026-07-01] T2517: Fix animation distortion — wing refinement corrupted donor-transferred weights
 
 Owner: LordVaderCW

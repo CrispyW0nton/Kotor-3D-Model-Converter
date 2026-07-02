@@ -6198,7 +6198,39 @@ def validate_skin_node_palettes(model: Any) -> Dict[str, Any]:
     return {"ok": not violations, "violations": violations}
 
 
+def _bone_bind_arrays_by_name(model: Any) -> Dict[str, Tuple[Tuple[float, float, float, float], Vec3]]:
+    """Map lowercase bone-node name → (world rotation quat XYZW, world position).
+
+    Mirrors ``skeleton_builder._node_world`` semantics (bone_world_position for
+    the pivot, world_transform for the rotation) so rebuilt qBone/tBone entries
+    match what the binder would have produced.
+    """
+    out: Dict[str, Tuple[Tuple[float, float, float, float], Vec3]] = {}
+    for bone in _iter_model_nodes(model):
+        name = str(getattr(bone, "name", "") or "").strip().lower()
+        if not name or name in out:
+            continue
+        try:
+            pos = tuple(float(v) for v in bone.bone_world_position()[:3])
+        except Exception:
+            try:
+                pos = tuple(float(v) for v in bone.world_transform()[0][:3])
+            except Exception:
+                pos = tuple(
+                    float(v) for v in (getattr(bone, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))[:3]
+                )
+        try:
+            rot = tuple(float(v) for v in bone.world_transform()[1][:4])
+        except Exception:
+            rot = tuple(
+                float(v) for v in (getattr(bone, "rotation", (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0))[:4]
+            )
+        out[name] = (rot, pos)  # type: ignore[assignment]
+    return out
+
+
 def _split_skinned_node_by_anatomical_regions(
+    model: Any,
     node: Any,
     reference_model: Any,
 ) -> Tuple[List[Any], Optional[str]]:
@@ -6241,6 +6273,9 @@ def _split_skinned_node_by_anatomical_regions(
         donor = kotor_loader.build_donor_skin_data_from_model(reference_model)
     except Exception as exc:
         return [], f"donor_build_failed:{exc}"
+
+    # Lazily built name→(qbone, tbone) table for the rebuild path (T2518).
+    bind_by_name: Optional[Dict[str, Tuple[Tuple[float, float, float, float], Vec3]]] = None
 
     try:
         np_vertices = np.asarray(
@@ -6337,6 +6372,10 @@ def _split_skinned_node_by_anatomical_regions(
             continue
 
         # ---- Weight remap: region palette from bone_indices, never positions.
+        # Blank-named source slots are excluded from the palette (the export
+        # preflight hard-blocks empty bone-map targets, T2518); influences that
+        # point at them are zeroed below rather than remapped — an empty-named
+        # slot never had a resolvable bone, so its weight was already dead.
         used_local_indices: List[int] = []
         seen: set = set()
         for row in new_skin_rows:
@@ -6347,6 +6386,8 @@ def _split_skinned_node_by_anatomical_regions(
                 except Exception:
                     continue
                 if weight <= 1e-9 or old_bone < 0 or old_bone >= len(bone_map):
+                    continue
+                if not str(bone_map[old_bone] or "").strip():
                     continue
                 if old_bone not in seen:
                     seen.add(old_bone)
@@ -6369,6 +6410,15 @@ def _split_skinned_node_by_anatomical_regions(
                     continue
                 if old_bone in old_to_new:
                     setattr(influence, "bone_index", old_to_new[old_bone])
+                elif 0 <= old_bone < len(bone_map) and not str(
+                    bone_map[old_bone] or ""
+                ).strip():
+                    # Influence on a blank-named slot: zero it so a stale index
+                    # can never alias a different bone in the new palette.
+                    try:
+                        setattr(influence, "weight", 0.0)
+                    except Exception:
+                        pass
                 # Zero-weight / out-of-range influences keep their index; they
                 # carry no weight and must not disturb byte-identity elsewhere.
 
@@ -6394,18 +6444,34 @@ def _split_skinned_node_by_anatomical_regions(
                 pass
         # qBone/tBone bind-pose arrays are per-bonemap-entry (T2513 round-trip
         # finding): subset them by the same local indices so the writer emits
-        # bind data aligned with the region palette.  Mismatched/absent source
-        # arrays are cleared rather than carried stale.
+        # bind data aligned with the region palette.  When the source arrays
+        # are absent or misaligned, REBUILD them per palette name from the
+        # model's bone nodes (T2518: the export preflight hard-blocks regions
+        # whose qbone/tbone lengths don't match the bone map — clearing them,
+        # the previous defensive behavior, made every region unexportable in
+        # the 2026-07-01 22:38 manual export).
         source_qbones = list(getattr(node, "qbone_list", []) or [])
         source_tbones = list(getattr(node, "tbone_list", []) or [])
-        if source_qbones and len(source_qbones) == len(bone_map):
+        if (
+            len(source_qbones) == len(bone_map)
+            and len(source_tbones) == len(bone_map)
+        ):
             split_node.qbone_list = [source_qbones[old] for old in used_local_indices]
-        elif hasattr(split_node, "qbone_list"):
-            split_node.qbone_list = []
-        if source_tbones and len(source_tbones) == len(bone_map):
             split_node.tbone_list = [source_tbones[old] for old in used_local_indices]
-        elif hasattr(split_node, "tbone_list"):
-            split_node.tbone_list = []
+        else:
+            if bind_by_name is None:
+                bind_by_name = _bone_bind_arrays_by_name(model)
+            rebuilt_q: List[Tuple[float, float, float, float]] = []
+            rebuilt_t: List[Vec3] = []
+            for bone_name in split_node.bone_map:
+                rot, pos = bind_by_name.get(
+                    str(bone_name or "").strip().lower(),
+                    ((0.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0)),
+                )
+                rebuilt_q.append(rot)
+                rebuilt_t.append(pos)
+            split_node.qbone_list = rebuilt_q
+            split_node.tbone_list = rebuilt_t
         setattr(split_node, "_external_imported", True)
         setattr(split_node, "_gr_node_splitter_component", True)
         setattr(split_node, "_gr_weight_remap_split", True)
@@ -6480,9 +6546,10 @@ def split_skinned_mesh_nodes_with_weight_remap(
     split_source_count = 0
     split_node_count = 0
     per_node_report: List[Dict[str, Any]] = []
+    payload_renames: Dict[str, List[str]] = {}
     for node in list(candidates):
         parts, reason = _split_skinned_node_by_anatomical_regions(
-            node, reference_model
+            model, node, reference_model
         )
         if reason is not None:
             return {
@@ -6494,6 +6561,9 @@ def split_skinned_mesh_nodes_with_weight_remap(
             }
         split_source_count += 1
         split_node_count += len(parts)
+        payload_renames[str(getattr(node, "name", "") or "")] = [
+            str(p.name) for p in parts
+        ]
         per_node_report.append(
             {
                 "source_node": str(getattr(node, "name", "") or "?"),
@@ -6544,6 +6614,52 @@ def split_skinned_mesh_nodes_with_weight_remap(
     if not isinstance(metadata, dict):
         metadata = {}
         setattr(model, "metadata", metadata)
+
+    # T2518: keep the Character Builder bind evidence coherent — the export
+    # transaction verifies the recorded payload mesh names still exist and
+    # survive writer/readback, so a split payload must be re-recorded as its
+    # region parts (otherwise export blocks with reload_payload_missing_from_source).
+    def _rewrite_payload_names(names: Any) -> List[str]:
+        rewritten: List[str] = []
+        for raw in list(names or []):
+            name = str(raw or "").strip()
+            if name in payload_renames:
+                rewritten.extend(payload_renames[name])
+            elif name:
+                rewritten.append(name)
+        return rewritten
+
+    if payload_renames:
+        bind_meta = metadata.get("character_builder_bind")
+        if isinstance(bind_meta, dict):
+            payload_meta = bind_meta.get("imported_payload")
+            if isinstance(payload_meta, dict) and payload_meta.get("mesh_names"):
+                payload_meta["mesh_names"] = _rewrite_payload_names(
+                    payload_meta.get("mesh_names")
+                )
+        # CharacterRigState is a frozen dataclass — rewrite through its own
+        # writer so the attr copy AND the metadata dict copy stay coherent
+        # (the export preflight cross-checks them; a partial update trips the
+        # bind_provenance_mismatch blocker).
+        try:
+            from importlib import import_module
+
+            rig_state_mod = import_module("src.core.characters.character_rig_state")
+            state = rig_state_mod.get_character_rig_state(model)
+            if state is not None and state.payload_mesh_names:
+                import dataclasses as _dc
+
+                rig_state_mod._write_state(
+                    model,
+                    _dc.replace(
+                        state,
+                        payload_mesh_names=tuple(
+                            _rewrite_payload_names(state.payload_mesh_names)
+                        ),
+                    ),
+                )
+        except Exception:  # pragma: no cover - defensive
+            log.exception("payload-name rewrite of rig state failed")
     metadata["character_builder_skinned_node_splitter"] = {
         "source_nodes_split": split_source_count,
         "region_nodes_created": split_node_count,
@@ -9511,6 +9627,73 @@ def _native_template_build_summary(model: Any) -> BodyRigGenerateResult:
     )
 
 
+#: KOTOR resource references (texture names included) are at most 16 chars.
+_KOTOR_RESREF_LIMIT = 16
+
+#: Node fields that carry texture resrefs and must respect the limit.
+_TEXTURE_RESREF_FIELDS = (
+    "texture",
+    "lightmap",
+    "txi_envmaptexture",
+    "txi_specularcolour",
+    "txi_bumpmaptexture",
+)
+
+
+def normalize_texture_resrefs_for_kotor(model: Any, resref: str) -> Dict[str, str]:
+    """Shorten over-long texture names to valid KOTOR resrefs (T2518).
+
+    The engine cannot load a texture whose name exceeds 16 characters (the
+    2026-07-01 export produced ``C_DrexlF_UV_basecolor`` — 21 chars — which the
+    game would silently fail to resolve).  Every over-long name is renamed to a
+    deterministic ``<resref-prefix>_tNN`` (≤16 chars, lowercase) and every node
+    field referencing it is rewritten so the exported MDL and TGA stay
+    consistent.  Returns ``{new_name: original_name}`` (empty when nothing
+    needed renaming) — the texture exporter uses it to find source images by
+    their original filename.
+    """
+    existing: set = set()
+    for node in _model_nodes(model):
+        for field in _TEXTURE_RESREF_FIELDS:
+            name = str(getattr(node, field, "") or "").strip()
+            if name:
+                existing.add(name.lower())
+
+    renames: Dict[str, str] = {}  # original -> new
+    counter = 0
+    base = "".join(c for c in str(resref or "tex").lower() if c.isalnum() or c == "_")
+    base = (base or "tex")[: _KOTOR_RESREF_LIMIT - 4]
+    for original in sorted(existing):
+        if len(original) <= _KOTOR_RESREF_LIMIT:
+            continue
+        while True:
+            candidate = f"{base}_t{counter:02d}"[: _KOTOR_RESREF_LIMIT]
+            counter += 1
+            if candidate not in existing and candidate not in renames.values():
+                break
+        renames[original] = candidate
+
+    if not renames:
+        return {}
+
+    for node in _model_nodes(model):
+        for field in _TEXTURE_RESREF_FIELDS:
+            name = str(getattr(node, field, "") or "").strip()
+            if name and name.lower() in renames:
+                try:
+                    setattr(node, field, renames[name.lower()])
+                except Exception:
+                    pass
+
+    log.info(
+        "normalize_texture_resrefs_for_kotor: renamed %d over-long texture "
+        "name(s): %s",
+        len(renames),
+        {orig: new for orig, new in renames.items()},
+    )
+    return {new: orig for orig, new in renames.items()}  # new -> original
+
+
 def model_texture_names(model: Any) -> List[str]:
     """Return unique diffuse/aux texture names referenced by a model."""
     names: List[str] = []
@@ -9631,12 +9814,17 @@ def export_external_textures(
     out.mkdir(parents=True, exist_ok=True)
     written: List[str] = []
     missing: List[str] = []
+    # T2518: renamed texture resrefs (16-char KOTOR limit) resolve their source
+    # image via the original filename recorded by the normalization pass.
+    rename_sources = dict(metadata.get("texture_resref_renames", {}) or {})
     for name in model_texture_names(model):
         src = texture_file_for_name(name, dirs)
+        if not src and name in rename_sources:
+            src = texture_file_for_name(rename_sources[name], dirs)
         if not src:
             missing.append(name)
             continue
-        target = out / f"{Path(name).stem[:32]}.tga"
+        target = out / f"{Path(name).stem[:_KOTOR_RESREF_LIMIT]}.tga"
         try:
             img = Image.open(src).convert("RGBA")
             img.save(target, format="TGA")
@@ -10258,6 +10446,21 @@ def export_scene(
     # Keep only filesystem-safe characters in the resref stem.
     resref = "".join(c for c in resref if c.isalnum() or c in ("_", "-")) \
         or "untitled"
+
+    # T2518: enforce the 16-char KOTOR texture resref limit BEFORE any writer
+    # runs, so the MDL texture fields and the exported TGA share the same
+    # short, engine-loadable name.
+    try:
+        texture_renames = normalize_texture_resrefs_for_kotor(body, resref)
+    except Exception:  # pragma: no cover - defensive
+        log.exception("texture resref normalization failed")
+        texture_renames = {}
+    if texture_renames:
+        scene_metadata = getattr(scene, "metadata", None)
+        if not isinstance(scene_metadata, dict):
+            scene_metadata = {}
+            setattr(scene, "metadata", scene_metadata)
+        scene_metadata["texture_resref_renames"] = dict(texture_renames)
 
     # Build the per-format dispatch list (preserving caller order).
     label_by_key = {key: label for key, label, _exts in EXPORT_FORMATS}

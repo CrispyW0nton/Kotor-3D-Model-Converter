@@ -600,13 +600,21 @@ def _payload_summaries_by_name(
 
 
 def _payload_summary(node: Any) -> dict[str, Any]:
+    # T2518: count only real bone-map entries.  The MDL loader materializes the
+    # engine's fixed 16-slot bonemap with blank trailing padding, so comparing
+    # raw lengths between a builder-shaped live node (exact count) and its
+    # reloaded twin (padded to 16) would flag every <16-bone skin node as
+    # "bone-map count changed" during writer/readback verification.
+    bone_map = list(getattr(node, "bone_map", []) or [])
+    while bone_map and not str(bone_map[-1] or "").strip():
+        bone_map.pop()
     return {
         "name": str(getattr(node, "name", "") or ""),
         "is_mesh": bool(getattr(node, "is_mesh", False)),
         "is_skin": bool(getattr(node, "is_skin", False)),
         "vertices": len(list(getattr(node, "vertices", []) or [])),
         "faces": len(list(getattr(node, "faces", []) or [])),
-        "bone_map_count": len(list(getattr(node, "bone_map", []) or [])),
+        "bone_map_count": len(bone_map),
         "skin_rows": len(list(getattr(node, "skin_data", []) or [])),
     }
 
