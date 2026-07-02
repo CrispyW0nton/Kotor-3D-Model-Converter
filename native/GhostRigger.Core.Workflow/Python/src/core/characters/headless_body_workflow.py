@@ -6168,8 +6168,402 @@ def _split_mesh_node_by_components(node: Any) -> List[Any]:
     return split_nodes
 
 
-def split_imported_mesh_nodes(scene: Any) -> Dict[str, Any]:
-    """Split imported unskinned mesh nodes into connected render islands."""
+#: KOTOR skin-node palette limit: a skin mesh's bonemap may reference at most
+#: 16 bones.  PR E (T2512) enforces this as a hard export gate.
+_SKIN_PALETTE_LIMIT = 16
+
+
+def validate_skin_node_palettes(model: Any) -> Dict[str, Any]:
+    """Hard export gate: every skin node's bone_map must have ≤16 entries.
+
+    Counts EVERY palette entry with real skinning weights — including bones
+    that the correspondence fit classifies as degenerate (duplicate-position
+    collar/wing bones are excluded from Falsifier A but are still valid,
+    load-bearing palette entries; see T2509b collar finding).  Two different
+    lists, same source data.
+    """
+    violations: List[Dict[str, Any]] = []
+    for node in _iter_model_nodes(model):
+        bone_map = list(getattr(node, "bone_map", []) or [])
+        if not bone_map:
+            continue
+        if len(bone_map) > _SKIN_PALETTE_LIMIT:
+            violations.append(
+                {
+                    "node": str(getattr(node, "name", "") or "?"),
+                    "palette_size": len(bone_map),
+                    "limit": _SKIN_PALETTE_LIMIT,
+                }
+            )
+    return {"ok": not violations, "violations": violations}
+
+
+def _split_skinned_node_by_anatomical_regions(
+    node: Any,
+    reference_model: Any,
+) -> Tuple[List[Any], Optional[str]]:
+    """Split ONE skinned node into per-region skinned nodes with local palettes.
+
+    PR E (T2512): the donor-driven BIAGP partition (T2507) decides the regions;
+    this function performs the mesh split and the **weight remap** — per-vertex
+    skin rows are carried into each region node byte-identically (weights are
+    never dropped, renormalised, or reordered; only each influence's
+    ``bone_index`` is rewritten from the source node's bone_map space to the
+    region node's local bone_map space).  Duplicate-position bones (the Drexl
+    collar pair) are DISTINCT palette entries: the remap operates on
+    ``bone_indices``/names, never on bone positions.
+
+    Returns ``(parts, None)`` or ``([], reason)``.  A non-empty reason is a
+    hard failure (missing donor per D-4, partition failure, or a region whose
+    palette would exceed the KOTOR 16-bone limit) — no partial output.
+    """
+    vertices = list(getattr(node, "vertices", []) or [])
+    faces = list(getattr(node, "faces", []) or [])
+    skin_data = list(getattr(node, "skin_data", []) or [])
+    bone_map = list(getattr(node, "bone_map", []) or [])
+    if len(faces) < 2 or not vertices:
+        return [], "node_has_no_splittable_geometry"
+    if not skin_data or not bone_map:
+        return [], "node_is_not_skinned"
+    if reference_model is None:
+        return [], "missing_donor:select a reference/base model (weight donor)"
+
+    try:
+        import numpy as np
+        from importlib import import_module
+
+        kotor_loader = import_module("src.core.game.kotor_loader")
+        ap = import_module("src.math.anatomical_partition")
+    except Exception as exc:
+        return [], f"imports_unavailable:{exc}"
+
+    try:
+        donor = kotor_loader.build_donor_skin_data_from_model(reference_model)
+    except Exception as exc:
+        return [], f"donor_build_failed:{exc}"
+
+    try:
+        np_vertices = np.asarray(
+            [(float(v[0]), float(v[1]), float(v[2])) for v in vertices]
+        )
+        np_faces = np.asarray(
+            [(int(f[0]), int(f[1]), int(f[2])) for f in faces], dtype=np.int64
+        )
+        partition = ap.partition_mesh_anatomically(np_vertices, np_faces, donor)
+    except Exception as exc:
+        return [], f"partition_failed:{exc}"
+
+    face_to_region = np.asarray(partition.imported_face_to_region, dtype=np.int64)
+    region_ids = sorted(int(r) for r in np.unique(face_to_region) if int(r) >= 0)
+    if len(region_ids) <= 1:
+        return [], "single_region_no_split_needed"
+
+    base_name = str(getattr(node, "name", "") or "mesh").strip() or "mesh"
+    normals = list(getattr(node, "normals", []) or [])
+    tangents = list(getattr(node, "tangents", []) or [])
+    uvs = list(getattr(node, "uvs", []) or [])
+    face_uvs = list(getattr(node, "face_uvs", []) or [])
+    face_mats = list(getattr(node, "face_mats", []) or [])
+
+    split_nodes: List[Any] = []
+    for region_id in region_ids:
+        face_indices = [
+            int(i) for i in np.where(face_to_region == region_id)[0].tolist()
+        ]
+        if not face_indices:
+            continue
+
+        vertex_map: Dict[int, int] = {}
+        uv_map: Dict[int, int] = {}
+        new_vertices: List[Tuple[float, float, float]] = []
+        new_normals: List[Tuple[float, float, float]] = []
+        new_tangents: List[Tuple[float, float, float]] = []
+        new_uvs: List[Tuple[float, float]] = []
+        new_faces: List[Tuple[int, int, int]] = []
+        new_face_uvs: List[Tuple[int, int, int]] = []
+        new_face_mats: List[int] = []
+        new_skin_rows: List[Any] = []
+
+        def map_vertex(old_index: int) -> int:
+            if old_index in vertex_map:
+                return vertex_map[old_index]
+            new_index = len(new_vertices)
+            vertex_map[old_index] = new_index
+            new_vertices.append(vertices[old_index])
+            if old_index < len(normals):
+                new_normals.append(normals[old_index])
+            if old_index < len(tangents):
+                new_tangents.append(tangents[old_index])
+            if not face_uvs and old_index < len(uvs):
+                new_uvs.append(uvs[old_index])
+            if old_index < len(skin_data):
+                new_skin_rows.append(copy.deepcopy(skin_data[old_index]))
+            else:
+                from types import SimpleNamespace
+
+                new_skin_rows.append(SimpleNamespace(influences=[]))
+            return new_index
+
+        def map_uv(old_index: int) -> int:
+            if old_index in uv_map:
+                return uv_map[old_index]
+            new_index = len(new_uvs)
+            uv_map[old_index] = new_index
+            new_uvs.append(uvs[old_index] if old_index < len(uvs) else (0.0, 0.0))
+            return new_index
+
+        for face_index in face_indices:
+            face = faces[face_index]
+            try:
+                mapped_face = tuple(map_vertex(int(value)) for value in face[:3])
+            except Exception:
+                continue
+            if len(set(mapped_face)) < 3:
+                continue
+            new_faces.append(mapped_face)  # type: ignore[arg-type]
+            if face_index < len(face_uvs):
+                fu = face_uvs[face_index]
+                try:
+                    new_face_uvs.append(tuple(map_uv(int(value)) for value in fu[:3]))  # type: ignore[arg-type]
+                except Exception:
+                    new_face_uvs.append((0, 0, 0))
+            if face_index < len(face_mats):
+                try:
+                    new_face_mats.append(int(face_mats[face_index]))
+                except Exception:
+                    new_face_mats.append(0)
+
+        if not new_faces:
+            continue
+
+        # ---- Weight remap: region palette from bone_indices, never positions.
+        used_local_indices: List[int] = []
+        seen: set = set()
+        for row in new_skin_rows:
+            for influence in list(getattr(row, "influences", []) or []):
+                try:
+                    old_bone = int(getattr(influence, "bone_index", -1))
+                    weight = float(getattr(influence, "weight", 0.0) or 0.0)
+                except Exception:
+                    continue
+                if weight <= 1e-9 or old_bone < 0 or old_bone >= len(bone_map):
+                    continue
+                if old_bone not in seen:
+                    seen.add(old_bone)
+                    used_local_indices.append(old_bone)
+        used_local_indices.sort()
+
+        if len(used_local_indices) > _SKIN_PALETTE_LIMIT:
+            return [], (
+                f"palette_overflow:region {region_id} needs "
+                f"{len(used_local_indices)} bones (> {_SKIN_PALETTE_LIMIT}); "
+                "cannot export a KOTOR skin node — refine the partition"
+            )
+
+        old_to_new = {old: new for new, old in enumerate(used_local_indices)}
+        for row in new_skin_rows:
+            for influence in list(getattr(row, "influences", []) or []):
+                try:
+                    old_bone = int(getattr(influence, "bone_index", -1))
+                except Exception:
+                    continue
+                if old_bone in old_to_new:
+                    setattr(influence, "bone_index", old_to_new[old_bone])
+                # Zero-weight / out-of-range influences keep their index; they
+                # carry no weight and must not disturb byte-identity elsewhere.
+
+        split_node = copy.deepcopy(node)
+        split_node.name = f"{base_name}_anat{region_id:02d}"
+        split_node.parent = getattr(node, "parent", None)
+        split_node.children = []
+        split_node.vertices = new_vertices
+        split_node.normals = new_normals
+        split_node.tangents = new_tangents
+        split_node.uvs = new_uvs
+        split_node.face_uvs = new_face_uvs
+        split_node.faces = new_faces
+        split_node.face_mats = new_face_mats
+        split_node.skin_data = new_skin_rows
+        split_node.bone_map = [bone_map[old] for old in used_local_indices]
+        # Stale packed skin arrays from the source node must not survive the
+        # split; the writer rebuilds bonemap floats from bone_map names.
+        if hasattr(split_node, "bone_map_floats"):
+            try:
+                split_node.bone_map_floats = []
+            except Exception:
+                pass
+        setattr(split_node, "_external_imported", True)
+        setattr(split_node, "_gr_node_splitter_component", True)
+        setattr(split_node, "_gr_weight_remap_split", True)
+        setattr(split_node, "_gr_anatomical_region_id", int(region_id))
+        # Provenance: new vertex i came from source vertex
+        # _gr_source_vertex_indices[i].  Enables byte-identity audits (D-5).
+        source_indices = [0] * len(new_vertices)
+        for old_index, new_index in vertex_map.items():
+            source_indices[new_index] = int(old_index)
+        setattr(split_node, "_gr_source_vertex_indices", source_indices)
+        try:
+            split_node.compute_bounds()
+        except Exception:
+            pass
+        split_nodes.append(split_node)
+
+    if not split_nodes:
+        return [], "no_regions_produced_geometry"
+    return split_nodes, None
+
+
+def split_skinned_mesh_nodes_with_weight_remap(
+    model: Any,
+    reference_model: Any,
+) -> Dict[str, Any]:
+    """Split every over-palette skinned node of ``model`` into anatomical
+    region nodes with ≤16-bone local palettes (PR E / T2512).
+
+    Hard-fails (D-4) when ``reference_model`` is missing; hard-fails on
+    palette overflow; weights are byte-identical (D-5).  Nodes already within
+    the palette limit are left untouched.
+    """
+    if model is None:
+        return {
+            "ok": False,
+            "code": "no_body_mesh",
+            "message": "Load a custom mesh before splitting.",
+            "split_nodes": 0,
+        }
+    if reference_model is None:
+        return {
+            "ok": False,
+            "code": "missing_donor",
+            "message": (
+                "Anatomical split requires a weight donor. Select a "
+                "reference/base model before splitting a skinned mesh."
+            ),
+            "split_nodes": 0,
+        }
+
+    candidates = [
+        node
+        for node in _iter_model_nodes(model)
+        if getattr(node, "vertices", None)
+        and getattr(node, "faces", None)
+        and (getattr(node, "skin_data", None) or getattr(node, "bone_map", None))
+        and len(list(getattr(node, "bone_map", []) or [])) > _SKIN_PALETTE_LIMIT
+    ]
+    if not candidates:
+        palettes = validate_skin_node_palettes(model)
+        return {
+            "ok": True,
+            "code": "no_over_palette_nodes",
+            "message": "No skinned node exceeds the 16-bone palette limit.",
+            "split_nodes": 0,
+            "palette_validation": palettes,
+        }
+
+    split_source_count = 0
+    split_node_count = 0
+    per_node_report: List[Dict[str, Any]] = []
+    for node in list(candidates):
+        parts, reason = _split_skinned_node_by_anatomical_regions(
+            node, reference_model
+        )
+        if reason is not None:
+            return {
+                "ok": False,
+                "code": reason.split(":", 1)[0],
+                "message": f"Anatomical split failed on node "
+                f"'{getattr(node, 'name', '?')}': {reason}",
+                "split_nodes": 0,
+            }
+        split_source_count += 1
+        split_node_count += len(parts)
+        per_node_report.append(
+            {
+                "source_node": str(getattr(node, "name", "") or "?"),
+                "regions": len(parts),
+                "palette_sizes": [len(p.bone_map) for p in parts],
+            }
+        )
+        parent = getattr(node, "parent", None)
+        if parent is None and getattr(model, "root_node", None) is node:
+            existing_children = list(getattr(node, "children", []) or [])
+            for child in parts + existing_children:
+                child.parent = node
+            node.children = parts + existing_children
+            node.vertices = []
+            node.normals = []
+            node.tangents = []
+            node.uvs = []
+            node.face_uvs = []
+            node.faces = []
+            node.face_mats = []
+            node.skin_data = []
+            node.bone_map = []
+            node.name = f"{str(getattr(node, 'name', '') or 'mesh')}_parts"
+            continue
+        if parent is None:
+            continue
+        siblings = list(getattr(parent, "children", []) or [])
+        try:
+            index = siblings.index(node)
+        except ValueError:
+            index = len(siblings)
+        for part in parts:
+            part.parent = parent
+        parent.children = siblings[:index] + parts + siblings[index + 1 :]
+
+    palettes = validate_skin_node_palettes(model)
+    if not palettes["ok"]:
+        return {
+            "ok": False,
+            "code": "palette_overflow",
+            "message": f"Post-split palette validation failed: "
+            f"{palettes['violations']}",
+            "split_nodes": split_node_count,
+            "palette_validation": palettes,
+        }
+
+    metadata = getattr(model, "metadata", None)
+    if not isinstance(metadata, dict):
+        metadata = {}
+        setattr(model, "metadata", metadata)
+    metadata["character_builder_skinned_node_splitter"] = {
+        "source_nodes_split": split_source_count,
+        "region_nodes_created": split_node_count,
+        "method": "anatomical_partition_weight_remap",
+        "per_node": per_node_report,
+        "palette_validation": palettes,
+    }
+    return {
+        "ok": True,
+        "code": "split",
+        "message": (
+            f"Anatomical splitter separated {split_source_count} skinned "
+            f"node(s) into {split_node_count} region node(s), all palettes "
+            f"<= {_SKIN_PALETTE_LIMIT} bones."
+        ),
+        "split_nodes": split_node_count,
+        "per_node": per_node_report,
+        "palette_validation": palettes,
+    }
+
+
+def split_imported_mesh_nodes(
+    scene: Any,
+    *,
+    respect_skinned: str = "skip",
+    reference_model: Any = None,
+) -> Dict[str, Any]:
+    """Split imported unskinned mesh nodes into connected render islands.
+
+    ``respect_skinned`` (PR E / T2512):
+    - ``"skip"`` (default): skinned nodes are counted and left untouched —
+      the pre-T2512 behavior, byte-for-byte.
+    - ``"split_with_weight_remap"``: over-palette skinned nodes are split into
+      anatomical region nodes via
+      :func:`split_skinned_mesh_nodes_with_weight_remap` (requires
+      ``reference_model``; hard-fails without one).
+    """
 
     md = _import_model_data()
     entry = scene.get(md.PartSlot.HEADLESS_BODY) if scene is not None else None
@@ -6186,6 +6580,19 @@ def split_imported_mesh_nodes(scene: Any) -> Dict[str, Any]:
         node for node in _iter_model_nodes(model)
         if getattr(node, "vertices", None) and getattr(node, "faces", None)
     ]
+    skinned_split_result: Optional[Dict[str, Any]] = None
+    if respect_skinned == "split_with_weight_remap":
+        skinned_split_result = split_skinned_mesh_nodes_with_weight_remap(
+            model, reference_model
+        )
+        if not skinned_split_result.get("ok", False):
+            return skinned_split_result
+        # Refresh candidates: the skinned split replaced nodes in the tree.
+        candidates = [
+            node for node in _iter_model_nodes(model)
+            if getattr(node, "vertices", None) and getattr(node, "faces", None)
+        ]
+
     split_source_count = 0
     split_node_count = 0
     skipped_skinned = 0
@@ -6247,23 +6654,37 @@ def split_imported_mesh_nodes(scene: Any) -> Dict[str, Any]:
         "method": "connected_face_components",
     }
 
-    if split_node_count:
+    skinned_nodes_created = (
+        int(skinned_split_result.get("split_nodes", 0) or 0)
+        if skinned_split_result is not None
+        else 0
+    )
+    total_created = split_node_count + skinned_nodes_created
+    if total_created:
         message = (
             f"Node Splitter separated {split_source_count} mesh node(s) into "
             f"{split_node_count} connected render node(s)."
         )
-        return {
+        if skinned_nodes_created:
+            message += (
+                f" Anatomical splitter created {skinned_nodes_created} skinned "
+                f"region node(s) with <= {_SKIN_PALETTE_LIMIT}-bone palettes."
+            )
+        result: Dict[str, Any] = {
             "ok": True,
             "code": "split",
             "message": message,
-            "split_nodes": split_node_count,
+            "split_nodes": total_created,
             "source_nodes": split_source_count,
             "skipped_skinned_nodes": skipped_skinned,
         }
+        if skinned_split_result is not None:
+            result["skinned_split"] = skinned_split_result
+        return result
     message = "Node Splitter found no unskinned multi-island mesh nodes to split."
     if skipped_skinned:
         message += f" Skipped {skipped_skinned} already-skinned node(s)."
-    return {
+    result = {
         "ok": True,
         "code": "no_split_needed",
         "message": message,
@@ -6271,6 +6692,9 @@ def split_imported_mesh_nodes(scene: Any) -> Dict[str, Any]:
         "source_nodes": 0,
         "skipped_skinned_nodes": skipped_skinned,
     }
+    if skinned_split_result is not None:
+        result["skinned_split"] = skinned_split_result
+    return result
 
 
 def _load_utc(path: str, game_version: str) -> Optional[Any]:

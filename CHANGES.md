@@ -11,6 +11,55 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-01
 
+### [2026-07-01] T2512: PR E — Anatomical skinned-node splitter with weight remap
+
+Owner: LordVaderCW
+T###: T2512
+Subsystem: Core.Workflow node splitter (skinned mesh export path)
+Intersects: Fourth PR of the six-PR c_drexl_uv completion chain. Consumes
+T2507 (partition) + T2508 (donor builder). Parent: T2511 (`6064f5eb`).
+
+Summary: the Node Splitter can now split **skinned** nodes. Previously any node
+with `skin_data`/`bone_map` was skipped (`skipped_skinned`); a >16-bone skinned
+import therefore could not become valid KOTOR skin nodes.
+
+- `split_imported_mesh_nodes(scene, *, respect_skinned="skip", reference_model=None)`
+  — default `"skip"` is byte-for-byte the pre-T2512 behavior;
+  `"split_with_weight_remap"` routes over-palette skinned nodes through the new
+  anatomical splitter first, then the unskinned island split runs as before.
+- `split_skinned_mesh_nodes_with_weight_remap(model, reference_model)` — for
+  each skinned node whose `bone_map` exceeds 16: donor-driven BIAGP partition
+  (T2507) decides regions; the node splits into per-region nodes named
+  `<base>_anatNN`. **Weight remap (D-5)**: per-vertex skin rows are carried
+  byte-identically — weights never dropped/renormalised/reordered; only each
+  influence's `bone_index` is rewritten into the region's local bone_map. The
+  remap operates on `bone_indices`/names, never positions — duplicate-position
+  bones (Drexl `lcollar_g`/`rcollar_g`) remain DISTINCT palette entries
+  (T2509b collar finding). Provenance marker `_gr_source_vertex_indices`
+  enables byte-identity audits. **Hard-fails (D-4)** on missing donor
+  (`missing_donor`), partition failure, or any region needing >16 bones
+  (`palette_overflow`) — no partial output.
+- `validate_skin_node_palettes(model)` — hard export gate: every skin node's
+  bone_map ≤16 entries. Counts EVERY entry with real weights, including bones
+  the correspondence fit classifies as degenerate — palette validator and
+  correspondence trace are two different lists over the same source data.
+
+Drexl acceptance: the 55-bone donor-as-import splits into **7 region nodes**,
+palettes 8/8/8/10/16/10/12 (all ≤16), 1526 faces preserved exactly, per-vertex
+(bone_name, weight) multisets byte-identical to source for every vertex of
+every region, collar pair survives as two distinct palette entries.
+
+Files: `native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`,
+`tests/test_skinned_node_splitter.py` (new, 6 tests), `.gitignore` allow-list,
+regenerated Core.Workflow payload (count unchanged at 1186).
+
+Verification: `tests/test_skinned_node_splitter.py` 6 passed (palette validator
+counts degenerates + passes at 16, missing-donor hard-fail, default-skip
+unchanged, Drexl end-to-end split with byte-identity + collar survival, wiring
+through `split_imported_mesh_nodes`). Project suites (correspondence +
+landmark + anatomical + splitter) 38 passed + 1 xfailed (ballooning xfail
+preserved). Cross-suite winding + v2 + payloads 32 passed at count 1186.
+
 ### [2026-07-01] T2511: PR D — Wire correspondence fit into the normalization dispatch ladder
 
 Owner: LordVaderCW
