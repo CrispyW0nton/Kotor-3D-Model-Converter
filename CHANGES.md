@@ -11,6 +11,62 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-01
 
+### [2026-07-01] T2509b: Correspondence fit — align-then-refine skeleton fit behind use_v3 flag
+
+Owner: LordVaderCW
+T###: T2509b
+Subsystem: Core.Math correspondence fit (successor objective to shell containment)
+Intersects: Second PR of the six-PR c_drexl_uv completion chain. Consumes
+T2509a (`landmark_alignment` weighted Umeyama + alignment) and T2508/T2508a
+(world-frame donor). Dark code until PR D (T2511) wires dispatch. Parent:
+T2509a (`3396abd4`).
+
+Summary: Added `native/GhostRigger.Core.Math/Python/src/math/correspondence_fit.py`
+with `fit_skeleton_by_correspondence(imported_vertices, imported_faces, donor,
+*, use_v3=False)` and `CorrespondenceFitResult`
+(`trace_version="ghostrigger.correspondence/v1"`). The fit derives a similarity
+from donor→imported **surface correspondence** and carries the skeleton rigidly
+— nothing is ever asked to be "inside" a shell, sidestepping the PR B/PR C
+balloon findings entirely.
+
+Stage 3 is the locked Option 1 **align-then-refine** (the raw nearest-surface
+spec was falsified 2026-07-01: donor world diag 12.12 vs OBJ diag 1.37 gave
+confidence 0.86): shape-normalise both clouds + 24-rotation octahedral
+pre-alignment (`landmark_alignment.best_alignment_rotation`), nearest-surface
+correspondence with weights `w=1/(1+d)`, weighted-Umeyama refinement, composed
+total `(s, R, t)` returned.
+
+- Degenerate donor-bone filter, duplicate-position FIRST (catches collapsed FK
+  wing chains), then influence count < 5, then spread < 0.01.
+- Falsifier A: rim-ratio preservation, `RATIO_TOLERANCE=0.50` — explicitly a
+  loose gate; Drexl is a self-fit and cannot calibrate it (T2510 debt in module
+  docstring).
+- Falsifier B: refinement-scale bracket [0.5, 2.0] — anchored to the
+  *refinement* scale, deliberately tighter than v2 solver's 0.1×–20×
+  (containment_fit.py:655-656); guards the refinement, not the solver.
+- `initial_scale_estimate` (containment formula, cited) is a **diagnostic
+  only** — on Drexl it is ~8.99 vs total registration scale ~0.11; never
+  asserted.
+
+Drexl self-fit acceptance: surface_confidence **0.9989** (≥0.99),
+refinement_scale **1.0024** (|Δ|<0.05), falsifier_b passed,
+`Rwing_03/05/07` + `Lwing_03/05/07` + collar pair + root dummies in the
+degenerate bucket (all `duplicate_position_*`), real_bone_count 45,
+falsifier_a passed (trivially — presence check).
+
+Files: `correspondence_fit.py` (new), `tests/test_correspondence_fit.py` (new,
+9 tests), `.gitignore` allow-list, `tests/test_native_python_payloads.py`
+count 1185→1186, regenerated Core.Math payload manifest/.rc/.vcxproj + root
+manifest.
+
+Verification: `tests/test_correspondence_fit.py` 9 passed (guards, degenerate
+ordering, synthetic scale recovery s=2.0 exact, ratio preservation scored on 2
+real synthetic bones, Falsifier B bracket contract incl. the 20× balloon
+signature, trace version, Drexl acceptance). Combined with
+`test_landmark_alignment.py` + `test_anatomical_partition.py`: 29 passed +
+1 xfailed (ballooning xfail preserved, Drexl 7/16/1.0 intact). Cross-suite
+winding + v2 + payloads: 32 passed at count 1186.
+
 ### [2026-07-01] T2509a: Correspondence-fit foundation math (weighted Umeyama + alignment migration)
 
 Owner: LordVaderCW

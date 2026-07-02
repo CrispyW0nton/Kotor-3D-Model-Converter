@@ -394,7 +394,7 @@
     },
     {
         "project": "GhostRigger.Core.Math",
-        "python_file_count": 53,
+        "python_file_count": 54,
         "files": [
             "src\\core\\camera\\__init__.py",
             "src\\core\\camera\\arcball_camera.py",
@@ -432,6 +432,7 @@
             "src\\math\\anatomical_partition.py",
             "src\\math\\camera_math.py",
             "src\\math\\containment_fit.py",
+            "src\\math\\correspondence_fit.py",
             "src\\math\\frame_math.py",
             "src\\math\\gpu_math.py",
             "src\\math\\heat_diffusion_skinning.py",

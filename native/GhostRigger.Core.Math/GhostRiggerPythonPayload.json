@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Math",
-    "file_count": 53,
+    "file_count": 54,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -220,6 +220,12 @@
             "source_path": "src/math/containment_fit.py",
             "packaged_path": "Python/src/math/containment_fit.py",
             "sha256": "461d47e0fe90e1dbcce95ee394dcdc9adbeeb7d22e5624c8c15ec623621563e0"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_MATH_CORRESPONDENCE_FIT",
+            "source_path": "src/math/correspondence_fit.py",
+            "packaged_path": "Python/src/math/correspondence_fit.py",
+            "sha256": "7a353113e9f0a31bda234b812b1739fac1eab74445a9ecec3063f9872bbd1d7e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_FRAME_MATH",
