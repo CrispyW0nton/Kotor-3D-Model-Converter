@@ -104,6 +104,7 @@ native/GhostRigger.Core.IO.MDL/**/*.py[cod]
 !/tests/test_full_pipeline_export.py
 !/tests/test_donor_wing_refinement_guard.py
 !/tests/test_character_export_pipeline.py
+!/tests/test_creature_hook_policy.py
 
 # Staged debug symbols next to the root launcher (never commit)
 /GhostRigger.pdb

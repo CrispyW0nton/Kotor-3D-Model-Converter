@@ -51,7 +51,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_DIAGNOSTICS_VALIDATION_SERVICE",
             "source_path": "src/core/diagnostics/validation_service.py",
             "packaged_path": "Python/src/core/diagnostics/validation_service.py",
-            "sha256": "3140dd56547c07b4cae6e4d4d7a160e2eb8ea8bafaee2baf7c62d84aeb135e58"
+            "sha256": "88e4661fe82122039899e8af72b20dc6f3eb23954c406557787437437141f7d2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_GPU_DIAGNOSTICS_CONFIG",

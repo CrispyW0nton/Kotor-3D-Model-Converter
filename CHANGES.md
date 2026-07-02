@@ -11,6 +11,47 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-01
 
+### [2026-07-02] T2519: Creature rigs are no longer judged by humanoid hook expectations
+
+Owner: LordVaderCW
+T###: T2519
+Subsystem: Validation service (Check Model hook rules)
+Intersects: Post-charter finding #3 — the owner saw three HOOK_MISSING
+warnings (`chestconjure`, `handconjure`, `impact_bolt`) in every Drexl
+Character Builder session. Those are humanoid cutscene/item attachment hooks;
+creature skeletons (vanilla `c_drexlf` included) do not have them, and the
+character-pipeline contract explicitly says creature hooks must not be
+blocked by humanoid-only expectations.
+
+Fix in `_body_hook_requirements` (canonical root
+`src/core/diagnostics/validation_service.py`, mirrored to the Runtime.Core +
+Native.Core.Foundation payload copies):
+
+- CREATURE mode: the humanoid required/expected hook lists are skipped
+  entirely (new `_scene_is_creature_mode` reads `CharacterScene.mode`).
+- `native_template_final` rigs with a donor snapshot: the snapshot's hooks are
+  the COMPLETE contract — required = snapshot hooks, expected = nothing
+  (previously the humanoid expected list leaked through minus overlaps, which
+  is exactly what produced the three persistent warnings).
+- Humanoid/headless-body mode: unchanged — the warnings still fire there.
+
+Files: `src/core/diagnostics/validation_service.py` (canonical) + payload
+copies in `native/GhostRigger.Runtime.Core/` and
+`native/GhostRigger.Native.Core.Foundation/`, regenerated both payload
+manifests (count unchanged at 1186), `tests/test_creature_hook_policy.py`
+(new, 4 tests), `.gitignore` allow-list.
+
+Verification: new policy suite 4 passed (creature skips humanoid hooks;
+headless-body still warns; donor snapshot is the complete contract; a missing
+donor hook still errors). Payloads + validation bus + export pipeline suites
+32 passed. KNOWN PRE-EXISTING (verified failing with all local changes
+stashed, alongside the T2518-documented preflight pair):
+`tests/test_regression.py::test_skin_node_palette_records_species_profile_reason`
+and 73 failures in `tests/test_core_contracts.py` (IPC/Qt adapter contracts)
+— both older breakage, not from this change; fold into the T2519→T2520
+follow-up investigation. Visible re-test: owner re-runs Check Model — the
+three warnings should be gone in Creature mode.
+
 ### [2026-07-02] T2518: Fix creature MDL export — bind arrays, payload provenance, texture resrefs, reload padding
 
 Owner: LordVaderCW

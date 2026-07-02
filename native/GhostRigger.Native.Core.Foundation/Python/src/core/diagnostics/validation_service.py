@@ -318,8 +318,31 @@ class ValidationService:
             log.debug("_get_node_map: %s", exc)
         return node_map
 
+    def _scene_is_creature_mode(self) -> bool:
+        """True when the active Character Builder mode is CREATURE."""
+        mode = getattr(self._scene, "mode", None)
+        token = (
+            str(getattr(mode, "value", "") or "")
+            or str(getattr(mode, "name", "") or "")
+            or str(mode or "")
+        )
+        return token.strip().lower() == "creature"
+
     def _body_hook_requirements(self, model) -> tuple[List[str], List[str]]:
-        """Return body hook rules, honoring native-template creature donors."""
+        """Return body hook rules, honoring native-template creature donors.
+
+        T2519 hook policy: the humanoid "expected" hooks (chestconjure /
+        handconjure / impact_bolt) are cutscene/item attachment points that
+        creature rigs simply do not have — vanilla c_drexlf ships without
+        them.  Per the character-pipeline contract, creature hooks must not
+        be judged by humanoid-only expectations, so:
+
+        - native-template rigs: the donor snapshot defines the COMPLETE hook
+          contract (its hooks are required; nothing extra is "expected"), and
+        - creature mode generally: the humanoid expected-hook list is skipped.
+        """
+        creature_mode = self._scene_is_creature_mode()
+
         state = getattr(model, "_gr_character_builder_rig_state", None)
         if isinstance(state, dict):
             state_name = str(state.get("state") or "")
@@ -336,7 +359,9 @@ class ValidationService:
                 native_snapshot_present = bool(raw_state.get("native_snapshot_present"))
 
         if state_name != "native_template_final" or not native_snapshot_present:
-            return list(_BODY_REQUIRED_HOOKS), list(_BODY_EXPECTED_HOOKS)
+            expected = [] if creature_mode else list(_BODY_EXPECTED_HOOKS)
+            required = [] if creature_mode else list(_BODY_REQUIRED_HOOKS)
+            return required, expected
 
         snapshot = getattr(model, "_gr_native_skeleton_snapshot", None)
         hook_names = list(getattr(snapshot, "hook_names", ()) or ())
@@ -346,13 +371,12 @@ class ValidationService:
                 hook_names = list(snap_data.get("hook_names") or ())
         required = [str(name or "") for name in hook_names if str(name or "").strip()]
         if not required:
-            return list(_BODY_REQUIRED_HOOKS), list(_BODY_EXPECTED_HOOKS)
-        required_lower = {name.lower() for name in required}
-        expected = [
-            name for name in _BODY_EXPECTED_HOOKS
-            if name.lower() not in required_lower
-        ]
-        return required, expected
+            expected = [] if creature_mode else list(_BODY_EXPECTED_HOOKS)
+            base_required = [] if creature_mode else list(_BODY_REQUIRED_HOOKS)
+            return base_required, expected
+        # Donor snapshot present: its hooks ARE the contract — expect nothing
+        # beyond what the donor itself authored.
+        return required, []
 
     def _check_hooks(self, slot, model, required: List[str], expected: List[str]) -> None:
         """Rules HOOK_MISSING / HOOK_MISALIGNED."""
