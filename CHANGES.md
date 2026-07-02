@@ -11,6 +11,52 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-01
 
+### [2026-07-01] T2517: Fix animation distortion — wing refinement corrupted donor-transferred weights
+
+Owner: LordVaderCW
+T###: T2517
+Subsystem: Skeleton builder (donor weight transfer / creature wing refinement)
+Intersects: Post-charter finding #1 from the 2026-07-01 manual test (owner
+video). The Node Splitter was exonerated first (owner toggle test: distortion
+identical without splitting), then the bind was probed headlessly.
+
+Root cause: `_refine_creature_wing_weights_with_native_wing_nodes` exists for
+donors whose stock skin carries NO wing-bone influence (its documented
+premise), but it ran unconditionally. Drexl's donor weights the wing membranes
+to `Lwing_*`/`Rwing_*` directly, so the premise was false — and the pass's
+spatial heuristic ("vertex outboard of the wing root") also matches Drexl's
+ARMS. Measured on `c_drexlf` + `C_DrexlF_UV.obj`: the donor nearest-vertex
+transfer itself was healthy (53/53 bones, 60.1% of vertices byte-exact, 0%
+weight drift), but 39.9% of vertices gained up to 0.49 spurious wing weight —
+arm/shoulder vertices dragged by wing bones during animation, the visible
+distortion.
+
+Fix: the refinement pass now tests its premise — it counts skin rows whose
+influences already reference native wing slots with weight ≥ 0.3 and skips
+itself (with a `bind.creature_wing_refinement_skipped` diagnostic) when ≥ 8
+such rows exist. Donors without wing weights (the pass's real audience, e.g.
+humanoid FBX imports) still get refined; donors that author wing weights are
+left untouched. Applied to BOTH package-local copies
+(`Core.Scene`/`Core.Tools` `skeleton_builder.py` — byte-identical before and
+after).
+
+Post-fix measurement: bind fidelity **100.0% byte-exact** (2120/2120 vertices
+match the authored donor weights; method `native_template_nearest_vertex_donor`,
+no wing refinement, 53 bone slots).
+
+Files: `native/GhostRigger.Core.Scene/Python/src/core/skeleton/skeleton_builder.py`,
+`native/GhostRigger.Core.Tools/Python/src/core/skeleton/skeleton_builder.py`,
+`tests/test_donor_wing_refinement_guard.py` (new regression: full headless
+normalize→bind, asserts exact per-vertex fidelity + refinement skipped),
+`.gitignore` allow-list, regenerated Core.Scene + Core.Tools payloads (count
+unchanged at 1186).
+
+Verification: new regression 1 passed;
+`tests/test_character_builder_template_rig.py` 20 passed (the wing-refinement
+tests there use donors WITHOUT wing weights, so the pass still fires for its
+intended audience). Visible re-test required: owner replays the animation in
+the Debug app — distortion should be gone (both split and unsplit).
+
 ### [2026-07-01] T2514: P5-min — Character Builder wiring for the anatomical splitter + hard-fail dialogs
 
 Owner: LordVaderCW

@@ -102,6 +102,7 @@ native/GhostRigger.Core.IO.MDL/**/*.py[cod]
 !/tests/test_correspondence_fit.py
 !/tests/test_skinned_node_splitter.py
 !/tests/test_full_pipeline_export.py
+!/tests/test_donor_wing_refinement_guard.py
 !/tests/test_kotor_to_unreal_preview_mode.py
 !/tests/test_kotor_to_unreal_export.py
 !/tests/test_ghostrigger_kotor_to_unreal_workbench_controller.py

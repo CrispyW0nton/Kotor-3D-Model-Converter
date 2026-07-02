@@ -669,6 +669,40 @@ def _refine_creature_wing_weights_with_native_wing_nodes(
     if not side_infos:
         return 0, {}
 
+    # T2517 guard: this pass exists for donors whose stock skin map carries NO
+    # wing-bone influence (see docstring).  When the donor transfer already
+    # delivered meaningful wing weights (Drexl's authored skin weights the wing
+    # membranes to Lwing/Rwing chains directly), the premise is false and the
+    # spatial blend actively corrupts arm/shoulder vertices that sit outboard
+    # of the wing root — measured on c_drexlf + C_DrexlF_UV.obj: 39.9% of
+    # vertices gained up to 0.49 spurious wing weight, the visible animation
+    # distortion in the 2026-07-01 manual test.  Test the premise instead of
+    # assuming it.
+    wing_slot_indices = {
+        index
+        for info in side_infos.values()
+        for index in info.get("indices", [])
+    }
+    donor_wing_rows = 0
+    for row in skin_rows:
+        for influence in list(getattr(row, "influences", []) or []):
+            try:
+                slot_index = int(getattr(influence, "bone_index", -1))
+                weight = float(getattr(influence, "weight", 0.0) or 0.0)
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if slot_index in wing_slot_indices and weight >= 0.3:
+                donor_wing_rows += 1
+                break
+    if donor_wing_rows >= 8:
+        _bind_diag(
+            "bind.creature_wing_refinement_skipped",
+            mesh_name=str(getattr(mesh, "name", "") or ""),
+            reason="donor_transfer_already_drives_wing_bones",
+            wing_weighted_rows=donor_wing_rows,
+        )
+        return 0, {}
+
     refined = 0
     by_side = {"l": 0, "r": 0}
     for vertex_index, vertex in enumerate(vertices[:len(skin_rows)]):
