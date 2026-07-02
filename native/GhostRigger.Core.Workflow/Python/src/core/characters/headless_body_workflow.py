@@ -6678,15 +6678,21 @@ def split_imported_mesh_nodes(
     )
     total_created = split_node_count + skinned_nodes_created
     if total_created:
-        message = (
-            f"Node Splitter separated {split_source_count} mesh node(s) into "
-            f"{split_node_count} connected render node(s)."
-        )
+        # Only mention the paths that actually did something — "separated 0
+        # mesh node(s) into 0 render node(s)" next to a successful anatomical
+        # split reads as a failure (T2514 manual-test finding).
+        message_parts: List[str] = []
+        if split_node_count:
+            message_parts.append(
+                f"Node Splitter separated {split_source_count} mesh node(s) "
+                f"into {split_node_count} connected render node(s)."
+            )
         if skinned_nodes_created:
-            message += (
-                f" Anatomical splitter created {skinned_nodes_created} skinned "
+            message_parts.append(
+                f"Anatomical splitter created {skinned_nodes_created} skinned "
                 f"region node(s) with <= {_SKIN_PALETTE_LIMIT}-bone palettes."
             )
+        message = " ".join(message_parts)
         result: Dict[str, Any] = {
             "ok": True,
             "code": "split",

@@ -2930,7 +2930,14 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             kind = "error"
         if hasattr(self.inspector, "set_node_splitter_status"):
             self.inspector.set_node_splitter_status(message, kind=kind)
-        if hasattr(self.inspector, "set_skeleton_template_status") and ok:
+        # Mirror to the skeleton-template status only for unskinned island
+        # splits (its original purpose) — mirroring every result printed the
+        # same line twice in the Build Skeleton box (T2514 manual-test finding).
+        if (
+            hasattr(self.inspector, "set_skeleton_template_status")
+            and ok
+            and int(result.get("source_nodes", 0) or 0) > 0
+        ):
             self.inspector.set_skeleton_template_status(message, kind=kind)
         try:
             from core.geometry import model_data as _md

@@ -705,7 +705,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_CHARACTER_BUILDER_PANEL",
             "source_path": "src/gui/panels/qt_character_builder_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_character_builder_panel.py",
-            "sha256": "4337490bd9f7b99c722759f627c038739a01b0db2f33e1d0632de3d35e6d8ca4"
+            "sha256": "e2bdcfa41a7e3c5a04c19c34d352fd196966a9723b6416895b4bfbf847a248a8"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_COMMON_PANELS",
