@@ -4608,6 +4608,155 @@ def _model_mesh_arrays(model: Any):
 _CORRESPONDENCE_REGION_MIN_FACES = 20
 
 
+_CORRESPONDENCE_POSTFIT_OVERSIZE_RATIO = 1.06
+_CORRESPONDENCE_POSTFIT_FLOOR_TOLERANCE_FRACTION = 0.055
+_CORRESPONDENCE_POSTFIT_MIN_FLOOR_TOLERANCE = 0.045
+_CORRESPONDENCE_POSTFIT_CENTER_TOLERANCE_FRACTION = 0.045
+_CORRESPONDENCE_POSTFIT_MIN_CENTER_TOLERANCE = 0.04
+_CORRESPONDENCE_POSTFIT_MIN_SCALE = 0.74
+
+
+def _correspondence_reference_frame_postfit_correction(
+    *,
+    imported_vertices: Any,
+    reference_bounds: Optional[Tuple[Vec3, Vec3]],
+    linear_matrix: Tuple[Vec3, Vec3, Vec3],
+    offset: Vec3,
+) -> Optional[Dict[str, Any]]:
+    """Return a small target-frame correction for oversized creature fits.
+
+    Surface correspondence is the primary objective, but bulky custom creature
+    shells can score well while sitting too large or below the selected donor
+    frame.  The native skeleton remains authoritative, so the final imported
+    mesh must still live in the donor's scale/origin envelope before binding.
+    """
+
+    if reference_bounds is None:
+        return None
+    try:
+        import numpy as np
+
+        vertices = np.asarray(imported_vertices, dtype=np.float64)
+        linear = np.asarray(linear_matrix, dtype=np.float64)
+        translation = np.asarray(offset, dtype=np.float64)
+        ref_min = np.asarray(reference_bounds[0], dtype=np.float64)
+        ref_max = np.asarray(reference_bounds[1], dtype=np.float64)
+    except Exception:
+        return None
+    if (
+        vertices.ndim != 2
+        or vertices.shape[1] != 3
+        or vertices.shape[0] < 4
+        or linear.shape != (3, 3)
+        or translation.shape != (3,)
+    ):
+        return None
+    if not (
+        np.all(np.isfinite(vertices))
+        and np.all(np.isfinite(linear))
+        and np.all(np.isfinite(translation))
+        and np.all(np.isfinite(ref_min))
+        and np.all(np.isfinite(ref_max))
+    ):
+        return None
+
+    mapped = (vertices @ linear.T) + translation
+    fit_min = mapped.min(axis=0)
+    fit_max = mapped.max(axis=0)
+    fit_ext = np.maximum(fit_max - fit_min, 1.0e-9)
+    ref_ext = np.maximum(ref_max - ref_min, 1.0e-9)
+    ext_ratios = fit_ext / ref_ext
+
+    oversized_axes = [
+        axis for axis, ratio in enumerate(ext_ratios)
+        if float(ratio) > _CORRESPONDENCE_POSTFIT_OVERSIZE_RATIO
+    ]
+    floor_delta = float(fit_min[2] - ref_min[2])
+    floor_tolerance = max(
+        float(ref_ext[2]) * _CORRESPONDENCE_POSTFIT_FLOOR_TOLERANCE_FRACTION,
+        _CORRESPONDENCE_POSTFIT_MIN_FLOOR_TOLERANCE,
+    )
+    fit_center = (fit_min + fit_max) * 0.5
+    ref_center = (ref_min + ref_max) * 0.5
+    center_delta_xy = fit_center[:2] - ref_center[:2]
+    center_tolerance = max(
+        float(max(ref_ext[0], ref_ext[1])) * _CORRESPONDENCE_POSTFIT_CENTER_TOLERANCE_FRACTION,
+        _CORRESPONDENCE_POSTFIT_MIN_CENTER_TOLERANCE,
+    )
+    center_drift = float(np.linalg.norm(center_delta_xy))
+
+    floor_below = floor_delta < -floor_tolerance
+    floor_above = floor_delta > floor_tolerance
+    needs_scale = len(oversized_axes) >= 1
+    needs_floor = floor_below
+    needs_center = center_drift > center_tolerance
+    if not (needs_scale or needs_floor or needs_center):
+        return None
+
+    scale_correction = 1.0
+    if needs_scale:
+        oversized_index = np.asarray(oversized_axes, dtype=np.int64)
+        shrink = ref_ext[oversized_index] / fit_ext[oversized_index]
+        valid = shrink[np.isfinite(shrink) & (shrink > 0.0)]
+        if valid.size:
+            scale_correction = min(1.0, float(np.median(valid)))
+            scale_correction = max(_CORRESPONDENCE_POSTFIT_MIN_SCALE, scale_correction)
+    if not math.isfinite(scale_correction) or scale_correction <= 0.0:
+        return None
+
+    post_target = np.array([ref_center[0], ref_center[1], ref_min[2]], dtype=np.float64)
+    post_source = np.array([fit_center[0], fit_center[1], fit_min[2]], dtype=np.float64)
+    post_translation = post_target - (post_source * scale_correction)
+    corrected_linear = linear * scale_correction
+    corrected_offset = (translation * scale_correction) + post_translation
+    corrected = (vertices @ corrected_linear.T) + corrected_offset
+    corrected_min = corrected.min(axis=0)
+    corrected_max = corrected.max(axis=0)
+    corrected_ext = np.maximum(corrected_max - corrected_min, 1.0e-9)
+
+    axis_names = ("x", "y", "z")
+    reasons: List[str] = []
+    if needs_scale:
+        reasons.append("oversized_axes:" + ",".join(axis_names[i] for i in oversized_axes))
+    if floor_below or floor_above:
+        reasons.append("below_donor_floor" if floor_below else "above_donor_floor")
+    if needs_center:
+        reasons.append("donor_center_drift")
+
+    return {
+        "scale_correction": float(scale_correction),
+        "linear_matrix": tuple(
+            tuple(float(corrected_linear[r, c]) for c in range(3))
+            for r in range(3)
+        ),
+        "offset": (
+            float(corrected_offset[0]),
+            float(corrected_offset[1]),
+            float(corrected_offset[2]),
+        ),
+        "pre_bounds": {
+            "min": [float(value) for value in fit_min],
+            "max": [float(value) for value in fit_max],
+            "extents": [float(value) for value in fit_ext],
+        },
+        "post_bounds": {
+            "min": [float(value) for value in corrected_min],
+            "max": [float(value) for value in corrected_max],
+            "extents": [float(value) for value in corrected_ext],
+        },
+        "reference_bounds": {
+            "min": [float(value) for value in ref_min],
+            "max": [float(value) for value in ref_max],
+            "extents": [float(value) for value in ref_ext],
+        },
+        "pre_extent_ratios": [float(value) for value in ext_ratios],
+        "post_extent_ratios": [float(value) for value in corrected_ext / ref_ext],
+        "floor_delta": float(floor_delta),
+        "center_delta_xy": [float(value) for value in center_delta_xy],
+        "reason": ";".join(reasons),
+    }
+
+
 def _correspondence_fit_solution(
     model: Any,
     bounds: Tuple[Vec3, Vec3],
@@ -4761,6 +4910,19 @@ def _correspondence_fit_solution(
     )  # type: ignore[assignment]
     linear_matrix = _scale_matrix(rotation_matrix, scale_inv)
     offset: Vec3 = (float(t_inv[0]), float(t_inv[1]), float(t_inv[2]))
+    raw_scale_inv = float(scale_inv)
+    raw_offset = offset
+    postfit_correction = _correspondence_reference_frame_postfit_correction(
+        imported_vertices=imported_vertices,
+        reference_bounds=reference_bounds,
+        linear_matrix=linear_matrix,
+        offset=offset,
+    )
+    if postfit_correction is not None:
+        scale_correction = float(postfit_correction["scale_correction"])
+        scale_inv *= scale_correction
+        linear_matrix = postfit_correction["linear_matrix"]
+        offset = postfit_correction["offset"]
 
     source_origin = _bounds_ground_center(bounds)
     target_origin = _vec_add(_mat_vec(linear_matrix, source_origin), offset)
@@ -4788,7 +4950,14 @@ def _correspondence_fit_solution(
         "refinement_scale": float(diag["refinement_scale"]),
         "total_scale_donor_to_imported": float(diag["total_scale"]),
         "applied_scale_imported_to_kotor": float(scale_inv),
+        "applied_scale_imported_to_kotor_raw": float(raw_scale_inv),
         "applied_transform_direction": "imported_to_kotor(inverse_of_donor_to_imported)",
+        "raw_imported_to_kotor_offset": [float(value) for value in raw_offset],
+        "postfit_reference_frame_correction": (
+            dict({"applied": True}, **postfit_correction)
+            if postfit_correction is not None else
+            {"applied": False}
+        ),
         "falsifier_a": {
             "passed": bool(whole.falsifier_a["passed"]),
             "n_real_bones_scored": int(whole.falsifier_a["n_real_bones_scored"]),

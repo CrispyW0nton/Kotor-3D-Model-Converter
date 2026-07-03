@@ -11,6 +11,60 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-01
 
+### [2026-07-02] T2523: Rancor FBX auto-fit now corrects donor-frame scale and position
+
+Owner: LordVaderCW
+T###: T2523
+Subsystem: Character Builder creature auto-fit (Core.Workflow payload)
+Intersects: Owner's RancorTamedConceptFinal FBX Character Builder workflow —
+the texture sidecar was resolving, but the imported Rancor still landed too
+wide, vertically offset, and off the selected K2 Rancor donor centerline before
+binding.
+
+Root cause: correspondence surface registration could produce high confidence
+while the final imported mesh still exceeded or drifted from the selected
+KOTOR donor frame. The old trace accepted the raw correspondence transform even
+when the fitted Rancor bounds were about 10% wider on the dominant span and
+about 1.4 KOTOR units away from the donor centerline. That left the viewport
+and later binding step looking plausible in texture space but wrong in
+animation/skeleton space.
+
+Fix:
+
+- Added a target-frame post-fit correction to the correspondence path. After
+  the primary surface registration succeeds, the workflow compares the fitted
+  imported bounds against the selected donor bounds and applies a conservative
+  uniform correction when the import is oversized, below the donor floor, or
+  center-drifted.
+- The correction shrinks from the oversized axes only, then recenters the
+  imported mesh on the donor X/Y center and grounds it to the donor floor.
+- The fit trace now records raw correspondence scale/offset plus the applied
+  post-fit correction, pre/post/reference bounds, extent ratios, floor delta,
+  center delta, and reason string (for the Rancor fixture:
+  ``oversized_axes:x;above_donor_floor;donor_center_drift``).
+- Drexl remains protected by an explicit no-op regression: its successful
+  self-fit does not receive the new correction.
+
+Files: Core.Workflow ``headless_body_workflow.py``,
+``tests/test_correspondence_fit.py``, regenerated Core.Workflow payload
+manifest.
+
+Verification: ``tests/test_correspondence_fit.py`` 14 passed;
+``tests/test_fbx_texture_resolution.py`` 5 passed;
+``tests/test_character_export_pipeline.py`` 1 passed; payload parity
+``tests/test_native_python_payloads.py -q -k Workflow`` passed; edited Python
+files compiled with ``py_compile``; ``GhostRigger.sln`` rebuilt ``Debug|x64``
+successfully with 0 warnings and 0 errors. Visual proof captured through the
+actual Character Builder viewport widget at
+``exports/validation/t2523_rancor_autofit/rancor_autofit_front.png`` with
+1/1 texture resolved and post-fit scale correction ``0.9108687797``.
+
+Note: this fixes the import frame scale/position. The remaining visible
+arm-pose/animation deformation issue is a bind-stage/source-armature rest-pose
+problem: ``apply_template_rig`` intentionally keeps the native KOTOR skeleton
+as export authority and does not re-pose donor arm bones to the custom FBX
+armature.
+
 ### [2026-07-02] T2522: Rancor FBX splitter now follows authored KOTOR skin regions
 
 Owner: LordVaderCW

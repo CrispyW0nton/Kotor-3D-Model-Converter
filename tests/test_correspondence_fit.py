@@ -16,6 +16,7 @@ never asserted against `initial_scale_estimate` (containment heuristic, ~8.99).
 from __future__ import annotations
 
 import importlib.util
+import os
 import pathlib
 import sys
 
@@ -310,6 +311,37 @@ def _load_workflow():
     )
 
 
+def _find_rancor_fbx() -> pathlib.Path | None:
+    candidates = [
+        os.environ.get("GHOSTRIGGER_RANCOR_FBX"),
+        r"C:\Users\NewAdmin\Documents\KotorMods\Dathomir\Characters\Rancor"
+        r"\Final\RancorTamedConceptFinal.fbx",
+    ]
+    for candidate in candidates:
+        if candidate and pathlib.Path(candidate).is_file():
+            return pathlib.Path(candidate)
+    return None
+
+
+def _load_rancor_reference_model():
+    from tests.test_anatomical_partition import _resolve_k2_dir
+
+    k2_dir = _resolve_k2_dir()
+    if k2_dir is None:
+        pytest.skip("K2 install not available (set K2_PATH)")
+    try:
+        from src.core.assets.resource_manager import ResourceManager
+    except Exception as exc:  # pragma: no cover - environment dependent
+        pytest.skip(f"GhostRigger resource manager unavailable: {exc}")
+    mgr = ResourceManager()
+    if not mgr.set_k2_dir(k2_dir):
+        pytest.skip(f"Could not index K2 install at {k2_dir}")
+    reference = mgr.load_model("c_rancorS", "K2") or mgr.load_model("c_rancor", "K2")
+    if reference is None:
+        pytest.skip("Rancor template not found in K2 install")
+    return reference
+
+
 class _FakeImportNode:
     def __init__(self, vertices, faces):
         self.name = "imported_mesh"
@@ -341,6 +373,56 @@ def _drexl_dispatch_fixtures():
     return _FakeImportModel(iv, if_), reference_model
 
 
+def _box_corners(bounds_min, bounds_max) -> np.ndarray:
+    lo = np.asarray(bounds_min, dtype=np.float64)
+    hi = np.asarray(bounds_max, dtype=np.float64)
+    return np.asarray(
+        [
+            (lo[0], lo[1], lo[2]),
+            (lo[0], lo[1], hi[2]),
+            (lo[0], hi[1], lo[2]),
+            (lo[0], hi[1], hi[2]),
+            (hi[0], lo[1], lo[2]),
+            (hi[0], lo[1], hi[2]),
+            (hi[0], hi[1], lo[2]),
+            (hi[0], hi[1], hi[2]),
+        ],
+        dtype=np.float64,
+    )
+
+
+def test_postfit_reference_frame_correction_recenters_and_shrinks() -> None:
+    """The correspondence fit may be geometrically confident while the final
+    imported frame is still too large or off-center for donor skeleton binding."""
+    wf = _load_workflow()
+    reference_bounds = ((-1.0, -1.0, 0.0), (1.0, 1.0, 2.0))
+    imported_vertices = _box_corners((-1.35, -1.3, -0.25), (1.25, 1.2, 2.35))
+
+    correction = wf._correspondence_reference_frame_postfit_correction(
+        imported_vertices=imported_vertices,
+        reference_bounds=reference_bounds,
+        linear_matrix=((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)),
+        offset=(0.0, 0.0, 0.0),
+    )
+
+    assert correction is not None
+    assert correction["scale_correction"] < 1.0
+    assert "oversized_axes" in correction["reason"]
+    post = correction["post_bounds"]
+    reference = correction["reference_bounds"]
+    assert post["min"][2] == pytest.approx(reference["min"][2])
+
+    post_center_xy = (
+        np.asarray(post["min"][:2], dtype=np.float64)
+        + np.asarray(post["max"][:2], dtype=np.float64)
+    ) * 0.5
+    reference_center_xy = (
+        np.asarray(reference["min"][:2], dtype=np.float64)
+        + np.asarray(reference["max"][:2], dtype=np.float64)
+    ) * 0.5
+    assert np.linalg.norm(post_center_xy - reference_center_xy) < 1.0e-6
+
+
 def test_dispatch_drexl_takes_correspondence_path_by_default(monkeypatch) -> None:
     """PR D regression: at default settings the Drexl creature import must be
     normalized by Policy 0 (correspondence), with trace v2 and high confidence."""
@@ -370,10 +452,64 @@ def test_dispatch_drexl_takes_correspondence_path_by_default(monkeypatch) -> Non
     for key in ("scale", "offset", "fit_transform", "fit_report", "vertical_axis"):
         assert key in result, key
     assert result["fit_report"]["fit_policy"] == "correspondence_surface_registration"
+    assert trace["postfit_reference_frame_correction"]["applied"] is False
     # The applied transform is imported->KOTOR: inverse of donor->imported.
     assert result["scale"] == pytest.approx(
         1.0 / trace["total_scale_donor_to_imported"], rel=1e-6
     )
+
+
+def test_dispatch_rancor_fbx_postfit_correction_recenters_template_frame(
+    monkeypatch,
+) -> None:
+    """The custom Rancor FBX used to fit the surface with high confidence while
+    landing ~1.4 KOTOR units off the selected c_rancorS donor centerline."""
+    monkeypatch.delenv("GHOSTRIGGER_DISABLE_CORRESPONDENCE_FIT", raising=False)
+    fbx = _find_rancor_fbx()
+    if fbx is None:
+        pytest.skip("Rancor FBX fixture not available (set GHOSTRIGGER_RANCOR_FBX)")
+    wf = _load_workflow()
+    reference = _load_rancor_reference_model()
+    md = wf._import_model_data()
+    scene = md.CharacterScene(game_version="K2")
+    scene.mode = md.CharacterMode.CREATURE
+
+    load = wf.load_body(
+        str(fbx),
+        scene,
+        game_version="K2",
+        fit_reference_model=reference,
+        fit_reference_label=getattr(reference, "name", "c_rancorS"),
+        expected_mode=md.CharacterMode.CREATURE,
+        allow_mode_correction=True,
+    )
+    if not load.ok and load.code == "load_failed":
+        pytest.skip(f"Rancor FBX importer unavailable: {load.message}")
+    assert load.ok, load
+
+    normalization = (load.model.metadata or {}).get("kotor_normalization") or {}
+    assert normalization["fit_policy"] == "correspondence_surface_registration"
+    trace = normalization["correspondence_fit"]
+    correction = trace["postfit_reference_frame_correction"]
+    assert correction["applied"] is True
+    assert correction["scale_correction"] < 0.96
+    assert "above_donor_floor" in correction["reason"]
+    assert "donor_center_drift" in correction["reason"]
+
+    assert abs(correction["center_delta_xy"][1]) > 1.0
+    post = correction["post_bounds"]
+    reference_bounds = correction["reference_bounds"]
+    assert post["min"][2] == pytest.approx(reference_bounds["min"][2])
+
+    post_center_xy = (
+        np.asarray(post["min"][:2], dtype=np.float64)
+        + np.asarray(post["max"][:2], dtype=np.float64)
+    ) * 0.5
+    reference_center_xy = (
+        np.asarray(reference_bounds["min"][:2], dtype=np.float64)
+        + np.asarray(reference_bounds["max"][:2], dtype=np.float64)
+    ) * 0.5
+    assert np.linalg.norm(post_center_xy - reference_center_xy) < 1.0e-6
 
 
 def test_dispatch_falls_back_when_falsifier_b_fails(monkeypatch) -> None:
