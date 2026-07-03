@@ -2943,6 +2943,25 @@ def _vertex_bounds(model: Any) -> Optional[Tuple[Tuple[float, float, float], Tup
     return (tuple(mins), tuple(maxs))  # type: ignore[return-value]
 
 
+def _refresh_external_render_bounds(
+    model: Any,
+) -> Optional[Tuple[Tuple[float, float, float], Tuple[float, float, float]]]:
+    """Refresh viewport-ready bounds after an external import fit transform."""
+    bounds = _vertex_bounds(model)
+    if bounds is None:
+        return None
+    try:
+        model.bb_min, model.bb_max = bounds
+    except Exception:
+        pass
+    try:
+        setattr(model, "_gr_render_bounds", bounds)
+        setattr(model, "_gr_bounds_prepared", True)
+    except Exception:
+        pass
+    return bounds
+
+
 def _model_bone_bounds(model: Any) -> Optional[Tuple[Tuple[float, float, float], Tuple[float, float, float]]]:
     mins = [float("inf"), float("inf"), float("inf")]
     maxs = [float("-inf"), float("-inf"), float("-inf")]
@@ -4424,6 +4443,7 @@ def _apply_point_transform_to_model(
         b = _vertex_bounds(model)
         if b is not None:
             model.bb_min, model.bb_max = b
+    _refresh_external_render_bounds(model)
 
 
 def apply_external_model_fit_adjustment(
@@ -4538,6 +4558,7 @@ def apply_external_model_fit_adjustment(
         b = _vertex_bounds(model)
         if b is not None:
             model.bb_min, model.bb_max = b
+    _refresh_external_render_bounds(model)
 
     metadata = getattr(model, "metadata", None)
     if not isinstance(metadata, dict):

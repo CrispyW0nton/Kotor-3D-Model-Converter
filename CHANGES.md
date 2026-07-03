@@ -11,6 +11,40 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-01
 
+### [2026-07-02] T2525: External auto-fit refreshes viewport bounds after transform
+
+Owner: LordVaderCW
+T###: T2525
+Subsystem: Character Builder external mesh auto-fit and viewport framing
+(Core.Workflow payload)
+
+Root cause: the FBX importer prepared ``_gr_render_bounds`` before Character
+Builder normalized the external mesh into KOTOR space. Bendak's actual fitted
+vertices were correct after the ``n_mandalorian`` landmark fit, but the stale
+pre-fit bounds survived into the viewport and made side/front framing report an
+oversized ``5.86 x 8.88 x 2.55`` envelope.
+
+Fix:
+
+- Added a workflow helper that refreshes ``bb_min``, ``bb_max``,
+  ``_gr_render_bounds``, and ``_gr_bounds_prepared`` after external auto-fit or
+  manual fit transforms.
+- The corrected Bendak fit reports fitted bounds of about
+  ``1.22 x 0.52 x 1.86`` and frames correctly in the Character Builder
+  viewport.
+- Added a regression test that starts with deliberately stale prepared bounds
+  and asserts the fit transform rewrites them to the transformed vertices.
+
+Files: Core.Workflow ``headless_body_workflow.py`` and
+``tests/test_external_fit_render_bounds.py``.
+
+Verification: ``tests/test_external_fit_render_bounds.py`` passed;
+``tests/test_correspondence_fit.py`` passed. Visual proof captured from the
+Character Builder viewport at
+``exports/validation/t2525_bendak_mandalorian_fit/bendak_n_mandalorian_fit_front_final.png``
+and
+``exports/validation/t2525_bendak_mandalorian_fit/bendak_n_mandalorian_fit_side_fixed_bounds.png``.
+
 ### [2026-07-02] T2524: Rancor skeleton auto-fit now uses regional correspondence bone targets
 
 Owner: LordVaderCW
