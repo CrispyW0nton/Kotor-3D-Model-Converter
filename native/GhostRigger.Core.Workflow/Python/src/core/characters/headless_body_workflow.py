@@ -4614,6 +4614,8 @@ _CORRESPONDENCE_POSTFIT_MIN_FLOOR_TOLERANCE = 0.045
 _CORRESPONDENCE_POSTFIT_CENTER_TOLERANCE_FRACTION = 0.045
 _CORRESPONDENCE_POSTFIT_MIN_CENTER_TOLERANCE = 0.04
 _CORRESPONDENCE_POSTFIT_MIN_SCALE = 0.74
+_CORRESPONDENCE_SKELETON_FIT_MIN_MAX_DISPLACEMENT = 0.35
+_CORRESPONDENCE_SKELETON_FIT_MIN_MEAN_DISPLACEMENT = 0.12
 
 
 def _correspondence_reference_frame_postfit_correction(
@@ -4757,6 +4759,140 @@ def _correspondence_reference_frame_postfit_correction(
     }
 
 
+def _correspondence_region_skeleton_fit_targets(
+    *,
+    raw_targets: Sequence[Dict[str, Any]],
+    donor_bone_names: Sequence[str],
+    donor_bone_positions: Any,
+    linear_matrix: Tuple[Vec3, Vec3, Vec3],
+    offset: Vec3,
+) -> Optional[Dict[str, Any]]:
+    """Combine regional correspondence solves into KOTOR-space bone targets.
+
+    The whole-mesh correspondence fit is intentionally rigid.  That protects a
+    connected imported mesh from being torn apart, but it cannot move a lowered
+    custom arm rest pose under a higher native donor arm chain.  The per-region
+    solves are still valid guide evidence for where each donor bone lands on
+    the imported surface, so we preserve them as optional skeleton-fit targets
+    for the later native-DAG clone step.
+    """
+
+    if not raw_targets:
+        return None
+    try:
+        import numpy as np
+
+        linear = np.asarray(linear_matrix, dtype=np.float64)
+        translation = np.asarray(offset, dtype=np.float64)
+        donor_positions = np.asarray(donor_bone_positions, dtype=np.float64)
+    except Exception:
+        return None
+    if linear.shape != (3, 3) or translation.shape != (3,):
+        return None
+
+    donor_lookup: Dict[str, Any] = {}
+    for index, raw_name in enumerate(donor_bone_names):
+        name = str(raw_name or "").strip()
+        if not name or index >= donor_positions.shape[0]:
+            continue
+        donor_lookup.setdefault(name.lower(), donor_positions[index])
+
+    accum: Dict[str, Dict[str, Any]] = {}
+    for entry in raw_targets:
+        name = str(entry.get("bone_name") or "").strip()
+        if not name:
+            continue
+        clean = _clean_landmark_name(name)
+        if clean in _NON_DEFORMING_ATTACHMENT_NAMES:
+            continue
+        try:
+            imported_pos = np.asarray(entry["imported_position"], dtype=np.float64)
+            weight = max(1.0e-6, float(entry.get("weight", 1.0) or 1.0))
+        except Exception:
+            continue
+        if imported_pos.shape != (3,) or not np.all(np.isfinite(imported_pos)):
+            continue
+        target = (linear @ imported_pos) + translation
+        if not np.all(np.isfinite(target)):
+            continue
+        row = accum.setdefault(
+            name.lower(),
+            {
+                "name": name,
+                "sum": np.zeros(3, dtype=np.float64),
+                "weight": 0.0,
+                "sources": [],
+            },
+        )
+        row["sum"] += target * weight
+        row["weight"] += weight
+        if len(row["sources"]) < 6:
+            row["sources"].append({
+                "region_id": int(entry.get("region_id", -1)),
+                "dominant_bone": str(entry.get("dominant_bone") or ""),
+                "surface_confidence": float(entry.get("surface_confidence", 0.0) or 0.0),
+            })
+
+    if not accum:
+        return None
+
+    bone_targets: Dict[str, List[float]] = {}
+    displacements: List[float] = []
+    target_details: Dict[str, Dict[str, Any]] = {}
+    for key, row in sorted(accum.items()):
+        total = float(row["weight"])
+        if total <= 1.0e-8:
+            continue
+        target = row["sum"] / total
+        name = str(row["name"])
+        bone_targets[name] = [float(value) for value in target]
+        native = donor_lookup.get(key)
+        displacement = None
+        if native is not None:
+            try:
+                displacement = float(np.linalg.norm(target - np.asarray(native, dtype=np.float64)))
+                displacements.append(displacement)
+            except Exception:
+                displacement = None
+        target_details[name] = {
+            "target": bone_targets[name],
+            "native_position": (
+                [float(value) for value in native]
+                if native is not None else
+                None
+            ),
+            "displacement": displacement,
+            "source_regions": list(row["sources"]),
+        }
+
+    if not bone_targets:
+        return None
+    max_displacement = max(displacements, default=0.0)
+    mean_displacement = (
+        sum(displacements) / float(len(displacements))
+        if displacements else
+        0.0
+    )
+    apply_recommended = (
+        max_displacement >= _CORRESPONDENCE_SKELETON_FIT_MIN_MAX_DISPLACEMENT
+        or mean_displacement >= _CORRESPONDENCE_SKELETON_FIT_MIN_MEAN_DISPLACEMENT
+    )
+    return {
+        "method": "per_region_correspondence_bone_targets",
+        "coordinate_space": "kotor_world_after_fit",
+        "apply_recommended": bool(apply_recommended),
+        "bone_targets": bone_targets,
+        "target_details": target_details,
+        "bone_target_count": len(bone_targets),
+        "max_displacement": float(max_displacement),
+        "mean_displacement": float(mean_displacement),
+        "thresholds": {
+            "max_displacement": _CORRESPONDENCE_SKELETON_FIT_MIN_MAX_DISPLACEMENT,
+            "mean_displacement": _CORRESPONDENCE_SKELETON_FIT_MIN_MEAN_DISPLACEMENT,
+        },
+    }
+
+
 def _correspondence_fit_solution(
     model: Any,
     bounds: Tuple[Vec3, Vec3],
@@ -4822,6 +4958,7 @@ def _correspondence_fit_solution(
     region_validation: List[Dict[str, Any]] = []
     regions_skipped: List[Dict[str, Any]] = []
     failed_regions: List[str] = []
+    raw_skeleton_targets: List[Dict[str, Any]] = []
     for region in partition.regions:
         imported_face_ids = np.asarray(region.imported_face_indices, dtype=np.int64)
         donor_face_ids = np.asarray(region.donor_face_indices, dtype=np.int64)
@@ -4871,6 +5008,36 @@ def _correspondence_fit_solution(
         except Exception as exc:
             failed_regions.append(f"region {int(region.region_id)} error:{exc}")
             continue
+        region_weight = max(
+            1.0,
+            float(imported_face_ids.size) * float(region_fit.surface_confidence),
+        )
+        region_rotation = np.asarray(region_fit.rotation, dtype=np.float64)
+        region_translation = np.asarray(region_fit.translation, dtype=np.float64)
+        for bone_index in np.asarray(region.bone_indices_in_region, dtype=np.int64).tolist():
+            if bone_index < 0 or bone_index >= len(donor.bone_names):
+                continue
+            bone_name = str(donor.bone_names[bone_index] or "").strip()
+            if not bone_name:
+                continue
+            try:
+                donor_pos = np.asarray(donor.bone_positions[bone_index], dtype=np.float64)
+                imported_pos = (
+                    float(region_fit.scale) * (donor_pos @ region_rotation.T)
+                    + region_translation
+                )
+            except Exception:
+                continue
+            if imported_pos.shape != (3,) or not np.all(np.isfinite(imported_pos)):
+                continue
+            raw_skeleton_targets.append({
+                "bone_name": bone_name,
+                "imported_position": [float(value) for value in imported_pos],
+                "weight": region_weight,
+                "region_id": int(region.region_id),
+                "dominant_bone": str(region.dominant_bone_name),
+                "surface_confidence": float(region_fit.surface_confidence),
+            })
         entry = {
             "region_id": int(region.region_id),
             "dominant_bone": str(region.dominant_bone_name),
@@ -4923,6 +5090,13 @@ def _correspondence_fit_solution(
         scale_inv *= scale_correction
         linear_matrix = postfit_correction["linear_matrix"]
         offset = postfit_correction["offset"]
+    skeleton_fit_targets = _correspondence_region_skeleton_fit_targets(
+        raw_targets=raw_skeleton_targets,
+        donor_bone_names=list(donor.bone_names),
+        donor_bone_positions=np.asarray(donor.bone_positions, dtype=np.float64),
+        linear_matrix=linear_matrix,
+        offset=offset,
+    )
 
     source_origin = _bounds_ground_center(bounds)
     target_origin = _vec_add(_mat_vec(linear_matrix, source_origin), offset)
@@ -4974,6 +5148,15 @@ def _correspondence_fit_solution(
         "region_count": int(partition.diagnostics["final_region_count"]),
         "region_validation": region_validation,
         "regions_skipped": regions_skipped,
+        "creature_skeleton_fit": (
+            skeleton_fit_targets
+            if skeleton_fit_targets is not None else
+            {
+                "method": "per_region_correspondence_bone_targets",
+                "apply_recommended": False,
+                "bone_target_count": 0,
+            }
+        ),
         "mean_transfer_confidence": float(
             partition.diagnostics["mean_transfer_confidence"]
         ),

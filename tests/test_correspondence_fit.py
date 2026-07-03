@@ -342,6 +342,21 @@ def _load_rancor_reference_model():
     return reference
 
 
+def _node_world_position_by_name(model, name: str) -> tuple[float, float, float]:
+    for node in model.all_nodes():
+        if str(getattr(node, "name", "") or "").lower() != name.lower():
+            continue
+        try:
+            pos = node.bone_world_position()
+        except Exception:
+            try:
+                pos = node.world_transform()[0]
+            except Exception:
+                pos = getattr(node, "position", (0.0, 0.0, 0.0))
+        return (float(pos[0]), float(pos[1]), float(pos[2]))
+    raise AssertionError(f"node not found: {name}")
+
+
 class _FakeImportNode:
     def __init__(self, vertices, faces):
         self.name = "imported_mesh"
@@ -510,6 +525,39 @@ def test_dispatch_rancor_fbx_postfit_correction_recenters_template_frame(
         + np.asarray(reference_bounds["max"][:2], dtype=np.float64)
     ) * 0.5
     assert np.linalg.norm(post_center_xy - reference_center_xy) < 1.0e-6
+
+    skeleton_fit = trace["creature_skeleton_fit"]
+    assert skeleton_fit["apply_recommended"] is True
+    assert skeleton_fit["bone_target_count"] >= 30
+    assert skeleton_fit["max_displacement"] > 1.0
+    assert skeleton_fit["mean_displacement"] > 1.0
+    assert "Ran_ForearmL" in skeleton_fit["bone_targets"]
+    assert "Ran_ForearmR" in skeleton_fit["bone_targets"]
+
+    try:
+        from src.core.characters import character_builder as cb
+    except Exception as exc:  # pragma: no cover - environment dependent
+        pytest.skip(f"Character Builder backend unavailable: {exc}")
+    rig = cb.apply_template_rig(load.model, reference, game="K2")
+    assert rig["ok"], rig
+    bind = (rig["model"].metadata or {}).get("character_builder_bind") or {}
+    applied = ((bind.get("native_base") or {}).get("creature_skeleton_fit") or {})
+    assert applied["applied"] is True
+    assert applied["moved_bones"] >= 30
+
+    native_left = _node_world_position_by_name(reference, "Ran_ForearmL")
+    fitted_left = _node_world_position_by_name(rig["model"], "Ran_ForearmL")
+    target_left = skeleton_fit["bone_targets"]["Ran_ForearmL"]
+    assert fitted_left == pytest.approx(target_left, abs=1.0e-4)
+    assert fitted_left[1] < native_left[1] - 0.9
+    assert fitted_left[2] < native_left[2] - 0.7
+
+    native_right = _node_world_position_by_name(reference, "Ran_ForearmR")
+    fitted_right = _node_world_position_by_name(rig["model"], "Ran_ForearmR")
+    target_right = skeleton_fit["bone_targets"]["Ran_ForearmR"]
+    assert fitted_right == pytest.approx(target_right, abs=1.0e-4)
+    assert fitted_right[1] < native_right[1] - 0.9
+    assert fitted_right[2] < native_right[2] - 0.7
 
 
 def test_dispatch_falls_back_when_falsifier_b_fails(monkeypatch) -> None:

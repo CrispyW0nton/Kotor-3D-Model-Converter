@@ -11,6 +11,43 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-01
 
+### [2026-07-02] T2524: Rancor skeleton auto-fit now uses regional correspondence bone targets
+
+Owner: LordVaderCW
+T###: T2524
+Subsystem: Character Builder creature skeleton fitting (Core.Workflow payload)
+Intersects: T2523 Rancor FBX auto-fit frame correction. The mesh frame was
+centered and textured, but the visible K2 Rancor donor bones still floated
+above the custom Rancor arms/body because the build step cloned the untouched
+native rest skeleton.
+
+Root cause: the correspondence path solved per-anatomical-region donor-to-import
+transforms for validation, then discarded those transforms before binding. A
+single whole-mesh transform can place the Rancor mesh envelope correctly, but it
+cannot put lowered custom arms under the higher native donor arm chain.
+
+Fix:
+
+- The correspondence fit now emits optional per-bone creature skeleton targets
+  from the validated regional correspondence solves.
+- ``apply_template_rig`` consumes those targets only when the measured native
+  rest-pose displacement is material, then moves the cloned KOTOR skeleton
+  pivots into the fitted imported mesh before skin binding.
+- The application is recorded in ``character_builder_bind.native_base`` with
+  moved-bone counts, displacement metrics, and before/target/after positions.
+- The Rancor fixture moves 44 cloned bones; key arm bones now land on the
+  generated regional targets instead of the raw high native donor positions.
+
+Files: Core.Workflow ``headless_body_workflow.py`` and
+``character_builder.py``, ``tests/test_correspondence_fit.py``, regenerated
+Core.Workflow payload manifest.
+
+Verification: Rancor FBX regression now asserts the rig build applies regional
+skeleton targets and moves both forearms down/back into the fitted mesh;
+Drexl correspondence and Drexl export targeted checks still pass. Visual proof
+captured from the actual Character Builder viewport using the rigged model at
+``exports/validation/t2524_rancor_skeleton_fit/rancor_skeleton_fit_front_no_helpers.png``.
+
 ### [2026-07-02] T2523: Rancor FBX auto-fit now corrects donor-frame scale and position
 
 Owner: LordVaderCW

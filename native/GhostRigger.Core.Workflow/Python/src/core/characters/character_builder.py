@@ -1247,6 +1247,16 @@ def apply_template_rig(
 
         import copy
         skel_root = copy.deepcopy(tmpl_root)
+        creature_skeleton_fit_report = _apply_creature_skeleton_fit_targets(
+            skel_root,
+            mesh_model,
+        )
+        if bool(creature_skeleton_fit_report.get("applied", False)):
+            warnings.append(
+                "Adjusted native creature skeleton pivots to the imported "
+                "mesh using regional correspondence targets "
+                f"({int(creature_skeleton_fit_report.get('moved_bones', 0))} bone(s))."
+            )
 
         replaced_native_render_nodes: List[dict] = []
         removed_template_meshes = _strip_render_geometry_from_skeleton(
@@ -1413,6 +1423,7 @@ def apply_template_rig(
                     "game": native_base_game,
                     "supermodel": sm or "NULL",
                     "dag_authority": "native_kotor_base",
+                    "creature_skeleton_fit": creature_skeleton_fit_report,
                     "dag_fingerprint": native_dag_fingerprint,
                     "dag_fingerprint_algorithm": native_dag_fingerprint_algorithm,
                     "weight_donor_source": weight_donor_source,
@@ -1590,6 +1601,182 @@ def _normalize_vec(v: Tuple[float, float, float]) -> Tuple[float, float, float]:
     if mag <= 1e-9:
         return (x, y, z)
     return (x / mag, y / mag, z / mag)
+
+
+def _quat_conjugate(q) -> Tuple[float, float, float, float]:
+    try:
+        return (-float(q[0]), -float(q[1]), -float(q[2]), float(q[3]))
+    except Exception:
+        return (0.0, 0.0, 0.0, 1.0)
+
+
+def _node_world_position_for_fit(node: Any) -> Tuple[float, float, float]:
+    try:
+        pos = node.bone_world_position()
+        return (float(pos[0]), float(pos[1]), float(pos[2]))
+    except Exception:
+        pass
+    try:
+        pos = node.world_transform()[0]
+        return (float(pos[0]), float(pos[1]), float(pos[2]))
+    except Exception:
+        pass
+    try:
+        pos = getattr(node, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
+        return (float(pos[0]), float(pos[1]), float(pos[2]))
+    except Exception:
+        return (0.0, 0.0, 0.0)
+
+
+def _node_world_rotation_for_fit(node: Any) -> Tuple[float, float, float, float]:
+    try:
+        rot = node.world_transform()[1]
+        return (float(rot[0]), float(rot[1]), float(rot[2]), float(rot[3]))
+    except Exception:
+        pass
+    try:
+        rot = getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
+        return (float(rot[0]), float(rot[1]), float(rot[2]), float(rot[3]))
+    except Exception:
+        return (0.0, 0.0, 0.0, 1.0)
+
+
+def _iter_skeleton_tree(root: Any) -> List[Any]:
+    if root is None:
+        return []
+    out: List[Any] = []
+    stack = [root]
+    seen: Set[int] = set()
+    while stack:
+        node = stack.pop()
+        if node is None:
+            continue
+        node_id = id(node)
+        if node_id in seen:
+            continue
+        seen.add(node_id)
+        out.append(node)
+        children = list(getattr(node, "children", []) or [])
+        stack.extend(reversed(children))
+    return out
+
+
+def _creature_skeleton_fit_targets_from_mesh(mesh_model: Any) -> Optional[dict]:
+    metadata = getattr(mesh_model, "metadata", None)
+    if not isinstance(metadata, dict):
+        return None
+    normalization = metadata.get("kotor_normalization")
+    if not isinstance(normalization, dict):
+        return None
+    correspondence = normalization.get("correspondence_fit")
+    if not isinstance(correspondence, dict):
+        fit_report = normalization.get("fit_report")
+        if isinstance(fit_report, dict):
+            correspondence = fit_report.get("correspondence_fit")
+    if not isinstance(correspondence, dict):
+        return None
+    skeleton_fit = correspondence.get("creature_skeleton_fit")
+    if not isinstance(skeleton_fit, dict):
+        return None
+    if not bool(skeleton_fit.get("apply_recommended", False)):
+        return None
+    targets = skeleton_fit.get("bone_targets")
+    if not isinstance(targets, dict) or not targets:
+        return None
+    return skeleton_fit
+
+
+def _apply_creature_skeleton_fit_targets(
+    skel_root: Any,
+    mesh_model: Any,
+) -> dict:
+    """Move cloned native pivots to regional correspondence bone targets."""
+
+    skeleton_fit = _creature_skeleton_fit_targets_from_mesh(mesh_model)
+    if skeleton_fit is None:
+        return {
+            "applied": False,
+            "reason": "no_recommended_creature_skeleton_fit",
+            "moved_bones": 0,
+        }
+    raw_targets = dict(skeleton_fit.get("bone_targets") or {})
+    target_by_name = {
+        str(name or "").strip().lower(): value
+        for name, value in raw_targets.items()
+        if str(name or "").strip()
+    }
+    moved: List[dict] = []
+    skipped: List[dict] = []
+    for node in _iter_skeleton_tree(skel_root):
+        if node is skel_root:
+            continue
+        name = str(getattr(node, "name", "") or "").strip()
+        if not name:
+            continue
+        target = target_by_name.get(name.lower())
+        if target is None:
+            continue
+        try:
+            target_world = (
+                float(target[0]),
+                float(target[1]),
+                float(target[2]),
+            )
+        except Exception:
+            skipped.append({"name": name, "reason": "invalid_target"})
+            continue
+        parent = getattr(node, "parent", None)
+        parent_pos = (
+            _node_world_position_for_fit(parent)
+            if parent is not None else
+            (0.0, 0.0, 0.0)
+        )
+        parent_rot = (
+            _node_world_rotation_for_fit(parent)
+            if parent is not None else
+            (0.0, 0.0, 0.0, 1.0)
+        )
+        old_world = _node_world_position_for_fit(node)
+        rel_world = (
+            target_world[0] - parent_pos[0],
+            target_world[1] - parent_pos[1],
+            target_world[2] - parent_pos[2],
+        )
+        local = _quat_rotate_vec(_quat_conjugate(parent_rot), rel_world)
+        try:
+            node.position = (
+                float(local[0]),
+                float(local[1]),
+                float(local[2]),
+            )
+        except Exception:
+            skipped.append({"name": name, "reason": "position_write_failed"})
+            continue
+        new_world = _node_world_position_for_fit(node)
+        moved.append({
+            "name": name,
+            "old_world": [float(value) for value in old_world],
+            "target_world": [float(value) for value in target_world],
+            "new_world": [float(value) for value in new_world],
+            "delta": float(
+                (
+                    (target_world[0] - old_world[0]) ** 2
+                    + (target_world[1] - old_world[1]) ** 2
+                    + (target_world[2] - old_world[2]) ** 2
+                ) ** 0.5
+            ),
+        })
+    return {
+        "applied": bool(moved),
+        "method": str(skeleton_fit.get("method") or "per_region_correspondence_bone_targets"),
+        "coordinate_space": str(skeleton_fit.get("coordinate_space") or "kotor_world_after_fit"),
+        "moved_bones": len(moved),
+        "requested_targets": len(target_by_name),
+        "max_displacement": float(skeleton_fit.get("max_displacement", 0.0) or 0.0),
+        "mean_displacement": float(skeleton_fit.get("mean_displacement", 0.0) or 0.0),
+        "moved": moved,
+        "skipped": skipped,
+    }
 
 
 def _is_mesh_payload_node(node: Any) -> bool:
