@@ -1,27 +1,36 @@
 <p align="center">
-  <img src="assets/icons/ghostrigger_icon.png" alt="GhostRigger application icon" width="128">
+  <img src="assets/icons/ghostrigger_icon.png" alt="Ghost-Studio application icon" width="128">
 </p>
 
-# GhostRigger
+# Ghost-Studio
 
 **A KOTOR 1 and KOTOR 2 modding suite for model inspection, animation
 retargeting, character building, module editing, map authoring, and safe
 export workflows.**
 
-GhostRigger is a hybrid Visual Studio C++ host plus embedded Python Qt/PySide6
+Ghost-Studio is a hybrid Visual Studio C++ host plus embedded Python Qt/PySide6
 desktop application. It is built for *Star Wars: Knights of the Old Republic*
 and *The Sith Lords* modding workflows, with a strong bias toward preserving
 source game data, validating outputs, and keeping user-facing tools separated
 from reusable core systems.
 
-The active development branch is `qt-ghostrigger`.
+The active development branch is `ghost-studio`.
 
-GhostRigger is not affiliated with LucasArts, BioWare, Obsidian, Disney, Aspyr,
-or Autodesk. KOTOR game assets and Autodesk FBX SDK binaries are not bundled.
+> **Naming note:** the product is **Ghost-Studio** (formerly GhostRigger).
+> Internal build identifiers still carry the original name for stability —
+> the solution is `GhostRigger.sln`, native packages live under
+> `native/GhostRigger.*`, environment variables use the `GHOSTRIGGER_` prefix,
+> and the PyInstaller output is `GhostRigger-K1-K2.exe`. These are structural
+> identifiers, not the product name; renaming them would break the build and
+> orphan user settings, so they are intentionally left as-is.
+
+Ghost-Studio is not affiliated with LucasArts, BioWare, Obsidian, Disney,
+Aspyr, or Autodesk. KOTOR game assets and Autodesk FBX SDK binaries are not
+bundled.
 
 ## What It Is
 
-GhostRigger is organized as four authoring studios over shared project,
+Ghost-Studio is organized as four authoring studios over shared project,
 resource, validation, export, scene, and native-runtime foundations.
 
 | Studio | Purpose | Current Status |
@@ -29,7 +38,7 @@ resource, validation, export, scene, and native-runtime foundations.
 | Character Studio | Import custom FBX/OBJ/glTF meshes, fit them to native KOTOR model hierarchies, bind/skin, preview animations and attachments, and export MDL/MDX candidates. | Active development. The main launch risk is exact Odyssey node-DAG preservation and golden playable exports. |
 | Retarget Studio | Retarget animations between Unreal/Mixamo/FBX and KOTOR, KOTOR to KOTOR, and KOTOR to Unreal. | Advanced partial. Unreal/Mixamo to KOTOR is strongest; the other lanes are being brought up to the same preview/export/readback standard. |
 | Module Studio | Hydrate, inspect, edit, validate, and safely save existing KOTOR modules and resources. | Backend services exist for hydration, GFF object forms, WOK editing, save manifests, and reference checks; visible editing and undo remain active work. |
-| Map Studio | Author custom KMAP/KMAX-backed areas, rooms, terrain, LYT/VIS/WOK, gameplay placements, package output, and game-test proof. | Backend/product foundations exist. Visible workflow consolidation and real `grdev01` in-game proof remain active work. |
+| Map Studio | Author and edit KMAP-backed areas: import stock modules, edit room geometry (GModeler ZModeler-style tools), retexture faces, sculpt terrain, place gameplay objects, and package/export playable modules. | Geometry edit, stock-room import/convert, face tools (extrude/inset/move/delete/split/flip/flat/set-texture), edge/vertex tools, terrain patch create + paint, and module export are working; interactive drag, an object palette, and lightmap re-emit remain active work. |
 
 Shared foundations already in the repository include `GhostRiggerProject`,
 `ResourceAddress`, `GameResourceProvider`, `ValidationBus`, `ExportJob`,
@@ -52,8 +61,11 @@ payload generation.
   socket preview recipes.
 - Lightsaber preview support for powered blade animation, game-color blade
   textures, and preview-only color overrides.
-- Module and Map foundations for safe `.kmap`, `.kmax`, `.mod`, WOK, LYT, VIS,
-  ARE, GIT, IFO, and package workflows.
+- Map Studio: import a stock KOTOR module, convert its rooms to editable
+  geometry, edit faces/edges/vertices with a ZModeler-inspired context menu
+  (GModeler), retexture faces from a game-directory texture browser, create and
+  paint terrain patches, place creatures/placeables/doors/waypoints/triggers,
+  and export a playable `.mod` with WOK/LYT/VIS/ARE/GIT/IFO/PTH.
 - Native Visual Studio package tree with canonical owners under
   `native/GhostRigger.*`.
 
@@ -62,7 +74,8 @@ payload generation.
 The active roadmap is
 [`knowledge_base/roadmap/02_roadmap_2026_05.md`](knowledge_base/roadmap/02_roadmap_2026_05.md).
 Despite the filename, it was regenerated on 2026-06-21 and is the current suite
-roadmap.
+roadmap. A focused Map Studio audit lives at
+[`Saved/Codex/brief_map_studio_full_audit.md`](Saved/Codex/brief_map_studio_full_audit.md).
 
 Near-term priorities:
 
@@ -72,7 +85,9 @@ Near-term priorities:
 4. Lock Character Studio native KOTOR DAG snapshot and clone-before-bind flow.
 5. Bring KOTOR-to-KOTOR and KOTOR-to-Unreal Retarget Studio lanes up to the
    same preview/export/readback discipline as Unreal/Mixamo-to-KOTOR.
-6. Finish real `grdev01` Map Studio game proof with recorded evidence.
+6. Map Studio: interactive click-drag modeling (replace value dialogs), an
+   object/placeable palette, lightmap re-emit for converted rooms, and a real
+   in-game proof of the open -> edit -> export -> warp loop.
 
 ## Requirements
 
@@ -94,9 +109,9 @@ pip install -r requirements.txt
 ## Quick Start
 
 ```bat
-git clone https://github.com/LordVaderCW/Kotor-3D-Model-Converter.git
-cd Kotor-3D-Model-Converter
-git switch qt-ghostrigger
+git clone https://github.com/CrispyW0nton/Ghost-Studio.git
+cd Ghost-Studio
+git switch ghost-studio
 pip install -r requirements.txt
 python main.py
 ```
@@ -109,7 +124,7 @@ On first launch:
 4. Load a model from the Content Browser.
 5. Save multi-object editor scenes as `.kmax`.
 
-GhostRigger scene files store references and lightweight editor state. They
+Ghost-Studio scene files store references and lightweight editor state. They
 should not embed large proprietary KOTOR asset bytes.
 
 ## Building
@@ -145,9 +160,11 @@ Native work lives in `GhostRigger.sln` and `native/GhostRigger.*`.
 - Edit canonical Python under root `src/...` first when a matching source file
   exists.
 - Regenerate embedded Python payload copies after canonical packaged Python
-  changes.
+  changes (`python scripts/native_python_payload_generator.py <Project>`).
 - Do not hand-edit `native/<Project>/Python/src/...` copies to diverge from
-  root source.
+  root source. Python source is mirrored across the owning native package
+  tree(s) **and** the root `src/` tree; all copies must stay byte-identical or
+  payload regeneration fails.
 
 ## Main Workflows
 
@@ -194,24 +211,32 @@ readback, and in-game testing have passed.
 
 ### Module Studio And Map Studio
 
-Module Studio edits existing KOTOR module resources. Map Studio authors custom
-modules and areas. Both must preserve source game data unless the user
-explicitly chooses an export/write operation.
+Module Studio edits existing KOTOR module resources. Map Studio authors and
+edits custom modules and areas. Both must preserve source game data unless the
+user explicitly chooses an export/write operation.
 
-Current first Map Studio proof target:
+Map Studio editing flow:
 
-```text
-grdev01
-```
+1. **File -> Import Stock Module (RIM)** to load a vanilla module (rooms,
+   placements, LYT/VIS), or start a fresh authored module.
+2. **File -> Make All Stock Rooms Editable** (or edit a hovered stock room,
+   which auto-converts it) to turn read-only stock geometry into editable
+   imported-mesh rooms.
+3. Hover a face/edge/vertex and use the GModeler context menu (RMB) for
+   Extrude, Inset, Move, Delete, Split, Flip, Flat, Set Texture, and the
+   edge/vertex tools. Click/marquee-select rooms; Delete removes them; Ctrl+Z /
+   Ctrl+R undo/redo.
+4. Create and paint terrain patches; place creatures, placeables, doors,
+   waypoints, triggers, and other gameplay objects.
+5. Validate, stage, and export a playable `.mod`, then `warp` into it in game.
 
-`grdev01` is a generated KOTOR 1 dev-test module with authored room
-MDL/MDX/WOK, ARE/GIT/IFO/PTH/LYT/VIS, a player start, one test placeable,
-staged `.mod`, and required `warp grdev01` screenshot/video proof before it can
-be called game-tested.
+New geometry is textured with world-space tiled UVs matched to the room's
+existing texture density so it blends with vanilla; polycount guardrails warn
+before KOTOR MDL limits.
 
 ## FBX Backends
 
-GhostRigger keeps FBX backends explicit.
+Ghost-Studio keeps FBX backends explicit.
 
 | Backend | Use | Notes |
 |---------|-----|-------|
@@ -226,7 +251,7 @@ python -c "import fbx; m=fbx.FbxManager.Create(); print(m.GetVersion()); m.Destr
 ```
 
 Blender is not treated as a silent fallback for Autodesk SDK requests. If a
-workflow asks for Autodesk and the SDK is missing, GhostRigger should fail with
+workflow asks for Autodesk and the SDK is missing, Ghost-Studio should fail with
 an actionable setup message unless that workflow explicitly opts into a
 fallback.
 
@@ -251,14 +276,15 @@ Prefer targeted checks:
 python -m py_compile main.py
 python -m pytest tests/test_fbx_backend_registry.py -q
 python -m pytest tests/test_character_builder_template_rig.py -q
-python -m pytest tests/test_headless_body_workflow.py -q -k "external_model_normalization or generated_rom"
+python -m pytest tests/test_map_studio_terrain_patch.py -q
+python -m pytest tests/test_authored_imported_mesh.py -q
 ```
 
 Use MCP/game-file validation tools for model-pipeline truth: MDL loading,
 vertex transforms, textures, skinning, model comparison, and game-file parsing.
 
 Visible UI, startup, viewport, theme/layout, renderer, animation playback, and
-workflow behavior must be tested in the real GhostRigger Debug application.
+workflow behavior must be tested in the real Ghost-Studio Debug application.
 Backend probes are not a substitute for visible workflow testing.
 
 Do not run broad full scans unless the task explicitly requires them.
@@ -275,6 +301,7 @@ scripts/                     Build, payload, validation, smoke, and utility scri
 tests/                       Targeted unit, contract, workflow, native, and regression tests.
 knowledge_base/              Active roadmap, architecture, native migration, and references.
 docs/knowledgebase/          Local book-derived agent skill notes.
+Saved/Codex/                 Design briefs and audits (e.g. the Map Studio full audit).
 ```
 
 ## Documentation
@@ -286,16 +313,17 @@ Start here:
 - [Package ownership model](knowledge_base/package_ownership_model.md)
 - [Native migration plan](knowledge_base/native_migration_plan.md)
 - [C++ integration phases](knowledge_base/cpp_integration_phases.md)
+- [Map Studio full audit](Saved/Codex/brief_map_studio_full_audit.md)
 - [Knowledge base index](knowledge_base/README.md)
 - [Agent operating manual](AGENTS.md)
 
 ## Branch And Contribution Policy
 
-- Primary development branch: `qt-ghostrigger`.
+- Primary development branch: `ghost-studio` (formerly `qt-ghostrigger`).
 - Legacy branches are historical references; do not base new feature work on
   them.
 - Commit messages should include the relevant roadmap task ID when one applies.
-- Future PRs should target `qt-ghostrigger`.
+- Future PRs should target `ghost-studio`.
 - Keep generated output, proprietary game assets, local screenshots, books, and
   dependency caches out of commits unless a tracked fixture is explicitly
   required.
@@ -304,6 +332,6 @@ Start here:
 
 See [LICENSE](LICENSE).
 
-GhostRigger does not bundle KOTOR game assets or Autodesk FBX SDK binaries.
+Ghost-Studio does not bundle KOTOR game assets or Autodesk FBX SDK binaries.
 Users are responsible for using legal local game installs and third-party SDKs
 according to their licenses.
