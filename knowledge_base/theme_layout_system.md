@@ -7,6 +7,18 @@ defaults and community customization.
 
 The standalone Module Editor is theme/layout aware. It consumes the active `ThemeManager` stylesheet and `LayoutManager` metrics, uses the `moduleEditor` toolbar id for its top command strip, and keeps KMAP outliner/properties/validation/export panels on shared table, tree, input, splitter, and toolbar metrics. No new colour tokens are required for the first KMAP pass.
 
+## Scripting Suite Notes
+
+The Scripting Suite is a standalone, non-modal workbench with the
+stable layout id `scriptingDialogueStudio`. It registers with the parent theme
+manager and consumes existing main-toolbar, library-panel, viewport, and output
+log metrics. Its twelve routed work areas cover scripts/dialogue, NWScript
+reference, quests, JRL, 2DA/globals, TLK, voice/LIP/SSF, project/history,
+packaging, guided workflows, Blueprint/GFF, and integrated GhostStudio tools.
+Editors, resource views, timelines, tables, and diagnostics intentionally inherit
+the normal application palette; do not add a private scripting stylesheet or
+hard-coded editor colours.
+
 ## Files
 
 - Theme engine: `src/gui/libtheme/`

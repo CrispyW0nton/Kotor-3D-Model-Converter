@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Workflow",
-    "file_count": 122,
+    "file_count": 132,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -700,6 +700,66 @@
             "source_path": "src/core/retargeting/unreal_target_skeleton.py",
             "packaged_path": "Python/src/core/retargeting/unreal_target_skeleton.py",
             "sha256": "52a3e5e0a80db00c0c3a1ffbc8ab826506bc0bf7768d5090142ba8690f28b7c1"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_SCRIPTING_INIT",
+            "source_path": "src/core/scripting/__init__.py",
+            "packaged_path": "Python/src/core/scripting/__init__.py",
+            "sha256": "5ee4b660964b4e0c4fca07c626833ac683d7a6993aff7e2fe2357fe32181f529"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_SCRIPTING_BLUEPRINT_AUTHORING",
+            "source_path": "src/core/scripting/blueprint_authoring.py",
+            "packaged_path": "Python/src/core/scripting/blueprint_authoring.py",
+            "sha256": "aa791a21b8855a882b361c024136557f06e26011183100eb2af84df17ac0ee33"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_SCRIPTING_DATA_AUTHORING",
+            "source_path": "src/core/scripting/data_authoring.py",
+            "packaged_path": "Python/src/core/scripting/data_authoring.py",
+            "sha256": "02f07e100418af89f9e0d829aa083211422ecc23bb93373a1abf7808110f291a"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_SCRIPTING_DIALOGUE_CONTRACT",
+            "source_path": "src/core/scripting/dialogue_contract.py",
+            "packaged_path": "Python/src/core/scripting/dialogue_contract.py",
+            "sha256": "696ad06811dd9128ef26aeae55c930dadec8c73a92178097fbdd0b97d68dba8b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_SCRIPTING_DIALOGUE_PARTICIPANTS",
+            "source_path": "src/core/scripting/dialogue_participants.py",
+            "packaged_path": "Python/src/core/scripting/dialogue_participants.py",
+            "sha256": "628f06dda2cff3529d3bc8959920e2b7c906d60ff32734aa6a539296c956d4b5"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_SCRIPTING_PACKAGING",
+            "source_path": "src/core/scripting/packaging.py",
+            "packaged_path": "Python/src/core/scripting/packaging.py",
+            "sha256": "22fcd363ee7f2f15b1658316f1cff46fd414bbbf47a83c6202adcc53e682ace3"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_SCRIPTING_PROJECT",
+            "source_path": "src/core/scripting/project.py",
+            "packaged_path": "Python/src/core/scripting/project.py",
+            "sha256": "b02888c86ec6be42242a7803d144a5778ea78ec7c465d8937a65aa820ee30127"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_SCRIPTING_QUEST",
+            "source_path": "src/core/scripting/quest.py",
+            "packaged_path": "Python/src/core/scripting/quest.py",
+            "sha256": "2ec350c76475249435c85923f2fc1bd3d1a9ce65c5a9bfc1db4b1fc93209c515"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_SCRIPTING_REFERENCE",
+            "source_path": "src/core/scripting/reference.py",
+            "packaged_path": "Python/src/core/scripting/reference.py",
+            "sha256": "a06416823871b4dcdc31285270e158c9185937d22f2ba6374be765976197a297"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_SCRIPTING_STUDIO",
+            "source_path": "src/core/scripting/studio.py",
+            "packaged_path": "Python/src/core/scripting/studio.py",
+            "sha256": "bb93a5f9cd6114203273b0a6b98386d8372b23af59f64ff82a26f65da87734e5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_INIT",

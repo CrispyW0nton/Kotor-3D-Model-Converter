@@ -1,7 +1,7 @@
 [
     {
         "project": "GhostRigger.Core.Automation",
-        "python_file_count": 42,
+        "python_file_count": 43,
         "files": [
             "src\\adapters\\scripts\\__init__.py",
             "src\\adapters\\scripts\\unavailable_compiler.py",
@@ -35,6 +35,7 @@
             "src\\kotormcp\\tools\\kotor_dinput_hook.py",
             "src\\kotormcp\\tools\\kotor_input.py",
             "src\\kotormcp\\tools\\kotor_live_log.py",
+            "src\\kotormcp\\tools\\legacy_ghostscripter.py",
             "src\\kotormcp\\tools\\modules.py",
             "src\\kotormcp\\tools\\quest.py",
             "src\\kotormcp\\tools\\refs.py",
@@ -49,7 +50,7 @@
     },
     {
         "project": "GhostRigger.Core.GUI.Display",
-        "python_file_count": 295,
+        "python_file_count": 312,
         "files": [
             "src\\gui\\__init__.py",
             "src\\gui\\assets\\__init__.py",
@@ -62,6 +63,12 @@
             "src\\gui\\camera\\frame_renderer.py",
             "src\\gui\\camera\\render_manifest.py",
             "src\\gui\\camera\\render_output.py",
+            "src\\gui\\controllers\\__init__.py",
+            "src\\gui\\controllers\\scripting_blueprint_controller.py",
+            "src\\gui\\controllers\\scripting_data_controller.py",
+            "src\\gui\\controllers\\scripting_project_controller.py",
+            "src\\gui\\controllers\\scripting_studio_controller.py",
+            "src\\gui\\controllers\\scripting_suite_controller.py",
             "src\\gui\\dialogs\\__init__.py",
             "src\\gui\\dialogs\\add_model_to_scene_dialog.py",
             "src\\gui\\dialogs\\error_report.py",
@@ -308,6 +315,8 @@
             "src\\gui\\viewports\\viewport_display.py",
             "src\\gui\\viewports\\viewport_host.py",
             "src\\gui\\viewports\\viewport_navigation.py",
+            "src\\gui\\widgets\\__init__.py",
+            "src\\gui\\widgets\\dialogue_graph_widget.py",
             "src\\gui\\windows\\__init__.py",
             "src\\gui\\windows\\application_core\\__init__.py",
             "src\\gui\\windows\\application_core\\application_core_lib.py",
@@ -333,6 +342,7 @@
             "src\\gui\\windows\\application_core\\shared\\retarget_window_workflow.py",
             "src\\gui\\windows\\application_core\\shared\\retarget_workflow.py",
             "src\\gui\\windows\\application_core\\shared\\scene_workflow.py",
+            "src\\gui\\windows\\application_core\\shared\\scripting_studio_workflow.py",
             "src\\gui\\windows\\application_core\\shared\\splash.py",
             "src\\gui\\windows\\application_core\\shared\\startup_library.py",
             "src\\gui\\windows\\application_core\\shared\\theme_layout.py",
@@ -345,7 +355,15 @@
             "src\\gui\\windows\\application_core\\toolboxes\\__init__.py",
             "src\\gui\\windows\\application_core\\toolboxes\\workspace_docks.py",
             "src\\gui\\windows\\progress_toast.py",
-            "src\\gui\\windows\\qt_main_window.py"
+            "src\\gui\\windows\\qt_main_window.py",
+            "src\\gui\\windows\\qt_scripting_blueprint_page.py",
+            "src\\gui\\windows\\qt_scripting_data_pages.py",
+            "src\\gui\\windows\\qt_scripting_dialogue_studio.py",
+            "src\\gui\\windows\\qt_scripting_integrated_tools_page.py",
+            "src\\gui\\windows\\qt_scripting_project_package_pages.py",
+            "src\\gui\\windows\\qt_scripting_quest_builder_page.py",
+            "src\\gui\\windows\\qt_scripting_reference_page.py",
+            "src\\gui\\windows\\qt_scripting_tutorial_page.py"
         ]
     },
     {
@@ -484,10 +502,11 @@
     },
     {
         "project": "GhostRigger.Core.Qt",
-        "python_file_count": 12,
+        "python_file_count": 13,
         "files": [
             "src\\adapters\\qt_audio\\__init__.py",
             "src\\adapters\\qt_audio\\map_studio_pie_audio.py",
+            "src\\adapters\\qt_audio\\narrative_audio_preview.py",
             "src\\adapters\\qt_autorig\\__init__.py",
             "src\\adapters\\qt_autorig\\cloth_dialogs.py",
             "src\\adapters\\qt_ipc\\__init__.py",
@@ -1167,7 +1186,7 @@
     },
     {
         "project": "GhostRigger.Core.Workflow",
-        "python_file_count": 122,
+        "python_file_count": 132,
         "files": [
             "src\\autorig\\__init__.py",
             "src\\autorig\\accurig.py",
@@ -1285,6 +1304,16 @@
             "src\\core\\retargeting\\ue5_to_aurora_r3b_preview.py",
             "src\\core\\retargeting\\ue_fbx_exporter.py",
             "src\\core\\retargeting\\unreal_target_skeleton.py",
+            "src\\core\\scripting\\__init__.py",
+            "src\\core\\scripting\\blueprint_authoring.py",
+            "src\\core\\scripting\\data_authoring.py",
+            "src\\core\\scripting\\dialogue_contract.py",
+            "src\\core\\scripting\\dialogue_participants.py",
+            "src\\core\\scripting\\packaging.py",
+            "src\\core\\scripting\\project.py",
+            "src\\core\\scripting\\quest.py",
+            "src\\core\\scripting\\reference.py",
+            "src\\core\\scripting\\studio.py",
             "src\\core\\workflow\\__init__.py",
             "src\\core\\workflow\\_workflow_base.py",
             "src\\core\\workflow\\composite_workflow.py",

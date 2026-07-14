@@ -2,20 +2,26 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Qt",
-    "file_count": 12,
+    "file_count": 13,
     "originals_remain_in_src": true,
     "files": [
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_AUDIO_INIT",
             "source_path": "src/adapters/qt_audio/__init__.py",
             "packaged_path": "Python/src/adapters/qt_audio/__init__.py",
-            "sha256": "3cf73d386c423c6f816024657d63909bef4600499588b2cdb1244359c36a6a87"
+            "sha256": "26ed23c56d0a38441862438b0dea4e1d2450bfbeb661abaa815ccbd5f33ef27e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_AUDIO_MAP_STUDIO_PIE_AUDIO",
             "source_path": "src/adapters/qt_audio/map_studio_pie_audio.py",
             "packaged_path": "Python/src/adapters/qt_audio/map_studio_pie_audio.py",
             "sha256": "8110844e8ce113d255ee0f4d5f4719cbcfc28b4f1073e5791d24980b90250851"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_AUDIO_NARRATIVE_AUDIO_PREVIEW",
+            "source_path": "src/adapters/qt_audio/narrative_audio_preview.py",
+            "packaged_path": "Python/src/adapters/qt_audio/narrative_audio_preview.py",
+            "sha256": "4e0ee287997ecd4b491fa50e8b6e37119fb37951ae56c1baa6e0f8eda49a6039"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_AUTORIG_INIT",

@@ -462,6 +462,7 @@ class ModuleEditorController:
         self._authored_placeable_resources: tuple[tuple[str, str, bytes], ...] = ()
         self._authored_placeable_resource_issues: tuple[Any, ...] = ()
         self._authored_creature_resources: tuple[tuple[str, str, bytes], ...] = ()
+        self._authored_scripting_resources: tuple[tuple[str, str, bytes], ...] = ()
         self._authored_placeable_preview_rows: tuple[dict[str, Any], ...] = ()
         self._authored_placeable_preview_revision = 0
         self.last_map_studio_resolved_placement_ids: tuple[str, ...] = ()
@@ -1008,6 +1009,50 @@ class ModuleEditorController:
             self._authored_creature_resources = tuple(normalized)
             self._invalidate_map_studio_stock_preview_resources()
 
+    def set_authored_scripting_resources(self, resources: Any) -> None:
+        """Inject built Scripting Studio resources into Map Studio's export transaction.
+
+        The scripting workbench owns source documents and compilation.  Scene
+        owns only immutable, typed resource bytes that have already passed that
+        workflow's validation gate.  Duplicate identities with different bytes
+        are rejected here so a Map Studio build can never depend on ordering.
+        """
+
+        normalized: dict[tuple[str, str], bytes] = {}
+        for item in tuple(resources or ()):
+            try:
+                resref, restype, data = item
+            except (TypeError, ValueError):
+                continue
+            clean_ref = str(resref or "").strip().lower()[:16]
+            clean_type = str(restype or "").strip().lower().lstrip(".")
+            payload = bytes(data or b"")
+            if not clean_ref or not clean_type or not payload:
+                continue
+            key = (clean_ref, clean_type)
+            prior = normalized.get(key)
+            if prior is not None and prior != payload:
+                raise ValueError(
+                    f"Scripting Studio resource collision for {clean_ref}.{clean_type}."
+                )
+            normalized[key] = payload
+        self._authored_scripting_resources = tuple(
+            (resref, restype, data)
+            for (resref, restype), data in sorted(normalized.items())
+        )
+
+    def authored_scripting_resource(self, resref: Any, restype: Any) -> bytes | None:
+        """Return one staged workbench resource for contextual export resolution."""
+
+        key = (
+            str(resref or "").strip().lower()[:16],
+            str(restype or "").strip().lower().lstrip("."),
+        )
+        for item_resref, item_restype, data in self._authored_scripting_resources:
+            if (item_resref, item_restype) == key:
+                return bytes(data)
+        return None
+
     def _invalidate_map_studio_stock_preview_resources(self) -> None:
         """Drop only resource-derived preview caches after library changes."""
 
@@ -1024,6 +1069,7 @@ class ModuleEditorController:
             tuple(self.authored_project_texture_resources())
             + tuple(self._authored_placeable_resources)
             + tuple(self._authored_creature_resources)
+            + tuple(self._authored_scripting_resources)
         )
 
     def _require_authored_creature_resources_ready(self) -> None:

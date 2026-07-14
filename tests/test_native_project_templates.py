@@ -112,7 +112,7 @@ def test_payload_manifest_tracks_aggregate_payload_projects() -> None:
 
     assert len(payload_projects) == 18
     assert payload_projects == EXPECTED_PROJECTS - {"GhostRigger.Native.Core.Host"}
-    assert sum(row["python_file_count"] for row in payload_rows) == 1121
+    assert sum(row["python_file_count"] for row in payload_rows) == 1289
     assert all(not row["project"].endswith(".vcxproj") for row in payload_rows)
 
 

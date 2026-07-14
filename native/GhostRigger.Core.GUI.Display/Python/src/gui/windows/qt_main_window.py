@@ -154,6 +154,7 @@ from src.gui.windows.application_core.application_core_lib.functions.splash_them
     _surface_fill,
 )
 from src.gui.windows.application_core.application_core_lib.shared.scene_workflow import SceneWorkflowMixin
+from src.gui.windows.application_core.application_core_lib.shared.scripting_studio_workflow import ScriptingStudioWorkflowMixin
 from src.gui.windows.application_core.application_core_lib.shared.viewport_tools import ViewportToolsMixin
 from src.gui.windows.application_core.application_core_lib.shared.model_io import ModelIoMixin
 from src.gui.windows.application_core.application_core_lib.shared.retarget_workflow import RetargetWorkflowMixin
@@ -214,6 +215,7 @@ def _build_prelaunch_library_input(
 
 class QtGhostRiggerMainWindow(
     WindowChromeMixin,
+    ScriptingStudioWorkflowMixin,
     MainWindowLayoutMixin,
     ViewportToolsMixin,
     ModelIoMixin,
@@ -333,6 +335,7 @@ class QtGhostRiggerMainWindow(
         self._progress_toast: Optional[QtProgressToast] = None
         self._gui_log_handler: Optional[QtLogPanelHandler] = None
         self._ipc_server: Optional[GhostRiggerIPCServer] = None
+        self._scripter_compat_ipc_server: Optional[GhostRiggerIPCServer] = None
         self._pending_gpu_upload_model_id = 0
         self._pending_gpu_upload_total = 0
         self._texture_dir = ""
@@ -518,6 +521,10 @@ class QtGhostRiggerMainWindow(
                 "module_editor": self._open_stock_module_editor_window,
                 "map_studio": self._open_module_editor_window,
                 "gmodular": self._open_module_editor_window,
+                "scripting_studio": self._open_scripting_dialogue_studio_window,
+                "scripting_dialogue_studio": self._open_scripting_dialogue_studio_window,
+                "script_editor": self._open_scripting_dialogue_studio_window,
+                "dialogue_editor": self._open_scripting_dialogue_studio_window,
                 "rig": self._open_rig_window,
                 "rigging": self._open_rig_window,
                 "rigging_window": self._open_rig_window,
@@ -540,7 +547,12 @@ class QtGhostRiggerMainWindow(
             if action is None:
                 self._log(f"IPC open_tool: unknown tool {tool}", "warning")
                 return
-            action()
+            try:
+                action()
+            except Exception as exc:
+                log.exception("IPC open_tool failed for %s", tool)
+                self._log(f"IPC open_tool failed for {tool}: {exc}", "error")
+                return
             self._log(f"IPC open_tool: {tool}", "info")
 
         def viewport_command(command: str, options: object = None) -> None:
@@ -669,6 +681,81 @@ class QtGhostRiggerMainWindow(
             data = payload if isinstance(payload, dict) else {}
             return self._map_studio_pie_visual_proof_from_ipc(data)
 
+        def scripting_status(_payload: object = None) -> dict:
+            controller = getattr(self, "scripting_dialogue_studio_controller", None)
+            project_controller = getattr(controller, "project_controller", None)
+            project = getattr(project_controller, "project", None)
+            documents = tuple(getattr(controller, "documents", ()) or ())
+            runtime = tuple(getattr(controller, "runtime_resources", lambda: ())() or ()) if controller else ()
+            return {
+                "suite_open": controller is not None,
+                "game": str(getattr(self, "_current_game", "") or "K2"),
+                "document_count": len(documents),
+                "dirty_document_count": sum(bool(row.get("dirty")) for row in documents if isinstance(row, dict)),
+                "runtime_resource_count": len(runtime),
+                "project_path": str(getattr(project, "manifest_path", "") or ""),
+            }
+
+        def open_scripting_resource(payload: object = None) -> dict:
+            data = dict(payload) if isinstance(payload, dict) else {}
+            requested = str(data.get("kind") or data.get("restype") or "script").strip().lower().lstrip(".")
+            aliases = {"nss": "script", "ncs": "script", "dlg": "dialogue"}
+            kind = aliases.get(requested, requested)
+            game = str(data.get("game") or getattr(self, "_current_game", "") or "K2").upper()
+            path = str(data.get("path") or data.get("source_path") or "").strip()
+            resref = str(data.get("resref") or Path(path).stem if path else data.get("resref") or "").strip()
+            context_kind = kind if kind in {"script", "dialogue"} else "script"
+            window = self._open_scripting_dialogue_studio_window(
+                {
+                    "source": "legacy_ipc",
+                    "kind": context_kind,
+                    "game": game,
+                    "restype": "DLG" if kind == "dialogue" else "NSS",
+                    "resref": resref if not path else "",
+                    "suggested_resref": resref,
+                }
+            )
+            controller = getattr(self, "scripting_dialogue_studio_controller", None)
+            opened = ""
+            if controller is not None and path:
+                if kind in {"script", "dialogue"}:
+                    opened = str(controller.script_controller.open_file(path, game=game))
+                elif kind in {"2da", "globals"}:
+                    controller.data_controller.set_table_mode("globals" if kind == "globals" else "2da")
+                    opened = str(bool(controller.data_controller.open_table(path)))
+                elif kind in {"tlk", "talk_table"}:
+                    opened = str(bool(controller.data_controller.open_talk_table(path)))
+                elif kind in {"jrl", "journal"}:
+                    opened = str(bool(controller.data_controller.open_journal(path)))
+                elif kind == "lip":
+                    opened = str(bool(controller.data_controller.open_lip(path)))
+                elif kind == "ssf":
+                    opened = str(bool(controller.data_controller.open_sound_set(path)))
+                elif kind in {"gff", "blueprint", "utc", "utp", "utd", "uti", "ute", "utm", "uts", "utt", "utw"}:
+                    blueprint = getattr(controller, "blueprint_controller", None)
+                    if blueprint is not None:
+                        opened = str(bool(blueprint.open_path(path)))
+            page_keys = {
+                "2da": "tables", "globals": "tables", "tlk": "talk", "talk_table": "talk",
+                "jrl": "journal", "journal": "journal", "lip": "voice", "ssf": "voice",
+                "gff": "blueprint", "blueprint": "blueprint", "utc": "blueprint", "utp": "blueprint",
+                "utd": "blueprint", "uti": "blueprint", "ute": "blueprint", "utm": "blueprint",
+                "uts": "blueprint", "utt": "blueprint", "utw": "blueprint",
+            }
+            window.show_suite_page(page_keys.get(kind, "code"))
+            return {"opened": opened or resref, "kind": kind, "game": game, "path": path}
+
+        def open_scripting_project(payload: object = None) -> dict:
+            data = dict(payload) if isinstance(payload, dict) else {}
+            path = str(data.get("path") or data.get("project") or "").strip()
+            window = self._open_scripting_dialogue_studio_window({"source": "legacy_ipc"})
+            controller = getattr(self, "scripting_dialogue_studio_controller", None)
+            opened = False
+            if controller is not None and path:
+                opened = controller.project_controller.open_project(path) is not None
+            window.show_suite_page("project")
+            return {"opened": bool(opened), "path": path}
+
         try:
             self._ipc_server = GhostRiggerIPCServer(
                 {
@@ -713,8 +800,33 @@ class QtGhostRiggerMainWindow(
             )
             self._ipc_server.start()
             self._log(f"IPC server starting on port {self._ipc_server.port}.", "info")
+
+            try:
+                compatibility_port = int(os.environ.get("GHOSTSTUDIO_SCRIPTER_IPC_PORT", "7002"))
+            except ValueError:
+                compatibility_port = 7002
+            self._scripter_compat_ipc_server = GhostRiggerIPCServer(
+                {
+                    "status": scripting_status,
+                    "open_script": lambda payload: open_scripting_resource({**dict(payload or {}), "kind": "script"}),
+                    "open_dlg": lambda payload: open_scripting_resource({**dict(payload or {}), "kind": "dialogue"}),
+                    "open_2da": lambda payload: open_scripting_resource({**dict(payload or {}), "kind": "2da"}),
+                    "open_tlk": lambda payload: open_scripting_resource({**dict(payload or {}), "kind": "tlk"}),
+                    "open_journal": lambda payload: open_scripting_resource({**dict(payload or {}), "kind": "jrl"}),
+                    "open_gff": lambda payload: open_scripting_resource({**dict(payload or {}), "kind": "gff"}),
+                    "open_project": open_scripting_project,
+                },
+                port=compatibility_port,
+                program_name="GhostStudio Scripting Suite",
+            )
+            self._scripter_compat_ipc_server.start()
+            self._log(
+                f"Scripting Suite compatibility IPC starting on port {compatibility_port}.",
+                "info",
+            )
         except Exception as exc:
             self._ipc_server = None
+            self._scripter_compat_ipc_server = None
             self._log(f"IPC server failed to start: {exc}", "warning")
 
     def _enable_theme_progress_toasts(self) -> None:

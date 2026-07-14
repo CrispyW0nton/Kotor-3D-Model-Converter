@@ -816,6 +816,9 @@ class ResourcePanelsMixin:
                 Path(getattr(self, "app_root", Path.cwd())) / "Saved" / "PlaceableLibrary"
             )
         window.set_library_rows(getattr(self, "_library_rows", []) or [])
+        connect_scripting = getattr(self, "_connect_map_studio_scripting_workflow", None)
+        if callable(connect_scripting):
+            connect_scripting(window)
         window.setAttribute(QtCore.Qt.WidgetAttribute.WA_ShowWithoutActivating, not bool(activate))
         window.show()
         if activate:

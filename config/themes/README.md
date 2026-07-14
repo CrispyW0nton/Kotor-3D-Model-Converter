@@ -114,3 +114,14 @@ overlays can stay readable in both dark and light themes.
 ## Module Editor
 
 The standalone Module Editor uses existing theme tokens and layout metrics rather than adding a separate palette. It exposes a `moduleEditor` toolbar layout id for density/button sizing and keeps panels compatible with Default, Matrix, Droid, Dark, Light, Classic plus Default, Compact, Wide, and Cinematic layouts.
+
+## Scripting Suite
+
+The standalone Scripting Suite registers as
+`scriptingDialogueStudio`. It inherits the active application palette and uses
+existing `main`, `library`, and `output_log` layout metrics for toolbar density,
+resource-browser width, editor space, and diagnostics height. No scripting-only
+colour tokens are required. Its left navigation composes all twelve preserved
+authoring, data, project, package, tutorial, blueprint, and integration pages in
+the same workbench. Community layouts can therefore resize the suite without
+introducing a second theme or crowding the main viewport.

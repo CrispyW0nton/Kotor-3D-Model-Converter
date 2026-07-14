@@ -42,6 +42,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "retarget_window_workflow",
         "retarget_workflow",
         "scene_workflow",
+        "scripting_studio_workflow",
         "splash",
         "startup_library",
         "theme_layout",

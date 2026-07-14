@@ -147,6 +147,7 @@ class PlacementTab(QtWidgets.QWidget):
     selectionRequested = QtCore.Signal(str)
     transformRequested = QtCore.Signal(str, object, float)
     creatureBehaviorRequested = QtCore.Signal(str, str, str, str)
+    dialogueEditorRequested = QtCore.Signal(str, str)
     actionRequested = QtCore.Signal(str, str)
     statusChanged = QtCore.Signal(str)
 
@@ -266,6 +267,11 @@ class PlacementTab(QtWidgets.QWidget):
         self.creature_conversation_edit = QtWidgets.QLineEdit(self.creature_behavior_box)
         self.creature_conversation_edit.setObjectName("mapStudioCreatureConversationLineEdit")
         self.creature_conversation_edit.setPlaceholderText("Optional DLG resref")
+        self.edit_creature_dialogue_button = QtWidgets.QPushButton("Edit Dialogue…", self.creature_behavior_box)
+        self.edit_creature_dialogue_button.setObjectName("mapStudioEditCreatureDialogueButton")
+        self.edit_creature_dialogue_button.setToolTip(
+            "Open this creature's conversation in GhostStudio's Scripting Suite."
+        )
         self.creature_movement_combo = QtWidgets.QComboBox(self.creature_behavior_box)
         self.creature_movement_combo.setObjectName("mapStudioCreatureMovementComboBox")
         self.creature_movement_combo.addItem("Stationary / template scripts", "stationary")
@@ -278,8 +284,12 @@ class PlacementTab(QtWidgets.QWidget):
         self.apply_creature_behavior_button.setToolTip(
             "Creates a unique target-game UTC during export. Free roam compiles an ActionRandomWalk OnSpawn script."
         )
+        conversation_row = QtWidgets.QHBoxLayout()
+        conversation_row.setContentsMargins(0, 0, 0, 0)
+        conversation_row.addWidget(self.creature_conversation_edit, 1)
+        conversation_row.addWidget(self.edit_creature_dialogue_button)
         creature_layout.addRow("Role", self.creature_role_combo)
-        creature_layout.addRow("Conversation", self.creature_conversation_edit)
+        creature_layout.addRow("Conversation", conversation_row)
         creature_layout.addRow("Movement", self.creature_movement_combo)
         creature_layout.addRow(self.creature_template_label)
         creature_layout.addRow(self.apply_creature_behavior_button)
@@ -332,6 +342,7 @@ class PlacementTab(QtWidgets.QWidget):
         self.apply_transform_button.clicked.connect(self._emit_transform)
         self.creature_role_combo.currentIndexChanged.connect(self._update_creature_behavior_controls)
         self.apply_creature_behavior_button.clicked.connect(self._emit_creature_behavior)
+        self.edit_creature_dialogue_button.clicked.connect(self._emit_dialogue_editor_request)
 
     @staticmethod
     def _coordinate_spin(parent: QtWidgets.QWidget) -> QtWidgets.QDoubleSpinBox:
@@ -622,6 +633,7 @@ class PlacementTab(QtWidgets.QWidget):
         self.creature_conversation_edit.setEnabled(authored)
         self.creature_movement_combo.setEnabled(authored)
         row = self._placements.get(self.selected_placement_id())
+        self.edit_creature_dialogue_button.setEnabled(row is not None)
         generated = str(self._value(row, "creature_generated_template_resref", "") or "") if row is not None else ""
         source = str(self._value(row, "creature_source_template_resref", "") or "") if row is not None else ""
         if authored:
@@ -641,6 +653,16 @@ class PlacementTab(QtWidgets.QWidget):
             self.creature_conversation_edit.text().strip(),
             str(self.creature_movement_combo.currentData() or "stationary"),
         )
+
+    def _emit_dialogue_editor_request(self) -> None:
+        """Request the external dialogue workbench for the selected creature binding."""
+
+        placement_id = self.selected_placement_id()
+        if placement_id:
+            self.dialogueEditorRequested.emit(
+                placement_id,
+                self.creature_conversation_edit.text().strip(),
+            )
 
     def _emit_transform(self) -> None:
         placement_id = self.selected_placement_id()

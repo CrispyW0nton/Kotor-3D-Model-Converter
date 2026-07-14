@@ -46,6 +46,7 @@ MAIN_ACTION_ICON_KEYS: dict[str, str] = {
     "unreal_animator": "unreal_animator",
     "map_studio": "map_studio",
     "placeable_builder": "placeable_builder",
+    "scripting_dialogue_studio": "scripting_dialogue_studio",
     "module_editor": "module_editor",
     "rigging": "rigging",
     "blueprint_editor": "blueprint_editor",
@@ -61,6 +62,7 @@ MAIN_COMMAND_STRIP_ICON_KEYS: dict[str, str] = {
     "character_builder": "character_builder",
     "map_studio": "map_studio",
     "placeable_builder": "placeable_builder",
+    "scripting_dialogue_studio": "scripting_dialogue_studio",
     "module_editor": "module_editor",
     "content_browser": "content_browser",
     "animation_browser": "animation_browser",
@@ -229,6 +231,16 @@ class WindowChromeMixin:
             "Design reusable containers, terminals, puzzles, interactive props, and decor for the Placeable Library"
         )
         self.placeable_builder_action.triggered.connect(self._open_placeable_builder_window)
+        self.scripting_dialogue_studio_action = QtGui.QAction(
+            self._icon(MAIN_ACTION_ICON_KEYS["scripting_dialogue_studio"]),
+            "Open Scripting Suite...",
+            self,
+        )
+        self.scripting_dialogue_studio_action.setShortcut("Ctrl+Shift+J")
+        self.scripting_dialogue_studio_action.setStatusTip(
+            "Author scripts, dialogue, quests, journals, tables, TLK/LIP/SSF, blueprints, projects, and validated packages"
+        )
+        self.scripting_dialogue_studio_action.triggered.connect(self._open_scripting_dialogue_studio_window)
         self.stock_module_editor_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["module_editor"]), "Open Module Editor (Stock MOD/RIM Patcher)", self)
         self.stock_module_editor_action.setStatusTip("Patch textures, walkmeshes, and objects in existing stock .mod/.rim module archives")
         self.stock_module_editor_action.triggered.connect(self._open_stock_module_editor_window)
@@ -334,8 +346,8 @@ class WindowChromeMixin:
         self.about_module_action.triggered.connect(self._about_modular)
         self.validate_character_action = QtGui.QAction("Validate Current Character...", self)
         self.validate_character_action.triggered.connect(self._validate_current_character)
-        self.ping_scripter_action = QtGui.QAction("Ping GhostScripter (port 7002)...", self)
-        self.ping_scripter_action.triggered.connect(lambda: self._ipc_ping("GhostScripter", 7002))
+        self.ping_scripter_action = QtGui.QAction("Ping Scripting Suite Compatibility (port 7002)...", self)
+        self.ping_scripter_action.triggered.connect(lambda: self._ipc_ping("GhostStudio Scripting Suite", 7002))
         self.ping_gmodular_action = QtGui.QAction("Ping GModular (port 7003)...", self)
         self.ping_gmodular_action.triggered.connect(lambda: self._ipc_ping("GModular", 7003))
         self.notify_gmodular_action = QtGui.QAction("Notify GModular: Blueprint Saved...", self)
@@ -433,6 +445,7 @@ class WindowChromeMixin:
         tools_menu.addSeparator()
         tools_menu.addAction(self.modules_action)
         tools_menu.addAction(self.placeable_builder_action)
+        tools_menu.addAction(self.scripting_dialogue_studio_action)
         tools_menu.addAction(self.stock_module_editor_action)
         tools_menu.addAction(self.rig_window_action)
         tools_menu.addSeparator()
@@ -482,7 +495,6 @@ class WindowChromeMixin:
         server_action = QtGui.QAction("GhostRigger Server (port 7001) - This Program", self)
         server_action.setEnabled(False)
         tools_menu.addAction(server_action)
-        tools_menu.addAction(self.ping_scripter_action)
         tools_menu.addAction(self.ping_gmodular_action)
         tools_menu.addAction(self.notify_gmodular_action)
         tools_menu.addAction(self.refresh_gmodular_action)
@@ -756,6 +768,16 @@ class WindowChromeMixin:
             "Open Placeable Builder and author reusable objects for the Map Studio Placeable Library"
         )
         layout.addWidget(placeable_builder_button)
+        scripting_studio_button = self._tool_button(
+            "Scripting Suite",
+            self.scripting_dialogue_studio_action,
+            MAIN_COMMAND_STRIP_ICON_KEYS["scripting_dialogue_studio"],
+        )
+        scripting_studio_button.setObjectName("CommandStripScriptingDialogueStudioButton")
+        scripting_studio_button.setToolTip(
+            "Open the complete Scripting Suite for narrative authoring, projects, packaging, and Map Studio handoff"
+        )
+        layout.addWidget(scripting_studio_button)
         module_editor_button = self._tool_button("Module Editor", self.stock_module_editor_action, MAIN_COMMAND_STRIP_ICON_KEYS["module_editor"])
         module_editor_button.setObjectName("CommandStripModuleEditorButton")
         module_editor_button.setToolTip("Open Module Editor (Stock MOD/RIM Patcher)")

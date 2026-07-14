@@ -11,6 +11,68 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-13
 
+### [2026-07-13] T3401-T3406: GhostScripter preserved in GhostStudio Scripting Suite
+
+Owner: LordVaderCW
+
+T###: T3401-T3406
+
+Subsystem: Scripting Suite, narrative/data authoring, project history,
+packaging, Map Studio handoff, KotorMCP compatibility, native payloads, and Qt
+workbench presentation
+
+Intersects: Map Studio T3005/T3008 narrative handoff and PIE workflows, the
+18-package native embedded-Python payload, and the GhostStudio main-shell tool
+launcher.
+
+- Integrated the complete inventoried GhostScripter product surface into one
+  uncluttered, standalone GhostStudio Scripting Suite. Its twelve routed pages
+  cover scripts/dialogue, NWScript reference, quests, JRL, 2DA/globals, TLK,
+  voice/LIP/SSF, projects/history, packaging/test install, guided workflows,
+  blueprints/GFF, and links to integrated GhostStudio tools.
+- Preserved project continuity through portable typed projects, immutable
+  revisions, export/install receipts, and read-only recovery of legacy project,
+  SQLite history, quest, dialogue, 2DA-plan, dependency, preference, and recent
+  records. No GPL GhostScripter implementation or assets were copied.
+- Completed dialogue topology and participant authoring, including shared
+  targets, cycles, start-node changes, link retarget/removal, safe editable
+  copies for opaque imports, and real module/UTC/dialogue participant tags.
+- Added the full versioned quest definition and builder, including legacy field
+  aliases, canonical saves, unknown-field preservation through row reorder and
+  deletion, templates, scaffold generation, and deterministic atomic JSON.
+- Preserved data and delivery workflows for typed GFF/blueprints, JRL, TLK,
+  2DA/changes.ini, globals, LIP, every retail SSF slot, ERF/MOD/SAV packaging,
+  staged Override installs, backups, rollback, readback, and receipts. Validated
+  narrative/data resources hand off directly to Map Studio.
+- Added an Automation-owned clean-room compatibility adapter for all 60 legacy
+  command names. Its eight mutations use bounded typed writers with validation,
+  finite limits, exact or semantic readback, and guarded install roots rather
+  than arbitrary filesystem writes; exact legacy arguments and response keys
+  remain available.
+- Regenerated every affected native payload and synchronized canonical Python
+  with its Workflow, GUI Display, Qt, Automation, Resources, Scene, Tools, and
+  Runtime Shared packaged copies. The root payload manifest now covers 1,289
+  files.
+
+Affected areas: `src/core/scripting/`, scripting controllers/widgets/windows,
+Qt audio preview, Map Studio scripting routes, resource and module controllers,
+`native/GhostRigger.Core.*` payload manifests/copies, KotorMCP compatibility,
+theme/layout documentation, roadmap/audit records, and focused contract tests.
+
+Verification: the final exact staged-snapshot integration set passed 227 tests.
+Automation compatibility passed 38 focused cases and real K2 resource smokes
+for `appearance.2da`, `tutorial_garage`, and `207tel`. Native payload identity
+and package contracts pass for 1,289 files. An isolated Debug x64 rebuild
+completed with 0 warnings and 0 errors, staged/audited 18/18 payload DLLs, and
+produced `GhostStudio.exe` with SHA-256
+`814A3D89A24193CA39D4B39356A3A0B9B9C9B66DBBEF39B07C317B611A56A98E`;
+build log: `Saved/BuildLogs/2026-07-13_scripting_suite_final_debug_build.log`.
+The actual rebuilt native shell visibly opened the suite from its command
+button, and all 12 pages passed under Default, Matrix, Droid, Dark, Light, and
+Classic (72/72 captured states; manifest:
+`Saved/VisibleProof/2026-07-13_scripting_suite/result.json`). Manual retail K1
+and K2 execution remains required before claiming Odyssey-engine proof.
+
 ### [2026-07-13] Native payload hashes survive fresh Windows checkouts
 
 Owner: LordVaderCW

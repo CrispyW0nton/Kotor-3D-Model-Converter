@@ -11,6 +11,7 @@ from .server import GhostRiggerIPCServer, PORT_GHOSTRIGGER
 from .client import (
     ipc_call, ipc_call_async,
     notify_blueprint_saved,
+    notify_script_compiled,
     refresh_gmodular_viewport,
     open_script_in_scripter,
     open_dlg_in_scripter,
@@ -22,7 +23,7 @@ __all__ = [
     "GhostRiggerIPCServer",
     "PORT_GHOSTRIGGER", "PORT_GHOSTSCRIPTER", "PORT_GMODULAR",
     "ipc_call", "ipc_call_async",
-    "notify_blueprint_saved", "refresh_gmodular_viewport",
+    "notify_blueprint_saved", "notify_script_compiled", "refresh_gmodular_viewport",
     "open_script_in_scripter", "open_dlg_in_scripter",
     "ping_program", "ping_all",
 ]

@@ -51,8 +51,11 @@ try {
     $repoRootPath = [IO.Path]::GetFullPath($RepoRoot)
     $hostOutDirPath = [IO.Path]::GetFullPath($HostOutDir)
     $manifestPath = Join-Path $repoRootPath "native\GhostRigger.PythonPayloadManifest.json"
-    $sourceRoot = [IO.Path]::GetFullPath(
+    $sharedSourceRoot = [IO.Path]::GetFullPath(
         (Join-Path $repoRootPath ("build\vs\{0}\{1}" -f $Platform, $Configuration))
+    )
+    $solutionSourceRoot = [IO.Path]::GetFullPath(
+        (Join-Path $repoRootPath ("native\build\vs\{0}\{1}" -f $Platform, $Configuration))
     )
 
     if (-not (Test-Path -LiteralPath $repoRootPath -PathType Container)) {
@@ -101,10 +104,36 @@ try {
         $seenProjects[$projectKey] = $true
 
         $dllName = "$projectName.dll"
-        $sourcePath = [IO.Path]::GetFullPath((Join-Path $sourceRoot $dllName))
-        if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
-            throw "Required native payload DLL is missing: $sourcePath"
+        $projectSourceRoot = [IO.Path]::GetFullPath(
+            (Join-Path $repoRootPath ("native\{0}\build\vs\{1}\{2}" -f $projectName, $Platform, $Configuration))
+        )
+        $sourceCandidates = @(
+            [IO.Path]::GetFullPath((Join-Path $sharedSourceRoot $dllName)),
+            [IO.Path]::GetFullPath((Join-Path $solutionSourceRoot $dllName)),
+            [IO.Path]::GetFullPath((Join-Path $projectSourceRoot $dllName))
+        )
+        $existingSources = @(
+            $sourceCandidates |
+                Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+                ForEach-Object { Get-Item -LiteralPath $_ }
+        )
+        if ($existingSources.Count -eq 0) {
+            throw (
+                "Required native payload DLL is missing. Checked exact build outputs: {0}" -f
+                ($sourceCandidates -join ", ")
+            )
         }
+
+        # A solution build writes all payload DLLs to one shared output folder,
+        # while building the host project directly gives each referenced project
+        # its own $(SolutionDir)-relative output. Select the newest exact output;
+        # never recurse, because similarly named stale or rogue DLLs may exist.
+        $selectedSource = (
+            $existingSources |
+                Sort-Object -Property LastWriteTimeUtc, FullName -Descending |
+                Select-Object -First 1
+        )
+        $sourcePath = [string]$selectedSource.FullName
 
         $payloads += [PSCustomObject]@{
             ProjectName = $projectName

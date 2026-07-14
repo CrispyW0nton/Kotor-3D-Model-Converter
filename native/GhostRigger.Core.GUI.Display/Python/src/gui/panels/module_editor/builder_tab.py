@@ -40,6 +40,7 @@ class BuilderTab(QtWidgets.QWidget):
     gameplayPlacementStatusChanged = QtCore.Signal(str)
     roomLightRequested = QtCore.Signal(str, str, float, float, float, float, float, float, float, float, str)
     scriptHookRequested = QtCore.Signal(str, str, str)
+    scriptEditorRequested = QtCore.Signal(str, str, str)
     modelingContextChanged = QtCore.Signal(str)
 
     ACTIONS = (
@@ -898,12 +899,18 @@ class BuilderTab(QtWidgets.QWidget):
         self.assignScriptHookButton.setObjectName("mapStudioAssignScriptHookButton")
         self.clearScriptHookButton = QtWidgets.QPushButton("Clear Script Hook")
         self.clearScriptHookButton.setObjectName("mapStudioClearScriptHookButton")
+        self.editScriptHookButton = QtWidgets.QPushButton("Edit Script…")
+        self.editScriptHookButton.setObjectName("mapStudioEditScriptHookButton")
+        self.editScriptHookButton.setToolTip(
+            "Open this ARE/IFO hook in GhostStudio's Scripting Suite."
+        )
         script_layout.addRow("Scope:", self.scriptHookScopeComboBox)
         script_layout.addRow("Field:", self.scriptHookFieldComboBox)
         script_layout.addRow("Script:", self.scriptHookResrefLineEdit)
         script_layout.addRow(self.scriptHookHintLabel)
         script_layout.addRow(self.assignScriptHookButton)
         script_layout.addRow(self.clearScriptHookButton)
+        script_layout.addRow(self.editScriptHookButton)
         layout.addWidget(script_box)
         for label in self.ACTIONS:
             button = QtWidgets.QPushButton(label)
@@ -991,6 +998,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.scriptHookFieldComboBox.currentIndexChanged.connect(self._update_script_hook_value)
         self.assignScriptHookButton.clicked.connect(self._emit_assign_script_hook)
         self.clearScriptHookButton.clicked.connect(self._emit_clear_script_hook)
+        self.editScriptHookButton.clicked.connect(self._emit_edit_script_hook)
         self._update_operation_controls()
         self._update_modeling_tool_hint()
         self.set_terrain_room_choices(())
@@ -2727,6 +2735,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.scriptHookResrefLineEdit.setEnabled(has_field)
         self.assignScriptHookButton.setEnabled(has_field)
         self.clearScriptHookButton.setEnabled(bool(has_field and script))
+        self.editScriptHookButton.setEnabled(has_field)
         if script:
             self.scriptHookHintLabel.setText(f"{scope.title()} hook {field_name} is assigned to {script}.ncs.")
         else:
@@ -2743,6 +2752,17 @@ class BuilderTab(QtWidgets.QWidget):
         field_name = self._current_script_hook_field()
         if field_name:
             self.scriptHookRequested.emit(self._current_script_hook_scope(), field_name, "")
+
+    def _emit_edit_script_hook(self) -> None:
+        """Open the selected hook without coupling this presentation panel to a studio window."""
+
+        field_name = self._current_script_hook_field()
+        if field_name:
+            self.scriptEditorRequested.emit(
+                self._current_script_hook_scope(),
+                field_name,
+                self.scriptHookResrefLineEdit.text().strip(),
+            )
 
     def _emit_room_light(self) -> None:
         self.roomLightRequested.emit(

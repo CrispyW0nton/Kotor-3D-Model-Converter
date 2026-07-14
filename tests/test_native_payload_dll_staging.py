@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -99,6 +100,45 @@ def test_staging_uses_exact_manifest_build_outputs_and_preserves_unowned_dlls(
         assert (host_out_dir / dll_name).read_bytes() == payload
     assert root_unowned.read_bytes() == b"keep-root"
     assert host_unowned.read_bytes() == b"keep-host"
+
+
+def test_staging_prefers_newer_exact_per_project_output_from_direct_host_build(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    host_out_dir = tmp_path / "host-output"
+    project = "GhostRigger.Core.GUI.Display"
+    _write_manifest(repo_root, [project])
+
+    shared_source = repo_root / "build" / "vs" / "x64" / "Debug" / f"{project}.dll"
+    shared_source.parent.mkdir(parents=True)
+    shared_source.write_bytes(b"stale-shared-solution-output")
+
+    project_source = (
+        repo_root
+        / "native"
+        / project
+        / "build"
+        / "vs"
+        / "x64"
+        / "Debug"
+        / f"{project}.dll"
+    )
+    project_source.parent.mkdir(parents=True)
+    project_source.write_bytes(b"fresh-direct-project-output")
+    shared_mtime = shared_source.stat().st_mtime
+    project_source_mtime = max(project_source.stat().st_mtime, shared_mtime + 2.0)
+    os.utime(project_source, (project_source_mtime, project_source_mtime))
+
+    host_out_dir.mkdir(parents=True)
+    (host_out_dir / f"{project}.dll").write_bytes(b"stale-host")
+    (repo_root / f"{project}.dll").write_bytes(b"stale-root")
+
+    result = _run_staging(repo_root, host_out_dir)
+
+    assert result.returncode == 0, result.stderr
+    assert (repo_root / f"{project}.dll").read_bytes() == b"fresh-direct-project-output"
+    assert (host_out_dir / f"{project}.dll").read_bytes() == b"fresh-direct-project-output"
 
 
 def test_staging_fails_before_pruning_when_any_manifest_dll_is_missing(

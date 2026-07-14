@@ -15,7 +15,7 @@ Design principles
    never loads actual resource data during startup.
 2. Lazy seek reads (< 2 ms): each get() does a single lseek + read.
 3. Priority chain (matches KotOR engine):
-      Override/ > module ERF > TexturePacks ERF > StreamSounds/ > BIF
+      Override/ > module ERF > TexturePacks ERF > streamed audio > BIF
 4. Module support: any .mod/.rim/.erf in modules/ is auto-indexed.
 5. Single unified API: one get(name, type) call handles everything.
 6. Thread-safe: all index lookups use read-only dicts (no locks needed
@@ -41,6 +41,8 @@ GIT  = 2015   .git  area instance template
 NSS  = 2009   .nss  NWScript source
 NCS  = 2010   .ncs  NWScript compiled
 SSF  = 2015   .ssf  sound set file
+WAV  = 4       .wav  streamed audio
+MP3  = 25014   .mp3  streamed audio
 """
 
 from __future__ import annotations
@@ -61,6 +63,7 @@ log = logging.getLogger(__name__)
 RES_BMP  = 1
 RES_TGA  = 3
 RES_WAV  = 4
+RES_MP3  = 25014
 RES_PLT  = 6
 RES_INI  = 7
 RES_TXT  = 10
@@ -103,11 +106,16 @@ EXT_TO_TYPE: Dict[str, int] = {
     'are': RES_ARE, 'ifo': RES_IFO, 'dlg': RES_DLG,
     'lyt': RES_LYT, 'vis': RES_VIS, 'pth': RES_PTH, '2da': RES_2DA,
     'git': RES_GIT, 'wok': RES_WOK,
-    'wav': RES_WAV, 'mp3': RES_WAV,
+    'wav': RES_WAV, 'mp3': RES_MP3,
     'bmp': RES_BMP, 'ini': RES_INI, 'txt': RES_TXT,
     'nss': RES_NSS, 'ncs': RES_NCS,
 }
 TYPE_TO_EXT: Dict[int, str] = {v: k for k, v in EXT_TO_TYPE.items()}
+
+_LOOSE_AUDIO_EXT_TYPES: Dict[str, int] = {
+    '.wav': RES_WAV,
+    '.mp3': RES_MP3,
+}
 
 
 def _key(name: str, res_type: int) -> str:
@@ -255,7 +263,7 @@ class ResourceManager:
       1. Override/ loose files  (pre-loaded into memory for instant access)
       2. module ERFs (*.mod / *.rim / *.erf in modules/)
       3. TexturePacks ERFs       (for TPC/TGA only, TPA > TPB > TPC > GUI)
-      4. StreamSounds/ loose WAV (path-indexed, bytes loaded on demand)
+      4. streamed audio paths    (VO and sounds, bytes loaded on demand)
       5. chitin.key / BIF        (base game data)
 
     Thread safety
@@ -293,7 +301,7 @@ class ResourceManager:
                      f"{len(inst._key_map)} key entries, "
                      f"{len(inst._tex_erfs)} tex ERFs, "
                      f"{len(inst._mod_erfs)} module ERFs, "
-                     f"{len(inst._stream_sounds)} stream sounds, "
+                     "streamed audio index deferred, "
                      f"{len(inst._override)} override files")
             return True
         except Exception as exc:
@@ -312,7 +320,7 @@ class ResourceManager:
                      f"{len(inst._key_map)} key entries, "
                      f"{len(inst._tex_erfs)} tex ERFs, "
                      f"{len(inst._mod_erfs)} module ERFs, "
-                     f"{len(inst._stream_sounds)} stream sounds, "
+                     "streamed audio index deferred, "
                      f"{len(inst._override)} override files")
             return True
         except Exception as exc:
@@ -626,7 +634,12 @@ class ResourceManager:
                     'key_entries': len(inst._key_map),
                     'tex_erfs': len(inst._tex_erfs),
                     'mod_erfs': len(inst._mod_erfs),
-                    'stream_sounds': len(inst._stream_sounds),
+                    'stream_sounds': sum(
+                        1 for _path, res_type in inst._loose_audio.values()
+                        if res_type == RES_WAV
+                    ),
+                    'stream_audio': len(inst._loose_audio),
+                    'stream_audio_indexed': inst._loose_audio_indexed,
                     'override': len(inst._override),
                 }
             else:
@@ -644,7 +657,7 @@ class _GameInstall:
       1. _override dict  (indexed loose Override/ file paths, lazy read)
       2. _mod_erfs list  (module ERFs, lazy seek)
       3. _tex_erfs list  (TexturePacks ERFs for TPC/TGA, lazy seek)
-      4. _stream_sounds  (StreamSounds/ WAV paths, lazy read)
+      4. _loose_audio    (StreamVoice/StreamWaves/StreamSounds paths, lazy read)
       5. _bif_index dict (BIF files via chitin.key, lazy seek)
     """
 
@@ -658,16 +671,42 @@ class _GameInstall:
         self._tex_erfs: List[_ErfIndex] = []              # TexturePacks ERFs, TPA first
         self._mod_erfs: List[_ErfIndex] = []              # modules/ ERFs
         self._override: Dict[str, str] = {}               # Override/ loose file paths
-        self._stream_sounds: Dict[str, str] = {}          # StreamSounds/ WAV paths
+        # Unified loose-audio index.  Values retain the concrete path and the
+        # real resource type; bytes are not read or decoded during indexing.
+        self._loose_audio: Dict[str, Tuple[str, int]] = {}
+        self._loose_audio_indexed = False
+        self._loose_audio_index_lock = threading.Lock()
 
         t0 = time.perf_counter()
         self._index_chitin()
         self._index_texture_packs()
         self._index_modules()
-        self._index_stream_sounds()
         self._load_override()
         elapsed = (time.perf_counter() - t0) * 1000
         log.debug(f"_GameInstall {tag} indexed {game_dir!r} in {elapsed:.0f}ms")
+
+    @property
+    def _stream_sounds(self) -> Dict[str, str]:
+        """Read-only compatibility view of the former WAV-path index."""
+
+        self._index_loose_audio()
+        return {
+            key: path
+            for key, (path, res_type) in self._loose_audio.items()
+            if res_type == RES_WAV
+        }
+
+    @_stream_sounds.setter
+    def _stream_sounds(self, paths: Dict[str, str]) -> None:
+        """Accept legacy test/caller setup while retaining one stored index."""
+
+        self._loose_audio = {
+            key: (path, RES_WAV)
+            for key, path in paths.items()
+        }
+        self._loose_audio_indexed = False
+        if not hasattr(self, '_loose_audio_index_lock'):
+            self._loose_audio_index_lock = threading.Lock()
 
     # ── Indexing ──────────────────────────────────────────────────────────
 
@@ -784,47 +823,85 @@ class _GameInstall:
         if loaded:
             log.debug(f"_GameInstall {self.tag}: {loaded} Override files indexed")
 
-    def _index_stream_sounds(self) -> None:
-        """Index stock ``StreamSounds`` audio by path without reading bytes.
+    def _index_loose_audio(self) -> None:
+        """Populate the path-only audio index once, on first audio access."""
 
-        Odyssey stores many UTS-referenced ambient loops outside KEY/BIF in
-        ``StreamSounds``.  A single directory scan keeps startup work bounded;
-        each WAV remains on disk until a caller actually resolves it. Raw MP3
-        files are deliberately excluded: KOTOR WAV resources may contain
-        encoded audio, but the PIE decoder does not accept an arbitrary .mp3
-        file and duplicate basenames otherwise have scandir-order precedence.
-        Resrefs and extensions are normalized case-insensitively, matching the
-        engine and the rest of this resource manager.
+        if getattr(self, '_loose_audio_indexed', False):
+            return
+        lock = getattr(self, '_loose_audio_index_lock', None)
+        if lock is None:
+            lock = threading.Lock()
+            self._loose_audio_index_lock = lock
+        with lock:
+            if getattr(self, '_loose_audio_indexed', False):
+                return
+            self._scan_loose_audio()
+            self._loose_audio_indexed = True
+
+    def _scan_loose_audio(self) -> None:
+        """Index streamed KOTOR audio paths without reading or decoding bytes.
+
+        KOTOR 1 stores dialogue voice-over recursively under ``StreamWaves``;
+        KOTOR 2 uses ``StreamVoice``.  A few installations contain both names,
+        so the target game's canonical VO directory wins, followed by the
+        alternate VO name and then ``StreamSounds``.  That final tier keeps
+        ambient UTS audio available without allowing a same-named ambient clip
+        to shadow dialogue VO.  Directory and extension matching is
+        case-insensitive.
+
+        ``.wav`` and genuine ``.mp3`` files retain their distinct resource
+        types.  Only paths are indexed; file contents remain on disk until
+        :meth:`get` resolves a requested resource.
         """
 
-        stream_dir = self._find_dir('StreamSounds')
-        if not stream_dir:
-            return
+        tag = str(self.tag or '').strip().upper()
+        directory_names = (
+            ('StreamWaves', 'StreamVoice', 'StreamSounds')
+            if tag == 'K1'
+            else ('StreamVoice', 'StreamWaves', 'StreamSounds')
+        )
         indexed = 0
-        try:
-            with os.scandir(stream_dir) as entries:
-                for entry in entries:
-                    try:
-                        if not entry.is_file():
+        for directory_name in directory_names:
+            stream_dir = self._find_dir(directory_name)
+            if not stream_dir:
+                continue
+            try:
+                for current_dir, child_dirs, files in os.walk(stream_dir):
+                    # Deterministic traversal makes duplicate-resref precedence
+                    # stable even on case-insensitive filesystems.
+                    child_dirs.sort(key=str.lower)
+                    files.sort(key=str.lower)
+                    for filename in files:
+                        base, ext = os.path.splitext(filename)
+                        res_type = _LOOSE_AUDIO_EXT_TYPES.get(ext.lower())
+                        if res_type is None:
                             continue
-                    except OSError:
-                        continue
-                    base, ext = os.path.splitext(entry.name)
-                    if ext.lower() != '.wav':
-                        continue
-                    self._stream_sounds[_key(base, RES_WAV)] = entry.path
-                    indexed += 1
-        except OSError:
-            return
+                        key = _key(base, res_type)
+                        if key in self._loose_audio:
+                            continue
+                        path = os.path.join(current_dir, filename)
+                        if not os.path.isfile(path):
+                            continue
+                        self._loose_audio[key] = (path, res_type)
+                        indexed += 1
+            except OSError:
+                continue
         if indexed:
-            log.debug(f"_GameInstall {self.tag}: {indexed} StreamSounds files indexed")
+            log.debug(f"_GameInstall {self.tag}: {indexed} streamed audio files indexed")
+
+    def _index_stream_sounds(self) -> None:
+        """Compatibility wrapper for the former StreamSounds-only indexer."""
+
+        if not hasattr(self, '_loose_audio'):
+            self._loose_audio = {}
+        self._index_loose_audio()
 
     # ── Resource access ───────────────────────────────────────────────────
 
     def get(self, name: str, res_type: int) -> Optional[bytes]:
         """
         Fetch raw resource bytes by name + type.
-        Priority: Override > modules ERF > TexturePacks ERF > StreamSounds > BIF.
+        Priority: Override > modules ERF > TexturePacks ERF > streamed audio > BIF.
         """
         k = _key(name, res_type)
 
@@ -851,17 +928,20 @@ class _GameInstall:
                 if data is not None:
                     return data
 
-        # 4. StreamSounds/ loose audio. Authored module resources above must
-        # retain precedence over the stock installation's streamed audio.
-        if res_type == RES_WAV:
-            stream_path = self._stream_sounds.get(k)
-            if stream_path is not None:
-                try:
-                    with open(stream_path, 'rb') as fh:
-                        return fh.read()
-                except OSError:
-                    # A stale/deleted path may still have a valid BIF fallback.
-                    pass
+        # 4. StreamVoice/StreamWaves/StreamSounds loose audio. Authored module
+        # resources above retain precedence over stock installation audio.
+        if res_type in (RES_WAV, RES_MP3):
+            self._index_loose_audio()
+            loose_audio = self._loose_audio.get(k)
+            if loose_audio is not None:
+                stream_path, indexed_type = loose_audio
+                if indexed_type == res_type:
+                    try:
+                        with open(stream_path, 'rb') as fh:
+                            return fh.read()
+                    except OSError:
+                        # A stale/deleted path may still have a valid BIF fallback.
+                        pass
 
         # 5. BIF via chitin.key
         slot = self._key_map.get(k)
@@ -895,8 +975,10 @@ class _GameInstall:
             for erf in self._tex_erfs:
                 if erf.has(name, res_type):
                     return True
-        if res_type == RES_WAV and k in self._stream_sounds:
-            return True
+        if res_type in (RES_WAV, RES_MP3):
+            self._index_loose_audio()
+            if k in self._loose_audio:
+                return True
         return k in self._key_map
 
     def list_resrefs(self, res_type: int) -> List[str]:
@@ -912,8 +994,9 @@ class _GameInstall:
         for erf in self._tex_erfs:
             for r in erf.list_type(res_type):
                 out.add(r)
-        if res_type == RES_WAV:
-            for k in self._stream_sounds:
+        if res_type in (RES_WAV, RES_MP3):
+            self._index_loose_audio()
+            for k in self._loose_audio:
                 if k.endswith(suffix):
                     out.add(k[:-(len(suffix))])
         for k in self._key_map:

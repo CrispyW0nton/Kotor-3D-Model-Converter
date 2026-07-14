@@ -35,7 +35,7 @@ PORT_GHOSTRIGGER  = 7001
 PORT_GHOSTSCRIPTER = 7002
 PORT_GMODULAR     = 7003
 
-_PROGRAM_NAME = "GhostRigger"
+_PROGRAM_NAME = "GhostStudio"
 _RESREF_RE = re.compile(r"^[A-Za-z0-9_]{1,16}$")
 _IPC_PORT_ENV = "GHOSTRIGGER_IPC_PORT"
 
@@ -243,12 +243,20 @@ class GhostRiggerIPCServer:
         'open_mdl'  : Callable[[str, str], None]
     """
 
-    def __init__(self, callbacks: Optional[Dict[str, Callable]] = None, port: int | None = None):
+    def __init__(
+        self,
+        callbacks: Optional[Dict[str, Callable]] = None,
+        port: int | None = None,
+        *,
+        program_name: str = _PROGRAM_NAME,
+    ):
         self.callbacks: Dict[str, Callable] = callbacks or {}
         self._thread: Optional[threading.Thread] = None
         self._app = None
+        self._http_server = None
         self._running = False
         self._port = resolve_ghostrigger_ipc_port() if port is None else int(port)
+        self._program_name = str(program_name or _PROGRAM_NAME)
 
     # ── Lifecycle ─────────────────────────────────────────────────────────
 
@@ -271,8 +279,14 @@ class GhostRiggerIPCServer:
         return int(self._port)
 
     def stop(self):
-        """Stop the server (best-effort — Flask dev server can't be stopped cleanly)."""
+        """Stop the background Werkzeug server without leaving a bound port."""
         self._running = False
+        server = self._http_server
+        if server is not None:
+            try:
+                server.shutdown()
+            except Exception:
+                log.exception("GhostStudio IPC server shutdown failed")
         log.info("GhostRigger IPC server stopping")
 
     @property
@@ -365,7 +379,7 @@ class GhostRiggerIPCServer:
                     return _err(action, str(exc))
 
             if action == "ping":
-                return _ok(action, {"program": _PROGRAM_NAME, "port": self._port})
+                return _ok(action, {"program": self._program_name, "port": self._port})
             return _ok(action)
 
         # ── Routes ────────────────────────────────────────────────────────
@@ -564,7 +578,7 @@ class GhostRiggerIPCServer:
             if not ok:
                 return jsonify({"status": "error", "message": str(result)}), 504
             payload_result = result if isinstance(result, dict) else {"value": result}
-            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "result": payload_result})
+            return jsonify({"status": "ok", "program": self._program_name, "result": payload_result})
 
         @app.route("/api/scene_object_properties", methods=["POST"])
         def route_scene_object_properties():
@@ -589,7 +603,7 @@ class GhostRiggerIPCServer:
             if not ok:
                 return jsonify({"status": "error", "message": str(result)}), 504
             payload_result = result if isinstance(result, dict) else {"value": result}
-            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "result": payload_result})
+            return jsonify({"status": "ok", "program": self._program_name, "result": payload_result})
 
         @app.route("/api/show_panel", methods=["POST"])
         def route_show_panel():
@@ -709,7 +723,7 @@ class GhostRiggerIPCServer:
             if not ok:
                 return jsonify({"status": "error", "message": str(result)}), 504
             payload_result = result if isinstance(result, dict) else {"value": result}
-            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "result": payload_result})
+            return jsonify({"status": "ok", "program": self._program_name, "result": payload_result})
 
         @app.route("/api/mesh_tool_command", methods=["POST"])
         def route_mesh_tool_command():
@@ -738,7 +752,7 @@ class GhostRiggerIPCServer:
             response = result if isinstance(result, dict) else {"status": "ok", "command": command, "result": result}
             response.setdefault("status", "ok")
             response.setdefault("command", command)
-            response.setdefault("program", _PROGRAM_NAME)
+            response.setdefault("program", self._program_name)
             return jsonify(response)
 
         @app.route("/api/select_module_mesh", methods=["POST"])
@@ -851,7 +865,7 @@ class GhostRiggerIPCServer:
             if not ok:
                 return jsonify({"status": "error", "message": str(result)}), 504
             proof = result if isinstance(result, dict) else {"status": "blocked", "value": result}
-            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "proof": proof})
+            return jsonify({"status": "ok", "program": self._program_name, "proof": proof})
 
         @app.route("/api/map_studio_pie_visual_proof", methods=["POST"])
         def route_map_studio_pie_visual_proof():
@@ -869,7 +883,7 @@ class GhostRiggerIPCServer:
             if not ok:
                 return jsonify({"status": "error", "message": str(result)}), 504
             proof = result if isinstance(result, dict) else {"status": "blocked", "value": result}
-            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "proof": proof})
+            return jsonify({"status": "ok", "program": self._program_name, "proof": proof})
 
         @app.route("/api/library_search", methods=["GET", "POST"])
         def route_library_search():
@@ -889,7 +903,7 @@ class GhostRiggerIPCServer:
             if not ok:
                 return jsonify({"status": "error", "message": str(result)}), 504
             payload_result = result if isinstance(result, dict) else {"value": result}
-            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "library": payload_result})
+            return jsonify({"status": "ok", "program": self._program_name, "library": payload_result})
 
         @app.route("/api/library_select", methods=["POST"])
         def route_library_select():
@@ -912,7 +926,7 @@ class GhostRiggerIPCServer:
             if not ok:
                 return jsonify({"status": "error", "message": str(result)}), 504
             payload_result = result if isinstance(result, dict) else {"value": result}
-            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "selection": payload_result})
+            return jsonify({"status": "ok", "program": self._program_name, "selection": payload_result})
 
         @app.route("/api/resource_search", methods=["GET", "POST"])
         def route_resource_search():
@@ -932,7 +946,7 @@ class GhostRiggerIPCServer:
             if not ok:
                 return jsonify({"status": "error", "message": str(result)}), 504
             payload_result = result if isinstance(result, dict) else {"value": result}
-            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "resources": payload_result})
+            return jsonify({"status": "ok", "program": self._program_name, "resources": payload_result})
 
         @app.route("/api/resource_select", methods=["POST"])
         def route_resource_select():
@@ -954,7 +968,7 @@ class GhostRiggerIPCServer:
             if not ok:
                 return jsonify({"status": "error", "message": str(result)}), 504
             payload_result = result if isinstance(result, dict) else {"value": result}
-            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "selection": payload_result})
+            return jsonify({"status": "ok", "program": self._program_name, "selection": payload_result})
 
         @app.route("/api/state", methods=["GET", "POST"])
         def route_state():
@@ -966,11 +980,11 @@ class GhostRiggerIPCServer:
             if not ok:
                 return jsonify({"status": "error", "message": str(state)}), 504
             payload = state if isinstance(state, dict) else {"value": state}
-            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "state": payload})
+            return jsonify({"status": "ok", "program": self._program_name, "state": payload})
 
         @app.route("/api/health", methods=["GET"])
         def route_health():
-            return jsonify({"status": "ok", "program": _PROGRAM_NAME,
+            return jsonify({"status": "ok", "program": self._program_name,
                             "port": self._port, "version": "2.8",
                             "mcp": True})
 
@@ -1040,9 +1054,32 @@ class GhostRiggerIPCServer:
 
         @app.route("/api/<path:action_name>", methods=["POST"])
         def route_catch_all(action_name):
-            """Catch-all for unknown POST actions — returns JSON error."""
-            return jsonify({"status": "error", "action": action_name,
-                            "message": f"unknown action: {action_name}"}), 404
+            """Dispatch registered compatibility actions with a bounded payload."""
+
+            cb = self.callbacks.get(str(action_name))
+            if cb is None:
+                return jsonify({"status": "error", "action": action_name,
+                                "message": f"unknown action: {action_name}"}), 404
+            body = request.get_json(force=True, silent=True) or {}
+            payload = _payload(body)
+            ok, result = self._invoke_callback_sync(cb, payload, timeout=30.0)
+            if not ok:
+                return jsonify({
+                    "status": "error",
+                    "action": action_name,
+                    "program": self._program_name,
+                    "message": str(result),
+                }), 500
+            response = {
+                "status": "ok",
+                "action": action_name,
+                "program": self._program_name,
+            }
+            if isinstance(result, dict):
+                response.update(result)
+            elif result is not None:
+                response["result"] = result
+            return jsonify(response)
 
         @app.errorhandler(404)
         def not_found(e):
@@ -1059,6 +1096,9 @@ class GhostRiggerIPCServer:
         try:
             from werkzeug.serving import make_server
             srv = make_server("127.0.0.1", self._port, app, threaded=True)
+            self._http_server = srv
+            if self._port == 0:
+                self._port = int(srv.server_port)
             self._running = True
             log.info("GhostRigger IPC server bound on port %d", self._port)
             srv.serve_forever()
@@ -1073,6 +1113,7 @@ class GhostRiggerIPCServer:
                 log.error("GhostRigger IPC server error: %s", exc)
         finally:
             self._running = False
+            self._http_server = None
 
     def _schedule_callback(self, cb: Callable, *args):
         """Execute a callback through Qt when active, otherwise directly."""

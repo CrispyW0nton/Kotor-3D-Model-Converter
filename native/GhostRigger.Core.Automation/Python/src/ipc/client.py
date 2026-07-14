@@ -148,6 +148,34 @@ def refresh_gmodular_viewport() -> None:
     )
 
 
+def notify_script_compiled(
+    resref: str,
+    *,
+    game: str,
+    success: bool,
+    sha256: str = "",
+    output_path: str = "",
+    diagnostics: Optional[list[dict[str, Any]]] = None,
+) -> None:
+    """Publish the preserved GhostScripter compile event to port 7003."""
+
+    ipc_call_async(
+        PORT_GMODULAR,
+        "script_compiled",
+        payload={
+            "version": 1,
+            "resref": str(resref or ""),
+            "game": str(game or "K2").upper(),
+            "success": bool(success),
+            "sha256": str(sha256 or ""),
+            "output_path": str(output_path or ""),
+            "diagnostics": list(diagnostics or ()),
+        },
+        on_result=_log_result("script_compiled → GModular"),
+        sender="GhostStudio",
+    )
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  High-level GhostRigger → GhostScripter calls
 # ─────────────────────────────────────────────────────────────────────────────

@@ -321,6 +321,9 @@ class WindowLifecycleMixin:
             ipc_server = getattr(self, "_ipc_server", None)
             if ipc_server is not None:
                 ipc_server.stop()
+            scripting_ipc_server = getattr(self, "_scripter_compat_ipc_server", None)
+            if scripting_ipc_server is not None:
+                scripting_ipc_server.stop()
         except Exception:
             pass
         super().closeEvent(event)

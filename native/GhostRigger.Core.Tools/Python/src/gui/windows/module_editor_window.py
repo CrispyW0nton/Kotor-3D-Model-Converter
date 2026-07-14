@@ -1019,6 +1019,8 @@ class _MapStudioToolBeltCustomizeDialog(QtWidgets.QDialog):
 class ModuleEditorWindow(QtWidgets.QMainWindow):
     """Top-level KMAP Map Studio Level Editor window."""
 
+    scriptingResourceEditRequested = QtCore.Signal(object)
+
     def __init__(
         self,
         parent: QtWidgets.QWidget | None = None,
@@ -1042,6 +1044,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._placeable_game_resource_provider: Any = None
         self._placeable_library_game = ""
         self._placeable_library_module_root = ""
+        self._scripting_studio_resources: tuple[tuple[str, str, bytes], ...] = ()
         self._plcaa_manual_proof_rows: list[dict[str, Any]] = []
         self._plcaa_manual_proof_build: Any = None
         self._plcaa_manual_proof_cache_key: tuple[str, int] | None = None
@@ -1707,6 +1710,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.placement_tab.selectionRequested.connect(self.select_item)
         self.placement_tab.transformRequested.connect(self._apply_placement_tab_transform)
         self.placement_tab.creatureBehaviorRequested.connect(self._apply_placement_tab_creature_behavior)
+        self.placement_tab.dialogueEditorRequested.connect(self._request_creature_dialogue_editor)
         self.placement_tab.actionRequested.connect(self._handle_placement_tab_action)
         self.placement_tab.statusChanged.connect(self.workflow_panel.set_active_authoring_context)
         self.texture_paint_tab.importRequested.connect(self.import_project_texture)
@@ -1722,6 +1726,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.environment_tab.skyTrafficCreateRequested.connect(self._create_map_studio_sky_traffic)
         self.builder_tab.modelingContextChanged.connect(self.workflow_panel.set_active_authoring_context)
         self.builder_tab.scriptHookRequested.connect(self.set_authored_script_hook)
+        self.builder_tab.scriptEditorRequested.connect(self._request_script_editor)
         self.outliner_action.toggled.connect(lambda visible: self.outliner.setVisible(visible))
         self.properties_action.toggled.connect(lambda visible: self.properties.setVisible(visible))
         self.viewport_action.toggled.connect(lambda visible: self.viewport_panel.setVisible(visible))
@@ -2571,6 +2576,46 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._apply_combined_library_rows()
         return tuple(self._placeable_library_rows)
 
+    def set_scripting_studio_resources(self, resources: object) -> None:
+        """Stage a successful Scripting Studio build for the next Map Studio export.
+
+        This boundary accepts immutable ``(resref, restype, bytes)`` rows (or a
+        build result exposing ``resource_tuples``).  Map Studio never reaches
+        into the workbench's mutable documents; only validated runtime types
+        such as NCS, DLG, JRL, 2DA, LIP, SSF, and GFF blueprints are accepted.
+        """
+
+        rows: object = resources
+        resource_tuples = getattr(resources, "resource_tuples", None)
+        if callable(resource_tuples):
+            rows = resource_tuples(runtime_only=True)
+        elif not isinstance(resources, (list, tuple)) and hasattr(resources, "resources"):
+            rows = tuple(
+                (
+                    str(getattr(item, "resref", "") or ""),
+                    str(getattr(item, "restype", "") or ""),
+                    bytes(getattr(item, "data", b"") or b""),
+                )
+                for item in tuple(getattr(resources, "resources", ()) or ())
+            )
+        normalized: list[tuple[str, str, bytes]] = []
+        for item in tuple(rows or ()):
+            try:
+                resref, restype, data = item
+            except (TypeError, ValueError):
+                continue
+            clean_ref = str(resref or "").strip().lower()[:16]
+            clean_type = str(restype or "").strip().lower().lstrip(".")
+            payload = bytes(data or b"")
+            if clean_ref and clean_type and payload:
+                normalized.append((clean_ref, clean_type, payload))
+        self.controller.set_authored_scripting_resources(normalized)
+        self._scripting_studio_resources = tuple(normalized)
+        self._log(
+            f"Staged {len(normalized)} validated Scripting Suite runtime resource(s) "
+            "for the next Map Studio package."
+        )
+
     def _authored_placeable_template_resrefs(self) -> tuple[str, ...]:
         payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
         placements = dict(payload.get("placements") or {})
@@ -2702,13 +2747,22 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 add_resource(*resource)
             conversation = str(getattr(row, "creature_conversation_resref", "") or "").strip().lower()
             if conversation:
-                try:
-                    add_resource(conversation, "dlg", bytes(reader(conversation, "DLG", game=game)))
-                except Exception as exc:
-                    self.controller.set_authored_creature_resources(())
-                    raise ValueError(
-                        f"Creature conversation {conversation}.dlg could not be resolved for target game {game}: {exc}"
-                    ) from exc
+                staged_reader = getattr(self.controller, "authored_scripting_resource", None)
+                staged_dialogue = staged_reader(conversation, "dlg") if callable(staged_reader) else None
+                if staged_dialogue is not None:
+                    # It is already part of authored_project_extra_resources;
+                    # do not duplicate it in the creature-owned resource set.
+                    self._log(
+                        f"Creature conversation {conversation}.dlg resolves from the current Scripting Studio build."
+                    )
+                else:
+                    try:
+                        add_resource(conversation, "dlg", bytes(reader(conversation, "DLG", game=game)))
+                    except Exception as exc:
+                        self.controller.set_authored_creature_resources(())
+                        raise ValueError(
+                            f"Creature conversation {conversation}.dlg could not be resolved for target game {game}: {exc}"
+                        ) from exc
         resources = tuple((resref, restype, data) for (resref, restype), data in sorted(merged.items()))
         self.controller.set_authored_creature_resources(resources)
         self._log(f"Creature behavior export resolved {len(rows)} authored creature(s) into {len(resources)} UTC/script/dialog resource(s).")
@@ -7624,6 +7678,51 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         )
         self.select_item(placement_id)
 
+    def _request_creature_dialogue_editor(self, placement_id: str, conversation_resref: str) -> None:
+        """Deep-link one creature conversation into the standalone narrative workbench."""
+
+        row = next(
+            (
+                item
+                for item in self.controller.authored_gameplay_placements()
+                if str(getattr(item, "placement_id", "") or "") == str(placement_id or "")
+            ),
+            None,
+        )
+        source_name = str(
+            getattr(row, "tag", "")
+            or getattr(row, "template_resref", "")
+            or placement_id
+            or "conversation"
+        ).strip().lower()
+        clean_name = "_".join(part for part in source_name.replace(":", "_").split() if part)
+        clean_name = "".join(character for character in clean_name if character.isalnum() or character == "_")
+        suggested_resref = (f"dlg_{clean_name}" if clean_name else "dlg_new")[:16]
+        resref = str(conversation_resref or "").strip().lower()[:16]
+        if not resref and row is not None:
+            resref = suggested_resref
+            self._apply_placement_tab_creature_behavior(
+                placement_id,
+                str(getattr(row, "creature_behavior_role", "neutral") or "neutral"),
+                resref,
+                str(getattr(row, "creature_movement_mode", "stationary") or "stationary"),
+            )
+        context = {
+            "source": "map_studio",
+            "kind": "dialogue",
+            "game": str(getattr(self.project, "game", "") or "K1").strip().upper(),
+            "restype": "DLG",
+            "resref": resref,
+            "suggested_resref": resref or suggested_resref,
+            "owner_kind": "creature",
+            "owner_id": str(placement_id or ""),
+            "field_name": "conversation_resref",
+        }
+        self.scriptingResourceEditRequested.emit(context)
+        self._log(
+            f"Opened Scripting & Dialogue Studio for creature conversation {resref or suggested_resref}.dlg."
+        )
+
     def _handle_placement_tab_action(self, action: str, placement_id: str) -> None:
         try:
             if action == "snap_to_walkmesh":
@@ -7699,6 +7798,37 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(self, "Script Hook", str(exc))
             return
         self._refresh_all(f"{message} Previous exports/proofs are now stale.")
+
+    def _request_script_editor(self, scope: str, field_name: str, script_resref: str) -> None:
+        """Deep-link an ARE/IFO hook into the standalone script editor."""
+
+        clean_scope = str(scope or "area").strip().lower()
+        clean_field = str(field_name or "").strip()
+        resref = str(script_resref or "").strip().lower()[:16]
+        field_slug = "".join(
+            character for character in clean_field.lower() if character.isalnum() or character == "_"
+        )
+        suggested_resref = (f"gr_{field_slug}" if field_slug else "gr_script")[:16]
+        if not resref:
+            resref = suggested_resref
+            self.set_authored_script_hook(clean_scope, clean_field, resref)
+        context = {
+            "source": "map_studio",
+            "kind": "script",
+            "game": str(getattr(self.project, "game", "") or "K1").strip().upper(),
+            "restype": "NSS",
+            "resref": resref,
+            "suggested_resref": resref or suggested_resref,
+            "owner_kind": f"{clean_scope}_script_hook",
+            "owner_id": f"{clean_scope}:{clean_field}",
+            "scope": clean_scope,
+            "field_name": clean_field,
+        }
+        self.scriptingResourceEditRequested.emit(context)
+        self._log(
+            f"Opened Scripting & Dialogue Studio for {clean_scope} hook {clean_field}: "
+            f"{resref or suggested_resref}.nss."
+        )
 
     def _apply_map_studio_world_settings(self, values: object) -> None:
         settings = dict(values) if isinstance(values, dict) else {}

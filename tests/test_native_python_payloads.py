@@ -54,9 +54,10 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     }
 
     assert len(entries) == 18
-    # 2026-07-13: Map Studio PIE adds the bounded creature runtime in Scene and
-    # Tools on top of the prior session/audio payload additions.
-    assert len(payload_files) == 1260
+    # 2026-07-13: the complete Scripting Suite adds its typed Workflow services,
+    # GUI Display pages/controllers/widget, Qt audio preview adapter, and the
+    # package-local Automation compatibility surface.
+    assert len(payload_files) == 1289
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 

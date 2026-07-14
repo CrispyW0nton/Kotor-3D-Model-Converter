@@ -17,7 +17,7 @@ Architecture note (Constantine, "Structured Design"):
   are context-free — the same tool works in a Discord bot, VS Code extension,
   CI pipeline, or any other consumer without modification.
 
-  Tool manifest (v3.11 — 107 total):
+  Tool manifest (v3.13 — 160 total):
   Installation   (3): detectInstallations, loadInstallation, kotor_installation_info
   Discovery      (4): listResources, describeResource, kotor_find_resource, kotor_search_resources
   Game data      (3): journalOverview, kotor_lookup_2da, kotor_lookup_tlk
@@ -66,6 +66,10 @@ Architecture note (Constantine, "Structured Design"):
                       ghostrigger_export_unity_fbx
   ModelPipeline  (3): inspect_mdl, inspect_mdl_ghostrigger,
                       compare_model_pipelines
+  Legacy surface (52): 51 safe GhostScripter compatibility names plus one
+                       machine-readable compatibility report.  Eight broad
+                       mutation names remain inventoried behind owned,
+                       validated project services rather than arbitrary writes.
 """
 
 from __future__ import annotations
@@ -79,6 +83,7 @@ from kotormcp.tools import (
     modules, game_test, kotor_input, kotor_live_log, kotor_dinput_hook,
     gffdata, decompile, resource, quest,
     refs, walkmesh, archives, retargeting, ghostrigger_tools,
+    legacy_ghostscripter,
 )
 
 
@@ -119,18 +124,9 @@ def _model_pipeline_tools() -> List[Dict[str, Any]]:
     ]
 
 
-def get_all_tools() -> List[Dict[str, Any]]:
-    """Return all tool definitions from all tool modules.
+def _native_tools() -> List[Dict[str, Any]]:
+    """Return GhostStudio's native tool definitions before name aliases."""
 
-    Tool count: 107 (v3.11)
-      3  installation  +  4 discovery  +  3 gamedata  +  8 ghostrigger
-    + 25 debug_skinning + 3  modules   +  2 game_test +  5 kotor_input
-    +  4 kotor_live_log + 3 kotor_dinput_hook
-    +  3 gffdata
-    + 11 decompile     +  2 composite +  6 refs      +  1 walkmesh
-    +  2 archives      + 16 debug_materials + 4 retargeting
-    +  3 model_pipeline = 104
-    """
     return (
         installation.get_tools()          # 3  installation management
         + discovery.get_tools()           # 4  resource discovery
@@ -155,8 +151,22 @@ def get_all_tools() -> List[Dict[str, Any]]:
     )
 
 
+def get_all_tools() -> List[Dict[str, Any]]:
+    """Return 108 native tools plus 52 clean-room compatibility definitions."""
+
+    native = _native_tools()
+    return native + legacy_ghostscripter.get_tools(native)
+
+
 async def handle_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
     """Dispatch tool invocation to the correct handler."""
+    legacy_target = legacy_ghostscripter.resolve_direct_alias(name, arguments)
+    if legacy_target is not None:
+        target_name, adapted_arguments = legacy_target
+        return await handle_tool(target_name, adapted_arguments)
+    if legacy_ghostscripter.handles_service_alias(name):
+        return await legacy_ghostscripter.handle_service_alias(name, arguments)
+
     # ── Installation tools ────────────────────────────────────────────────────
     if name == "detectInstallations":
         return await installation.handle_detect_installations(arguments)
