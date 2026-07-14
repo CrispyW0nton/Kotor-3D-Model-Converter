@@ -14,6 +14,7 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
 from src.gui.libtheme.theme_editor_window import ThemeEditorWindow
 from src.gui.libtheme.theme_settings import ThemeLayoutSettings
 from src.gui.qt_lib.dialogs.qt_settings_dialog import QtSettingsDialog, save_settings
+from src.gui.qt_lib.dialogs.qt_getting_started_window import QtGettingStartedWindow
 from src.gui.qt_lib.panels.qt_character_builder_panel import QtCharacterBuilderWindow
 from src.gui.qt_lib.panels.qt_log_panel import QtLogPanelHandler
 from src.core.rendering.renderer_backend import renderer_backend_label
@@ -46,6 +47,67 @@ class WindowLifecycleMixin:
         self._character_builder_window.show()
         self._character_builder_window.raise_()
         self._character_builder_window.activateWindow()
+
+    def _open_getting_started_window(self, page_key: str = "") -> None:
+        """Open the reusable tutorial window and optionally select one pillar."""
+
+        if not bool(self.settings_data.get("getting_started_seen", False)):
+            self.settings_data["getting_started_seen"] = True
+            try:
+                save_settings(self.settings_path, self.settings_data)
+            except Exception as exc:
+                self._log(f"Could not save tutorial first-run state: {exc}", "warning")
+        window = getattr(self, "_getting_started_window", None)
+        if window is None:
+            window = QtGettingStartedWindow(self, icon_provider=self._icon)
+            window.openRequested.connect(self._open_tutorial_workspace)
+            self._getting_started_window = window
+        if page_key:
+            window.select_page(page_key)
+        window.show()
+        window.raise_()
+        window.activateWindow()
+
+    def _maybe_show_getting_started_on_first_launch(self) -> None:
+        """Teach a new user where the main studios live, once per settings profile."""
+
+        if bool(self.settings_data.get("getting_started_seen", False)):
+            return
+        self._open_getting_started_window()
+
+    def _open_tutorial_workspace(self, route: str) -> None:
+        """Route tutorial calls to existing, production workspace entry points."""
+
+        key = str(route or "").strip().lower()
+        if key == "resources":
+            self._show_workspace_dock("resources")
+            self._show_workspace_dock("content_browser")
+        elif key == "scene":
+            self._show_workspace_dock("scene")
+            self._show_workspace_dock("properties")
+            self._show_workspace_dock("mesh_tools")
+        elif key == "placeable_builder":
+            opener = getattr(self, "_open_placeable_builder_window", None)
+            if not callable(opener):
+                self._log("Placeable Builder is unavailable in this build.", "warning")
+                return
+            opener()
+        elif key in {"gmodeler", "map_studio", "terrain", "texture_paint", "game_proof"}:
+            self._open_module_editor_window()
+            window = getattr(self, "module_editor_window", None)
+            focus = getattr(window, "focus_map_studio_tutorial_workspace", None)
+            if callable(focus):
+                focus(key)
+        elif key == "module_editor":
+            self._open_stock_module_editor_window()
+        elif key == "character":
+            self._open_qt_character_builder_window()
+        elif key == "retarget":
+            self._open_animation_retarget_window()
+        else:
+            self._log(f"Unknown tutorial workspace route: {route}", "warning")
+            return
+        self._log(f"Tutorial opened workspace: {key}", "success")
     def _send_library_row_to_character_builder(self, row: dict) -> None:
         self._open_qt_character_builder_window()
         resref = str(row.get("resref") or "asset")

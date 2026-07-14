@@ -186,6 +186,19 @@ def _preset_room_lights(*, preset: AuthoredRoomPrimitivePreset, root: str, room_
     )
 
 
+def _preset_lighting_metadata(preset: AuthoredRoomPrimitivePreset) -> dict[str, Any]:
+    """Return game-visible lighting policy for generated room presets."""
+
+    return {
+        "lighting": {
+            "profile": "fullbright",
+            "source": "map_studio:room_primitive_preset_fullbright",
+            "preset_id": preset.preset_id,
+            "purpose": "editable_graybox_visibility",
+        }
+    }
+
+
 def _composition_project_from_preset(
     *,
     preset: AuthoredRoomPrimitivePreset,
@@ -325,6 +338,7 @@ def _composition_project_from_preset(
             "source": "map_studio:room_primitive_preset",
             "room_geometry_mode": "authored_room_composition",
             "preset_id": preset.preset_id,
+            **_preset_lighting_metadata(preset),
         },
     )
 
@@ -404,6 +418,7 @@ def _terrain_project_from_preset(
             "source": "map_studio:room_primitive_preset",
             "room_geometry_mode": "terrain_heightfield",
             "preset_id": preset.preset_id,
+            **_preset_lighting_metadata(preset),
         },
     )
 
@@ -501,6 +516,7 @@ def create_authored_module_from_room_preset(
             "source": "map_studio:room_primitive_preset",
             "room_geometry_mode": "floor_plan_extrusion",
             "preset_id": preset.preset_id,
+            **_preset_lighting_metadata(preset),
         },
     )
 

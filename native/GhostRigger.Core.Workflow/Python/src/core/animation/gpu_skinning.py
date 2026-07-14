@@ -893,6 +893,20 @@ class MatrixPaletteUploader:
         preferred_layout = str(getattr(profile, 'preferred_qbone_layout', 'dfs') or 'dfs')
         preferred_formula = str(getattr(profile, 'preferred_formula', _SKIN_FORMULA_G5) or _SKIN_FORMULA_G5)
 
+        if bool(getattr(skin_node, '_gr_kotor_inverse_bind_qt', False)) and bone_map and qt_count >= len(bone_map):
+            # T2555: split region nodes carry compact per-slot rows rebuilt
+            # under the ENGINE convention (inverse(bone_world)*skin_world,
+            # WXYZ, used directly — the T2550 writer contract).  F1 would
+            # invert them a second time and double-transform every vertex;
+            # G5 consumes them directly, and its compact-layout guard indexes
+            # them by slot instead of DFS.
+            self._skin_profile_reason = (
+                f"species:{species} auto:compact_engine_inverse_bind "
+                f"model={self._model_name or '?'} qt={qt_count} "
+                f"bone_map={len(bone_map)}"
+            )
+            return _SKIN_FORMULA_G5
+
         if preferred_layout == "compact" and bone_map and qt_count >= len(bone_map):
             self._skin_profile_reason = (
                 f"species:{species} auto:compact_qbone model={self._model_name or '?'} "
@@ -1092,12 +1106,26 @@ class MatrixPaletteUploader:
                     # the bone is missing from the lookup so a malformed
                     # bone_map entry never crashes the renderer.
                     dfs_idx = self._name_to_dfs_index.get(bkey, -1) if bkey else -1
-                    if 0 <= dfs_idx < len(qbones) and dfs_idx < len(tbones):
+                    # T2555: MDL-loaded models carry full DFS-indexed qBone/
+                    # tBone arrays (len == model node count), but Character
+                    # Builder split parts carry COMPACT per-slot rows
+                    # (len == bone_map, recomputed at split under the same
+                    # inverse(bone_world)*skin_world convention).  Indexing a
+                    # compact array with a DFS index silently reads another
+                    # bone's bind row for early-DFS bones (torso_g, pelvis_g)
+                    # and identity for the rest — the K1 c_ithorian preview
+                    # exploded to 450x edge stretch this way.
+                    compact_layout = (
+                        len(qbones) == len(bone_map)
+                        and len(qbones) < int(self._model_node_count or 0)
+                    )
+                    row_idx = idx if compact_layout else dfs_idx
+                    if 0 <= row_idx < len(qbones) and row_idx < len(tbones):
                         inv_bind = self.qbone_inverse_bind_matrix_g5(
-                            qbones[dfs_idx], tbones[dfs_idx],
+                            qbones[row_idx], tbones[row_idx],
                         )
                         direct_bind = self.qbone_direct_bind_matrix(
-                            qbones[dfs_idx], tbones[dfs_idx],
+                            qbones[row_idx], tbones[row_idx],
                         )
                     else:
                         inv_bind = _mat4_identity_py()

@@ -24,7 +24,7 @@ and other performance-sensitive systems.
 
 ## Core Architecture Statement
 
-`GhostRigger.exe` is the owning process. It is built by the `GhostRigger.Native.Core.Host`
+`GhostStudio.exe` is the owning process. It is built by the `GhostRigger.Native.Core.Host`
 Visual Studio project, embeds Python, and runs the
 existing Qt application in-process. Because C++ and Python now share the same
 process, Python can access native C++ functionality through stable bridge
@@ -34,7 +34,7 @@ Allowed bridge surfaces:
 
 1. C ABI DLLs loaded by Python through `ctypes` or `cffi`.
 2. Python extension modules (`.pyd`) imported directly by Python.
-3. Host-registered Python modules created by `GhostRigger.exe` before
+3. Host-registered Python modules created by `GhostStudio.exe` before
    `main.py` runs.
 4. Narrow shared-handle APIs for host-owned runtime objects such as renderer
    devices, retained scenes, buffers, textures, skin palettes, and frame
@@ -206,7 +206,7 @@ first shared runtime handles without moving product behavior prematurely.
 
 Current completed foundation:
 
-- `GhostRigger.exe` hosts embedded Python in-process from the `GhostRigger.Native.Core.Host` project.
+- `GhostStudio.exe` hosts embedded Python in-process from the `GhostRigger.Native.Core.Host` project.
 - The native host starts `main.py --gui qt` without launching a separate Python
   process.
 - `GhostRigger.Native.Core.Foundation.dll` exists as the first shared native core package for
@@ -445,7 +445,7 @@ Current completed foundation:
   `gr_python_payload_manifest_json()` and `gr_python_payload_file_count()` so
   native code and embedded Python can verify the DLL-owned Python payload
   boundary without executing copied Python files.
-- `GhostRigger.exe` has build-order project references to every payload DLL and
+- `GhostStudio.exe` has build-order project references to every payload DLL and
   runs a startup dependency audit before embedded Python executes `main.py`.
   After the native log console opens, the host loads each DLL, checks
   version/capability exports, reads the payload file count, and writes the

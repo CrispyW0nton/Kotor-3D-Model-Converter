@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 
 def _install_native_payload_paths() -> None:
     repo = Path(__file__).resolve().parents[1]
@@ -340,6 +342,27 @@ def test_t2637_composition_rejects_invalid_placed_primitive_scale() -> None:
 
     assert validation.ok is False
     assert "Placed primitive bad_scale_ramp must have positive transform scale." in validation.blocking_issues
+
+
+def test_t2637_non_uniform_placed_scale_uses_inverse_transpose_normals() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_composition import PrimitiveTransform, transform_primitive_mesh
+    from src.core.modules.authored_room_geometry import PrimitiveMesh
+
+    mesh = PrimitiveMesh(
+        name="normal_probe",
+        vertices=((0.0, 0.0, 0.0),),
+        faces=(),
+        normals=((2.0 ** -0.5, 0.0, 2.0 ** -0.5),),
+    )
+
+    transformed = transform_primitive_mesh(
+        mesh,
+        PrimitiveTransform(scale=(2.0, 1.0, 0.5), rotation_degrees_z=90.0),
+    )
+
+    assert transformed.normals[0] == pytest.approx((0.0, 0.242535625, 0.9701425), abs=1.0e-7)
 
 
 def test_t2622_composition_compiles_arch_primitive_as_helper_mesh() -> None:

@@ -100,12 +100,44 @@ def _mat4_mul(a, b):
 
 
 def _mat3_normal(model_mat: np.ndarray) -> np.ndarray:
-    """Compute the normal matrix = transpose(inverse(model_mat_3x3))."""
-    m33 = model_mat.reshape(4, 4)[:3, :3].copy()
-    try:
-        return np.linalg.inv(m33).T.astype(np.float32)
-    except np.linalg.LinAlgError:
+    """Compute the inverse-transpose of a model matrix's linear 3x3 part.
+
+    This runs once per visible rigid mesh.  Calling ``numpy.linalg.inv`` for
+    hundreds of tiny 3x3 matrices paid more dispatcher/setup cost than useful
+    arithmetic, so use the exact cofactor form directly.  An exact-zero guard
+    preserves invertible small-scale transforms; an epsilon cutoff would turn
+    valid transforms with determinants below that cutoff into identity.
+    """
+
+    matrix = model_mat.reshape(4, 4)
+    m00, m01, m02 = float(matrix[0, 0]), float(matrix[0, 1]), float(matrix[0, 2])
+    m10, m11, m12 = float(matrix[1, 0]), float(matrix[1, 1]), float(matrix[1, 2])
+    m20, m21, m22 = float(matrix[2, 0]), float(matrix[2, 1]), float(matrix[2, 2])
+
+    c00 = m11 * m22 - m12 * m21
+    c01 = m12 * m20 - m10 * m22
+    c02 = m10 * m21 - m11 * m20
+    determinant = m00 * c00 + m01 * c01 + m02 * c02
+    if determinant == 0.0:
         return np.eye(3, dtype=np.float32)
+
+    inverse_determinant = 1.0 / determinant
+    return np.array(
+        (
+            (c00 * inverse_determinant, c01 * inverse_determinant, c02 * inverse_determinant),
+            (
+                (m02 * m21 - m01 * m22) * inverse_determinant,
+                (m00 * m22 - m02 * m20) * inverse_determinant,
+                (m01 * m20 - m00 * m21) * inverse_determinant,
+            ),
+            (
+                (m01 * m12 - m02 * m11) * inverse_determinant,
+                (m02 * m10 - m00 * m12) * inverse_determinant,
+                (m00 * m11 - m01 * m10) * inverse_determinant,
+            ),
+        ),
+        dtype=np.float32,
+    )
 
 
 def _scene_gpu_root_for_node(node):
@@ -198,6 +230,47 @@ def _quat_multiply_xyzw(parent, child) -> tuple[float, float, float, float]:
     )
 
 
+def _compose_world_transform_np(
+    parent_position,
+    parent_rotation,
+    local_position,
+    local_rotation,
+) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
+    """Compose one local transform onto an already-resolved parent transform.
+
+    This is the scalar sibling of the vertex-batch helpers above.  Renderer DAG
+    traversal calls it once per node, so avoiding temporary one-row arrays is
+    materially cheaper than routing every parent/child pair through NumPy.
+    """
+
+    px, py, pz = (float(v) for v in tuple(parent_position)[:3])
+    qx, qy, qz, qw = (float(v) for v in tuple(parent_rotation)[:4])
+    lx, ly, lz = (float(v) for v in tuple(local_position)[:3])
+    rx, ry, rz, rw = (float(v) for v in tuple(local_rotation)[:4])
+    rotation_length_sq = rx * rx + ry * ry + rz * rz + rw * rw
+    if rotation_length_sq > 1.0e-9 and abs(rotation_length_sq - 1.0) > 1.0e-4:
+        inverse_length = 1.0 / math.sqrt(rotation_length_sq)
+        rx *= inverse_length
+        ry *= inverse_length
+        rz *= inverse_length
+        rw *= inverse_length
+
+    tx = 2.0 * (qy * lz - qz * ly)
+    ty = 2.0 * (qz * lx - qx * lz)
+    tz = 2.0 * (qx * ly - qy * lx)
+    rotated_x = lx + qw * tx + (qy * tz - qz * ty)
+    rotated_y = ly + qw * ty + (qz * tx - qx * tz)
+    rotated_z = lz + qw * tz + (qx * ty - qy * tx)
+    world_rotation = _quat_multiply_xyzw(
+        (qx, qy, qz, qw),
+        (rx, ry, rz, rw),
+    )
+    return (
+        (px + rotated_x, py + rotated_y, pz + rotated_z),
+        world_rotation,
+    )
+
+
 def _scene_authored_world_transform(node):
     root = _scene_gpu_root_for_node(node)
     if root is None:
@@ -243,6 +316,29 @@ def _scene_authored_world_transform(node):
 def _quat_rotate_batch(q: np.ndarray, pts: np.ndarray) -> np.ndarray:
     """Vectorized quaternion rotation for Nx3 points using q=(x,y,z,w)."""
     qx, qy, qz, qw = q
+    # Renderer transform chains overwhelmingly rotate one local translation at
+    # a time.  Sending that singleton through ``numpy.cross`` constructs and
+    # normalizes multiple temporary axes; 207TEL PIE invoked that generic path
+    # about 1,700 times per frame.  Keep the vectorized implementation for real
+    # vertex batches, but use the algebraically identical scalar expansion for
+    # the common one-point case.
+    if pts.ndim == 2 and pts.shape == (1, 3):
+        # The generic path promotes through its float64 ``q_vec``.  Cast both
+        # operands here as well so float32 callers receive identical precision,
+        # not merely the same output dtype.
+        qx, qy, qz, qw = (float(v) for v in q)
+        px, py, pz = (float(v) for v in pts[0])
+        tx = 2.0 * (qy * pz - qz * py)
+        ty = 2.0 * (qz * px - qx * pz)
+        tz = 2.0 * (qx * py - qy * px)
+        return np.array(
+            [[
+                px + qw * tx + (qy * tz - qz * ty),
+                py + qw * ty + (qz * tx - qx * tz),
+                pz + qw * tz + (qx * ty - qy * tx),
+            ]],
+            dtype=np.float64,
+        )
     q_vec = np.array([qx, qy, qz], dtype=np.float64)
     t = 2.0 * np.cross(q_vec, pts)
     return pts + qw * t + np.cross(q_vec, t)

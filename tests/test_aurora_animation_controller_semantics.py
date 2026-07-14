@@ -11,7 +11,9 @@ import pytest
 from src.core.animation.animation_engine import (
     AnimationEngine,
     SuperModelResolver,
+    _sample_controller_absolute,
     evaluate_aurora_animation_pose,
+    mark_controller_times_sorted_for_sampling,
 )
 from src.core.geometry.lightsaber import (
     is_lightsaber_blade_node,
@@ -153,7 +155,7 @@ def test_orientation_controller_is_absolute_local_not_delta() -> None:
     _assert_quat_equivalent(pose.local_transforms_by_node["child"].rotation, (0.0, 0.0, 0.0, 1.0))
 
 
-def test_position_controller_is_absolute_local_not_delta() -> None:
+def test_position_controller_is_rest_local_delta() -> None:
     model = _two_node_model(child_position=(1.0, 0.0, 0.0))
     animation = Animation(
         name="pause1",
@@ -163,7 +165,122 @@ def test_position_controller_is_absolute_local_not_delta() -> None:
 
     pose = evaluate_aurora_animation_pose(model, animation, 0.0)
 
-    assert pose.local_transforms_by_node["child"].position == pytest.approx((2.0, 0.0, 0.0))
+    assert pose.local_transforms_by_node["child"].position == pytest.approx((3.0, 0.0, 0.0))
+
+
+def _sample_position_controller(
+    controller: dict[str, object],
+    time_seconds: float,
+) -> list[float] | None:
+    return _sample_controller_absolute(
+        [controller],
+        8,
+        "position",
+        time_seconds,
+        clamp=True,
+    )
+
+
+def test_marked_sorted_controller_uses_zero_copy_sampling() -> None:
+    class IterationGuardTimes(list[float]):
+        forbid_iteration = False
+
+        def __iter__(self):
+            if self.forbid_iteration:
+                raise AssertionError("marked dense times were iterated during sampling")
+            return super().__iter__()
+
+    times = IterationGuardTimes([0.0, 0.5, 1.0])
+    controller = {
+        "type": 8,
+        "name": "position",
+        "times": times,
+        "values": [[0.0, 0.0, 0.0], [1.0, 2.0, 3.0], [2.0, 4.0, 6.0]],
+    }
+
+    assert mark_controller_times_sorted_for_sampling(controller)
+    times.forbid_iteration = True
+    assert _sample_position_controller(controller, 0.25) == pytest.approx([0.5, 1.0, 1.5])
+
+
+def test_unmarked_integer_times_keep_float_normalization_semantics() -> None:
+    controller = {
+        "type": 8,
+        "name": "position",
+        "times": [2**53 - 1, 2**53, 2**53 + 1],
+        "values": [[0.0], [1.0], [2.0]],
+    }
+
+    assert not mark_controller_times_sorted_for_sampling(controller)
+    assert _sample_position_controller(controller, float(2**53)) == pytest.approx([2.0])
+
+
+def test_unmarked_unsorted_tuple_rows_keep_stable_sort_semantics() -> None:
+    controller = {
+        "type": 8,
+        "name": "position",
+        "times": (1.0, 0.0, 0.0, 2.0),
+        "values": ((10.0,), (1.0,), (2.0,), (20.0,)),
+    }
+
+    assert _sample_position_controller(controller, 0.0) == pytest.approx([1.0])
+
+
+def test_unmarked_length_mismatch_still_truncates_rows_like_zip() -> None:
+    controller = {
+        "type": 8,
+        "name": "position",
+        "times": [0.0, 1.0, 2.0],
+        "values": [[0.0, 0.0, 0.0], [2.0, 4.0, 6.0]],
+    }
+
+    assert _sample_position_controller(controller, 2.0) == pytest.approx([2.0, 4.0, 6.0])
+
+
+def test_bas_attachment_duplicate_cannot_replace_primary_body_bind_node() -> None:
+    """A detachable head DAG must not supply the body's rest-local delta base."""
+
+    body_root = ModelNode(name="body")
+    body_rootdummy = ModelNode(
+        name="rootdummy",
+        position=(0.0, 0.0, 1.12557),
+        parent=body_root,
+    )
+    head_socket = ModelNode(name="headhook", parent=body_rootdummy)
+    attachment_root = ModelNode(name="head_attachment", parent=head_socket)
+    attachment_root._gr_bas_attachment_layer = True
+    attachment_root._gr_bas_attachment_root = True
+    attachment_rootdummy = ModelNode(
+        name="rootdummy",
+        position=(0.0, 0.0, 0.0),
+        parent=attachment_root,
+    )
+    attachment_rootdummy._gr_bas_attachment_layer = True
+    body_root.children = [body_rootdummy]
+    body_rootdummy.children = [head_socket]
+    head_socket.children = [attachment_root]
+    attachment_root.children = [attachment_rootdummy]
+    animation = Animation(
+        name="pause1",
+        length=1.0,
+        nodes=[
+            _animation_node(
+                "rootdummy",
+                position_values=[[0.025, 0.001, -0.00665]],
+            )
+        ],
+    )
+    model = KotorModel(name="body_with_detachable_head", root_node=body_root, animations=[animation])
+
+    engine = AnimationEngine(model)
+    assert engine.play("pause1", loop=True, blend=False)
+    pose = engine.evaluate(0.0)
+
+    assert engine._base_nodes["rootdummy"] is body_rootdummy
+    assert pose.nodes["rootdummy"].position == pytest.approx(
+        (0.025, 0.001, 1.11892),
+        abs=1.0e-6,
+    )
 
 
 def test_unkeyed_components_fall_back_to_rest() -> None:

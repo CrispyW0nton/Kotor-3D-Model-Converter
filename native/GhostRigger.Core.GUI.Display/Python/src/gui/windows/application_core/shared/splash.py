@@ -91,8 +91,8 @@ class _ThemeColorOverride:
 class QtStartupSplash(QtWidgets.QWidget):
     """Theme-aware startup splash with embedded progress panel."""
 
-    COPYRIGHT_TEXT = "GhostRigger (C) 2026 Shaolin (CrispyWonton). Co-developed by LordVaderCW."
-    PRODUCT_TEXT = "GhostRigger"
+    COPYRIGHT_TEXT = "GhostStudio (C) 2026 Shaolin (CrispyWonton). Co-developed by LordVaderCW."
+    PRODUCT_TEXT = "GhostStudio"
     SUBTITLE_TEXT = "Odyssey Engine Pipeline"
     STAGE_ROWS = (
         ("native", "Native runtime audit", ("native", "bootstrap", "runtime", "pre-python", "pre-launch worker", "startup threading")),
@@ -140,7 +140,7 @@ class QtStartupSplash(QtWidgets.QWidget):
         logo = self._load_logo_pixmap("")
         if not logo.isNull():
             self.logo_label.setPixmap(logo.scaled(220, 220, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
-        self.product_label = QtWidgets.QLabel("GhostRigger")
+        self.product_label = QtWidgets.QLabel("GhostStudio")
         self.product_label.setObjectName("StartupSplashProduct")
         self.product_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         self.product_label.setWordWrap(True)
@@ -163,7 +163,7 @@ class QtStartupSplash(QtWidgets.QWidget):
         accent_line.setObjectName("StartupSplashAccentLine")
         accent_line.setFixedHeight(2)
         content_layout.addWidget(accent_line)
-        self.header_label = QtWidgets.QLabel("Preparing GhostRigger")
+        self.header_label = QtWidgets.QLabel("Preparing GhostStudio")
         self.header_label.setObjectName("StartupSplashHeader")
         self.header_label.setWordWrap(True)
         self.stage_list = QtWidgets.QWidget()

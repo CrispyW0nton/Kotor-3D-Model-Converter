@@ -861,7 +861,7 @@ class SceneWorkflowMixin:
     def _update_scene_chrome(self) -> None:
         scene = self.scene_manager.active_scene
         dirty = " *" if scene.dirty else ""
-        self.setWindowTitle(f"GhostRigger - {scene.display_name}{dirty}")
+        self.setWindowTitle(f"GhostStudio - {scene.display_name}{dirty}")
         objects = len(scene.objects)
         selected_objects = self.scene_manager.get_selected_objects()
         selected = len(selected_objects)

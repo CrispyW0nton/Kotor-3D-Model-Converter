@@ -45,7 +45,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
-        self.setWindowTitle("Animation Retargeting Workbench")
+        self.setWindowTitle("GhostStudio — Animation Retargeting Workbench")
         self.resize(1280, 820)
         self.setMinimumSize(960, 640)
         self._texture_dir = ""
@@ -77,6 +77,7 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             theme_manager.register_theme_aware_widget(self)
             self.apply_ghost_theme(theme_manager.current_theme or theme_manager.get_theme())
         if layout_manager is not None:
+            layout_manager.layoutChanged.connect(self.apply_ghost_layout)
             self.apply_ghost_layout(layout_manager.current_layout or layout_manager.get_layout())
 
     def apply_ghost_theme(self, theme) -> None:
@@ -120,20 +121,28 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             widget.setMinimumHeight(layout.spacing_value("inputHeight", 24))
 
     def _build_actions(self) -> None:
-        self.close_action = QtGui.QAction("Close", self)
+        style = QtWidgets.QApplication.style()
+        icon = self._workspace_icon
+        self.close_action = QtGui.QAction(style.standardIcon(QtWidgets.QStyle.SP_DialogCloseButton), "Close", self)
         self.close_action.setShortcut("Ctrl+W")
+        self.close_action.setStatusTip("Close the Retarget Workbench")
         self.close_action.triggered.connect(self.close)
-        self.preview_action = QtGui.QAction("Preview Selected", self)
+        self.preview_action = QtGui.QAction(icon("anims"), "Preview Selected Animation", self)
         self.preview_action.setShortcut("Space")
+        self.preview_action.setStatusTip("Build and play a non-destructive retarget preview in the target viewport")
         self.preview_action.triggered.connect(lambda: self.previewRequested.emit(self.panel.selected_animation()))
-        self.apply_action = QtGui.QAction("Apply Selected", self)
+        self.apply_action = QtGui.QAction(icon("export"), "Apply Selected to Target", self)
         self.apply_action.setShortcut("Ctrl+Return")
+        self.apply_action.setStatusTip("Apply the selected preview to the chosen KOTOR output slot or custom patch name")
         self.apply_action.triggered.connect(lambda: self.applyRequested.emit(self.panel.selected_animation()))
-        self.stop_action = QtGui.QAction("Stop Preview", self)
+        self.stop_action = QtGui.QAction(style.standardIcon(QtWidgets.QStyle.SP_MediaStop), "Stop Preview", self)
+        self.stop_action.setStatusTip("Stop playback and return the workbench to the first frame")
         self.stop_action.triggered.connect(self._stop_requested)
-        self.frame_source_action = QtGui.QAction("Frame Source", self)
+        self.frame_source_action = QtGui.QAction(icon("viewport_frame"), "Frame Source View", self)
+        self.frame_source_action.setStatusTip("Fit the complete source skeleton or mesh in the source viewport")
         self.frame_source_action.triggered.connect(lambda: self.source_viewport.frame_all())
-        self.frame_target_action = QtGui.QAction("Frame Target", self)
+        self.frame_target_action = QtGui.QAction(icon("viewport_frame"), "Frame Target View", self)
+        self.frame_target_action.setStatusTip("Fit the complete KOTOR target in the target viewport")
         self.frame_target_action.triggered.connect(lambda: self.target_viewport.frame_all())
         self.viewport_toolbar_action = QtGui.QAction("Viewport Toolbar", self)
         self.viewport_toolbar_action.setCheckable(True)
@@ -147,11 +156,16 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.transform_typein_action.setCheckable(True)
         self.transform_typein_action.setChecked(False)
         self.transform_typein_action.toggled.connect(lambda checked: self._set_viewport_chrome(transform_typein=checked))
-        self.vertex_tweak_action = QtGui.QAction("Vertex", self)
-        self.skin_paint_action = QtGui.QAction("Skin Paint", self)
-        self.weight_balance_action = QtGui.QAction("Weights", self)
-        self.diagnostics_action = QtGui.QAction("Diagnostics", self)
-        self.cloth_rigging_action = QtGui.QAction("Cloth Rigging...", self)
+        self.vertex_tweak_action = QtGui.QAction(icon("viewport_mesh_hover"), "Vertex Corrections", self)
+        self.vertex_tweak_action.setStatusTip("Inspect or correct retarget helper geometry without changing the KOTOR DAG")
+        self.skin_paint_action = QtGui.QAction(icon("texture"), "Skin Weight Paint", self)
+        self.skin_paint_action.setStatusTip("Review target skin influences while preserving normalized KOTOR weight limits")
+        self.weight_balance_action = QtGui.QAction(icon("viewport_heat"), "Weight Balance", self)
+        self.weight_balance_action.setStatusTip("Inspect normalized influence balance and high-bend deformation")
+        self.diagnostics_action = QtGui.QAction(icon("diag"), "Retarget Diagnostics", self)
+        self.diagnostics_action.setStatusTip("Show mapping, hierarchy, hook, controller, and export-readiness diagnostics")
+        self.cloth_rigging_action = QtGui.QAction(icon("body_attachment"), "Cloth Rigging...", self)
+        self.cloth_rigging_action.setStatusTip("Map cloth helpers to an existing KOTOR target skeleton")
         self.cloth_rigging_action.triggered.connect(self._show_cloth_tool)
         self.tool_action_group = QtGui.QActionGroup(self)
         self.tool_action_group.setExclusive(True)
@@ -164,6 +178,26 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
             action.setCheckable(True)
             self.tool_action_group.addAction(action)
             action.triggered.connect(self._tool_mode_changed)
+
+    def _workspace_icon(self, name: str, size: int = 18) -> QtGui.QIcon:
+        """Use the host's theme-aware icon library without creating a second icon system."""
+
+        provider = getattr(self.parent(), "_icon", None)
+        if callable(provider):
+            return provider(name, size)
+        fallbacks = {
+            "anims": QtWidgets.QStyle.SP_MediaPlay,
+            "export": QtWidgets.QStyle.SP_DialogSaveButton,
+            "viewport_frame": QtWidgets.QStyle.SP_DesktopIcon,
+            "viewport_mesh_hover": QtWidgets.QStyle.SP_ArrowRight,
+            "texture": QtWidgets.QStyle.SP_FileIcon,
+            "viewport_heat": QtWidgets.QStyle.SP_FileDialogDetailedView,
+            "diag": QtWidgets.QStyle.SP_MessageBoxInformation,
+            "body_attachment": QtWidgets.QStyle.SP_DirIcon,
+        }
+        return QtWidgets.QApplication.style().standardIcon(
+            fallbacks.get(name, QtWidgets.QStyle.SP_FileIcon)
+        )
 
     def _build_menu(self) -> None:
         file_menu = self.menuBar().addMenu("File")
@@ -262,6 +296,10 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         self.retarget_mode_combo = QtWidgets.QComboBox(box)
         self.retarget_mode_combo.setObjectName("retargetModeComboBox")
         self.retarget_mode_combo.setMinimumWidth(170)
+        self.retarget_mode_combo.setAccessibleName("Retarget direction")
+        self.retarget_mode_combo.setToolTip(
+            "Choose KOTOR → KOTOR, KOTOR → Unreal, or Unreal/FBX → KOTOR. Each direction has separate export gates."
+        )
         populate_retarget_mode_combo(self.retarget_mode_combo)
         top.addWidget(mode_label)
         top.addWidget(self.retarget_mode_combo)
@@ -299,35 +337,49 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
 
         self.retarget_output_global_controls = QtWidgets.QFrame(box)
         self.retarget_output_global_controls.setObjectName("retargetOutputGlobalControls")
-        self.retarget_output_global_controls.setVisible(False)
-        names = QtWidgets.QHBoxLayout(self.retarget_output_global_controls)
+        names = QtWidgets.QGridLayout(self.retarget_output_global_controls)
         names.setContentsMargins(0, 0, 0, 0)
         names.setSpacing(6)
         self.kotor_output_name_mode_combo = QtWidgets.QComboBox(self.retarget_output_global_controls)
         self.kotor_output_name_mode_combo.setObjectName("kotorOutputNameModeComboBox")
         self.kotor_output_name_mode_combo.addItem("Vanilla slot override", KotorOutputAnimationNameMode.VANILLA_SLOT.value)
         self.kotor_output_name_mode_combo.addItem("Custom animation patch", KotorOutputAnimationNameMode.CUSTOM_PATCH.value)
+        self.kotor_output_name_mode_combo.setToolTip(
+            "Use a known vanilla animation slot for normal engine playback, or create a custom patch that requires script/2DA integration."
+        )
         self.target_kotor_animation_slot_combo = QtWidgets.QComboBox(self.retarget_output_global_controls)
         self.target_kotor_animation_slot_combo.setObjectName("targetKotorAnimationSlotComboBox")
         self.target_kotor_animation_slot_combo.setEditable(True)
         self.target_kotor_animation_slot_combo.setMinimumWidth(120)
+        self.target_kotor_animation_slot_combo.setToolTip(
+            "KOTOR animation slot to replace or override. Inherited supermodel slots are resolved from the selected game library."
+        )
         self.custom_kotor_animation_name_edit = QtWidgets.QLineEdit(self.retarget_output_global_controls)
         self.custom_kotor_animation_name_edit.setObjectName("customKotorAnimationNameLineEdit")
         self.custom_kotor_animation_name_edit.setPlaceholderText("gr_spin_attack_01")
+        self.custom_kotor_animation_name_edit.setToolTip("Engine-safe name for a custom animation patch.")
         self.output_unreal_clip_name_edit = QtWidgets.QLineEdit(self.retarget_output_global_controls)
         self.output_unreal_clip_name_edit.setObjectName("outputUnrealClipNameLineEdit")
         self.output_unreal_clip_name_edit.setPlaceholderText("pmbam_pause1")
+        self.output_unreal_clip_name_edit.setToolTip("Animation clip name written when exporting KOTOR motion to Unreal/FBX.")
         self.retarget_output_display_label_edit = QtWidgets.QLineEdit(self.retarget_output_global_controls)
         self.retarget_output_display_label_edit.setObjectName("retargetOutputDisplayLabelLineEdit")
         self.retarget_output_display_label_edit.setPlaceholderText("Display label / notes")
-        for widget in (
-            self.kotor_output_name_mode_combo,
-            self.target_kotor_animation_slot_combo,
-            self.custom_kotor_animation_name_edit,
-            self.output_unreal_clip_name_edit,
-            self.retarget_output_display_label_edit,
-        ):
-            names.addWidget(widget)
+        self.retarget_output_display_label_edit.setToolTip("Project-facing label or notes; this does not rename KOTOR controller data.")
+        output_fields = (
+            ("kotor_output_name_mode_label", "Output policy", self.kotor_output_name_mode_combo),
+            ("target_kotor_animation_slot_label", "KOTOR slot", self.target_kotor_animation_slot_combo),
+            ("custom_kotor_animation_name_label", "Custom name", self.custom_kotor_animation_name_edit),
+            ("output_unreal_clip_name_label", "Unreal clip", self.output_unreal_clip_name_edit),
+            ("retarget_output_display_label", "Notes", self.retarget_output_display_label_edit),
+        )
+        for column, (attribute_name, label_text, widget) in enumerate(output_fields):
+            label = QtWidgets.QLabel(label_text, self.retarget_output_global_controls)
+            label.setObjectName(f"{widget.objectName()}Label")
+            label.setBuddy(widget)
+            setattr(self, attribute_name, label)
+            names.addWidget(label, 0, column)
+            names.addWidget(widget, 1, column)
         outer.addWidget(self.retarget_output_global_controls, 0)
 
         details = QtWidgets.QGridLayout()
@@ -771,6 +823,11 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
         pose = AnimPose(time=float(getattr(source_pose, "time_seconds", time_seconds) or time_seconds))
         global_transforms = getattr(source_pose, "global_transforms", {}) or {}
         local_transforms = getattr(source_pose, "local_transforms", {}) or {}
+        local_transforms_by_key = {
+            str(node_name).lower(): transform
+            for node_name, transform in local_transforms.items()
+        }
+        model = getattr(self.source_viewport, "model", None)
         for node_name, transform in global_transforms.items():
             preview_node = None
             if model is not None and hasattr(model, "find_node"):
@@ -784,6 +841,9 @@ class QtAnimationRetargetWindow(QtWidgets.QMainWindow):
                     )
                     preview_node = None
             position = self._source_clip_pose_delta(preview_node, str(node_name), global_transforms, transform)
+            local_transform = local_transforms.get(node_name)
+            if local_transform is None:
+                local_transform = local_transforms_by_key.get(str(node_name).lower())
             rotation = getattr(local_transform, "rotation", None) if local_transform is not None else None
             pose.nodes[str(node_name).lower()] = NodePose(
                 name=str(node_name),

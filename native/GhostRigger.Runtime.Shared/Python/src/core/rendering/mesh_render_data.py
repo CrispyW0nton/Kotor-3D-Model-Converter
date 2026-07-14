@@ -96,6 +96,13 @@ class ScopedAnimationPoseSet:
                 if str(getattr(pose, "_gr_animation_scene_import_id", "") or "") == node_import_id:
                     return pose
         node_source_id = _source_model_id_for_node(node)
+        # A scoped collection is intentionally stricter than a legacy single
+        # pose.  Identity-free module geometry must never inherit whichever
+        # character happens to be first in ``poses_by_character``.  Runtime
+        # actor descendants still resolve their inherited object/import/source
+        # identity through the parent-chain helpers above.
+        if not node_object_id and not node_import_id and not node_source_id:
+            return None
         for pose in self.poses_by_character.values():
             if _animation_pose_matches_node_identity(node, pose, node_object_id=node_object_id, node_import_id=node_import_id, node_source_id=node_source_id):
                 return pose
@@ -175,6 +182,7 @@ def iter_mesh_render_data(
                     skinning,
                     node_anim_pose,
                     model=model,
+                    anim_base_pose=anim_base_pose,
                 )
                 if skinned_positions is not positions:
                     positions = skinned_positions
@@ -203,6 +211,7 @@ def iter_mesh_render_data(
                     skinning,
                     node_anim_pose,
                     model=model,
+                    anim_base_pose=anim_base_pose,
                 )
                 if skinned_positions is not positions:
                     positions = skinned_positions
@@ -276,14 +285,28 @@ def _node_is_renderable_mesh(node) -> bool:
     return bool(getattr(node, "vertices", getattr(node, "verts", [])) and getattr(node, "faces", []))
 
 
+def _node_vertices_are_model_world(node) -> bool:
+    if bool(getattr(node, "_gr_vertices_in_kotor_world", False)):
+        return True
+    try:
+        return int(getattr(node, "vertex_space", 0) or 0) == 1
+    except Exception:
+        return False
+
+
 def _extract_node_arrays(node, *, anim_pose=None, vbo_builder=None):
     import numpy as np
 
     is_skin = bool(getattr(node, "is_skin", False))
     is_bas_attachment = bool(getattr(node, "_gr_bas_attachment_layer", False))
     bas_root = _bas_attachment_root_for_node(node) if is_bas_attachment else None
+    vertices_are_model_world = _node_vertices_are_model_world(node)
     world_pos, world_orient = _node_world_transform(node, anim_pose=anim_pose)
     world_matrix = node_world_matrix(node, anim_pose=anim_pose)
+    if vertices_are_model_world and not is_bas_attachment:
+        world_pos = (0.0, 0.0, 0.0)
+        world_orient = (0.0, 0.0, 0.0, 1.0)
+        world_matrix = np.eye(4, dtype=np.float32)
     if is_skin and bas_root is not None:
         # BAS skin attachments must stay out of the body palette, but their
         # bind-shape should remain local to the attachment root.  Keeping large
@@ -619,6 +642,10 @@ def bas_attachment_palette_model_for_node(node):
 def mesh_model_matrix_for_node(node, *, anim_pose=None):
     """Return the world/model matrix a renderer should apply to one mesh node."""
 
+    if _node_vertices_are_model_world(node) and not bool(getattr(node, "_gr_bas_attachment_layer", False)):
+        import numpy as np
+
+        return np.eye(4, dtype=np.float32)
     anim_pose = _effective_animation_pose_for_node(node, anim_pose)
     if bool(getattr(node, "_gr_bas_attachment_layer", False)):
         root = _bas_attachment_root_for_node(node)
@@ -1214,6 +1241,27 @@ def _source_model_id_for_node(node) -> int:
     return 0
 
 
+def runtime_source_model_for_node(node):
+    """Return the runtime actor model that owns ``node``'s skin palette.
+
+    PIE actors live inside a much larger resident map model.  Their qBone/tBone
+    rows and DFS indices still belong to the original character model, so a
+    renderer must not infer a palette from the map hierarchy.  The reference is
+    stored on the runtime wrapper and resolved through ancestors to avoid
+    retaining a duplicate strong reference on every copied Odyssey node.
+    """
+
+    current = node
+    visited: set[int] = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        source_model = getattr(current, "_gr_runtime_source_model_ref", None)
+        if source_model is not None:
+            return source_model
+        current = getattr(current, "parent", None)
+    return None
+
+
 def animation_pose_for_node(node, anim_pose):
     """Return the single character pose allowed to drive ``node``."""
 
@@ -1249,11 +1297,15 @@ def _animation_pose_matches_node_identity(
         node_object_id = _scene_object_id_for_node(node) if node_object_id is None else node_object_id
         if node_object_id and node_object_id != pose_object_id:
             return False
+        if node_object_id:
+            return True
     pose_import_id = str(getattr(anim_pose, "_gr_animation_scene_import_id", "") or "")
     if pose_import_id:
         node_import_id = _scene_import_id_for_node(node) if node_import_id is None else node_import_id
         if node_import_id and node_import_id != pose_import_id:
             return False
+        if node_import_id:
+            return True
     try:
         pose_source_id = int(getattr(anim_pose, "_gr_animation_source_model_id", 0) or 0)
     except Exception:
@@ -1306,6 +1358,53 @@ def _bas_attachment_local_transform(node, bas_root):
     return (float(wx), float(wy), float(wz)), tuple(float(v) for v in parent_orientation[:4])
 
 
+def _animated_world_cache_key_from_chain(chain) -> tuple:
+    key_parts = []
+    for chain_node in chain:
+        try:
+            position = tuple(round(float(v), 6) for v in tuple(getattr(chain_node, "position", (0.0, 0.0, 0.0)))[:3])
+        except Exception:
+            position = (0.0, 0.0, 0.0)
+        try:
+            rotation = tuple(round(float(v), 6) for v in tuple(getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0)))[:4])
+        except Exception:
+            rotation = (0.0, 0.0, 0.0, 1.0)
+        try:
+            source_position = tuple(
+                round(float(v), 6)
+                for v in tuple(getattr(chain_node, "_gr_scene_source_position", position))[:3]
+            )
+        except Exception:
+            source_position = position
+        key_parts.append(
+            (
+                id(chain_node),
+                int(getattr(chain_node, "_gr_revision", 0) or 0),
+                bool(getattr(chain_node, "_gr_scene_object_root", False)),
+                position,
+                source_position,
+                rotation,
+            )
+        )
+    return tuple(key_parts)
+
+
+def _animated_pose_cache_stamp(anim_pose) -> tuple:
+    def _stamp_value(name: str, fallback=0.0):
+        try:
+            return round(float(getattr(anim_pose, name, fallback) or fallback), 6)
+        except Exception:
+            return fallback
+
+    return (
+        _stamp_value("time"),
+        _stamp_value("current_time"),
+        _stamp_value("_gr_animation_time"),
+        int(getattr(anim_pose, "_gr_revision", 0) or 0),
+        str(getattr(anim_pose, "_gr_animation_name", "") or ""),
+    )
+
+
 def _animated_node_world_transform(node, anim_pose) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
     import math
 
@@ -1323,10 +1422,6 @@ def _animated_node_world_transform(node, anim_pose) -> tuple[tuple[float, float,
             setattr(anim_pose, "_gr_mesh_world_cache", cache)
         except Exception:
             pass
-    cached = cache.get(id(node))
-    if cached is not None:
-        return cached
-
     chain = []
     current = node
     visited: set[int] = set()
@@ -1338,6 +1433,10 @@ def _animated_node_world_transform(node, anim_pose) -> tuple[tuple[float, float,
         chain.append(current)
         current = getattr(current, "parent", None)
     chain.reverse()
+    cache_key = (id(node), _animated_pose_cache_stamp(anim_pose), _animated_world_cache_key_from_chain(chain))
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
 
     wx = wy = wz = 0.0
     parent_orientation = [0.0, 0.0, 0.0, 1.0]
@@ -1384,7 +1483,7 @@ def _animated_node_world_transform(node, anim_pose) -> tuple[tuple[float, float,
             scale = 1.0 / math.sqrt(length_sq)
             wo = tuple(float(v) * scale for v in wo[:4])
         result = ((float(wx), float(wy), float(wz)), tuple(float(v) for v in wo[:4]))
-    cache[id(node)] = result
+    cache[cache_key] = result
     return result
 
 
@@ -1399,11 +1498,13 @@ def _material_color(node) -> tuple[float, float, float, float]:
     return (_clamp01(r), _clamp01(g), _clamp01(b), _clamp01(alpha))
 
 
-def _node_revision(node) -> tuple[int, int, int]:
+def _node_revision(node) -> tuple[int, ...]:
     return (
         len(getattr(node, "vertices", getattr(node, "verts", [])) or []),
         len(getattr(node, "faces", []) or []),
         int(getattr(node, "_gr_revision", 0) or 0),
+        int(getattr(node, "vertex_space", 0) or 0),
+        1 if bool(getattr(node, "_gr_vertices_in_kotor_world", False)) else 0,
     )
 
 

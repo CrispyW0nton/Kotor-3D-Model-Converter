@@ -8,6 +8,7 @@ from typing import Any
 _EXPORTS: dict[str, str] = {
     "QtViewportWidget": "src.gui.viewports.viewport_core.widgets.viewport_widget",
     "QtMainViewportWidget": "src.gui.viewports.viewport_core.widgets.variants",
+    "QtMapStudioViewportWidget": "src.gui.viewports.viewport_core.widgets.variants",
     "QtCharacterBuilderViewportWidget": "src.gui.viewports.viewport_core.widgets.variants",
     "QtRetargetViewportWidget": "src.gui.viewports.viewport_core.widgets.variants",
     "QtUnrealAnimatorViewportWidget": "src.gui.viewports.viewport_core.widgets.variants",

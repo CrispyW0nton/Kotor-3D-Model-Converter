@@ -1,7 +1,48 @@
 from __future__ import annotations
 
+import os
 import sys
+from dataclasses import replace
 from pathlib import Path
+from time import perf_counter, sleep
+from types import SimpleNamespace
+
+import pytest
+
+
+def test_t3002_direct_placement_workspace_and_viewport_contract() -> None:
+    root = Path(__file__).resolve().parents[1]
+    display = root / "native" / "GhostRigger.Core.GUI.Display" / "Python" / "src" / "gui" / "panels" / "module_editor"
+    placement_source = (display / "placement_tab.py").read_text(encoding="utf-8")
+    viewport_source = (display / "module_editor_viewport_panel.py").read_text(encoding="utf-8")
+    window_source = (
+        root / "native" / "GhostRigger.Core.Tools" / "Python" / "src" / "gui" / "windows" / "module_editor_window.py"
+    ).read_text(encoding="utf-8")
+
+    for token in (
+        "mapStudioPlaceInViewportButton",
+        "mapStudioPlacementSnapWalkmeshCheckBox",
+        "mapStudioPlacementInstanceComboBox",
+        "placementModeChanged",
+        "transformRequested",
+        "snap_to_walkmesh",
+    ):
+        assert token in placement_source
+    for token in (
+        "placementRequested = QtCore.Signal(object)",
+        "set_placement_tool_context",
+        "_place_from_viewport_event",
+        "KOTOR GIT placements do not support arbitrary scale",
+        "math.radians(delta_degrees)",
+    ):
+        assert token in viewport_source
+    for token in (
+        "self.placement_tab = PlacementTab()",
+        '("Place", self.placement_tab)',
+        "_place_authored_gameplay_from_viewport",
+        "snap_authored_gameplay_placement_to_walkmesh",
+    ):
+        assert token in window_source
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +58,9 @@ def _install_native_payload_paths() -> None:
             "native/GhostRigger.Core.Scene/Python",
             "native/GhostRigger.Core.Tools/Python",
             "native/GhostRigger.Core.Resources/Python",
+            "native/GhostRigger.Core.Project/Python",
+            "native/GhostRigger.Core.IO/Python",
+            "native/GhostRigger.Core.Workflow/Python",
             "native/GhostRigger.Core.Math/Python",
             "native/GhostRigger.Core.Rendering/Python",
             ".",
@@ -316,6 +360,15 @@ def test_t2600_level_editor_wires_workflow_panel_to_readiness_contract() -> None
     assert "MapStudioWorkflowPanel" in init_source
 
 
+def test_map_studio_top_focus_button_routes_to_selected_scene_row() -> None:
+    for rel in (
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py",
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py",
+    ):
+        source = _read(rel)
+        assert "self.focus_button.clicked.connect(self.focus_selected)" in source
+
+
 def test_t2600_level_editor_exposes_map_studio_workspace_switcher() -> None:
     window_source = _read(
         "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
@@ -479,6 +532,7 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
         assert "mapStudioFloorPlanOpeningMarkerRoomComboBox" in source
         assert "mapStudioFloorPlanOpeningMarkerNameComboBox" in source
         assert "mapStudioFloorPlanOpeningMarkerKindComboBox" in source
+        assert "mapStudioFloorPlanOpeningMarkerTargetTypeComboBox" in source
         assert "mapStudioFloorPlanOpeningMarkerTransitionDestSpinBox" in source
         assert "mapStudioCreateOpeningTransitionMarkerButton" in source
         assert "def _emit_floor_plan_opening_marker" in source
@@ -948,11 +1002,10 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "mapStudioToolContextMenuSearchResultsMenu" in window_source
     assert "def _open_map_studio_tool_context_menu" in window_source
     assert "mapStudioModeMarkingMenu" in window_source
+    assert "mapStudioModeMarkingButton_edit" in window_source
     assert "mapStudioModeMarkingButton_object" in window_source
-    assert "mapStudioModeMarkingButton_vertex" in window_source
-    assert "mapStudioModeMarkingButton_edge" in window_source
-    assert "mapStudioModeMarkingButton_face" in window_source
-    assert "mapStudioModeMarkingButton_select" in window_source
+    assert "mapStudioModeMarkingButton_terrain" in window_source
+    assert "mapStudioModeMarkingButton_placement" in window_source
     assert "mapStudioToolMarkingMenu" in window_source
     assert "mapStudioToolMarkingQuickButton_extrude" in window_source
     assert "mapStudioToolMarkingQuickButton_bridge" in window_source
@@ -962,7 +1015,7 @@ def test_t2908_map_studio_exposes_component_vertex_tools_and_customizable_belt()
     assert "mapStudioToolMarkingQuickButton_bevel" in window_source
     assert "mapStudioToolMarkingTerrainBrushesMenu" in window_source
     assert "mapStudioToolMarkingUvMappingMenu" in window_source
-    assert "mapStudioToolMarkingPlannedMenu" in window_source
+    assert "mapStudioToolMarkingPlannedMenu" not in window_source
     assert "def _build_map_studio_mode_marking_menu" in window_source
     assert "def _build_map_studio_tool_marking_menu" in window_source
     assert "def _run_map_studio_mode_marking_action" in window_source
@@ -1434,7 +1487,7 @@ def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
         assert "prepare_map_studio_terrain_sculpt_frame" in source
         assert "apply_map_studio_terrain_sculpt_frame" in source
         assert "MapStudioTerrainSculptApplyResult" in source
-        assert "full MDL/WOK rebuild deferred" in source
+        assert "never serialize per frame" in source
         assert "return self.authored_module_readiness()" not in source[
             source.index("def apply_map_studio_terrain_sculpt_frame") : source.index("def merge_authored_floor_plan_rooms")
         ]
@@ -1572,13 +1625,20 @@ def test_t2603_map_studio_exposes_live_terrain_sculpt_frame_contract() -> None:
         window_source.index("def commit_map_studio_viewport_terrain_brush_stroke")
     ]
     assert "apply_map_studio_terrain_sculpt_frame" in live_apply_source
-    assert "authored_terrain_walkability_overlay" in live_apply_source
+    assert "apply_terrain_height_patch" in live_apply_source
+    assert "KMAP encode and full walkability rebuild deferred" in live_apply_source
     assert "_refresh_all" not in live_apply_source
     commit_source = window_source[
         window_source.index("def commit_map_studio_viewport_terrain_brush_stroke") :
         window_source.index("def merge_authored_floor_plan_rooms")
     ]
-    assert "_refresh_all(message)" in commit_source
+    assert "_refresh_map_studio_geometry_change(" in commit_source
+    assert "rebuild_viewport_model=False" in commit_source
+    assert "refresh_scene_tree=False" in commit_source
+    assert "validation_delay_ms=250" in commit_source
+    assert "set_terrain_walkability_overlay(None)" in commit_source
+    assert "self.controller.authored_terrain_walkability_overlay()" not in commit_source
+    assert "_refresh_all" not in commit_source
     assert "def preview_map_studio_terrain_sculpt_frame" in window_source
     assert "full MDL/WOK rebuild deferred" in window_source
 
@@ -1928,6 +1988,8 @@ def test_t2600_map_studio_rooms_tab_explains_room_graph_workflow() -> None:
     )
 
     for source in (rooms_source, rooms_mirror_source):
+        # 2026-07-07 UI cleanup: workflow guidance moved from three body
+        # paragraphs into the tab tooltip so the dock shows controls, not prose.
         assert "mapStudioRoomsWorkflowLabel" in source
         assert "mapStudioRoomsLayoutHintLabel" in source
         assert "mapStudioRoomsAuthoringHintLabel" in source
@@ -1935,12 +1997,16 @@ def test_t2600_map_studio_rooms_tab_explains_room_graph_workflow() -> None:
         assert "validate LYT/VIS links before packaging" in source
         assert "LYT stores room models and transforms" in source
         assert "VIS controls which rooms can see each other" in source
-        assert "Keep room resrefs stable for WOK, MDL/MDX, and placed resources" in source
+        assert "Keep room resrefs stable" in source
         assert "Use Builder for new geometry" in source
         assert "mapStudioRoomsLoadLytButton" in source
         assert "mapStudioRoomsAddRoomButton" in source
         assert "mapStudioRoomsRemoveRoomButton" in source
         assert "mapStudioRoomsDuplicateRoomButton" in source
+        assert "mapStudioRoomsConnectOpeningsButton" in source
+        assert "mapStudioRoomsAuditConnectionsButton" in source
+        assert "def set_connection_audit" in source
+        assert "WOK transition edges and in-game traversal" in source
         assert "mapStudioRoomsSaveLayoutButton" in source
         assert "mapStudioRoomsFocusSelectedButton" in source
         assert "mapStudioRoomsAutoArrangeButton" in source
@@ -2075,10 +2141,11 @@ def test_t2600_map_studio_properties_exposes_transition_controls() -> None:
     )
 
     for source in (properties_source, properties_mirror_source):
-        assert "transitionChanged = QtCore.Signal(str, str, str, int)" in source
+        assert "transitionChanged = QtCore.Signal(str, str, str, int, int)" in source
         assert "mapStudioTransitionPropertiesGroup" in source
         assert "mapStudioTransitionLinkedToLineEdit" in source
         assert "mapStudioTransitionLinkedModuleLineEdit" in source
+        assert "mapStudioTransitionTargetTypeComboBox" in source
         assert "mapStudioTransitionDestinationSpinBox" in source
         assert "transition_capable" in source
         assert "self.transition_group.setVisible(transition_capable)" in source
@@ -2106,7 +2173,7 @@ def test_t2600_map_studio_properties_exposes_selected_room_light_controls() -> N
     )
 
     for source in (properties_source, properties_mirror_source):
-        assert "roomLightChanged = QtCore.Signal(str, str, object, float, float)" in source
+        assert "roomLightChanged = QtCore.Signal(str, object)" in source
         assert "mapStudioRoomLightPropertiesGroup" in source
         assert "mapStudioRoomLightTypeComboBox" in source
         assert "mapStudioRoomLightColorRSpinBox" in source
@@ -2114,6 +2181,13 @@ def test_t2600_map_studio_properties_exposes_selected_room_light_controls() -> N
         assert "mapStudioRoomLightColorBSpinBox" in source
         assert "mapStudioRoomLightRadiusSpinBox" in source
         assert "mapStudioRoomLightIntensitySpinBox" in source
+        assert "mapStudioRoomLightEnabledCheckBox" in source
+        assert "mapStudioRoomLightCastsShadowsCheckBox" in source
+        assert "mapStudioRoomLightAffectsDiffuseCheckBox" in source
+        assert "mapStudioRoomLightAffectsLightmapCheckBox" in source
+        assert "mapStudioRoomLightDirection{axis}SpinBox" in source
+        assert "mapStudioRoomLightConeAngleSpinBox" in source
+        assert "mapStudioRoomLightBakeGroupLineEdit" in source
         assert "self.room_light_group.setVisible(True)" in source
         assert "def _room_light_changed" in source
 
@@ -2358,3 +2432,1012 @@ def test_t2600_map_studio_readiness_validation_projection_is_mirrored() -> None:
         assert "issues.extend(" in text
         assert "bridge_warnings=readiness_result.warnings" in text
 
+
+def test_t2905_gmodeler_hover_uses_stable_mesh_component_identity() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.map_studio_hover_context import (
+        MapStudioHoverCandidateFace,
+        pick_map_studio_hover_context,
+    )
+    from src.core.modules.map_studio_marking_menu_registry import available_map_studio_marking_menu_trees
+
+    first = MapStudioHoverCandidateFace(
+        room_resref="grhover01",
+        mesh_role="render",
+        face_index=4,
+        screen_points=((0.0, 0.0), (100.0, 0.0), (100.0, 100.0)),
+        world_points=((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0)),
+        vertex_indices=(10, 11, 12),
+    )
+    second = MapStudioHoverCandidateFace(
+        room_resref="grhover01",
+        mesh_role="render",
+        face_index=9,
+        screen_points=((0.0, 0.0), (100.0, 100.0), (0.0, 100.0)),
+        world_points=((0.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0)),
+        vertex_indices=(10, 12, 13),
+    )
+
+    edge = pick_map_studio_hover_context((first, second), 50.0, 50.0)
+    assert edge.component_type == "edge"
+    assert edge.mesh_edge_indices == (10, 12)
+    assert edge.adjacent_face_indices == (4, 9)
+    assert edge.is_border is False
+
+    face = pick_map_studio_hover_context((first, second), 50.0, 20.0)
+    assert face.component_type == "face"
+    assert face.selector_edge_corners == (0, 1)
+    assert face.selector_world_point == (0.5, 0.0, 0.0)
+    for tree in available_map_studio_marking_menu_trees():
+        assert len(tree.action_keys) == len(set(tree.action_keys))
+
+
+def test_t2907_live_terrain_sculpt_interpolates_segments_and_exposes_hardness() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.map_studio_terrain_sculpt_session import (
+        interpolate_terrain_sculpt_segment,
+        terrain_sculpt_brush_is_deferred,
+    )
+
+    points = interpolate_terrain_sculpt_segment((2, 1, 0.25), (2, 6, 1.0), include_start=True)
+    assert [(point.row_index, point.column_index) for point in points] == [
+        (2, 1),
+        (2, 2),
+        (2, 3),
+        (2, 4),
+        (2, 5),
+        (2, 6),
+    ]
+    assert terrain_sculpt_brush_is_deferred("ramp") is True
+    assert terrain_sculpt_brush_is_deferred("raise") is False
+
+    builder = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/builder_tab.py"
+    )
+    viewport = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+    )
+    assert "mapStudioTerrainHardnessSpinBox" in builder
+    assert 'terrain_layout.addRow("Falloff hardness:"' in builder
+    assert "key == QtCore.Qt.Key_Space" in viewport
+    assert "self.terrainBrushFrameRequested.emit(brush, room_resref, tuple(segment))" in viewport
+
+
+def test_t2603_imported_face_extrude_promotes_resident_mesh_without_renderer_reset(monkeypatch) -> None:
+    """A topology commit replaces one mesh, not the combined module model."""
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _install_native_payload_paths()
+
+    import moderngl
+    from PySide6 import QtWidgets
+
+    monkeypatch.setattr(moderngl.VertexArray, "render", lambda self, *args, **kwargs: None)
+
+    from scripts.gmodeler_tool_matrix import _cube_surfaces
+    from src.core.modules.authored_imported_mesh import ImportedMeshRoomPrimitive
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        authored_project_to_kmap_payload,
+    )
+    from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+    from src.core.modules.authored_module_project import (
+        AuthoredModuleMetadata,
+        AuthoredModuleProject,
+        AuthoredRoomSpec,
+    )
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    room_resref = "perfroom"
+    base = _cube_surfaces()[0]
+    neighbor = replace(
+        base,
+        name="neighbor_cube",
+        vertices=tuple((vertex[0] + 4.0, vertex[1], vertex[2]) for vertex in base.vertices),
+    )
+    authored = AuthoredModuleProject(
+        metadata=AuthoredModuleMetadata(
+            module_root="perfmod",
+            game="K1",
+            display_name="Topology Commit Performance",
+            tag="perfmod",
+        ),
+        rooms=(
+            AuthoredRoomSpec(
+                room_resref=room_resref,
+                primitive=ImportedMeshRoomPrimitive(
+                    room_resref=room_resref,
+                    surfaces=(base, neighbor),
+                    game="K1",
+                ),
+            ),
+        ),
+        placements=AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref="perfmod")),
+    )
+
+    window = ModuleEditorWindow()
+    try:
+        window.controller.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(authored)
+        window._refresh_all("topology performance fixture")
+        app.processEvents()
+
+        viewport = window.viewport_panel.viewport
+        resident_model = viewport.model
+        nodes = {
+            str(getattr(node, "_gr_map_studio_mesh_role", "") or ""): node
+            for _room_node, node in window.viewport_panel._iter_room_preview_mesh_nodes(room_resref)
+        }
+        target = nodes["render"]
+        neighbor_node = nodes["imported_srf_1"]
+        target_faces_before = len(target.faces)
+        load_model_calls: list[object] = []
+        original_load_model = viewport.load_model
+
+        def tracked_load_model(*args, **kwargs):
+            load_model_calls.append(args[0] if args else None)
+            return original_load_model(*args, **kwargs)
+
+        viewport.load_model = tracked_load_model
+        payload = {
+            "kind": "face",
+            "room_resref": room_resref,
+            "mesh_role": "render",
+            "face_indices": (0,),
+            "distance": 0.5,
+            "axis_mode": "normal",
+            "axis": (0.0, 0.0, 1.0),
+        }
+        window._preview_map_studio_component_extrude(payload)
+        window._commit_map_studio_component_extrude(payload)
+
+        assert load_model_calls == []
+        assert viewport.model is resident_model
+        assert nodes["render"] is target
+        assert nodes["imported_srf_1"] is neighbor_node
+        assert len(target.faces) > target_faces_before
+        assert window.viewport_panel._component_mesh_preview_baselines == {}
+        assert window.viewport_panel._room_preview_model_key.startswith("resident-topology:perfroom:render:")
+        assert window._last_map_studio_geometry_refresh_ms < 10.0
+
+        committed = authored_project_from_kmap_payload(
+            window.controller.project.extra_sections["authored_module"],
+            fallback_name="perfmod",
+            fallback_game="K1",
+        )
+        assert len(committed.rooms[0].primitive.surfaces[0].faces) == len(target.faces)
+        assert window.controller.command_history.undo_label.startswith("Extrude 1 face(s)")
+
+        generation = int(window._map_studio_geometry_refresh_generation)
+        started = perf_counter()
+        window._refresh_map_studio_geometry_validation(generation)
+        assert perf_counter() - started < 0.1
+        deadline = perf_counter() + 10.0
+        while (
+            getattr(window, "_map_studio_geometry_validation_future", None) is not None
+            and perf_counter() < deadline
+        ):
+            app.processEvents()
+            sleep(0.005)
+        app.processEvents()
+        assert getattr(window, "_map_studio_geometry_validation_future", None) is None
+        assert window._last_map_studio_geometry_validation_ms > 0.0
+
+        window.undo_map_studio_command()
+        assert len(load_model_calls) == 1
+    finally:
+        window.controller.project.dirty = False
+        window.close()
+        app.processEvents()
+
+
+def test_t2603_topology_refresh_defers_validation_and_keeps_structural_fallback(monkeypatch) -> None:
+    _install_native_payload_paths()
+
+    from concurrent.futures import Future
+
+    from PySide6 import QtCore
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    scheduled: list[tuple[int, object]] = []
+    monkeypatch.setattr(
+        QtCore.QTimer,
+        "singleShot",
+        lambda delay, callback: scheduled.append((int(delay), callback)),
+    )
+    live_drag_window = SimpleNamespace(
+        _map_studio_geometry_refresh_generation=4,
+        viewport_panel=SimpleNamespace(_component_extrude_drag={"active": True}),
+    )
+    ModuleEditorWindow._refresh_map_studio_geometry_validation(live_drag_window, 4)
+    assert len(scheduled) == 1
+    assert scheduled[0][0] == 100
+
+    stale_future: Future = Future()
+    stale_future.set_result({})
+    replaced_project_window = SimpleNamespace(
+        _map_studio_geometry_validation_future_generation=3,
+        _map_studio_geometry_validation_future=stale_future,
+        _map_studio_geometry_refresh_generation=4,
+        _map_studio_geometry_validation_requested_generation=-1,
+        _refresh_map_studio_geometry_validation=lambda _generation: (_ for _ in ()).throw(
+            AssertionError("a broad refresh already supplied current readiness")
+        ),
+    )
+    ModuleEditorWindow._poll_map_studio_geometry_validation(replaced_project_window, 3)
+    assert replaced_project_window._map_studio_geometry_validation_future is None
+
+    refresh_calls: list[dict[str, object]] = []
+    room_spec = SimpleNamespace(primitive=SimpleNamespace(surfaces=(object(),)))
+    controller = SimpleNamespace(
+        last_committed_imported_mesh_room=lambda _room: room_spec,
+        imported_mesh_room=lambda _room: room_spec,
+    )
+    panel = SimpleNamespace(
+        _iter_room_preview_mesh_nodes=lambda _room: iter(((object(), object()), (object(), object()))),
+        promote_component_mesh_preview=lambda *_args: (_ for _ in ()).throw(
+            AssertionError("mismatched surface layout must not promote")
+        ),
+    )
+    fallback_window = SimpleNamespace(
+        controller=controller,
+        viewport_panel=panel,
+        _show_live_imported_surface=lambda *_args: (_ for _ in ()).throw(
+            AssertionError("mismatched surface layout must not patch a node")
+        ),
+        _refresh_map_studio_geometry_change=lambda _message, **kwargs: refresh_calls.append(kwargs),
+    )
+    promoted = ModuleEditorWindow._refresh_map_studio_imported_mesh_change(
+        fallback_window,
+        "deleted a whole material surface",
+        "perfroom",
+        "render",
+    )
+    assert promoted is False
+    assert refresh_calls == [{"rebuild_viewport_model": True, "refresh_scene_tree": True}]
+
+    source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
+    assert "rebuild_viewport_model=not promoted" in source
+    assert "refresh_scene_tree=not promoted" in source
+    assert "QtCore.QTimer.singleShot(75" in source
+    assert "_MAP_STUDIO_VALIDATION_EXECUTOR.submit" in source
+    assert "def _poll_map_studio_geometry_validation" in source
+
+
+def test_map_studio_generate_walkmesh_action_recompiles_without_broad_refresh_or_kmap_mutation() -> None:
+    _install_native_payload_paths()
+
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    status = SimpleNamespace(
+        ready=True,
+        room_count=1,
+        terrain_room_count=1,
+        walkable_triangle_count=32,
+        non_walk_triangle_count=0,
+        max_slope_degrees=4.9,
+        blocking_messages=(),
+        next_action="Validate before staging.",
+    )
+    overlay = object()
+    calls: dict[str, object] = {}
+    window = SimpleNamespace(
+        controller=SimpleNamespace(
+            authored_walkmesh_status=lambda: status,
+            authored_walkmesh_room_surface_choices=lambda: ("room-surface",),
+            authored_terrain_walkability_overlay=lambda: overlay,
+        ),
+        walkmesh_tab=SimpleNamespace(
+            set_walkmesh_status=lambda value: calls.setdefault("status", value),
+            set_room_surface_choices=lambda value: calls.setdefault("surfaces", value),
+        ),
+        viewport_panel=SimpleNamespace(
+            set_terrain_walkability_overlay=lambda value: calls.setdefault("overlay", value),
+        ),
+        workflow_panel=SimpleNamespace(
+            set_active_authoring_context=lambda value: calls.setdefault("context", value),
+        ),
+        _select_map_studio_component_mode=lambda value: calls.setdefault("mode", value),
+        _log=lambda value: calls.setdefault("log", value),
+        statusBar=lambda: SimpleNamespace(showMessage=lambda value, _timeout: calls.setdefault("message", value)),
+        _refresh_all=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("Generate Walkmesh must not reset the resident renderer")
+        ),
+    )
+
+    ModuleEditorWindow._handle_tab_action(window, "Generate Walkmesh")
+
+    assert calls["status"] is status
+    assert calls["surfaces"] == ("room-surface",)
+    assert calls["overlay"] is overlay
+    assert calls["mode"] == "walkmesh"
+    assert "Regenerated derived WOK" in str(calls["message"])
+    assert "32 walkable triangle(s)" in str(calls["message"])
+    assert "experimental" not in str(calls["log"]).lower()
+
+    source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
+    assert 'if action in {"Generate Walkmesh", "Validate Walkmesh"}:' in source
+    assert "self.workflow_tabs.currentChanged.connect(self._reset_map_studio_workflow_scroll)" in source
+    assert "def _reset_map_studio_workflow_scroll" in source
+
+
+def test_map_studio_texture_paint_ui_and_nearest_uv_streaming_contract() -> None:
+    paint_display = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/texture_paint_tab.py"
+    )
+    paint_tools = _read(
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/texture_paint_tab.py"
+    )
+    viewport_display = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+    )
+    viewport_tools = _read(
+        "native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py"
+    )
+    window = _read(
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py"
+    )
+
+    assert paint_display == paint_tools
+    assert viewport_display == viewport_tools
+    for token in (
+        "mapStudioTexturePaintTargetComboBox",
+        "mapStudioTexturePaintBrushSourceButton",
+        "mapStudioTexturePaintSizeSpinBox",
+        "mapStudioTexturePaintOpacitySpinBox",
+        "mapStudioTexturePaintFlowSpinBox",
+        "mapStudioTexturePaintHardnessSpinBox",
+        "mapStudioTexturePaintSpacingSpinBox",
+        "mapStudioTexturePaintEnableButton",
+    ):
+        assert token in paint_display
+    for token in (
+        "texturePaintStrokeBegan",
+        "texturePaintSampleRequested",
+        "set_texture_paint_interaction",
+        'getattr(context, "uv"',
+        'face_uvs = getattr(mesh_node, "face_uvs", ()) or ()',
+        "_map_studio_face_uv_points(mesh_node, face_index, face_vertex_indices)",
+    ):
+        assert token in viewport_display
+    assert "update_texture_regions" in window
+    assert '("Paint", self.texture_paint_tab)' in window
+    assert "commit_project_texture_paint" in window
+    assert "def _show_map_studio_texture_paint_workflow" in window
+    assert 'if action_key == "texture_paint":' in window
+
+
+def test_map_studio_texture_paint_hover_uses_seam_expanded_per_corner_uvs() -> None:
+    import pytest
+
+    _install_native_payload_paths()
+    from src.core.modules.map_studio_hover_context import pick_map_studio_hover_context
+    from src.gui.panels.module_editor.module_editor_viewport_panel import ModuleEditorViewportPanel
+
+    mesh = SimpleNamespace(
+        faces=((0, 1, 2),),
+        # The first triangle is the misleading geometry-vertex fallback.  The
+        # asymmetric second triangle is the face's rendered seam mapping.
+        uvs=(
+            (0.02, 0.03),
+            (0.11, 0.07),
+            (0.09, 0.19),
+            (0.61, 0.17),
+            (0.94, 0.23),
+            (0.72, 0.91),
+        ),
+        face_uvs=((3, 4, 5),),
+    )
+    uv_points = ModuleEditorViewportPanel._map_studio_face_uv_points(mesh, 0, (0, 1, 2))
+    assert tuple(uv_points[0]) == pytest.approx((0.61, 0.17))
+    assert tuple(uv_points[1]) == pytest.approx((0.94, 0.23))
+    assert tuple(uv_points[2]) == pytest.approx((0.72, 0.91))
+
+    owner = SimpleNamespace(_map_studio_face_normal=lambda _points: (0.0, 0.0, 1.0))
+    candidate = ModuleEditorViewportPanel._map_studio_projected_candidate(
+        owner,
+        lambda x, y, z, _width, _height: (x, y, z),
+        640,
+        480,
+        ((0.0, 0.0, 1.0), (100.0, 0.0, 2.0), (0.0, 100.0, 2.0)),
+        room_resref="koq200_01f",
+        mesh_role="stock_room_0",
+        material="asym_seam",
+        face_index=0,
+        walkable=None,
+        vertex_indices=(0, 1, 2),
+        uv_points=uv_points,
+    )
+    hit = pick_map_studio_hover_context((candidate,), 25.0, 25.0, tolerance_px=0.0)
+    # Perspective weights are (2/3, 1/6, 1/6); the fallback UV triangle would
+    # produce (0.0467, 0.0633), making this an asymmetric orientation check too.
+    assert hit.uv == pytest.approx((0.6833333333, 0.3033333333))
+
+    invalid_corner_mesh = SimpleNamespace(
+        faces=((0, 1, 2),),
+        uvs=mesh.uvs,
+        face_uvs=((3, 999, 5),),
+    )
+    fallback = ModuleEditorViewportPanel._map_studio_face_uv_points(invalid_corner_mesh, 0, (0, 1, 2))
+    assert tuple(fallback[0]) == pytest.approx((0.61, 0.17))
+    assert tuple(fallback[1]) == pytest.approx((0.11, 0.07))
+    assert tuple(fallback[2]) == pytest.approx((0.72, 0.91))
+
+
+def test_map_studio_texture_paint_targets_only_writable_project_sidecars() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _install_native_payload_paths()
+
+    from PySide6 import QtWidgets
+    from src.gui.panels.module_editor.texture_paint_tab import MapStudioTexturePaintTab
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    tab = MapStudioTexturePaintTab()
+    try:
+        project = SimpleNamespace(
+            textures=(
+                SimpleNamespace(texture_id="stock", resref="lda_wall01", path=""),
+                SimpleNamespace(texture_id="project", resref="paint_wall", path="map_assets/textures/paint_wall.tga"),
+            ),
+            extra_sections={
+                "authored_module": {
+                    "texture_paint_dirty": True,
+                    "texture_paint_unapplied": True,
+                    "texture_paint_pending_resrefs": ["paint_wall"],
+                }
+            },
+        )
+        emitted = []
+        tab.applyRequested.connect(lambda: emitted.append(True))
+        tab.set_project(project)
+        assert tab.target_combo.count() == 1
+        assert tab.selected_texture_id() == "project"
+        assert tab.selected_resref() == "paint_wall"
+        assert tab.apply_button.text() == "Apply Texture Changes"
+        assert tab.apply_button.isEnabled() is True
+        assert tab.has_unapplied_changes() is True
+        assert "before export" in tab.status_label.text()
+        tab.paint_button.setChecked(True)
+        assert tab.apply_button.isEnabled() is False
+        tab.stop_painting()
+        assert tab.apply_button.isEnabled() is True
+        tab.apply_button.click()
+        assert emitted == [True]
+        project.extra_sections["authored_module"]["texture_paint_dirty"] = False
+        project.extra_sections["authored_module"]["texture_paint_unapplied"] = False
+        tab.set_project(project)
+        assert tab.apply_button.isEnabled() is False
+        assert tab.has_unapplied_changes() is False
+    finally:
+        tab.close()
+        app.processEvents()
+
+
+def _map_studio_texture_apply_draft_project(tmp_path: Path):
+    from src.core.level import TextureReference, new_kmap_project
+    from src.core.modules.authored_module_kmap_bridge import create_dev_test_authored_module_payload
+    from src.core.modules.map_studio_texture_paint import encode_tga_rgba
+
+    project = new_kmap_project(name="grapply", game="K2")
+    project.path = str(tmp_path / "grapply.kmap")
+    sidecar = tmp_path / "grapply_assets" / "textures" / "paint_wall.tga"
+    sidecar.parent.mkdir(parents=True)
+    sidecar.write_bytes(encode_tga_rgba(4, 4, bytes((30, 60, 90, 255)) * 16))
+    texture = TextureReference(
+        resref="paint_wall",
+        path="grapply_assets/textures/paint_wall.tga",
+        source="map_studio:texture_paint_commit",
+        metadata={
+            "format": "tga",
+            "width": 4,
+            "height": 4,
+            "paint_revision": 3,
+            "paint_unapplied": True,
+            "diffuse_uv_channel": 0,
+            "lightmap_untouched": True,
+        },
+    )
+    project.textures.append(texture)
+    payload = create_dev_test_authored_module_payload(module_root="grapply", game="K2")
+    payload["texture_paint_dirty"] = True
+    payload["texture_paint_unapplied"] = True
+    payload["texture_paint_resref"] = "paint_wall"
+    payload["texture_paint_pending_resrefs"] = ["paint_wall"]
+    project.extra_sections["authored_module"] = payload
+    return project, texture
+
+
+def test_map_studio_texture_apply_is_an_undoable_headless_export_gate(tmp_path: Path, monkeypatch) -> None:
+    _install_native_payload_paths()
+    from src.core.modules.authored_module_kmap_bridge import (
+        TEXTURE_PAINT_UNAPPLIED_BLOCKER,
+        build_kmap_authored_module_readiness,
+    )
+    from src.core.modules.module_editor_controller import ModuleEditorController
+    import src.core.modules.module_editor_controller as controller_module
+
+    project, texture = _map_studio_texture_apply_draft_project(tmp_path)
+    controller = ModuleEditorController()
+    controller.model.set_project(project)
+    export_calls = []
+
+    def fake_export(request):
+        export_calls.append(request)
+        return SimpleNamespace(resources=(), message="dry-run export accepted")
+
+    monkeypatch.setattr(controller_module, "export_authored_module_project", fake_export)
+    readiness = build_kmap_authored_module_readiness(project).readiness
+    assert readiness is not None
+    assert readiness.can_export_candidate is False
+    assert TEXTURE_PAINT_UNAPPLIED_BLOCKER in readiness.blocking_messages
+    assert readiness.metadata["texture_paint_apply"] == {
+        "unapplied": True,
+        "pending_resrefs": ["paint_wall"],
+        "export_blocked": True,
+    }
+    with pytest.raises(ValueError, match="Apply Texture Changes"):
+        controller.export_authored_module(tmp_path / "blocked", dry_run=True)
+    assert export_calls == []
+
+    result = controller.apply_project_texture_changes()
+    payload = project.extra_sections["authored_module"]
+    assert result["applied"] is True
+    assert result["resrefs"] == ("paint_wall",)
+    assert payload["texture_paint_dirty"] is False
+    assert payload["texture_paint_unapplied"] is False
+    assert payload["texture_paint_pending_resrefs"] == []
+    assert payload["texture_paint_applied_revision"] == 1
+    assert payload["texture_paint_applied_resources"][0]["restype"] == "tga"
+    assert len(payload["texture_paint_applied_resources"][0]["sha256"]) == 64
+    assert texture.metadata["paint_applied_revision"] == 3
+    assert texture.metadata["paint_unapplied"] is False
+    assert texture.metadata["diffuse_uv_channel"] == 0
+    assert texture.metadata["lightmap_untouched"] is True
+
+    accepted = controller.export_authored_module(tmp_path / "accepted", dry_run=True)
+    assert accepted.message == "dry-run export accepted"
+    assert len(export_calls) == 1
+    assert any(item[:2] == ("paint_wall", "tga") for item in export_calls[0].extra_resources)
+    applied_readiness = build_kmap_authored_module_readiness(project).readiness
+    assert applied_readiness is not None
+    assert TEXTURE_PAINT_UNAPPLIED_BLOCKER not in applied_readiness.blocking_messages
+    assert controller.undo_map_studio_command() is not None
+    assert controller.has_unapplied_project_texture_changes() is True
+    assert controller.redo_map_studio_command() is not None
+    assert controller.has_unapplied_project_texture_changes() is False
+
+
+def test_map_studio_window_routes_apply_texture_changes_to_readiness(tmp_path: Path, monkeypatch) -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _install_native_payload_paths()
+    import moderngl
+    from PySide6 import QtWidgets
+
+    monkeypatch.setattr(moderngl.VertexArray, "render", lambda self, *args, **kwargs: None)
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    project, _texture = _map_studio_texture_apply_draft_project(tmp_path)
+    window = ModuleEditorWindow()
+    try:
+        window.controller.model.set_project(project)
+        window.texture_paint_tab.set_project(project)
+        assert window.texture_paint_tab.apply_button.isEnabled() is True
+        build_warnings = []
+        monkeypatch.setattr(
+            QtWidgets.QFileDialog,
+            "getExistingDirectory",
+            lambda *_args, **_kwargs: str(tmp_path / "blocked_build"),
+        )
+        monkeypatch.setattr(
+            QtWidgets.QMessageBox,
+            "warning",
+            lambda _parent, title, message: build_warnings.append((title, message)),
+        )
+        window.build_module_files()
+        assert build_warnings
+        assert build_warnings[-1][0] == "Build Module"
+        assert "Apply Texture Changes" in build_warnings[-1][1]
+        assert window.controller.project.extra_sections["authored_module"]["texture_paint_unapplied"] is True
+        window.texture_paint_tab.apply_button.click()
+        app.processEvents()
+        payload = window.controller.project.extra_sections["authored_module"]
+        assert payload["texture_paint_unapplied"] is False
+        assert window.texture_paint_tab.apply_button.isEnabled() is False
+        assert "eligible for module export" in window.texture_paint_tab.status_label.text()
+        assert window.controller.command_history.undo_label == "Apply Texture Changes"
+        readiness = window.controller.authored_module_readiness().readiness
+        assert readiness is not None
+        assert not any("unapplied live changes" in message for message in readiness.blocking_messages)
+    finally:
+        window.controller.project.dirty = False
+        window.close()
+        app.processEvents()
+
+
+def test_map_studio_texture_browser_combines_project_and_game_resrefs(tmp_path: Path) -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _install_native_payload_paths()
+    from PySide6 import QtWidgets
+
+    from src.core.level import TextureReference, new_kmap_project
+    from src.gui.panels.module_editor.texture_browser_dialog import MapStudioTextureBrowserDialog
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    project = new_kmap_project(name="paintlib", game="K2")
+    project.path = str(tmp_path / "paintlib.kmap")
+    project.textures.append(TextureReference(resref="shared_wall", path="paintlib_assets/textures/shared_wall.tga"))
+
+    class FakeManager:
+        def list_textures(self, game="all"):
+            assert game == "K2"
+            return [("shared_wall", "K2"), ("game_floor", "K2")]
+
+        def load_texture_image(self, _name, _game="K2"):
+            return None
+
+    dialog = MapStudioTextureBrowserDialog(FakeManager(), project=project, game="K2")
+    try:
+        rows = {name: (source, path) for name, source, path in dialog._all_textures}
+        assert rows["shared_wall"][0] == "Project"
+        assert rows["game_floor"][0] == "K2"
+        assert all(not name.startswith("(") for name in rows)
+    finally:
+        dialog.close()
+        dialog.deleteLater()
+        app.processEvents()
+
+
+def test_map_studio_texture_paint_drag_updates_only_dirty_regions_and_undoes_as_one_step(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _install_native_payload_paths()
+
+    import moderngl
+    from PySide6 import QtWidgets
+
+    monkeypatch.setattr(moderngl.VertexArray, "render", lambda self, *args, **kwargs: None)
+
+    from src.core.modules.map_studio_texture_paint import encode_tga_rgba
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    source = tmp_path / "paint_target.tga"
+    source.write_bytes(encode_tga_rgba(64, 64, bytes((20, 30, 40, 255)) * (64 * 64)))
+    window = ModuleEditorWindow()
+    try:
+        window.controller.new_project(name="grpaint2", game="K2")
+        window.controller.save_project(tmp_path / "grpaint2.kmap")
+        window.controller.create_dev_test_authored_module()
+        asset = window.controller.import_project_texture(source)
+        window.texture_paint_tab.set_project(window.project)
+        assert window._execute_map_studio_tool_belt_command("texture_paint") is True
+        assert window.workflow_tabs.currentWidget() is window.texture_paint_tab
+
+        region_updates: list[tuple[tuple[int, int, int, int], ...]] = []
+        texture_updates: list[tuple[str, object]] = []
+
+        def capture_regions(_name, _image, regions=None):
+            region_updates.append(tuple(regions or ()))
+            texture_updates.append((str(_name), _image))
+            return _image, tuple(regions or ())
+
+        window.viewport_panel.viewport.update_texture_regions = capture_regions
+        session = window._load_map_studio_texture_paint_session(asset.texture_id)
+        region_updates.clear()
+        target = Path(asset.path)
+        before = target.read_bytes()
+        context = SimpleNamespace(material=asset.resref, component_type="face")
+        payload = {"context": context, "uv": (0.5, 0.5), "pressure": 1.0}
+
+        window._begin_map_studio_texture_paint_stroke(payload)
+        window._append_map_studio_texture_paint_sample(payload)
+        window._commit_map_studio_texture_paint_stroke()
+
+        assert target.read_bytes() != before
+        assert region_updates
+        assert all(width <= 64 and height <= 64 for update in region_updates for _x, _y, width, height in update)
+        texture = window._project_texture_for_id(asset.texture_id)
+        assert int(texture.metadata["paint_revision"]) == 1
+        assert window.project.extra_sections["authored_module"]["texture_paint_dirty"] is True
+        assert window.project.extra_sections["authored_module"]["texture_paint_unapplied"] is True
+        assert window.project.extra_sections["authored_module"]["texture_paint_pending_resrefs"] == [asset.resref]
+        assert window.texture_paint_tab.has_unapplied_changes() is True
+
+        window.texture_paint_tab.stop_painting()
+        assert window.texture_paint_tab.paint_button.isChecked() is False
+        assert session.can_undo is True
+        texture_updates.clear()
+        window.undo_map_studio_command()
+        assert target.read_bytes() == before
+        assert texture_updates
+        restored_name, restored_image = texture_updates[-1]
+        assert restored_name == asset.resref
+        assert getattr(restored_image, "_gr_gpu_uv_v_flip") is False
+        assert set(restored_image.get_flattened_data()) == {(20, 30, 40, 255)}
+        texture_updates.clear()
+        window.redo_map_studio_command()
+        assert target.read_bytes() != before
+        assert texture_updates and texture_updates[-1][0] == asset.resref
+    finally:
+        window.controller.project.dirty = False
+        window.close()
+        app.processEvents()
+
+
+def test_map_studio_texture_paint_live_image_has_explicit_asymmetric_orientation(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _install_native_payload_paths()
+
+    import moderngl
+    from PySide6 import QtWidgets
+
+    monkeypatch.setattr(moderngl.VertexArray, "render", lambda self, *args, **kwargs: None)
+    from src.core.modules.map_studio_texture_paint import encode_tga_rgba
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    # Top-down source rows: red/green, then blue/yellow.  The live renderer
+    # image is deliberately bottom-up and marked as already converted.
+    rgba = bytes(
+        (
+            255, 0, 0, 255,
+            0, 255, 0, 255,
+            0, 0, 255, 255,
+            255, 255, 0, 255,
+        )
+    )
+    source = tmp_path / "orientation.tga"
+    source.write_bytes(encode_tga_rgba(2, 2, rgba))
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    window = ModuleEditorWindow()
+    try:
+        window.controller.new_project(name="grorient", game="K2")
+        window.controller.save_project(tmp_path / "grorient.kmap")
+        asset = window.controller.import_project_texture(source, resref="orient_tex")
+        window.texture_paint_tab.set_project(window.project)
+        window._load_map_studio_texture_paint_session(asset.texture_id)
+        image = window._texture_paint_view_image
+        assert getattr(image, "_gr_gpu_uv_v_flip") is False
+        assert tuple(image.get_flattened_data()) == (
+            (0, 0, 255, 255),
+            (255, 255, 0, 255),
+            (255, 0, 0, 255),
+            (0, 255, 0, 255),
+        )
+    finally:
+        window.controller.project.dirty = False
+        window.close()
+        app.processEvents()
+
+
+def test_placeable_library_asset_is_searchable_and_resolved_for_map_studio_export(
+    tmp_path: Path,
+) -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _install_native_payload_paths()
+
+    from PySide6 import QtWidgets
+
+    from src.core.project.placeable_asset import PlaceableAsset, save_placeable_asset
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    library_root = tmp_path / "PlaceableLibrary"
+    asset = PlaceableAsset(
+        game="K2",
+        template_resref="pb_crate",
+        tag="pb_crate",
+        display_name="Supply Crate",
+        category="container",
+        appearance_id=4,
+    )
+    save_placeable_asset(asset, library_root / "pb_crate.ghostplaceable.json")
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    window = ModuleEditorWindow()
+    try:
+        window.controller.new_project(name="grpbmap", game="K2")
+        window.controller.create_dev_test_authored_module(module_root="grpbmap")
+        payload = dict(window.project.extra_sections["authored_module"])
+        placements = dict(payload.get("placements") or {})
+        placements["placeables"] = [
+            {
+                "template_resref": "pb_crate",
+                "tag": "pb_crate_instance",
+                "position": [1.75, 1.5, 0.0],
+                "bearing": 0.0,
+            }
+        ]
+        payload["placements"] = placements
+        window.project.extra_sections["authored_module"] = payload
+        window.set_placeable_library_root(library_root)
+        window.set_library_rows([])
+
+        authored_row = next(row for row in window._library_rows if row.get("resref") == "pb_crate")
+        assert authored_row["source"] == "placeable_builder"
+        assert authored_row["restype"] == "utp"
+        palette = window.controller.authored_gameplay_palette_entries(window._library_rows, kind="placeable")
+        assert any(entry.template_resref == "pb_crate" for entry in palette)
+
+        window._sync_placeable_library_resources_for_export()
+        resources = window.controller.authored_project_extra_resources()
+        assert any(resref == "pb_crate" and restype == "utp" for resref, restype, _data in resources)
+    finally:
+        window.controller.project.dirty = False
+        window.close()
+        app.processEvents()
+
+
+def test_map_studio_ui_sync_bundles_non_core_utp_utd_and_scripts_into_mod(tmp_path: Path) -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _install_native_payload_paths()
+
+    from PySide6 import QtWidgets
+    from pykotor.common.misc import ResRef
+    from pykotor.resource.generics.utd import UTD, bytes_utd
+    from pykotor.resource.generics.utp import UTP, bytes_utp
+    from src.core.project.resource_address import ResourceAddress
+    from src.core.resources.game_resource_provider import (
+        GameResourceRecord,
+        InMemoryGameResourceProvider,
+    )
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    def record(resref: str, restype: str, data: bytes):
+        return (
+            GameResourceRecord(
+                address=ResourceAddress(
+                    scheme="module_resource",
+                    game="K2",
+                    module_id="source_s",
+                    resref=resref,
+                    restype=restype,
+                    layer="module",
+                ),
+                source="module:source_s.rim",
+                priority=80,
+                size=len(data),
+            ),
+            data,
+        )
+
+    terminal = UTP()
+    terminal.resref = ResRef("plcaa_terminal")
+    terminal.tag = "plcaa_terminal"
+    terminal.appearance_id = 1
+    terminal.on_used = ResRef("plcaa_term_use")
+    door = UTD()
+    door.resref = ResRef("plcaa_door")
+    door.tag = "plcaa_door"
+    door.appearance_id = 1
+    door.on_open = ResRef("plcaa_door_open")
+    provider = InMemoryGameResourceProvider(
+        (
+            record("plcaa_terminal", "UTP", bytes_utp(terminal)),
+            record("plcaa_door", "UTD", bytes_utd(door)),
+            record("plcaa_term_use", "NCS", b"terminal-script"),
+            record("plcaa_door_open", "NCS", b"door-script"),
+        )
+    )
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    window = ModuleEditorWindow()
+    try:
+        window.controller.new_project(name="plcaa", game="K2")
+        window.controller.create_dev_test_authored_module(module_root="plcaa")
+        payload = dict(window.project.extra_sections["authored_module"])
+        placements = dict(payload.get("placements") or {})
+        placements["placeables"] = [
+            {"template_resref": "plcaa_terminal", "tag": "plcaa_terminal", "position": [1.0, 1.0, 0.0]}
+        ]
+        placements["doors"] = [
+            {"template_resref": "plcaa_door", "tag": "plcaa_door", "position": [2.0, 1.0, 0.0]}
+        ]
+        payload["placements"] = placements
+        window.project.extra_sections["authored_module"] = payload
+        window.set_placeable_library_root("", provider=provider)
+
+        window._sync_placeable_library_resources_for_export()
+        result = window.controller.export_authored_module(tmp_path / "plcaa_export")
+
+        keys = {(item.resref, item.restype) for item in result.package_verification.resources}
+        assert {
+            ("plcaa_terminal", "utp"),
+            ("plcaa_door", "utd"),
+            ("plcaa_term_use", "ncs"),
+            ("plcaa_door_open", "ncs"),
+        } <= keys
+        assert not any(
+            str(getattr(issue, "severity", "")).lower() == "blocking"
+            for issue in window.controller.authored_placeable_resource_issues()
+        )
+    finally:
+        window.controller.project.dirty = False
+        window.close()
+        app.processEvents()
+
+
+def test_map_studio_terrain_release_keeps_resident_mesh_and_defers_wok_validation() -> None:
+    _install_native_payload_paths()
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    calls: dict[str, object] = {}
+
+    class Controller:
+        def commit_map_studio_terrain_sculpt_stroke(self, **kwargs):
+            calls["commit"] = dict(kwargs)
+            return SimpleNamespace(frame_count=1)
+
+        def authored_terrain_walkability_overlay(self):
+            raise AssertionError("terrain mouse release must not serialize a WOK overlay synchronously")
+
+    target = SimpleNamespace(
+        controller=Controller(),
+        viewport_panel=SimpleNamespace(
+            set_terrain_walkability_overlay=lambda value: calls.setdefault("overlay", value),
+        ),
+        _refresh_map_studio_geometry_change=lambda message, **kwargs: calls.setdefault(
+            "refresh", (message, dict(kwargs))
+        ),
+        _sync_map_studio_terrain_brush_context=lambda: calls.setdefault("context_synced", True),
+        _log=lambda message: calls.setdefault("log", message),
+    )
+
+    ModuleEditorWindow.commit_map_studio_viewport_terrain_brush_stroke(
+        target,
+        "raise",
+        "grresident_terrain",
+    )
+
+    assert calls["commit"] == {"brush": "raise", "room_resref": "grresident_terrain"}
+    assert calls["overlay"] is None
+    message, refresh_kwargs = calls["refresh"]
+    assert "background" in message
+    assert refresh_kwargs == {
+        "rebuild_viewport_model": False,
+        "refresh_scene_tree": False,
+        "validation_delay_ms": 250,
+    }
+    assert calls["context_synced"] is True
+    assert target._last_map_studio_terrain_release_ms >= 0.0
+
+
+def test_map_studio_live_terrain_stroke_redoes_the_same_kmap_heights() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grterrainredo", game="K1")
+    room_resref = controller.create_terrain_patch(resolution=9)
+    before = authored_project_from_kmap_payload(
+        controller.project.extra_sections["authored_module"]
+    ).rooms[0].primitive.heights
+    controller.apply_map_studio_terrain_sculpt_frame(
+        room_resref=room_resref,
+        brush="raise",
+        points=((4, 4, 1.0),),
+        delta=0.5,
+        radius=2,
+        force=True,
+    )
+    controller.commit_map_studio_terrain_sculpt_stroke(
+        brush="raise",
+        room_resref=room_resref,
+    )
+    after = authored_project_from_kmap_payload(
+        controller.project.extra_sections["authored_module"]
+    ).rooms[0].primitive.heights
+    assert after != before
+
+    assert controller.undo_map_studio_command() is not None
+    assert authored_project_from_kmap_payload(
+        controller.project.extra_sections["authored_module"]
+    ).rooms[0].primitive.heights == before
+    assert controller.redo_map_studio_command() is not None
+    assert authored_project_from_kmap_payload(
+        controller.project.extra_sections["authored_module"]
+    ).rooms[0].primitive.heights == after

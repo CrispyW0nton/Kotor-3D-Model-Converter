@@ -67,6 +67,7 @@ class MapStudioToolActionContext:
     opening_marker_tag: str = ""
     opening_marker_linked_to: str = ""
     opening_marker_linked_to_module: str = ""
+    opening_marker_linked_to_flags: int = 0
     opening_marker_transition_destination: int = 0
     opening_marker_edge_index: int | None = None
     point_index: int | None = None
@@ -1127,6 +1128,7 @@ def resolve_map_studio_tool_belt_action(
             "tag": str(ctx.opening_marker_tag or "").strip(),
             "linked_to": str(ctx.opening_marker_linked_to or "").strip(),
             "linked_to_module": str(ctx.opening_marker_linked_to_module or "").strip(),
+            "linked_to_flags": int(ctx.opening_marker_linked_to_flags),
             "transition_destination": int(ctx.opening_marker_transition_destination),
         }
         if ctx.opening_marker_edge_index is not None:
@@ -1139,8 +1141,8 @@ def resolve_map_studio_tool_belt_action(
             command_kwargs=kwargs,
             mutates_kmap=True,
             authoring_context=(
-                "Opening Marker: convert a visual floor-plan wall opening into authored KOTOR door, trigger, "
-                "or waypoint transition data with LinkedTo/LinkedToModule/TransitionDestin readiness checks."
+                "Opening Marker: convert a visual floor-plan wall opening into a KOTOR door/trigger transition "
+                "source or waypoint destination, with LinkedTo/LinkedToModule/LinkedToFlags readiness checks."
             ),
         )
 
@@ -1702,9 +1704,8 @@ def resolve_map_studio_tool_belt_action(
                 },
                 mutates_kmap=True,
                 authoring_context=(
-                    "Object Combine: record selected authored primitives as one KMAP object group for selection, "
-                    "readiness, DCC handoff, and later export policy while preserving primitive topology. "
-                    "Arbitrary baked mesh combine remains planned."
+                    "Combine Meshes: bake selected authored-object transforms into one true polygon object while "
+                    "preserving UVs, normals, materials, source provenance, disconnected shells, and explicit WOK ownership."
                 ),
             )
         if not ctx.first_room_resref or not ctx.second_room_resref:
@@ -1739,22 +1740,22 @@ def resolve_map_studio_tool_belt_action(
                 focus_component_mode="object",
                 focus_snap_mode="grid",
                 enabled=False,
-                disabled_reason="Separate needs an authored composition primitive selection first.",
+                disabled_reason="Separate Shells needs one Combined Mesh selection first.",
             )
         return _route(
             action,
             focus_component_mode="object",
             focus_snap_mode="grid",
-            command_method="separate_authored_room_primitive",
+            command_method="separate_authored_room_primitive_shells",
             command_kwargs={
                 "room_resref": ctx.room_resref,
                 "primitive_name": ctx.primitive_name,
-                "result_room_resref": ctx.result_room_resref,
+                "name_prefix": ctx.result_room_resref,
             },
             mutates_kmap=True,
             authoring_context=(
-                "Separate: move one authored composition primitive into its own room/object boundary for "
-                "DCC UV/texturing handoff and independent KOTOR export validation."
+                "Separate Shells: split one Combined Mesh into connected polygon-shell objects in the same room. "
+                "Use Extract to Export Room when a new KOTOR room boundary is intended."
             ),
         )
 

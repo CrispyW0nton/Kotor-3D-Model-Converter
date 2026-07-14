@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -119,7 +120,7 @@ def test_t2606_tool_contract_audit_classifies_visible_tool_belt_actions() -> Non
     assert statuses["combine"].contract_kind == "command_mutates_kmap"
     assert statuses["combine"].command_method == "combine_authored_room_primitives"
     assert statuses["separate"].contract_kind == "command_mutates_kmap"
-    assert statuses["separate"].command_method == "separate_authored_room_primitive"
+    assert statuses["separate"].command_method == "separate_authored_room_primitive_shells"
     assert statuses["extrude"].contract_kind == "command_mutates_kmap"
     assert statuses["extrude"].command_method == "edge_extrude_authored_floor_plan_room"
     assert statuses["bevel"].contract_kind == "command_mutates_kmap"
@@ -724,7 +725,7 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
         MapStudioToolActionContext(
             entry_area_resref="grentry01",
             entry_position=(0.5, -2.0, 0.0),
-            entry_facing=180.0,
+            entry_facing=math.pi,
         ),
     )
 
@@ -733,7 +734,7 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     assert entry_point_route.command_kwargs == {
         "area_resref": "grentry01",
         "position": (0.5, -2.0, 0.0),
-        "facing": 180.0,
+        "facing": math.pi,
     }
     assert entry_point_route.mutates_kmap is True
     assert "IFO player start" in entry_point_route.authoring_context
@@ -844,6 +845,7 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
             opening_marker_tag="south_exit_trigger",
             opening_marker_linked_to="wp_dest",
             opening_marker_linked_to_module="grnext01",
+            opening_marker_linked_to_flags=2,
             opening_marker_transition_destination=2,
         ),
     )
@@ -858,10 +860,11 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
         "tag": "south_exit_trigger",
         "linked_to": "wp_dest",
         "linked_to_module": "grnext01",
+        "linked_to_flags": 2,
         "transition_destination": 2,
     }
     assert opening_marker_route.mutates_kmap is True
-    assert "KOTOR door, trigger, or waypoint transition data" in opening_marker_route.authoring_context
+    assert "door/trigger transition source or waypoint destination" in opening_marker_route.authoring_context
 
     snap = resolve_map_studio_tool_belt_action("vertex_snap")
 
@@ -1169,7 +1172,7 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
         "primitive_names": ("room_a_wall", "room_a_arch"),
         "group_name": "entry_group",
     }
-    assert "KMAP object group" in object_combine.authoring_context
+    assert "true polygon object" in object_combine.authoring_context
 
     combine = resolve_map_studio_tool_belt_action(
         "combine",
@@ -1192,7 +1195,7 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     separate_missing = resolve_map_studio_tool_belt_action("separate")
 
     assert separate_missing.enabled is False
-    assert "primitive selection" in separate_missing.disabled_reason
+    assert "Combined Mesh selection" in separate_missing.disabled_reason
 
     separate = resolve_map_studio_tool_belt_action(
         "separate",
@@ -1200,13 +1203,13 @@ def test_t2606_tool_action_dispatch_resolves_command_and_disabled_context() -> N
     )
 
     assert separate.enabled is True
-    assert separate.command_method == "separate_authored_room_primitive"
+    assert separate.command_method == "separate_authored_room_primitive_shells"
     assert separate.command_kwargs == {
         "room_resref": "room_a",
         "primitive_name": "room_a_wall",
-        "result_room_resref": "room_wall",
+        "name_prefix": "room_wall",
     }
-    assert "DCC UV/texturing handoff" in separate.authoring_context
+    assert "connected polygon-shell objects" in separate.authoring_context
 
     duplicate_missing = resolve_map_studio_tool_belt_action("duplicate_special")
 
@@ -2053,6 +2056,7 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
             opening_marker_tag="south_exit_trigger",
             opening_marker_linked_to="wp_dest",
             opening_marker_linked_to_module="grnext01",
+            opening_marker_linked_to_flags=2,
             opening_marker_transition_destination=2,
         ),
     )
@@ -2065,9 +2069,11 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert marker_trigger["tag"] == "south_exit_trigger"
     assert marker_trigger["linked_to"] == "wp_dest"
     assert marker_trigger["linked_to_module"] == "grnext01"
+    assert marker_trigger["linked_to_flags"] == 2
     assert marker_trigger["transition_destination"] == 2
     assert marker_metadata["opening_name"] == "south_door"
     assert marker_metadata["marker_kind"] == "trigger"
+    assert marker_metadata["linked_to_flags"] == 2
     assert marker_metadata["transition_destination"] == 2
     assert controller.command_history.undo_label == "Add opening marker south_exit_trigger"
 
@@ -2343,38 +2349,36 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     )
 
     object_combine_payload = controller.project.extra_sections["authored_module"]
-    object_combine_metadata = object_combine_payload["rooms"][0]["primitive"]["metadata"]
-    object_group = object_combine_metadata["combined_primitive_groups"][0]
+    object_composition = object_combine_payload["rooms"][0]["primitive"]
+    object_combined_mesh = next(
+        primitive
+        for primitive in object_composition["primitives"]
+        if primitive.get("type") == "combined_mesh"
+    )
 
-    assert object_group["name"] == "kit_column_group"
-    assert object_group["primitive_names"] == ["combine_cube", "combine_cylinder"]
-    assert object_group["coordinate_space"] == "authored_room_composition_mesh_space"
-    assert object_group["bounds_coordinate_space"] == "kmap_world"
-    assert len(object_group["bounds_min"]) == 3
-    assert len(object_group["bounds_max"]) == 3
-    assert len(object_group["center"]) == 3
-    assert len(object_group["dimensions"]) == 3
-    assert all(float(value) > 0.0 for value in object_group["dimensions"])
-    assert object_group["topology_policy"] == "preserve_authored_primitives_no_mesh_bake"
-    assert object_group["baked_mesh_combine"] == "planned"
-    assert object_group["vertex_count"] > 0
-    assert object_group["face_count"] > 0
-    assert object_combine_metadata["combined_primitive_group_by_name"]["combine_cube"] == "kit_column_group"
-    assert object_combine_metadata["combined_primitive_group_by_name"]["combine_cylinder"] == "kit_column_group"
-    assert controller.command_history.undo_label == "Combine primitives combine_cube, combine_cylinder"
+    assert object_combined_mesh["name"] == "kit_column_group"
+    assert [source["source_name"] for source in object_combined_mesh["sources"]] == [
+        "combine_cube",
+        "combine_cylinder",
+    ]
+    assert all(source["walkmesh_policy"] == "inherit" for source in object_combined_mesh["sources"])
+    assert object_combined_mesh["metadata"]["topology_policy"] == "true_polygon_combine"
+    assert object_composition["metadata"]["last_operation"] == "combine_meshes"
+    assert object_composition["metadata"]["last_combined_mesh"] == "kit_column_group"
+    assert object_composition["metadata"]["last_combined_mesh_vertex_count"] > 0
+    assert object_composition["metadata"]["last_combined_mesh_face_count"] > 0
+    assert controller.command_history.undo_label == "Combine meshes combine_cube, combine_cylinder"
+    combined_rows = [
+        row for row in controller.authored_room_primitive_transforms() if row.primitive_type == "combined_mesh"
+    ]
+    assert [row.primitive_name for row in combined_rows] == ["kit_column_group"]
     export_boundaries = controller.map_studio_export_object_boundaries()
     readiness = controller.authored_module_readiness()
     room_boundary = next(boundary for boundary in export_boundaries if boundary.object_kind == "composition_room")
-    group_boundary = next(boundary for boundary in export_boundaries if boundary.object_kind == "combined_primitive_group")
     readiness_room = next(
         boundary
         for boundary in readiness.readiness.metadata["export_object_boundaries"]
         if boundary["object_kind"] == "composition_room"
-    )
-    readiness_group = next(
-        boundary
-        for boundary in readiness.readiness.metadata["export_object_boundaries"]
-        if boundary["object_kind"] == "combined_primitive_group"
     )
 
     assert room_boundary.bounds_coordinate_space == "kmap_world"
@@ -2390,35 +2394,15 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert readiness_room["center"] == list(room_boundary.center)
     assert readiness_room["dimensions"] == list(room_boundary.dimensions)
 
-    assert group_boundary.label == "kit_column_group (combined primitive group)"
-    assert group_boundary.export_resref == combine_cube.room_resref
-    assert group_boundary.resource_boundary_policy == "combined_group_within_parent_room"
-    assert group_boundary.member_primitive_names == ("combine_cube", "combine_cylinder")
-    assert group_boundary.source_operation == "combine_primitives"
-    assert group_boundary.bounds_coordinate_space == "kmap_world"
-    assert group_boundary.bounds_min == tuple(object_group["bounds_min"])
-    assert group_boundary.bounds_max == tuple(object_group["bounds_max"])
-    assert group_boundary.center == tuple(object_group["center"])
-    assert group_boundary.dimensions == tuple(object_group["dimensions"])
-    assert group_boundary.owns_walkmesh is False
-    assert group_boundary.uv_handoff_recommended is True
-    assert group_boundary.dcc_handoff_status == "ready_for_external_uv"
-    assert "still exports through the parent room" in group_boundary.dcc_handoff_reason
-    assert any("KMAP-world dimensions" in note for note in group_boundary.notes)
-    assert readiness_group["member_primitive_names"] == ["combine_cube", "combine_cylinder"]
-    assert readiness_group["resource_boundary_policy"] == "combined_group_within_parent_room"
-    assert readiness_group["source_operation"] == "combine_primitives"
-    assert readiness_group["bounds_coordinate_space"] == "kmap_world"
-    assert readiness_group["bounds_min"] == object_group["bounds_min"]
-    assert readiness_group["bounds_max"] == object_group["bounds_max"]
-    assert readiness_group["center"] == object_group["center"]
-    assert readiness_group["dimensions"] == object_group["dimensions"]
-
     controller.undo_map_studio_command()
 
     restored_object_combine_payload = controller.project.extra_sections["authored_module"]
-    restored_object_combine_metadata = restored_object_combine_payload["rooms"][0]["primitive"]["metadata"]
-    assert "combined_primitive_groups" not in restored_object_combine_metadata
+    restored_primitives = restored_object_combine_payload["rooms"][0]["primitive"]["primitives"]
+    assert not any(primitive.get("type") == "combined_mesh" for primitive in restored_primitives)
+    assert {primitive.get("name") for primitive in restored_primitives} >= {
+        "combine_cube",
+        "combine_cylinder",
+    }
 
     controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grfill01")
     fill_room = controller.authored_floor_plan_room_choices()[0]
@@ -2552,8 +2536,32 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     assert [room["room_resref"] for room in restored_combine_payload["rooms"]] == ["grcomb1_room01", "grcomb1_room02"]
 
     controller.create_authored_room_preset_module(preset_id="elevation_test_room", module_root="grsep01")
+    execute_map_studio_tool_belt_action(
+        controller,
+        "primitive",
+        MapStudioToolActionContext(primitive_kind="cube", primitive_name="separate_cube"),
+    )
+    separate_cube = controller.authored_room_primitive_transforms()[-1]
+    execute_map_studio_tool_belt_action(
+        controller,
+        "primitive",
+        MapStudioToolActionContext(primitive_kind="cylinder", primitive_name="separate_cylinder"),
+    )
+    separate_cylinder = controller.authored_room_primitive_transforms()[-1]
+
+    execute_map_studio_tool_belt_action(
+        controller,
+        "combine",
+        MapStudioToolActionContext(
+            room_resref=separate_cube.room_resref,
+            primitive_name=separate_cube.primitive_name,
+            target_primitive_name=separate_cylinder.primitive_name,
+            metadata={"group_name": "separate_source_mesh"},
+        ),
+    )
+
     separate_source_rows = controller.authored_room_primitive_transforms()
-    separate_source = next(row for row in separate_source_rows if row.primitive_type != "plane")
+    separate_source = next(row for row in separate_source_rows if row.primitive_name == "separate_source_mesh")
     separate_source_count = len(separate_source_rows)
 
     execute_map_studio_tool_belt_action(
@@ -2567,19 +2575,31 @@ def test_t2606_tool_action_dispatch_executes_headless_command_and_records_undo(t
     )
 
     separated_payload = controller.project.extra_sections["authored_module"]
+    separated_room = separated_payload["rooms"][0]
+    separated_primitives = separated_room["primitive"]["primitives"]
+    separated_shells = [
+        primitive
+        for primitive in separated_primitives
+        if str(primitive.get("name") or "").startswith("grsepwall_")
+    ]
 
-    assert len(separated_payload["rooms"]) == 2
-    assert separated_payload["rooms"][1]["room_resref"] == "grsepwall"
-    assert separated_payload["rooms"][1]["metadata"]["last_operation"] == "separate_composition_primitive"
-    assert separated_payload["rooms"][1]["metadata"]["separated_primitive"] == separate_source.primitive_name
+    assert len(separated_payload["rooms"]) == 1
+    assert separated_room["metadata"]["last_operation"] == "separate_shells"
+    assert separated_room["metadata"]["last_separated_combined_mesh"] == separate_source.primitive_name
+    assert len(separated_shells) == 2
+    assert all(primitive["type"] == "combined_mesh" for primitive in separated_shells)
     assert len(controller.authored_room_primitive_transforms()) == separate_source_count + 1
-    assert controller.command_history.undo_label == f"Separate primitive {separate_source.primitive_name}"
+    assert controller.command_history.undo_label == f"Separate shells {separate_source.primitive_name}"
 
     controller.undo_map_studio_command()
 
     restored_separate_payload = controller.project.extra_sections["authored_module"]
     assert len(restored_separate_payload["rooms"]) == 1
     assert len(controller.authored_room_primitive_transforms()) == separate_source_count
+    assert any(
+        primitive.get("name") == separate_source.primitive_name
+        for primitive in restored_separate_payload["rooms"][0]["primitive"]["primitives"]
+    )
 
     controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grcutcmd")
 
@@ -4216,7 +4236,7 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
         assert 'command_method="bridge_authored_floor_plan_edges"' in source
         assert 'command_method="combine_authored_room_primitives"' in source
         assert 'command_method="merge_authored_floor_plan_rooms"' in source
-        assert 'command_method="separate_authored_room_primitive"' in source
+        assert 'command_method="separate_authored_room_primitive_shells"' in source
         assert 'command_method="duplicate_authored_room_primitive"' in source
         assert 'command_method="center_authored_room_primitive_pivot"' in source
         assert 'command_method="freeze_authored_room_primitive_transform"' in source
@@ -4281,3 +4301,53 @@ def test_t2606_level_editor_routes_tool_belt_actions_through_core_dispatcher() -
     assert "def clear_map_studio_universal_transform_overlay" in viewport_scene_models
     assert "def _draw_map_studio_universal_transform_overlay" in viewport_overlay_layers
     assert "self._draw_map_studio_universal_transform_overlay(draw, w, h)" in viewport_rendering
+
+
+def test_opening_marker_dispatch_preserves_transition_target_type() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_tool_action_dispatch import (
+        MapStudioToolActionContext,
+        execute_map_studio_tool_belt_action,
+    )
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="plcaa", game="K2")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="plcaa")
+    room = controller.authored_floor_plan_room_choices()[0]
+    execute_map_studio_tool_belt_action(
+        controller,
+        "opening",
+        MapStudioToolActionContext(
+            room_resref=room.room_resref,
+            wall_opening_name="south_door",
+            wall_opening_edge_index=0,
+            wall_opening_center_fraction=0.5,
+            wall_opening_width=1.5,
+            wall_opening_height=2.0,
+        ),
+    )
+    execute_map_studio_tool_belt_action(
+        controller,
+        "opening_marker",
+        MapStudioToolActionContext(
+            room_resref=room.room_resref,
+            opening_name="south_door",
+            opening_marker_kind="trigger",
+            opening_marker_template_resref="newtransition",
+            opening_marker_tag="plcaa_exit",
+            opening_marker_linked_to="plcab_arrive",
+            opening_marker_linked_to_module="plcab",
+            opening_marker_linked_to_flags=2,
+            opening_marker_transition_destination=74183,
+        ),
+    )
+
+    payload = controller.project.extra_sections["authored_module"]
+    trigger = payload["placements"]["triggers"][-1]
+    marker = payload["extra"]["last_opening_transition_marker"]
+    assert trigger["linked_to_module"] == "plcab"
+    assert trigger["linked_to_flags"] == 2
+    assert trigger["transition_destination"] == 74183
+    assert marker["linked_to_flags"] == 2

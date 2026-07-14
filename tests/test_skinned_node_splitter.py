@@ -109,6 +109,43 @@ def _source_weight_multiset(node, vertex_index):
     return sorted(out)
 
 
+def _assert_compact_inverse_bind_collapse(model, skin_node, *, bone_model=None):
+    """Every compact q/t slot must collapse bone bind space to skin space."""
+
+    from src.core.animation.gpu_skinning import MatrixPaletteUploader
+    from src.math.gpu_math import _matrix_from_pos_quat_np
+
+    lookup = {}
+    for source in (model, bone_model):
+        if source is None:
+            continue
+        for node in source.all_nodes():
+            key = str(getattr(node, "name", "") or "").strip().lower()
+            if key and key not in lookup:
+                lookup[key] = node
+
+    skin_pos, skin_rot = wf._node_world_transform_or_local(skin_node)
+    skin_world = _matrix_from_pos_quat_np(skin_pos, skin_rot)
+    qbones = list(getattr(skin_node, "qbone_list", []) or [])
+    tbones = list(getattr(skin_node, "tbone_list", []) or [])
+    assert len(qbones) == len(skin_node.bone_map)
+    assert len(tbones) == len(skin_node.bone_map)
+    for slot, raw_name in enumerate(skin_node.bone_map):
+        bone = lookup[str(raw_name).strip().lower()]
+        bone_pos, bone_rot = wf._node_world_transform_or_local(bone)
+        bone_world = _matrix_from_pos_quat_np(bone_pos, bone_rot)
+        inverse_bind = np.asarray(
+            MatrixPaletteUploader.qbone_inverse_bind_matrix_g5(
+                qbones[slot], tbones[slot]
+            ),
+            dtype=np.float64,
+        )
+        assert np.allclose(bone_world @ inverse_bind, skin_world, atol=1.0e-6), (
+            skin_node.name,
+            raw_name,
+        )
+
+
 def _drexl_skinned_fixture():
     """The Drexl donor itself as an over-palette skinned import (55-bone map)."""
     from tests.test_anatomical_partition import _load_drexl_model
@@ -285,6 +322,8 @@ def test_split_with_weight_remap_drexl(capsys) -> None:
 
     total_faces = 0
     collar_regions = 0
+    donor_ambient = wf._reference_skin_ambient(reference)
+    assert donor_ambient is not None
     for part in parts:
         # Palette limit (hard invariant).
         assert len(part.bone_map) <= 16, (part.name, len(part.bone_map))
@@ -296,6 +335,15 @@ def test_split_with_weight_remap_drexl(capsys) -> None:
                 "rcollar_g"
             )
         total_faces += len(part.faces)
+
+        # KOTOR consumes W-first inverse(bone_world)*skin_world qBone/tBone
+        # rows.  Forward bone transforms are finite and structurally valid but
+        # produce the long live-game vertex spikes fixed by T2550.
+        _assert_compact_inverse_bind_collapse(model, part, bone_model=reference)
+
+        # Keep the custom texture/diffuse, but use the native creature's KOTOR
+        # ambient-lighting baseline instead of Blender's dark 0.2 default.
+        assert tuple(part.ambient) == pytest.approx(tuple(donor_ambient))
 
         # D-5 byte-identity: every vertex's (bone_name, weight) multiset is
         # exactly the source vertex's multiset — weights never dropped,
@@ -321,7 +369,7 @@ def test_split_with_weight_remap_drexl(capsys) -> None:
 
     # Wrapper metadata recorded.
     meta = model.metadata["character_builder_skinned_node_splitter"]
-    assert meta["method"] == "anatomical_partition_weight_remap"
+    assert meta["method"] == "authored_donor_skin_node_weight_remap"
     assert meta["palette_validation"]["ok"]
 
 

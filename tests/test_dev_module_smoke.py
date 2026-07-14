@@ -70,8 +70,8 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     assert ("grdev01_room01", "mdx") in keys
     assert ("grdev01_room01", "wok") in keys
     assert "grdev01_room01" in authored.module.lyt.to_text()
-    assert authored.module.room_woks["grdev01_room01"].walkable_face_count() == 2
-    assert authored.module.room_woks["grdev01_room01"].non_walk_face_count() == 8
+    assert authored.module.room_woks["grdev01_room01"].walkable_face_count() == 4  # 2 floor + 2 door transition
+    assert authored.module.room_woks["grdev01_room01"].non_walk_face_count() == 12
     assert authored.module.room_geometry is not None
     assert authored.module.room_geometry.room_mesh.name == "grdev01_room01_mesh"
     assert authored.module.room_geometry.room_mesh.texture == "CM_Baremetal"
@@ -87,17 +87,18 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
         "grdev01_room01_door_marker",
     }
     assert authored.module.room_geometry.wok.walkable_face_count() == primitive_geometry.wok.walkable_face_count()
-    assert authored.module.room_geometry.wok.non_walk_face_count() == 8
-    assert authored.module.room_geometry.metadata["walkmesh_boundary_wall_faces"] == 8
-    assert lyt_text.startswith("#MAXLAYOUT ASCII\n")
-    assert "filedependancy grdev01.max\n" in lyt_text
-    assert "beginlayout\n" in lyt_text
-    assert "roomcount 1\n" in lyt_text
-    assert "trackcount 0\n" in lyt_text
-    assert "obstaclecount 0\n" in lyt_text
-    assert "doorhookcount 0\n" in lyt_text
+    assert authored.module.room_geometry.wok.non_walk_face_count() == 12
+    assert authored.module.room_geometry.metadata["walkmesh_boundary_wall_faces"] == 12
+    # LYT/VIS are CRLF and never self-reference visibility (engine contract).
+    assert lyt_text.startswith("#MAXLAYOUT ASCII\r\n")
+    assert "filedependancy grdev01.max\r\n" in lyt_text
+    assert "beginlayout\r\n" in lyt_text
+    assert "roomcount 1\r\n" in lyt_text
+    assert "trackcount 0\r\n" in lyt_text
+    assert "obstaclecount 0\r\n" in lyt_text
+    assert "doorhookcount 0\r\n" in lyt_text
     assert lyt_text.rstrip().endswith("donelayout")
-    assert vis_text == "grdev01_room01 1\n  grdev01_room01\n"
+    assert vis_text == "grdev01_room01 0\r\n"
     assert authored.module.placements is not None
     assert authored.module.placements.entry_point.area_resref == "grdev01"
     assert authored.module.placements.placeables[0].template_resref == "plc_bench"
@@ -139,7 +140,7 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     assert raw_are.root.get_single("Grass_Prob_LL") == 0.25
     assert raw_are.root.get_single("MoonFogNear") == 99.0
     assert raw_are.root.get_single("SunFogNear") == 99.0
-    assert raw_are.root.get_uint8("ShadowOpacity") == 50
+    assert raw_are.root.get_uint8("ShadowOpacity") == 0  # fullbright profile: shadows off
     assert raw_are.root.get_uint8("Unescapable") == 1
     assert not raw_are.root.exists("DisableTransit")
     assert not raw_are.root.exists("Natural")
@@ -155,8 +156,8 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     assert raw_waypoint.exists("XOrientation")
     assert raw_waypoint.exists("YOrientation")
     assert not raw_waypoint.exists("Bearing")
-    assert len(raw_wok.faces) == 10
-    assert sum(1 for face in raw_wok.faces if face.material.walkable()) == 2
+    assert len(raw_wok.faces) == 16  # 2 floor + 2 door transition + 12 boundary walls
+    assert sum(1 for face in raw_wok.faces if face.material.walkable()) == 4
     room_root_offset = struct.unpack_from("<I", raw_mdl, 12 + 40)[0]
     room_anim_array_offset = struct.unpack_from("<I", raw_mdl, 12 + 88)[0]
     assert raw_mdl[12 + 83] == 1
@@ -282,7 +283,9 @@ def test_t2614_exports_floor_plan_smoke_manifest_with_opening_metadata(tmp_path:
     assert smoke["authored_project"]["light_count"] == 1
     assert smoke["authored_lighting"]["lighting_count"] == 1
     assert smoke["authored_lighting"]["room_lights"][0]["name"] == "grdev01_key_light"
-    assert smoke["authored_lighting"]["lightmap_status"] == "viewport_lit_only"
+    assert smoke["authored_lighting"]["lighting_profile"] == "fullbright"
+    assert smoke["authored_lighting"]["ready"] is True
+    assert smoke["authored_lighting"]["lightmap_status"] == "fullbright_export_candidate"
     assert smoke["authored_lighting"]["game_tested_lighting"] is False
     assert smoke["authored_project"]["metadata"]["room_geometry_mode"] == "floor_plan"
     assert smoke["authored_geometry"]["source"] == "src.core.modules.authored_room_floorplan"
@@ -362,7 +365,9 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     assert smoke["authored_lighting"]["lighting_count"] == 1
     assert smoke["authored_lighting"]["room_lights"][0]["room_resref"] == "grdev01_room01"
     assert smoke["authored_lighting"]["room_lights"][0]["metadata"]["purpose"] == "canonical_smoke_visibility"
-    assert smoke["authored_lighting"]["lightmap_status"] == "viewport_lit_only"
+    assert smoke["authored_lighting"]["lighting_profile"] == "fullbright"
+    assert smoke["authored_lighting"]["ready"] is True
+    assert smoke["authored_lighting"]["lightmap_status"] == "fullbright_export_candidate"
     assert smoke["authored_lighting"]["game_tested_lighting"] is False
     assert smoke["authored_layout"]["source"] == "src.core.modules.authored_module_layout"
     assert smoke["authored_layout"]["room_count"] == 1
@@ -370,7 +375,7 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
         {
             "resref": "grdev01_room01",
             "position": [0.0, 0.0, 0.0],
-            "visible": ["grdev01_room01"],
+            "visible": [],
         }
     ]
     assert smoke["authored_metadata"]["source"] == "src.core.modules.authored_module_metadata"
@@ -399,9 +404,9 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     }
     assert smoke["authored_geometry"]["metadata"]["compiled_mesh_count"] == 6
     assert smoke["authored_geometry"]["derived_wok"] is True
-    assert smoke["authored_geometry"]["wok_walkable_faces"] == 2
-    assert smoke["authored_geometry"]["wok_non_walk_faces"] == 8
-    assert smoke["authored_geometry"]["walkmesh_boundary_wall_faces"] == 8
+    assert smoke["authored_geometry"]["wok_walkable_faces"] == 4  # 2 floor + 2 door transition
+    assert smoke["authored_geometry"]["wok_non_walk_faces"] == 12
+    assert smoke["authored_geometry"]["walkmesh_boundary_wall_faces"] == 12
     assert smoke["authored_geometry"]["metadata"]["walkmesh_boundary_walls"]["source"] == "src.core.modules.authored_walkmesh_boundaries"
     assert smoke["authored_materials"]["source"] == "src.core.modules.authored_room_materials"
     assert smoke["authored_materials"]["texture"] == "CM_Baremetal"

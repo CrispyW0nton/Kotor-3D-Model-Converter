@@ -12,6 +12,13 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.mcp.start_kotormcp_stdio import _python_roots
+
+for python_root in reversed(_python_roots(ROOT)):
+    python_root_text = str(python_root)
+    if python_root_text not in sys.path:
+        sys.path.insert(0, python_root_text)
+
 from src.core.retargeting.animation_injector import (
     AnimationInjectionRequest,
     AnimationInjector,
@@ -35,6 +42,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--action", default="")
     parser.add_argument("--frame-step", type=int, default=1)
     parser.add_argument("--game", default="K1", choices=["K1", "K2", "k1", "k2"])
+    parser.add_argument(
+        "--game-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Optional KOTOR installation used to resolve inherited animation slots through the target model's "
+            "supermodel chain. Supply this when writing an override onto a model whose slot is not local."
+        ),
+    )
     parser.add_argument(
         "--source-reference-mode",
         default="hybrid_limb_source_rest",
@@ -106,6 +122,19 @@ def main() -> int:
             return 1
         output_mdl = args.output_mdl or (args.output / f"{args.target_mdl.stem}__{args.slot}__r3b.mdl")
         output_manifest = args.output / f"{args.target_mdl.stem}__{args.slot}__r3b_manifest.json"
+        resource_manager = None
+        if args.game_dir is not None:
+            from src.core.assets.resource_manager import ResourceManager
+
+            resource_manager = ResourceManager()
+            configure_game = (
+                resource_manager.set_k1_dir
+                if args.game.upper() == "K1"
+                else resource_manager.set_k2_dir
+            )
+            if not configure_game(str(args.game_dir)):
+                print(f"Errors:\n  - Could not index {args.game.upper()} installation: {args.game_dir}")
+                return 1
         writer_request = AuroraAnimationInjectionRequest(
             r3a_animation_json=result.retargeted_animation_json,
             target_mdl=args.target_mdl,
@@ -115,8 +144,10 @@ def main() -> int:
             output_manifest=output_manifest,
             game=args.game.upper(),
             fps=result.fps,
+            verify_roundtrip=True,
             source_reference_mode=args.source_reference_mode,
             hybrid_limb_source_rest_weight=args.hybrid_limb_source_rest_weight,
+            resource_manager=resource_manager,
         )
         writer_result = AuroraAnimationWriter().inject(writer_request)
         print("-" * 60)

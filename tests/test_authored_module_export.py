@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import struct
 import sys
 from pathlib import Path
 
@@ -24,6 +25,55 @@ def _install_native_payload_paths() -> None:
         path = str((repo / rel).resolve())
         if path not in sys.path:
             sys.path.insert(0, path)
+
+
+def _kmap_with_used_project_texture(
+    tmp_path: Path,
+    *,
+    resref: str,
+    texture_path: str,
+    width: int = 256,
+    height: int = 256,
+):
+    from src.core.level import TextureReference, new_kmap_project
+    from src.core.modules.authored_imported_mesh import ImportedMeshRoomPrimitive, ImportedMeshSurface
+    from src.core.modules.authored_module_kmap_bridge import authored_project_to_kmap_payload
+    from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+    from src.core.modules.authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject, AuthoredRoomSpec
+
+    module_root = "grtexval"
+    room_resref = "grtexvalr"
+    surface = ImportedMeshSurface(
+        name="painted_floor",
+        texture=resref,
+        vertices=((0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (0.0, 2.0, 0.0)),
+        faces=((0, 1, 2),),
+        uvs=((0.0, 0.0), (1.0, 0.0), (0.0, 1.0)),
+        normals=((0.0, 0.0, 1.0),) * 3,
+    )
+    authored = AuthoredModuleProject(
+        metadata=AuthoredModuleMetadata(module_root=module_root, game="K2", display_name="Texture Validation", tag=module_root),
+        rooms=(
+            AuthoredRoomSpec(
+                room_resref=room_resref,
+                primitive=ImportedMeshRoomPrimitive(room_resref=room_resref, surfaces=(surface,), game="K2"),
+            ),
+        ),
+        placements=AuthoredGameplayPlacement(
+            entry_point=ModuleEntryPoint(area_resref=module_root, position=(0.5, 0.5, 0.0))
+        ),
+    )
+    project = new_kmap_project(name=module_root, game="K2")
+    project.path = str(tmp_path / f"{module_root}.kmap")
+    project.extra_sections["authored_module"] = authored_project_to_kmap_payload(authored)
+    texture = TextureReference(
+        resref=resref,
+        path=texture_path,
+        source="map_studio:project_texture",
+        metadata={"width": width, "height": height, "format": "tga"},
+    )
+    project.textures.append(texture)
+    return project, texture
 
 
 def _authored_project_with_door_transition_surface(module_root: str, game: str = "K1"):
@@ -68,6 +118,334 @@ def test_t2600_map_studio_builds_live_preview_model_from_authored_kmap_geometry(
     assert all(getattr(node, "_gr_map_studio_authored_mesh", False) for node in result.model.mesh_nodes())
 
 
+def test_map_studio_preview_renders_authored_lights_and_optional_non_pickable_backdrop() -> None:
+    _install_native_payload_paths()
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        create_dev_test_authored_module_payload,
+    )
+    from src.core.modules.authored_module_lighting import AuthoredRoomLight
+    from src.core.modules.authored_module_preview_model import build_authored_module_preview_model
+
+    payload = create_dev_test_authored_module_payload(module_root="grsky01", game="K2")
+    base = authored_project_from_kmap_payload(payload, fallback_name="grsky01", fallback_game="K2")
+    playable = base.rooms[0]
+    backdrop = replace(
+        playable,
+        room_resref="grsky01s",
+        metadata={**dict(playable.metadata), "is_backdrop": True},
+    )
+    project = replace(
+        base,
+        rooms=(playable, backdrop),
+        lights=(
+            AuthoredRoomLight(
+                name="window_fill",
+                room_resref=playable.room_resref,
+                position=(1.0, 2.0, 3.0),
+                color=(0.2, 0.4, 1.0),
+                radius=9.0,
+                intensity=1.5,
+                light_type="spot",
+                light_id="light_window_fill",
+                enabled=True,
+                casts_shadows=False,
+                affects_diffuse=False,
+                affects_lightmap=True,
+                direction=(1.0, 0.0, 0.0),
+                cone_angle_degrees=32.0,
+                bake_group="windows",
+            ),
+        ),
+    )
+
+    hidden = build_authored_module_preview_model(project)
+    shown = build_authored_module_preview_model(project, include_backdrops=True)
+
+    assert hidden.room_count == 1
+    assert shown.room_count == 2
+    assert any("skybox/backdrop" in warning for warning in hidden.warnings)
+    light = next(node for node in shown.model.root_node.children if getattr(node, "_gr_map_studio_authored_light", False))
+    assert light.light_color == (0.2, 0.4, 1.0)
+    assert light.light_radius == 9.0
+    assert light.light_multiplier == 1.5
+    assert light._gr_light_id == "authored_light:light_window_fill"
+    assert light.light_kind == "spot"
+    assert light.light_enabled is True
+    assert light.light_shadow is False
+    assert light.light_affects_diffuse is False
+    assert light.light_affects_lightmap is True
+    assert light.light_cone_degrees == 32.0
+    assert light._gr_light_group_id == "windows"
+    assert abs(float(light.rotation[1]) + 0.70710678) < 1.0e-6
+    assert abs(float(light.rotation[3]) - 0.70710678) < 1.0e-6
+    backdrop_node = next(node for node in shown.model.root_node.children if getattr(node, "_gr_map_studio_backdrop", False))
+    assert all(getattr(node, "_gr_map_studio_backdrop", False) for node in backdrop_node.children)
+    assert getattr(shown.model, "_gr_render_bounds") == getattr(hidden.model, "_gr_render_bounds")
+
+
+def test_texture_paint_stroke_updates_dirty_tiles_and_is_one_step_undoable() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.map_studio_texture_paint import TexturePaintBrush, TexturePaintSession
+
+    original = bytes((16, 32, 64, 255)) * (64 * 64)
+    session = TexturePaintSession(64, 64, original, tile_size=16)
+    session.begin_stroke(
+        TexturePaintBrush(
+            radius_px=6.0,
+            opacity=1.0,
+            flow=1.0,
+            hardness=1.0,
+            spacing=0.2,
+            color=(255, 0, 0, 255),
+        )
+    )
+    session.append_sample((0.25, 0.75))
+    session.append_sample((0.38, 0.75), pressure=0.75)
+    live_tiles = session.pending_tile_payloads()
+    result = session.end_stroke()
+
+    assert result.changed is True
+    assert result.stamp_count > 1
+    assert result.pixels_changed > 0
+    assert result.dirty_tiles
+    assert live_tiles
+    assert session.rgba_bytes() != original
+    assert all(len(item.rgba) == item.width * item.height * 4 for item in live_tiles)
+    assert session.undo() == result
+    assert session.rgba_bytes() == original
+    assert session.redo() == result
+    assert session.rgba_bytes() != original
+
+
+def test_texture_paint_uses_short_wrapped_route_across_uv_seam() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.map_studio_texture_paint import TexturePaintBrush, TexturePaintSession
+
+    original = bytes((0, 0, 0, 255)) * (64 * 16)
+    session = TexturePaintSession(64, 16, original, tile_size=8)
+    session.begin_stroke(TexturePaintBrush(radius_px=1.5, hardness=1.0, spacing=0.25, color=(0, 255, 0, 255)))
+    session.append_sample((0.98, 0.5))
+    session.append_sample((0.02, 0.5))
+    session.end_stroke()
+    rgba = session.rgba_bytes()
+
+    def green_at(x: int, y: int = 8) -> int:
+        return rgba[((y * 64) + x) * 4 + 1]
+
+    assert green_at(0) > 0
+    assert green_at(63) > 0
+    assert green_at(32) == 0
+
+
+def test_texture_paint_accepts_game_or_project_texture_stamp_sources() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.map_studio_texture_paint import TexturePaintBrush, TexturePaintSession
+
+    # A 2x2 stamp: red, green, blue, white. The top-left quarter of the
+    # circular brush must sample red instead of the solid white fallback.
+    stamp = bytes((255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255))
+    session = TexturePaintSession(16, 16, bytes((0, 0, 0, 255)) * 256, tile_size=8)
+    session.begin_stroke(
+        TexturePaintBrush(
+            radius_px=6.0,
+            hardness=1.0,
+            color=(255, 255, 255, 255),
+            stamp_size=(2, 2),
+            stamp_rgba=stamp,
+            stamp_name="game_wall",
+        )
+    )
+    session.append_sample((0.5, 0.5))
+    session.end_stroke()
+    rgba = session.rgba_bytes()
+    top_left = ((5 * 16) + 5) * 4
+
+    assert rgba[top_left] > rgba[top_left + 1]
+    assert rgba[top_left] > rgba[top_left + 2]
+
+
+def test_project_texture_asset_roundtrips_as_referenced_tga_and_txi(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+    from src.core.level import KMapSerializer, import_project_texture_asset, new_kmap_project, project_texture_export_resources
+    from src.core.modules.map_studio_texture_paint import encode_tga_rgba
+
+    source = tmp_path / "My Painted Rock.tga"
+    source.write_bytes(encode_tga_rgba(4, 4, bytes((120, 80, 40, 255)) * 16))
+    source.with_suffix(".txi").write_text("mipmap 1\n", encoding="utf-8")
+    project = new_kmap_project(name="paint01", game="K2", author="LordVaderCW")
+    project.path = str(tmp_path / "paint01.kmap")
+
+    asset = import_project_texture_asset(project, source)
+    KMapSerializer.save(project)
+
+    assert asset.resref == "my_painted_rock"
+    assert Path(asset.path).is_file()
+    assert not Path(project.textures[0].path).is_absolute()
+    payload = json.loads(Path(project.path).read_text(encoding="utf-8"))
+    assert payload["textures"][0]["path"].endswith("my_painted_rock.tga")
+    assert "rgba" not in json.dumps(payload).lower()
+    resources = project_texture_export_resources(project)
+    assert {(resref, restype) for resref, restype, _data in resources} == {
+        ("my_painted_rock", "tga"),
+        ("my_painted_rock", "txi"),
+    }
+
+
+def test_used_project_texture_missing_or_engine_invalid_blocks_kmap_readiness(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+    from src.core.level import KMapValidator
+    from src.core.modules.authored_module_kmap_bridge import build_kmap_authored_module_readiness
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    project, texture = _kmap_with_used_project_texture(
+        tmp_path,
+        resref="Bad Painted Texture.tga",
+        texture_path="grtexval_assets/textures/missing.tga",
+        width=300,
+        height=8192,
+    )
+
+    issues = KMapValidator().validate_authored_project_textures(project)
+    by_code = {issue.code: issue for issue in issues}
+
+    assert by_code["MAP_STUDIO_PROJECT_TEXTURE_RESREF_INVALID"].severity == "Error"
+    assert by_code["MAP_STUDIO_PROJECT_TEXTURE_FILE_MISSING"].severity == "Error"
+    assert by_code["MAP_STUDIO_PROJECT_TEXTURE_NON_POWER_OF_TWO"].severity == "Warning"
+    assert by_code["MAP_STUDIO_PROJECT_TEXTURE_DIMENSIONS_HIGH"].severity == "Warning"
+    assert all(issue.item_id == texture.texture_id for issue in issues)
+
+    bridge = build_kmap_authored_module_readiness(project)
+    assert bridge.readiness is not None
+    assert bridge.readiness.can_export_candidate is False
+    assert bridge.readiness.ready_for_game_test is False
+    assert bridge.readiness.export_status == "Project textures not ready"
+    assert any("not engine-safe" in message for message in bridge.readiness.blocking_messages)
+    assert bridge.blocking_messages == ()
+    audit = bridge.readiness.metadata["project_texture_validation"]
+    assert audit["blocking_count"] == 2
+    assert audit["warning_count"] == 2
+    assert "image bytes remain external" in audit["reference_policy"]
+
+    controller = ModuleEditorController()
+    controller.model.set_project(project)
+    projected = controller.validate()
+    assert sum(issue.code == "MAP_STUDIO_PROJECT_TEXTURE_RESREF_INVALID" for issue in projected) == 1
+    assert sum(issue.code == "MAP_STUDIO_PROJECT_TEXTURE_FILE_MISSING" for issue in projected) == 1
+    assert not any(
+        issue.code == "MAP_STUDIO_READINESS_BLOCKER" and "project texture" in issue.message.lower()
+        for issue in projected
+    )
+
+
+def test_used_project_texture_checks_readability_and_ignores_unused_sidecars(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_native_payload_paths()
+    from src.core.level import KMapSerializer, KMapValidator, TextureReference
+    from src.core.modules.map_studio_texture_paint import encode_tga_rgba
+
+    relative = Path("grtexval_assets") / "textures" / "valid_wall.tga"
+    sidecar = tmp_path / relative
+    sidecar.parent.mkdir(parents=True)
+    sidecar.write_bytes(encode_tga_rgba(256, 256, bytes((10, 20, 30, 255)) * (256 * 256)))
+    txi = sidecar.with_suffix(".txi")
+    txi.write_text("mipmap 1\n", encoding="utf-8")
+    project, texture = _kmap_with_used_project_texture(
+        tmp_path,
+        resref="valid_wall",
+        texture_path=relative.as_posix(),
+    )
+    texture.metadata["txi_path"] = relative.with_suffix(".txi").as_posix()
+    project.textures.append(
+        TextureReference(
+            resref="unused_wall",
+            path="grtexval_assets/textures/unused_missing.tga",
+            metadata={"width": 300, "height": 500},
+        )
+    )
+    validator = KMapValidator()
+
+    assert validator.validate_authored_project_textures(project) == []
+    read_only_snapshot = KMapSerializer.from_dict(KMapSerializer.to_dict(project))
+    assert validator.validate_authored_project_textures(read_only_snapshot) == []
+
+    txi.unlink()
+    missing_txi = validator.validate_authored_project_textures(project)
+    assert [issue.code for issue in missing_txi] == ["MAP_STUDIO_PROJECT_TEXTURE_TXI_MISSING"]
+    txi.write_text("mipmap 1\n", encoding="utf-8")
+
+    original_open = Path.open
+
+    def deny_sidecar(path: Path, *args, **kwargs):
+        if path.resolve() == sidecar.resolve():
+            raise PermissionError("validation fixture denied read access")
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", deny_sidecar)
+    unreadable = validator.validate_authored_project_textures(project)
+    assert [issue.code for issue in unreadable] == ["MAP_STUDIO_PROJECT_TEXTURE_FILE_UNREADABLE"]
+    assert "denied read access" in unreadable[0].message
+
+
+def test_used_project_texture_duplicate_resref_blocks_readiness_and_export_resource_merge(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+    from src.core.level import KMapValidator, TextureReference, project_texture_export_resources
+    from src.core.modules.authored_module_kmap_bridge import build_kmap_authored_module_readiness
+    from src.core.modules.map_studio_texture_paint import encode_tga_rgba
+
+    first_relative = Path("grtexval_assets") / "textures" / "shared_wall_a.tga"
+    second_relative = Path("grtexval_assets") / "textures" / "shared_wall_b.tga"
+    for relative, color in ((first_relative, (10, 20, 30, 255)), (second_relative, (80, 70, 60, 255))):
+        sidecar = tmp_path / relative
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        sidecar.write_bytes(encode_tga_rgba(4, 4, bytes(color) * 16))
+
+    project, first = _kmap_with_used_project_texture(
+        tmp_path,
+        resref="shared_wall",
+        texture_path=first_relative.as_posix(),
+        width=4,
+        height=4,
+    )
+    second = TextureReference(
+        resref="shared_wall",
+        path=second_relative.as_posix(),
+        source="map_studio:project_texture",
+        metadata={"width": 4, "height": 4, "format": "tga"},
+    )
+    project.textures.append(second)
+
+    issues = KMapValidator().validate_authored_project_textures(project)
+
+    assert [issue.code for issue in issues] == ["MAP_STUDIO_PROJECT_TEXTURE_RESREF_DUPLICATE"]
+    assert issues[0].severity == "Error"
+    assert issues[0].item_id in {first.texture_id, second.texture_id}
+    readiness = build_kmap_authored_module_readiness(project).readiness
+    assert readiness is not None
+    assert readiness.can_export_candidate is False
+    assert readiness.ready_for_game_test is False
+    assert any("declared 2 times" in message for message in readiness.blocking_messages)
+
+    with pytest.raises(ValueError, match=r'Duplicate project texture export resource "shared_wall\.tga"'):
+        project_texture_export_resources(project)
+
+
+def test_kotor_texture_resref_suggestion_is_unique_and_engine_safe() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.map_studio_texture_paint import suggest_kotor_texture_resref, validate_kotor_texture_resref
+
+    first = suggest_kotor_texture_resref("Too Long / Painted Stone Diffuse.PNG")
+    second = suggest_kotor_texture_resref("Too Long / Painted Stone Diffuse.PNG", (first,))
+    assert len(first) <= 16
+    assert len(second) <= 16
+    assert first != second
+    assert validate_kotor_texture_resref(first) == first
+
+
 def test_t2600_map_studio_routes_authored_preview_model_into_viewport_panel() -> None:
     controller_source = _read_repo_text(
         "native/GhostRigger.Core.Scene/Python/src/core/modules/module_editor_controller.py"
@@ -98,10 +476,15 @@ def test_t2600_map_studio_routes_authored_preview_model_into_viewport_panel() ->
     assert "build_authored_module_preview_model" in controller_source
     assert "def authored_room_preview_model" in controller_source
     assert "def authored_room_preview_model" in controller_mirror
-    assert "authored_room_preview_model = self.controller.authored_room_preview_model()" in window_source
+    assert "authored_room_preview_model = self.controller.map_studio_viewport_preview_model(" in window_source
+    assert "def map_studio_viewport_preview_model" in controller_source
+    assert "def map_studio_viewport_preview_model" in controller_mirror
     assert "authored_room_preview_model" in panel_source
     assert "_sync_room_preview_model(authored_room_preview_model)" in panel_source
-    assert "load_model(authored_room_preview_model)" in panel_source
+    # The preview load is demand-preserving: key-cached, camera-restoring, and
+    # passing project texture directories instead of the bare one-arg call.
+    assert "load_model(\n                authored_room_preview_model," in panel_source
+    assert "if key == self._room_preview_model_key" in panel_source
     assert "preview_model_loaded = self._room_preview_model is not None" in panel_source
     assert '"preview_model_loaded": preview_model_loaded' in panel_source
     assert '"show_render_geometry_overlay": render_geometry_edit_active if preview_model_loaded else True' in panel_source
@@ -164,6 +547,7 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert export_job["preflight"]["ready"] is True
     assert export_job["preflight"]["walkmesh_gate_ready"] is True
     assert export_job["preflight"]["visibility_ready"] is True
+    assert export_job["preflight"]["engine_contract_ready"] is True
     assert export_job["package"]["ok"] is True
     assert export_job["package"]["module_path"] == result.module_path
     assert export_job["package"]["pack_manifest_path"] == result.manifest_path
@@ -177,15 +561,35 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert authored_manifest["room_lights"][0]["name"] == "grdev01_key_light"
     assert authored_manifest["room_lights"][0]["room_resref"] == "grdev01_room01"
     assert authored_manifest["room_lights"][0]["metadata"]["purpose"] == "canonical_smoke_visibility"
-    assert authored_manifest["lighting"]["ready"] is False
-    assert authored_manifest["lighting"]["status"] == "Viewport lit only"
+    assert authored_manifest["project_metadata"]["lighting"]["profile"] == "fullbright"
+    assert authored_manifest["lighting"]["ready"] is True
+    assert authored_manifest["lighting"]["status"] == "Fullbright export candidate"
+    assert authored_manifest["lighting"]["lighting_profile"] == "fullbright"
     assert authored_manifest["lighting"]["light_count"] == 1
     assert authored_manifest["lighting"]["rooms_with_lights"] == ["grdev01_room01"]
     assert authored_manifest["lighting"]["rooms_without_lights"] == []
-    assert authored_manifest["lighting"]["lightmap_status"] == "viewport_lit_only"
+    assert authored_manifest["lighting"]["lightmap_status"] == "fullbright_export_candidate"
     assert authored_manifest["lighting"]["lightmap_manifest_path"] == ""
     assert authored_manifest["lighting"]["game_tested_lighting"] is False
-    assert any("viewport/editor intent" in warning for warning in authored_manifest["lighting"]["warnings"])
+    assert authored_manifest["lighting"]["warnings"] == []
+    mdl_light_sanitizer = authored_manifest["mdl_light_sanitizer"]
+    assert mdl_light_sanitizer["enabled"] is True
+    assert mdl_light_sanitizer["source"] == "map_studio:fullbright_mdl_light_sanitizer"
+    assert mdl_light_sanitizer["room_count"] == 1
+    assert mdl_light_sanitizer["light_node_count"] == 0
+    assert mdl_light_sanitizer["patched_light_node_count"] == 0
+    assert mdl_light_sanitizer["changed_light_node_count"] == 0
+    assert mdl_light_sanitizer["runtime_light_nodes_neutralized"] is False
+    assert mdl_light_sanitizer["warnings"] == []
+    assert mdl_light_sanitizer["neutralized_fields"] == [
+        "dynamic_type",
+        "affect_dynamic",
+        "shadow",
+        "flare",
+        "fading_light",
+    ]
+    assert mdl_light_sanitizer["rooms"][0]["room_resref"] == "grdev01_room01"
+    assert mdl_light_sanitizer["rooms"][0]["light_node_count"] == 0
     material_uv = authored_manifest["material_uv"]
     assert material_uv[0]["room_resref"] == "grdev01_room01"
     assert material_uv[0]["texture"] == "CM_Baremetal"
@@ -195,28 +599,29 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert material_uv[0]["meshes"][0]["role"] == "room_mesh"
     assert material_uv[0]["meshes"][0]["uv_coordinate_space"] == "mesh_uv0"
     assert material_uv[0]["meshes"][0]["uv_count"] == material_uv[0]["meshes"][0]["vertex_count"]
-    assert material_uv[0]["meshes"][0]["diffuse"] == [0.8, 0.8, 0.8]
-    assert material_uv[0]["meshes"][0]["ambient"] == [0.35, 0.35, 0.35]
+    assert material_uv[0]["lighting_profile"] == "fullbright"
+    assert material_uv[0]["meshes"][0]["diffuse"] == [1.0, 1.0, 1.0]
+    assert material_uv[0]["meshes"][0]["ambient"] == [1.0, 1.0, 1.0]
     assert authored_manifest["visibility"]["vis_resource"] == "grdev01.vis"
     assert authored_manifest["visibility"]["ready"] is True
     assert authored_manifest["visibility"]["status"] == "Ready"
     assert authored_manifest["visibility"]["room_count"] == 1
     assert authored_manifest["visibility"]["vis_entry_count"] == 1
-    assert authored_manifest["visibility"]["link_count"] == 1
+    assert authored_manifest["visibility"]["link_count"] == 0
     assert authored_manifest["visibility"]["cross_room_link_count"] == 0
     assert authored_manifest["visibility"]["entries"] == [
-        {"room": "grdev01_room01", "visible_rooms": ["grdev01_room01"]}
+        {"room": "grdev01_room01", "visible_rooms": []}
     ]
     assert authored_manifest["visibility"]["isolated_rooms"] == []
     assert authored_manifest["visibility"]["missing_targets"] == []
     assert authored_manifest["rooms"][0]["wok_walkable_faces"] == 4
-    assert authored_manifest["rooms"][0]["wok_non_walk_faces"] == 12
+    assert authored_manifest["rooms"][0]["wok_non_walk_faces"] == 0
     assert authored_manifest["rooms"][0]["wok_transition_surface_faces"] == 2
     assert authored_manifest["rooms"][0]["walkmesh_boundary_wall_faces"] == 12
     gate = authored_manifest["walkmesh_gate"]
     assert gate["ready"] is True
     assert gate["walkable_face_count"] == 4
-    assert gate["non_walk_face_count"] == 12
+    assert gate["non_walk_face_count"] == 0
     assert gate["transition_surface_face_count"] == 2
     assert gate["transition_surface_gate"]["ready"] is True
     assert gate["transition_surface_gate"]["required_transition_count"] == 0
@@ -234,6 +639,14 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert gate["pth_point_count"] >= 1
     assert {"entry_point", "placeable:grdev01_test_placeable", "waypoint:start"} <= set(gate["pathing_anchor_labels"])
     assert gate["blocking_messages"] == []
+    engine_contract = authored_manifest["engine_contract"]
+    assert engine_contract["export_ready"] is True
+    assert engine_contract["blocking_issues"] == []
+    assert engine_contract["rooms"][0]["room_resref"] == "grdev01_room01"
+    assert engine_contract["rooms"][0]["mdl"]["nonzero_node_plus_8"] == 0
+    assert engine_contract["rooms"][0]["mdl"]["aabb_node_count"] >= 1
+    assert engine_contract["rooms"][0]["wok"]["perimeter_count"] >= 1
+    assert engine_contract["rooms"][0]["wok"]["closed_perimeter_count"] >= 1
     contract = authored_manifest["t2601_smoke_contract"]
     assert contract["task"] == "T2601"
     assert contract["warp_command"] == "warp grdev01"
@@ -309,6 +722,49 @@ def test_t2643_exports_kmap_authored_module_package(tmp_path: Path) -> None:
     assert reference_gate["all_required_packaged"] is False
 
 
+def test_t3105_fullbright_mdl_light_sanitizer_zeros_runtime_light_fields() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules import authored_module_export as export_module
+
+    logical_node_offset = 0x20
+    actual_node_offset = logical_node_offset + export_module._MDL_BINARY_PREFIX_SIZE
+    light_header_offset = actual_node_offset + export_module._MDL_NODE_HEADER_SIZE
+    mdl_bytes = bytearray(light_header_offset + export_module._MDL_LIGHT_HEADER_SIZE + 16)
+    sentinel_offset = light_header_offset + 8
+    struct.pack_into("<I", mdl_bytes, sentinel_offset, 0xAABBCCDD)
+    for index, (_field_name, field_offset) in enumerate(export_module._LIGHT_RUNTIME_FIELD_OFFSETS, start=1):
+        struct.pack_into("<I", mdl_bytes, light_header_offset + field_offset, index)
+
+    patched, rows = export_module._neutralize_mdl_light_header_fields(
+        bytes(mdl_bytes),
+        (logical_node_offset,),
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["logical_node_offset"] == logical_node_offset
+    assert rows[0]["actual_node_offset"] == actual_node_offset
+    assert rows[0]["light_header_offset"] == light_header_offset
+    assert rows[0]["neutralized"] is True
+    assert rows[0]["before"] == {
+        "dynamic_type": 1,
+        "affect_dynamic": 2,
+        "shadow": 3,
+        "flare": 4,
+        "fading_light": 5,
+    }
+    assert rows[0]["after"] == {
+        "dynamic_type": 0,
+        "affect_dynamic": 0,
+        "shadow": 0,
+        "flare": 0,
+        "fading_light": 0,
+    }
+    for _field_name, field_offset in export_module._LIGHT_RUNTIME_FIELD_OFFSETS:
+        assert struct.unpack_from("<I", patched, light_header_offset + field_offset)[0] == 0
+    assert struct.unpack_from("<I", patched, sentinel_offset)[0] == 0xAABBCCDD
+
+
 def test_t2606_authored_build_metadata_records_multi_room_vis_links() -> None:
     _install_native_payload_paths()
 
@@ -344,11 +800,13 @@ def test_t2606_authored_build_metadata_records_multi_room_vis_links() -> None:
     assert visibility["vis_resource"] == "grvis01.vis"
     assert visibility["room_count"] == 2
     assert visibility["vis_entry_count"] == 2
-    assert visibility["link_count"] == 4
+    # The VIS compile drops self-references (a room never lists itself in the
+    # vanilla contract) and mirrors links so A<->B stays symmetric.
+    assert visibility["link_count"] == 2
     assert visibility["cross_room_link_count"] == 2
     assert visibility["entries"] == [
-        {"room": "grvis01_a", "visible_rooms": ["grvis01_a", "grvis01_b"]},
-        {"room": "grvis01_b", "visible_rooms": ["grvis01_a", "grvis01_b"]},
+        {"room": "grvis01_a", "visible_rooms": ["grvis01_b"]},
+        {"room": "grvis01_b", "visible_rooms": ["grvis01_a"]},
     ]
     assert visibility["isolated_rooms"] == []
     assert visibility["missing_targets"] == []
@@ -561,7 +1019,9 @@ def test_t3105_exports_golden_map_module_fixture(tmp_path: Path) -> None:
     gate = authored_manifest["walkmesh_gate"]
     assert gate["ready"] is True
     assert gate["walkable_face_count"] == 4
-    assert gate["non_walk_face_count"] == 12
+    # Floor-only WOK engine contract (T2538/T2540/T2906): walls and ceilings
+    # are never baked into the .wok, so no NON_WALK faces exist.
+    assert gate["non_walk_face_count"] == 0
     assert gate["transition_surface_face_count"] == 2
     assert gate["transition_surface_gate"]["ready"] is True
     assert gate["transition_surface_gate"]["required_transition_count"] == 1
@@ -662,19 +1122,18 @@ def test_t3105_export_gate_blocks_disconnected_walkmesh_islands(tmp_path: Path) 
 
     build = build_authored_module(project)
 
+    # Disconnected islands are advisory now (vanilla areas ship them); the
+    # counts still surface so the UI can flag the gap.
     gate = build.metadata["walkmesh_gate"]
-    assert gate["ready"] is False
     assert gate["walkable_face_count"] == 4
     assert gate["walkable_component_count"] == 2
     assert gate["disconnected_walkmesh_room_count"] == 1
-    assert any("disconnected walkable island" in message for message in gate["blocking_messages"])
+    assert not any("disconnected walkable island" in message for message in gate["blocking_messages"])
 
     result = export_authored_module_project(AuthoredModuleExportRequest(project=project, output_dir=str(tmp_path)))
 
-    assert result.ok is False
-    assert result.code == "preflight_failed"
-    assert result.metadata["walkmesh_gate"]["ready"] is False
-    assert any("disconnected walkable island" in message for message in result.blocking_issues)
+    assert not any("disconnected walkable island" in message for message in result.blocking_issues)
+    assert any("disconnected walkable island" in message for message in result.warnings)
 
 
 def test_t2680_pathing_includes_walkable_spatial_gameplay_anchors() -> None:
@@ -887,6 +1346,7 @@ def test_t2605_complete_door_module_transition_is_export_candidate() -> None:
         position=(0.0, 1.0, 0.0),
         linked_to="wp_arrive",
         linked_to_module="grnext01",
+        linked_to_flags=2,
     ).project
 
     build = build_authored_module(project)
@@ -900,6 +1360,72 @@ def test_t2605_complete_door_module_transition_is_export_candidate() -> None:
     assert readiness.metadata["transition_incomplete_count"] == 0
     assert readiness.metadata["transition_references"][0]["status"] == "module_transition"
     assert readiness.can_export_candidate is True
+
+
+@pytest.mark.parametrize("game", ("K1", "K2"))
+def test_transition_fields_survive_k1_k2_mod_archive_readback(tmp_path: Path, game: str) -> None:
+    """Package proof for custom-plcaa travel fields; live interaction remains a manual game gate."""
+
+    _install_native_payload_paths()
+
+    from pykotor.extract.capsule import LazyCapsule
+    from pykotor.resource.formats.gff import read_gff
+    from pykotor.resource.type import ResourceType
+    from src.core.modules.authored_module_export import AuthoredModuleExportRequest, export_authored_module_project
+    from src.core.modules.authored_module_placements import add_authored_gameplay_placement
+
+    module_root = "grtrbk1" if game == "K1" else "grtrbk2"
+    project = _authored_project_with_door_transition_surface(module_root, game)
+    project = add_authored_gameplay_placement(
+        project,
+        kind="door",
+        template_resref="door_t01",
+        tag="plcaa_exit",
+        position=(0.0, 1.0, 0.0),
+        linked_to="plcab_arrive",
+        linked_to_module="plcab",
+        linked_to_flags=2,
+    ).project
+    project = add_authored_gameplay_placement(
+        project,
+        kind="trigger",
+        template_resref="newtransition",
+        tag="plcaa_trigger",
+        position=(1.0, 1.0, 0.0),
+        linked_to="plcab_door",
+        linked_to_module="plcab",
+        linked_to_flags=1,
+    ).project
+
+    result = export_authored_module_project(
+        AuthoredModuleExportRequest(project=project, output_dir=str(tmp_path))
+    )
+
+    assert result.ok is True, result.blocking_issues
+    archive = {
+        (str(resource.resname()).lower(), resource.restype()): bytes(resource.data())
+        for resource in LazyCapsule(result.module_path)
+    }
+    git = read_gff(archive[(module_root, ResourceType.GIT)]).root
+    ifo = read_gff(archive[("module", ResourceType.IFO)]).root
+    expected_types = {
+        "LinkedTo": "String",
+        "LinkedToModule": "ResRef",
+        "LinkedToFlags": "UInt8",
+        "TransitionDestin": "LocalizedString",
+    }
+    door = git.get_list("Door List")[0]
+    trigger = git.get_list("TriggerList")[0]
+
+    assert {field: door.what_type(field).name for field in expected_types} == expected_types
+    assert {field: trigger.what_type(field).name for field in expected_types} == expected_types
+    assert str(trigger.get_resref("LinkedToModule")) == "plcab"
+    assert trigger.get_uint8("LinkedToFlags") == 1
+    assert ifo.what_type("Mod_Entry_Area").name == "ResRef"
+    assert all(
+        ifo.what_type(field).name == "Single"
+        for field in ("Mod_Entry_X", "Mod_Entry_Y", "Mod_Entry_Z", "Mod_Entry_Dir_X", "Mod_Entry_Dir_Y")
+    )
 
 
 def test_t2911_linked_transition_requires_wok_door_surface_before_export() -> None:
@@ -924,34 +1450,33 @@ def test_t2911_linked_transition_requires_wok_door_surface_before_export() -> No
         position=(0.0, 1.0, 0.0),
         linked_to="wp_arrive",
         linked_to_module="grnext01",
+        linked_to_flags=2,
     ).project
 
     build = build_authored_module(project)
 
+    # Missing surface-18 faces WARN rather than block: vanilla WOKs (plcaa)
+    # ship linked transitions without them, so stock round-trips must export.
     gate = build.metadata["walkmesh_gate"]["transition_surface_gate"]
-    assert gate["ready"] is False
+    assert gate["ready"] is True
     assert gate["required_transition_count"] == 1
     assert gate["transition_surface_face_count"] == 0
-    assert any("no WOK DOOR/transition surface" in message for message in build.blocking_issues)
+    assert not any("no WOK DOOR/transition surface" in message for message in build.blocking_issues)
+    assert any("no WOK DOOR/transition surface" in message for message in build.warnings)
 
     readiness = build_authored_module_readiness(project, packaged_resources=build.resource_summaries)
 
     readiness_gate = readiness.metadata["transition_surface_gate"]
-    assert readiness.can_export_candidate is False
-    assert readiness.export_status == "Transition WOK surface blocked"
-    assert readiness_gate["ready"] is False
+    assert readiness.export_status != "Transition WOK surface blocked"
+    assert readiness_gate["ready"] is True
     assert readiness_gate["required_transition_count"] == 1
     assert readiness_gate["transition_surface_face_count"] == 0
-    assert any("surface 18" in message for message in readiness.blocking_messages)
-    issues = authored_module_readiness_validation_issues(readiness)
-    assert any(issue.code == "MAP_STUDIO_TRANSITION_WOK_SURFACE_BLOCKER" for issue in issues)
+    assert not any("surface 18" in message for message in readiness.blocking_messages)
+    assert any("surface 18" in message for message in readiness.warnings)
 
     result = export_authored_module_project(AuthoredModuleExportRequest(project=project, dry_run=True))
 
-    assert result.ok is False
-    assert result.code == "preflight_failed"
-    assert result.metadata["walkmesh_gate"]["ready"] is False
-    assert any("surface 18" in message for message in result.blocking_issues)
+    assert not any("surface 18" in message for message in result.blocking_issues)
 
 
 def test_t2605_local_door_transition_requires_authored_destination_tag() -> None:
@@ -974,14 +1499,15 @@ def test_t2605_local_door_transition_requires_authored_destination_tag() -> None
         tag="grloc_exit",
         position=(0.0, 1.0, 0.0),
         linked_to="wp_missing",
+        linked_to_flags=2,
     ).project
 
     build = build_authored_module(project)
     readiness = build_authored_module_readiness(project, packaged_resources=build.resource_summaries)
 
     joined_blockers = "\n".join(build.blocking_issues + list(readiness.blocking_messages))
-    assert "links to local destination wp_missing" in joined_blockers
-    assert "no authored local door, trigger, or waypoint has that tag" in joined_blockers
+    assert "links to local waypoint wp_missing" in joined_blockers
+    assert "no authored local door or waypoint has that tag" in joined_blockers
     assert readiness.can_export_candidate is False
     assert readiness.metadata["transition_references"][0]["status"] == "local_transition"
 
@@ -1001,6 +1527,7 @@ def test_t2605_local_door_transition_accepts_matching_authored_waypoint() -> Non
         tag="grloc_exit",
         position=(0.0, 1.0, 0.0),
         linked_to="wp_arrive",
+        linked_to_flags=2,
     ).project
     project = add_authored_gameplay_placement(
         project,
@@ -1067,16 +1594,22 @@ def test_t2605_overlong_gameplay_template_resref_blocks_authored_export() -> Non
         )
 
 
-def test_t2907_terrain_preset_exports_walkable_wok_pathing_and_lighting(tmp_path: Path) -> None:
+@pytest.mark.parametrize("game", ("K1", "K2"))
+def test_t2907_terrain_preset_exports_walkable_wok_pathing_and_lighting(
+    tmp_path: Path,
+    game: str,
+) -> None:
     _install_native_payload_paths()
 
     from src.core.modules.authored_module_export import AuthoredModuleExportRequest, export_authored_module_project
     from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
 
+    module_root = "grterr1" if game == "K1" else "grterr2"
+    room_resref = f"{module_root}_room01"
     project = create_authored_module_from_room_preset(
         preset_id="terrain_heightfield",
-        module_root="grterr01",
-        game="K1",
+        module_root=module_root,
+        game=game,
     )
 
     result = export_authored_module_project(AuthoredModuleExportRequest(project=project, output_dir=str(tmp_path)))
@@ -1086,35 +1619,185 @@ def test_t2907_terrain_preset_exports_walkable_wok_pathing_and_lighting(tmp_path
     assert result.blocking_issues == []
     resource_keys = {(summary.resref, summary.restype) for summary in result.resources}
     assert {
-        ("grterr01", "are"),
-        ("grterr01", "git"),
-        ("grterr01", "lyt"),
-        ("grterr01", "vis"),
-        ("grterr01", "pth"),
+        (module_root, "are"),
+        (module_root, "git"),
+        (module_root, "lyt"),
+        (module_root, "vis"),
+        (module_root, "pth"),
         ("module", "ifo"),
-        ("grterr01_room01", "mdl"),
-        ("grterr01_room01", "mdx"),
-        ("grterr01_room01", "wok"),
+        (room_resref, "mdl"),
+        (room_resref, "mdx"),
+        (room_resref, "wok"),
     } <= resource_keys
     manifest = json.loads(Path(result.manifest_path).read_text(encoding="utf-8"))
     authored_manifest = manifest["map_studio_authored_module"]
     room = authored_manifest["rooms"][0]
-    assert room["resref"] == "grterr01_room01"
+    assert room["resref"] == room_resref
     assert room["wok_walkable_faces"] == 32
-    assert room["wok_non_walk_faces"] == 32
+    # The engine-facing WOK is the floor only. Boundary-wall intent remains
+    # recorded separately instead of enclosing the floor in NON_WALK slabs.
+    assert room["wok_non_walk_faces"] == 0
     assert room["walkmesh_boundary_wall_faces"] == 32
     assert room["floor_surface_id"] == 3
     assert authored_manifest["lighting_count"] == 1
-    assert authored_manifest["room_lights"][0]["name"] == "grterr01_key_light"
-    assert authored_manifest["room_lights"][0]["room_resref"] == "grterr01_room01"
+    assert authored_manifest["room_lights"][0]["name"] == f"{module_root}_key_light"
+    assert authored_manifest["room_lights"][0]["room_resref"] == room_resref
     assert authored_manifest["room_lights"][0]["metadata"]["purpose"] == "starter_room_visibility"
     assert authored_manifest["walkability"]["ok"] is True
     walkability_labels = {row["label"] for row in authored_manifest["walkability"]["checks"]}
-    assert {"entry_point", "placeable:grterr01_test_placeable", "waypoint:start"} <= walkability_labels
+    placement_label = f"placeable:{module_root}_test_placeable"
+    assert {"entry_point", placement_label, "waypoint:start"} <= walkability_labels
     assert authored_manifest["pathing"]["walkmesh_component_count"] == 1
-    assert {"entry_point", "placeable:grterr01_test_placeable", "waypoint:start"} <= set(
+    assert {"entry_point", placement_label, "waypoint:start"} <= set(
         authored_manifest["pathing"]["anchor_labels"]
     )
+    engine_contract = authored_manifest["engine_contract"]
+    assert engine_contract["export_ready"] is True
+    assert engine_contract["blocking_issues"] == []
+    engine_room = engine_contract["rooms"][0]
+    assert engine_room["room_resref"] == room_resref
+    assert engine_room["mdl"]["aabb_node_count"] >= 1
+    assert engine_room["mdl"]["nonzero_node_plus_8"] == 0
+    assert engine_room["wok"]["aabb_count"] >= 1
+    assert engine_room["wok"]["perimeter_count"] >= 1
+    assert engine_room["wok"]["closed_perimeter_count"] == engine_room["wok"]["perimeter_count"]
+
+
+def test_wok_writer_serializes_two_closed_perimeters_for_disconnected_islands() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_format import WOKData, WOKFace
+    from src.core.validation.kotor_module_engine_contract import inspect_raw_wok_structure
+
+    wok = WOKData(
+        name="grislands",
+        verts=[
+            (0.0, 0.0, 0.0),
+            (2.0, 0.0, 0.0),
+            (2.0, 2.0, 0.0),
+            (0.0, 2.0, 0.0),
+            (5.0, 0.0, 0.0),
+            (7.0, 0.0, 0.0),
+            (7.0, 2.0, 0.0),
+            (5.0, 2.0, 0.0),
+        ],
+        faces=[
+            WOKFace(0, 1, 2, 4),
+            WOKFace(0, 2, 3, 4),
+            WOKFace(4, 5, 6, 4),
+            WOKFace(4, 6, 7, 4),
+        ],
+    )
+
+    raw = wok.to_bytes()
+    fingerprint, report = inspect_raw_wok_structure(wok.name, raw)
+    perimeter_count, perimeter_offset = struct.unpack_from("<II", raw, 128)
+    endpoints = struct.unpack_from(f"<{perimeter_count}I", raw, perimeter_offset)
+
+    assert report.blocking_issues == []
+    assert fingerprint.aabb_count >= 1
+    assert fingerprint.perimeter_count == 2
+    assert fingerprint.closed_perimeter_count == 2
+    assert perimeter_count == 2
+    assert endpoints == (4, 8)
+
+
+def test_wok_writer_serializes_outer_and_inner_closed_perimeters_for_ring_hole() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_format import WOKData, WOKFace
+    from src.core.validation.kotor_module_engine_contract import inspect_raw_wok_structure
+
+    # Four strips form a square ring. The inner boundary is deliberately a
+    # real hole rather than a NON_WALK cap, matching terrain caves/courtyards.
+    wok = WOKData(
+        name="grring",
+        verts=[
+            (0.0, 0.0, 0.0),
+            (4.0, 0.0, 0.0),
+            (4.0, 4.0, 0.0),
+            (0.0, 4.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (3.0, 1.0, 0.0),
+            (3.0, 3.0, 0.0),
+            (1.0, 3.0, 0.0),
+        ],
+        faces=[
+            WOKFace(0, 1, 5, 4),
+            WOKFace(0, 5, 4, 4),
+            WOKFace(1, 2, 6, 4),
+            WOKFace(1, 6, 5, 4),
+            WOKFace(2, 3, 7, 4),
+            WOKFace(2, 7, 6, 4),
+            WOKFace(3, 0, 4, 4),
+            WOKFace(3, 4, 7, 4),
+        ],
+    )
+
+    raw = wok.to_bytes()
+    fingerprint, report = inspect_raw_wok_structure(wok.name, raw)
+    perimeter_count, perimeter_offset = struct.unpack_from("<II", raw, 128)
+    endpoints = struct.unpack_from(f"<{perimeter_count}I", raw, perimeter_offset)
+
+    assert report.blocking_issues == []
+    assert fingerprint.aabb_count >= 1
+    assert fingerprint.perimeter_count == 2
+    assert fingerprint.closed_perimeter_count == 2
+    assert perimeter_count == 2
+    assert endpoints == (4, 8)
+
+
+@pytest.mark.parametrize("game", ("K1", "K2"))
+def test_sloped_terrain_exports_embedded_mdl_aabb_and_closed_raw_wok_perimeter(game: str) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+    from src.core.modules.authored_module_project import create_terrain_room_project
+    from src.core.modules.authored_terrain_builder import TerrainHeightfieldPrimitive
+    from src.core.validation.kotor_module_engine_contract import inspect_raw_mdl_structure, inspect_raw_wok_structure
+
+    module_root = "grramp1" if game == "K1" else "grramp2"
+    room_resref = f"{module_root}r"
+    project = create_terrain_room_project(
+        module_root=module_root,
+        game=game,
+        display_name=f"{game} serialized ramp proof",
+        terrain=TerrainHeightfieldPrimitive(
+            room_resref=room_resref,
+            width=4.0,
+            depth=4.0,
+            heights=((0.0, 0.0, 0.0), (0.5, 0.5, 0.5), (1.0, 1.0, 1.0)),
+            max_walkable_slope_degrees=45.0,
+        ),
+        placements=AuthoredGameplayPlacement(
+            entry_point=ModuleEntryPoint(area_resref=module_root, position=(0.0, 0.0, 0.5))
+        ),
+    )
+
+    build = build_authored_module(project)
+    packaged = {(item.resref, item.restype): bytes(item.data) for item in build.packaged_resources}
+    mdl_fingerprint, mdl_report = inspect_raw_mdl_structure(
+        room_resref,
+        packaged[(room_resref, "mdl")],
+        packaged[(room_resref, "mdx")],
+        game=game,
+    )
+    raw_wok = bytes(build.resources[(room_resref, "wok")].data)
+    wok_fingerprint, wok_report = inspect_raw_wok_structure(room_resref, raw_wok)
+
+    assert build.blocking_issues == []
+    assert build.metadata["engine_contract"]["export_ready"] is True
+    assert mdl_report.blocking_issues == []
+    assert mdl_fingerprint.aabb_node_count >= 1
+    assert mdl_fingerprint.nonzero_node_plus_8 == 0
+    assert mdl_fingerprint.controller_count == 0
+    assert wok_report.blocking_issues == []
+    assert wok_fingerprint.aabb_count >= 1
+    assert wok_fingerprint.walkable_face_count == 8
+    assert wok_fingerprint.perimeter_count == 1
+    assert wok_fingerprint.closed_perimeter_count == 1
+    assert struct.unpack_from("<I", raw_wok, 128)[0] == 1
 
 
 def test_t2600_camera_properties_update_survives_kmap_payload_roundtrip() -> None:
@@ -1162,7 +1845,11 @@ def test_t2600_camera_properties_update_survives_kmap_payload_roundtrip() -> Non
     assert row.pitch == -12.0
 
     payload = authored_project_to_kmap_payload(update.project)
-    camera_payload = payload["placements"]["cameras"][0]
+    camera_payload = dict(payload["placements"]["cameras"][0])
+    # Stable editor identity persists in KMAP (stable-ID contract). The value
+    # is generated, so assert presence/shape and pop it for the exact compare.
+    instance_id = str(camera_payload.pop("instance_id", "") or "")
+    assert instance_id.startswith("i_")
     assert camera_payload == {
         "camera_id": 42,
         "position": [1.0, 2.0, 3.0],
@@ -1175,6 +1862,7 @@ def test_t2600_camera_properties_update_survives_kmap_payload_roundtrip() -> Non
 
     round_tripped = authored_project_from_kmap_payload(payload, fallback_name="grcam01", fallback_game="K1")
     camera = round_tripped.placements.cameras[0]
+    assert camera.instance_id == instance_id
     assert camera.camera_id == 42
     assert camera.field_of_view == 62.5
     assert camera.height == 1.25
@@ -1233,6 +1921,402 @@ def test_t2643_dry_run_does_not_mark_runtime_resources(tmp_path: Path) -> None:
     assert result.code == "dry_run_passed"
     assert result.module_path == ""
     assert controller.project.extra_sections["authored_module"].get("runtime_resources", []) == []
+
+
+@pytest.mark.parametrize("game", ("K1", "K2"))
+def test_authored_export_blocks_generated_and_duplicate_extra_resource_collisions(game: str) -> None:
+    _install_native_payload_paths()
+    from src.core.modules.authored_module_export import AuthoredModuleExportRequest, export_authored_module_project
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        create_dev_test_authored_module_payload,
+    )
+
+    module_root = "grcolk1" if game == "K1" else "grcolk2"
+    payload = create_dev_test_authored_module_payload(module_root=module_root, game=game)
+    project = authored_project_from_kmap_payload(payload, fallback_name=module_root, fallback_game=game)
+
+    generated_collision = export_authored_module_project(
+        AuthoredModuleExportRequest(
+            project=project,
+            dry_run=True,
+            strict=False,
+            extra_resources=((module_root.upper(), ".ARE", b"must-not-overwrite-generated-are"),),
+        )
+    )
+
+    assert generated_collision.ok is False
+    assert generated_collision.code == "preflight_failed"
+    assert any("conflicts with generated resource" in issue for issue in generated_collision.blocking_issues)
+    generated_gate = generated_collision.metadata["resource_collision_gate"]
+    assert generated_gate["game"] == game
+    assert generated_gate["ready"] is False
+    assert generated_gate["collision_count"] == 1
+    assert generated_gate["accepted_extra_resource_count"] == 0
+    assert generated_gate["collisions"][0]["kind"] == "generated_resource"
+    assert generated_gate["collisions"][0]["code"] == "MAP_STUDIO_RESOURCE_COLLISION"
+    generated_are = next(
+        summary
+        for summary in generated_collision.resources
+        if (summary.resref, summary.restype) == (module_root, "are")
+    )
+    assert generated_are.source == "map_studio:authored:are"
+    assert generated_are.size != len(b"must-not-overwrite-generated-are")
+    generated_final = generated_collision.metadata["final_resource_map_validation"]
+    assert generated_final["game_supported"] is True
+    assert generated_final["collision_count"] == 1
+    assert generated_final["ready"] is False
+    assert generated_final["resource_count"] == generated_final["unique_resource_count"]
+
+    duplicate_extra = export_authored_module_project(
+        AuthoredModuleExportRequest(
+            project=project,
+            dry_run=True,
+            strict=False,
+            extra_resources=(
+                ("painted_wall", "tga", b"first-tga"),
+                ("PAINTED_WALL", ".TGA", b"second-tga-must-not-win"),
+                ("painted_wall", "txi", b"mipmap 1\n"),
+            ),
+        )
+    )
+
+    assert duplicate_extra.ok is False
+    assert duplicate_extra.code == "preflight_failed"
+    assert any("conflicts with an earlier extra resource" in issue for issue in duplicate_extra.blocking_issues)
+    duplicate_gate = duplicate_extra.metadata["resource_collision_gate"]
+    assert duplicate_gate["collision_count"] == 1
+    assert duplicate_gate["accepted_extra_resource_count"] == 2
+    assert duplicate_gate["collisions"][0]["kind"] == "duplicate_extra_resource"
+    custom = [summary for summary in duplicate_extra.resources if summary.resref == "painted_wall"]
+    assert {(summary.restype, summary.size) for summary in custom} == {
+        ("tga", len(b"first-tga")),
+        ("txi", len(b"mipmap 1\n")),
+    }
+
+
+@pytest.mark.parametrize("game", ("K1", "K2"))
+def test_placeable_builder_utp_extra_is_followed_from_git_and_marked_packaged(game: str) -> None:
+    _install_native_payload_paths()
+    from dataclasses import replace
+
+    from pykotor.common.misc import ResRef
+    from pykotor.resource.generics.utp import UTP, bytes_utp
+    from src.core.modules.authored_module_export import AuthoredModuleExportRequest, export_authored_module_project
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        create_dev_test_authored_module_payload,
+    )
+    from src.core.modules.authored_module_objects import AuthoredPlaceableInstance
+
+    module_root = "grpbk1" if game == "K1" else "grpbk2"
+    payload = create_dev_test_authored_module_payload(module_root=module_root, game=game)
+    project = authored_project_from_kmap_payload(payload, fallback_name=module_root, fallback_game=game)
+    project = replace(
+        project,
+        placements=replace(
+            project.placements,
+            placeables=(
+                AuthoredPlaceableInstance(
+                    template_resref="pb_crate",
+                    tag="pb_crate_instance",
+                    position=(1.75, 1.5, 0.0),
+                ),
+            ),
+        ),
+    )
+    utp = UTP()
+    utp.resref = ResRef("pb_crate")
+    utp.tag = "pb_crate"
+    utp.appearance_id = 4
+
+    result = export_authored_module_project(
+        AuthoredModuleExportRequest(
+            project=project,
+            dry_run=True,
+            extra_resources=(("pb_crate", ".UTP", bytes_utp(utp)),),
+        )
+    )
+
+    assert result.ok is True, result.blocking_issues
+    assert result.metadata["gameplay_packaged_template_dependency_count"] == 1
+    assert result.metadata["gameplay_external_template_dependency_count"] == 1  # stock start waypoint
+    dependency = next(
+        row for row in result.metadata["gameplay_template_dependencies"] if row["kind"] == "placeable"
+    )
+    assert dependency["template_resref"] == "pb_crate"
+    assert dependency["packaged"] is True
+    engine_contract = result.metadata["engine_contract"]
+    assert engine_contract["bundled_placeable_count"] == 1
+    assert engine_contract["placeable_templates"][0]["utp_template_resref"] == "pb_crate"
+    assert ("pb_crate", "utp") in {(row.resref, row.restype) for row in result.resources}
+
+
+def test_placeable_builder_utp_and_git_reference_survive_mod_archive_readback(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+    from dataclasses import replace
+
+    from pykotor.common.misc import ResRef
+    from pykotor.extract.capsule import LazyCapsule
+    from pykotor.resource.formats.gff import read_gff
+    from pykotor.resource.generics.utp import UTP, bytes_utp, read_utp
+    from pykotor.resource.type import ResourceType
+    from src.core.modules.authored_module_export import AuthoredModuleExportRequest, export_authored_module_project
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        create_dev_test_authored_module_payload,
+    )
+    from src.core.modules.authored_module_objects import AuthoredPlaceableInstance
+
+    payload = create_dev_test_authored_module_payload(module_root="grpbrdbk", game="K2")
+    project = authored_project_from_kmap_payload(payload, fallback_name="grpbrdbk", fallback_game="K2")
+    project = replace(
+        project,
+        placements=replace(
+            project.placements,
+            placeables=(
+                AuthoredPlaceableInstance(
+                    template_resref="pb_terminal",
+                    tag="pb_terminal_instance",
+                    position=(1.75, 1.5, 0.0),
+                ),
+            ),
+        ),
+    )
+    utp = UTP()
+    utp.resref = ResRef("pb_terminal")
+    utp.tag = "pb_terminal"
+    utp.appearance_id = 4
+    utp.useable = True
+
+    result = export_authored_module_project(
+        AuthoredModuleExportRequest(
+            project=project,
+            output_dir=str(tmp_path),
+            extra_resources=(("pb_terminal", "UTP", bytes_utp(utp)),),
+        )
+    )
+
+    assert result.ok is True, result.blocking_issues
+    archive_rows = {
+        (str(resource.resname()).lower(), resource.restype()): bytes(resource.data())
+        for resource in LazyCapsule(result.module_path)
+    }
+    assert ("pb_terminal", ResourceType.UTP) in archive_rows
+    assert ("grpbrdbk", ResourceType.GIT) in archive_rows
+    roundtrip_utp = read_utp(archive_rows[("pb_terminal", ResourceType.UTP)])
+    assert str(roundtrip_utp.resref).lower() == "pb_terminal"
+    assert roundtrip_utp.useable is True
+    git = read_gff(archive_rows[("grpbrdbk", ResourceType.GIT)])
+    placeables = git.root.get("Placeable List")
+    assert len(placeables) == 1
+    assert str(placeables.at(0).get("TemplateResRef")).lower() == "pb_terminal"
+    assert result.metadata["engine_contract"]["bundled_placeable_count"] == 1
+
+
+@pytest.mark.parametrize("game", ("K1", "K2"))
+def test_map_studio_project_texture_is_bundled_and_read_back_from_authored_mod(
+    tmp_path: Path,
+    game: str,
+) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.map_studio_texture_paint import encode_tga_rgba
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    source = tmp_path / "painted_wall.tga"
+    source.write_bytes(encode_tga_rgba(4, 4, bytes((40, 100, 180, 255)) * 16))
+    source.with_suffix(".txi").write_text("mipmap 1\n", encoding="utf-8")
+    controller = ModuleEditorController()
+    controller.new_project(name="grpaint1", game=game)
+    controller.save_project(tmp_path / "grpaint1.kmap")
+    controller.create_dev_test_authored_module()
+    asset = controller.import_project_texture(source)
+
+    result = controller.export_authored_module(tmp_path / "export")
+
+    assert result.ok is True
+    assert asset.resref == "painted_wall"
+    assert {("painted_wall", "tga"), ("painted_wall", "txi")} <= {
+        (item.resref, item.restype) for item in result.resources
+    }
+    assert result.package_verification is not None
+    assert {("painted_wall", "tga"), ("painted_wall", "txi")} <= {
+        (item.resref, item.restype) for item in result.package_verification.resources
+    }
+    assert result.metadata["resource_collision_gate"]["ready"] is True
+    assert result.metadata["resource_collision_gate"]["collision_count"] == 0
+    assert result.metadata["final_resource_map_validation"]["ready"] is True
+    assert "painted_wall.tga" in controller.project.extra_sections["authored_module"]["runtime_resources"]
+    assert "painted_wall.txi" in controller.project.extra_sections["authored_module"]["runtime_resources"]
+
+
+def test_map_studio_controller_injects_placeable_library_utp_into_final_resource_map(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+    from pykotor.common.misc import ResRef
+    from pykotor.resource.generics.utp import UTP, bytes_utp
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grpbctrl", game="K2")
+    controller.save_project(tmp_path / "grpbctrl.kmap")
+    controller.create_dev_test_authored_module()
+    utp = UTP()
+    utp.resref = ResRef("plc_bench")
+    utp.tag = "grpbctrl_bench"
+    utp.appearance_id = 4
+    controller.set_authored_placeable_resources(
+        (("plc_bench", ".UTP", bytes_utp(utp)),),
+        issues=("manual KOTOR proof pending",),
+    )
+
+    result = controller.export_authored_module(tmp_path / "export", dry_run=True)
+
+    assert result.ok is True, result.blocking_issues
+    assert result.metadata["gameplay_packaged_template_dependency_count"] == 1
+    assert result.metadata["engine_contract"]["bundled_placeable_count"] == 1
+    assert controller.authored_placeable_resource_issues() == ("manual KOTOR proof pending",)
+    assert ("plc_bench", "utp") in {(row.resref, row.restype) for row in result.resources}
+
+
+def test_headless_export_cannot_bypass_placeable_library_resource_gate(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+    from types import SimpleNamespace
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grpb_gate", game="K2")
+    controller.create_dev_test_authored_module()
+    controller.set_authored_placeable_preview_rows(
+        ({"source": "placeable_builder", "resref": "plc_bench", "template_resref": "plc_bench"},)
+    )
+
+    with pytest.raises(ValueError, match="plc_bench"):
+        controller.export_authored_module(tmp_path / "missing", dry_run=True)
+
+    controller.set_authored_placeable_resources(
+        (),
+        issues=(SimpleNamespace(severity="blocking", message="custom MDL dependency is missing"),),
+    )
+    with pytest.raises(ValueError, match="custom MDL dependency is missing"):
+        controller.export_authored_module(tmp_path / "blocked", dry_run=True)
+
+
+def test_authored_install_prep_preserves_custom_texture_resources() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.authored_module_export import (
+        AuthoredModuleExportRequest,
+        AuthoredModuleInstallPrepRequest,
+        _install_prep_export_request,
+    )
+
+    project = _dev_authored_project()
+    custom = (("painted_wall", "tga", b"tga-bytes"), ("painted_wall", "txi", b"mipmap 1\n"))
+    request = AuthoredModuleInstallPrepRequest(
+        project=project,
+        output_dir="stage",
+        export_request=AuthoredModuleExportRequest(project=project, extra_resources=custom),
+    )
+
+    resolved = _install_prep_export_request(request)
+
+    assert resolved.extra_resources == custom
+    assert resolved.output_dir == "stage"
+
+
+@pytest.mark.parametrize("game", ("K1", "K2"))
+def test_painted_texture_face_reference_and_tga_txi_roundtrip_together_in_mod(
+    tmp_path: Path,
+    game: str,
+) -> None:
+    _install_native_payload_paths()
+    from pykotor.extract.capsule import LazyCapsule
+    from pykotor.resource.type import ResourceType
+    from src.core.level import new_kmap_project
+    from src.core.modules.authored_imported_mesh import ImportedMeshRoomPrimitive, ImportedMeshSurface
+    from src.core.modules.authored_module_kmap_bridge import authored_project_to_kmap_payload
+    from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+    from src.core.modules.authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject, AuthoredRoomSpec
+    from src.core.modules.map_studio_texture_paint import TexturePaintBrush, TexturePaintSession, encode_tga_rgba
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    surface = ImportedMeshSurface(
+        name="paint_floor",
+        texture="CM_Baremetal",
+        vertices=((0.0, 0.0, 0.0), (4.0, 0.0, 0.0), (4.0, 4.0, 0.0), (0.0, 4.0, 0.0)),
+        faces=((0, 1, 2), (0, 2, 3)),
+        uvs=((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)),
+        normals=((0.0, 0.0, 1.0),) * 4,
+    )
+    authored = AuthoredModuleProject(
+        metadata=AuthoredModuleMetadata(module_root="grpaint3", game=game, display_name="Paint Proof", tag="grpaint3"),
+        rooms=(
+            AuthoredRoomSpec(
+                room_resref="grpaint3r",
+                primitive=ImportedMeshRoomPrimitive(room_resref="grpaint3r", surfaces=(surface,), game=game),
+            ),
+        ),
+        placements=AuthoredGameplayPlacement(
+            entry_point=ModuleEntryPoint(area_resref="grpaint3", position=(1.0, 1.0, 0.0))
+        ),
+    )
+    controller = ModuleEditorController()
+    controller.model.set_project(new_kmap_project(name="grpaint3", game=game))
+    controller.project.path = str(tmp_path / "grpaint3.kmap")
+    controller.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(authored)
+    source = tmp_path / "painted_floor.tga"
+    base_rgba = bytes((60, 70, 80, 255)) * (32 * 32)
+    source.write_bytes(encode_tga_rgba(32, 32, base_rgba))
+    source.with_suffix(".txi").write_text("mipmap 1\n", encoding="utf-8")
+    asset = controller.import_project_texture(source)
+    ok, message = controller.set_imported_mesh_room_face_texture(
+        room_resref="grpaint3r",
+        mesh_role="render",
+        face_indices=(0,),
+        texture=asset.resref,
+    )
+    assert ok is True, message
+    session = TexturePaintSession(32, 32, base_rgba)
+    session.begin_stroke(TexturePaintBrush(radius_px=4.0, color=(200, 30, 10, 255)))
+    session.append_sample((0.25, 0.25))
+    session.end_stroke()
+    controller.commit_project_texture_paint(asset.texture_id, session)
+
+    with pytest.raises(ValueError, match="Apply Texture Changes"):
+        controller.export_authored_module(tmp_path / "blocked_export")
+
+    applied = controller.apply_project_texture_changes()
+    result = controller.export_authored_module(tmp_path / "export")
+
+    assert applied["applied"] is True
+    assert applied["resrefs"] == ("painted_floor",)
+    assert result.ok is True
+    assert {(item.resref, item.restype) for item in result.package_verification.resources} >= {
+        ("grpaint3r", "mdl"),
+        ("grpaint3r", "mdx"),
+        ("grpaint3r", "wok"),
+        ("painted_floor", "tga"),
+        ("painted_floor", "txi"),
+    }
+    archive_rows = {
+        (str(resource.resname()).lower(), resource.restype()): bytes(resource.data())
+        for resource in LazyCapsule(result.module_path)
+    }
+    assert {
+        ("grpaint3r", ResourceType.MDL),
+        ("grpaint3r", ResourceType.MDX),
+        ("grpaint3r", ResourceType.WOK),
+        ("painted_floor", ResourceType.TGA),
+        ("painted_floor", ResourceType.TXI),
+    } <= set(archive_rows)
+    assert archive_rows[("painted_floor", ResourceType.TXI)] == b"mipmap 1\n"
+    assert archive_rows[("painted_floor", ResourceType.TGA)] != source.read_bytes()
+
+    mdl_bytes = archive_rows[("grpaint3r", ResourceType.MDL)]
+    assert b"painted_floor\x00" in mdl_bytes
+    assert struct.unpack_from("<I", mdl_bytes, 4)[0] + 12 == len(mdl_bytes)
+    assert struct.unpack_from("<I", mdl_bytes, 8)[0] == len(archive_rows[("grpaint3r", ResourceType.MDX)])
 
 
 def test_t2643_export_panel_exposes_authored_module_action() -> None:
@@ -1834,7 +2918,9 @@ def test_t2683_controller_installs_authored_module_to_modules_folder_with_backup
     assert result.code == "installed"
     assert result.installed_module_path == str(installed)
     assert result.resolved_game_root_dir == str(modules_dir.parent)
-    assert "launch_authored_module_smoke_test.py" in result.launch_helper_command
+    # grdev01 keeps its bespoke smoke pipeline; other roots get the generic
+    # launch_authored_module_smoke_test.py (covered by the grgold01 test).
+    assert "launch_grdev01_smoke_test.py" in result.launch_helper_command
     assert str(modules_dir.parent) in result.launch_helper_command
     assert Path(result.elevated_launch_script_path).is_file()
     launch_script = Path(result.elevated_launch_script_path).read_text(encoding="utf-8")

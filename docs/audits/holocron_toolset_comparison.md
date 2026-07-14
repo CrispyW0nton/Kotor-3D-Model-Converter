@@ -121,3 +121,46 @@ Holocron/PyKotor should not be expected to solve:
    code.
 5. Initialize Holocron Toolset submodules later if network/TLS allows, then run
    a narrower UI/editor comparison.
+
+## 8. 2026-07-11 Deep Module/Indoor Builder Pass
+
+This pass inspected the current OpenKotOR sources rather than relying on the
+older package inventory above.  The audited revisions were PyKotor
+`ca61ce8d53f5442f73c109e8518cd9a838b2f37c` and Holocron Toolset
+`6286e81002978a61bf3bfab515073a63c539460a`, plus the current Module Editor and
+Indoor Map Builder user guides.
+
+### Patterns worth adopting
+
+| Holocron behavior | Why it feels direct | GhostRigger decision |
+|---|---|---|
+| Cursor room preview and hook/grid snapping before placement | The user sees the final footprint and valid connection before committing. | Keep GhostRigger's room/opening previews and make snap health visible in the viewport. |
+| Direct object drag, Z movement, rotation, duplicate, delete, and focus | Common layout work stays in the canvas instead of inspector forms. | Preserve direct transforms and expose the same selection through viewport and Outliner. |
+| Marquee multi-selection and selected-hook overlays | Batch intent is visible and predictable. | Add multi-object authored-primitive selection with a persistent yellow viewport outline. |
+| Indoor Builder room merge | Selected rooms become one manipulation/export entity while hooks and WOK data are reconciled. | Combine selected composition primitives as a stable KMAP object group without destroying editable topology. |
+| Face/edge/vertex WOK edit modes and paint undo | Spatial and walkability edits share one interaction model. | Keep GhostRigger component modes, brush undo, and WOK overlay in the same Map Studio viewport. |
+| Cached room/WOK preview geometry | Editing remains responsive as maps grow. | Retain cached hover candidates and lightweight overlay state rather than rebuilding on every pointer frame. |
+| Blender roundtrip and 3D tile editor | Advanced geometry can leave and return without losing module context. | Keep FBX/DCC handoff as an escape hatch, but make routine bevel/extrude/sculpt operations work natively. |
+
+### Gaps found and disposition
+
+| Manual-builder gap | Evidence before this pass | Resolution/status |
+|---|---|---|
+| Plane versus terrain patch was ambiguous | A four-vertex Geometry plane could not be sculpted; Terrain Patch was a separate command. | In the Terrain workspace, Plane now creates a subdivided sculptable heightfield and immediately focuses terrain tools. |
+| Edge Bevel appeared in GModeler but did nothing | `edge_bevel` was registered as unimplemented and absent from the controller. | Implemented a manifold hard-edge chamfer with amount memory, topology clamping, end caps, undo, and export coverage. |
+| Authored objects were single-select only | Room selection supported batches, but primitive viewport/outliner selection collapsed to one item. | Added Shift-style primitive selection shared by viewport, model, and extended-selection Outliner. |
+| Combine/Separate were buried and context-confused | Combine focused floor-plan room union; Separate focused a Builder form. | Tool-belt Combine/Separate now operate immediately on selected authored objects when the selection is valid. |
+| Existing matrices overclaimed tool coverage | Terrain and GModeler matrices did not exercise the named plane/bevel/object workflows. | Added explicit manual-flow acceptance cases; current results are terrain 16/16, core modeling 27/27, UI flow 42/42, and K2 packaging/engine-contract 18/18. |
+
+Maya binary reverse engineering was not needed for this slice.  Autodesk's
+published bevel contract already states the required user-visible behavior:
+selected edges become new faces with adjustable width/segments and retained
+material behavior.  The implementation deliberately starts with one manifold
+hard edge; boundary, coplanar, and non-manifold selections are rejected rather
+than generating corrupt KOTOR room seams.  Multi-segment/profile bevels and a
+full face-border bevel remain future modeling slices.
+
+The remaining usability bar is visible Debug-app testing with a human-sized
+map, followed by a manual KOTOR warp.  Headless Qt, readback, and structural
+engine checks prove the command paths and exported contracts but do not replace
+those two product proofs.

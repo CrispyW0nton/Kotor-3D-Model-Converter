@@ -109,6 +109,27 @@ def test_supermodel_resolver_cache_is_game_specific() -> None:
     assert [anim.name for anim in k2_model.animations] == ["k2only"]
 
 
+def test_supermodel_resolver_prefers_target_game_strict_loader() -> None:
+    calls: list[tuple[str, str, str]] = []
+
+    class Manager:
+        def load_model(self, resref: str, game: str = "K1"):
+            calls.append(("fallback", resref, game))
+            return _model(resref, anims=("wronggame",))
+
+        def load_model_strict(self, resref: str, game: str = "K1"):
+            calls.append(("strict", resref, game))
+            return _model(resref, anims=(f"{game.lower()}only",))
+
+    SuperModelResolver.configure(Manager())
+
+    model = SuperModelResolver.load_supermodel("S_Male02", "K2")
+
+    assert model is not None
+    assert [anim.name for anim in model.animations] == ["k2only"]
+    assert calls == [("strict", "S_Male02", "K2")]
+
+
 def test_resolve_animation_slot_can_require_valid_slot() -> None:
     target = _model("pmbam", anims=("pause1",))
 

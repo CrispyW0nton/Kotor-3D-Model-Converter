@@ -8,7 +8,7 @@ is `knowledge_base/native_migration_plan.md`. Prefer extending an existing
 aggregate DLL owner over adding a new DLL.
 
 The first native application project is a C++ Windows host. It embeds the local
-Python 3.13 runtime in `GhostRigger.exe` and runs the existing
+Python 3.13 runtime in `GhostStudio.exe` and runs the existing
 `main.py --gui qt` path inside that native process. The current UI is still the
 Python/Qt application, but the process, debugger target, and future graphics
 integration point now belong to the Visual Studio solution.
@@ -180,7 +180,7 @@ deliberately enabled.
 Each payload DLL also exports the shared Phase 1.5 resource ABI:
 `gr_python_payload_manifest_json()` returns the embedded
 `GhostRiggerPythonPayload.json` resource and `gr_python_payload_file_count()`
-returns its manifest file count. `GhostRigger.exe` has build-order project
+returns its manifest file count. `GhostStudio.exe` has build-order project
 references to every payload DLL and probes those DLLs after the native startup
 log console opens but before embedded Python starts. The host writes each DLL
 dependency, version ABI, capabilities ABI, and Python payload file count
@@ -253,7 +253,10 @@ does not record draws or create a real draw submission path yet.
 `Present` is only reachable through the guarded present-call diagnostic after
 prior swap-chain, back-buffer, RTV, clear-pass, and fence readiness gates pass.
 
-Build `GhostRigger.Native.Core.Host` to produce `GhostRigger.exe`, then run it from Visual Studio. The host is a
+Build `GhostRigger.Native.Core.Host` to produce
+`build\vs\x64\Debug\GhostStudio.exe`, then run it from Visual Studio. The
+repository-root executable is a source-backed developer launcher, not a
+portable standalone package. The host is a
 Windows-subsystem application, but while GhostRigger is still under active
 construction it opens the startup log console by default before Python starts,
 preserving the visible `ghostrigger.main` and diagnostics log output. With no
@@ -278,7 +281,7 @@ C:\Users\KingJamesIX\AppData\Local\Programs\Python\Python313\python.exe
 
 If `GHOSTRIGGER_PYTHON` is not set, the host uses that local Python 3.13 home
 when it exists. The build links against `python313.lib` and copies
-`python313.dll` plus `python3.dll` beside `GhostRigger.exe`.
+`python313.dll` plus `python3.dll` beside `GhostStudio.exe`.
 
 Hosted runs set `GHOSTRIGGER_NATIVE_HOST=1` and
 `GHOSTRIGGER_EMBEDDED_PYTHON=1` before Python starts. Set
@@ -288,7 +291,7 @@ after we decide the application no longer needs it. Use
 Python, and `--native-embed-init-debug` to verify embedded Python
 initialization/finalization without opening the Qt application.
 
-Any command-line arguments passed to `GhostRigger.exe` are forwarded to
+Any command-line arguments passed to `GhostStudio.exe` are forwarded to
 `main.py`, replacing the default `--gui qt`.
 
 Build `GhostRigger.Runtime.Core.Host` to produce:

@@ -1085,6 +1085,7 @@ class ResourceLoadingMixin:
             self.skeleton_panel.load_model(model)
         if hasattr(self, "lighting_panel"):
             self.lighting_panel.set_model(self._active_viewport_model())
+            self.lighting_panel.apply_preview_settings_to_viewport(self.viewport)
             self._sync_lighting_helper_visibility_to_viewport()
         if hasattr(self, "camera_panel"):
             self.camera_panel.set_model(self._active_viewport_model())

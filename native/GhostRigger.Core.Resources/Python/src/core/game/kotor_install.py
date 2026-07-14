@@ -62,8 +62,9 @@ RES_IFO  = 2013
 RES_UTC  = 2023
 RES_DLG  = 2029
 RES_TPC  = 3007
-RES_LYT  = 3005
-RES_VIS  = 3006
+RES_LYT  = 3000
+RES_VIS  = 3001
+RES_PTH  = 3003
 RES_2DA  = 2017
 RES_GIT  = 2015
 
@@ -72,7 +73,7 @@ EXT_TO_TYPE: Dict[str, int] = {
     'mdl': RES_MDL, 'mdx': RES_MDX,
     'tpc': RES_TPC, 'tga': RES_TGA, 'txi': RES_TXI,
     'utc': RES_UTC, 'are': RES_ARE, 'ifo': RES_IFO,
-    'dlg': RES_DLG, 'lyt': RES_LYT, 'vis': RES_VIS,
+    'dlg': RES_DLG, 'lyt': RES_LYT, 'vis': RES_VIS, 'pth': RES_PTH,
     '2da': RES_2DA, 'git': RES_GIT,
 }
 TYPE_TO_EXT: Dict[int, str] = {v: k for k, v in EXT_TO_TYPE.items()}
@@ -369,11 +370,29 @@ class KotorInstallation:
 
         return None
 
+    def get_bif(self, name: str, res_type: int) -> Optional[bytes]:
+        """Fetch raw KEY/BIF bytes without consulting Override/ first."""
+        k = _res_key(name, res_type)
+        entry = self._key_map.get(k)
+        if entry is None:
+            return None
+        bif_idx, var_idx = entry
+        bif = self._bif_index.get(bif_idx)
+        if not bif:
+            return None
+        return bif.read(var_idx)
+
     def get_mdl(self, name: str) -> Optional[bytes]:
         return self.get(name, RES_MDL)
 
     def get_mdx(self, name: str) -> Optional[bytes]:
         return self.get(name, RES_MDX)
+
+    def get_mdl_bif(self, name: str) -> Optional[bytes]:
+        return self.get_bif(name, RES_MDL)
+
+    def get_mdx_bif(self, name: str) -> Optional[bytes]:
+        return self.get_bif(name, RES_MDX)
 
     def get_texture(self, name: str) -> Optional[bytes]:
         """Load texture: tries TPC then TGA."""

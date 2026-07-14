@@ -140,7 +140,7 @@ class StockModuleEditorWindow(QtWidgets.QMainWindow):
 
     def __init__(self, parent: QtWidgets.QWidget | None = None, *, game_library: object | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("GhostRigger Module Editor")
+        self.setWindowTitle("Ghost-Studio Module Editor")
         self.setObjectName("stockModuleEditorWindow")
         self.resize(1320, 820)
         self._module_path: Path | None = None
@@ -662,7 +662,7 @@ class StockModuleEditorWindow(QtWidgets.QMainWindow):
         self._pending_logic_field_edit = None
         self._staged_edits.clear()
         self._details_row_payloads.clear()
-        self.setWindowTitle(f"GhostRigger Module Editor - {self._module_display_title(prepared)}")
+        self.setWindowTitle(f"Ghost-Studio Module Editor - {self._module_display_title(prepared)}")
         self._populate_outliner()
         self._populate_content_browser()
         self._populate_audit_details()

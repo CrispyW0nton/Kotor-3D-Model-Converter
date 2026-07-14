@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import hashlib
 import math
 from typing import Any
+from uuid import uuid4
 
 from .authored_module_objects import (
     AuthoredCameraInstance,
@@ -21,6 +23,7 @@ from .authored_module_objects import (
     normalise_resource_resref,
 )
 from .authored_module_project import AuthoredModuleProject, authored_resref_blocking_issue, normalise_resref
+from .authored_module_walkmesh import AuthoredWalkmeshSnapResult, snap_position_to_authored_walkmesh
 
 
 Vec3 = tuple[float, float, float]
@@ -64,6 +67,7 @@ class AuthoredGameplayPlacementRow:
     transition_capable: bool = False
     linked_to: str = ""
     linked_to_module: str = ""
+    linked_to_flags: int = 0
     transition_destination: int = 0
     transition_status: str = "not_applicable"
     transition_summary: str = ""
@@ -72,6 +76,11 @@ class AuthoredGameplayPlacementRow:
     height: float = 0.0
     mic_range: float = 0.0
     pitch: float = 0.0
+    creature_source_template_resref: str = ""
+    creature_behavior_role: str = "template"
+    creature_conversation_resref: str = ""
+    creature_movement_mode: str = "stationary"
+    creature_generated_template_resref: str = ""
 
 
 SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS: tuple[str, ...] = (
@@ -117,31 +126,78 @@ def _kind(value: Any) -> str:
     return aliases.get(text, text)
 
 
-def authored_gameplay_placement_id(kind: Any, index: int) -> str:
-    """Return the stable virtual UI id for one authored gameplay placement."""
+def new_authored_gameplay_instance_id() -> str:
+    """Return a new KMAP-only durable gameplay-instance token."""
+
+    return f"i_{uuid4().hex}"
+
+
+def _instance_token(value: Any) -> str:
+    token = str(value or "").strip()
+    if not token or ":" in token:
+        return ""
+    return token[:96]
+
+
+def authored_gameplay_placement_id(kind: Any, identity: int | str) -> str:
+    """Return the virtual UI id for a durable token or legacy list index."""
 
     normalized = _kind(kind)
     if normalized not in SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS:
         raise ValueError(f"Unsupported authored gameplay placement kind '{kind}'.")
-    return f"authored:{normalized}:{int(index)}"
+    if isinstance(identity, int):
+        if identity < 0:
+            raise ValueError("Authored gameplay placement index cannot be negative.")
+        token = str(identity)
+    else:
+        token = _instance_token(identity)
+        if not token:
+            raise ValueError("Authored gameplay placement identity cannot be empty or contain ':'.")
+    return f"authored:{normalized}:{token}"
 
 
-def parse_authored_gameplay_placement_id(value: Any) -> tuple[str, int]:
-    """Parse a virtual id like ``authored:placeable:0``."""
+def parse_authored_gameplay_placement_id(value: Any) -> tuple[str, int | str]:
+    """Parse a durable id while accepting legacy ``authored:kind:index`` ids."""
 
-    parts = str(value or "").strip().split(":")
+    parts = str(value or "").strip().split(":", 2)
     if len(parts) != 3 or parts[0] != "authored":
         raise ValueError(f"'{value}' is not an authored gameplay placement id.")
     kind = _kind(parts[1])
     if kind not in SUPPORTED_AUTHORED_GAMEPLAY_PLACEMENTS:
         raise ValueError(f"Unsupported authored gameplay placement kind '{parts[1]}'.")
+    token = _instance_token(parts[2])
+    if not token:
+        raise ValueError(f"Authored gameplay placement id '{value}' has an invalid identity token.")
     try:
-        index = int(parts[2])
-    except ValueError as exc:
-        raise ValueError(f"Authored gameplay placement id '{value}' has an invalid index.") from exc
+        index = int(token)
+    except ValueError:
+        return kind, token
     if index < 0:
         raise ValueError(f"Authored gameplay placement id '{value}' has a negative index.")
     return kind, index
+
+
+def _canonical_placement_id(kind: str, index: int, item: Any) -> str:
+    token = _instance_token(getattr(item, "instance_id", ""))
+    return authored_gameplay_placement_id(kind, token if token else index)
+
+
+def _creature_behavior_records(placement: AuthoredGameplayPlacement) -> dict[str, dict[str, Any]]:
+    raw = dict(placement.metadata.get("creature_behaviors") or {})
+    return {
+        str(key): dict(value)
+        for key, value in raw.items()
+        if isinstance(value, dict)
+    }
+
+
+def _generated_creature_template_resref(project: AuthoredModuleProject, placement_id: str) -> str:
+    """Return a stable, per-instance 16-character UTC resref."""
+
+    digest = hashlib.sha1(
+        f"{normalise_resref(project.module_root)}|{str(placement_id)}".encode("utf-8")
+    ).hexdigest()
+    return f"grc{digest[:13]}"
 
 
 def _vec3(value: Any) -> Vec3:
@@ -192,7 +248,7 @@ def _placement_template(item: Any) -> str:
 
 
 def _placement_tag(item: Any, kind: str, index: int) -> str:
-    return str(getattr(item, "tag", "") or _placement_template(item) or authored_gameplay_placement_id(kind, index))
+    return str(getattr(item, "tag", "") or _placement_template(item) or _canonical_placement_id(kind, index, item))
 
 
 def _copy_label(label: str, kind: str, count: int) -> str:
@@ -228,21 +284,33 @@ def _offset_position(item: Any, offset: Vec3 = (0.5, 0.5, 0.0)) -> Any:
 
 
 def _placement_items_for_id(project: AuthoredModuleProject, placement_id: Any) -> tuple[str, int, str, list[Any], Any]:
-    kind, index = parse_authored_gameplay_placement_id(placement_id)
+    kind, identity = parse_authored_gameplay_placement_id(placement_id)
     field_name = _KIND_FIELDS[kind]
     items = list(tuple(getattr(project.placements, field_name, ()) or ()))
-    if index >= len(items):
+    if isinstance(identity, int):
+        index = identity
+    else:
+        index = next(
+            (
+                candidate_index
+                for candidate_index, item in enumerate(items)
+                if _instance_token(getattr(item, "instance_id", "")) == identity
+            ),
+            -1,
+        )
+    if index < 0 or index >= len(items):
         raise ValueError(f"Authored gameplay placement '{placement_id}' does not exist.")
     return kind, index, field_name, items, items[index]
 
 
-def _transition_fields_for_item(kind: str, item: Any) -> tuple[bool, str, str, int]:
-    if kind not in {"door", "trigger", "waypoint"}:
-        return False, "", "", 0
+def _transition_fields_for_item(kind: str, item: Any) -> tuple[bool, str, str, int, int]:
+    if kind not in {"door", "trigger"}:
+        return False, "", "", 0, 0
     return (
         True,
         str(getattr(item, "linked_to", "") or ""),
-        normalise_resref(getattr(item, "linked_to_module", "")) if hasattr(item, "linked_to_module") else "",
+        normalise_resref(getattr(item, "linked_to_module", "")),
+        int(getattr(item, "linked_to_flags", 0) or 0),
         int(getattr(item, "transition_destination", 0) or 0),
     )
 
@@ -252,27 +320,42 @@ def _transition_status_and_summary(
     kind: str,
     linked_to: str,
     linked_to_module: str,
+    linked_to_flags: int,
 ) -> tuple[str, str]:
-    if kind not in {"door", "trigger", "waypoint"}:
+    if kind not in {"door", "trigger"}:
         return "not_applicable", ""
     destination = str(linked_to or "").strip()
     module = normalise_resref(linked_to_module)
+    flags = int(linked_to_flags or 0)
+    target_label = {1: "door", 2: "waypoint"}.get(flags, "untyped target")
+    if destination and flags not in {1, 2}:
+        return "missing_link_type", f"Links to {destination}, but target type is not set"
     if destination and module:
-        return "module_transition", f"Links to {destination} in {module}"
+        return "module_transition", f"Links to {target_label} {destination} in {module}"
     if destination:
-        return "local_transition", f"Links to local destination {destination}"
+        return "local_transition", f"Links to local {target_label} {destination}"
     if module:
         return "missing_destination", f"Module {module} selected, destination tag missing"
     return "not_configured", "No transition destination set"
 
 
-def _transition_metadata(*, placement_id: Any, kind: str, index: int, linked_to: str, linked_to_module: str, destination: int) -> dict[str, Any]:
+def _transition_metadata(
+    *,
+    placement_id: Any,
+    kind: str,
+    index: int,
+    linked_to: str,
+    linked_to_module: str,
+    linked_to_flags: int,
+    destination: int,
+) -> dict[str, Any]:
     return {
         "placement_id": str(placement_id),
         "kind": kind,
         "index": int(index),
         "linked_to": str(linked_to or ""),
         "linked_to_module": normalise_resref(linked_to_module),
+        "linked_to_flags": int(linked_to_flags),
         "transition_destination": int(destination),
     }
 
@@ -282,6 +365,7 @@ def authored_gameplay_placement_rows(project: AuthoredModuleProject) -> tuple[Au
 
     rows: list[AuthoredGameplayPlacementRow] = []
     placement = project.placements
+    creature_behaviors = _creature_behavior_records(placement)
     for kind, field_name in _KIND_FIELDS.items():
         for index, item in enumerate(tuple(getattr(placement, field_name, ()) or ())):
             is_spatial = hasattr(item, "position")
@@ -292,16 +376,19 @@ def authored_gameplay_placement_rows(project: AuthoredModuleProject) -> tuple[Au
                     position = (0.0, 0.0, 0.0)
             else:
                 position = (0.0, 0.0, 0.0)
-            transition_capable, linked_to, linked_to_module, transition_destination = _transition_fields_for_item(kind, item)
+            transition_capable, linked_to, linked_to_module, linked_to_flags, transition_destination = _transition_fields_for_item(kind, item)
             transition_status, transition_summary = _transition_status_and_summary(
                 kind=kind,
                 linked_to=linked_to,
                 linked_to_module=linked_to_module,
+                linked_to_flags=linked_to_flags,
             )
             camera_id = getattr(item, "camera_id", "") if kind == "camera" else ""
+            placement_id = _canonical_placement_id(kind, index, item)
+            creature_behavior = creature_behaviors.get(placement_id, {}) if kind == "creature" else {}
             rows.append(
                 AuthoredGameplayPlacementRow(
-                    placement_id=authored_gameplay_placement_id(kind, index),
+                    placement_id=placement_id,
                     kind=kind,
                     index=index,
                     template_resref=_placement_template(item),
@@ -312,6 +399,7 @@ def authored_gameplay_placement_rows(project: AuthoredModuleProject) -> tuple[Au
                     transition_capable=transition_capable,
                     linked_to=linked_to,
                     linked_to_module=linked_to_module,
+                    linked_to_flags=linked_to_flags,
                     transition_destination=transition_destination,
                     transition_status=transition_status,
                     transition_summary=transition_summary,
@@ -320,9 +408,102 @@ def authored_gameplay_placement_rows(project: AuthoredModuleProject) -> tuple[Au
                     height=float(getattr(item, "height", 0.0) or 0.0) if kind == "camera" else 0.0,
                     mic_range=float(getattr(item, "mic_range", 0.0) or 0.0) if kind == "camera" else 0.0,
                     pitch=float(getattr(item, "pitch", 0.0) or 0.0) if kind == "camera" else 0.0,
+                    creature_source_template_resref=str(creature_behavior.get("source_template_resref") or ""),
+                    creature_behavior_role=str(creature_behavior.get("faction_role") or "template"),
+                    creature_conversation_resref=str(creature_behavior.get("conversation_resref") or ""),
+                    creature_movement_mode=str(creature_behavior.get("movement_mode") or "stationary"),
+                    creature_generated_template_resref=str(creature_behavior.get("generated_template_resref") or ""),
                 )
             )
     return tuple(rows)
+
+
+def update_authored_creature_behavior(
+    project: AuthoredModuleProject,
+    placement_id: Any,
+    *,
+    faction_role: Any = "template",
+    conversation_resref: Any = "",
+    movement_mode: Any = "stationary",
+) -> AuthoredGameplayPlacementUpdate:
+    """Persist one selected creature's UTC authoring intent in human-readable KMAP state."""
+
+    kind, index, field_name, items, current = _placement_items_for_id(project, placement_id)
+    if kind != "creature":
+        raise ValueError(f"Authored {kind} placements do not support creature behavior properties.")
+    role = str(faction_role or "template").strip().lower().replace("-", "_").replace(" ", "_")
+    if role not in {"template", "hostile", "friendly", "neutral"}:
+        raise ValueError("Creature role must be template, hostile, friendly, or neutral.")
+    movement = str(movement_mode or "stationary").strip().lower().replace("-", "_")
+    if movement not in {"stationary", "free_roam"}:
+        raise ValueError("Creature movement must be stationary or free_roam.")
+    conversation = normalise_resource_resref(conversation_resref)
+    if str(conversation_resref or "").strip():
+        issue = authored_resref_blocking_issue("Creature conversation", conversation_resref)
+        if issue:
+            raise ValueError(issue)
+
+    canonical_id = _canonical_placement_id(kind, index, current)
+    behavior_records = _creature_behavior_records(project.placements)
+    previous = dict(behavior_records.get(canonical_id) or {})
+    source_template = normalise_resource_resref(
+        previous.get("source_template_resref") or getattr(current, "template_resref", "")
+    )
+    if not source_template:
+        raise ValueError("Creature behavior authoring requires a source UTC template resref.")
+
+    if role == "template":
+        updated_item = replace(current, template_resref=source_template)
+        behavior_records.pop(canonical_id, None)
+        generated_template = ""
+    else:
+        generated_template = normalise_resource_resref(
+            previous.get("generated_template_resref")
+            or _generated_creature_template_resref(project, canonical_id)
+        )
+        updated_item = replace(current, template_resref=generated_template)
+        behavior_records[canonical_id] = {
+            "schema": "ghostrigger.map_studio.creature_behavior/v1",
+            "source_template_resref": source_template,
+            "generated_template_resref": generated_template,
+            "faction_role": role,
+            "conversation_resref": conversation,
+            "movement_mode": movement,
+        }
+    items[index] = updated_item
+    metadata = {
+        "placement_id": canonical_id,
+        "source_template_resref": source_template,
+        "generated_template_resref": generated_template,
+        "faction_role": role,
+        "conversation_resref": conversation,
+        "movement_mode": movement,
+    }
+    placement_metadata = dict(project.placements.metadata)
+    if behavior_records:
+        placement_metadata["creature_behaviors"] = behavior_records
+    else:
+        placement_metadata.pop("creature_behaviors", None)
+    placement_metadata["last_creature_behavior_update"] = metadata
+    updated_placements = replace(
+        project.placements,
+        **{field_name: tuple(items), "metadata": placement_metadata},
+    )
+    updated = replace(
+        project,
+        placements=updated_placements,
+        notes=tuple(project.notes) + (f"Updated Map Studio creature behavior: {canonical_id} ({role}, {movement}).",),
+        extra={**dict(project.extra), "last_creature_behavior_update": metadata},
+    )
+    return AuthoredGameplayPlacementUpdate(
+        project=updated,
+        kind=kind,
+        template_resref=updated_item.template_resref,
+        tag=_placement_tag(updated_item, kind, index),
+        position=_vec3(updated_item.position),
+        count=len(items),
+        placement_id=canonical_id,
+    )
 
 
 def update_authored_module_entry_point(
@@ -384,13 +565,15 @@ def _append_placement(
     bearing: float,
     linked_to: str = "",
     linked_to_module: str = "",
+    linked_to_flags: int = 0,
     trigger_size: float = 1.0,
 ) -> tuple[AuthoredGameplayPlacement, int]:
+    instance_id = new_authored_gameplay_instance_id()
     if kind == "placeable":
-        items = placement.placeables + (AuthoredPlaceableInstance(template_resref=template_resref, tag=tag, position=position, bearing=bearing),)
+        items = placement.placeables + (AuthoredPlaceableInstance(template_resref=template_resref, tag=tag, position=position, bearing=bearing, instance_id=instance_id),)
         return replace(placement, placeables=items), len(items)
     if kind == "creature":
-        items = placement.creatures + (AuthoredCreatureInstance(template_resref=template_resref, tag=tag, position=position, bearing=bearing),)
+        items = placement.creatures + (AuthoredCreatureInstance(template_resref=template_resref, tag=tag, position=position, bearing=bearing, instance_id=instance_id),)
         return replace(placement, creatures=items), len(items)
     if kind == "door":
         items = placement.doors + (
@@ -401,11 +584,13 @@ def _append_placement(
                 bearing=bearing,
                 linked_to=linked_to,
                 linked_to_module=linked_to_module,
+                linked_to_flags=linked_to_flags,
+                instance_id=instance_id,
             ),
         )
         return replace(placement, doors=items), len(items)
     if kind == "waypoint":
-        items = placement.waypoints + (AuthoredWaypointInstance(template_resref=template_resref, tag=tag, position=position, bearing=bearing, linked_to=linked_to),)
+        items = placement.waypoints + (AuthoredWaypointInstance(template_resref=template_resref, tag=tag, position=position, bearing=bearing, instance_id=instance_id),)
         return replace(placement, waypoints=items), len(items)
     if kind == "trigger":
         items = placement.triggers + (
@@ -416,20 +601,22 @@ def _append_placement(
                 geometry=_default_trigger_geometry(position, size=trigger_size),
                 linked_to=linked_to,
                 linked_to_module=linked_to_module,
+                linked_to_flags=linked_to_flags,
+                instance_id=instance_id,
             ),
         )
         return replace(placement, triggers=items), len(items)
     if kind == "encounter":
-        items = placement.encounters + (AuthoredEncounterInstance(template_resref=template_resref, tag=tag, position=position),)
+        items = placement.encounters + (AuthoredEncounterInstance(template_resref=template_resref, tag=tag, position=position, instance_id=instance_id),)
         return replace(placement, encounters=items), len(items)
     if kind == "sound":
-        items = placement.sounds + (AuthoredSoundInstance(template_resref=template_resref, tag=tag, position=position),)
+        items = placement.sounds + (AuthoredSoundInstance(template_resref=template_resref, tag=tag, position=position, instance_id=instance_id),)
         return replace(placement, sounds=items), len(items)
     if kind == "camera":
-        items = placement.cameras + (AuthoredCameraInstance(camera_id=tag or str(len(placement.cameras) + 1), position=position),)
+        items = placement.cameras + (AuthoredCameraInstance(camera_id=tag or str(len(placement.cameras) + 1), position=position, instance_id=instance_id),)
         return replace(placement, cameras=items), len(items)
     if kind == "store":
-        items = placement.stores + (AuthoredStoreInstance(template_resref=template_resref, tag=tag),)
+        items = placement.stores + (AuthoredStoreInstance(template_resref=template_resref, tag=tag, instance_id=instance_id),)
         return replace(placement, stores=items), len(items)
     raise ValueError(f"Unsupported authored gameplay placement kind '{kind}'.")
 
@@ -444,7 +631,9 @@ def add_authored_gameplay_placement(
     bearing: float = 0.0,
     linked_to: str = "",
     linked_to_module: str = "",
+    linked_to_flags: int = 0,
     trigger_size: float = 1.0,
+    provenance: dict[str, Any] | None = None,
 ) -> AuthoredGameplayPlacementUpdate:
     """Append one gameplay placement to an authored module project."""
 
@@ -465,9 +654,28 @@ def add_authored_gameplay_placement(
         bearing=float(bearing),
         linked_to=str(linked_to or ""),
         linked_to_module=str(linked_to_module or ""),
+        linked_to_flags=int(linked_to_flags or 0),
         trigger_size=float(trigger_size),
     )
+    placement_id = _canonical_placement_id(normalized_kind, count - 1, tuple(getattr(placement, _KIND_FIELDS[normalized_kind]))[-1])
+    if provenance:
+        safe_provenance = {
+            key: str(provenance.get(key) or "").strip()
+            for key in ("game", "library_source", "asset_id", "asset_path")
+            if str(provenance.get(key) or "").strip()
+        }
+        if normalized_kind == "placeable" and template:
+            safe_provenance["template_resref"] = template
+        if safe_provenance:
+            by_instance = dict(placement.metadata.get("instance_provenance") or {})
+            by_instance[placement_id] = safe_provenance
+            placement = replace(
+                placement,
+                metadata={**dict(placement.metadata), "instance_provenance": by_instance},
+            )
     metadata = {
+        "placement_id": placement_id,
+        "instance_id": placement_id.rsplit(":", 1)[-1],
         "kind": normalized_kind,
         "template_resref": template,
         "tag": label,
@@ -495,7 +703,7 @@ def add_authored_gameplay_placement(
         tag=label,
         position=pos,
         count=count,
-        placement_id=authored_gameplay_placement_id(normalized_kind, count - 1),
+        placement_id=placement_id,
     )
 
 
@@ -512,12 +720,26 @@ def update_authored_gameplay_placement_transform(
     if not hasattr(current, "position"):
         raise ValueError(f"Authored gameplay placement '{placement_id}' is not a spatial map object.")
     pos = _vec3(position) if position is not None else _vec3(getattr(current, "position", (0.0, 0.0, 0.0)))
+    previous_position = _vec3(getattr(current, "position", (0.0, 0.0, 0.0)))
     updated_item = replace(current, position=pos)
+    if hasattr(updated_item, "geometry"):
+        delta = tuple(pos[axis] - previous_position[axis] for axis in range(3))
+        geometry = tuple(
+            (
+                float(point[0]) + delta[0],
+                float(point[1]) + delta[1],
+                float(point[2]) + delta[2],
+            )
+            for point in tuple(getattr(updated_item, "geometry", ()) or ())
+            if len(point) >= 3
+        )
+        updated_item = replace(updated_item, geometry=geometry)
     if bearing is not None and hasattr(updated_item, "bearing"):
         updated_item = replace(updated_item, bearing=float(bearing))
     items[index] = updated_item
+    canonical_id = _canonical_placement_id(kind, index, updated_item)
     transform_metadata = {
-        "placement_id": str(placement_id),
+        "placement_id": canonical_id,
         "kind": kind,
         "index": index,
         "position": [float(pos[0]), float(pos[1]), float(pos[2])],
@@ -549,8 +771,32 @@ def update_authored_gameplay_placement_transform(
         tag=_placement_tag(updated_item, kind, index),
         position=pos,
         count=len(items),
-        placement_id=authored_gameplay_placement_id(kind, index),
+        placement_id=canonical_id,
     )
+
+
+def snap_authored_gameplay_placement_to_walkmesh(
+    project: AuthoredModuleProject,
+    placement_id: Any,
+    *,
+    max_horizontal_distance: float | None = None,
+    downward_only: bool = False,
+) -> tuple[AuthoredGameplayPlacementUpdate, AuthoredWalkmeshSnapResult]:
+    """Move one spatial GIT placement onto the nearest walkable authored WOK."""
+
+    _kind_name, _index, _field_name, _items, current = _placement_items_for_id(project, placement_id)
+    if not hasattr(current, "position"):
+        raise ValueError(f"Authored gameplay placement '{placement_id}' is not a spatial map object.")
+    snap = snap_position_to_authored_walkmesh(
+        project,
+        getattr(current, "position", (0.0, 0.0, 0.0)),
+        max_horizontal_distance=max_horizontal_distance,
+        downward_only=bool(downward_only),
+    )
+    if snap is None:
+        raise ValueError("No walkable authored WOK face is available for this placement.")
+    update = update_authored_gameplay_placement_transform(project, placement_id, position=snap.position)
+    return update, snap
 
 
 def rename_authored_gameplay_placement(
@@ -567,8 +813,9 @@ def rename_authored_gameplay_placement(
     kind, index, field_name, items, current = _placement_items_for_id(project, placement_id)
     updated_item = _with_label(current, label)
     items[index] = updated_item
+    canonical_id = _canonical_placement_id(kind, index, updated_item)
     metadata = {
-        "placement_id": str(placement_id),
+        "placement_id": canonical_id,
         "kind": kind,
         "index": index,
         "tag": label,
@@ -600,7 +847,7 @@ def rename_authored_gameplay_placement(
         tag=_placement_tag(updated_item, kind, index),
         position=position,
         count=len(items),
-        placement_id=authored_gameplay_placement_id(kind, index),
+        placement_id=canonical_id,
     )
 
 
@@ -610,12 +857,13 @@ def update_authored_gameplay_transition(
     *,
     linked_to: Any = "",
     linked_to_module: Any = "",
+    linked_to_flags: Any = 0,
     transition_destination: Any = 0,
 ) -> AuthoredGameplayPlacementUpdate:
-    """Set transition destination fields for an authored door, trigger, or waypoint."""
+    """Set transition destination fields for an authored door or trigger."""
 
     kind, index, field_name, items, current = _placement_items_for_id(project, placement_id)
-    if kind not in {"door", "trigger", "waypoint"}:
+    if kind not in {"door", "trigger"}:
         raise ValueError(f"Authored {kind} placements do not support transition destination fields.")
     destination_tag = str(linked_to or "").strip()[:64]
     module = normalise_resref(linked_to_module)
@@ -624,24 +872,36 @@ def update_authored_gameplay_transition(
         if issue:
             raise ValueError(issue)
     try:
+        flags = int(linked_to_flags or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Transition target type must be 0 (none), 1 (door), or 2 (waypoint).") from exc
+    if flags not in {0, 1, 2}:
+        raise ValueError("Transition target type must be 0 (none), 1 (door), or 2 (waypoint).")
+    try:
         destination = int(transition_destination or 0)
     except (TypeError, ValueError) as exc:
         raise ValueError("Transition destination must be an integer.") from exc
     if destination < 0:
         raise ValueError("Transition destination cannot be negative.")
+    if destination > 2147483647:
+        raise ValueError("Transition destination StringRef cannot exceed 2147483647.")
 
-    updated_item = replace(current, linked_to=destination_tag)
-    if hasattr(updated_item, "linked_to_module"):
-        updated_item = replace(updated_item, linked_to_module=module)
-    if hasattr(updated_item, "transition_destination"):
-        updated_item = replace(updated_item, transition_destination=destination)
+    updated_item = replace(
+        current,
+        linked_to=destination_tag,
+        linked_to_module=module,
+        linked_to_flags=flags,
+        transition_destination=destination,
+    )
     items[index] = updated_item
+    canonical_id = _canonical_placement_id(kind, index, updated_item)
     metadata = _transition_metadata(
-        placement_id=placement_id,
+        placement_id=canonical_id,
         kind=kind,
         index=index,
         linked_to=destination_tag,
         linked_to_module=module,
+        linked_to_flags=flags,
         destination=destination,
     )
     updated_placements = replace(
@@ -671,7 +931,7 @@ def update_authored_gameplay_transition(
         tag=_placement_tag(updated_item, kind, index),
         position=position,
         count=len(items),
-        placement_id=authored_gameplay_placement_id(kind, index),
+        placement_id=canonical_id,
     )
 
 
@@ -723,8 +983,9 @@ def update_authored_gameplay_camera_properties(
     if pitch is not None:
         updated_item = replace(updated_item, pitch=_finite(pitch, "Camera pitch"))
     items[index] = updated_item
+    canonical_id = _canonical_placement_id(kind, index, updated_item)
     metadata = {
-        "placement_id": str(placement_id),
+        "placement_id": canonical_id,
         "kind": kind,
         "index": index,
         "camera_id": str(updated_item.camera_id),
@@ -759,7 +1020,7 @@ def update_authored_gameplay_camera_properties(
         tag=_placement_tag(updated_item, kind, index),
         position=_vec3(getattr(updated_item, "position", (0.0, 0.0, 0.0))),
         count=len(items),
-        placement_id=authored_gameplay_placement_id(kind, index),
+        placement_id=canonical_id,
     )
 
 
@@ -770,12 +1031,30 @@ def duplicate_authored_gameplay_placement(
     """Duplicate one authored gameplay placement selected in Map Studio."""
 
     kind, index, field_name, items, current = _placement_items_for_id(project, placement_id)
-    duplicated = _offset_position(_with_label(current, _copy_label(_placement_tag(current, kind, index), kind, len(items))))
+    duplicated = replace(
+        _offset_position(_with_label(current, _copy_label(_placement_tag(current, kind, index), kind, len(items)))),
+        instance_id=new_authored_gameplay_instance_id(),
+    )
     items.append(duplicated)
     new_index = len(items) - 1
-    new_id = authored_gameplay_placement_id(kind, new_index)
+    new_id = _canonical_placement_id(kind, new_index, duplicated)
+    source_id = _canonical_placement_id(kind, index, current)
+    placement_metadata = dict(project.placements.metadata)
+    creature_behaviors = _creature_behavior_records(project.placements)
+    if kind == "creature" and source_id in creature_behaviors:
+        duplicated_behavior = dict(creature_behaviors[source_id])
+        generated_template = _generated_creature_template_resref(project, new_id)
+        duplicated_behavior["generated_template_resref"] = generated_template
+        creature_behaviors[new_id] = duplicated_behavior
+        duplicated = replace(duplicated, template_resref=generated_template)
+        items[new_index] = duplicated
+        placement_metadata["creature_behaviors"] = creature_behaviors
+    provenance = dict(placement_metadata.get("instance_provenance") or {})
+    if source_id in provenance:
+        provenance[new_id] = dict(provenance[source_id])
+        placement_metadata["instance_provenance"] = provenance
     metadata = {
-        "source_placement_id": str(placement_id),
+        "source_placement_id": source_id,
         "placement_id": new_id,
         "kind": kind,
         "index": new_index,
@@ -786,7 +1065,7 @@ def duplicate_authored_gameplay_placement(
         **{
             field_name: tuple(items),
             "metadata": {
-                **dict(project.placements.metadata),
+                **placement_metadata,
                 "last_gameplay_placement_duplicate": metadata,
             },
         },
@@ -822,9 +1101,23 @@ def remove_authored_gameplay_placement(
     removed_tag = _placement_tag(current, kind, index)
     removed_template = _placement_template(current)
     removed_position = _vec3(getattr(current, "position", (0.0, 0.0, 0.0))) if hasattr(current, "position") else (0.0, 0.0, 0.0)
+    canonical_id = _canonical_placement_id(kind, index, current)
+    placement_metadata = dict(project.placements.metadata)
+    creature_behaviors = _creature_behavior_records(project.placements)
+    creature_behaviors.pop(canonical_id, None)
+    if creature_behaviors:
+        placement_metadata["creature_behaviors"] = creature_behaviors
+    else:
+        placement_metadata.pop("creature_behaviors", None)
+    provenance = dict(placement_metadata.get("instance_provenance") or {})
+    provenance.pop(canonical_id, None)
+    if provenance:
+        placement_metadata["instance_provenance"] = provenance
+    else:
+        placement_metadata.pop("instance_provenance", None)
     del items[index]
     metadata = {
-        "placement_id": str(placement_id),
+        "placement_id": canonical_id,
         "kind": kind,
         "index": index,
         "tag": removed_tag,
@@ -834,7 +1127,7 @@ def remove_authored_gameplay_placement(
         **{
             field_name: tuple(items),
             "metadata": {
-                **dict(project.placements.metadata),
+                **placement_metadata,
                 "last_gameplay_placement_remove": metadata,
             },
         },
@@ -868,10 +1161,12 @@ __all__ = [
     "authored_gameplay_placement_id",
     "authored_gameplay_placement_rows",
     "duplicate_authored_gameplay_placement",
+    "new_authored_gameplay_instance_id",
     "parse_authored_gameplay_placement_id",
     "remove_authored_gameplay_placement",
     "rename_authored_gameplay_placement",
     "update_authored_module_entry_point",
+    "update_authored_creature_behavior",
     "update_authored_gameplay_camera_properties",
     "update_authored_gameplay_placement_transform",
     "update_authored_gameplay_transition",

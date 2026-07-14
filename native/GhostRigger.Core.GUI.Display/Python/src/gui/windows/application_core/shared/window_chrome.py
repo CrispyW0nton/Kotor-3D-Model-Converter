@@ -34,6 +34,42 @@ _GUI_DIR = Path(__file__).resolve().parents[3]
 _QT_ICON_DIR = (_GUI_DIR / "icons").as_posix()
 _fallback_icons = ThemeIconManager(_GUI_DIR / "icons")
 
+# Semantic product-surface icon keys.  Keep QAction and command-strip routing
+# explicit so a workbench cannot silently fall back to another product's icon.
+MAIN_ACTION_ICON_KEYS: dict[str, str] = {
+    "theme_editor": "theme_editor",
+    "character_builder": "character_builder",
+    "animation_library": "animation_library",
+    "animation_browser": "animation_browser",
+    "retarget_workbench": "retarget",
+    "retarget_preview": "retarget_preview",
+    "unreal_animator": "unreal_animator",
+    "map_studio": "map_studio",
+    "placeable_builder": "placeable_builder",
+    "module_editor": "module_editor",
+    "rigging": "rigging",
+    "blueprint_editor": "blueprint_editor",
+    "content_browser": "content_browser",
+    "nodes": "nodes",
+    "twoda_browser": "twoda_browser",
+    "resource_browser": "resource_browser",
+    "tutorials": "tutorials",
+    "module_meshes": "module_meshes",
+}
+
+MAIN_COMMAND_STRIP_ICON_KEYS: dict[str, str] = {
+    "character_builder": "character_builder",
+    "map_studio": "map_studio",
+    "placeable_builder": "placeable_builder",
+    "module_editor": "module_editor",
+    "content_browser": "content_browser",
+    "animation_browser": "animation_browser",
+    "nodes": "nodes",
+    "module_meshes": "module_meshes",
+    "twoda_browser": "twoda_browser",
+    "resource_browser": "resource_browser",
+}
+
 
 class WindowChromeMixin:
     """Actions, menus, command strip, and Matrix header behavior."""
@@ -96,7 +132,7 @@ class WindowChromeMixin:
         self.settings_action = QtGui.QAction(self._icon("settings"), "Settings...", self)
         self.settings_action.setShortcut("Ctrl+Comma")
         self.settings_action.triggered.connect(self._open_settings_dialog)
-        self.theme_editor_action = QtGui.QAction(self._icon("settings"), "Theme Editor...", self)
+        self.theme_editor_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["theme_editor"]), "Theme Editor...", self)
         self.theme_editor_action.triggered.connect(self._open_theme_editor_window)
         self.autorig_action = QtGui.QAction(self._icon("autorig"), "Auto-Rig Current Model", self)
         self.autorig_action.setShortcut("Ctrl+Shift+G")
@@ -146,13 +182,13 @@ class WindowChromeMixin:
         self.refresh_action = QtGui.QAction("Refresh All", self)
         self.refresh_action.setShortcut("F5")
         self.refresh_action.triggered.connect(self._refresh_all)
-        self.character_builder_action = QtGui.QAction(self._icon("charbuilder"), "Character Builder (New Window)...", self)
+        self.character_builder_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["character_builder"]), "Character Builder (New Window)...", self)
         self.character_builder_action.setShortcut("Ctrl+Shift+C")
         self.character_builder_action.triggered.connect(self._open_qt_character_builder_window)
-        self.anims_action = QtGui.QAction(self._icon("anims"), "Animation Library", self)
+        self.anims_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["animation_library"]), "Animation Library", self)
         self.anims_action.setShortcut("Ctrl+Shift+A")
         self.anims_action.triggered.connect(lambda: self._show_content_browser("Animation"))
-        self.animation_browser_dock_action = QtGui.QAction(self._icon("anims"), "Animation Browser", self)
+        self.animation_browser_dock_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["animation_browser"]), "Animation Browser", self)
         self._configure_dock_toggle_action(
             self.animation_browser_dock_action,
             "animations",
@@ -164,38 +200,45 @@ class WindowChromeMixin:
             "body_attachment",
             lambda: self._show_workspace_dock("body_attachment"),
         )
-        self.retarget_workbench_action = QtGui.QAction(self._icon("anims"), "Animation Retargeting Workbench...", self)
+        self.retarget_workbench_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["retarget_workbench"]), "Animation Retargeting Workbench...", self)
         self.retarget_workbench_action.setShortcut("Ctrl+Shift+A")
         self.retarget_workbench_action.triggered.connect(self._open_animation_retarget_window)
         self.load_retarget_source_clip_action = QtGui.QAction("Load UE/FBX Source Animation...", self)
         self.load_retarget_source_clip_action.triggered.connect(self._load_retarget_source_clip)
         self.load_retarget_profile_action = QtGui.QAction("Load Retarget Profile...", self)
         self.load_retarget_profile_action.triggered.connect(self._load_retarget_profile)
-        self.preview_retarget_action = QtGui.QAction(self._icon("anims"), "Preview Retarget", self)
+        self.preview_retarget_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["retarget_preview"]), "Preview Retarget", self)
         self.preview_retarget_action.setEnabled(False)
         self.preview_retarget_action.triggered.connect(self._preview_retarget_animation)
         self.export_retarget_preview_action = QtGui.QAction("Export Retarget Preview...", self)
         self.export_retarget_preview_action.setEnabled(False)
         self.export_retarget_preview_action.triggered.connect(self._export_retarget_preview)
-        self.unreal_animator_action = QtGui.QAction(self._icon("anims"), "Unreal Animator...", self)
+        self.unreal_animator_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["unreal_animator"]), "Unreal Animator...", self)
         self.unreal_animator_action.setShortcut("Ctrl+Shift+U")
         self.unreal_animator_action.triggered.connect(self._open_unreal_animator_window)
         self.sequence_editor_action = QtGui.QAction(self._icon("sequence"), "Sequence Editor", self)
         self.sequence_editor_action.setShortcut("Ctrl+Alt+Q")
         self._configure_dock_toggle_action(self.sequence_editor_action, "sequence_editor", self._show_sequence_editor_dock)
-        self.modules_action = QtGui.QAction(self._icon("modular"), "Open Map Studio (KMAP Area Authoring)", self)
+        self.modules_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["map_studio"]), "Open Map Studio (KMAP Area Authoring)", self)
         self.modules_action.setStatusTip("Author new KMAP areas with room geometry, walkmeshes, and gameplay placements")
         self.modules_action.triggered.connect(self._open_map_studio_modeling_workspace)
-        self.stock_module_editor_action = QtGui.QAction(self._icon("module_meshes"), "Open Module Editor (Stock MOD/RIM Patcher)", self)
+        self.placeable_builder_action = QtGui.QAction(
+            self._icon(MAIN_ACTION_ICON_KEYS["placeable_builder"]), "Open Placeable Builder...", self
+        )
+        self.placeable_builder_action.setStatusTip(
+            "Design reusable containers, terminals, puzzles, interactive props, and decor for the Placeable Library"
+        )
+        self.placeable_builder_action.triggered.connect(self._open_placeable_builder_window)
+        self.stock_module_editor_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["module_editor"]), "Open Module Editor (Stock MOD/RIM Patcher)", self)
         self.stock_module_editor_action.setStatusTip("Patch textures, walkmeshes, and objects in existing stock .mod/.rim module archives")
         self.stock_module_editor_action.triggered.connect(self._open_stock_module_editor_window)
-        self.rig_window_action = QtGui.QAction(self._icon("rig"), "Open Rigging Window", self)
+        self.rig_window_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["rigging"]), "Open Rigging Window", self)
         self.rig_window_action.triggered.connect(self._open_rig_window)
         self.texture_tool_action = QtGui.QAction(self._icon("texture"), "Texture Tool...", self)
         self.texture_tool_action.triggered.connect(self._open_texture_tool_window)
-        self.blueprint_editor_action = QtGui.QAction(self._icon("library"), "Blueprint Editor...", self)
+        self.blueprint_editor_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["blueprint_editor"]), "Blueprint Editor...", self)
         self.blueprint_editor_action.triggered.connect(self._open_blueprint_editor_window)
-        self.content_browser_action = QtGui.QAction(self._icon("library"), "Open Content Browser", self)
+        self.content_browser_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["content_browser"]), "Open Content Browser", self)
         self._configure_dock_toggle_action(
             self.content_browser_action,
             "content_browser",
@@ -209,7 +252,7 @@ class WindowChromeMixin:
             "properties",
             lambda: self._show_workspace_dock("properties"),
         )
-        self.nodes_panel_action = QtGui.QAction(self._icon("skeleton"), "Open Nodes Panel", self)
+        self.nodes_panel_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["nodes"]), "Open Nodes Panel", self)
         self._configure_dock_toggle_action(self.nodes_panel_action, "nodes", lambda: self._show_workspace_dock("nodes"))
         self.lighting_panel_action = QtGui.QAction(self._icon("lights"), "Open Lighting Panel", self)
         self._configure_dock_toggle_action(self.lighting_panel_action, "lighting", lambda: self._show_workspace_dock("lighting"))
@@ -233,15 +276,15 @@ class WindowChromeMixin:
         self.create_ambient_light_action.triggered.connect(lambda: self._create_scene_light_object("ambient"))
         self.render_frame_action = QtGui.QAction("Render Camera Still...", self)
         self.render_frame_action.triggered.connect(self._open_render_frame_dialog)
-        self.twoda_panel_action = QtGui.QAction(self._icon("twoda"), "Open 2DA Browser", self)
+        self.twoda_panel_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["twoda_browser"]), "Open 2DA Browser", self)
         self._configure_dock_toggle_action(self.twoda_panel_action, "2das", lambda: self._show_workspace_dock("2das"))
-        self.resources_panel_action = QtGui.QAction(self._icon("resources"), "Open Resource Browser", self)
+        self.resources_panel_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["resource_browser"]), "Open Resource Browser", self)
         self._configure_dock_toggle_action(
             self.resources_panel_action,
             "resources",
             lambda: self._show_workspace_dock("resources"),
         )
-        self.module_meshes_panel_action = QtGui.QAction(self._icon("module_meshes"), "Open Module Meshes", self)
+        self.module_meshes_panel_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["module_meshes"]), "Open Module Meshes", self)
         self._configure_dock_toggle_action(
             self.module_meshes_panel_action,
             "module_meshes",
@@ -301,6 +344,17 @@ class WindowChromeMixin:
         self.refresh_gmodular_action.triggered.connect(self._ipc_refresh_gmodular)
         self.about_action = QtGui.QAction("About GhostRigger...", self)
         self.about_action.triggered.connect(lambda: show_about(self))
+
+        self.getting_started_action = QtGui.QAction(
+            self._icon(MAIN_ACTION_ICON_KEYS["tutorials"]),
+            "Tutorials && Getting Started...",
+            self,
+        )
+        self.getting_started_action.setShortcut("F1")
+        self.getting_started_action.setStatusTip(
+            "Learn each GhostStudio pillar and open the real workspace for the selected tutorial"
+        )
+        self.getting_started_action.triggered.connect(self._open_getting_started_window)
 
         self.quit_action = QtGui.QAction("Exit", self)
         self.quit_action.setShortcut("Alt+F4")
@@ -378,6 +432,7 @@ class WindowChromeMixin:
         tools_menu.addAction(self.remove_rig_action)
         tools_menu.addSeparator()
         tools_menu.addAction(self.modules_action)
+        tools_menu.addAction(self.placeable_builder_action)
         tools_menu.addAction(self.stock_module_editor_action)
         tools_menu.addAction(self.rig_window_action)
         tools_menu.addSeparator()
@@ -464,6 +519,8 @@ class WindowChromeMixin:
         format_action.triggered.connect(lambda: show_format_reference(self))
         viewport_controls_action = QtGui.QAction("Viewport Navigation Controls", self)
         viewport_controls_action.triggered.connect(lambda: show_viewport_navigation_reference(self))
+        help_menu.addAction(self.getting_started_action)
+        help_menu.addSeparator()
         help_menu.addAction(self.about_action)
         help_menu.addAction(self.about_module_action)
         help_menu.addAction(viewport_controls_action)
@@ -487,6 +544,31 @@ class WindowChromeMixin:
             return QtGui.QIcon(str(path))
         fallback = _GUI_DIR / "icons" / f"{name}_24.png"
         return QtGui.QIcon(str(fallback)) if fallback.exists() else _fallback_icons.icon(name, None, size)
+
+    def _ghost_studio_brand_icon(self, size: int = 36) -> QtGui.QIcon:
+        """Return the real GhostStudio application artwork, never an initials tile."""
+
+        root = Path(getattr(self, "app_root", "") or "")
+        for candidate in (
+            root / "assets" / "icons" / "icon_256x256.png",
+            root / "assets" / "icons" / "ghostrigger_icon.png",
+        ):
+            if candidate.is_file():
+                icon = QtGui.QIcon(str(candidate))
+                if not icon.isNull():
+                    return icon
+
+        # A standalone GhostStudio build carries the same artwork as its
+        # native executable ICON resource. QFileIconProvider asks Windows for
+        # that real shell icon, so packaged builds do not need a loose PNG.
+        try:
+            executable = QtCore.QFileInfo(QtCore.QCoreApplication.applicationFilePath())
+            icon = QtWidgets.QFileIconProvider().icon(executable)
+            if not icon.isNull():
+                return icon
+        except Exception:
+            pass
+        return self._icon("logo", size)
 
     def _placeholder_action(self, text: str, shortcut: str = "") -> QtGui.QAction:
         action = QtGui.QAction(text, self)
@@ -583,11 +665,17 @@ class WindowChromeMixin:
         layout.setSpacing(10)
 
         logo = QtWidgets.QLabel()
-        pix = self._icon("logo", 24).pixmap(24, 24)
+        logo.setObjectName("GhostStudioBrandIcon")
+        logo.setFixedSize(38, 38)
+        logo.setAlignment(QtCore.Qt.AlignCenter)
+        brand_icon = self._ghost_studio_brand_icon(36)
+        pix = brand_icon.pixmap(36, 36)
         if not pix.isNull():
             logo.setPixmap(pix)
+            if self.windowIcon().isNull():
+                self.setWindowIcon(brand_icon)
         else:
-            logo.setText("//")
+            logo.setText("GS")
             logo.setStyleSheet(f"color:{C['accent']}; font-weight:bold; font-size:16pt;")
         logo.setStyleSheet(logo.styleSheet() + "background:transparent;")
         layout.addWidget(logo)
@@ -595,7 +683,7 @@ class WindowChromeMixin:
         title_box = QtWidgets.QVBoxLayout()
         title_box.setContentsMargins(0, 0, 0, 0)
         title_box.setSpacing(0)
-        title = QtMatrixLabel("GHOSTRIGGER")
+        title = QtMatrixLabel("GHOST STUDIO")
         title.setObjectName("GhostTitle")
         subtitle = QtWidgets.QLabel("Odyssey Engine Pipeline  //  KotOR 1 & 2 TSL")
         subtitle.setObjectName("GhostSubtitle")
@@ -655,12 +743,20 @@ class WindowChromeMixin:
         layout.addWidget(self._tool_button("Open Scene  Ctrl+O", self.open_scene_action, "open"))
         layout.addWidget(self._tool_button("Save  Ctrl+S", self.save_scene_action, "save"))
         layout.addWidget(self._tool_button("Auto-Rig  Ctrl+Shift+G", self.autorig_action, "autorig"))
-        layout.addWidget(self._tool_button("Character Builder", self.character_builder_action, "charbuilder"))
-        map_studio_button = self._tool_button("Modules", self.modules_action, "modular")
+        layout.addWidget(self._tool_button("Character Builder", self.character_builder_action, MAIN_COMMAND_STRIP_ICON_KEYS["character_builder"]))
+        map_studio_button = self._tool_button("Map Studio", self.modules_action, MAIN_COMMAND_STRIP_ICON_KEYS["map_studio"])
         map_studio_button.setObjectName("CommandStripMapStudioButton")
         map_studio_button.setToolTip("Open Map Studio (KMAP Area Authoring)")
         layout.addWidget(map_studio_button)
-        module_editor_button = self._tool_button("Module Editor", self.stock_module_editor_action, "module_meshes")
+        placeable_builder_button = self._tool_button(
+            "Placeables", self.placeable_builder_action, MAIN_COMMAND_STRIP_ICON_KEYS["placeable_builder"]
+        )
+        placeable_builder_button.setObjectName("CommandStripPlaceableBuilderButton")
+        placeable_builder_button.setToolTip(
+            "Open Placeable Builder and author reusable objects for the Map Studio Placeable Library"
+        )
+        layout.addWidget(placeable_builder_button)
+        module_editor_button = self._tool_button("Module Editor", self.stock_module_editor_action, MAIN_COMMAND_STRIP_ICON_KEYS["module_editor"])
         module_editor_button.setObjectName("CommandStripModuleEditorButton")
         module_editor_button.setToolTip("Open Module Editor (Stock MOD/RIM Patcher)")
         layout.addWidget(module_editor_button)
@@ -703,21 +799,21 @@ class WindowChromeMixin:
         layout.addWidget(light_create_button)
 
         layout.addStretch(1)
-        layout.addWidget(self._tool_button("Content", self.content_browser_action, "library", compact=True))
+        layout.addWidget(self._tool_button("Content", self.content_browser_action, MAIN_COMMAND_STRIP_ICON_KEYS["content_browser"], compact=True))
         layout.addWidget(self._tool_button("Scene Information", self.scene_panel_action, "scene", compact=True))
         layout.addWidget(self._tool_button("Properties", self.properties_panel_action, "props", compact=True))
         layout.addWidget(self._tool_button("BAS", self.body_attachment_panel_action, "body_attachment", compact=True))
         layout.addWidget(self._tool_button("Sequence Editor", self.sequence_editor_action, "sequence", compact=True))
-        layout.addWidget(self._tool_button("Animation Browser", self.animation_browser_dock_action, "anims", compact=True))
-        layout.addWidget(self._tool_button("Nodes", self.nodes_panel_action, "skeleton", compact=True))
+        layout.addWidget(self._tool_button("Animation Browser", self.animation_browser_dock_action, MAIN_COMMAND_STRIP_ICON_KEYS["animation_browser"], compact=True))
+        layout.addWidget(self._tool_button("Nodes", self.nodes_panel_action, MAIN_COMMAND_STRIP_ICON_KEYS["nodes"], compact=True))
         layout.addWidget(self._tool_button("Lighting", self.lighting_panel_action, "lights", compact=True))
         layout.addWidget(self._tool_button("Cameras", self.camera_panel_action, "cameras", compact=True))
-        layout.addWidget(self._tool_button("Module Meshes", self.module_meshes_panel_action, "module_meshes", compact=True))
+        layout.addWidget(self._tool_button("Module Meshes", self.module_meshes_panel_action, MAIN_COMMAND_STRIP_ICON_KEYS["module_meshes"], compact=True))
         layout.addWidget(self._tool_button("Mesh Tools", self.mesh_tools_panel_action, "mesh_tools", compact=True))
         layout.addWidget(self._tool_button("Sprite Materials", self.sprite_materials_panel_action, "sprite_materials", compact=True))
         layout.addWidget(self._tool_button("Adjust Pivot", self.adjust_pivot_panel_action, "viewport_gimbal", compact=True))
-        layout.addWidget(self._tool_button("2DA Browser", self.twoda_panel_action, "twoda", compact=True))
-        layout.addWidget(self._tool_button("Resource Browser", self.resources_panel_action, "resources", compact=True))
+        layout.addWidget(self._tool_button("2DA Browser", self.twoda_panel_action, MAIN_COMMAND_STRIP_ICON_KEYS["twoda_browser"], compact=True))
+        layout.addWidget(self._tool_button("Resource Browser", self.resources_panel_action, MAIN_COMMAND_STRIP_ICON_KEYS["resource_browser"], compact=True))
         layout.addWidget(self._tool_button("Log", self.output_log_panel_action, "output_log", compact=True))
         layout.addWidget(self._tool_button("Terminal", self.python_terminal_panel_action, "python_terminal", compact=True))
         layout.addWidget(self._tool_button("Diagnostics  Ctrl+Shift+D", self.diag_action, "diag", compact=True))
@@ -794,222 +890,26 @@ class WindowChromeMixin:
         toolbar.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
 
         row.addWidget(toolbar, 1)
-        modeling_button = QtWidgets.QToolButton(row_host)
-        modeling_button.setObjectName("ViewportToolbarMapStudioModelingButton")
-        modeling_button.setText("Modeling")
-        modeling_button.setIcon(self._icon("modular"))
-        modeling_button.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
-        modeling_button.setToolTip(
-            "Open Map Studio Modeling. KMAP room, terrain, component, and WOK edits are authored in Map Studio."
-        )
-        modeling_button.clicked.connect(self._open_map_studio_modeling_workspace)
-        row.addWidget(modeling_button, 0, QtCore.Qt.AlignVCenter)
         root.addWidget(row_host)
-        modeling_tabs = None
-        viewport = getattr(self, "viewport", None)
-        take_modeling_tabs = getattr(viewport, "take_viewport_modeling_tabs", None)
-        if callable(take_modeling_tabs):
-            modeling_tabs = take_modeling_tabs()
-        if modeling_tabs is None:
-            modeling_tabs = self._make_viewport_modeling_tabs(band)
-        modeling_tabs.setParent(band)
-        root.addWidget(modeling_tabs)
         self.viewport_toolbar_band = band
         self.viewport_toolbar_default_row = row_host
         self.viewport_toolbar_hosted_scroll = toolbar
-        self.viewport_toolbar_modeling_button = modeling_button
-        self.viewport_toolbar_modeling_tabs = modeling_tabs
-        modeling_tabs.setVisible(True)
         self._sync_viewport_toolbar_band()
         return band
-
-    def _make_viewport_modeling_tabs(self, parent: QtWidgets.QWidget) -> QtWidgets.QTabWidget:
-        tabs = QtWidgets.QTabWidget(parent)
-        tabs.setObjectName("ViewportToolbarMapStudioModelingTabs")
-        tabs.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
-        tab = QtWidgets.QWidget(tabs)
-        tab.setObjectName("ViewportToolbarMapStudioModelingTab")
-        tab_root = QtWidgets.QVBoxLayout(tab)
-        tab_root.setContentsMargins(0, 0, 0, 0)
-        tab_root.setSpacing(0)
-        scroll = QtWidgets.QScrollArea(tab)
-        scroll.setObjectName("ViewportToolbarMapStudioModelingScrollArea")
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
-        scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
-        content = QtWidgets.QWidget(scroll)
-        content.setObjectName("ViewportToolbarMapStudioModelingRow")
-        row = QtWidgets.QHBoxLayout(content)
-        row.setContentsMargins(4, 1, 4, 1)
-        row.setSpacing(3)
-
-        mode_label = QtWidgets.QLabel("Modes", content)
-        mode_label.setObjectName("ViewportToolbarMapStudioModeLabel")
-        row.addWidget(mode_label)
-        for mode in ("Object", "Vertex", "Edge", "Face", "Terrain", "Walkmesh"):
-            button = QtWidgets.QToolButton(content)
-            button.setObjectName(f"ViewportToolbarMapStudioModeButton_{mode.lower()}")
-            button.setText(mode)
-            button.setProperty("_gr_full_text", mode)
-            button.setToolTip(f"Open Map Studio {mode} mode for KMAP-authored modeling.")
-            button.clicked.connect(lambda _checked=False, label=mode: self._open_map_studio_mode_from_viewport(label))
-            row.addWidget(button)
-
-        row.addSpacing(8)
-        tool_label = QtWidgets.QLabel("Tools", content)
-        tool_label.setObjectName("ViewportToolbarMapStudioToolLabel")
-        row.addWidget(tool_label)
-        actions = (
-            ("select", "Select", "Focus Map Studio object selection."),
-            ("move", "Move", "Focus Map Studio object transform tools."),
-            ("duplicate_selected", "Dupe", "Duplicate the selected Map Studio item."),
-            ("delete_selected", "Delete", "Delete the selected Map Studio item."),
-            ("object_grid_snap", "Snap", "Snap the selected primitive pivot to the Map Studio grid."),
-            ("weld", "Weld", "Weld selected floor-plan vertices."),
-            ("cut", "Cut", "Cut or split room/terrain topology."),
-            ("split", "Split", "Split authored room topology into KOTOR-safe ownership pieces."),
-            ("bridge", "Bridge", "Bridge selected edges for corridors or joins."),
-            ("extrude", "Extrude", "Extrude selected authored edges or faces."),
-            ("bevel", "Bevel", "Bevel selected authored geometry."),
-            ("inset", "Inset", "Inset selected authored faces."),
-            ("flatten", "Flatten", "Flatten selected floor-plan vertices."),
-            ("cleanup", "Cleanup", "Cleanup duplicate or collinear authored geometry."),
-            ("triangulate", "Triang.", "Triangulate selected room or WOK-facing faces."),
-            ("paint_material", "Material", "Assign KOTOR texture/material intent to the active room or selected primitive."),
-            ("paint_wok", "WOK", "Assign KOTOR WOK surface intent to the active room or selected walkmesh primitive."),
-            ("center_pivot", "Pivot", "Center the selected primitive pivot."),
-            ("freeze_transform", "Freeze", "Freeze supported primitive transforms into authored dimensions."),
-        )
-        for key, label, tooltip in actions:
-            button = QtWidgets.QToolButton(content)
-            button.setObjectName(f"ViewportToolbarMapStudioToolButton_{key}")
-            button.setText(label)
-            button.setProperty("_gr_full_text", label)
-            button.setToolTip(tooltip)
-            button.clicked.connect(lambda _checked=False, action_key=key: self._run_map_studio_viewport_modeling_command(action_key))
-            row.addWidget(button)
-        row.addStretch(1)
-        scroll.setWidget(content)
-        tab_root.addWidget(scroll)
-        tabs.addTab(tab, "Modeling")
-
-        blockout_tab = QtWidgets.QWidget(tabs)
-        blockout_tab.setObjectName("ViewportToolbarMapStudioBlockoutTab")
-        blockout_root = QtWidgets.QVBoxLayout(blockout_tab)
-        blockout_root.setContentsMargins(0, 0, 0, 0)
-        blockout_root.setSpacing(0)
-        blockout_scroll = QtWidgets.QScrollArea(blockout_tab)
-        blockout_scroll.setObjectName("ViewportToolbarMapStudioBlockoutScrollArea")
-        blockout_scroll.setWidgetResizable(True)
-        blockout_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
-        blockout_scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-        blockout_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
-        blockout_content = QtWidgets.QWidget(blockout_scroll)
-        blockout_content.setObjectName("ViewportToolbarMapStudioBlockoutRow")
-        blockout_row = QtWidgets.QHBoxLayout(blockout_content)
-        blockout_row.setContentsMargins(4, 1, 4, 1)
-        blockout_row.setSpacing(3)
-
-        blockout_label = QtWidgets.QLabel("Blockout", blockout_content)
-        blockout_label.setObjectName("ViewportToolbarMapStudioBlockoutLabel")
-        blockout_row.addWidget(blockout_label)
-        blockout_actions = (
-            ("blockout_room", "Room", "Create a KMAP-authored starter room with editable primitives, WOK, LYT/VIS, and player start intent."),
-            ("floor", "Floor", "Add an authored walkable floor/platform primitive to the active Map Studio room."),
-            ("wall", "Wall", "Add an authored wall/slab primitive to the active Map Studio room."),
-            ("cube", "Cube", "Add an authored cube/blockout primitive to the active Map Studio room."),
-            ("ramp", "Ramp", "Add an authored ramp primitive with generated walkmesh-facing surface intent."),
-            ("stairs", "Stairs", "Add authored stairs with a continuous walkable WOK proxy."),
-            ("door_frame", "Doorway", "Add an authored doorway frame primitive for portal or transition blockout."),
-            ("arch", "Arch", "Add an authored arch primitive for entrance or portal silhouettes."),
-            ("terrain_patch", "Terrain", "Create a KMAP-authored terrain heightfield patch with slope-aware WOK intent."),
-        )
-        for key, label, tooltip in blockout_actions:
-            button = QtWidgets.QToolButton(blockout_content)
-            button.setObjectName(f"ViewportToolbarMapStudioBlockoutButton_{key}")
-            button.setText(label)
-            button.setProperty("_gr_full_text", label)
-            button.setToolTip(tooltip)
-            button.clicked.connect(lambda _checked=False, action_key=key: self._run_map_studio_viewport_modeling_command(action_key))
-            blockout_row.addWidget(button)
-        blockout_row.addStretch(1)
-        blockout_scroll.setWidget(blockout_content)
-        blockout_root.addWidget(blockout_scroll)
-        tabs.addTab(blockout_tab, "Blockout")
-        return tabs
-
-    def _open_map_studio_mode_from_viewport(self, mode_label: str) -> None:
-        self._open_map_studio_modeling_workspace()
-        window = getattr(self, "module_editor_window", None)
-        if window is None:
-            return
-        handler = getattr(window, "_handle_map_studio_edit_mode_changed", None)
-        if callable(handler):
-            handler(str(mode_label or "Object"))
-        window.show()
-        window.raise_()
-        window.activateWindow()
-
-    def _run_map_studio_viewport_modeling_command(self, action_key: str) -> None:
-        self._open_map_studio_modeling_workspace()
-        window = getattr(self, "module_editor_window", None)
-        if window is None:
-            return
-        key = str(action_key or "").strip()
-        if key == "select":
-            select_authored = getattr(window, "select_map_studio_authored_context", None)
-            if callable(select_authored) and select_authored():
-                return
-            self._open_map_studio_mode_from_viewport("Object")
-            return
-        if key == "move":
-            move_primitive = getattr(window, "move_map_studio_authored_primitive_selection", None)
-            if callable(move_primitive) and move_primitive():
-                return
-            self._open_map_studio_mode_from_viewport("Object")
-            return
-        if key == "duplicate_selected":
-            execute = getattr(window, "_execute_map_studio_tool_belt_command", None)
-            if callable(execute) and execute("duplicate_selected"):
-                return
-            duplicate = getattr(window, "duplicate_selected", None)
-            if callable(duplicate):
-                duplicate()
-            return
-        if key == "delete_selected":
-            execute = getattr(window, "_execute_map_studio_tool_belt_command", None)
-            if callable(execute) and execute("delete_selected"):
-                return
-            delete = getattr(window, "delete_selected", None)
-            if callable(delete):
-                delete()
-            return
-        execute = getattr(window, "_execute_map_studio_tool_belt_command", None)
-        if callable(execute):
-            execute(key)
-        window.show()
-        window.raise_()
-        window.activateWindow()
 
     def _sync_viewport_toolbar_band(self) -> None:
         toolbar = getattr(self, "viewport_toolbar_hosted_scroll", None)
         band = getattr(self, "viewport_toolbar_band", None)
-        if toolbar is not None and band is not None:
-            height = self._height_for_wrapping_widget(toolbar, max(28, toolbar.sizeHint().height()))
-            toolbar.setMinimumHeight(height)
-            toolbar.setMaximumHeight(height)
-            row_host = getattr(self, "viewport_toolbar_default_row", None)
-            if row_host is not None:
-                row_host.setMinimumHeight(height)
-                row_host.setMaximumHeight(height)
-            modeling_tabs = getattr(self, "viewport_toolbar_modeling_tabs", None)
-            modeling_height = max(36, modeling_tabs.sizeHint().height()) if modeling_tabs is not None else 0
-        if modeling_tabs is not None:
-            modeling_tabs.setVisible(True)
-            modeling_tabs.setMinimumHeight(modeling_height)
-            modeling_tabs.setMaximumHeight(modeling_height)
-        band.setFixedHeight(height + modeling_height)
+        if toolbar is None or band is None:
+            return
+        height = self._height_for_wrapping_widget(toolbar, max(28, toolbar.sizeHint().height()))
+        toolbar.setMinimumHeight(height)
+        toolbar.setMaximumHeight(height)
+        row_host = getattr(self, "viewport_toolbar_default_row", None)
+        if row_host is not None:
+            row_host.setMinimumHeight(height)
+            row_host.setMaximumHeight(height)
+        band.setFixedHeight(height)
         band.updateGeometry()
 
     def _sync_reserved_top_rows(self) -> None:

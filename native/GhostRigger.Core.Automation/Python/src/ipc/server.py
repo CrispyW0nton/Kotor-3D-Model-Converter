@@ -20,6 +20,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+from pathlib import Path
+import re
 import threading
 from typing import Callable, Optional, Dict, Any
 
@@ -33,6 +36,190 @@ PORT_GHOSTSCRIPTER = 7002
 PORT_GMODULAR     = 7003
 
 _PROGRAM_NAME = "GhostRigger"
+_RESREF_RE = re.compile(r"^[A-Za-z0-9_]{1,16}$")
+_IPC_PORT_ENV = "GHOSTRIGGER_IPC_PORT"
+
+
+def resolve_ghostrigger_ipc_port(raw_value: object | None = None) -> int:
+    """Resolve the local IPC port without changing the normal 7001 contract.
+
+    A per-process environment override lets a focus-safe validation instance
+    coexist with the user's already-running GhostStudio process. Invalid
+    values deliberately fall back to the documented product port.
+    """
+
+    value = os.environ.get(_IPC_PORT_ENV, "") if raw_value is None else raw_value
+    text = str(value or "").strip()
+    if not text:
+        return PORT_GHOSTRIGGER
+    try:
+        port = int(text, 10)
+    except (TypeError, ValueError):
+        return PORT_GHOSTRIGGER
+    return port if 1 <= port <= 65535 else PORT_GHOSTRIGGER
+
+
+def _validate_map_studio_visual_proof_payload(payload: object) -> tuple[dict[str, Any] | None, str]:
+    """Validate and normalise the focus-safe Map Studio proof request."""
+
+    if not isinstance(payload, dict):
+        return None, "payload must be a JSON object"
+
+    game = str(payload.get("game") or "").strip().upper()
+    if game not in {"K1", "K2"}:
+        return None, "game must be 'K1' or 'K2'"
+
+    module_resref = str(payload.get("module_resref") or payload.get("module") or "").strip().lower()
+    if not _RESREF_RE.fullmatch(module_resref):
+        return None, "module_resref must be a 1-16 character KOTOR resref"
+
+    modules_dir_text = str(payload.get("modules_dir") or "").strip()
+    modules_dir = Path(modules_dir_text).expanduser()
+    if not modules_dir_text or not modules_dir.is_absolute():
+        return None, "modules_dir must be an absolute path"
+    if not modules_dir.is_dir():
+        return None, f"modules_dir does not exist: {modules_dir}"
+
+    capture_paths: dict[str, Path] = {}
+    for key in ("before_path", "after_path"):
+        text = str(payload.get(key) or "").strip()
+        candidate = Path(text).expanduser()
+        if not text or not candidate.is_absolute():
+            return None, f"{key} must be an absolute path"
+        if candidate.suffix.lower() != ".png":
+            return None, f"{key} must end in .png"
+        capture_paths[key] = candidate.resolve(strict=False)
+    if capture_paths["before_path"] == capture_paths["after_path"]:
+        return None, "before_path and after_path must be different files"
+
+    activate = payload.get("activate", False)
+    if not isinstance(activate, bool):
+        return None, "activate must be a boolean"
+    if activate:
+        return None, "map_studio_visual_proof is focus-safe; activate must be false"
+
+    settle_ms = payload.get("settle_ms", 5000)
+    if isinstance(settle_ms, bool) or not isinstance(settle_ms, int) or not 0 <= settle_ms <= 5000:
+        return None, "settle_ms must be an integer between 0 and 5000"
+    # A positive visual-proof delay is a renderer-residency contract, not a
+    # caller-selected performance knob.  Stock module textures can still be
+    # decoding/uploading after the former 750 ms default, yielding a nearly
+    # black capture that looked superficially different and falsely passed.
+    # Preserve zero only for deterministic focused tests; real proofs always
+    # receive the full measured residency window.
+    settle_ms = 0 if settle_ms == 0 else 5000
+
+    expected_room = str(payload.get("expected_room_resref") or "").strip().lower()
+    if expected_room and not _RESREF_RE.fullmatch(expected_room):
+        return None, "expected_room_resref must be a valid KOTOR resref"
+
+    expected_count = payload.get("expected_backdrop_surface_count", None)
+    if expected_count is not None:
+        if isinstance(expected_count, bool) or not isinstance(expected_count, int) or not 0 <= expected_count <= 1024:
+            return None, "expected_backdrop_surface_count must be an integer between 0 and 1024"
+
+    raw_textures = payload.get("expected_textures", {})
+    if raw_textures is None:
+        raw_textures = {}
+    if not isinstance(raw_textures, dict) or len(raw_textures) > 64:
+        return None, "expected_textures must be an object with at most 64 entries"
+    expected_textures: dict[str, list[int]] = {}
+    for raw_name, raw_size in raw_textures.items():
+        name = str(raw_name or "").strip().lower()
+        if not _RESREF_RE.fullmatch(name):
+            return None, f"invalid expected texture resref: {raw_name!r}"
+        if (
+            not isinstance(raw_size, (list, tuple))
+            or len(raw_size) != 2
+            or any(isinstance(value, bool) or not isinstance(value, int) for value in raw_size)
+        ):
+            return None, f"expected texture size for {name} must be [width, height]"
+        width, height = int(raw_size[0]), int(raw_size[1])
+        if not 1 <= width <= 8192 or not 1 <= height <= 8192:
+            return None, f"expected texture size for {name} must be between 1 and 8192 pixels"
+        expected_textures[name] = [width, height]
+
+    return {
+        "game": game,
+        "module_resref": module_resref,
+        "modules_dir": str(modules_dir.resolve()),
+        "before_path": str(capture_paths["before_path"]),
+        "after_path": str(capture_paths["after_path"]),
+        "activate": activate,
+        "settle_ms": settle_ms,
+        "expected_room_resref": expected_room,
+        "expected_backdrop_surface_count": expected_count,
+        "expected_textures": expected_textures,
+    }, ""
+
+
+def _validate_map_studio_pie_visual_proof_payload(payload: object) -> tuple[dict[str, Any] | None, str]:
+    """Validate one focus-safe, bounded PIE motion/capture request."""
+
+    if not isinstance(payload, dict):
+        return None, "payload must be a JSON object"
+
+    kmap_text = str(payload.get("kmap_path") or "").strip()
+    kmap_path = Path(kmap_text).expanduser()
+    if not kmap_text or not kmap_path.is_absolute():
+        return None, "kmap_path must be an absolute path"
+    if kmap_path.suffix.lower() != ".kmap":
+        return None, "kmap_path must end in .kmap"
+    if not kmap_path.is_file():
+        return None, f"kmap_path does not exist: {kmap_path}"
+
+    capture_text = str(payload.get("capture_dir") or "").strip()
+    capture_dir = Path(capture_text).expanduser()
+    if not capture_text or not capture_dir.is_absolute():
+        return None, "capture_dir must be an absolute path"
+
+    activate = payload.get("activate", False)
+    if not isinstance(activate, bool):
+        return None, "activate must be a boolean"
+    if activate:
+        return None, "map_studio_pie_visual_proof is focus-safe; activate must be false"
+
+    settle_ms = payload.get("settle_ms", 1500)
+    if isinstance(settle_ms, bool) or not isinstance(settle_ms, int) or not 0 <= settle_ms <= 5000:
+        return None, "settle_ms must be an integer between 0 and 5000"
+    movement_ms = payload.get("movement_ms", 1200)
+    if isinstance(movement_ms, bool) or not isinstance(movement_ms, int) or not 100 <= movement_ms <= 5000:
+        return None, "movement_ms must be an integer between 100 and 5000"
+    sample_count = payload.get("sample_count", 12)
+    if isinstance(sample_count, bool) or not isinstance(sample_count, int) or not 2 <= sample_count <= 24:
+        return None, "sample_count must be an integer between 2 and 24"
+
+    motion: dict[str, float] = {}
+    for key, default in (("forward", 1.0), ("strafe", 0.0)):
+        raw = payload.get(key, default)
+        if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+            return None, f"{key} must be a number between -1 and 1"
+        value = float(raw)
+        if not -1.0 <= value <= 1.0:
+            return None, f"{key} must be a number between -1 and 1"
+        motion[key] = value
+    run = payload.get("run", False)
+    if not isinstance(run, bool):
+        return None, "run must be a boolean"
+    expected_min_distance = payload.get("expected_min_distance", 0.05)
+    if isinstance(expected_min_distance, bool) or not isinstance(expected_min_distance, (int, float)):
+        return None, "expected_min_distance must be a number between 0 and 25"
+    expected_min_distance = float(expected_min_distance)
+    if not 0.0 <= expected_min_distance <= 25.0:
+        return None, "expected_min_distance must be a number between 0 and 25"
+
+    return {
+        "kmap_path": str(kmap_path.resolve()),
+        "capture_dir": str(capture_dir.resolve(strict=False)),
+        "activate": False,
+        "settle_ms": int(settle_ms),
+        "movement_ms": int(movement_ms),
+        "sample_count": int(sample_count),
+        "forward": motion["forward"],
+        "strafe": motion["strafe"],
+        "run": run,
+        "expected_min_distance": expected_min_distance,
+    }, ""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -56,12 +243,12 @@ class GhostRiggerIPCServer:
         'open_mdl'  : Callable[[str, str], None]
     """
 
-    def __init__(self, callbacks: Optional[Dict[str, Callable]] = None, port: int = 7001):
+    def __init__(self, callbacks: Optional[Dict[str, Callable]] = None, port: int | None = None):
         self.callbacks: Dict[str, Callable] = callbacks or {}
         self._thread: Optional[threading.Thread] = None
         self._app = None
         self._running = False
-        self._port = port   # allow test to override port
+        self._port = resolve_ghostrigger_ipc_port() if port is None else int(port)
 
     # ── Lifecycle ─────────────────────────────────────────────────────────
 
@@ -75,7 +262,13 @@ class GhostRiggerIPCServer:
             daemon=True,
         )
         self._thread.start()
-        log.info("GhostRigger IPC server starting on port %d", PORT_GHOSTRIGGER)
+        log.info("GhostRigger IPC server starting on port %d", self._port)
+
+    @property
+    def port(self) -> int:
+        """Return the actual per-process listening port."""
+
+        return int(self._port)
 
     def stop(self):
         """Stop the server (best-effort — Flask dev server can't be stopped cleanly)."""
@@ -641,6 +834,42 @@ class GhostRiggerIPCServer:
             if cb is not None:
                 self._schedule_callback(cb, path)
             return jsonify({"status": "ok", "path": path})
+
+        @app.route("/api/map_studio_visual_proof", methods=["POST"])
+        def route_map_studio_visual_proof():
+            """Run a focus-safe stock-skybox before/after proof in Map Studio."""
+
+            body = request.get_json(force=True, silent=True) or {}
+            payload, validation_error = _validate_map_studio_visual_proof_payload(_payload(body))
+            if payload is None:
+                return jsonify({"status": "error", "message": validation_error}), 400
+
+            cb = self.callbacks.get("map_studio_visual_proof")
+            if cb is None:
+                return jsonify({"status": "error", "message": "map_studio_visual_proof callback unavailable"}), 503
+            ok, result = self._invoke_callback_sync(cb, payload, timeout=180.0)
+            if not ok:
+                return jsonify({"status": "error", "message": str(result)}), 504
+            proof = result if isinstance(result, dict) else {"status": "blocked", "value": result}
+            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "proof": proof})
+
+        @app.route("/api/map_studio_pie_visual_proof", methods=["POST"])
+        def route_map_studio_pie_visual_proof():
+            """Run a focus-safe bounded PIE motion/capture proof."""
+
+            body = request.get_json(force=True, silent=True) or {}
+            payload, validation_error = _validate_map_studio_pie_visual_proof_payload(_payload(body))
+            if payload is None:
+                return jsonify({"status": "error", "message": validation_error}), 400
+
+            cb = self.callbacks.get("map_studio_pie_visual_proof")
+            if cb is None:
+                return jsonify({"status": "error", "message": "map_studio_pie_visual_proof callback unavailable"}), 503
+            ok, result = self._invoke_callback_sync(cb, payload, timeout=90.0)
+            if not ok:
+                return jsonify({"status": "error", "message": str(result)}), 504
+            proof = result if isinstance(result, dict) else {"status": "blocked", "value": result}
+            return jsonify({"status": "ok", "program": _PROGRAM_NAME, "proof": proof})
 
         @app.route("/api/library_search", methods=["GET", "POST"])
         def route_library_search():

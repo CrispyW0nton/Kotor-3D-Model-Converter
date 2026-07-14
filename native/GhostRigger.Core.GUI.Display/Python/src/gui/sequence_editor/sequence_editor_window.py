@@ -68,7 +68,7 @@ class SequenceEditorWindow(QtWidgets.QMainWindow):
         self.fire_events_while_scrubbing = False
         self._settings = self._load_settings()
         self._last_evaluated_frame = 0
-        self.setWindowTitle("GhostRigger Sequence Editor")
+        self.setWindowTitle("Ghost-Studio Sequence Editor")
         self.resize(1360, 820)
         self._build_actions()
         self._build_ui()

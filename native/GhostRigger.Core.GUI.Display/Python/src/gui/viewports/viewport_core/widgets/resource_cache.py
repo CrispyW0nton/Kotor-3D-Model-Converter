@@ -8,6 +8,48 @@ from .snap_view_bar import *  # noqa: F401,F403
 
 
 class ViewportResourceCacheMixin:
+    def update_texture_regions(self, texture_name: str, image, dirty_regions=None):
+        """Publish painted pixels without reloading the model or renderer.
+
+        Dirty rectangles are ``(x, y, width, height)`` in the bottom-up PIL
+        image held by ``TextureCache``.  ModernGL writes those rectangles into
+        the resident texture.  Backends without a partial-write contract evict
+        only the named texture/material binding and lazily rebuild it next
+        frame.  No framebuffer, mesh or unrelated texture cache is cleared.
+        """
+        update_software = getattr(self._renderer, "update_texture_regions", None)
+        if not callable(update_software):
+            raise RuntimeError("active frame renderer does not support live texture updates")
+        cached_image, clipped_regions = update_software(texture_name, image, dirty_regions)
+
+        gpu_patched = False
+        gpu_targeted_invalidation = False
+        gpu_renderer = self._gpu_renderer
+        if gpu_renderer is not None:
+            update_gpu = getattr(gpu_renderer, "update_texture_regions", None)
+            if callable(update_gpu):
+                gpu_patched = bool(update_gpu(texture_name, cached_image, clipped_regions))
+            if not gpu_patched:
+                invalidate_texture = getattr(gpu_renderer, "invalidate_texture", None)
+                if callable(invalidate_texture):
+                    gpu_targeted_invalidation = bool(
+                        invalidate_texture(texture_name, image=cached_image)
+                    )
+
+        self._last_texture_region_update = {
+            "texture": str(texture_name or ""),
+            "image_id": id(cached_image),
+            "regions": tuple(clipped_regions),
+            "gpu_patched": gpu_patched,
+            "gpu_targeted_invalidation": gpu_targeted_invalidation,
+        }
+        self._request_render(
+            fast=True,
+            reason=f"texture pixels changed: {texture_name}",
+            materials=True,
+        )
+        return cached_image, clipped_regions
+
     def _evict_transform_cache(self, node) -> None:
         clear_prebuilt_static_gpu_mesh_data(node)
         self._renderer._wt_cache.pop(id(node), None)

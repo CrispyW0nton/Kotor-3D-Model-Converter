@@ -63,7 +63,7 @@
     <None Include="Python\src\core\qt_core.py">
       <Filter>Python\src\core</Filter>
     </None>
-  </ItemGroup>
+  <None Include="Python\src\core\mdl\__init__.py"><Filter>Python\src\core\mdl</Filter></None><None Include="Python\src\core\mdl\ghostrigger_mdl_reader.py"><Filter>Python\src\core\mdl</Filter></None><None Include="Python\src\core\mdl\mdl_parser.py"><Filter>Python\src\core\mdl</Filter></None><None Include="Python\src\core\mdl\mdl_porter.py"><Filter>Python\src\core\mdl</Filter></None><None Include="Python\src\core\mdl\mdl_reader_wrapper.py"><Filter>Python\src\core\mdl</Filter></None><None Include="Python\src\core\mdl\mdl_writer.py"><Filter>Python\src\core\mdl</Filter></None></ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
   </ItemGroup>

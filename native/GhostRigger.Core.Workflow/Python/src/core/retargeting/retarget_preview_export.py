@@ -53,6 +53,7 @@ class RetargetPreviewExportRequest:
     requires_custom_animation_patch: bool = False
     target_mdl_bytes: bytes | None = None
     target_mdx_bytes: bytes | None = None
+    resource_manager: Any | None = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         self.output_mdl_path = Path(self.output_mdl_path)
@@ -131,6 +132,7 @@ def export_retarget_preview_override(
                 verify_roundtrip=request.verify_roundtrip,
                 roundtrip_tolerance=request.roundtrip_tolerance,
                 target_model_override=copy.deepcopy(request.original_target_model),
+                resource_manager=request.resource_manager,
                 kotor_output_name_mode=output_mode,
                 requires_custom_animation_patch=requires_custom_patch,
             )

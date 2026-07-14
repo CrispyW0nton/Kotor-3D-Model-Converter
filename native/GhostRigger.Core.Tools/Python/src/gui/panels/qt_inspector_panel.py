@@ -251,13 +251,22 @@ class QtInspectorPanel(QtWidgets.QWidget):
             if page_layout is not None:
                 page_layout.setSpacing(layout.spacing_value("groupboxSpacing", 4))
 
-    def _page_layout(self) -> QtWidgets.QWidget:
+    def _page_layout(self) -> QtWidgets.QScrollArea:
+        scroll = QtWidgets.QScrollArea()
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        scroll.setSizeAdjustPolicy(QtWidgets.QAbstractScrollArea.AdjustIgnored)
+
         page = QtWidgets.QWidget()
+        page.setObjectName("CharacterBuilderInspectorPageContents")
         layout = QtWidgets.QVBoxLayout(page)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(6)
-        page._gr_layout = layout                            # type: ignore[attr-defined]
-        return page
+        layout.setSizeConstraint(QtWidgets.QLayout.SetMinimumSize)
+        scroll.setWidget(page)
+        scroll._gr_layout = layout                          # type: ignore[attr-defined]
+        return scroll
 
     def _build_page_for_step(self, step: int) -> QtWidgets.QWidget:
         page = self._page_layout()
@@ -282,10 +291,12 @@ class QtInspectorPanel(QtWidgets.QWidget):
     # ── Step-specific page builders ──────────────────────────────────────
 
     def _populate_load_page(self, layout: QtWidgets.QVBoxLayout) -> None:
-        layout.addWidget(QtWidgets.QLabel(
+        guidance = QtWidgets.QLabel(
             "Choose the KOTOR base model/skeleton first, then load the\n"
             "custom MDL / FBX / OBJ mesh that should fit that rig."
-        ))
+        )
+        guidance.setWordWrap(True)
+        layout.addWidget(guidance)
         self._add_skeleton_template_picker(layout)
         btn = QtWidgets.QPushButton("Load Custom Mesh…")
         btn.setProperty("accent", True)
@@ -293,10 +304,22 @@ class QtInspectorPanel(QtWidgets.QWidget):
         layout.addWidget(btn)
 
         fit_group = QtWidgets.QGroupBox("Import Fit")
-        fit_layout = QtWidgets.QGridLayout(fit_group)
+        fit_group.setObjectName("CharacterBuilderImportFitGroup")
+        fit_layout = QtWidgets.QFormLayout(fit_group)
         fit_layout.setContentsMargins(8, 8, 8, 8)
         fit_layout.setHorizontalSpacing(6)
         fit_layout.setVerticalSpacing(4)
+        fit_layout.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+        fit_layout.setRowWrapPolicy(QtWidgets.QFormLayout.WrapLongRows)
+
+        def add_fit_row(
+            text: str,
+            widget: QtWidgets.QWidget,
+            object_name: str,
+        ) -> None:
+            label = QtWidgets.QLabel(text)
+            label.setObjectName(object_name)
+            fit_layout.addRow(label, widget)
 
         self._fit_scale_spin = QtWidgets.QDoubleSpinBox()
         self._fit_scale_spin.setRange(1.0, 1000.0)
@@ -306,8 +329,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._fit_scale_spin.setAccelerated(True)
         self._fit_scale_spin.setSuffix("%")
         self._fit_scale_spin.setToolTip("Manual scale after auto-fit. Use the arrow keys or type an exact percentage.")
-        fit_layout.addWidget(QtWidgets.QLabel("Scale"), 0, 0)
-        fit_layout.addWidget(self._fit_scale_spin, 0, 1, 1, 3)
+        add_fit_row("Scale", self._fit_scale_spin, "CharacterBuilderFitScaleLabel")
 
         pos_specs = [
             ("Pos X", "_fit_pos_x_spin"),
@@ -322,8 +344,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
             spin.setAccelerated(True)
             spin.setToolTip("Manual translation after auto-fit, in KOTOR world units.")
             setattr(self, attr, spin)
-            fit_layout.addWidget(QtWidgets.QLabel(label), row, 0)
-            fit_layout.addWidget(spin, row, 1, 1, 3)
+            add_fit_row(label, spin, f"CharacterBuilderFit{label.replace(' ', '')}Label")
 
         spin_specs = [
             ("Rot X", "_fit_rot_x_spin"),
@@ -338,37 +359,65 @@ class QtInspectorPanel(QtWidgets.QWidget):
             spin.setSuffix(" deg")
             spin.setToolTip("Manual orientation after auto-fit. Viewport rotation drags snap to 10 deg while Shift is held.")
             setattr(self, attr, spin)
-            fit_layout.addWidget(QtWidgets.QLabel(label), row, 0)
-            fit_layout.addWidget(spin, row, 1, 1, 3)
+            add_fit_row(label, spin, f"CharacterBuilderFit{label.replace(' ', '')}Label")
 
         axis_options = ["Auto", "+X", "-X", "+Y", "-Y", "+Z", "-Z"]
         self._fit_source_forward_combo = QtWidgets.QComboBox()
         self._fit_source_forward_combo.addItems(axis_options)
+        self._fit_source_forward_combo.setSizeAdjustPolicy(
+            QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon
+        )
+        self._fit_source_forward_combo.setMinimumContentsLength(8)
         self._fit_source_forward_combo.setToolTip("Override the imported mesh's forward axis before re-fit.")
-        fit_layout.addWidget(QtWidgets.QLabel("Source Forward"), 7, 0)
-        fit_layout.addWidget(self._fit_source_forward_combo, 7, 1)
+        add_fit_row(
+            "Source Forward",
+            self._fit_source_forward_combo,
+            "CharacterBuilderFitSourceForwardLabel",
+        )
 
         self._fit_source_up_combo = QtWidgets.QComboBox()
         self._fit_source_up_combo.addItems(axis_options)
+        self._fit_source_up_combo.setSizeAdjustPolicy(
+            QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon
+        )
+        self._fit_source_up_combo.setMinimumContentsLength(8)
         self._fit_source_up_combo.setToolTip("Override the imported mesh's up axis before re-fit.")
-        fit_layout.addWidget(QtWidgets.QLabel("Source Up"), 7, 2)
-        fit_layout.addWidget(self._fit_source_up_combo, 7, 3)
+        add_fit_row(
+            "Source Up",
+            self._fit_source_up_combo,
+            "CharacterBuilderFitSourceUpLabel",
+        )
 
         self._fit_height_source_combo = QtWidgets.QComboBox()
         self._fit_height_source_combo.addItems(["Auto", "Landmarks", "Bounds"])
+        self._fit_height_source_combo.setSizeAdjustPolicy(
+            QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon
+        )
+        self._fit_height_source_combo.setMinimumContentsLength(8)
         self._fit_height_source_combo.setToolTip("Choose whether re-fit height comes from detected landmarks or mesh bounds.")
-        fit_layout.addWidget(QtWidgets.QLabel("Height"), 8, 0)
-        fit_layout.addWidget(self._fit_height_source_combo, 8, 1)
+        add_fit_row(
+            "Height",
+            self._fit_height_source_combo,
+            "CharacterBuilderFitHeightLabel",
+        )
 
         self._fit_ground_basis_combo = QtWidgets.QComboBox()
         self._fit_ground_basis_combo.addItems(["Auto", "Feet", "Hips", "Bounds Bottom"])
+        self._fit_ground_basis_combo.setSizeAdjustPolicy(
+            QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon
+        )
+        self._fit_ground_basis_combo.setMinimumContentsLength(8)
         self._fit_ground_basis_combo.setToolTip("Choose the origin used to snap the imported mesh to the KOTOR base.")
-        fit_layout.addWidget(QtWidgets.QLabel("Ground"), 8, 2)
-        fit_layout.addWidget(self._fit_ground_basis_combo, 8, 3)
+        add_fit_row(
+            "Ground",
+            self._fit_ground_basis_combo,
+            "CharacterBuilderFitGroundLabel",
+        )
 
         reset_btn = QtWidgets.QPushButton("Reset Fit")
+        reset_btn.setObjectName("CharacterBuilderResetFitButton")
         reset_btn.clicked.connect(self.fitAdjustmentResetRequested.emit)
-        fit_layout.addWidget(reset_btn, 9, 0, 1, 2)
+        fit_layout.addRow(reset_btn)
 
         refit_btn = QtWidgets.QPushButton("Re-fit to Selected Base")
         refit_btn.setObjectName("CharacterBuilderRefitToSelectedBaseButton")
@@ -377,14 +426,15 @@ class QtInspectorPanel(QtWidgets.QWidget):
             "the currently selected KOTOR base skeleton."
         )
         refit_btn.clicked.connect(self.refitToSelectedBaseRequested.emit)
-        fit_layout.addWidget(refit_btn, 9, 2, 1, 2)
+        fit_layout.addRow(refit_btn)
 
         self._fit_adjust_status = QtWidgets.QLabel("Auto-fit can be fine-tuned after import.")
+        self._fit_adjust_status.setObjectName("CharacterBuilderFitAdjustmentStatusLabel")
         self._fit_adjust_status.setWordWrap(True)
         self._fit_adjust_status.setStyleSheet(
             f"color:{C.get('text2', '#888')}; font-size:8pt;"
         )
-        fit_layout.addWidget(self._fit_adjust_status, 10, 0, 1, 4)
+        fit_layout.addRow(self._fit_adjust_status)
 
         self._fit_report_label = QtWidgets.QLabel(
             "Auto-fit report will appear after loading a custom mesh."
@@ -394,7 +444,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._fit_report_label.setStyleSheet(
             f"color:{C.get('text2', '#888')}; font-size:8pt;"
         )
-        fit_layout.addWidget(self._fit_report_label, 11, 0, 1, 4)
+        fit_layout.addRow(self._fit_report_label)
 
         for spin in (
             self._fit_scale_spin,
@@ -413,7 +463,7 @@ class QtInspectorPanel(QtWidgets.QWidget):
         """AccuRig-style base-skeleton picker shown before custom import."""
         # P5-min (T2514): one selection now serves two roles — skeleton
         # reference AND anatomical-split weight donor (T2512).
-        template_group = QtWidgets.QGroupBox("KOTOR Base Skeleton (weight donor)")
+        template_group = QtWidgets.QGroupBox("KOTOR Base Skeleton")
         template_layout = QtWidgets.QVBoxLayout(template_group)
         template_layout.setSpacing(4)
 
@@ -424,6 +474,10 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._skeleton_template_combo.setInsertPolicy(QtWidgets.QComboBox.NoInsert)
         self._skeleton_template_combo.setMaxVisibleItems(18)
         self._skeleton_template_combo.setMinimumWidth(160)
+        self._skeleton_template_combo.setSizeAdjustPolicy(
+            QtWidgets.QComboBox.AdjustToMinimumContentsLengthWithIcon
+        )
+        self._skeleton_template_combo.setMinimumContentsLength(12)
         self._configure_skeleton_template_search()
         self._skeleton_template_combo.setToolTip(
             "Pick the shipped KOTOR body/creature model that the imported mesh "
@@ -456,7 +510,8 @@ class QtInspectorPanel(QtWidgets.QWidget):
         template_layout.addWidget(browse_btn)
 
         picker_status = QtWidgets.QLabel(
-            "Pick a KOTOR base first. Align the imported mesh to this skeleton in the viewport."
+            "Pick a KOTOR base first; it is also the weight donor. "
+            "Align the imported mesh to this skeleton in the viewport."
         )
         picker_status.setStyleSheet(
             f"color:{C.get('text2', '#888')}; font-size:8pt;"
@@ -585,6 +640,20 @@ class QtInspectorPanel(QtWidgets.QWidget):
         self._preview_attachment_status = status
         attach_layout.addWidget(status, 3, 0, 1, 2)
         layout.addWidget(attach_group)
+
+        # The shared Body Attachment System panel: the same slot grid, game
+        # item catalog, and lightsaber color selector as the main viewport.
+        from src.gui.qt_lib.panels.qt_body_attachment_panel import QtBodyAttachmentPanel
+
+        bas_group = QtWidgets.QGroupBox("Body Attachment System")
+        bas_group.setObjectName("characterBuilderBodyAttachmentGroup")
+        bas_layout = QtWidgets.QVBoxLayout(bas_group)
+        bas_layout.setContentsMargins(4, 4, 4, 4)
+        self.body_attachment_panel = QtBodyAttachmentPanel(self)
+        # The Character Builder exports through its own workflow strip.
+        self.body_attachment_panel.save_build_button.setVisible(False)
+        bas_layout.addWidget(self.body_attachment_panel)
+        layout.addWidget(bas_group)
 
         # Head/facial preview panels remain HEAD-mode only, but now live under
         # the broader Preview step instead of the old Face Rig page.

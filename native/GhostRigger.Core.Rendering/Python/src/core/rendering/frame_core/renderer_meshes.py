@@ -286,7 +286,11 @@ class RendererMeshMixin:
                 # face/head mesh.  This exposes them through the eye-socket and
                 # mouth-gap openings in the face geometry.
                 _is_trans_flat = (_th_flat > 0 or node_alpha < 0.999 or _is_inner_geo_flat)
-                _tier_flat = 1 if _is_trans_flat else 0
+                # Background geometry must be a distinct first pass.  A tiny
+                # centroid-depth bias is not sufficient for giant sky panels:
+                # their centroid can sort in front of ordinary room triangles
+                # and paint an opaque sky over the map in this CPU painter.
+                _tier_flat = -1 if bool(getattr(node, 'background_geometry', False)) else (1 if _is_trans_flat else 0)
                 tris.append((sort_key, ((p0[0],p0[1]), (p1[0],p1[1]), (p2[0],p2[1])), fill, is_sel, fi, node_alpha, _tier_flat))
                 if len(tris) >= tri_cap:
                     break
@@ -1549,7 +1553,11 @@ class RendererMeshMixin:
                 # the opaque head/body mesh and are visible through the eye-socket
                 # / mouth-gap geometric openings in the face mesh.
                 _is_trans_tex = (_th_tex > 0 or is_transparent or is_additive or _is_inner_geo_tex)
-                _tier_tex = 1 if _is_trans_tex else 0
+                # Draw sky/backdrop panels before every ordinary opaque face.
+                # This CPU backend has no depth buffer, so a dedicated tier is
+                # required; centroid sorting alone lets a huge sky triangle
+                # overwrite closer rooms even though the camera is inside it.
+                _tier_tex = -1 if _node_bg_geom else (1 if _is_trans_tex else 0)
                 tris.append((sort_key,
                              ((p0[0], p0[1]), (p1[0], p1[1]), (p2[0], p2[1])),
                              fill, shade_col, face_tex, uv0, uv1, uv2, is_sel,
@@ -1565,7 +1573,7 @@ class RendererMeshMixin:
                 break
 
         # ── Sort: two-pass (tier) then back-to-front (painter's algorithm) ──
-        # PRIMARY key: tier (0=opaque, 1=transparent/additive).
+        # PRIMARY key: tier (-1=background, 0=opaque, 1=transparent/additive).
         # All opaque triangles render before any transparent triangle
         # regardless of depth.  This prevents transparent inner geometry
         # (eyes, glass, droid lenses) from occluding opaque face/body meshes

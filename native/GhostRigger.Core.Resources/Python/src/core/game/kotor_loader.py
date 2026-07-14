@@ -67,19 +67,21 @@ from .import_normalisation import apply_known_skin_bone_map_normalisations
 #            that LBS and texture-pipeline code can locate them via is_mesh.
 #            is_dummy stays False because HEADER|MESH|SKIN (0x61) ≠ 0x01.
 #            Viewport code uses 'if n.is_skin: skip' paths separately.
-#   TRIMESH→ NodeFlags.MESH only (0x20), matching the old bridge.
+#   TRIMESH→ NodeFlags.HEADER|MESH (0x21), matching the raw binary MDL flags
+#            used by stock KOTOR models.  Reloaded models must preserve this
+#            header bit so a write-after-read does not emit bare 0x20 helpers.
 _TYPE_FLAGS: Dict[int, int] = {
     int(MDLNodeType.DUMMY):      int(NodeFlags.HEADER),
-    int(MDLNodeType.TRIMESH):    int(NodeFlags.MESH),
-    int(MDLNodeType.DANGLYMESH): int(NodeFlags.MESH) | int(NodeFlags.DANGLY),
-    int(MDLNodeType.LIGHT):      int(NodeFlags.LIGHT),
-    int(MDLNodeType.EMITTER):    int(NodeFlags.EMITTER),
-    int(MDLNodeType.REFERENCE):  int(NodeFlags.REFERENCE),
-    int(MDLNodeType.AABB):       int(NodeFlags.AABB),
+    int(MDLNodeType.TRIMESH):    int(NodeFlags.HEADER) | int(NodeFlags.MESH),
+    int(MDLNodeType.DANGLYMESH): int(NodeFlags.HEADER) | int(NodeFlags.MESH) | int(NodeFlags.DANGLY),
+    int(MDLNodeType.LIGHT):      int(NodeFlags.HEADER) | int(NodeFlags.LIGHT),
+    int(MDLNodeType.EMITTER):    int(NodeFlags.HEADER) | int(NodeFlags.EMITTER),
+    int(MDLNodeType.REFERENCE):  int(NodeFlags.HEADER) | int(NodeFlags.REFERENCE),
+    int(MDLNodeType.AABB):       int(NodeFlags.HEADER) | int(NodeFlags.AABB),
     int(MDLNodeType.SKIN):       int(NodeFlags.HEADER) | int(NodeFlags.MESH) | int(NodeFlags.SKIN),
-    int(MDLNodeType.SABER):      int(NodeFlags.SABER) | int(NodeFlags.MESH),
+    int(MDLNodeType.SABER):      int(NodeFlags.HEADER) | int(NodeFlags.SABER) | int(NodeFlags.MESH),
     int(MDLNodeType.CAMERA):     int(NodeFlags.HEADER),
-    int(MDLNodeType.PATCH):      int(NodeFlags.MESH),
+    int(MDLNodeType.PATCH):      int(NodeFlags.HEADER) | int(NodeFlags.MESH),
     int(MDLNodeType.BINARY):     int(NodeFlags.HEADER),
 }
 
@@ -143,6 +145,7 @@ def load_model_from_bytes(
     try:
         pk_mdl = pk_read_mdl(patched_bytes, source_ext=mdx_bytes if mdx_bytes else None)
         model  = _mdl_to_kotormodel(pk_mdl, detected_version)
+        _apply_raw_mesh_header_counts(model, mdl_bytes, mdx_bytes)
         # Override classification from raw byte if known
         if raw_cls_byte is not None:
             model.classification = _CLS_MAP_BYTES.get(raw_cls_byte, 'character')
@@ -182,6 +185,7 @@ def load_model_from_file(
 
     # Detect game version from function pointer before passing to PyKotor
     mdl_bytes_raw = p.read_bytes()
+    mdx_bytes_raw = mdx_p.read_bytes() if mdx_p is not None else b''
     detected_version = game_version or _detect_version_from_bytes(mdl_bytes_raw)
 
     _CLS_MAP_FILE: Dict[int, str] = {
@@ -195,6 +199,7 @@ def load_model_from_file(
     try:
         pk_mdl = pk_read_mdl(p, source_ext=mdx_p)
         model  = _mdl_to_kotormodel(pk_mdl, detected_version)
+        _apply_raw_mesh_header_counts(model, mdl_bytes_raw, mdx_bytes_raw)
         # Override classification from raw byte for accuracy
         if raw_cls_byte_f is not None:
             model.classification = _CLS_MAP_FILE.get(raw_cls_byte_f, 'character')
@@ -208,6 +213,106 @@ def load_model_from_file(
     except Exception as exc:
         log.error("load_model_from_file: '%s' — %s", mdl_path, exc, exc_info=True)
         return None
+
+
+def _apply_raw_mesh_header_counts(
+    model: Optional[KotorModel],
+    mdl_bytes: bytes,
+    mdx_bytes: bytes = b'',
+) -> None:
+    """Preserve raw mesh header fields lost by PyKotor's object model."""
+
+    if model is None or not mdl_bytes:
+        return
+    try:
+        from ..mdl.ghostrigger_mdl_reader import GhostRiggerMDLBinaryReader
+
+        reader = GhostRiggerMDLBinaryReader(
+            mdl_bytes,
+            0,
+            len(mdl_bytes),
+            mdx_bytes or b'',
+            0,
+            len(mdx_bytes or b''),
+        )
+        reader.load()
+        raw_mesh_headers: Dict[int, Dict[str, object]] = {}
+        for _offset, bin_node in sorted((getattr(reader, "_gr_bin_nodes", None) or {}).items()):
+            header = getattr(bin_node, "header", None)
+            trimesh = getattr(bin_node, "trimesh", None)
+            if header is None or trimesh is None:
+                continue
+            try:
+                node_id = int(getattr(header, "node_id"))
+            except Exception:
+                continue
+            raw_mesh_headers.setdefault(
+                node_id,
+                {
+                    "tex_count": max(0, int(getattr(trimesh, "texture_count", 0) or 0)),
+                    "has_lightmap": bool(getattr(trimesh, "has_lightmap", False)),
+                    "rotate_texture": bool(getattr(trimesh, "rotate_texture", False)),
+                    "background_geometry": bool(getattr(trimesh, "background", False)),
+                    "has_shadow": bool(getattr(trimesh, "has_shadow", False)),
+                    "beaming": bool(getattr(trimesh, "beaming", False)),
+                    "render": bool(getattr(trimesh, "render", True)),
+                    "transparency_hint": int(getattr(trimesh, "transparency_hint", 0) or 0),
+                    "diffuse": (
+                        float(getattr(getattr(trimesh, "diffuse", None), "x", 1.0)),
+                        float(getattr(getattr(trimesh, "diffuse", None), "y", 1.0)),
+                        float(getattr(getattr(trimesh, "diffuse", None), "z", 1.0)),
+                    ),
+                    "ambient": (
+                        float(getattr(getattr(trimesh, "ambient", None), "x", 1.0)),
+                        float(getattr(getattr(trimesh, "ambient", None), "y", 1.0)),
+                        float(getattr(getattr(trimesh, "ambient", None), "z", 1.0)),
+                    ),
+                    "dirt_enabled": bool(getattr(trimesh, "dirt_enabled", False)),
+                    "dirt_texture": int(getattr(trimesh, "dirt_texture", 0) or 0),
+                    "dirt_coord_space": int(getattr(trimesh, "dirt_worldspace", 0) or 0),
+                    "hide_in_holograms": bool(getattr(trimesh, "hologram_donotdraw", False)),
+                    "mesh_indices_counts": [
+                        int(value) for value in (getattr(trimesh, "indices_counts", []) or [])
+                    ],
+                    "mesh_inverted_counters": [
+                        int(value) for value in (getattr(trimesh, "inverted_counters", []) or [])
+                    ],
+                },
+            )
+        if not raw_mesh_headers:
+            return
+        for node in model.all_nodes():
+            try:
+                node_id = int(getattr(node, "index"))
+            except Exception:
+                continue
+            raw_header = raw_mesh_headers.get(node_id)
+            if not raw_header:
+                continue
+            tex_count = int(raw_header["tex_count"])
+            node.tex_count = tex_count
+            setattr(node, "_gr_raw_tex_count", tex_count)
+            for attr in (
+                "has_lightmap",
+                "rotate_texture",
+                "background_geometry",
+                "has_shadow",
+                "beaming",
+                "render",
+                "transparency_hint",
+                "diffuse",
+                "ambient",
+                "dirt_enabled",
+                "dirt_texture",
+                "dirt_coord_space",
+                "hide_in_holograms",
+                "mesh_indices_counts",
+                "mesh_inverted_counters",
+            ):
+                setattr(node, attr, raw_header[attr])
+            setattr(node, "_gr_raw_mesh_header", dict(raw_header))
+    except Exception as exc:
+        log.debug("raw mesh header preservation failed: %s", exc, exc_info=True)
 
 
 def _game_name(game: Optional[object], model: Optional[KotorModel] = None) -> str:
@@ -514,6 +619,7 @@ def _mdl_to_kotormodel(pk_mdl, game_version: Optional[GameVersion]) -> KotorMode
     model.supermodel  = str(getattr(pk_mdl, 'supermodel', 'NULL') or 'NULL')
     model.anim_scale  = float(getattr(pk_mdl, 'animation_scale', 1.0) or 1.0)
     model.game_version = game_version or _detect_version(pk_mdl)
+    model.disable_fog = bool(getattr(pk_mdl, 'fog', False))
 
     # Classification: read raw byte from binary header (bytes BASE+80 = model_type)
     # and map using GhostRigger's ModelClassification table (differs from PyKotor's enum).
@@ -686,6 +792,12 @@ def _convert_node(pk_node, parent: Optional[ModelNode],
 
     if ntype == int(MDLNodeType.LIGHT):
         _read_light(pk_node, gr)
+
+    if ntype == int(MDLNodeType.REFERENCE):
+        reference = getattr(pk_node, 'reference', None)
+        if reference is not None:
+            gr.reference_model = str(getattr(reference, 'model', '') or '')
+            gr.reference_reattachable = bool(getattr(reference, 'reattachable', False))
 
     # Recurse children
     for child_pk in (pk_node.children or []):
@@ -862,6 +974,11 @@ def _read_mesh(mesh, gr: ModelNode) -> None:
     # tangent data), NOT the tangent vector list.  Do NOT iterate it.
     # PyKotor does not expose pre-computed tangent vectors in this version;
     # tangents are computed on-demand in the exporter from normals+UVs.
+    # Preserve the source MDX channel contract separately so the binary writer
+    # can keep known no-tangent models (for example c_drexlf) compact while
+    # rebuilding the full B/T/N rows used by bump-mapped models such as
+    # c_rancor.
+    gr.mdx_tangent_space = bool(getattr(mesh, 'tangent_space', False))
     gr.tangents = []  # filled by exporter when needed
 
     # ── Primary UVs ──────────────────────────────────────────────────────────
@@ -1020,37 +1137,89 @@ def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
         pk_n = id_to_pknode.get(nid)
         gr.bone_map.append(pk_n.name if pk_n else '')
 
-    # Fallback: if bone_indices produced no valid entries (all were -1/0xFFFF/invalid
-    # or the array was empty), use bonemap instead.  This handles:
+    # Cross-validate the palette against the node-indexed ``bonemap`` array.
+    # ``bone_indices`` is a FIXED uint16[16] header block: unused tail slots
+    # carry padding that is sometimes 0 (which aliases the model root node)
+    # and sometimes uninitialised garbage.  Vanilla files (e.g. K2 c_drexlf
+    # tailGeo: bones = [9,8,7,6,5,4,11,12,13,10, 0,0,0,0,0,0]) would otherwise
+    # gain phantom palette entries pointing at the root.  A slot ``s`` is a
+    # real palette entry iff bonemap[node_id] == s — that is exactly how the
+    # engine associates nodes with palette slots.  Only applies when a
+    # bonemap is present; mid-array blanks are preserved (indices matter),
+    # trailing blanks are trimmed.
+    _raw_bonemap_check = list(getattr(skin, 'bonemap', None) or [])
+    if _raw_bonemap_check and any(name for name in gr.bone_map):
+        _validated = []
+        for _slot, nid_raw in enumerate(raw_bone_indices[:len(gr.bone_map)]):
+            try:
+                _nid = int(nid_raw)
+            except (TypeError, ValueError):
+                _validated.append('')
+                continue
+            _confirmed = (
+                0 <= _nid < len(_raw_bonemap_check)
+                and int(_raw_bonemap_check[_nid]) == _slot
+            )
+            _validated.append(gr.bone_map[_slot] if _confirmed else '')
+        if any(name for name in _validated):
+            while _validated and not _validated[-1]:
+                _validated.pop()
+            gr.bone_map = _validated
+
+    # Fallback: if bone_indices produced no valid entries (all were
+    # -1/0xFFFF/invalid or the array was empty), derive the palette from the
+    # NODE-indexed bonemap by inversion (bonemap[node_id] = palette_slot).
+    # This handles:
     #   - Synthetic mock skins (unit tests with MockMDLSkin(bone_indices=all_invalid))
     #   - Models where bone_indices is genuinely absent
     # Note: We check whether ANY non-empty name was produced, not just array length.
+    # Legacy tolerance: some synthetic/mock skins store palette-length arrays
+    # of node ids (bonemap[slot] = node_id).  When inversion yields nothing
+    # (no entry maps back to a plausible slot), fall back to that legacy read.
     _has_valid_bi = any(name for name in gr.bone_map)
     if not _has_valid_bi:
-        gr.bone_map = []
-        for raw in (getattr(skin, 'bonemap', None) or []):
+        _raw_bm = list(getattr(skin, 'bonemap', None) or [])
+        slot_to_node: Dict[int, int] = {}
+        for _node_id, _slot_raw in enumerate(_raw_bm):
             try:
-                nid = int(raw)
+                _slot = int(_slot_raw)
             except (TypeError, ValueError):
-                gr.bone_map.append('')
                 continue
-            if nid < 0 or nid == 0xFFFF:
-                gr.bone_map.append('')
-                continue
-            pk_n = id_to_pknode.get(nid)
-            gr.bone_map.append(pk_n.name if pk_n else '')
+            if 0 <= _slot < len(_raw_bm) and _slot not in slot_to_node:
+                slot_to_node[_slot] = _node_id
+        gr.bone_map = []
+        if slot_to_node and max(slot_to_node) < max(len(_raw_bm), 1):
+            for _slot in range(max(slot_to_node) + 1):
+                _nid = slot_to_node.get(_slot, -1)
+                pk_n = id_to_pknode.get(_nid) if _nid >= 0 else None
+                gr.bone_map.append(pk_n.name if pk_n else '')
+        if not any(name for name in gr.bone_map):
+            gr.bone_map = []
+            for raw in _raw_bm:
+                try:
+                    nid = int(raw)
+                except (TypeError, ValueError):
+                    gr.bone_map.append('')
+                    continue
+                if nid < 0 or nid == 0xFFFF:
+                    gr.bone_map.append('')
+                    continue
+                pk_n = id_to_pknode.get(nid)
+                gr.bone_map.append(pk_n.name if pk_n else '')
 
     apply_known_skin_bone_map_normalisations(gr, skin, id_to_pknode)
     n_bones = len(gr.bone_map)
 
     # Some shipped creature skins use vertex palette indices beyond the fixed
-    # 16-entry ``bone_indices`` header array while PyKotor still exposes a
-    # longer ``bonemap`` table with valid node ids for those overflow slots.
-    # Example: c_brith/Brith_mesh has vertices weighted to local index 16,
-    # ``bone_indices`` has slots 0..15, and ``bonemap[16]`` resolves to the
-    # model root.  Dropping those influences leaves zero-weight vertices and
-    # frozen triangles during animation.  Preserve the palette slot by extending
-    # bone_map from bonemap only for indices actually referenced by vertices.
+    # 16-entry ``bone_indices`` header array while the node-indexed ``bonemap``
+    # table still assigns those overflow palette slots to valid nodes.
+    # Example: c_brith/Brith_mesh has vertices weighted to local index 16;
+    # ``bone_indices`` has slots 0..15, and some node's bonemap entry == 16.
+    # Dropping those influences leaves zero-weight vertices and frozen
+    # triangles during animation.  Recover the overflow slot by scanning the
+    # NODE-indexed bonemap for the node whose entry equals the slot number
+    # (bonemap[node_id] = palette_slot — verified against vanilla K2
+    # c_drexlf raw bytes, T2526).
     try:
         max_vertex_idx = -1
         for bv in (getattr(skin, 'vertex_bones', None) or []):
@@ -1064,16 +1233,20 @@ def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
 
         raw_bonemap = list(getattr(skin, 'bonemap', None) or [])
         if max_vertex_idx >= n_bones and raw_bonemap:
+            slot_to_node = {}
+            for node_id, slot_raw in enumerate(raw_bonemap):
+                try:
+                    slot_val = int(slot_raw)
+                except (TypeError, ValueError):
+                    continue
+                if slot_val >= 0 and slot_val not in slot_to_node:
+                    slot_to_node[slot_val] = node_id
             for slot in range(n_bones, max_vertex_idx + 1):
                 name = ''
-                if slot < len(raw_bonemap):
-                    try:
-                        nid = int(raw_bonemap[slot])
-                    except (TypeError, ValueError):
-                        nid = -1
-                    if nid >= 0 and nid != 0xFFFF:
-                        pk_n = id_to_pknode.get(nid)
-                        name = pk_n.name if pk_n else ''
+                nid = slot_to_node.get(slot, -1)
+                if nid >= 0:
+                    pk_n = id_to_pknode.get(nid)
+                    name = pk_n.name if pk_n else ''
                 gr.bone_map.append(name)
             n_bones = len(gr.bone_map)
             log.debug(
@@ -1258,8 +1431,52 @@ _CT_COLS: Dict[int, int] = {
 def _read_controllers(pk_node, gr: ModelNode) -> None:
     """Copy controller keyframe data directly from PyKotor MDLController list.
 
-    Each controller dict has keys: type, name, times, values, columns.
+    Each controller dict has keys: type, name, times, values, columns. Binary
+    round-trip metadata is retained under ``binary_*`` keys; Bezier channels
+    keep their expanded value/in/out-tangent rows in ``binary_bezier_rows``.
     """
+    def _with_binary_metadata(ctrl, payload: Dict) -> Dict:
+        raw = getattr(ctrl, "_gr_binary_controller", None)
+        if isinstance(raw, dict):
+            if "unknown0" in raw:
+                payload["binary_unknown0"] = int(raw.get("unknown0") or 0)
+            if "column_count" in raw:
+                payload["binary_column_count"] = int(raw.get("column_count") or payload.get("columns", 1))
+            unknown1 = raw.get("unknown1")
+            if isinstance(unknown1, (list, tuple)):
+                payload["binary_unknown1"] = [int(v) & 0xFF for v in list(unknown1)[:3]]
+            words = raw.get("compressed_quaternion_words")
+            if isinstance(words, (list, tuple)):
+                payload["binary_compressed_quaternion_words"] = [int(v) & 0xFFFFFFFF for v in words]
+            binary_columns = int(raw.get("column_count") or 0)
+            if binary_columns & 0x10:
+                bezier_rows = raw.get("bezier_rows")
+                controller_rows = list(getattr(ctrl, "rows", None) or ())
+                if (
+                    not isinstance(bezier_rows, (list, tuple))
+                    or len(bezier_rows) < len(controller_rows)
+                ):
+                    bezier_rows = [
+                        list(getattr(row, "data", ()) or ())
+                        for row in controller_rows
+                    ]
+                payload["is_bezier"] = True
+                payload["binary_bezier_rows"] = [
+                    [float(value) for value in tuple(row or ())]
+                    for row in bezier_rows
+                ]
+        elif bool(getattr(ctrl, "is_bezier", False)):
+            # ASCII or third-party controller objects may expose Bezier rows
+            # without GhostRigger's raw-entry metadata.  Keep their expanded
+            # value/in/out-tangent rows in the same domain-model field; the
+            # writer will derive the 0x10 flag from the logical column count.
+            payload["is_bezier"] = True
+            payload["binary_bezier_rows"] = [
+                [float(value) for value in tuple(getattr(row, "data", ()) or ())]
+                for row in (getattr(ctrl, "rows", None) or ())
+            ]
+        return payload
+
     for ctrl in (getattr(pk_node, 'controllers', None) or []):
         ct    = int(ctrl.controller_type)
         rows  = ctrl.rows
@@ -1272,33 +1489,33 @@ def _read_controllers(pk_node, gr: ModelNode) -> None:
         cols   = _CT_COLS.get(ct, len(first) if first else 1)
 
         if ct == _CT_POS and len(first) >= 3:
-            gr.controllers.append({'type': _CT_POS,   'name': name, 'columns': 3,
-                                   'times': times, 'values': [v[:3] for v in values]})
+            gr.controllers.append(_with_binary_metadata(ctrl, {'type': _CT_POS,   'name': name, 'columns': 3,
+                                   'times': times, 'values': [v[:3] for v in values]}))
         elif ct == _CT_ORI and len(first) >= 4:
-            gr.controllers.append({'type': _CT_ORI,   'name': name, 'columns': 4,
-                                   'times': times, 'values': [v[:4] for v in values]})
+            gr.controllers.append(_with_binary_metadata(ctrl, {'type': _CT_ORI,   'name': name, 'columns': 4,
+                                   'times': times, 'values': [v[:4] for v in values]}))
         elif ct == _CT_SCALE:
-            gr.controllers.append({'type': _CT_SCALE, 'name': name, 'columns': 1,
-                                   'times': times, 'values': [[v[0]] for v in values]})
+            gr.controllers.append(_with_binary_metadata(ctrl, {'type': _CT_SCALE, 'name': name, 'columns': 1,
+                                   'times': times, 'values': [[v[0]] for v in values]}))
         elif ct == _CT_COLOR and len(first) >= 3:
-            gr.controllers.append({'type': _CT_COLOR, 'name': name, 'columns': 3,
-                                   'times': times, 'values': [v[:3] for v in values]})
+            gr.controllers.append(_with_binary_metadata(ctrl, {'type': _CT_COLOR, 'name': name, 'columns': 3,
+                                   'times': times, 'values': [v[:3] for v in values]}))
         elif ct == _CT_RADIUS:
-            gr.controllers.append({'type': _CT_RADIUS, 'name': name, 'columns': 1,
-                                   'times': times, 'values': [[v[0]] for v in values]})
+            gr.controllers.append(_with_binary_metadata(ctrl, {'type': _CT_RADIUS, 'name': name, 'columns': 1,
+                                   'times': times, 'values': [[v[0]] for v in values]}))
         elif ct == _CT_ALPHA:
-            gr.controllers.append({'type': _CT_ALPHA, 'name': name, 'columns': 1,
-                                   'times': times, 'values': [[v[0]] for v in values]})
+            gr.controllers.append(_with_binary_metadata(ctrl, {'type': _CT_ALPHA, 'name': name, 'columns': 1,
+                                   'times': times, 'values': [[v[0]] for v in values]}))
         elif ct == _CT_MULT:
-            gr.controllers.append({'type': _CT_MULT, 'name': name, 'columns': 1,
-                                   'times': times, 'values': [[v[0]] for v in values]})
+            gr.controllers.append(_with_binary_metadata(ctrl, {'type': _CT_MULT, 'name': name, 'columns': 1,
+                                   'times': times, 'values': [[v[0]] for v in values]}))
         elif ct == _CT_ILLUM and len(first) >= 3:
-            gr.controllers.append({'type': _CT_ILLUM, 'name': name, 'columns': 3,
-                                   'times': times, 'values': [v[:3] for v in values]})
+            gr.controllers.append(_with_binary_metadata(ctrl, {'type': _CT_ILLUM, 'name': name, 'columns': 3,
+                                   'times': times, 'values': [v[:3] for v in values]}))
         else:
             # Preserve all other controller types with metadata
-            gr.controllers.append({'type': ct, 'name': name, 'columns': cols,
-                                   'times': times, 'values': values})
+            gr.controllers.append(_with_binary_metadata(ctrl, {'type': ct, 'name': name, 'columns': cols,
+                                   'times': times, 'values': values}))
 
 
 # ── Animations ────────────────────────────────────────────────────────────────
@@ -1309,8 +1526,10 @@ def _convert_anim(pk_anim) -> Optional[Animation]:
         anim.name            = pk_anim.name or 'default'
         anim.length          = float(getattr(pk_anim, 'length', None) or
                                      getattr(pk_anim, 'anim_length', 0) or 0.0)
-        anim.transition_time = float(getattr(pk_anim, 'transition_time', None) or
-                                     getattr(pk_anim, 'transition_length', 0.25) or 0.25)
+        transition_time = getattr(pk_anim, 'transition_time', None)
+        if transition_time is None:
+            transition_time = getattr(pk_anim, 'transition_length', None)
+        anim.transition_time = float(0.25 if transition_time is None else transition_time)
         anim.anim_root = str(getattr(pk_anim, 'root_model', '') or '')
 
         for evt in (getattr(pk_anim, 'events', None) or []):
@@ -1318,13 +1537,31 @@ def _convert_anim(pk_anim) -> Optional[Animation]:
             n = str(getattr(evt, 'name', '') or '')
             anim.events.append(AnimEvent(time=t, name=n))
 
-        # Animation nodes — PyKotor provides all_nodes() on MDLAnimation
-        for pk_anode in _walk_nodes(pk_anim):
+        # Animation nodes -- PyKotor exposes the donor animation tree through
+        # child links even though parent links are not populated on those nodes.
+        # Preserve that sparse tree so binary exports can round-trip creature
+        # animations without manufacturing full-geometry animation branches.
+        pk_nodes = list(_walk_nodes(pk_anim))
+        converted_by_id: Dict[int, ModelNode] = {}
+        for pk_anode in pk_nodes:
             an = ModelNode()
             an.name  = pk_anode.name or 'node'
             an.index = int(pk_anode.node_id)
             _read_controllers(pk_anode, an)
             anim.nodes.append(an)
+            converted_by_id[id(pk_anode)] = an
+
+        for pk_anode in pk_nodes:
+            parent = converted_by_id.get(id(pk_anode))
+            if parent is None:
+                continue
+            for pk_child in getattr(pk_anode, 'children', []) or []:
+                child = converted_by_id.get(id(pk_child))
+                if child is None or child is parent:
+                    continue
+                child.parent = parent
+                if child not in parent.children:
+                    parent.children.append(child)
 
         return anim
     except Exception as exc:

@@ -571,6 +571,59 @@ def test_t403_thumbnail_visibility_is_opt_in():
         unreal.deleteLater()
 
 
+def test_map_studio_authoring_chrome_is_scoped_to_the_map_viewport_role():
+    """Only Map Studio constructs the KMAP Modeling and Blockout controls."""
+
+    from PySide6 import QtWidgets
+    from src.gui.qt_lib.viewports.qt_viewport import (
+        QtCharacterBuilderViewportWidget,
+        QtMainViewportWidget,
+        QtMapStudioViewportWidget,
+        QtRetargetViewportWidget,
+    )
+
+    app, _generic = _make_widget()
+    main = QtMainViewportWidget()
+    builder = QtCharacterBuilderViewportWidget()
+    retarget = QtRetargetViewportWidget()
+    map_studio = QtMapStudioViewportWidget()
+    try:
+        for viewport in (main, builder, retarget):
+            assert viewport.map_studio_authoring_chrome_enabled is False
+            assert viewport.viewport_map_studio_modeling_tabs is None
+            assert viewport.findChild(
+                QtWidgets.QTabWidget,
+                "ViewportToolbarMapStudioModelingTabs",
+            ) is None
+
+        assert map_studio.viewport_role == "map_studio"
+        assert map_studio.map_studio_authoring_chrome_enabled is True
+        tabs = map_studio.findChild(
+            QtWidgets.QTabWidget,
+            "ViewportToolbarMapStudioModelingTabs",
+        )
+        assert tabs is map_studio.viewport_map_studio_modeling_tabs
+        assert [tabs.tabText(index) for index in range(tabs.count())] == [
+            "Modeling",
+            "Blockout",
+        ]
+        assert map_studio.findChild(
+            QtWidgets.QToolButton,
+            "ViewportToolbarMapStudioToolButton_extrude",
+        ) is not None
+        assert map_studio.findChild(
+            QtWidgets.QToolButton,
+            "ViewportToolbarMapStudioBlockoutButton_floor",
+        ) is not None
+        app.processEvents()
+    finally:
+        main.deleteLater()
+        builder.deleteLater()
+        retarget.deleteLater()
+        map_studio.deleteLater()
+        _generic.deleteLater()
+
+
 def test_t403_thumbnail_widget_constructed_at_correct_size():
     """The inset widget is a QGraphicsView pinned at 220×280 px."""
     from src.gui.qt_lib.viewports.qt_viewport import (

@@ -464,6 +464,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._legacy_acurig_enabled = False
         self._body_guides: dict[str, Any] = {}
         self._body_guide_history: Optional[Any] = None
+        # Durable workflow state lives in scene metadata; runtime AcuRig and
+        # model objects stay out of the human-readable .ghostrig payload.
+        self._rig_session: Optional[Any] = None
+        self._restore_rig_session_from_scene()
         # M12 / T1202 — selected KOTOR skeleton template for imported
         # OBJ/FBX bodies.  Options are provided by the Qt-free picker
         # service and mirrored into the right inspector.
@@ -478,6 +482,8 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._resource_manager: Optional[Any] = None
         self._resource_manager_games: set[str] = set()
         self._preview_attachment_path: str = ""
+        self._bas_preview_attachments: dict[str, tuple[Any, str]] = {}
+        self._bas_preview_body: Any = None
         self._animation_engine: Optional[Any] = None
         self._animation_last_tick: Optional[float] = None
         self._animation_timer = QtCore.QTimer(self)
@@ -493,7 +499,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._last_validation_result: Optional[Any] = None
 
         self.setObjectName("QtCharacterBuilderWindow")
-        self.setWindowTitle("GhostRigger - Character Builder")
+        self.setWindowTitle("Ghost-Studio - Character Builder")
         self.resize(1280, 800)
         apply_theme(self)
 
@@ -975,7 +981,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         right_split.setChildrenCollapsible(False)
         self.inspector = QtInspectorPanel(self)
         right_split.addWidget(self.inspector)
-        self.properties = QtPropertiesPanel(self)
+        # Character Studio edits character/node properties only. Module room,
+        # wall, NULL-mesh, and WOK browsing belongs to Map/Module Studio.
+        self.properties = QtPropertiesPanel(self, module_browser_enabled=False)
         right_split.addWidget(self.properties)
         right_split.setStretchFactor(0, 3)
         right_split.setStretchFactor(1, 2)
@@ -1119,6 +1127,11 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if hasattr(self.inspector, "attachPreviewAttachmentRequested"):
             self.inspector.attachPreviewAttachmentRequested.connect(
                 self._on_attach_preview_attachment_requested)
+        bas_panel = getattr(self.inspector, "body_attachment_panel", None)
+        if bas_panel is not None:
+            bas_panel.attachRequested.connect(self._on_bas_panel_attach_requested)
+            bas_panel.clearRequested.connect(self._on_bas_panel_clear_requested)
+            bas_panel.slotSelected.connect(self._ensure_cb_bas_attachment_catalog)
         # M12 / T1204 — mode-aware motion assignment replaces the
         # placeholder Add Motions action.
         if hasattr(self.inspector, "assignMotionsRequested"):
@@ -1482,6 +1495,199 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             from src.core.characters import headless_body_workflow as _wf  # type: ignore
         return _wf
 
+    @staticmethod
+    def _rig_session_module():
+        try:
+            from core.characters import rig_session as _rig
+        except ImportError:                                 # pragma: no cover
+            from src.core.characters import rig_session as _rig  # type: ignore
+        return _rig
+
+    def _restore_rig_session_from_scene(self):
+        """Restore the durable rig graph attached to the active scene."""
+        _rig = self._rig_session_module()
+        metadata = getattr(self.scene, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            setattr(self.scene, "metadata", metadata)
+        try:
+            self._rig_session = _rig.RigSession.restore_from_metadata(metadata)
+        except (TypeError, ValueError):
+            log.warning("Invalid RigSession metadata; starting a new session", exc_info=True)
+            self._rig_session = _rig.RigSession()
+        self._rig_session.store_in_metadata(metadata)
+        return self._rig_session
+
+    def _sync_rig_session_metadata(self, *, mark_dirty: bool = True) -> None:
+        metadata = getattr(self.scene, "metadata", None)
+        if not isinstance(metadata, dict):
+            metadata = {}
+            setattr(self.scene, "metadata", metadata)
+        session = self._rig_session or self._restore_rig_session_from_scene()
+        session.store_in_metadata(metadata)
+        if mark_dirty:
+            self.scene.dirty = True
+
+    def _start_rig_stage(self, stage: str, *, cancellable: bool = False) -> None:
+        session = self._rig_session or self._restore_rig_session_from_scene()
+        session.start_stage(stage, cancellable=cancellable)
+        self._sync_rig_session_metadata()
+
+    def _fail_rig_stage(self, stage: str, message: str) -> None:
+        session = self._rig_session or self._restore_rig_session_from_scene()
+        session.fail_stage(stage, message)
+        self._sync_rig_session_metadata()
+
+    def _complete_rig_stage(self, stage: str, artifact: dict[str, Any]) -> None:
+        session = self._rig_session or self._restore_rig_session_from_scene()
+        session.complete_stage(stage, artifact)
+        self._sync_rig_session_metadata()
+
+    @staticmethod
+    def _serialize_rig_guides(guides: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        """Copy editable guide values without retaining runtime guide objects."""
+        records: dict[str, dict[str, Any]] = {}
+        for raw_name, guide in sorted((guides or {}).items(), key=lambda item: str(item[0])):
+            name = str(raw_name or getattr(guide, "name", "") or "").strip().lower()
+            position = getattr(guide, "position", None)
+            try:
+                coords = [float(value) for value in tuple(position)[:3]]
+            except (TypeError, ValueError):
+                continue
+            if len(coords) != 3 or not name:
+                continue
+            colour = getattr(guide, "colour", (255, 200, 0))
+            try:
+                colour_values = [int(value) for value in tuple(colour)[:3]]
+            except (TypeError, ValueError):
+                colour_values = [255, 200, 0]
+            records[name] = {
+                "position": coords,
+                "bone_parent": getattr(guide, "bone_parent", None),
+                "locked": bool(getattr(guide, "locked", False)),
+                "mirror_of": getattr(guide, "mirror_of", None),
+                "colour": (colour_values + [255, 200, 0])[:3],
+            }
+        return records
+
+    def _body_landmark_artifact(self, source: str) -> dict[str, Any]:
+        guides = dict(self._body_guides or {})
+        if self._acurig is not None and hasattr(self._acurig, "get_all_guides"):
+            try:
+                guides = dict(self._acurig.get_all_guides() or guides)
+            except Exception:                               # pragma: no cover
+                log.debug("Could not snapshot AcuRig guides", exc_info=True)
+        records = self._serialize_rig_guides(guides)
+        return {
+            "kind": "body_landmarks",
+            "source": str(source or "manual"),
+            "guide_count": len(records),
+            "guides": records,
+        }
+
+    def _finger_artifact(
+        self,
+        source: str,
+        *,
+        guides: Optional[dict[str, Any]] = None,
+        masked_bones: Optional[list[str]] = None,
+    ) -> dict[str, Any]:
+        if guides is None and self._acurig is not None and hasattr(self._acurig, "get_all_guides"):
+            try:
+                guides = dict(self._acurig.get_all_guides() or {})
+            except Exception:                               # pragma: no cover
+                guides = {}
+        hand_names = {
+            "lforearm", "lhand", "lfinger01",
+            "rforearm", "rhand", "rfinger01",
+        }
+        serialized = self._serialize_rig_guides(dict(guides or {}))
+        serialized = {name: row for name, row in serialized.items() if name in hand_names}
+        if masked_bones is None:
+            mask = getattr(self._acurig, "mask", None)
+            values = getattr(mask, "masked_bones", []) if mask is not None else []
+            masked_bones = list(values() if callable(values) else values or [])
+        return {
+            "kind": "finger_landmarks",
+            "source": str(source or "manual"),
+            "guide_count": len(serialized),
+            "guides": serialized,
+            "masked_bones": sorted(str(value) for value in (masked_bones or [])),
+        }
+
+    def _restore_body_guides_from_rig_session(self) -> bool:
+        """Rebuild lightweight AcuRig guide objects from saved session data."""
+        _rig = self._rig_session_module()
+        session = self._rig_session or self._restore_rig_session_from_scene()
+        body_state = session.state(_rig.RigStage.BODY_LANDMARKS)
+        if (
+            not body_state.has_preserved_output
+            or body_state.status in {_rig.RigStageStatus.PENDING, _rig.RigStageStatus.STALE}
+        ):
+            self._body_guides = {}
+            self._acurig = None
+            return False
+        body_artifact = body_state.artifact
+        records = body_artifact.get("guides") if isinstance(body_artifact, dict) else None
+        if not isinstance(records, dict) or not records:
+            self._body_guides = {}
+            self._acurig = None
+            return False
+        records = dict(records)
+        finger_state = session.state(_rig.RigStage.FINGERS)
+        finger_artifact = (
+            finger_state.artifact
+            if finger_state.has_preserved_output
+            and finger_state.status not in {_rig.RigStageStatus.PENDING, _rig.RigStageStatus.STALE}
+            else {}
+        )
+        finger_records = (
+            finger_artifact.get("guides")
+            if isinstance(finger_artifact, dict) else None
+        )
+        if isinstance(finger_records, dict):
+            records.update(finger_records)
+        try:
+            try:
+                from src.autorig.accurig import AcuRig, RigGuide
+            except ImportError:                            # pragma: no cover
+                from autorig.accurig import AcuRig, RigGuide  # type: ignore
+            guides = {}
+            for raw_name, record in records.items():
+                if not isinstance(record, dict):
+                    continue
+                position = tuple(float(value) for value in list(record.get("position") or ())[:3])
+                if len(position) != 3:
+                    continue
+                name = str(raw_name or "").strip().lower()
+                guides[name] = RigGuide(
+                    name=name,
+                    position=position,
+                    bone_parent=record.get("bone_parent"),
+                    locked=bool(record.get("locked", False)),
+                    mirror_of=record.get("mirror_of"),
+                    colour=tuple(int(value) for value in list(record.get("colour") or (255, 200, 0))[:3]),
+                )
+            if not guides:
+                return False
+            acurig = AcuRig()
+            acurig._guides = guides
+            masked = (
+                list(finger_artifact.get("masked_bones") or [])
+                if isinstance(finger_artifact, dict) else []
+            )
+            for bone in masked:
+                acurig.mask.mask(str(bone))
+            self._acurig = acurig
+            self._body_guides = dict(guides)
+            if hasattr(getattr(self, "inspector", None), "set_hand_masked_bones"):
+                self.inspector.set_hand_masked_bones(masked)
+            self._push_body_guides_to_viewport()
+            return True
+        except Exception:                                  # pragma: no cover
+            log.exception("Could not restore saved RigSession landmarks")
+            return False
+
     def _ensure_body_guide_history(self):
         _wf = self._workflow_module()
         if self._body_guide_history is None:
@@ -1517,6 +1723,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             return
         self._body_guides = dict(getattr(result, "guides", {}) or {})
         self._push_body_guides_to_viewport()
+        self._complete_rig_stage(
+            "body_landmarks",
+            self._body_landmark_artifact(str(getattr(result, "code", "history") or "history")),
+        )
         if hasattr(self.inspector, "set_body_rig_status"):
             self.inspector.set_body_rig_status(result.message, kind="ok")
         try:
@@ -1571,6 +1781,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         self._body_guides = dict(getattr(result, "guides", {}) or {})
         self._push_body_guides_to_viewport()
+        self._complete_rig_stage(
+            "body_landmarks",
+            self._body_landmark_artifact("viewport_edit"),
+        )
 
         if hasattr(self.inspector, "set_body_rig_status"):
             try:
@@ -1671,6 +1885,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         gv = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
              getattr(self.scene, "game_version", "K1")
         fit_label = self._selected_skeleton_template_fit_label()
+        self._start_rig_stage("source")
         result = _wf.load_body(
             path,
             self.scene,
@@ -1720,6 +1935,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         # ── Hard failures ────────────────────────────────────────────
         if not result.ok:
+            self._fail_rig_stage("source", result.message)
             self.bottom_strip.set_validation(
                 "error", result.code.upper(),
                 issues=[result.message],
@@ -1783,6 +1999,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         gv = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
              getattr(self.scene, "game_version", "K1")
+        self._start_rig_stage("source")
         result = _cw.load_composite(
             self.scene,
             body_path=body_path,
@@ -1799,6 +2016,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             issues.extend(list(getattr(snap, "warnings", []) or []))
 
         if not result.ok:
+            self._fail_rig_stage("source", result.message)
             self.bottom_strip.set_validation(
                 "error", (result.code or "composite").upper(),
                 issues=issues,
@@ -1810,6 +2028,15 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         self.bottom_strip.set_validation(
             "info", "COMPOSITE_LOADED", issues=issues,
+        )
+        self._complete_rig_stage(
+            "source",
+            {
+                "kind": "composite_source",
+                "body_path": str(body_path),
+                "head_path": str(head_path),
+                "game_version": str(gv),
+            },
         )
         self.statusBar().showMessage(result.message, 5000)
         self._sync_from_scene()
@@ -1832,6 +2059,15 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         Pushes the new model into the viewport, refreshes the workflow
         rail, and marks the scene dirty so File→Save offers to write.
         """
+        self._complete_rig_stage(
+            "source",
+            {
+                "kind": "source_model",
+                "source_path": str(getattr(result, "source_path", "") or ""),
+                "resref": str(getattr(result, "resref", "") or ""),
+                "game_version": str(getattr(self.scene, "game_version", "K1") or "K1"),
+            },
+        )
         # Sync rail / properties panel with the (possibly auto-updated)
         # CharacterMode now reflected in the scene.
         self._sync_from_scene()
@@ -2845,6 +3081,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             option,
             game,
         )
+        self._start_rig_stage("skeleton")
         result = _cb.apply_template_rig(
             mesh_model,
             template_model,
@@ -2855,6 +3092,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         if not bool(result.get("ok")):
             message = str(result.get("message") or "Template skeleton apply failed.")
+            self._fail_rig_stage("skeleton", message)
             if hasattr(self.inspector, "set_skeleton_template_status"):
                 self.inspector.set_skeleton_template_status(message, kind="error")
             self.bottom_strip.set_validation(
@@ -2894,6 +3132,16 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         warnings = list(result.get("warnings") or [])
         message = str(result.get("message") or "Template skeleton applied.")
+        self._complete_rig_stage(
+            "skeleton",
+            {
+                "kind": "native_kotor_template",
+                "template_key": str(key or ""),
+                "template_resref": str(self._option_field(option, "resref", "") or ""),
+                "game_version": str(game),
+                "warnings": [str(value) for value in warnings],
+            },
+        )
         if hasattr(self.inspector, "set_skeleton_template_status"):
             self.inspector.set_skeleton_template_status(message, kind="ok")
         self._push_import_fit_report_to_inspector(rigged_model)
@@ -3304,6 +3552,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if not can_export:
             return
 
+        self._start_rig_stage("export")
         if self._is_scene_mode("supermodel"):
             try:
                 from core.workflow import composite_workflow as _cw  # noqa: WPS433
@@ -3324,6 +3573,26 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 write_sidecar=write_sidecar,
                 skip_validation=skip_validation,
             )
+
+        export_artifact = {
+            "kind": "character_export",
+            "output_dir": str(out_dir),
+            "requested_formats": [str(value) for value in formats],
+            "write_sidecar": bool(write_sidecar),
+            "sidecar_path": str(result.sidecar_path or ""),
+            "formats": [
+                {
+                    "label": str(getattr(row, "label", "") or ""),
+                    "ok": bool(getattr(row, "ok", False)),
+                    "message": str(getattr(row, "message", "") or ""),
+                }
+                for row in list(result.formats or [])
+            ],
+        }
+        if result.ok:
+            self._complete_rig_stage("export", export_artifact)
+        else:
+            self._fail_rig_stage("export", result.message)
 
         # Inspector status line + bottom-strip banner.
         if hasattr(self.inspector, "set_export_status"):
@@ -3462,6 +3731,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         _wf = self._workflow_module()
 
+        self._start_rig_stage("body_landmarks")
         result = _wf.place_body_guides(
             self.scene,
             snap_to_bones=True,
@@ -3479,6 +3749,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 log.exception("inspector.set_body_rig_status failed")
 
         if not result.ok:
+            self._fail_rig_stage("body_landmarks", result.message)
             self.bottom_strip.set_validation(
                 "error", "PLACE_GUIDES",
                 issues=[result.message],
@@ -3491,6 +3762,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._body_guides = dict(result.guides or {})
         self._body_guide_history = None
         self._refresh_body_guide_undo_actions()
+        self._complete_rig_stage(
+            "body_landmarks",
+            self._body_landmark_artifact("place_body_guides"),
+        )
 
         # Refresh viewport joint-dot overlay by re-loading the body.
         try:
@@ -3524,6 +3799,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         _wf = self._workflow_module()
 
+        self._start_rig_stage("skeleton")
         result = _wf.generate_skeleton(
             self.scene,
             acurig=self._acurig,
@@ -3540,6 +3816,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 log.exception("inspector.set_body_rig_status failed")
 
         if not result.ok:
+            self._fail_rig_stage("skeleton", result.message)
             severity_code = (result.code or "skeleton").upper()
             self.bottom_strip.set_validation(
                 "error", severity_code,
@@ -3568,6 +3845,22 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             log.exception("Failed to refresh viewport after generate_skeleton")
 
         # Mark the scene dirty so File → Save offers to persist.
+        self._complete_rig_stage(
+            "skeleton",
+            {
+                "kind": "legacy_acurig_generated",
+                "bone_count": int(result.bone_count),
+                "guide_count": len(self._body_guides),
+            },
+        )
+        self._complete_rig_stage(
+            "weights",
+            {
+                "kind": "legacy_acurig_auto_skin",
+                "vertices_skinned": int(result.vertices_skinned),
+                "weighting_method": str(result.weighting_method or ""),
+            },
+        )
         try:
             self.scene.dirty = True
         except Exception:                                    # pragma: no cover
@@ -3598,6 +3891,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         _wf = self._workflow_module()
 
+        self._start_rig_stage("fingers")
         result = _wf.place_hand_guides(
             self.scene,
             acurig=self._acurig,
@@ -3614,6 +3908,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 log.exception("inspector.set_hand_rig_status failed")
 
         if not result.ok:
+            self._fail_rig_stage("fingers", result.message)
             self.bottom_strip.set_validation(
                 "error", (result.code or "hand_guides").upper(),
                 issues=[result.message],
@@ -3623,6 +3918,14 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
         # Persist the AcuRig instance so subsequent mask toggles share it.
         self._acurig = result.acurig
+        self._complete_rig_stage(
+            "fingers",
+            self._finger_artifact(
+                "place_hand_guides",
+                guides=dict(result.guides or {}),
+                masked_bones=list(result.masked_bones or []),
+            ),
+        )
 
         # Push the current mask state into the checkbox column so the UI
         # reflects whatever AcuRig already had set.
@@ -3701,6 +4004,17 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 )
             except Exception:                               # pragma: no cover
                 log.exception("inspector.set_hand_rig_status failed")
+
+        if result.ok:
+            self._complete_rig_stage(
+                "fingers",
+                self._finger_artifact(
+                    "hand_mask_edit",
+                    masked_bones=list(result.masked_bones or []),
+                ),
+            )
+        else:
+            self._fail_rig_stage("fingers", result.message)
 
         # Re-sync checkbox column with the canonical AcuRig state — in
         # case ``apply_hand_masks`` snapped to a slightly different set.
@@ -4211,39 +4525,174 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             slot = str(bas_slot or bas_slot_for_preview_socket(socket_name, item_resref) or "").strip()
             if not slot:
                 return
-            transform = default_bas_attachment_transform(slot, item_resref)
-            preview = build_bas_preview_model(
-                body_model=body,
-                attachment_models={slot: item},
-                attachment_transforms={slot: transform},
-                name=f"{getattr(body, 'name', 'body')}_bas_preview",
-            )
-            setattr(self.scene, "preview_model", preview)
-            metadata = getattr(self.scene, "metadata", None)
-            if isinstance(metadata, dict):
-                metadata.setdefault("body_attachment_system", {})
-                metadata["body_attachment_system"].update({
-                    "active": True,
-                    "preview_owner": "character_builder",
-                    "attachments": {slot: str(item_resref or getattr(item, "name", "") or "")},
-                    "layers": [{
-                        "slot": slot,
-                        "socket": bas_socket_for_slot(slot),
-                        "resref": str(item_resref or getattr(item, "name", "") or ""),
-                        "enabled": True,
-                    }],
-                })
-            viewport = getattr(self, "viewport", None)
-            if viewport is not None and hasattr(viewport, "load_model"):
-                viewport.load_model(preview)
+            label = str(item_resref or getattr(item, "name", "") or "")
+            self._bas_preview_attachments[slot] = (item, label)
+            self._rebuild_cb_bas_preview(body)
+            bas_panel = getattr(self.inspector, "body_attachment_panel", None)
+            if bas_panel is not None:
+                bas_panel.set_slot_model(slot, item, resref=label)
             if hasattr(self.inspector, "set_preview_attachment_status"):
-                label = str(item_resref or getattr(item, "name", "") or "attachment")
                 self.inspector.set_preview_attachment_status(
-                    f"BAS preview attached {label} to {bas_socket_for_slot(slot)}.",
+                    f"BAS preview attached {label or 'attachment'} to {bas_socket_for_slot(slot)}.",
                     kind="ok",
                 )
         except Exception:                                  # pragma: no cover
             log.exception("Could not build attachment preview model")
+
+    def _rebuild_cb_bas_preview(self, body: Any) -> None:
+        """Compose the body with every attached BAS layer and present it."""
+
+        self._bas_preview_body = body
+        attachment_models = {slot: item for slot, (item, _resref) in self._bas_preview_attachments.items()}
+        attachment_transforms = {
+            slot: default_bas_attachment_transform(slot, resref)
+            for slot, (_item, resref) in self._bas_preview_attachments.items()
+        }
+        preview = build_bas_preview_model(
+            body_model=body,
+            attachment_models=attachment_models,
+            attachment_transforms=attachment_transforms,
+            name=f"{getattr(body, 'name', 'body')}_bas_preview",
+        )
+        setattr(self.scene, "preview_model", preview)
+        metadata = getattr(self.scene, "metadata", None)
+        if isinstance(metadata, dict):
+            metadata.setdefault("body_attachment_system", {})
+            metadata["body_attachment_system"].update({
+                "active": bool(attachment_models),
+                "preview_owner": "character_builder",
+                "attachments": {slot: resref for slot, (_item, resref) in self._bas_preview_attachments.items()},
+                "layers": [
+                    {
+                        "slot": slot,
+                        "socket": bas_socket_for_slot(slot),
+                        "resref": resref,
+                        "enabled": True,
+                    }
+                    for slot, (_item, resref) in self._bas_preview_attachments.items()
+                ],
+            })
+        viewport = getattr(self, "viewport", None)
+        if viewport is not None and hasattr(viewport, "load_model"):
+            viewport.load_model(preview)
+
+    def _cb_bas_body_model(self) -> Any:
+        """Resolve the current base body for BAS preview composition."""
+
+        if self._bas_preview_body is not None:
+            return self._bas_preview_body
+        try:
+            from core.geometry import model_data as _md
+        except ImportError:                                 # pragma: no cover
+            from src.core.geometry import model_data as _md        # type: ignore
+        for slot_name in ("HEADLESS_BODY", "FULL_BODY"):
+            part = getattr(_md.PartSlot, slot_name, None)
+            if part is None:
+                continue
+            try:
+                model = self.scene.get_model(part)
+            except Exception:
+                model = None
+            if model is not None:
+                return model
+        return None
+
+    def _ensure_cb_bas_attachment_catalog(self, *_args) -> None:
+        """Populate the embedded BAS panel from the installed games once."""
+
+        panel = getattr(self.inspector, "body_attachment_panel", None)
+        if panel is None or panel.attachment_catalog() is not None:
+            return
+        game = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
+            getattr(self.scene, "game_version", "K1")
+        manager = self._ensure_game_resource_manager(game)
+        if manager is None:
+            return
+        try:
+            from src.systems.bas.attachment_catalog import build_bas_attachment_catalog
+
+            catalog = build_bas_attachment_catalog(manager)
+        except Exception:                                   # pragma: no cover
+            log.debug("Character Builder BAS catalog build failed", exc_info=True)
+            return
+        if not catalog.empty:
+            panel.set_attachment_catalog(catalog)
+
+    def _on_bas_panel_attach_requested(self, slot: str, resref: str) -> None:
+        """Attach a catalog item from the embedded BAS panel to the preview."""
+
+        slot = str(slot or "").strip().lower()
+        panel = getattr(self.inspector, "body_attachment_panel", None)
+        if slot in {"body", "left_hand", "right_hand"}:
+            if panel is not None:
+                panel.set_status("Body and hand slots are sockets; attach items through the other slots.")
+            return
+        resref_clean = normalize_bas_model_resref(resref)
+        if not resref_clean:
+            if panel is not None:
+                panel.set_status("No attachment model selected.")
+            return
+        game = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
+            getattr(self.scene, "game_version", "K1")
+        manager = self._ensure_game_resource_manager(game)
+        if manager is None:
+            if panel is not None:
+                panel.set_status("Configure the KOTOR game folders to load attachment models.")
+            return
+        body = self._cb_bas_body_model()
+        if body is None:
+            if panel is not None:
+                panel.set_status("Load or build a body first (steps 1-3), then attach preview items.")
+            return
+        if slot == "head":
+            resolution = resolve_bas_head_resref(
+                requested=resref_clean,
+                body_model=body,
+                manager=manager,
+                game=str(game or "K1").upper(),
+            )
+            resref_clean = resolution.resolved_resref or resref_clean
+        try:
+            item_model = manager.load_model(resref_clean, str(game or "K1").upper())
+        except Exception:
+            item_model = None
+        if item_model is None:
+            if panel is not None:
+                panel.set_status(f"Could not load {resref_clean}.")
+            return
+        self._bas_preview_attachments[slot] = (item_model, resref_clean)
+        try:
+            self._rebuild_cb_bas_preview(body)
+        except Exception as exc:                            # pragma: no cover
+            log.exception("Character Builder BAS preview rebuild failed")
+            self._bas_preview_attachments.pop(slot, None)
+            if panel is not None:
+                panel.set_status(f"BAS preview failed: {exc}")
+            return
+        if panel is not None:
+            panel.set_slot_model(slot, item_model, resref=resref_clean)
+            attached = ", ".join(resref for _slot, (_item, resref) in sorted(self._bas_preview_attachments.items()))
+            panel.set_status(f"BAS preview updated: {attached}.")
+        self._schedule_live_validation("preview_attachment")
+
+    def _on_bas_panel_clear_requested(self, slot: str) -> None:
+        slot = str(slot or "").strip().lower()
+        panel = getattr(self.inspector, "body_attachment_panel", None)
+        if slot not in self._bas_preview_attachments:
+            if panel is not None:
+                panel.set_status(f"{slot.replace('_', ' ')} is already empty.")
+            return
+        self._bas_preview_attachments.pop(slot, None)
+        if panel is not None:
+            panel.clear_slot_model(slot)
+        body = self._cb_bas_body_model()
+        if body is not None:
+            try:
+                self._rebuild_cb_bas_preview(body)
+            except Exception:                               # pragma: no cover
+                log.exception("Character Builder BAS preview rebuild failed after clear")
+        if panel is not None:
+            panel.set_status(f"Cleared {slot.replace('_', ' ')}.")
 
     # ── M6 / T602 — Head Facial Palette slots ────────────────────────────
 
@@ -4564,6 +5013,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
 
     def _capture_scene_session_metadata(self) -> None:
         """Persist UI-only rigging state before SceneIO serialises metadata."""
+        self._sync_rig_session_metadata(mark_dirty=False)
         metadata = getattr(self.scene, "metadata", None)
         if not isinstance(metadata, dict):
             metadata = {}
@@ -4792,14 +5242,16 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         """Load a .ghostrig file, rehydrate models, and update the builder."""
         SceneIO = _import_scene_io()
         self.scene = SceneIO.load(path, load_models=False)
+        self._rig_session = None
+        self._restore_rig_session_from_scene()
         self._scene_path = path
         messages = self._rehydrate_scene_models_from_sources()
         self._restore_manual_fit_from_metadata()
         self._sync_from_scene()
         shown = self._load_primary_scene_model_in_viewport()
         self._refresh_skeleton_template_options()
-        self._body_guides = {}
         self._body_guide_history = None
+        self._restore_body_guides_from_rig_session()
         self._refresh_body_guide_undo_actions()
         if hasattr(self.scene, "mark_clean"):
             self.scene.mark_clean()
@@ -4840,6 +5292,8 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         game_version = getattr(self.scene, "game_version", "K1")
         self.scene = CharacterScene(game_version=game_version)
         self._scene_path = ""
+        self._rig_session = None
+        self._restore_rig_session_from_scene()
         self._acurig = None
         self._body_guides = {}
         self._body_guide_history = None
@@ -4911,7 +5365,7 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             mode_suffix = f" [{mode_label}]"
         suffix = f" - {name}" if name else ""
         self.setWindowTitle(
-            f"GhostRigger - Character Builder{suffix}{mode_suffix}{dirty_marker}"
+            f"Ghost-Studio - Character Builder{suffix}{mode_suffix}{dirty_marker}"
         )
 
     # ── QSettings persistence (T207) ─────────────────────────────────────

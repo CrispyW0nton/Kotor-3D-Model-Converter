@@ -145,13 +145,51 @@ def ensure_project_payload_items(project: str, packaged_paths: list[Path]) -> No
         for item in required
         if item not in existing
     ]
-    if not missing:
-        return
+    if missing:
+        addition = "".join(f'<None Include="{item}" />' for item in missing)
+        updated_group = f"{match.group(1)}{body}{addition}{match.group(3)}"
+        updated = text[:match.start()] + updated_group + text[match.end():]
+        write_text_if_changed(vcxproj, updated)
 
-    addition = "".join(f'<None Include="{item}" />' for item in missing)
-    updated_group = f"{match.group(1)}{body}{addition}{match.group(3)}"
-    updated = text[:match.start()] + updated_group + text[match.end():]
-    write_text_if_changed(vcxproj, updated)
+    # Keep Solution Explorer's generated payload view in lockstep with the
+    # manifest/RC/vcxproj.  Several packages predate this generator support,
+    # so add only missing rows and preserve their existing filter layout.
+    filters = project_dir / f"{project}.vcxproj.filters"
+    if not filters.exists():
+        return
+    filter_text = filters.read_text(encoding="utf-8")
+    filter_group = next(
+        (
+            candidate
+            for candidate in re.finditer(
+                r"(<ItemGroup>)(.*?)(</ItemGroup>)",
+                filter_text,
+                flags=re.DOTALL,
+            )
+            if 'GhostRiggerPythonPayload.json' in candidate.group(2)
+        ),
+        None,
+    )
+    if filter_group is None:
+        raise RuntimeError(f"cannot find Python payload filter group in {filters}")
+    filter_body = filter_group.group(2)
+    filter_existing = set(re.findall(r'<None Include="([^"]+)"', filter_body))
+    filter_missing = [item for item in required if item not in filter_existing]
+    if not filter_missing:
+        return
+    filter_addition = "".join(
+        f'<None Include="{item}"><Filter>{str(Path(item).parent)}</Filter></None>'
+        for item in filter_missing
+    )
+    updated_filter_group = (
+        f"{filter_group.group(1)}{filter_body}{filter_addition}{filter_group.group(3)}"
+    )
+    write_text_if_changed(
+        filters,
+        filter_text[:filter_group.start()]
+        + updated_filter_group
+        + filter_text[filter_group.end():],
+    )
 
 
 def _insert_after_once(text: str, anchor: str, addition: str, exists: str, path: Path) -> str:

@@ -246,9 +246,9 @@ FALLBACK_STYLES: dict[str, str] = {
     "matrixBar.cropW": "100",
     "matrixBar.cropH": "100",
     "splash.logoPath": "",
-    "splash.productText": "GhostRigger",
+    "splash.productText": "GhostStudio",
     "splash.subtitleText": "Odyssey Engine Pipeline",
-    "splash.copyrightText": "GhostRigger (C) 2026 Shaolin (CrispyWonton). Co-developed by LordVaderCW.",
+    "splash.copyrightText": "GhostStudio (C) 2026 Shaolin (CrispyWonton). Co-developed by LordVaderCW.",
     "splash.surfaceStyle": "matte",
     "tab.mode": "standard",
 }

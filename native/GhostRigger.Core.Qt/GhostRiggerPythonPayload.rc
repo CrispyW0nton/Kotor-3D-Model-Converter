@@ -1,5 +1,7 @@
 // Generated Phase 1.5 Python payload resources. Original Python files remain in src/.
 PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
+PYTHON_PAYLOAD_ADAPTERS_QT_AUDIO_INIT RCDATA "Python/src/adapters/qt_audio/__init__.py"
+PYTHON_PAYLOAD_ADAPTERS_QT_AUDIO_MAP_STUDIO_PIE_AUDIO RCDATA "Python/src/adapters/qt_audio/map_studio_pie_audio.py"
 PYTHON_PAYLOAD_ADAPTERS_QT_AUTORIG_INIT RCDATA "Python/src/adapters/qt_autorig/__init__.py"
 PYTHON_PAYLOAD_ADAPTERS_QT_AUTORIG_CLOTH_DIALOGS RCDATA "Python/src/adapters/qt_autorig/cloth_dialogs.py"
 PYTHON_PAYLOAD_ADAPTERS_QT_IPC_INIT RCDATA "Python/src/adapters/qt_ipc/__init__.py"

@@ -39,6 +39,7 @@ del /Q "$(TargetDir)$(TargetName).exp" 2&gt;nul</Command></PostBuildEvent></Item
     <None Include="Python\src\core\validation\validation_adapters.py" />
     <None Include="Python\src\core\validation\validation_bus.py" />
     <None Include="Python\src\core\validation\viewport_validator.py" />
+    <None Include="Python\src\core\validation\kotor_module_engine_contract.py" />
   </ItemGroup>
   <PropertyGroup Label="PythonPayloadBuild">
     <GhostRiggerPythonPayloadPython Condition="'$(GhostRiggerPythonPayloadPython)'=='' and '$(GHOSTRIGGER_PYTHON)'!=''">$(GHOSTRIGGER_PYTHON)</GhostRiggerPythonPayloadPython>

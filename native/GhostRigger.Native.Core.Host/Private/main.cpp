@@ -89,7 +89,7 @@ std::string python_string_literal(const std::string& value) {
     return result;
 }
 
-std::optional<fs::path> executable_directory() {
+std::optional<fs::path> executable_path() {
     std::wstring buffer(MAX_PATH, L'\0');
     DWORD length = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
     if (length == 0) {
@@ -105,7 +105,14 @@ std::optional<fs::path> executable_directory() {
     }
 
     buffer.resize(length);
-    return fs::path(buffer).parent_path();
+    return fs::path(buffer);
+}
+
+std::optional<fs::path> executable_directory() {
+    if (auto path = executable_path()) {
+        return path->parent_path();
+    }
+    return std::nullopt;
 }
 
 std::optional<fs::path> find_repo_root() {
@@ -362,7 +369,7 @@ void open_log_console() {
         return;
     }
 
-    SetConsoleTitleW(L"Select GhostRigger");
+    SetConsoleTitleW(L"GhostStudio Log");
     FILE* stream = nullptr;
     freopen_s(&stream, "CONOUT$", "w", stdout);
     freopen_s(&stream, "CONOUT$", "w", stderr);
@@ -375,7 +382,7 @@ void open_log_console() {
 }
 
 void show_error(const std::wstring& message) {
-    MessageBoxW(nullptr, message.c_str(), L"GhostRigger Native Host", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
+    MessageBoxW(nullptr, message.c_str(), L"GhostStudio", MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
 }
 
 bool has_arg(int argc, wchar_t* argv[], const wchar_t* expected) {
@@ -512,8 +519,8 @@ bool configure_embedded_python(PyConfig& config, const fs::path& repo_root, cons
         return false;
     }
 
-    auto exe_dir = executable_directory();
-    const std::wstring program_name = exe_dir ? ((*exe_dir / L"GhostRigger.exe").wstring()) : L"GhostRigger.exe";
+    auto exe_path = executable_path();
+    const std::wstring program_name = exe_path ? exe_path->wstring() : L"GhostStudio.exe";
     if (!set_python_config_string(config, &config.program_name, program_name)) {
         return false;
     }
@@ -592,7 +599,7 @@ int run_embedded_python(int argc, wchar_t* argv[], const fs::path& repo_root, co
     const fs::path main_py = executable_directory().value_or(repo_root) / L"main.py";
     if (!fs::exists(main_py)) {
         Py_FinalizeEx();
-        show_error(L"GhostRigger.Native.Core.Host could not find its native main.py beside GhostRigger.exe.");
+        show_error(L"GhostRigger.Native.Core.Host could not find its native main.py beside GhostStudio.exe.");
         return 6;
     }
     const std::string main_py_utf8 = utf8_from_wstring(main_py.wstring());

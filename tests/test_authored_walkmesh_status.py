@@ -86,12 +86,13 @@ def test_t2600_walkmesh_status_reports_terrain_walkability_counts() -> None:
     assert status.non_walk_triangle_count > 0
     assert status.max_slope_degrees > 35.0
     assert "terrain room" in status.summary
-    assert "Inspect green/orange terrain overlay" in status.next_action
+    assert "green validated WOK overlay" in status.next_action
 
 
 def test_t2600_controller_exposes_walkmesh_status_for_map_studio() -> None:
     _install_native_payload_paths()
 
+    from src.core.level import KMapSerializer
     from src.core.modules.module_editor_controller import ModuleEditorController
 
     controller = ModuleEditorController()
@@ -101,11 +102,17 @@ def test_t2600_controller_exposes_walkmesh_status_for_map_studio() -> None:
     assert "no authored Map Studio module" in empty.summary
 
     controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grwalk03")
+    before_project = KMapSerializer.to_dict(controller.project)
+    before_dirty = controller.project.dirty
+    before_undo_depth = len(controller.command_history.undo_stack)
     status = controller.authored_walkmesh_status()
 
     assert status.ready is True
     assert status.room_count == 1
     assert "walkable triangle" in status.summary
+    assert KMapSerializer.to_dict(controller.project) == before_project
+    assert controller.project.dirty is before_dirty
+    assert len(controller.command_history.undo_stack) == before_undo_depth
 
 
 def test_t2604_wok_audit_blocks_disconnected_walkable_islands() -> None:
@@ -135,11 +142,13 @@ def test_t2604_wok_audit_blocks_disconnected_walkable_islands() -> None:
 
     audit = audit_authored_wok("grsplit", wok)
 
-    assert audit.ready is False
+    # Islands warn instead of blocking: vanilla areas (the Ebon Hawk) ship
+    # intentionally disconnected walkable regions.
     assert audit.walkable_face_count == 4
     assert audit.walkable_component_count == 2
     assert audit.disconnected_component_count == 1
-    assert any("disconnected walkable island" in message for message in audit.blocking_messages)
+    assert not any("disconnected walkable island" in message for message in audit.blocking_messages)
+    assert any("disconnected walkable island" in message for message in audit.warnings)
 
 
 def test_t2911_wok_audit_blocks_steep_walkable_faces() -> None:
@@ -161,10 +170,11 @@ def test_t2911_wok_audit_blocks_steep_walkable_faces() -> None:
 
     audit = audit_authored_wok("grsteep", wok)
 
-    assert audit.ready is False
+    # Steep walkable faces warn instead of blocking (vanilla 001ebo has one).
     assert audit.steep_walkable_face_count == 1
     assert audit.max_walkable_slope_degrees > MAX_WALKABLE_SLOPE_DEGREES
-    assert any("steeper than" in message for message in audit.blocking_messages)
+    assert not any("steeper than" in message for message in audit.blocking_messages)
+    assert any("steeper than" in message for message in audit.warnings)
 
 
 def test_t2911_wok_audit_reports_open_boundary_edges_without_blocking() -> None:
@@ -226,14 +236,14 @@ def test_t2604_walkmesh_status_and_readiness_block_disconnected_composition_room
     status = authored_walkmesh_status_for_project(project)
     readiness = build_authored_module_readiness(project)
 
-    assert status.ready is False
+    # Islands warn instead of blocking; the counts still surface for the UI.
     assert status.walkable_component_count == 2
     assert status.disconnected_walkmesh_room_count == 1
-    assert any("disconnected walkable island" in message for message in status.blocking_messages)
+    assert not any("disconnected walkable island" in message for message in status.blocking_messages)
+    assert any("disconnected walkable island" in message for message in status.warnings)
     assert status.open_edge_count > 0
-    assert readiness.can_preview is False
     assert readiness.metadata["open_wok_edge_count"] > 0
-    assert any("disconnected walkable island" in message for message in readiness.blocking_messages)
+    assert not any("disconnected walkable island" in message for message in readiness.blocking_messages)
 
 
 def test_t2911_pathing_samples_wok_triangles_without_face_lookup_method() -> None:

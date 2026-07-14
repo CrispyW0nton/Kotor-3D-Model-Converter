@@ -2,20 +2,40 @@
 
 from __future__ import annotations
 
-from .dependencies import Path, QtCore, QtGui, subprocess, normalize_viewport_navigation_profile
+from .dependencies import Path, QtCore, QtGui, subprocess
 
 _GUI_DIR = Path(__file__).resolve().parents[3]
 _ICON_DIR = _GUI_DIR / "icons"
 
 
 def _icon_dirs() -> tuple[Path, ...]:
-    dirs = [_ICON_DIR]
+    """Return every valid source/packaged icon root in priority order.
+
+    Embedded modules do not necessarily have an on-disk ``__file__`` beside
+    their non-Python assets.  Resolve from the running executable as well as
+    from source-tree parents so the viewport toolbar follows the same asset
+    contract as the main command strip.
+    """
+
+    app_file = Path(QtCore.QCoreApplication.applicationFilePath() or "")
+    app_root = app_file.parent if app_file.name else Path.cwd()
+    candidates = [
+        _ICON_DIR,
+        app_root / "src" / "gui" / "icons",
+        app_root / "GhostRiggerPythonPayload" / "src" / "gui" / "icons",
+        app_root / "RuntimePayload" / "src" / "gui" / "icons",
+        Path.cwd() / "src" / "gui" / "icons",
+    ]
     for parent in Path(__file__).resolve().parents:
-        runtime_icons = parent / "native" / "GhostRigger.Native.Core.Host.vcxproj" / "RuntimePayload" / "src" / "gui" / "icons"
-        if runtime_icons.exists():
-            dirs.append(runtime_icons)
-            break
-    return tuple(dict.fromkeys(dirs))
+        candidates.extend(
+            (
+                parent / "src" / "gui" / "icons",
+                parent / "GhostRiggerPythonPayload" / "src" / "gui" / "icons",
+                parent / "RuntimePayload" / "src" / "gui" / "icons",
+                parent / "native" / "GhostRigger.Native.Core.Host" / "RuntimePayload" / "src" / "gui" / "icons",
+            )
+        )
+    return tuple(dict.fromkeys(path for path in candidates if path.is_dir()))
 
 
 def _icon(name: str) -> QtGui.QIcon:
@@ -124,13 +144,10 @@ def _gpu_icon() -> QtGui.QIcon:
 
 
 def _navigation_profile_icon(profile: object) -> QtGui.QIcon:
-    profile_key = normalize_viewport_navigation_profile(profile)
-    if profile_key == "3dsmax":
-        return _branded_control_icon("3dsmax")
-    if profile_key == "blender":
-        return _branded_control_icon("blender")
-    if profile_key == "maya":
-        return _branded_control_icon("maya")
-    return _generated_fallback_icon(str(profile_key or "navigation"))
+    # The menu text and tooltip identify the active Maya/Blender/3ds Max
+    # profile.  The compact toolbar button uses one stable mouse/orbit symbol
+    # instead of falling back to cryptic MA/BL/3D letter tiles.
+    _ = profile
+    return _icon("viewport_navigation")
 
 __all__ = tuple(name for name in globals() if not name.startswith("__"))

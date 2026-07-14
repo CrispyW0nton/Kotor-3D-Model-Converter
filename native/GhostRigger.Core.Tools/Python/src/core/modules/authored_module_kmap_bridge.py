@@ -7,8 +7,13 @@ so Qt windows can display readiness without owning parsing or validation rules.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+import json
+import math
 from typing import Any
+from uuid import UUID, uuid5
+
+from src.core.level.kmap_validator import KMapValidator
 
 from .authored_module_objects import (
     AuthoredCameraInstance,
@@ -36,8 +41,20 @@ from .authored_module_project import (
     normalise_resref,
 )
 from .authored_module_readiness import AuthoredModuleReadiness, build_authored_module_readiness
-from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, PrimitiveTransform
+from .authored_room_composition import (
+    AuthoredRoomComposition,
+    CombinedRoomPrimitive,
+    CombinedRoomPrimitiveSource,
+    PlacedRoomPrimitive,
+    PrimitiveTransform,
+)
 from .authored_room_materials import DEFAULT_AUTHORED_ROOM_TEXTURE, normalize_authored_room_texture
+from .authored_imported_mesh import (
+    IMPORTED_MESH_PRIMITIVE_KIND,
+    ImportedMeshRoomPrimitive,
+    imported_mesh_primitive_from_payload,
+    imported_mesh_primitive_payload,
+)
 from .authored_room_floorplan import FloorPlanRoomPrimitive, FloorPlanWallOpening
 from .authored_room_geometry import RectangularRoomPrimitive
 from .authored_terrain_builder import TerrainHeightfieldPrimitive
@@ -70,11 +87,93 @@ def _dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
+TEXTURE_PAINT_UNAPPLIED_BLOCKER = (
+    "Texture Paint has unapplied live changes. Click Apply Texture Changes before "
+    "building, exporting, staging, or installing this module."
+)
+
+
+_PLACEMENT_INSTANCE_ID_NAMESPACE = UUID("c4d04ea5-f077-5d16-a0bf-867340926a71")
+_PLACEMENT_INSTANCE_ID_VERSION = 1
+_PLACEMENT_BEARING_UNIT_VERSION = 1
+
+
+def _migrated_placement_instance_id(
+    *,
+    module_root: str,
+    kind: str,
+    index: int,
+    source: Any,
+    seen: set[str],
+) -> str:
+    """Preserve a KMAP instance token or deterministically migrate an old row."""
+
+    data = _dict(source)
+    candidate = str(data.get("instance_id") or "").strip()
+    if ":" in candidate or candidate in seen:
+        candidate = ""
+    if not candidate:
+        identity_source = dict(data)
+        identity_source.pop("instance_id", None)
+        fingerprint = json.dumps(identity_source, sort_keys=True, separators=(",", ":"), default=str)
+        salt = 0
+        while True:
+            suffix = f"|{salt}" if salt else ""
+            candidate = "i_" + uuid5(
+                _PLACEMENT_INSTANCE_ID_NAMESPACE,
+                f"{normalise_resref(module_root)}|{kind}|{int(index)}|{fingerprint}{suffix}",
+            ).hex
+            if candidate not in seen:
+                break
+            salt += 1
+    seen.add(candidate)
+    return candidate
+
+
+def texture_paint_pending_resrefs(payload: Any) -> tuple[str, ...]:
+    """Return stable pending paint targets from current and legacy KMAP state."""
+
+    data = _dict(payload)
+    raw_values = data.get("texture_paint_pending_resrefs") or ()
+    values = list(raw_values) if isinstance(raw_values, (list, tuple, set)) else [raw_values]
+    legacy = str(data.get("texture_paint_resref") or "").strip()
+    if legacy:
+        values.append(legacy)
+    return tuple(
+        dict.fromkeys(
+            str(value or "").strip().lower()
+            for value in values
+            if str(value or "").strip()
+        )
+    )
+
+
+def texture_paint_has_unapplied_changes(payload: Any) -> bool:
+    """Treat either persisted draft flag as an export-blocking paint state."""
+
+    data = _dict(payload)
+    return bool(data.get("texture_paint_unapplied", False) or data.get("texture_paint_dirty", False))
+
+
 def _float(value: Any, default: float) -> float:
     try:
         return float(value)
     except (TypeError, ValueError):
         return float(default)
+
+
+def _bearing_radians(value: Any, *, unit: str = "") -> float:
+    """Migrate legacy degree-valued KMAP bearings into normalized radians."""
+
+    bearing = _float(value, 0.0)
+    declared = str(unit or "").strip().lower()
+    if declared in {"degree", "degrees", "deg"}:
+        bearing = math.radians(bearing)
+    elif declared not in {"radian", "radians", "rad"} and abs(bearing) > math.tau + 1.0e-6:
+        # KMAP v0 did not name its unit while the degree-labelled Builder
+        # persisted raw 45/90/180 values.
+        bearing = math.radians(bearing)
+    return math.atan2(math.sin(bearing), math.cos(bearing))
 
 
 def _vec2(value: Any) -> tuple[float, float] | None:
@@ -156,10 +255,37 @@ def _floor_primitive(data: Any, room_resref: str) -> FloorPrimitive | PlacedRoom
 def _base_room_primitive(
     data: Any,
     room_resref: str,
-) -> FloorPrimitive | WallPrimitive | CubePrimitive | RampPrimitive | StairsPrimitive | CylinderPrimitive | DoorFramePrimitive | ArchPrimitive:
+    *,
+    _depth: int = 0,
+) -> FloorPrimitive | WallPrimitive | CubePrimitive | RampPrimitive | StairsPrimitive | CylinderPrimitive | DoorFramePrimitive | ArchPrimitive | CombinedRoomPrimitive:
+    if _depth > 32:
+        raise ValueError("Combined room primitive recipe nesting exceeds the supported depth of 32.")
     source = _dict(data)
     primitive_type = str(source.get("type") or source.get("primitive") or "").strip().lower()
     name = str(source.get("name") or f"{room_resref}_{primitive_type or 'primitive'}")
+    if primitive_type in {"combined_mesh", "combined_polygon_mesh", "combined_room_primitive"}:
+        sources: list[CombinedRoomPrimitiveSource] = []
+        for source_index, raw_source in enumerate(source.get("sources", ()) or ()):
+            source_payload = _dict(raw_source)
+            primitive_payload = _dict(source_payload.get("primitive"))
+            if not primitive_payload:
+                raise ValueError(f"Combined room primitive {name} source {source_index} has no primitive recipe.")
+            face_indices = tuple(
+                sorted(dict.fromkeys(int(index) for index in tuple(source_payload.get("face_indices") or ())))
+            )
+            sources.append(
+                CombinedRoomPrimitiveSource(
+                    primitive=_room_primitive_recipe(primitive_payload, room_resref, _depth=_depth + 1),
+                    face_indices=face_indices,
+                    source_name=str(source_payload.get("source_name") or primitive_payload.get("instance_name") or primitive_payload.get("name") or ""),
+                    walkmesh_policy=str(source_payload.get("walkmesh_policy") or "inherit"),
+                )
+            )
+        return CombinedRoomPrimitive(
+            name=name,
+            sources=tuple(sources),
+            metadata=_dict(source.get("metadata")),
+        )
     material = _material(source.get("material"))
     if primitive_type in {"floor", "plane", "platform"}:
         return FloorPrimitive(
@@ -241,24 +367,26 @@ def _base_room_primitive(
     raise ValueError(f"Unsupported authored room composition primitive type: {primitive_type or '(missing)'}")
 
 
+def _room_primitive_recipe(data: Any, room_resref: str, *, _depth: int = 0) -> Any:
+    """Decode one recursively human-readable composition primitive recipe."""
+
+    source = _dict(data)
+    base = _base_room_primitive(source, room_resref, _depth=_depth)
+    if source.get("transform") is None:
+        return base
+    return PlacedRoomPrimitive(
+        primitive=base,
+        transform=_transform(source.get("transform")),
+        name=str(source.get("instance_name") or source.get("name") or getattr(base, "name", "")),
+    )
+
+
 def _composition_primitive(data: dict[str, Any], room_resref: str) -> AuthoredRoomComposition:
     primitive = _dict(data.get("primitive"))
     floor = _floor_primitive(primitive.get("floor"), room_resref)
     primitives = []
     for raw in primitive.get("primitives", ()) or ():
-        source = _dict(raw)
-        base = _base_room_primitive(source, room_resref)
-        transform_payload = source.get("transform")
-        if transform_payload is None:
-            primitives.append(base)
-        else:
-            primitives.append(
-                PlacedRoomPrimitive(
-                    primitive=base,
-                    transform=_transform(transform_payload),
-                    name=str(source.get("instance_name") or source.get("name") or getattr(base, "name", "")),
-                )
-            )
+        primitives.append(_room_primitive_recipe(raw, room_resref))
     return AuthoredRoomComposition(
         room_resref=normalise_resref(primitive.get("room_resref") or room_resref),
         floor=floor,
@@ -280,7 +408,14 @@ def _room_primitive(data: dict[str, Any], room_resref: str) -> RectangularRoomPr
     primitive_type = str(primitive.get("type") or primitive.get("primitive") or data.get("primitive_type") or "rectangular").lower()
     if primitive_type in {"composition", "authored_room_composition"}:
         return _composition_primitive(data, room_resref)
+    if primitive_type == IMPORTED_MESH_PRIMITIVE_KIND:
+        return imported_mesh_primitive_from_payload(primitive, room_resref)
     if primitive_type in {"terrain_heightfield", "terrain", "heightfield"}:
+        holes = tuple(
+            (int(cell[0]), int(cell[1]))
+            for cell in primitive.get("holes", ()) or ()
+            if isinstance(cell, (list, tuple)) and len(cell) >= 2
+        )
         return TerrainHeightfieldPrimitive(
             room_resref=normalise_resref(primitive.get("room_resref") or room_resref),
             heights=_height_rows(primitive.get("heights")) or ((0.0, 0.0), (0.0, 0.0)),
@@ -289,6 +424,7 @@ def _room_primitive(data: dict[str, Any], room_resref: str) -> RectangularRoomPr
             floor_surface_id=primitive.get("floor_surface_id", 4),
             non_walk_surface_id=primitive.get("non_walk_surface_id", 7),
             max_walkable_slope_degrees=_float(primitive.get("max_walkable_slope_degrees"), 35.0),
+            holes=holes,
             material=_material(primitive.get("material")),
             metadata=_dict(primitive.get("metadata")),
         )
@@ -319,26 +455,38 @@ def _room_primitive(data: dict[str, Any], room_resref: str) -> RectangularRoomPr
 def _placement(data: Any, module_root: str) -> AuthoredGameplayPlacement:
     source = _dict(data)
     entry = _dict(source.get("entry_point"))
+    placement_metadata = _dict(source.get("metadata"))
+    bearing_unit = str(placement_metadata.get("bearing_unit") or "")
+    seen_instance_ids: set[str] = set()
     creatures = tuple(
         AuthoredCreatureInstance(
             template_resref=normalise_resref(item.get("template_resref") or item.get("resref") or ""),
             tag=str(item.get("tag") or ""),
             position=_vec3(item.get("position")),
-            bearing=_float(item.get("bearing"), 0.0),
+            bearing=_bearing_radians(item.get("bearing"), unit=bearing_unit),
+            instance_id=_migrated_placement_instance_id(
+                module_root=module_root, kind="creature", index=index, source=item, seen=seen_instance_ids
+            ),
         )
-        for item in (_dict(raw) for raw in source.get("creatures", ()) or ())
+        for index, item in enumerate(_dict(raw) for raw in source.get("creatures", ()) or ())
     )
     doors = tuple(
         AuthoredDoorInstance(
             template_resref=normalise_resref(item.get("template_resref") or item.get("resref") or ""),
             tag=str(item.get("tag") or ""),
             position=_vec3(item.get("position")),
-            bearing=_float(item.get("bearing"), 0.0),
+            bearing=_bearing_radians(item.get("bearing"), unit=bearing_unit),
             linked_to=str(item.get("linked_to") or ""),
             linked_to_module=str(item.get("linked_to_module") or ""),
+            linked_to_flags=int(_float(item.get("linked_to_flags"), 0.0)) & 0xFF,
             transition_destination=int(_float(item.get("transition_destination"), 0.0)),
+            use_tweak_color=bool(item.get("use_tweak_color", False)),
+            tweak_color=int(_float(item.get("tweak_color"), 0.0)) & 0xFFFFFFFF,
+            instance_id=_migrated_placement_instance_id(
+                module_root=module_root, kind="door", index=index, source=item, seen=seen_instance_ids
+            ),
         )
-        for item in (_dict(raw) for raw in source.get("doors", ()) or ())
+        for index, item in enumerate(_dict(raw) for raw in source.get("doors", ()) or ())
     )
     triggers = tuple(
         AuthoredTriggerInstance(
@@ -348,25 +496,35 @@ def _placement(data: Any, module_root: str) -> AuthoredGameplayPlacement:
             geometry=tuple(_vec3(point) for point in item.get("geometry", ()) or ()),
             linked_to=str(item.get("linked_to") or ""),
             linked_to_module=str(item.get("linked_to_module") or ""),
+            linked_to_flags=int(_float(item.get("linked_to_flags"), 0.0)) & 0xFF,
             transition_destination=int(_float(item.get("transition_destination"), 0.0)),
+            instance_id=_migrated_placement_instance_id(
+                module_root=module_root, kind="trigger", index=index, source=item, seen=seen_instance_ids
+            ),
         )
-        for item in (_dict(raw) for raw in source.get("triggers", ()) or ())
+        for index, item in enumerate(_dict(raw) for raw in source.get("triggers", ()) or ())
     )
     encounters = tuple(
         AuthoredEncounterInstance(
             template_resref=normalise_resref(item.get("template_resref") or item.get("resref") or ""),
             tag=str(item.get("tag") or ""),
             position=_vec3(item.get("position")),
+            instance_id=_migrated_placement_instance_id(
+                module_root=module_root, kind="encounter", index=index, source=item, seen=seen_instance_ids
+            ),
         )
-        for item in (_dict(raw) for raw in source.get("encounters", ()) or ())
+        for index, item in enumerate(_dict(raw) for raw in source.get("encounters", ()) or ())
     )
     sounds = tuple(
         AuthoredSoundInstance(
             template_resref=normalise_resref(item.get("template_resref") or item.get("resref") or ""),
             tag=str(item.get("tag") or ""),
             position=_vec3(item.get("position")),
+            instance_id=_migrated_placement_instance_id(
+                module_root=module_root, kind="sound", index=index, source=item, seen=seen_instance_ids
+            ),
         )
-        for item in (_dict(raw) for raw in source.get("sounds", ()) or ())
+        for index, item in enumerate(_dict(raw) for raw in source.get("sounds", ()) or ())
     )
     cameras = tuple(
         AuthoredCameraInstance(
@@ -377,40 +535,56 @@ def _placement(data: Any, module_root: str) -> AuthoredGameplayPlacement:
             height=_float(item.get("height"), 0.0),
             mic_range=_float(item.get("mic_range"), 0.0),
             pitch=_float(item.get("pitch"), 0.0),
+            instance_id=_migrated_placement_instance_id(
+                module_root=module_root, kind="camera", index=index, source=item, seen=seen_instance_ids
+            ),
         )
-        for item in (_dict(raw) for raw in source.get("cameras", ()) or ())
+        for index, item in enumerate(_dict(raw) for raw in source.get("cameras", ()) or ())
     )
     stores = tuple(
         AuthoredStoreInstance(
             template_resref=normalise_resref(item.get("template_resref") or item.get("resref") or ""),
             tag=str(item.get("tag") or ""),
+            position=_vec3(item.get("position")),
+            bearing=_bearing_radians(item.get("bearing"), unit=bearing_unit),
+            instance_id=_migrated_placement_instance_id(
+                module_root=module_root, kind="store", index=index, source=item, seen=seen_instance_ids
+            ),
         )
-        for item in (_dict(raw) for raw in source.get("stores", ()) or ())
+        for index, item in enumerate(_dict(raw) for raw in source.get("stores", ()) or ())
     )
     placeables = tuple(
         AuthoredPlaceableInstance(
             template_resref=normalise_resref(item.get("template_resref") or item.get("resref") or ""),
             tag=str(item.get("tag") or ""),
             position=_vec3(item.get("position")),
-            bearing=_float(item.get("bearing"), 0.0),
+            bearing=_bearing_radians(item.get("bearing"), unit=bearing_unit),
+            use_tweak_color=bool(item.get("use_tweak_color", False)),
+            tweak_color=int(_float(item.get("tweak_color"), 0.0)) & 0xFFFFFFFF,
+            instance_id=_migrated_placement_instance_id(
+                module_root=module_root, kind="placeable", index=index, source=item, seen=seen_instance_ids
+            ),
         )
-        for item in (_dict(raw) for raw in source.get("placeables", ()) or ())
+        for index, item in enumerate(_dict(raw) for raw in source.get("placeables", ()) or ())
     )
     waypoints = tuple(
         AuthoredWaypointInstance(
             template_resref=normalise_resref(item.get("template_resref") or item.get("resref") or ""),
             tag=str(item.get("tag") or ""),
             position=_vec3(item.get("position")),
-            bearing=_float(item.get("bearing"), 0.0),
+            bearing=_bearing_radians(item.get("bearing"), unit=bearing_unit),
             linked_to=str(item.get("linked_to") or ""),
+            instance_id=_migrated_placement_instance_id(
+                module_root=module_root, kind="waypoint", index=index, source=item, seen=seen_instance_ids
+            ),
         )
-        for item in (_dict(raw) for raw in source.get("waypoints", ()) or ())
+        for index, item in enumerate(_dict(raw) for raw in source.get("waypoints", ()) or ())
     )
     return AuthoredGameplayPlacement(
         entry_point=ModuleEntryPoint(
             area_resref=normalise_resref(entry.get("area_resref") or module_root),
             position=_vec3(entry.get("position")),
-            facing=_float(entry.get("facing"), 0.0),
+            facing=_bearing_radians(entry.get("facing"), unit=bearing_unit),
         ),
         creatures=creatures,
         doors=doors,
@@ -421,7 +595,12 @@ def _placement(data: Any, module_root: str) -> AuthoredGameplayPlacement:
         stores=stores,
         placeables=placeables,
         waypoints=waypoints,
-        metadata=_dict(source.get("metadata")),
+        metadata={
+            **placement_metadata,
+            "instance_identity_version": _PLACEMENT_INSTANCE_ID_VERSION,
+            "bearing_unit": "radians",
+            "bearing_unit_version": _PLACEMENT_BEARING_UNIT_VERSION,
+        },
     )
 
 
@@ -514,8 +693,13 @@ def _base_primitive_payload(
     | CylinderPrimitive
     | DoorFramePrimitive
     | ArchPrimitive
+    | CombinedRoomPrimitive
     | PlacedRoomPrimitive,
+    *,
+    _depth: int = 0,
 ) -> dict[str, Any]:
+    if _depth > 32:
+        raise ValueError("Combined room primitive recipe nesting exceeds the supported depth of 32.")
     transform: PrimitiveTransform | None = None
     instance_name = ""
     if isinstance(primitive, PlacedRoomPrimitive):
@@ -523,7 +707,22 @@ def _base_primitive_payload(
         instance_name = primitive.name
         primitive = primitive.primitive
     payload: dict[str, Any]
-    if isinstance(primitive, FloorPrimitive):
+    if isinstance(primitive, CombinedRoomPrimitive):
+        payload = {
+            "type": "combined_mesh",
+            "name": primitive.name,
+            "sources": [
+                {
+                    "source_name": source.source_name,
+                    "face_indices": [int(index) for index in source.face_indices],
+                    "walkmesh_policy": source.walkmesh_policy,
+                    "primitive": _base_primitive_payload(source.primitive, _depth=_depth + 1),
+                }
+                for source in primitive.sources
+            ],
+            "metadata": dict(primitive.metadata),
+        }
+    elif isinstance(primitive, FloorPrimitive):
         payload = {
             "type": "plane",
             "name": primitive.name,
@@ -632,8 +831,10 @@ def _composition_payload(composition: AuthoredRoomComposition) -> dict[str, Any]
 def _primitive_payload(primitive: RectangularRoomPrimitive | FloorPlanRoomPrimitive | AuthoredRoomComposition | TerrainHeightfieldPrimitive) -> dict[str, Any]:
     if isinstance(primitive, AuthoredRoomComposition):
         return _composition_payload(primitive)
+    if isinstance(primitive, ImportedMeshRoomPrimitive):
+        return imported_mesh_primitive_payload(primitive)
     if isinstance(primitive, TerrainHeightfieldPrimitive):
-        return {
+        payload = {
             "type": "terrain_heightfield",
             "room_resref": primitive.room_resref,
             "width": float(primitive.width),
@@ -645,6 +846,10 @@ def _primitive_payload(primitive: RectangularRoomPrimitive | FloorPlanRoomPrimit
             "material": _material_payload(primitive.material),
             "metadata": dict(primitive.metadata),
         }
+        if primitive.holes:
+            # Only persisted when present so pre-hole KMAPs stay byte-stable.
+            payload["holes"] = [[int(row), int(column)] for row, column in primitive.holes]
+        return payload
     if isinstance(primitive, FloorPlanRoomPrimitive):
         return {
             "type": "floor_plan",
@@ -681,64 +886,89 @@ def _primitive_payload(primitive: RectangularRoomPrimitive | FloorPlanRoomPrimit
     }
 
 
-def _placement_payload(placement: AuthoredGameplayPlacement) -> dict[str, Any]:
+def _placement_payload(placement: AuthoredGameplayPlacement, *, module_root: str = "") -> dict[str, Any]:
+    seen_instance_ids: set[str] = set()
+
+    def _payload_instance_id(kind: str, index: int, item: Any) -> str:
+        source = {
+            "instance_id": str(getattr(item, "instance_id", "") or ""),
+            "record": repr(replace(item, instance_id="")),
+        }
+        return _migrated_placement_instance_id(
+            module_root=module_root,
+            kind=kind,
+            index=index,
+            source=source,
+            seen=seen_instance_ids,
+        )
+
     return {
         "entry_point": {
             "area_resref": placement.entry_point.area_resref,
             "position": _vec3_payload(placement.entry_point.position),
-            "facing": float(placement.entry_point.facing),
+            "facing": _bearing_radians(placement.entry_point.facing, unit="radians"),
         },
         "creatures": [
             {
+                "instance_id": _payload_instance_id("creature", index, item),
                 "template_resref": item.template_resref,
                 "tag": item.tag,
                 "position": _vec3_payload(item.position),
-                "bearing": float(item.bearing),
+                "bearing": _bearing_radians(item.bearing, unit="radians"),
             }
-            for item in placement.creatures
+            for index, item in enumerate(placement.creatures)
         ],
         "doors": [
             {
+                "instance_id": _payload_instance_id("door", index, item),
                 "template_resref": item.template_resref,
                 "tag": item.tag,
                 "position": _vec3_payload(item.position),
-                "bearing": float(item.bearing),
+                "bearing": _bearing_radians(item.bearing, unit="radians"),
                 "linked_to": item.linked_to,
                 "linked_to_module": item.linked_to_module,
+                "linked_to_flags": int(item.linked_to_flags) & 0xFF,
                 "transition_destination": int(item.transition_destination),
+                "use_tweak_color": bool(item.use_tweak_color),
+                "tweak_color": int(item.tweak_color) & 0xFFFFFFFF,
             }
-            for item in placement.doors
+            for index, item in enumerate(placement.doors)
         ],
         "triggers": [
             {
+                "instance_id": _payload_instance_id("trigger", index, item),
                 "template_resref": item.template_resref,
                 "tag": item.tag,
                 "position": _vec3_payload(item.position),
                 "geometry": [_vec3_payload(point) for point in item.geometry],
                 "linked_to": item.linked_to,
                 "linked_to_module": item.linked_to_module,
+                "linked_to_flags": int(item.linked_to_flags) & 0xFF,
                 "transition_destination": int(item.transition_destination),
             }
-            for item in placement.triggers
+            for index, item in enumerate(placement.triggers)
         ],
         "encounters": [
             {
+                "instance_id": _payload_instance_id("encounter", index, item),
                 "template_resref": item.template_resref,
                 "tag": item.tag,
                 "position": _vec3_payload(item.position),
             }
-            for item in placement.encounters
+            for index, item in enumerate(placement.encounters)
         ],
         "sounds": [
             {
+                "instance_id": _payload_instance_id("sound", index, item),
                 "template_resref": item.template_resref,
                 "tag": item.tag,
                 "position": _vec3_payload(item.position),
             }
-            for item in placement.sounds
+            for index, item in enumerate(placement.sounds)
         ],
         "cameras": [
             {
+                "instance_id": _payload_instance_id("camera", index, item),
                 "camera_id": item.camera_id,
                 "position": _vec3_payload(item.position),
                 "orientation": [float(value) for value in item.orientation],
@@ -747,35 +977,46 @@ def _placement_payload(placement: AuthoredGameplayPlacement) -> dict[str, Any]:
                 "mic_range": float(item.mic_range),
                 "pitch": float(item.pitch),
             }
-            for item in placement.cameras
+            for index, item in enumerate(placement.cameras)
         ],
         "stores": [
             {
+                "instance_id": _payload_instance_id("store", index, item),
                 "template_resref": item.template_resref,
                 "tag": item.tag,
+                "position": list(item.position),
+                "bearing": _bearing_radians(item.bearing, unit="radians"),
             }
-            for item in placement.stores
+            for index, item in enumerate(placement.stores)
         ],
         "placeables": [
             {
+                "instance_id": _payload_instance_id("placeable", index, item),
                 "template_resref": item.template_resref,
                 "tag": item.tag,
                 "position": _vec3_payload(item.position),
-                "bearing": float(item.bearing),
+                "bearing": _bearing_radians(item.bearing, unit="radians"),
+                "use_tweak_color": bool(item.use_tweak_color),
+                "tweak_color": int(item.tweak_color) & 0xFFFFFFFF,
             }
-            for item in placement.placeables
+            for index, item in enumerate(placement.placeables)
         ],
         "waypoints": [
             {
+                "instance_id": _payload_instance_id("waypoint", index, item),
                 "template_resref": item.template_resref,
                 "tag": item.tag,
                 "position": _vec3_payload(item.position),
-                "bearing": float(item.bearing),
-                "linked_to": item.linked_to,
+                "bearing": _bearing_radians(item.bearing, unit="radians"),
             }
-            for item in placement.waypoints
+            for index, item in enumerate(placement.waypoints)
         ],
-        "metadata": dict(placement.metadata),
+        "metadata": {
+            **dict(placement.metadata),
+            "instance_identity_version": _PLACEMENT_INSTANCE_ID_VERSION,
+            "bearing_unit": "radians",
+            "bearing_unit_version": _PLACEMENT_BEARING_UNIT_VERSION,
+        },
     }
 
 
@@ -833,6 +1074,7 @@ def _authored_payload_invalidation(project: AuthoredModuleProject) -> dict[str, 
         "last_gameplay_placement_rename",
         "last_gameplay_placement_duplicate",
         "last_gameplay_placement_remove",
+        "last_creature_behavior_update",
     )
     for key in placement_edit_keys:
         edit = dict(project_extra.get(key) or {}) if isinstance(project_extra.get(key), dict) else {}
@@ -886,6 +1128,17 @@ def _authored_payload_invalidation(project: AuthoredModuleProject) -> dict[str, 
         latest_summary = f"Updated {scope} script hook {field_name} {script}".strip()
         next_action = "Regenerate ARE/IFO script-hook resources and record fresh in-game proof after script changes."
 
+    world_lighting_edit = dict(project_extra.get("last_world_lighting_update") or {})
+    if world_lighting_edit:
+        invalidates_previous_export = True
+        invalidates_game_proof = True
+        add_stale_outputs(("ARE", ".mod"))
+        latest_operation = "last_world_lighting_update"
+        profile = str(world_lighting_edit.get("profile") or "standard").strip()
+        fog_state = "enabled" if bool(world_lighting_edit.get("fog_enabled")) else "disabled"
+        latest_summary = f"Updated ARE world lighting ({profile}) with distance fog {fog_state}."
+        next_action = "Regenerate the ARE/module package and record fresh in-game proof after world-lighting changes."
+
     if not invalidates_previous_export and not invalidates_game_proof and not stale_outputs:
         return {}
     return {
@@ -927,7 +1180,7 @@ def authored_project_to_kmap_payload(
             }
             for room in project.rooms
         ],
-        "placements": _placement_payload(project.placements),
+        "placements": _placement_payload(project.placements, module_root=project.module_root),
         "lights": [authored_room_light_payload(light) for light in project.lights],
         "notes": list(project.notes),
         "extra": dict(project.extra),
@@ -1032,6 +1285,11 @@ def create_dev_test_authored_module_payload(
             "inherited_base_game_module_content": False,
             "inherited_scripted_movers_expected": False,
             "room_geometry_mode": "rectangular_composition",
+            "lighting": {
+                "profile": "fullbright",
+                "source": "map_studio:dev_test_fullbright",
+                "purpose": "canonical_graybox_visibility",
+            },
             "include_doorway_marker": bool(include_doorway_marker),
             "include_basic_light": bool(include_basic_light),
         },
@@ -1094,6 +1352,7 @@ def create_golden_test_authored_module_payload(
                     bearing=0.0,
                     linked_to=f"{root}_exit",
                     linked_to_module=root,
+                    linked_to_flags=2,
                     transition_destination=1,
                 ),
             ),
@@ -1115,7 +1374,6 @@ def create_golden_test_authored_module_payload(
                     template_resref="wp_test",
                     tag=f"{root}_exit",
                     position=(0.0, 3.25, 0.0),
-                    linked_to=f"{root}_door",
                 ),
             ),
             metadata={
@@ -1147,6 +1405,11 @@ def create_golden_test_authored_module_payload(
             "room_geometry_mode": "rectangular_composition",
             "fixture_role": "golden_module_in_game_smoke_test",
             "completion_requirement": "Package, install, warp in-game, verify expected objects, and record proof manifest.",
+            "lighting": {
+                "profile": "fullbright",
+                "source": "map_studio:golden_module_fullbright",
+                "purpose": "golden_graybox_visibility",
+            },
         },
     )
     return authored_project_to_kmap_payload(project)
@@ -1243,6 +1506,54 @@ def build_kmap_authored_module_readiness(kmap_project: Any) -> AuthoredModuleKMa
         game_tested=bool(payload_dict.get("game_tested", False)),
         proof_metadata=proof_metadata,
     )
+    texture_paint_unapplied = texture_paint_has_unapplied_changes(payload_dict)
+    pending_paint_resrefs = texture_paint_pending_resrefs(payload_dict)
+    texture_apply_blocking = (TEXTURE_PAINT_UNAPPLIED_BLOCKER,) if texture_paint_unapplied else ()
+    texture_issues = KMapValidator().validate_authored_project_textures(kmap_project)
+    texture_blocking = tuple(
+        dict.fromkeys(issue.message for issue in texture_issues if str(issue.severity).lower() == "error")
+    )
+    texture_warnings = tuple(
+        dict.fromkeys(issue.message for issue in texture_issues if str(issue.severity).lower() == "warning")
+    )
+    if texture_issues or texture_apply_blocking:
+        readiness_metadata = dict(readiness.metadata or {})
+        if texture_issues:
+            readiness_metadata["project_texture_validation"] = {
+                "issue_count": len(texture_issues),
+                "blocking_count": len(texture_blocking),
+                "warning_count": len(texture_warnings),
+                "issues": [issue.to_dict() for issue in texture_issues],
+                "reference_policy": "KMAP stores project-relative paths; image bytes remain external until explicit export.",
+            }
+        readiness_metadata["texture_paint_apply"] = {
+            "unapplied": bool(texture_paint_unapplied),
+            "pending_resrefs": list(pending_paint_resrefs),
+            "export_blocked": bool(texture_apply_blocking),
+        }
+        combined_texture_blocking = tuple((*texture_blocking, *texture_apply_blocking))
+        readiness = replace(
+            readiness,
+            can_export_candidate=bool(readiness.can_export_candidate) and not combined_texture_blocking,
+            ready_for_game_test=bool(readiness.ready_for_game_test) and not combined_texture_blocking,
+            export_status=(
+                "Apply texture changes"
+                if texture_apply_blocking and readiness.can_preview
+                else "Project textures not ready"
+                if texture_blocking and readiness.can_preview
+                else readiness.export_status
+            ),
+            next_action=(
+                "Click Apply Texture Changes in Texture Paint, then validate and export again."
+                if texture_apply_blocking and readiness.can_preview
+                else "Relink or re-import the authored room project textures, then validate again before export."
+                if texture_blocking and readiness.can_preview
+                else readiness.next_action
+            ),
+            blocking_messages=tuple(dict.fromkeys((*readiness.blocking_messages, *combined_texture_blocking))),
+            warnings=tuple(dict.fromkeys((*readiness.warnings, *texture_warnings))),
+            metadata=readiness_metadata,
+        )
     return AuthoredModuleKMapBridgeResult(
         project=project,
         readiness=readiness,
@@ -1251,15 +1562,19 @@ def build_kmap_authored_module_readiness(kmap_project: Any) -> AuthoredModuleKMa
             "source": "src.core.modules.authored_module_kmap_bridge",
             "has_payload": True,
             "runtime_output_status": _runtime_output_status(readiness),
+            "project_texture_validation": dict(readiness.metadata.get("project_texture_validation") or {}),
         },
     )
 
 
 __all__ = [
     "AuthoredModuleKMapBridgeResult",
+    "TEXTURE_PAINT_UNAPPLIED_BLOCKER",
     "authored_project_from_kmap_payload",
     "authored_project_to_kmap_payload",
     "build_kmap_authored_module_readiness",
     "create_dev_test_authored_module_payload",
     "create_golden_test_authored_module_payload",
+    "texture_paint_has_unapplied_changes",
+    "texture_paint_pending_resrefs",
 ]

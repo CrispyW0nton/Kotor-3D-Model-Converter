@@ -1164,7 +1164,11 @@ class RendererOverlayMixin:
             fc += len(n.faces)
             if n.texture and _clean_tex_name(n.texture).upper() not in ('NULL',''):
                 tex_total += 1
-                if self._get_tex(n):
+                # PERF-RESIDENCY: Stats are drawn on every Qt frame. Calling
+                # _get_tex() here synchronously decoded every missing TPC while
+                # merely counting it, blocking 207tel's first orbit frame for
+                # minutes and defeating the background texture prewarmer.
+                if self.is_texture_resident(n.texture):
                     tex_ok += 1
             if len(n.uvs) == len(n.vertices) and n.vertices:
                 uv_ok += 1

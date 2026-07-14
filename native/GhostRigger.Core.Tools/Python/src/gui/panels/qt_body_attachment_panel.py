@@ -7,6 +7,11 @@ from typing import Any
 from PySide6 import QtCore, QtWidgets
 
 from src.gui.qt_lib.assets.qt_theme import heading
+from src.systems.bas.attachment_catalog import (
+    BasAttachmentCatalog,
+    saber_color_variants,
+    saber_family,
+)
 from src.systems.bas.head_resolution import normalize_bas_model_resref
 
 
@@ -87,6 +92,8 @@ class QtBodyAttachmentPanel(QtWidgets.QWidget):
         self._selected_slot = "head"
         self._mode = "headless_body"
         self._syncing_layer_selection = False
+        self._catalog: BasAttachmentCatalog | None = None
+        self._syncing_color_combo = False
         self._build()
         self.set_selected_slot("head")
 
@@ -128,7 +135,17 @@ class QtBodyAttachmentPanel(QtWidgets.QWidget):
         form.addRow("Slot", self.slot_label)
         self.model_combo = QtWidgets.QComboBox()
         self.model_combo.setEditable(True)
+        self.model_combo.currentIndexChanged.connect(self._sync_color_combo)
         form.addRow("Model", self.model_combo)
+        self.color_combo = QtWidgets.QComboBox()
+        self.color_combo.setObjectName("basLightsaberColorComboBox")
+        self.color_combo.setToolTip(
+            "Blade colors for the selected lightsaber family from both installed games. "
+            "Changing the color re-attaches the matching model variation."
+        )
+        self.color_combo.setEnabled(False)
+        self.color_combo.activated.connect(self._handle_color_selected)
+        form.addRow("Color", self.color_combo)
         root.addLayout(form)
 
         controls = QtWidgets.QHBoxLayout()
@@ -199,6 +216,7 @@ class QtBodyAttachmentPanel(QtWidgets.QWidget):
         self.model_combo.setEnabled(attachable)
         self.attach_button.setEnabled(attachable)
         self.clear_button.setEnabled(slot != "body" and attachable)
+        self._sync_color_combo()
         self._sync_selected_layer()
         self.slotSelected.emit(slot)
 
@@ -219,14 +237,77 @@ class QtBodyAttachmentPanel(QtWidgets.QWidget):
     def set_status(self, message: str) -> None:
         self.status.setPlainText(str(message or ""))
 
+    def set_attachment_catalog(self, catalog: BasAttachmentCatalog | None) -> None:
+        """Adopt the game-derived item catalog and refresh the active slot."""
+
+        self._catalog = catalog if catalog is not None and not getattr(catalog, "empty", True) else None
+        self._populate_model_combo(self._selected_slot)
+        self._sync_color_combo()
+
+    def attachment_catalog(self) -> BasAttachmentCatalog | None:
+        return self._catalog
+
     def _populate_model_combo(self, slot: str) -> None:
         self.model_combo.blockSignals(True)
         self.model_combo.clear()
-        for label, value in BAS_PRESET_MODELS.get(slot, ()):
-            self.model_combo.addItem(f"{label} - {value}", value)
+        entries = self._catalog.entries(slot) if self._catalog is not None else ()
+        if entries:
+            for entry in entries:
+                games = f" [{entry.games_label}]" if entry.games_label else ""
+                self.model_combo.addItem(f"{entry.label}{games} - {entry.resref}", entry.resref)
+        else:
+            for label, value in BAS_PRESET_MODELS.get(slot, ()):
+                self.model_combo.addItem(f"{label} - {value}", value)
         if self.model_combo.count() == 0:
             self.model_combo.addItem("", "")
         self.model_combo.blockSignals(False)
+        self._sync_color_combo()
+
+    def _sync_color_combo(self) -> None:
+        """Mirror the selected model's saber family into the Color choices."""
+
+        combo = getattr(self, "color_combo", None)
+        if combo is None or self._syncing_color_combo:
+            return
+        self._syncing_color_combo = True
+        try:
+            resref = self.selected_model_resref()
+            family = saber_family(resref)
+            combo.blockSignals(True)
+            combo.clear()
+            if not family:
+                combo.setEnabled(False)
+                return
+            current_index = 0
+            for index, variant in enumerate(saber_color_variants(resref, self._catalog, self._selected_slot)):
+                games = f" [{variant.games_label}]" if variant.games_label else ""
+                combo.addItem(f"{variant.color}{games}", variant.resref)
+                if variant.resref == resref:
+                    current_index = index
+            combo.setCurrentIndex(current_index)
+            combo.setEnabled(combo.count() > 0 and self.model_combo.isEnabled())
+        finally:
+            combo.blockSignals(False)
+            self._syncing_color_combo = False
+
+    def _handle_color_selected(self, index: int) -> None:
+        """Swap the model to the chosen blade color, re-attaching if live."""
+
+        variant = str(self.color_combo.itemData(index) or "").strip()
+        if not variant:
+            return
+        previous = self.selected_model_resref()
+        match = self.model_combo.findData(variant)
+        self.model_combo.blockSignals(True)
+        if match >= 0:
+            self.model_combo.setCurrentIndex(match)
+        else:
+            self.model_combo.setEditText(variant)
+        self.model_combo.blockSignals(False)
+        slot = self._selected_slot
+        attached = str(self._slot_models.get(slot, "") or "").strip()
+        if attached and saber_family(attached) and saber_family(attached) == saber_family(previous or variant):
+            self.attachRequested.emit(slot, variant)
 
     def _emit_attach(self) -> None:
         if self._selected_slot in {"body", "left_hand", "right_hand"} or (

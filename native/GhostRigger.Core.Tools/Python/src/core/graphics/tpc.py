@@ -254,7 +254,11 @@ def _ensure_bottom_up(img: 'Image.Image', data: bytes = b'') -> 'Image.Image':
     return img
 
 
-def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
+def _load_tpc_bytes(
+    data: bytes,
+    *,
+    max_size: Optional[int] = None,
+) -> Optional['Image.Image']:
     """Load a KotOR TPC image from raw bytes using pykotor's battle-tested reader.
 
     pykotor.read_tpc handles DXT1/DXT3/DXT5 decompression, greyscale, RGB/RGBA,
@@ -262,7 +266,11 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
     Falls back to the legacy software decompressor if pykotor is unavailable.
 
     Returns a PIL RGBA Image (bottom-up orientation, ready for the renderer's
-    V-flip formula) or None on failure.
+    V-flip formula) or None on failure.  ``max_size`` is an opt-in viewport
+    decode budget: the first authored mip whose largest axis is at most that
+    size is copied and converted by itself.  The default ``None`` preserves
+    the full-resolution/all-mip conversion behavior used by export and source
+    inspection callers.
 
     FIX-TXI-ATTR: The returned image always has '_txi_str' set (may be empty
     string if no TXI is present).  This allows _apply_txi_from_textures_to_model()
@@ -288,8 +296,35 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
         _is_compressed = _orig_format in (
             TPCTextureFormat.DXT1, TPCTextureFormat.DXT3, TPCTextureFormat.DXT5
         ) if hasattr(TPCTextureFormat, 'DXT1') else (data[:4] != b'\x00\x00\x00\x00' and data[12] in (2, 4) and struct.unpack_from('<I', data, 0)[0] != 0)
-        tpc.convert(TPCTextureFormat.RGBA)
-        mip = tpc.get(0, 0)          # first layer, first (largest) mipmap
+        _max_size = None
+        if max_size is not None:
+            try:
+                _candidate = int(max_size)
+                _max_size = _candidate if _candidate > 0 else None
+            except (TypeError, ValueError):
+                _max_size = None
+        _source_size = tuple(int(value) for value in tpc.dimensions())
+        _mip_index = 0
+        if _max_size is None:
+            # Preserve the historical full-resolution contract exactly.
+            tpc.convert(TPCTextureFormat.RGBA)
+            mip = tpc.get(0, 0)
+        else:
+            # Converting ``tpc`` converts every mip in every layer. A 4096²
+            # DXT5 texture therefore spent ~15.5 seconds decoding pixels that
+            # TextureCache immediately discarded. Select the authored 512px
+            # (or smaller) mip while it is still compressed, then convert only
+            # that copy. This retains the game's own mip filtering/content.
+            mipmaps = tuple(tpc.layers[0].mipmaps)
+            if not mipmaps:
+                raise ValueError("TPC layer 0 has no mipmaps")
+            _mip_index = len(mipmaps) - 1
+            for index, candidate_mip in enumerate(mipmaps):
+                if max(int(candidate_mip.width), int(candidate_mip.height)) <= _max_size:
+                    _mip_index = index
+                    break
+            mip = mipmaps[_mip_index].copy()
+            mip.convert(TPCTextureFormat.RGBA)
         img = mip.to_pil_image()
         if img is None:
             raise ValueError("pykotor returned None image")
@@ -320,6 +355,10 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
         # FIX-TXI-ATTR: Attach TXI string so GPU renderer can apply blending modes
         img._txi_str = _txi  # type: ignore[attr-defined]
         img._gr_gpu_uv_v_flip = True  # type: ignore[attr-defined]
+        img._tpc_mip_level = int(_mip_index)  # type: ignore[attr-defined]
+        img._tpc_mip_size = (int(mip.width), int(mip.height))  # type: ignore[attr-defined]
+        img._tpc_source_size = _source_size  # type: ignore[attr-defined]
+        img._tpc_viewport_max_size = _max_size  # type: ignore[attr-defined]
         # Also store raw data so legacy _extract_txi path works as fallback
         img._tpc_raw = data   # type: ignore[attr-defined]
         # FIX-ALPHATEST: Attach alpha_test from TPC header for punchthrough threshold
@@ -339,6 +378,31 @@ def _load_tpc_bytes(data: bytes) -> Optional['Image.Image']:
     img = _load_tpc_bytes_legacy(data)
     if img is not None:
         img._gr_gpu_uv_v_flip = True  # type: ignore[attr-defined]
+        img._tpc_mip_level = 0  # type: ignore[attr-defined]
+        img._tpc_mip_size = tuple(int(value) for value in img.size)  # type: ignore[attr-defined]
+        img._tpc_source_size = tuple(int(value) for value in img.size)  # type: ignore[attr-defined]
+        img._tpc_viewport_max_size = None  # type: ignore[attr-defined]
+        if max_size is not None:
+            try:
+                _legacy_limit = int(max_size)
+            except (TypeError, ValueError):
+                _legacy_limit = 0
+            if _legacy_limit > 0 and max(img.size) > _legacy_limit:
+                _scale = _legacy_limit / max(img.size)
+                _legacy_size = (
+                    max(1, int(img.width * _scale)),
+                    max(1, int(img.height * _scale)),
+                )
+                _legacy_original = img
+                img = img.resize(_legacy_size, Image.LANCZOS)
+                for _attr in ('_gr_gpu_uv_v_flip', '_txi_str', '_tpc_raw', '_txi_alpha_test', '_tpc_mip_level', '_tpc_source_size'):
+                    if hasattr(_legacy_original, _attr):
+                        setattr(img, _attr, getattr(_legacy_original, _attr))
+                img._tpc_mip_level = -1  # type: ignore[attr-defined]
+                img._tpc_mip_size = tuple(int(value) for value in img.size)  # type: ignore[attr-defined]
+                img._tpc_viewport_max_size = _legacy_limit  # type: ignore[attr-defined]
+            elif _legacy_limit > 0:
+                img._tpc_viewport_max_size = _legacy_limit  # type: ignore[attr-defined]
     return img
 
 

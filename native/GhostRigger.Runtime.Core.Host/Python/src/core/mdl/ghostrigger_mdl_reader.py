@@ -419,6 +419,77 @@ class GhostRiggerMDLBinaryReader(_iom.MDLBinaryReader):
             self._fill_mdx_offset_zero_vertices(node, bin_node)
         return node
 
+    def _load_controller(self, offset: int, data_offset: int):
+        """Load a controller and preserve its original binary entry metadata."""
+
+        raw_metadata = self._read_raw_controller_metadata(offset, data_offset)
+        controller = super()._load_controller(offset, data_offset)
+        if raw_metadata:
+            setattr(controller, "_gr_binary_controller", raw_metadata)
+        return controller
+
+    def _read_raw_controller_metadata(self, offset: int, data_offset: int) -> Dict[str, Any]:
+        saved_pos = self._reader.position()
+        try:
+            if offset in (0, 0xFFFFFFFF) or offset < 0:
+                return {}
+            if offset + _iom._Controller.SIZE > self._reader.size():
+                return {}
+            self._reader.seek(offset)
+            raw = _iom._Controller().read(self._reader)  # type: ignore[attr-defined]
+            metadata: Dict[str, Any] = {
+                "type": int(raw.type_id),
+                "unknown0": int(raw.unknown0),
+                "row_count": int(raw.row_count),
+                "key_offset": int(raw.key_offset),
+                "data_offset": int(raw.data_offset),
+                "column_count": int(raw.column_count),
+                "unknown1": list(bytes(raw.unknown1 or b"\x00\x00\x00")[:3].ljust(3, b"\x00")),
+            }
+            column_count = int(raw.column_count)
+            if int(raw.type_id) == int(_iom.MDLControllerType.ORIENTATION) and column_count == 2:
+                words = []
+                value_pos = int(data_offset) + int(raw.data_offset) * 4
+                if 0 <= value_pos < self._reader.size():
+                    self._reader.seek(value_pos)
+                    for _ in range(int(raw.row_count)):
+                        if self._reader.position() + 4 > self._reader.size():
+                            break
+                        words.append(int(self._reader.read_uint32()))
+                metadata["compressed_quaternion_words"] = words
+            elif column_count & 0x10:
+                # Aurora stores a Bezier controller row as three floats for
+                # every logical component: value, incoming tangent, outgoing
+                # tangent.  PyKotor exposes those expanded rows, but the
+                # GhostRigger domain conversion historically kept only the
+                # first logical values.  Capture the raw float32 rows here so
+                # a load -> model -> write round trip can preserve both the
+                # 0x10 flag and every tangent without depending on a decoded
+                # interpolation representation.
+                base_columns = column_count & 0x0F
+                values_per_row = base_columns * 3
+                rows: list[list[float]] = []
+                value_pos = int(data_offset) + int(raw.data_offset) * 4
+                bytes_per_row = values_per_row * 4
+                if values_per_row > 0 and 0 <= value_pos < self._reader.size():
+                    self._reader.seek(value_pos)
+                    for _ in range(int(raw.row_count)):
+                        if self._reader.position() + bytes_per_row > self._reader.size():
+                            break
+                        rows.append([
+                            float(self._reader.read_single())
+                            for _ in range(values_per_row)
+                        ])
+                metadata["bezier_rows"] = rows
+            return metadata
+        except Exception:
+            return {}
+        finally:
+            try:
+                self._reader.seek(saved_pos)
+            except Exception:
+                pass
+
     def _preserve_raw_node_flags(self, node, bin_node: GhostRiggerNode) -> None:
         """Restore semantic node types that PyKotor collapses during conversion."""
 

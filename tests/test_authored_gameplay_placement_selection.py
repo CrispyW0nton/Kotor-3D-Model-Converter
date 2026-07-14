@@ -57,16 +57,28 @@ def test_t2655_authored_placement_rows_have_stable_virtual_ids() -> None:
 
     rows = authored_gameplay_placement_rows(project)
     row_ids = {row.placement_id for row in rows}
-    store_row = next(row for row in rows if row.placement_id == "authored:store:0")
+    creature_row = next(row for row in rows if row.kind == "creature")
+    placeable_row = next(row for row in rows if row.kind == "placeable")
+    store_row = next(row for row in rows if row.kind == "store")
     markers = authored_gameplay_preview_markers(project)
     marker_ids = {marker.placement_id for marker in markers}
 
-    assert authored_gameplay_placement_id("creature", 0) in row_ids
-    assert authored_gameplay_placement_id("placeable", 0) in row_ids
-    assert authored_gameplay_placement_id("store", 0) in row_ids
-    assert store_row.is_spatial is False
-    assert "authored:store:0" not in marker_ids
+    assert creature_row.placement_id.startswith("authored:creature:i_")
+    # Preset fixtures without an editor identity retain their legacy selector
+    # until the KMAP bridge migrates them on save/open.
+    assert placeable_row.placement_id == authored_gameplay_placement_id("placeable", 0)
+    assert store_row.placement_id.startswith("authored:store:i_")
+    assert creature_row.placement_id in row_ids
+    assert store_row.placement_id in row_ids
+    # Vanilla 202TEL GIT stores are spatial: struct 11 carries ResRef +
+    # XPosition/YPosition/ZPosition + orientation (tag lives in the UTM).
+    assert store_row.is_spatial is True
+    assert store_row.placement_id not in marker_ids
     assert parse_authored_gameplay_placement_id("authored:creature:0") == ("creature", 0)
+    assert parse_authored_gameplay_placement_id(creature_row.placement_id) == (
+        "creature",
+        creature_row.placement_id.rsplit(":", 1)[-1],
+    )
 
 
 def test_t2655_transform_update_moves_authored_placement_and_preserves_build_contract() -> None:
@@ -130,25 +142,27 @@ def test_t2600_authored_placement_rename_duplicate_and_remove_update_project() -
         tag="guard_a",
         position=(1.0, 2.0, 0.0),
     ).project
+    original_id = next(row.placement_id for row in authored_gameplay_placement_rows(project) if row.kind == "creature")
 
-    renamed = rename_authored_gameplay_placement(project, "authored:creature:0", tag="guard_renamed")
-    duplicated = duplicate_authored_gameplay_placement(renamed.project, "authored:creature:0")
-    removed = remove_authored_gameplay_placement(duplicated.project, "authored:creature:0")
+    renamed = rename_authored_gameplay_placement(project, original_id, tag="guard_renamed")
+    duplicated = duplicate_authored_gameplay_placement(renamed.project, original_id)
+    removed = remove_authored_gameplay_placement(duplicated.project, original_id)
     rows = authored_gameplay_placement_rows(removed.project)
 
     creature_rows = [row for row in rows if row.kind == "creature"]
 
     assert renamed.project.placements.creatures[0].tag == "guard_renamed"
-    assert duplicated.placement_id == "authored:creature:1"
+    assert duplicated.placement_id.startswith("authored:creature:i_")
+    assert duplicated.placement_id != original_id
     assert duplicated.project.placements.creatures[1].tag == "guard_renamed_copy"
     assert duplicated.project.placements.creatures[1].position == (1.5, 2.5, 0.0)
     assert removed.count == 1
     assert len(creature_rows) == 1
-    assert creature_rows[0].placement_id == "authored:creature:0"
+    assert creature_rows[0].placement_id == duplicated.placement_id
     assert creature_rows[0].tag == "guard_renamed_copy"
 
 
-def test_t2600_non_spatial_store_can_be_renamed_duplicated_and_removed() -> None:
+def test_t2600_spatial_store_can_be_renamed_duplicated_and_removed() -> None:
     _install_native_payload_paths()
 
     from src.core.modules.authored_module_placements import (
@@ -171,21 +185,24 @@ def test_t2600_non_spatial_store_can_be_renamed_duplicated_and_removed() -> None
         template_resref="stm_shop",
         tag="store_a",
     ).project
+    original_id = next(row.placement_id for row in authored_gameplay_placement_rows(project) if row.kind == "store")
 
-    renamed = rename_authored_gameplay_placement(project, "authored:store:0", tag="store_renamed")
-    duplicated = duplicate_authored_gameplay_placement(renamed.project, "authored:store:0")
-    removed = remove_authored_gameplay_placement(duplicated.project, "authored:store:0")
+    renamed = rename_authored_gameplay_placement(project, original_id, tag="store_renamed")
+    duplicated = duplicate_authored_gameplay_placement(renamed.project, original_id)
+    removed = remove_authored_gameplay_placement(duplicated.project, original_id)
     rows = authored_gameplay_placement_rows(removed.project)
     store_rows = [row for row in rows if row.kind == "store"]
 
     assert renamed.project.placements.stores[0].tag == "store_renamed"
-    assert duplicated.placement_id == "authored:store:1"
+    assert duplicated.placement_id.startswith("authored:store:i_")
+    assert duplicated.placement_id != original_id
     assert duplicated.project.placements.stores[1].tag == "store_renamed_copy"
     assert removed.count == 1
     assert len(store_rows) == 1
-    assert store_rows[0].placement_id == "authored:store:0"
+    assert store_rows[0].placement_id == duplicated.placement_id
     assert store_rows[0].tag == "store_renamed_copy"
-    assert store_rows[0].is_spatial is False
+    # Stores follow the vanilla 202TEL GIT engine contract and are spatial.
+    assert store_rows[0].is_spatial is True
 
 
 def test_t2655_controller_transform_update_clears_stale_runtime_state() -> None:
@@ -241,14 +258,16 @@ def test_t2600_controller_placement_edit_actions_clear_export_and_proof_state() 
     payload["game_tested"] = True
     controller.project.extra_sections["authored_module"] = payload
 
-    renamed = controller.rename_authored_gameplay_placement("authored:creature:0", tag="grctledit_renamed")
-    duplicated = controller.duplicate_authored_gameplay_placement("authored:creature:0")
+    original_id = next(row.placement_id for row in controller.authored_gameplay_placements() if row.kind == "creature")
+    renamed = controller.rename_authored_gameplay_placement(original_id, tag="grctledit_renamed")
+    duplicated = controller.duplicate_authored_gameplay_placement(original_id)
     controller.model.select(duplicated.placement_id)
     removed = controller.remove_authored_gameplay_placement(duplicated.placement_id)
     updated = controller.project.extra_sections["authored_module"]
 
     assert renamed.tag == "grctledit_renamed"
-    assert duplicated.placement_id == "authored:creature:1"
+    assert duplicated.placement_id.startswith("authored:creature:i_")
+    assert duplicated.placement_id != original_id
     assert removed.tag == "grctledit_renamed_copy"
     assert updated["runtime_resources"] == []
     assert updated["game_tested"] is False
@@ -279,6 +298,7 @@ def test_t2600_controller_transition_edit_clears_export_and_proof_state() -> Non
         "authored:door:0",
         linked_to="wp_next_start",
         linked_to_module="grnext",
+        linked_to_flags=2,
         transition_destination=2,
     )
     updated = controller.project.extra_sections["authored_module"]
@@ -287,6 +307,7 @@ def test_t2600_controller_transition_edit_clears_export_and_proof_state() -> Non
     assert updated["game_tested"] is False
     assert updated["placements"]["doors"][0]["linked_to"] == "wp_next_start"
     assert updated["placements"]["doors"][0]["linked_to_module"] == "grnext"
+    assert updated["placements"]["doors"][0]["linked_to_flags"] == 2
     assert updated["placements"]["doors"][0]["transition_destination"] == 2
     assert result.readiness is not None
     assert result.readiness.can_preview is True
@@ -348,7 +369,9 @@ def test_t2655_module_editor_projects_authored_placements_into_selection_surface
     assert "is_spatial" in properties_source
     assert "module-level resource" in properties_source
     assert "transition_summary" in properties_source
-    assert "transitionChanged = QtCore.Signal(str, str, str, int)" in properties_source
+    # T2605: item_id, LinkedTo, LinkedToModule, LinkedToFlags (destination
+    # door/waypoint type), and the TransitionDestin StringRef.
+    assert "transitionChanged = QtCore.Signal(str, str, str, int, int)" in properties_source
     assert "mapStudioTransitionPropertiesGroup" in properties_source
     assert "mapStudioTransitionLinkedToLineEdit" in properties_source
     assert "mapStudioTransitionLinkedModuleLineEdit" in properties_source

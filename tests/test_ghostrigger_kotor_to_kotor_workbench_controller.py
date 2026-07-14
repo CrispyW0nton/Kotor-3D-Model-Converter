@@ -46,7 +46,7 @@ def _adapter_result(name: str = "gr_bek_rally"):
     )
 
 
-def _controller(*, builder=None, exporter=None, apply_preview=None):
+def _controller(*, builder=None, exporter=None, apply_preview=None, resource_manager=None):
     preview_action = FakeAction()
     export_action = FakeAction()
     calls: dict[str, list] = {"build": [], "apply": [], "export": []}
@@ -62,7 +62,14 @@ def _controller(*, builder=None, exporter=None, apply_preview=None):
         calls["export"].append(request)
         return SimpleNamespace(mdl_path=request.output_mdl_path, slot_name=request.preview_result.slot_name)
 
+    resource_provider = SimpleNamespace(
+        can_preview=lambda: False,
+        can_export=lambda: False,
+        update_enabled=lambda: None,
+        current_resource_manager=lambda: resource_manager,
+    )
     controller = RetargetWorkbenchController(
+        ue_to_kotor_controller=resource_provider,
         viewport=SimpleNamespace(name="viewport"),
         preview_action=preview_action,
         export_action=export_action,
@@ -150,7 +157,8 @@ def test_changing_target_output_name_invalidates_without_overwriting_source_slot
 
 
 def test_kotor_to_kotor_export_uses_last_preview_only() -> None:
-    controller, _preview_action, _export_action, calls = _controller()
+    resource_manager = object()
+    controller, _preview_action, _export_action, calls = _controller(resource_manager=resource_manager)
     _fill_required_inputs(controller)
     preview = controller.preview()
     calls["build"].clear()
@@ -163,6 +171,7 @@ def test_kotor_to_kotor_export_uses_last_preview_only() -> None:
     request = calls["export"][0]
     assert request.preview_result is preview
     assert request.verify_roundtrip is True
+    assert request.resource_manager is resource_manager
     assert request.kotor_output_name_mode == KotorOutputAnimationNameMode.CUSTOM_PATCH
     assert request.requires_custom_animation_patch is True
 

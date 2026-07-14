@@ -179,7 +179,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='GhostRigger-K1-K2',
+    name='GhostStudio',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -192,5 +192,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    version='assets/windows_version_info.txt',
     icon='assets/icons/ghostrigger.ico',    # Windows taskbar / exe icon
 )

@@ -20,6 +20,16 @@ from src.core.project import (
     validate_ghostrigger_project,
     validate_resource_address,
 )
+from src.core.project.placeable_asset import (
+    PlaceableAppearanceMappingEvidence,
+    PlaceableAsset,
+    PlaceableBaseTemplateEvidence,
+    PlaceableGameplay,
+    PlaceableResourceRefs,
+    load_placeable_asset,
+    save_placeable_asset,
+    validate_placeable_asset,
+)
 
 
 def _module_resource(resref: str = "gr_beklead", restype: str = "UTC") -> ResourceAddress:
@@ -35,6 +45,98 @@ def _module_resource(resref: str = "gr_beklead", restype: str = "UTC") -> Resour
 
 def _local_file(path: str = "C:/imports/custom_mesh.fbx") -> ResourceAddress:
     return ResourceAddress(scheme="local_file", path=path)
+
+
+def test_placeable_asset_json_roundtrip_preserves_editable_contract(tmp_path: Path) -> None:
+    base = ResourceAddress(scheme="game_resource", game="k2", resref="plc_bench", restype="UTP", layer="base")
+    mdl = ResourceAddress(scheme="project_resource", game="k2", resref="gr_console", restype="MDL", path="models/gr_console.mdl")
+    asset = PlaceableAsset(
+        game="K2",
+        template_resref="gr_console",
+        tag="gr_console",
+        display_name="Ghost Console",
+        description="Reusable terminal",
+        category="terminal",
+        visual_source="custom",
+        appearance_id=321,
+        gameplay=PlaceableGameplay(
+            static=False,
+            useable=True,
+            has_inventory=True,
+            inventory_items=["g_i_datapad01"],
+            lockable=True,
+            locked=True,
+            unlock_dc=25,
+            maximum_hp=40,
+            current_hp=35,
+            conversation_resref="gr_console_dlg",
+        ),
+        scripts={"on_used": "gr_console_use", "on_open": "gr_console_open"},
+        resources=PlaceableResourceRefs(
+            mdl=mdl,
+            mdx=ResourceAddress(scheme="project_resource", game="k2", resref="gr_console", restype="MDX", path="models/gr_console.mdx"),
+            pwk=ResourceAddress(scheme="project_resource", game="k2", resref="gr_console", restype="PWK", path="models/gr_console.pwk"),
+            textures=[ResourceAddress(scheme="project_resource", game="k2", resref="gr_console01", restype="TPC", path="textures/gr_console01.tpc")],
+        ),
+        base_template=base,
+        base_evidence=PlaceableBaseTemplateEvidence(template=base, sha256="a" * 64, field_count=55, source="templates.bif"),
+        appearance_evidence=PlaceableAppearanceMappingEvidence(
+            game="K2",
+            appearance_id=321,
+            model_resref="gr_console",
+            source="placeables.2da",
+            source_sha256="b" * 64,
+            verified=True,
+        ),
+    )
+
+    path = save_placeable_asset(asset, tmp_path / "gr_console.ghostplaceable.json")
+    restored = load_placeable_asset(path)
+
+    assert restored.to_dict() == asset.to_dict()
+    assert restored.asset_id == asset.asset_id
+    assert restored.gameplay.inventory_items == ["g_i_datapad01"]
+    validation = validate_placeable_asset(restored)
+    assert validation.document_valid is True
+    assert validation.utp_export_ready is True
+    assert validation.structural_evidence_ready is True
+    assert validation.engine_ready is False
+    assert "bytes" not in path.read_text(encoding="utf-8").lower()
+    assert list(tmp_path.glob(".*.tmp")) == []
+
+
+def test_placeable_asset_validation_rejects_unsafe_gameplay_and_visual_contract() -> None:
+    asset = PlaceableAsset(
+        asset_id="unstable",
+        game="K3",
+        template_resref="bad/template/that/is/too/long",
+        tag="",
+        category="vehicle",
+        visual_source="custom",
+        appearance_id=None,
+        gameplay=PlaceableGameplay(locked=True, lockable=False, key_required=True, inventory_items=["bad/item"]),
+        scripts={"not_a_hook": "bad/script"},
+    )
+
+    validation = validate_placeable_asset(asset)
+    codes = {issue.code for issue in validation.issues if issue.severity == "blocking"}
+
+    assert validation.document_valid is False
+    assert validation.utp_export_ready is False
+    assert validation.engine_ready is False
+    assert {
+        "invalid_placeable_asset_id",
+        "invalid_placeable_game",
+        "invalid_placeable_resref",
+        "missing_placeable_tag",
+        "invalid_placeable_category",
+        "missing_placeable_appearance",
+        "locked_not_lockable",
+        "invalid_placeable_key",
+        "inventory_flag_missing",
+        "unknown_placeable_script_hook",
+        "custom_placeable_model_pair_missing",
+    } <= codes
 
 
 def test_project_json_roundtrip_across_studios(tmp_path: Path) -> None:

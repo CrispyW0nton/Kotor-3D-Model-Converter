@@ -69,6 +69,41 @@ class PygfxMeshCache:
         self.texture_maps.clear()
         self.begin_frame()
 
+    def invalidate_texture(self, texture_name: str, image=None) -> bool:
+        """Evict one retained texture map and dirty only its mesh materials."""
+        clean = str(texture_name or "").strip().replace("\\", "/").rsplit("/", 1)[-1]
+        clean = clean.rsplit(".", 1)[0].lower()
+        if not clean:
+            return False
+        image_suffix = f":{id(image)}" if image is not None else ""
+
+        matching_keys = []
+        for key in tuple(self.texture_maps):
+            texture_id = str(key[0] if isinstance(key, tuple) and key else key).lower()
+            matches_name = texture_id == clean or texture_id.startswith(clean + ":")
+            matches_image = not image_suffix or texture_id == clean + image_suffix
+            if matches_name and matches_image:
+                matching_keys.append(key)
+        if not matching_keys and image_suffix:
+            matching_keys = [
+                key
+                for key in tuple(self.texture_maps)
+                if str(key[0] if isinstance(key, tuple) and key else key).lower() == clean
+                or str(key[0] if isinstance(key, tuple) and key else key).lower().startswith(clean + ":")
+            ]
+        removed_map_ids = {
+            id(self.texture_maps.pop(key))
+            for key in matching_keys
+            if key in self.texture_maps
+        }
+        if not removed_map_ids:
+            return False
+        for record in self.records.values():
+            if id(record.diffuse_map) in removed_map_ids or id(record.lightmap_map) in removed_map_ids:
+                record.material_dirty = True
+                record.view_style_key = ()
+        return True
+
     @staticmethod
     def _view_style_key(
         *,
@@ -392,11 +427,12 @@ class PygfxMeshCache:
                 animation_pose_applies_to_node,
                 animation_pose_for_node,
                 bas_attachment_palette_model_for_node,
+                runtime_source_model_for_node,
             )
 
-            source_model = model
+            source_model = runtime_source_model_for_node(record.source) or model
             if bool(getattr(record.source, "_gr_bas_attachment_layer", False)):
-                source_model = bas_attachment_palette_model_for_node(record.source) or model
+                source_model = bas_attachment_palette_model_for_node(record.source) or source_model
             if anim_pose is not None and not animation_pose_applies_to_node(record.source, anim_pose):
                 if not bool(getattr(record.source, "_gr_bas_attachment_layer", False)):
                     return

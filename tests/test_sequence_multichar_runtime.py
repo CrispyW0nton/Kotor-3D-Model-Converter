@@ -5,6 +5,8 @@ import types
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 for path in reversed(
@@ -334,6 +336,7 @@ def test_scoped_pose_set_prevents_matching_bone_names_from_cross_driving():
 
     assert _pose_node_for_transform(node_a, scoped) is pose_a_node
     assert _pose_node_for_transform(node_b, scoped) is pose_b_node
+    assert scoped.pose_for_node(FakeNode("identityless-room-piece", 2)) is None
 
 
 def test_moderngl_scene_animation_uses_node_scoped_skin_and_rigid_transforms():
@@ -350,10 +353,754 @@ def test_moderngl_scene_animation_uses_node_scoped_skin_and_rigid_transforms():
     assert "anim_base_pose=_skin_anim_base_pose" in source
     assert "_skin_uploaders_by_scope" in source
     assert "item is root or getattr(item, \"_gr_scene_object_root_ref\", None) is root" in source
-    assert "_skin_uploader_for_node(node)" in source
+    assert "_skin_uploader_for_node(node, _skin_palette_scope)" in source
+    assert "self._skin_palette_bytes_for_draw(" in source
     assert "scene_gpu_mat is not None and is_animated and not _nd_is_skin" in source
     assert "vbo_wp = (0.0, 0.0, 0.0)" in source
     assert "_scene_animated_node_draw_mat" in source
+    assert "_scene_rigid_gpu_pose" in source
+    assert "_dynamic_rigid_vbo = bool(is_animated and not _scene_rigid_gpu_pose)" in source
+    assert "_rigid_vbo_mode_changed" in source
+    assert "gm.scene_rigid_gpu_pose" in source
+    assert "if not _dynamic_rigid_vbo:" in source
+    assert "self._mesh_cache[node_id] = gm" in source
+
+
+def test_moderngl_retained_scene_rigid_pose_reuses_gpu_mesh(monkeypatch) -> None:
+    import src.adapters.rendering.moderngl_renderer_impl as renderer_impl
+
+    from src.adapters.rendering.moderngl_renderer import ModernGLRenderer
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+
+    scene = ModelNode(name="scene", flags=int(NodeFlags.HEADER))
+    actor = ModelNode(
+        name="actor",
+        flags=int(NodeFlags.HEADER),
+        parent=scene,
+        position=(2.0, 0.0, 0.0),
+    )
+    actor._gr_scene_object_root = True
+    actor._gr_scene_gpu_transform = True
+    actor._gr_scene_object_id = "actor-1"
+    actor._gr_scene_source_position = (5.0, 0.0, 0.0)
+    actor._gr_scene_source_rotation = (0.0, 0.0, 0.0, 1.0)
+    mesh = ModelNode(
+        name="rigid_part",
+        flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH),
+        parent=actor,
+        vertices=[(-0.7, 0.0, 0.0), (0.7, 0.0, 0.0), (0.0, 0.0, 1.2)],
+        normals=[(0.0, -1.0, 0.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)],
+        faces=[(0, 1, 2)],
+        texture="",
+    )
+    scene.children = [actor]
+    actor.children = [mesh]
+    # Transparent geometry is queried during both back-to-front sorting and
+    # drawing.  The animated world transform should still be evaluated once.
+    mesh.alpha = 0.5
+    for node in (actor, mesh):
+        node._gr_scene_object_id = "actor-1"
+        node._gr_scene_object_root_ref = actor
+    model = KotorModel(name="retained-actor-cache-proof", root_node=scene)
+    model.classification = "character"
+
+    def scoped_pose(x: float) -> ScopedAnimationPoseSet:
+        pose_node = SimpleNamespace(
+            name="actor",
+            position=(5.0 + x, 0.0, 0.0),
+            rotation=(0.0, 0.0, 0.0, 1.0),
+            scale=1.0,
+        )
+        pose = SimpleNamespace(
+            time=x,
+            nodes={"actor": pose_node},
+            nodes_by_index={},
+            duplicate_node_names=set(),
+            _gr_animation_scene_object_id="actor-1",
+        )
+        return ScopedAnimationPoseSet({"actor-1": pose})
+
+    camera = SimpleNamespace(
+        eye=(2.0, -6.0, 2.0),
+        target=(2.0, 0.0, 0.5),
+        up=(0.0, 0.0, 1.0),
+        fov=45.0,
+        near=0.01,
+        far=100.0,
+    )
+    renderer = ModernGLRenderer()
+    renderer.show_grid = False
+    renderer.cull_faces = False
+    original_world_transform = renderer_impl._animated_node_world_transform
+    transform_calls = []
+
+    def counted_world_transform(node, pose):
+        transform_calls.append(node)
+        return original_world_transform(node, pose)
+
+    monkeypatch.setattr(
+        renderer_impl,
+        "_animated_node_world_transform",
+        counted_world_transform,
+    )
+    try:
+        first_pose = scoped_pose(0.0)
+        second_pose = scoped_pose(1.2)
+        first_world, _ = original_world_transform(mesh, first_pose)
+        second_world, _ = original_world_transform(mesh, second_pose)
+        assert first_world == pytest.approx((2.0, 0.0, 0.0))
+        assert second_world == pytest.approx((3.2, 0.0, 0.0))
+
+        if not renderer._ensure_context():
+            pytest.skip("ModernGL standalone context is unavailable")
+        static = renderer.render(model, camera, 128, 128, textures={}, anim_pose=None)
+        static_mesh = renderer._mesh_cache.get(id(mesh))
+        assert static is not None
+        assert static_mesh is not None
+        assert static_mesh.scene_rigid_gpu_pose is False
+
+        transform_calls.clear()
+        first = renderer.render(model, camera, 128, 128, textures={}, anim_pose=first_pose)
+        first_mesh = renderer._mesh_cache.get(id(mesh))
+        assert first is not None
+        assert first_mesh is not None
+        assert first_mesh is not static_mesh
+        assert first_mesh.scene_rigid_gpu_pose is True
+        assert transform_calls.count(mesh) == 1
+        first_vbo = first_mesh.vbo
+        first_pixels = first.tobytes()
+
+        transform_calls.clear()
+        second = renderer.render(model, camera, 128, 128, textures={}, anim_pose=second_pose)
+        second_mesh = renderer._mesh_cache.get(id(mesh))
+
+        assert second is not None
+        assert transform_calls.count(mesh) == 1
+        assert second_mesh is first_mesh
+        assert second_mesh.vbo is first_vbo
+        assert second.tobytes() != first_pixels
+
+        static_again = renderer.render(
+            model,
+            camera,
+            128,
+            128,
+            textures={},
+            anim_pose=None,
+        )
+        rebuilt_static_mesh = renderer._mesh_cache.get(id(mesh))
+        assert static_again is not None
+        assert rebuilt_static_mesh is not second_mesh
+        assert rebuilt_static_mesh.scene_rigid_gpu_pose is False
+    finally:
+        renderer.release()
+
+
+def test_moderngl_scoped_pose_keeps_unrelated_static_nodes_on_persistent_transform_cache(
+    monkeypatch,
+) -> None:
+    import src.adapters.rendering.moderngl_renderer_impl as renderer_impl
+
+    from src.adapters.rendering.moderngl_renderer import ModernGLRenderer
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+
+    scene = ModelNode(name="scene", flags=int(NodeFlags.HEADER))
+    static_mesh = ModelNode(
+        name="static_room_piece",
+        flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH),
+        parent=scene,
+        position=(0.0, 0.0, 0.0),
+        vertices=[(-1.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 2.0)],
+        normals=[(0.0, -1.0, 0.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)],
+        faces=[(0, 1, 2)],
+        texture="",
+    )
+    actor = ModelNode(
+        name="actor",
+        flags=int(NodeFlags.HEADER),
+        parent=scene,
+        position=(2.0, 0.0, 0.0),
+    )
+    actor._gr_scene_object_root = True
+    actor._gr_scene_gpu_transform = True
+    actor._gr_scene_object_id = "actor-cache-proof"
+    actor._gr_scene_source_position = (2.0, 0.0, 0.0)
+    actor_mesh = ModelNode(
+        name="actor_rigid_piece",
+        flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH),
+        parent=actor,
+        vertices=[(-0.4, 0.0, 0.0), (0.4, 0.0, 0.0), (0.0, 0.0, 1.2)],
+        normals=[(0.0, -1.0, 0.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)],
+        faces=[(0, 1, 2)],
+        texture="",
+    )
+    for node in (actor, actor_mesh):
+        node._gr_scene_object_id = "actor-cache-proof"
+        node._gr_scene_object_root_ref = actor
+    scene.children = [static_mesh, actor]
+    actor.children = [actor_mesh]
+    model = KotorModel(name="scoped-static-cache-proof", root_node=scene)
+    model.classification = "tile"
+
+    pose_node = SimpleNamespace(
+        name="actor",
+        position=(3.0, 0.0, 0.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        scale=1.0,
+    )
+    actor_pose = SimpleNamespace(
+        time=0.0,
+        nodes={"actor": pose_node},
+        nodes_by_index={},
+        duplicate_node_names=set(),
+        _gr_animation_scene_object_id="actor-cache-proof",
+    )
+
+    camera = SimpleNamespace(
+        eye=(0.0, -8.0, 2.0),
+        target=(1.0, 0.0, 0.8),
+        up=(0.0, 0.0, 1.0),
+        fov=45.0,
+        near=0.01,
+        far=100.0,
+    )
+    renderer = ModernGLRenderer()
+    renderer.show_grid = False
+    renderer.cull_faces = False
+    renderer.enable_frustum_culling = False
+    if not renderer._ensure_context():
+        pytest.skip("ModernGL standalone context is unavailable")
+
+    animated_calls = []
+    static_world_calls = []
+    original_animated = renderer_impl._animated_node_world_transform
+    original_world = type(static_mesh).world_transform
+
+    def counted_animated(node, pose):
+        animated_calls.append(node)
+        return original_animated(node, pose)
+
+    def counted_world(node):
+        if node is static_mesh:
+            static_world_calls.append(node)
+        return original_world(node)
+
+    monkeypatch.setattr(
+        renderer_impl,
+        "_animated_node_world_transform",
+        counted_animated,
+    )
+    monkeypatch.setattr(type(static_mesh), "world_transform", counted_world)
+    try:
+        first = renderer.render(
+            model,
+            camera,
+            96,
+            96,
+            textures={},
+            anim_pose=ScopedAnimationPoseSet({"actor-cache-proof": actor_pose}),
+        )
+        assert first is not None
+        first_static_world_calls = len(static_world_calls)
+        assert first_static_world_calls == 1, (
+            renderer.perf,
+            [node.name for node in renderer._node_cache_opaque],
+            [node.name for node in animated_calls],
+            id(static_mesh) in renderer._wt_cache,
+        )
+        assert static_mesh not in animated_calls
+        assert actor_mesh in animated_calls
+
+        animated_calls.clear()
+        second = renderer.render(
+            model,
+            camera,
+            96,
+            96,
+            textures={},
+            # Match the viewport contract: the wrapper is new even when the
+            # individual actor pose object is unchanged.
+            anim_pose=ScopedAnimationPoseSet({"actor-cache-proof": actor_pose}),
+        )
+        assert second is not None
+        assert len(static_world_calls) == first_static_world_calls
+        assert static_mesh not in animated_calls
+        assert actor_mesh in animated_calls
+    finally:
+        renderer.release()
+
+
+def test_moderngl_retained_bas_head_skin_uses_actor_placement_once() -> None:
+    """A detachable head skin and its rigid face parts must share one headhook."""
+
+    import numpy as np
+
+    from src.adapters.rendering.moderngl_renderer import ModernGLRenderer
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+
+    scene = ModelNode(name="scene", flags=int(NodeFlags.HEADER))
+    actor = ModelNode(
+        name="pie_actor",
+        flags=int(NodeFlags.HEADER),
+        parent=scene,
+        position=(2.0, 0.0, 0.0),
+    )
+    actor._gr_scene_object_root = True
+    actor._gr_scene_object_root_ref = actor
+    actor._gr_scene_gpu_transform = True
+    actor._gr_scene_object_id = "actor-head-proof"
+    actor._gr_map_studio_pie_actor = True
+    actor._gr_runtime_source_model_ref = SimpleNamespace(
+        bb_min=(-0.8, -0.2, 0.0),
+        bb_max=(0.8, 0.2, 2.4),
+    )
+    body_root = ModelNode(name="pmbam", flags=int(NodeFlags.HEADER), parent=actor)
+    headhook = ModelNode(
+        name="headhook",
+        flags=int(NodeFlags.HEADER),
+        parent=body_root,
+        position=(0.0, 0.0, 1.5),
+    )
+    body = ModelNode(
+        name="body_rigid",
+        flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH),
+        parent=body_root,
+        vertices=[(-0.65, 0.0, 0.0), (0.65, 0.0, 0.0), (0.0, 0.0, 1.25)],
+        normals=[(0.0, -1.0, 0.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)],
+        faces=[(0, 1, 2)],
+        diffuse=(0.0, 0.0, 1.0),
+    )
+    head_root = ModelNode(
+        name="head_attach",
+        flags=int(NodeFlags.HEADER),
+        parent=headhook,
+    )
+    head_root._gr_bas_attachment_layer = True
+    head_root._gr_bas_attachment_root = True
+    head_root._gr_bas_attachment_root_ref = head_root
+    head_root._gr_bas_attachment_slot = "head"
+    head_root._gr_bas_socket_name = "headhook"
+    head_skin = ModelNode(
+        name="head_skin",
+        flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH) | int(NodeFlags.SKIN),
+        parent=head_root,
+        vertices=[(-0.45, 0.0, 0.0), (0.45, 0.0, 0.0), (0.0, 0.0, 0.8)],
+        normals=[(0.0, -1.0, 0.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)],
+        faces=[(0, 1, 2)],
+        diffuse=(0.0, 1.0, 0.0),
+    )
+    eye = ModelNode(
+        name="eye_rigid",
+        flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH),
+        parent=head_root,
+        position=(0.0, -0.02, 0.25),
+        vertices=[(-0.16, 0.0, 0.0), (0.16, 0.0, 0.0), (0.0, 0.0, 0.24)],
+        normals=[(0.0, -1.0, 0.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)],
+        faces=[(0, 1, 2)],
+        diffuse=(1.0, 0.0, 0.0),
+    )
+    for node in (head_skin, eye):
+        node._gr_bas_attachment_layer = True
+        node._gr_bas_attachment_root_ref = head_root
+    scene.children = [actor]
+    actor.children = [body_root]
+    body_root.children = [body, headhook]
+    headhook.children = [head_root]
+    head_root.children = [head_skin, eye]
+    for node in (body_root, headhook, body, head_root, head_skin, eye):
+        node._gr_scene_object_id = "actor-head-proof"
+        node._gr_scene_object_root_ref = actor
+
+    model = KotorModel(name="retained-bas-head-proof", root_node=scene)
+    model.classification = "character"
+    pose_nodes = {
+        node.name.lower(): SimpleNamespace(
+            name=node.name,
+            position=node.position,
+            rotation=node.rotation,
+            scale=1.0,
+        )
+        for node in (body_root, headhook, body, head_root, head_skin, eye)
+    }
+    pose = SimpleNamespace(
+        time=0.5,
+        nodes=pose_nodes,
+        nodes_by_index={},
+        duplicate_node_names=set(),
+        _gr_animation_scene_object_id="actor-head-proof",
+    )
+    scoped_pose = ScopedAnimationPoseSet({"actor-head-proof": pose})
+    camera = SimpleNamespace(
+        eye=(2.0, -8.0, 2.0),
+        target=(2.0, 0.0, 1.2),
+        up=(0.0, 0.0, 1.0),
+        fov=45.0,
+        near=0.01,
+        far=100.0,
+    )
+    renderer = ModernGLRenderer()
+    renderer.show_grid = False
+    renderer.cull_faces = False
+    renderer.lighting_mode = "fullbright"
+
+    def colored_centroid(image, channel: int) -> tuple[int, float]:
+        pixels = np.asarray(image.convert("RGB"), dtype=np.float32)
+        selected = pixels[:, :, channel] > 140.0
+        for other in range(3):
+            if other != channel:
+                selected &= pixels[:, :, channel] > (pixels[:, :, other] * 1.5)
+        ys, xs = np.nonzero(selected)
+        return int(len(xs)), float(np.mean(xs)) if len(xs) else float("nan")
+
+    try:
+        if not renderer._ensure_context():
+            pytest.skip("ModernGL standalone context is unavailable")
+        culling_on = renderer.render(
+            model,
+            camera,
+            512,
+            512,
+            textures={},
+            anim_pose=scoped_pose,
+        )
+        assert culling_on is not None
+        assert renderer.perf["draw_calls"] == 3
+        assert renderer.perf["culled_actor_meshes"] == 0
+        head_count, head_x = colored_centroid(culling_on, 1)
+        eye_count, eye_x = colored_centroid(culling_on, 0)
+        body_count, body_x = colored_centroid(culling_on, 2)
+        assert min(head_count, eye_count, body_count) > 0
+        assert abs(head_x - eye_x) < 5.0
+        assert abs(head_x - body_x) < 5.0
+
+        renderer.enable_frustum_culling = False
+        culling_off = renderer.render(
+            model,
+            camera,
+            512,
+            512,
+            textures={},
+            anim_pose=scoped_pose,
+        )
+        assert culling_off is not None
+        assert renderer.perf["draw_calls"] == 3
+        assert culling_off.tobytes() == culling_on.tobytes()
+    finally:
+        renderer.release()
+
+
+def test_moderngl_bas_duplicate_bind_name_keeps_body_skin_on_support_plane() -> None:
+    """A head attachment's zeroed rootdummy must not sink the primary body skin."""
+
+    import numpy as np
+
+    from src.adapters.rendering.moderngl_renderer import ModernGLRenderer
+    from src.core.animation.animation_engine import AnimationEngine
+    from src.core.geometry.model_data import (
+        Animation,
+        BoneWeight,
+        KotorModel,
+        ModelNode,
+        NodeFlags,
+        VertexSkinData,
+    )
+
+    body_root = ModelNode(name="body")
+    body_rootdummy = ModelNode(
+        name="rootdummy",
+        position=(0.0, 0.0, 1.12557),
+        parent=body_root,
+    )
+    body_skin = ModelNode(
+        name="torso",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=body_root,
+        vertices=[(-0.5, 0.0, 0.0), (0.5, 0.0, 0.0), (0.0, 0.0, 1.0)],
+        normals=[(0.0, -1.0, 0.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)],
+        faces=[(0, 1, 2)],
+        diffuse=(0.0, 1.0, 0.0),
+    )
+    body_skin.bone_map = ["rootdummy"]
+    body_skin.skin_data = [
+        VertexSkinData([BoneWeight(0, 1.0)])
+        for _ in body_skin.vertices
+    ]
+    headhook = ModelNode(name="headhook", parent=body_rootdummy)
+    attachment_root = ModelNode(name="head_attachment", parent=headhook)
+    attachment_root._gr_bas_attachment_layer = True
+    attachment_root._gr_bas_attachment_root = True
+    attachment_rootdummy = ModelNode(
+        name="rootdummy",
+        position=(0.0, 0.0, 0.0),
+        parent=attachment_root,
+    )
+    attachment_rootdummy._gr_bas_attachment_layer = True
+    body_root.children = [body_rootdummy, body_skin]
+    body_rootdummy.children = [headhook]
+    headhook.children = [attachment_root]
+    attachment_root.children = [attachment_rootdummy]
+
+    animation_rootdummy = ModelNode(
+        name="rootdummy",
+        controllers=[
+            {
+                "type": 8,
+                "name": "position",
+                "columns": 3,
+                "times": [0.0],
+                "values": [[0.0, 0.0, -0.00665]],
+            }
+        ],
+    )
+    model = KotorModel(
+        name="body_with_detachable_head",
+        root_node=body_root,
+        animations=[Animation(name="pause1", length=1.0, nodes=[animation_rootdummy])],
+    )
+    engine = AnimationEngine(model)
+    assert engine.play("pause1", loop=True, blend=False)
+    pose = engine.evaluate(0.0)
+    assert pose.nodes["rootdummy"].position[2] == pytest.approx(1.11892)
+
+    camera = SimpleNamespace(
+        eye=(0.0, -5.0, 0.5),
+        target=(0.0, 0.0, 0.5),
+        up=(0.0, 0.0, 1.0),
+        fov=45.0,
+        near=0.01,
+        far=100.0,
+    )
+    renderer = ModernGLRenderer()
+    renderer.show_grid = False
+    renderer.cull_faces = False
+    renderer.lighting_mode = "fullbright"
+    try:
+        if not renderer._ensure_context():
+            pytest.skip("ModernGL standalone context is unavailable")
+        image = renderer.render(model, camera, 256, 256, textures={}, anim_pose=pose)
+        assert image is not None
+        assert renderer.perf["draw_calls"] == 1
+
+        # Decode the exact column-major palette bytes uploaded to u_bones.  The
+        # animation is a 6.65 mm root delta; the detachable head must not turn
+        # it into a -1.132 m body translation by replacing the 1.12557 m bind.
+        cached = next(iter(renderer._skin_palette_bytes_cache.values()))
+        palette = np.frombuffer(cached[2], dtype=np.float32).reshape(-1, 4, 4)
+        palette = palette.transpose((0, 2, 1))
+        assert palette[0, 2, 3] == pytest.approx(-0.00665, abs=1.0e-5)
+
+        pixels = np.asarray(image.convert("RGB"), dtype=np.float32)
+        green = pixels[:, :, 1] > 80.0
+        green &= pixels[:, :, 1] > pixels[:, :, 0] * 1.5
+        green &= pixels[:, :, 1] > pixels[:, :, 2] * 1.5
+        ys, _xs = np.nonzero(green)
+        assert len(ys) > 100
+        assert int(ys.min()) < 110
+        assert int(ys.max()) < 180
+    finally:
+        renderer.release()
+
+
+def test_moderngl_skin_palette_cache_is_actor_local_and_pose_stamped() -> None:
+    from src.adapters.rendering.moderngl_renderer import ModernGLRenderer
+
+    class FakeUploader:
+        def __init__(self, marker: bytes):
+            self.marker = marker
+            self.compute_calls = 0
+            self._skin_palette_formula = ""
+            self._skin_inverse_bind_source = ""
+
+        def compute_skin_node_palette(self, skin_node, anim_pose, *, anim_base_pose=None):
+            self.compute_calls += 1
+            self._skin_palette_formula = f"formula-{self.marker.decode()}"
+            self._skin_inverse_bind_source = f"bind-{self.marker.decode()}"
+
+        def as_flat_bytes(self):
+            return self.marker * 16
+
+    renderer = ModernGLRenderer()
+    skin_a = SimpleNamespace(bone_map=["root"])
+    skin_b = SimpleNamespace(bone_map=["root"])
+    uploader_a = FakeUploader(b"A")
+    uploader_b = FakeUploader(b"B")
+    pose_a = SimpleNamespace(time=1.0, nodes={"root": object()})
+    pose_b = SimpleNamespace(time=1.0, nodes={"root": object()})
+    signature = ("skin", 1)
+
+    count_a, bytes_a, cached_a = renderer._skin_palette_bytes_for_draw(
+        scope_key=("runtime_actor", "actor-a"),
+        skin_node=skin_a,
+        uploader=uploader_a,
+        anim_pose=pose_a,
+        anim_base_pose=None,
+        skin_signature=signature,
+    )
+    count_b, bytes_b, cached_b = renderer._skin_palette_bytes_for_draw(
+        scope_key=("runtime_actor", "actor-b"),
+        skin_node=skin_b,
+        uploader=uploader_b,
+        anim_pose=pose_b,
+        anim_base_pose=None,
+        skin_signature=signature,
+    )
+    repeat_count_a, repeat_bytes_a, repeat_cached_a = renderer._skin_palette_bytes_for_draw(
+        scope_key=("runtime_actor", "actor-a"),
+        skin_node=skin_a,
+        uploader=uploader_a,
+        anim_pose=pose_a,
+        anim_base_pose=None,
+        skin_signature=signature,
+    )
+
+    assert (count_a, count_b, repeat_count_a) == (1, 1, 1)
+    assert cached_a is False
+    assert cached_b is False
+    assert repeat_cached_a is True
+    assert bytes_a == repeat_bytes_a
+    assert bytes_a != bytes_b
+    assert uploader_a.compute_calls == 1
+    assert uploader_b.compute_calls == 1
+
+    moved_pose_a = SimpleNamespace(time=1.25, nodes={"root": object()})
+    _count, moved_bytes_a, moved_cached_a = renderer._skin_palette_bytes_for_draw(
+        scope_key=("runtime_actor", "actor-a"),
+        skin_node=skin_a,
+        uploader=uploader_a,
+        anim_pose=moved_pose_a,
+        anim_base_pose=None,
+        skin_signature=signature,
+    )
+    _count, repeat_bytes_b, repeat_cached_b = renderer._skin_palette_bytes_for_draw(
+        scope_key=("runtime_actor", "actor-b"),
+        skin_node=skin_b,
+        uploader=uploader_b,
+        anim_pose=pose_b,
+        anim_base_pose=None,
+        skin_signature=signature,
+    )
+
+    assert moved_cached_a is False
+    assert repeat_cached_b is True
+    assert moved_bytes_a == bytes_a
+    assert repeat_bytes_b == bytes_b
+    assert uploader_a.compute_calls == 2
+    assert uploader_b.compute_calls == 1
+
+
+def test_moderngl_transformed_bounds_culling_is_conservative() -> None:
+    import numpy as np
+
+    from src.adapters.rendering.moderngl_renderer import ModernGLRenderer
+
+    unit_cube_planes = (
+        (1.0, 0.0, 0.0, 1.0),
+        (-1.0, 0.0, 0.0, 1.0),
+        (0.0, 1.0, 0.0, 1.0),
+        (0.0, -1.0, 0.0, 1.0),
+        (0.0, 0.0, 1.0, 1.0),
+        (0.0, 0.0, -1.0, 1.0),
+    )
+    bounds = ((10.0, 10.0, 10.0), (11.0, 11.0, 11.0))
+    identity = np.eye(4, dtype=np.float32)
+    translated = np.eye(4, dtype=np.float32)
+    translated[:3, 3] = (-10.5, -10.5, -10.5)
+
+    assert ModernGLRenderer._transformed_bounds_outside_frustum(
+        bounds, identity, unit_cube_planes
+    ) is True
+    assert ModernGLRenderer._transformed_bounds_outside_frustum(
+        bounds, translated, unit_cube_planes
+    ) is False
+    assert ModernGLRenderer._transformed_bounds_outside_frustum(
+        None, identity, unit_cube_planes
+    ) is False
+
+
+def test_moderngl_pie_actor_frustum_culls_whole_transparent_actor() -> None:
+    from src.adapters.rendering.moderngl_renderer import ModernGLRenderer
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+
+    scene = ModelNode(name="scene", flags=int(NodeFlags.HEADER))
+    actor = ModelNode(
+        name="offscreen_actor",
+        flags=int(NodeFlags.HEADER),
+        parent=scene,
+        position=(80.0, 0.0, 0.0),
+    )
+    actor._gr_scene_object_root = True
+    actor._gr_scene_gpu_transform = True
+    actor._gr_scene_object_id = "actor-offscreen"
+    actor._gr_map_studio_pie_actor = True
+    actor._gr_runtime_source_model_ref = SimpleNamespace(
+        bb_min=(-0.5, -0.5, 0.0),
+        bb_max=(0.5, 0.5, 1.8),
+    )
+    mesh = ModelNode(
+        name="transparent_actor_mesh",
+        flags=int(NodeFlags.HEADER) | int(NodeFlags.MESH),
+        parent=actor,
+        vertices=[(-0.5, 0.0, 0.0), (0.5, 0.0, 0.0), (0.0, 0.0, 1.0)],
+        normals=[(0.0, -1.0, 0.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)],
+        faces=[(0, 1, 2)],
+        texture="",
+    )
+    mesh.alpha = 0.5
+    mesh._gr_scene_object_id = "actor-offscreen"
+    mesh._gr_scene_object_root_ref = actor
+    actor._gr_scene_object_root_ref = actor
+    actor.children = [mesh]
+    scene.children = [actor]
+    model = KotorModel(name="pie-actor-frustum-proof", root_node=scene)
+    model.classification = "character"
+    camera = SimpleNamespace(
+        eye=(0.0, -6.0, 2.0),
+        target=(0.0, 0.0, 0.5),
+        up=(0.0, 0.0, 1.0),
+        fov=45.0,
+        near=0.01,
+        far=100.0,
+    )
+    renderer = ModernGLRenderer()
+    renderer.show_grid = False
+    renderer.cull_faces = False
+    renderer.selected_node = mesh
+    try:
+        if not renderer._ensure_context():
+            pytest.skip("ModernGL standalone context is unavailable")
+        image = renderer.render(model, camera, 128, 128, textures={})
+        assert image is not None
+        culled_pixels = image.tobytes()
+        assert renderer.perf["culled_actor_meshes"] == 1
+        assert renderer.perf["culled_meshes"] == 1
+        assert renderer.perf["draw_calls"] == 0
+        # Rendering culls only submission; selection/picking scene state is intact.
+        assert renderer.selected_node is mesh
+        assert mesh in model.all_nodes()
+
+        renderer.enable_frustum_culling = False
+        uncull_image = renderer.render(model, camera, 128, 128, textures={})
+        assert uncull_image is not None
+        assert renderer.perf["draw_calls"] == 1
+        # Submitting the offscreen transparent mesh changes no visible pixels.
+        assert uncull_image.tobytes() == culled_pixels
+
+        actor.position = (0.0, 0.0, 0.0)
+        renderer.enable_frustum_culling = True
+        image = renderer.render(model, camera, 128, 128, textures={})
+        assert image is not None
+        assert renderer.perf["culled_actor_meshes"] == 0
+        assert renderer.perf["draw_calls"] == 1
+    finally:
+        renderer.release()
 
 
 def test_animation_ipc_carries_target_scene_object_id():

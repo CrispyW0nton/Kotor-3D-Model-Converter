@@ -182,6 +182,118 @@ def test_mdl_writer_sets_engine_maxtree_subtype_bytes():
     assert mdl_bytes[base + anim_rel + 0x4C] == 0x05
 
 
+def test_mdl_writer_places_animations_before_static_tree_for_kotor2_loader():
+    from src.core.geometry.model_data import Animation, GameVersion, KotorModel, ModelNode
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
+
+    root = ModelNode(name="c_drexlf")
+    anim_node = ModelNode(
+        name="c_drexlf",
+        controllers=[
+            {
+                "type": 8,
+                "name": "position",
+                "columns": 3,
+                "times": [0.0],
+                "values": [(0.0, 0.0, 0.0)],
+            }
+        ],
+    )
+    model = KotorModel(
+        name="c_drexlf",
+        root_node=root,
+        animations=[Animation(name="pause1", length=0.0, anim_root="c_drexlf", nodes=[anim_node])],
+        game_version=GameVersion.K2,
+    )
+
+    mdl_bytes, _mdx_bytes = MDLBinaryWriter().write(model)
+    base = 12
+    root_rel = struct.unpack_from("<I", mdl_bytes, base + 0x28)[0]
+    anim_table_rel = struct.unpack_from("<I", mdl_bytes, base + 80 + 8)[0]
+    first_anim_rel = struct.unpack_from("<I", mdl_bytes, base + anim_table_rel)[0]
+    anim_root_rel = struct.unpack_from("<I", mdl_bytes, base + first_anim_rel + 0x28)[0]
+
+    assert anim_table_rel < root_rel
+    assert first_anim_rel < root_rel
+    assert mdl_bytes[base + first_anim_rel + 0x84:base + first_anim_rel + 0x88] == b"\0" * 4
+    assert anim_root_rel - first_anim_rel == 0x88
+    # The on-disk +8 field has different contracts for the two MaxTree kinds:
+    # static nodes are runtime-null, animation nodes point to their animation
+    # geometry block so K2's relocation dispatcher can fix child arrays.
+    assert struct.unpack_from("<I", mdl_bytes, base + root_rel + 0x08)[0] == 0
+    assert struct.unpack_from("<I", mdl_bytes, base + anim_root_rel + 0x08)[0] == first_anim_rel
+
+
+def test_mdl_writer_keeps_animation_runtime_base_slot_clear_of_events_and_root():
+    from src.core.geometry.model_data import AnimEvent, Animation, GameVersion, KotorModel, ModelNode
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
+
+    root = ModelNode(name="c_rancor")
+    animations = []
+    for event_count in range(3):
+        animations.append(
+            Animation(
+                name=f"probe{event_count}",
+                length=1.0,
+                anim_root="c_rancor",
+                nodes=[ModelNode(name="c_rancor")],
+                events=[
+                    AnimEvent(time=float(index) * 0.25, name=f"event{index}")
+                    for index in range(event_count)
+                ],
+            )
+        )
+    model = KotorModel(
+        name="c_rancor",
+        root_node=root,
+        animations=animations,
+        game_version=GameVersion.K2,
+    )
+
+    mdl_bytes, _mdx_bytes = MDLBinaryWriter().write(model)
+    base = 12
+    anim_table_rel = struct.unpack_from("<I", mdl_bytes, base + 0x58)[0]
+    for index, expected_event_count in enumerate(range(3)):
+        anim_rel = struct.unpack_from("<I", mdl_bytes, base + anim_table_rel + index * 4)[0]
+        anim_abs = base + anim_rel
+        event_array_rel = struct.unpack_from("<I", mdl_bytes, anim_abs + 0x78)[0]
+        event_count = struct.unpack_from("<I", mdl_bytes, anim_abs + 0x7C)[0]
+        root_rel = struct.unpack_from("<I", mdl_bytes, anim_abs + 0x28)[0]
+
+        assert event_count == expected_event_count
+        assert mdl_bytes[anim_abs + 0x84:anim_abs + 0x88] == b"\0" * 4
+        assert root_rel - anim_rel == 0x88 + expected_event_count * 0x24
+        if expected_event_count:
+            assert event_array_rel == anim_rel + 0x88
+        else:
+            assert event_array_rel == 0
+        assert struct.unpack_from("<I", mdl_bytes, base + root_rel + 0x08)[0] == anim_rel
+
+
+def test_mdl_writer_converts_import_space_uvs_to_game_mdx_orientation():
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
+
+    root = ModelNode(
+        name="uv_mesh",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH),
+        vertices=[(0.0, 0.0, 0.0)],
+        uvs=[(0.25, 0.20)],
+        uvs_lm=[(0.75, 0.30)],
+    )
+    root.uv_v_flip = False
+    model = KotorModel(name="uv_mesh", root_node=root, animations=[])
+
+    _mdl_bytes, mdx_bytes = MDLBinaryWriter().write(model)
+    u0, v0 = struct.unpack_from("<ff", mdx_bytes, 12)
+    u1, v1 = struct.unpack_from("<ff", mdx_bytes, 20)
+
+    assert abs(u0 - 0.25) < 1.0e-6
+    assert abs(v0 - 0.80) < 1.0e-6
+    assert abs(u1 - 0.75) < 1.0e-6
+    assert abs(v1 - 0.70) < 1.0e-6
+
+
 def test_mdl_writer_emits_full_engine_model_header_fields():
     from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
     from src.core.mdl.mdl_writer import MDLBinaryWriter
@@ -207,6 +319,186 @@ def test_mdl_writer_emits_full_engine_model_header_fields():
     assert struct.unpack_from("<I", mdl_bytes, base + 0xB8)[0] == 0xC4
     assert struct.unpack_from("<I", mdl_bytes, base + 0xBC)[0] == 1
     assert struct.unpack_from("<I", mdl_bytes, base + 0xC0)[0] == 1
+
+
+def test_mdl_writer_preserves_header_bit_for_mesh_nodes():
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
+
+    root = ModelNode(name="root")
+    mesh = ModelNode(
+        name="helper_mesh",
+        flags=int(NodeFlags.MESH),
+        parent=root,
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+        faces=[(0, 1, 2)],
+    )
+    root.children = [mesh]
+    model = KotorModel(name="meshflag", root_node=root, animations=[])
+
+    mdl_bytes, _mdx_bytes = MDLBinaryWriter().write(model)
+    base = 12
+    root_rel = struct.unpack_from("<I", mdl_bytes, base + 0x28)[0]
+    child_arr_rel = struct.unpack_from("<I", mdl_bytes, base + root_rel + 0x2C)[0]
+    mesh_rel = struct.unpack_from("<I", mdl_bytes, base + child_arr_rel)[0]
+
+    assert struct.unpack_from("<H", mdl_bytes, base + mesh_rel)[0] == int(
+        NodeFlags.HEADER | NodeFlags.MESH
+    )
+
+
+def test_mdl_writer_emits_engine_render_batch_arrays_for_mesh_nodes():
+    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.mdl.ghostrigger_mdl_reader import GhostRiggerMDLBinaryReader
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
+
+    root = ModelNode(name="render_batch_mesh", flags=int(NodeFlags.HEADER | NodeFlags.MESH))
+    root.vertices = [
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (1.0, 1.0, 0.0),
+        (0.0, 1.0, 0.0),
+    ]
+    root.normals = [(0.0, 0.0, 1.0)] * 4
+    root.uvs = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+    root.faces = [(0, 1, 2), (0, 2, 3)]
+    model = KotorModel(name="render_batch_mesh", root_node=root, animations=[])
+
+    mdl_bytes, mdx_bytes = MDLBinaryWriter().write(model)
+    reader = GhostRiggerMDLBinaryReader(mdl_bytes, 0, len(mdl_bytes), mdx_bytes, 0, len(mdx_bytes))
+    reader.load()
+    mesh_header = next(
+        bin_node.trimesh
+        for bin_node in reader._gr_bin_nodes.values()
+        if getattr(bin_node, "trimesh", None) is not None
+    )
+
+    assert mesh_header.indices_counts == [6]
+    assert mesh_header.indices_offsets_count == 1
+    assert mesh_header.counters_count == 1
+    assert mesh_header.inverted_counters == [98]
+
+    index_abs = 12 + mesh_header.indices_offsets[0]
+    assert struct.unpack_from("<6H", mdl_bytes, index_abs) == (0, 1, 2, 0, 2, 3)
+
+
+def test_mdl_writer_emits_full_k2_tangent_space_for_generated_render_skin():
+    from src.core.geometry.model_data import (
+        BoneWeight,
+        GameVersion,
+        KotorModel,
+        ModelNode,
+        NodeFlags,
+        VertexSkinData,
+    )
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
+
+    root = ModelNode(
+        name="rancor_skin",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+        faces=[(0, 1, 2)],
+        bone_map=["rancor_skin"],
+        skin_data=[
+            VertexSkinData(influences=[BoneWeight(bone_index=0, weight=1.0)])
+            for _ in range(3)
+        ],
+        render=True,
+    )
+    model = KotorModel(
+        name="rancor_skin",
+        game_version=GameVersion.K2,
+        root_node=root,
+        animations=[],
+    )
+
+    mdl_bytes, mdx_bytes = MDLBinaryWriter().write(model)
+    base = 12
+    root_rel = struct.unpack_from("<I", mdl_bytes, base + 0x28)[0]
+    mesh_abs = base + root_rel + 80
+
+    assert struct.unpack_from("<I", mdl_bytes, mesh_abs + 252)[0] == 100
+    assert struct.unpack_from("<I", mdl_bytes, mesh_abs + 256)[0] == 0xA3
+    channel_offsets = struct.unpack_from("<11I", mdl_bytes, mesh_abs + 260)
+    assert channel_offsets == (
+        0,
+        12,
+        0xFFFFFFFF,
+        24,
+        0xFFFFFFFF,
+        0xFFFFFFFF,
+        0xFFFFFFFF,
+        32,
+        0xFFFFFFFF,
+        0xFFFFFFFF,
+        0xFFFFFFFF,
+    )
+
+    skin_abs = mesh_abs + 340
+    assert struct.unpack_from("<I", mdl_bytes, skin_abs + 12)[0] == 68
+    assert struct.unpack_from("<I", mdl_bytes, skin_abs + 16)[0] == 84
+
+    row0 = struct.unpack_from("<25f", mdx_bytes, 0)
+    assert row0[8:11] == (0.0, 1.0, 0.0)   # bitangent
+    assert row0[11:14] == (-1.0, 0.0, 0.0)  # tangent
+    assert row0[14:17] == (0.0, 0.0, 1.0)  # tangent-space normal
+    assert row0[17:21] == (1.0, 0.0, 0.0, 0.0)
+    assert row0[21:25] == (0.0, -1.0, -1.0, -1.0)
+
+    # The trailing sentinel is one complete 100-byte row; tangent bytes stay
+    # zero while the first skin weight remains the engine's one-row-past guard.
+    assert len(mdx_bytes) == 4 * 100
+    sentinel = struct.unpack_from("<25f", mdx_bytes, 3 * 100)
+    assert sentinel[8:17] == (0.0,) * 9
+    assert sentinel[17:21] == (1.0, 0.0, 0.0, 0.0)
+
+
+def test_mdl_writer_keeps_nonrender_and_explicit_no_tangent_skins_compact():
+    from src.core.geometry.model_data import BoneWeight, ModelNode, NodeFlags, VertexSkinData
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
+
+    def skin_node(*, render: bool, source_tangent_space=None):
+        node = ModelNode(
+            name="compact_skin",
+            flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+            vertices=[(0.0, 0.0, 0.0)],
+            normals=[(0.0, 0.0, 1.0)],
+            uvs=[(0.0, 0.0)],
+            skin_data=[VertexSkinData(influences=[BoneWeight(0, 1.0)])],
+            render=render,
+        )
+        if source_tangent_space is not None:
+            node.mdx_tangent_space = source_tangent_space
+        return node
+
+    writer = MDLBinaryWriter()
+    for node in (
+        skin_node(render=False),
+        skin_node(render=True, source_tangent_space=False),
+    ):
+        stride, offsets = writer._mdx_stride_for(node)
+        assert stride == 64
+        assert offsets["tan"] == 0xFFFFFFFF
+        assert offsets["sw"] == 32
+        assert offsets["br"] == 48
+
+    # A source file can explicitly carry tangent space without a UV channel.
+    # Preserve that on-disk format and synthesize a stable fallback basis.
+    source_tangent = ModelNode(
+        name="source_tangent",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH),
+        vertices=[(0.0, 0.0, 0.0)],
+        normals=[(0.0, 0.0, 1.0)],
+        render=False,
+    )
+    source_tangent.mdx_tangent_space = True
+    stride, offsets = writer._mdx_stride_for(source_tangent)
+    assert stride == 60
+    assert offsets["tan"] == 24
 
 
 def test_mdl_writer_exports_full_target_hierarchy_for_sparse_animation_tree():
@@ -268,6 +560,7 @@ def test_mdl_writer_exports_full_target_hierarchy_for_sparse_animation_tree():
         assert node_rel != 0
         assert node_abs not in visited_offsets
         visited_offsets.add(node_abs)
+        assert struct.unpack_from("<I", mdl_bytes, node_abs + 0x08)[0] == anim_rel
         name_index = struct.unpack_from("<H", mdl_bytes, node_abs + 0x04)[0]
         visited_names.append(names[name_index])
         child_array_rel = struct.unpack_from("<I", mdl_bytes, node_abs + 0x2C)[0]
@@ -284,6 +577,154 @@ def test_mdl_writer_exports_full_target_hierarchy_for_sparse_animation_tree():
 
     assert visited_names == ["pmbam", "pelvis_g", "lupperarm_g", "lhand_g", "lthigh_g", "headhook"]
     assert len(visited_offsets) == node_count
+
+
+def test_mdl_writer_preserves_existing_sparse_donor_animation_tree():
+    from src.core.geometry.model_data import Animation, KotorModel, ModelNode
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
+
+    root = ModelNode(name="C_DrexlF")
+    render_mesh = ModelNode(name="tailGeo", parent=root)
+    cutscene = ModelNode(name="cutscenedummy", parent=root)
+    rootdummy = ModelNode(name="rootdummy", parent=cutscene)
+    pelvis = ModelNode(name="pelvis_g", parent=rootdummy)
+    root.children = [render_mesh, cutscene]
+    cutscene.children = [rootdummy]
+    rootdummy.children = [pelvis]
+
+    anim_root = ModelNode(name="C_DrexlF")
+    anim_cutscene = ModelNode(name="cutscenedummy", parent=anim_root)
+    anim_rootdummy = ModelNode(name="rootdummy", parent=anim_cutscene)
+    anim_pelvis = ModelNode(
+        name="pelvis_g",
+        parent=anim_rootdummy,
+        controllers=[
+            {
+                "type": 20,
+                "name": "orientation",
+                "columns": 4,
+                "times": [0.0],
+                "values": [(0.0, 0.0, 0.0, 1.0)],
+            }
+        ],
+    )
+    anim_root.children = [anim_cutscene]
+    anim_cutscene.children = [anim_rootdummy]
+    anim_rootdummy.children = [anim_pelvis]
+
+    model = KotorModel(
+        name="C_DrexlF",
+        root_node=root,
+        animations=[
+            Animation(
+                name="cwalk",
+                length=1.0,
+                anim_root="C_DrexlF",
+                nodes=[anim_root, anim_cutscene, anim_rootdummy, anim_pelvis],
+            )
+        ],
+    )
+
+    mdl_bytes, _mdx_bytes = MDLBinaryWriter().write(model)
+    base = 12
+    name_table_rel = struct.unpack_from("<I", mdl_bytes, base + 0xB8)[0]
+    name_count = struct.unpack_from("<I", mdl_bytes, base + 0xBC)[0]
+    names = []
+    for index in range(name_count):
+        string_rel = struct.unpack_from("<I", mdl_bytes, base + name_table_rel + index * 4)[0]
+        string_abs = base + string_rel
+        end = mdl_bytes.index(b"\0", string_abs)
+        names.append(mdl_bytes[string_abs:end].decode("ascii"))
+
+    anim_table_rel = struct.unpack_from("<I", mdl_bytes, base + 0x58)[0]
+    anim_rel = struct.unpack_from("<I", mdl_bytes, base + anim_table_rel)[0]
+    anim_abs = base + anim_rel
+    root_rel = struct.unpack_from("<I", mdl_bytes, anim_abs + 0x28)[0]
+    node_count = struct.unpack_from("<I", mdl_bytes, anim_abs + 0x2C)[0]
+
+    visited_names: list[str] = []
+    controller_counts: dict[str, int] = {}
+
+    def walk(node_rel: int) -> None:
+        node_abs = base + node_rel
+        name_index = struct.unpack_from("<H", mdl_bytes, node_abs + 0x04)[0]
+        name = names[name_index]
+        visited_names.append(name)
+        controller_counts[name] = struct.unpack_from("<I", mdl_bytes, node_abs + 0x3C)[0]
+        child_array_rel = struct.unpack_from("<I", mdl_bytes, node_abs + 0x2C)[0]
+        child_count = struct.unpack_from("<I", mdl_bytes, node_abs + 0x30)[0]
+        for child_index in range(child_count):
+            child_rel = struct.unpack_from("<I", mdl_bytes, base + child_array_rel + child_index * 4)[0]
+            walk(child_rel)
+
+    walk(root_rel)
+
+    assert node_count == 5
+    assert len(visited_names) == 4
+    assert visited_names == ["C_DrexlF", "cutscenedummy", "rootdummy", "pelvis_g"]
+    assert "tailGeo" not in visited_names
+    assert controller_counts["C_DrexlF"] == 0
+    assert controller_counts["cutscenedummy"] == 0
+    assert controller_counts["pelvis_g"] == 1
+
+
+def test_mdl_writer_preserves_binary_compressed_orientation_controller_metadata():
+    from src.core.geometry.model_data import Animation, KotorModel, ModelNode
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
+
+    root = ModelNode(name="C_DrexlF")
+    anim_root = ModelNode(
+        name="C_DrexlF",
+        controllers=[
+            {
+                "type": 20,
+                "name": "orientation",
+                "columns": 4,
+                "times": [0.0, 1.0],
+                "values": [(0.0, 0.0, 0.0, 1.0), (0.0, 0.707106, 0.0, 0.707106)],
+                "binary_unknown0": 28,
+                "binary_column_count": 2,
+                "binary_unknown1": [0, 0, 0],
+                "binary_compressed_quaternion_words": [0x3FFFFFFF, 0x20002000],
+            }
+        ],
+    )
+    model = KotorModel(
+        name="C_DrexlF",
+        root_node=root,
+        animations=[
+            Animation(
+                name="cwalk",
+                length=1.0,
+                anim_root="C_DrexlF",
+                nodes=[anim_root],
+            )
+        ],
+    )
+
+    mdl_bytes, _mdx_bytes = MDLBinaryWriter().write(model)
+    base = 12
+    anim_table_rel = struct.unpack_from("<I", mdl_bytes, base + 0x58)[0]
+    anim_rel = struct.unpack_from("<I", mdl_bytes, base + anim_table_rel)[0]
+    anim_abs = base + anim_rel
+    anim_root_rel = struct.unpack_from("<I", mdl_bytes, anim_abs + 0x28)[0]
+    node_abs = base + anim_root_rel
+
+    ctrl_arr_rel = struct.unpack_from("<I", mdl_bytes, node_abs + 0x38)[0]
+    ctrl_data_rel = struct.unpack_from("<I", mdl_bytes, node_abs + 0x44)[0]
+    ctrl_data_count = struct.unpack_from("<I", mdl_bytes, node_abs + 0x48)[0]
+    ctrl_abs = base + ctrl_arr_rel
+    ctrl_data_abs = base + ctrl_data_rel
+
+    assert struct.unpack_from("<I", mdl_bytes, ctrl_abs)[0] == 20
+    assert struct.unpack_from("<H", mdl_bytes, ctrl_abs + 0x04)[0] == 28
+    assert struct.unpack_from("<H", mdl_bytes, ctrl_abs + 0x06)[0] == 2
+    assert struct.unpack_from("<H", mdl_bytes, ctrl_abs + 0x08)[0] == 0
+    assert struct.unpack_from("<H", mdl_bytes, ctrl_abs + 0x0A)[0] == 2
+    assert mdl_bytes[ctrl_abs + 0x0C] == 2
+    assert ctrl_data_count == 4
+    assert struct.unpack_from("<ff", mdl_bytes, ctrl_data_abs) == (0.0, 1.0)
+    assert struct.unpack_from("<II", mdl_bytes, ctrl_data_abs + 8) == (0x3FFFFFFF, 0x20002000)
 
 
 def test_legacy_mdl_porter_sets_engine_maxtree_model_subtype_byte():

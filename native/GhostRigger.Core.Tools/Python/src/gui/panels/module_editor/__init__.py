@@ -8,6 +8,7 @@ from .module_editor_viewport_panel import ModuleEditorViewportPanel
 from .readiness_panel import ModuleReadinessPanel
 from .validation_panel import ModuleValidationPanel
 from .workflow_panel import MapStudioWorkflowPanel
+from .environment_tab import MapStudioEnvironmentTab
 
 __all__ = [
     "ModuleEditorOutliner",
@@ -18,4 +19,5 @@ __all__ = [
     "ModuleReadinessPanel",
     "ModuleValidationPanel",
     "MapStudioWorkflowPanel",
+    "MapStudioEnvironmentTab",
 ]

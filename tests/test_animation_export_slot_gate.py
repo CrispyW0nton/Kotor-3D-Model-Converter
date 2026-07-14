@@ -90,8 +90,17 @@ def test_invalid_slot_rejects_export_before_writer(monkeypatch, tmp_path: Path) 
 
 def test_inherited_slot_is_accepted_and_written_as_local_override(monkeypatch, tmp_path: Path) -> None:
     target_model = _model("pmbam", supermodel="S_Male02")
-    SuperModelResolver.prime_cache("S_Male02", _model("S_Male02", anims=("pause1",)))
     request = _request(tmp_path, "pause1")
+    load_calls: list[tuple[str, str]] = []
+
+    class FakeResourceManager:
+        def load_model(self, resref: str, game: str):
+            load_calls.append((resref, game))
+            if resref.lower() == "s_male02":
+                return _model("S_Male02", anims=("pause1",))
+            return None
+
+    request.resource_manager = FakeResourceManager()
     captured: dict[str, KotorModel] = {}
 
     class SpyWriter:
@@ -129,6 +138,7 @@ def test_inherited_slot_is_accepted_and_written_as_local_override(monkeypatch, t
     assert captured["model"].animations[-1].name == "pause1"
     assert result.animation_slot == "pause1"
     assert result.operation == "appended_local_override"
+    assert load_calls == [("S_Male02", "K1")]
 
 
 def test_local_slot_takes_priority_over_inherited_slot_for_export() -> None:

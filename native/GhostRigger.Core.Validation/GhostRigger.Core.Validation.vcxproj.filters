@@ -90,6 +90,9 @@
     <None Include="Python\src\core\validation\capture_specs.py">
       <Filter>Python\src\core\validation</Filter>
     </None>
+    <None Include="Python\src\core\validation\kotor_module_engine_contract.py">
+      <Filter>Python\src\core\validation</Filter>
+    </None>
     <None Include="Python\src\core\validation\validation_adapters.py">
       <Filter>Python\src\core\validation</Filter>
     </None>

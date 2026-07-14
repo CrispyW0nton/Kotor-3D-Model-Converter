@@ -37,6 +37,8 @@ class LightPicker:
         for node in lights:
             if not bool(getattr(node, "is_light", False)):
                 continue
+            if bool(getattr(node, "_gr_light_helper_hidden", False)):
+                continue
             if bool(getattr(node, "_gr_light_hidden", False)) or bool(getattr(node, "_gr_light_deleted", False)):
                 continue
             try:

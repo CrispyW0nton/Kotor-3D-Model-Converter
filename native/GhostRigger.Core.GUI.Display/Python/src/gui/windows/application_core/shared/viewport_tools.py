@@ -14,6 +14,7 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
 from src.gui.qt_lib.dialogs.qt_lightmap_baker_dialog import QtLightmapBakerDialog
 from src.gui.qt_lib.dialogs.qt_render_frame_dialog import QtRenderFrameDialog
 from src.gui.viewports.viewport_core.widget_scaffold import create_custom_viewport_widget
+from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
 from src.systems.bas.model_recipe import BAS_SLOT_ORDER
 
 log = logging.getLogger(__name__)
@@ -816,6 +817,80 @@ class ViewportToolsMixin:
         window.show()
         window.raise_()
         window.activateWindow()
+    def _open_placeable_builder_window(self):
+        """Lazily open the dedicated reusable-placeable authoring workbench."""
+
+        window = getattr(self, "placeable_builder_window", None)
+        app_root = Path(getattr(self, "app_root", Path.cwd()))
+        library_root = app_root / "Saved" / "PlaceableLibrary"
+        manager = getattr(self, "_resource_manager", None)
+        if manager is None:
+            get_manager = getattr(self, "_get_resource_manager", None)
+            if callable(get_manager):
+                try:
+                    manager = get_manager()
+                except Exception:
+                    manager = None
+        provider = None
+        if manager is not None:
+            try:
+                from src.core.resources.game_resource_provider import ResourceManagerGameResourceProvider
+
+                provider = ResourceManagerGameResourceProvider(manager)
+            except Exception:
+                provider = None
+        if window is None:
+            from src.gui.qt_lib.windows.qt_placeable_builder import QtPlaceableBuilderWindow
+            from src.gui.qt_lib.windows.qt_placeable_builder_controller import QtPlaceableBuilderController
+
+            window = QtPlaceableBuilderWindow(self)
+            self.placeable_builder_window = window
+            controller = QtPlaceableBuilderController(
+                window,
+                library_root=library_root,
+                provider=provider,
+                resource_manager=manager,
+                parent=window,
+            )
+            self.placeable_builder_controller = controller
+            window.libraryChanged.connect(self._on_placeable_library_changed)
+        else:
+            controller = getattr(self, "placeable_builder_controller", None)
+            if controller is not None:
+                controller.set_library_root(library_root)
+                controller.set_provider(provider, resource_manager=manager)
+            else:
+                window.set_library_root(library_root)
+        set_renderer_settings = getattr(window, "set_renderer_settings", None)
+        if callable(set_renderer_settings):
+            set_renderer_settings(getattr(self, "settings_data", {}) or {})
+        set_navigation_profile = getattr(window, "set_navigation_profile", None)
+        if callable(set_navigation_profile):
+            profile = (getattr(self, "settings_data", {}) or {}).get(
+                "viewport_navigation_profile", DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+            )
+            set_navigation_profile(profile)
+        window.show()
+        window.raise_()
+        window.activateWindow()
+
+    def _on_placeable_library_changed(self, root: str) -> None:
+        """Refresh both the workbench and any open Map Studio after a save."""
+
+        controller = getattr(self, "placeable_builder_controller", None)
+        if controller is not None:
+            controller.refresh_library()
+        map_window = getattr(self, "module_editor_window", None)
+        if map_window is not None:
+            set_root = getattr(map_window, "set_placeable_library_root", None)
+            if callable(set_root):
+                set_root(root)
+            refresh = getattr(map_window, "refresh_placeable_library", None)
+            if callable(refresh):
+                refresh()
+        log = getattr(self, "_log", None)
+        if callable(log):
+            log("Placeable Library refreshed in Placeable Builder and Map Studio.", "success")
     def _quick_autorig(self):
         model = self._require_model("Auto-Rig")
         if model is None:

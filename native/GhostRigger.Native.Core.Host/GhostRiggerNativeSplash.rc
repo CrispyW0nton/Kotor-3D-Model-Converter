@@ -1,4 +1,7 @@
+#include <windows.h>
 #include "Public/GhostRiggerNativeSplashResource.h"
+
+IDI_GHOSTSTUDIO_APP_ICON ICON "../../assets/icons/ghostrigger.ico"
 
 IDR_NATIVE_SPLASH_LOGO RCDATA "../../assets/icons/ghostrigger_1024x1024.png"
 IDR_NATIVE_SPLASH_ICON_CHECK RCDATA "resources/svg/check.svg"
@@ -7,3 +10,37 @@ IDR_NATIVE_SPLASH_ICON_GEAR RCDATA "resources/svg/gear.svg"
 IDR_NATIVE_SPLASH_ICON_SPINNER RCDATA "resources/svg/spinner.svg"
 IDR_NATIVE_SPLASH_ICON_TERMINAL RCDATA "resources/svg/terminal.svg"
 IDR_NATIVE_SPLASH_ICON_TRASH RCDATA "resources/svg/trash.svg"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 6,1,0,0
+ PRODUCTVERSION 6,1,0,0
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS VS_FF_DEBUG
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "GhostStudio Contributors\0"
+            VALUE "FileDescription", "GhostStudio\0"
+            VALUE "FileVersion", "6.1.0.0\0"
+            VALUE "InternalName", "GhostStudio\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 GhostStudio Contributors\0"
+            VALUE "OriginalFilename", "GhostStudio.exe\0"
+            VALUE "ProductName", "GhostStudio\0"
+            VALUE "ProductVersion", "6.1.0\0"
+            VALUE "Comments", "KOTOR 1 & 2 modding suite\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

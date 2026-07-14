@@ -8,6 +8,7 @@ from src.adapters.gpu.moderngl_runtime import Image, _NUMPY, _PIL, moderngl, np
 from src.adapters.gpu.viewport_probe import _gr_gpu_probe
 from src.core.geometry.lightsaber import (
     is_lightsaber_blade_node,
+    lightsaber_blade_preview_quad,
     synthetic_lightsaber_blade_uvs,
 )
 from src.core.rendering.gpu_vbo_layout import _split_vbo_attributes_for_gpu
@@ -29,6 +30,26 @@ from src.math.gpu_math import (
 )
 
 log = logging.getLogger(__name__)
+
+
+def _is_saber_runtime_helper(node) -> bool:
+    """Return whether ``node`` is an Odyssey NODE_SABER runtime helper.
+
+    The game uses these records to drive blade extension.  They duplicate the
+    two ordinary crossed glow cards and are not drawable preview geometry.
+    """
+
+    return bool(getattr(node, "is_saber", False))
+
+
+def _configure_lightsaber_blade_sampler(texture) -> None:
+    """Use smooth, non-mipmapped sampling for one procedural blade texture."""
+
+    if texture is None:
+        return
+    texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
+    texture.repeat_x = False
+    texture.repeat_y = False
 
 
 class _GlTexCache:
@@ -56,6 +77,8 @@ class _GlTexCache:
         import collections, weakref as _weakref_mod
         self._cache: 'collections.OrderedDict[int, tuple]' = collections.OrderedDict()
         self._wr_mod = _weakref_mod  # stash for use in methods
+        self.region_update_count: int = 0
+        self.region_update_bytes: int = 0
 
     def get(self, img: Optional['Image.Image']) -> Optional['moderngl.Texture']:
         if img is None or not _PIL:
@@ -169,14 +192,82 @@ class _GlTexCache:
             # FIX-MIPALIGN: Clamp mip chain at level 6 (coarsest = 8×8 for 512px)
             # to prevent single corner pixel colors from dominating lower LODs.
             # max_level=6 keeps 512→256→128→64→32→16→8 (7 levels, idx 0-6).
-            import math
-            max_dim = max(w, h)
-            mip_cap = min(6, max(0, int(math.log2(max_dim)) - 2)) if max_dim > 4 else 0
+            mip_cap = self._mip_cap(w, h)
             tex.build_mipmaps(max_level=mip_cap)
             return tex
         except Exception as e:
             log.debug(f"_GlTexCache._upload failed: {e}")
             return None
+
+    @staticmethod
+    def _mip_cap(width: int, height: int) -> int:
+        max_dim = max(int(width), int(height))
+        return min(6, max(0, int(math.log2(max_dim)) - 2)) if max_dim > 4 else 0
+
+    def update_regions(self, img: Optional['Image.Image'], regions) -> bool:
+        """Write bottom-up RGBA rectangles into one resident GL texture.
+
+        ``regions`` are ``(x, y, width, height)`` rectangles in the cached PIL
+        image's coordinates.  Cached KOTOR images and OpenGL both use row zero
+        as the bottom row, so bytes are uploaded directly with no vertical flip.
+        Returns ``False`` when the image has not been uploaded yet; the next
+        normal render will then perform the initial full upload.
+        """
+        if img is None or not _PIL:
+            return False
+        key = id(img)
+        entry = self._cache.get(key)
+        if entry is None:
+            return False
+        wr, tex = entry
+        if wr() is not img:
+            try:
+                tex.release()
+            except Exception:
+                pass
+            del self._cache[key]
+            return False
+
+        try:
+            rgba = img if getattr(img, "mode", "") == "RGBA" else img.convert("RGBA")
+            image_width, image_height = (int(v) for v in rgba.size)
+            texture_size = tuple(getattr(tex, "size", (image_width, image_height)))
+            if texture_size[:2] != (image_width, image_height):
+                return False
+
+            wrote = False
+            for region in regions or ():
+                try:
+                    x, y, width, height = (int(value) for value in region)
+                except (TypeError, ValueError):
+                    continue
+                if width <= 0 or height <= 0:
+                    continue
+                x0 = max(0, x)
+                y0 = max(0, y)
+                x1 = min(image_width, x + width)
+                y1 = min(image_height, y + height)
+                if x1 <= x0 or y1 <= y0:
+                    continue
+                crop = rgba.crop((x0, y0, x1, y1))
+                payload = crop.tobytes()
+                tex.write(
+                    payload,
+                    viewport=(x0, y0, x1 - x0, y1 - y0),
+                    alignment=1,
+                )
+                self.region_update_count += 1
+                self.region_update_bytes += len(payload)
+                wrote = True
+            if wrote:
+                # Regenerate the existing GPU mip chain without re-uploading
+                # the full base level or replacing the texture/bindings.
+                tex.build_mipmaps(max_level=self._mip_cap(image_width, image_height))
+            self._cache.move_to_end(key)
+            return True
+        except Exception as exc:
+            log.debug("_GlTexCache.update_regions failed: %s", exc)
+            return False
 
     def invalidate(self, img: Optional['Image.Image']) -> None:
         if img is None:
@@ -383,6 +474,24 @@ def _build_vbo_data(node, world_pos: tuple, world_orient: tuple,
     faces  = getattr(node, 'faces', [])
     face_uvs = getattr(node, 'face_uvs', [])
     is_skin = bool(getattr(node, 'is_skin', False))
+
+    # FIX-SABER-PROXY: Stock KOTOR blade cards are not ordinary triangle
+    # meshes.  Their sparse, segmented strips expose long diagonal wedges in a
+    # conventional renderer.  Build one render-only quad from each card's
+    # authored local bounds so the procedural core/aura texture stays smooth.
+    # This changes only GPU upload data; the loaded MDL/MDX model remains
+    # untouched for animation, validation, and export.
+    if is_lightsaber_blade_node(node):
+        blade_proxy = lightsaber_blade_preview_quad(verts, edge_inset=0.0)
+        if blade_proxy is not None:
+            proxy_verts, proxy_uvs, proxy_faces, proxy_normal = blade_proxy
+            verts = proxy_verts
+            norms = [proxy_normal] * len(proxy_verts)
+            uvs = proxy_uvs
+            uvs_lm = []
+            faces = proxy_faces
+            face_uvs = proxy_faces
+            is_skin = False
 
     n_verts = len(verts)
     n_faces = len(faces)
@@ -794,12 +903,20 @@ class _GpuMesh:
         self.first8_uv0_uploaded: List[List[float]] = []
         self.first8_uv1_uploaded: List[List[float]] = []
         self.uploaded_positions: List[List[float]] = []
+        # Axis-aligned bounds in the exact coordinate space uploaded to the
+        # VBO.  ModernGL uses these for conservative frustum rejection before
+        # issuing per-node uniforms and draw calls.
+        self.uploaded_bounds: Optional[tuple] = None
         self.uploaded_bone_ids: List[List[int]] = []
         self.uploaded_weights: List[List[float]] = []
         self.uploaded_source_indices: List[int] = []
         self.uv1_attribute_bound: bool = False
         self.skin_bind_transform: Optional[bool] = None
         self.skin_vbo_signature: Optional[tuple] = None
+        # Retained scene animation switches rigid nodes from authored/world-
+        # baked VBOs to node-local VBOs driven by a per-draw model matrix.  The
+        # cache owner uses this bit to rebuild exactly once at that boundary.
+        self.scene_rigid_gpu_pose: Optional[bool] = None
         # Per-material-slot draw groups for multi-texture nodes
         self.mat_slots: Dict[int, tuple] = {}  # {slot: (vao, ibo, tri_count)}
 

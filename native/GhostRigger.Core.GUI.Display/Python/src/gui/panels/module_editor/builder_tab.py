@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from PySide6 import QtCore, QtWidgets
 
 
@@ -11,7 +13,7 @@ class BuilderTab(QtWidgets.QWidget):
     roomOperationRequested = QtCore.Signal(str, float, int, float, float, float, float)
     floorPlanExtrusionRequested = QtCore.Signal(str, float, float, bool, str)
     floorPlanOpeningRequested = QtCore.Signal(str, str, int, float, float, float, float)
-    floorPlanOpeningMarkerRequested = QtCore.Signal(str, str, str, str, str, str, str, int)
+    floorPlanOpeningMarkerRequested = QtCore.Signal(str, str, str, str, str, str, str, int, int)
     floorPlanVertexSnapPreviewRequested = QtCore.Signal(str, int)
     floorPlanVertexSnapRequested = QtCore.Signal(str, int, int, str)
     floorPlanVertexWeldRequested = QtCore.Signal(str, object, int, str)
@@ -60,6 +62,8 @@ class BuilderTab(QtWidgets.QWidget):
         )
         self.builderGuideLabel.setObjectName("mapStudioBuilderGuideLabel")
         self.builderGuideLabel.setWordWrap(True)
+        self.builderGuideLabel.setToolTip(self.builderGuideLabel.text())
+        self.builderGuideLabel.setVisible(False)
         layout.addWidget(self.builderGuideLabel)
         modeling_box = QtWidgets.QGroupBox("Modeling Mode + Snap")
         modeling_layout = QtWidgets.QFormLayout(modeling_box)
@@ -70,6 +74,8 @@ class BuilderTab(QtWidgets.QWidget):
         )
         self.modelingModeGuideLabel.setObjectName("mapStudioModelingModeGuideLabel")
         self.modelingModeGuideLabel.setWordWrap(True)
+        self.modelingModeGuideLabel.setToolTip(self.modelingModeGuideLabel.text())
+        self.modelingModeGuideLabel.setVisible(False)
         self.componentModeComboBox = QtWidgets.QComboBox()
         self.componentModeComboBox.setObjectName("mapStudioComponentModeComboBox")
         self.modelingToolComboBox = QtWidgets.QComboBox()
@@ -81,6 +87,8 @@ class BuilderTab(QtWidgets.QWidget):
         )
         self.modelingToolHintLabel.setObjectName("mapStudioModelingToolHintLabel")
         self.modelingToolHintLabel.setWordWrap(True)
+        self.modelingToolHintLabel.setToolTip(self.modelingToolHintLabel.text())
+        self.modelingToolHintLabel.setVisible(False)
         self.modelingStatusLabel = QtWidgets.QLabel("Modeling: Object mode / Grid snap")
         self.modelingStatusLabel.setObjectName("mapStudioModelingStatusLabel")
         self.modelingStatusLabel.setWordWrap(True)
@@ -98,6 +106,8 @@ class BuilderTab(QtWidgets.QWidget):
         )
         self.roomGeometryWorkflowLabel.setObjectName("mapStudioRoomGeometryWorkflowLabel")
         self.roomGeometryWorkflowLabel.setWordWrap(True)
+        self.roomGeometryWorkflowLabel.setToolTip(self.roomGeometryWorkflowLabel.text())
+        self.roomGeometryWorkflowLabel.setVisible(False)
         self.moduleRootLineEdit = QtWidgets.QLineEdit("grdev01")
         self.moduleRootLineEdit.setObjectName("mapStudioModuleRootLineEdit")
         self.moduleRootLineEdit.setPlaceholderText("module resref, e.g. grdev01")
@@ -225,8 +235,9 @@ class BuilderTab(QtWidgets.QWidget):
         layout.addWidget(opening_box)
         marker_box = QtWidgets.QGroupBox("Opening Transition Marker")
         marker_layout = QtWidgets.QFormLayout(marker_box)
+        self.floorPlanOpeningMarkerLayout = marker_layout
         self.floorPlanOpeningMarkerHintLabel = QtWidgets.QLabel(
-            "Create a KOTOR door, trigger, or waypoint marker at an authored wall opening. Use destination fields when the marker leaves this area."
+            "Create a door/trigger transition source or a waypoint destination at an authored wall opening."
         )
         self.floorPlanOpeningMarkerHintLabel.setObjectName("mapStudioFloorPlanOpeningMarkerHintLabel")
         self.floorPlanOpeningMarkerHintLabel.setWordWrap(True)
@@ -239,7 +250,7 @@ class BuilderTab(QtWidgets.QWidget):
         self.floorPlanOpeningMarkerKindComboBox.setObjectName("mapStudioFloorPlanOpeningMarkerKindComboBox")
         self.floorPlanOpeningMarkerKindComboBox.addItem("Door marker (UTD)", "door")
         self.floorPlanOpeningMarkerKindComboBox.addItem("Trigger marker (UTT)", "trigger")
-        self.floorPlanOpeningMarkerKindComboBox.addItem("Waypoint marker (UTW)", "waypoint")
+        self.floorPlanOpeningMarkerKindComboBox.addItem("Waypoint destination (UTW)", "waypoint")
         self.floorPlanOpeningMarkerTemplateLineEdit = QtWidgets.QLineEdit()
         self.floorPlanOpeningMarkerTemplateLineEdit.setObjectName("mapStudioFloorPlanOpeningMarkerTemplateLineEdit")
         self.floorPlanOpeningMarkerTemplateLineEdit.setPlaceholderText("door/trigger/waypoint template resref")
@@ -251,10 +262,22 @@ class BuilderTab(QtWidgets.QWidget):
         self.floorPlanOpeningMarkerLinkedModuleLineEdit = QtWidgets.QLineEdit()
         self.floorPlanOpeningMarkerLinkedModuleLineEdit.setObjectName("mapStudioFloorPlanOpeningMarkerLinkedModuleLineEdit")
         self.floorPlanOpeningMarkerLinkedModuleLineEdit.setPlaceholderText("destination module resref")
+        self.floorPlanOpeningMarkerTargetTypeComboBox = QtWidgets.QComboBox()
+        self.floorPlanOpeningMarkerTargetTypeComboBox.setObjectName("mapStudioFloorPlanOpeningMarkerTargetTypeComboBox")
+        self.floorPlanOpeningMarkerTargetTypeComboBox.addItem("No engine link", 0)
+        self.floorPlanOpeningMarkerTargetTypeComboBox.addItem("Destination door", 1)
+        self.floorPlanOpeningMarkerTargetTypeComboBox.addItem("Destination waypoint", 2)
+        self.floorPlanOpeningMarkerTargetTypeComboBox.setCurrentIndex(2)
+        self.floorPlanOpeningMarkerTargetTypeComboBox.setToolTip(
+            "KOTOR LinkedToFlags: choose whether the destination tag names a door (1) or waypoint (2)."
+        )
         self.floorPlanOpeningMarkerTransitionDestSpinBox = QtWidgets.QSpinBox()
         self.floorPlanOpeningMarkerTransitionDestSpinBox.setObjectName("mapStudioFloorPlanOpeningMarkerTransitionDestSpinBox")
-        self.floorPlanOpeningMarkerTransitionDestSpinBox.setRange(0, 999)
-        self.floorPlanOpeningMarkerTransitionDestSpinBox.setToolTip("KOTOR GIT TransitionDestin value. Leave 0 unless the destination type needs a specific transition index.")
+        self.floorPlanOpeningMarkerTransitionDestSpinBox.setRange(0, 2147483647)
+        self.floorPlanOpeningMarkerTransitionDestSpinBox.setSpecialValueText("Use area name")
+        self.floorPlanOpeningMarkerTransitionDestSpinBox.setToolTip(
+            "Optional dialog.tlk StringRef displayed as the destination name; this is not a destination type or index."
+        )
         self.createFloorPlanOpeningMarkerButton = QtWidgets.QPushButton("Create Opening Marker")
         self.createFloorPlanOpeningMarkerButton.setObjectName("mapStudioCreateOpeningTransitionMarkerButton")
         marker_layout.addRow(self.floorPlanOpeningMarkerHintLabel)
@@ -265,7 +288,8 @@ class BuilderTab(QtWidgets.QWidget):
         marker_layout.addRow("Tag:", self.floorPlanOpeningMarkerTagLineEdit)
         marker_layout.addRow("Links to:", self.floorPlanOpeningMarkerLinkedToLineEdit)
         marker_layout.addRow("Module:", self.floorPlanOpeningMarkerLinkedModuleLineEdit)
-        marker_layout.addRow("TransitionDestin:", self.floorPlanOpeningMarkerTransitionDestSpinBox)
+        marker_layout.addRow("Target type:", self.floorPlanOpeningMarkerTargetTypeComboBox)
+        marker_layout.addRow("Destination name StringRef:", self.floorPlanOpeningMarkerTransitionDestSpinBox)
         marker_layout.addRow(self.createFloorPlanOpeningMarkerButton)
         layout.addWidget(marker_box)
         vertex_box = QtWidgets.QGroupBox("Floor-Plan Vertex Tools")
@@ -375,6 +399,12 @@ class BuilderTab(QtWidgets.QWidget):
         self.terrainSmoothIterationsSpinBox.setRange(1, 32)
         self.terrainSmoothIterationsSpinBox.setValue(1)
         self.terrainSmoothStrengthSpinBox = self._make_transform_spin("mapStudioTerrainSmoothStrengthSpinBox", 0.0, 1.0, "", value=0.5, step=0.1)
+        self.terrainHardnessSpinBox = self._make_transform_spin(
+            "mapStudioTerrainHardnessSpinBox", 0.0, 1.0, "", value=0.5, step=0.05
+        )
+        self.terrainHardnessSpinBox.setToolTip(
+            "Inner brush hardness: 0 gives a soft eased falloff; 1 applies full strength across the radius."
+        )
         self.terrainHintLabel = QtWidgets.QLabel("Create a terrain heightfield preset to sculpt terrain samples.")
         self.terrainHintLabel.setObjectName("mapStudioTerrainHintLabel")
         self.terrainHintLabel.setWordWrap(True)
@@ -393,6 +423,14 @@ class BuilderTab(QtWidgets.QWidget):
         self.smoothTerrainButton.setObjectName("mapStudioSmoothTerrainButton")
         self.flattenTerrainButton = QtWidgets.QPushButton("Flatten Terrain")
         self.flattenTerrainButton.setObjectName("mapStudioFlattenTerrainButton")
+        self.carveTerrainHoleButton = QtWidgets.QPushButton("Carve Hole")
+        self.carveTerrainHoleButton.setObjectName("mapStudioCarveTerrainHoleButton")
+        self.carveTerrainHoleButton.setToolTip(
+            "Remove the floor cells around Row/Column (Radius in cells). Holed cells emit no render or WOK faces; the exported walkmesh perimeter gains an interior loop."
+        )
+        self.fillTerrainHoleButton = QtWidgets.QPushButton("Fill Hole")
+        self.fillTerrainHoleButton.setObjectName("mapStudioFillTerrainHoleButton")
+        self.fillTerrainHoleButton.setToolTip("Restore previously carved floor cells around Row/Column (Radius in cells).")
         self.applyTerrainBrushButton = QtWidgets.QPushButton("Apply Sculpt Brush")
         self.applyTerrainBrushButton.setObjectName("mapStudioApplyTerrainBrushButton")
         self.checkLiveTerrainBrushFrameButton = QtWidgets.QPushButton("Check Live Brush Frame")
@@ -410,7 +448,8 @@ class BuilderTab(QtWidgets.QWidget):
         terrain_layout.addRow("Delta:", self.terrainDeltaSpinBox)
         terrain_layout.addRow("Radius:", self.terrainRadiusSpinBox)
         terrain_layout.addRow("Smooth passes:", self.terrainSmoothIterationsSpinBox)
-        terrain_layout.addRow("Smooth strength:", self.terrainSmoothStrengthSpinBox)
+        terrain_layout.addRow("Strength:", self.terrainSmoothStrengthSpinBox)
+        terrain_layout.addRow("Falloff hardness:", self.terrainHardnessSpinBox)
         terrain_layout.addRow(self.terrainHintLabel)
         terrain_layout.addRow(self.terrainBrushStatusLabel)
         terrain_layout.addRow(self.checkLiveTerrainBrushFrameButton)
@@ -420,6 +459,8 @@ class BuilderTab(QtWidgets.QWidget):
         terrain_layout.addRow(self.lowerTerrainButton)
         terrain_layout.addRow(self.smoothTerrainButton)
         terrain_layout.addRow(self.flattenTerrainButton)
+        terrain_layout.addRow(self.carveTerrainHoleButton)
+        terrain_layout.addRow(self.fillTerrainHoleButton)
         terrain_layout.addRow(self.applyTerrainShapeButton)
         layout.addWidget(terrain_box)
         union_box = QtWidgets.QGroupBox("Boolean Union Rooms")
@@ -514,8 +555,12 @@ class BuilderTab(QtWidgets.QWidget):
         self.removePrimitiveButton.setObjectName("mapStudioRemoveCompositionPrimitiveButton")
         self.roomPrimitiveSeparateResultLineEdit = QtWidgets.QLineEdit()
         self.roomPrimitiveSeparateResultLineEdit.setObjectName("mapStudioSeparatePrimitiveResultRoomLineEdit")
-        self.roomPrimitiveSeparateResultLineEdit.setPlaceholderText("optional separated room/object resref")
-        self.separatePrimitiveButton = QtWidgets.QPushButton("Separate Selected Primitive")
+        self.roomPrimitiveSeparateResultLineEdit.setPlaceholderText("optional extracted export-room resref")
+        self.separatePrimitiveButton = QtWidgets.QPushButton("Extract to Export Room")
+        self.separatePrimitiveButton.setToolTip(
+            "Move the selected authored primitive into a separate KOTOR room/export boundary. "
+            "This is not polygon Separate Shells; use the Modeling > Separate Shells command for that."
+        )
         self.separatePrimitiveButton.setObjectName("mapStudioSeparateCompositionPrimitiveButton")
         transform_layout.addRow("Primitive:", self.roomPrimitiveTransformComboBox)
         transform_layout.addRow(self.primitiveTransformHintLabel)
@@ -530,7 +575,7 @@ class BuilderTab(QtWidgets.QWidget):
         transform_layout.addRow("Pivot Y:", self.primitivePivotYSpinBox)
         transform_layout.addRow("Pivot Z:", self.primitivePivotZSpinBox)
         transform_layout.addRow(self.applyPrimitiveTransformButton)
-        transform_layout.addRow("Separate as:", self.roomPrimitiveSeparateResultLineEdit)
+        transform_layout.addRow("Extract as:", self.roomPrimitiveSeparateResultLineEdit)
         transform_layout.addRow(self.separatePrimitiveButton)
         transform_layout.addRow(self.removePrimitiveButton)
         layout.addWidget(transform_box)
@@ -907,6 +952,8 @@ class BuilderTab(QtWidgets.QWidget):
         self.lowerTerrainButton.clicked.connect(lambda: self._emit_terrain_operation("lower"))
         self.smoothTerrainButton.clicked.connect(lambda: self._emit_terrain_operation("smooth"))
         self.flattenTerrainButton.clicked.connect(lambda: self._emit_terrain_operation("flatten"))
+        self.carveTerrainHoleButton.clicked.connect(lambda: self._emit_terrain_operation("carve_hole"))
+        self.fillTerrainHoleButton.clicked.connect(lambda: self._emit_terrain_operation("fill_hole"))
         self.checkLiveTerrainBrushFrameButton.clicked.connect(self._emit_live_terrain_brush_frame)
         self.applyTerrainBrushButton.clicked.connect(self._emit_selected_terrain_brush)
         self.applyTerrainShapeButton.clicked.connect(self._emit_terrain_shape_preset)
@@ -1269,7 +1316,7 @@ class BuilderTab(QtWidgets.QWidget):
             "radius": int(self.terrainRadiusSpinBox.value()),
             "iterations": int(self.terrainSmoothIterationsSpinBox.value()),
             "strength": float(self.terrainSmoothStrengthSpinBox.value()),
-            "hardness": float(self.terrainSmoothStrengthSpinBox.value()),
+            "hardness": float(self.terrainHardnessSpinBox.value()),
         }
 
     def _update_terrain_shape_controls(self) -> None:
@@ -1321,11 +1368,14 @@ class BuilderTab(QtWidgets.QWidget):
             self.terrainRadiusSpinBox,
             self.terrainSmoothIterationsSpinBox,
             self.terrainSmoothStrengthSpinBox,
+            self.terrainHardnessSpinBox,
             self.setTerrainHeightButton,
             self.raiseTerrainButton,
             self.lowerTerrainButton,
             self.smoothTerrainButton,
             self.flattenTerrainButton,
+            self.carveTerrainHoleButton,
+            self.fillTerrainHoleButton,
             self.applyTerrainBrushButton,
             self.checkLiveTerrainBrushFrameButton,
             self.applyTerrainShapeButton,
@@ -1684,6 +1734,7 @@ class BuilderTab(QtWidgets.QWidget):
             self.floorPlanOpeningMarkerTagLineEdit,
             self.floorPlanOpeningMarkerLinkedToLineEdit,
             self.floorPlanOpeningMarkerLinkedModuleLineEdit,
+            self.floorPlanOpeningMarkerTargetTypeComboBox,
             self.floorPlanOpeningMarkerTransitionDestSpinBox,
             self.createFloorPlanOpeningMarkerButton,
         ):
@@ -1695,11 +1746,29 @@ class BuilderTab(QtWidgets.QWidget):
             self.floorPlanOpeningMarkerTemplateLineEdit.setPlaceholderText("UTT template resref, e.g. tr_transition")
         else:
             self.floorPlanOpeningMarkerTemplateLineEdit.setPlaceholderText("UTW template resref, e.g. wp_transition")
+        is_transition_source = kind in {"door", "trigger"}
+        for widget in (
+            self.floorPlanOpeningMarkerLinkedToLineEdit,
+            self.floorPlanOpeningMarkerLinkedModuleLineEdit,
+            self.floorPlanOpeningMarkerTargetTypeComboBox,
+            self.floorPlanOpeningMarkerTransitionDestSpinBox,
+        ):
+            widget.setEnabled(enabled and is_transition_source)
+            widget.setVisible(is_transition_source)
+            label = self.floorPlanOpeningMarkerLayout.labelForField(widget)
+            if label is not None:
+                label.setVisible(is_transition_source)
         if enabled:
-            self.floorPlanOpeningMarkerHintLabel.setText(
-                f"Editing {data.get('room_resref')}: create a {kind} marker from one authored opening. "
-                "Fill destination fields only when this opening changes area."
-            )
+            if is_transition_source:
+                self.floorPlanOpeningMarkerHintLabel.setText(
+                    f"Editing {data.get('room_resref')}: create a {kind} transition source from one authored opening. "
+                    "Linked To names a destination door or waypoint; Module is blank for a local link."
+                )
+            else:
+                self.floorPlanOpeningMarkerHintLabel.setText(
+                    f"Editing {data.get('room_resref')}: create a waypoint destination from one authored opening. "
+                    "Doors and triggers link to this waypoint tag; waypoints do not initiate transitions."
+                )
         else:
             self.floorPlanOpeningMarkerHintLabel.setText(
                 "Add a floor-plan wall opening before creating a KOTOR door, trigger, or waypoint marker from it."
@@ -1711,15 +1780,21 @@ class BuilderTab(QtWidgets.QWidget):
         opening = str(self.floorPlanOpeningMarkerNameComboBox.currentData() or self.floorPlanOpeningMarkerNameComboBox.currentText() or "").strip()
         if not room or not opening:
             return
+        kind = str(self.floorPlanOpeningMarkerKindComboBox.currentData() or "door")
+        linked_to = self.floorPlanOpeningMarkerLinkedToLineEdit.text().strip() if kind in {"door", "trigger"} else ""
+        linked_module = self.floorPlanOpeningMarkerLinkedModuleLineEdit.text().strip() if kind in {"door", "trigger"} else ""
+        target_type = int(self.floorPlanOpeningMarkerTargetTypeComboBox.currentData() or 0) if linked_to else 0
+        destination_name_sref = int(self.floorPlanOpeningMarkerTransitionDestSpinBox.value()) if kind in {"door", "trigger"} else 0
         self.floorPlanOpeningMarkerRequested.emit(
             room,
             opening,
-            str(self.floorPlanOpeningMarkerKindComboBox.currentData() or "door"),
+            kind,
             self.floorPlanOpeningMarkerTemplateLineEdit.text().strip(),
             self.floorPlanOpeningMarkerTagLineEdit.text().strip(),
-            self.floorPlanOpeningMarkerLinkedToLineEdit.text().strip(),
-            self.floorPlanOpeningMarkerLinkedModuleLineEdit.text().strip(),
-            int(self.floorPlanOpeningMarkerTransitionDestSpinBox.value()),
+            linked_to,
+            linked_module,
+            target_type,
+            destination_name_sref,
         )
 
     def _current_floor_plan_vertex_room_data(self) -> dict:
@@ -2357,7 +2432,11 @@ class BuilderTab(QtWidgets.QWidget):
         for kind in kinds or ():
             value = str(kind or "").strip()
             if value:
-                self.gameplayPlacementKindComboBox.addItem(value.replace("_", " ").title(), value)
+                label = {
+                    "placeable": "Placeables + Animated Doors",
+                    "door": "Doors (UTD)",
+                }.get(value.lower(), value.replace("_", " ").title())
+                self.gameplayPlacementKindComboBox.addItem(label, value)
         if self.gameplayPlacementKindComboBox.count() <= 0:
             self.gameplayPlacementKindComboBox.addItem("Placeable", "placeable")
         self._update_gameplay_supported_kinds_label()
@@ -2393,6 +2472,7 @@ class BuilderTab(QtWidgets.QWidget):
         area = str(getattr(entry, "area_resref", "") or "")
         position = tuple(getattr(entry, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
         facing = float(getattr(entry, "facing", 0.0) or 0.0)
+        facing_degrees = math.degrees(facing)
         self.entryPointAreaLineEdit.blockSignals(True)
         self.entryPointAreaLineEdit.setText(area)
         self.entryPointAreaLineEdit.blockSignals(False)
@@ -2402,10 +2482,10 @@ class BuilderTab(QtWidgets.QWidget):
             (0.0, 0.0, 0.0),
         )
         self.entryPointFacingSpinBox.blockSignals(True)
-        self.entryPointFacingSpinBox.setValue(facing)
+        self.entryPointFacingSpinBox.setValue(facing_degrees)
         self.entryPointFacingSpinBox.blockSignals(False)
         self.entryPointStatusLabel.setText(
-            f"Entry point: {area or '(area not set)'} at {position[:3]}, facing {facing:.1f} deg."
+            f"Entry point: {area or '(area not set)'} at {position[:3]}, facing {facing_degrees:.1f} deg."
         )
 
     def set_gameplay_palette_entries(self, entries) -> None:
@@ -2436,11 +2516,12 @@ class BuilderTab(QtWidgets.QWidget):
         count = 0
         for entry in self._gameplay_palette_entries:
             entry_kind = self._entry_value(entry, "kind").lower()
+            entry_family = self._entry_value(entry, "authoring_family", entry_kind).lower()
             haystack = " ".join(
                 self._entry_value(entry, key)
                 for key in ("template_resref", "label", "category", "source")
             ).lower()
-            if kind and entry_kind != kind:
+            if kind and entry_kind != kind and entry_family != kind:
                 continue
             if needle and needle not in haystack:
                 continue
@@ -2512,9 +2593,9 @@ class BuilderTab(QtWidgets.QWidget):
             return
         kind = str(self.gameplayPlacementKindComboBox.currentData() or "").strip().lower()
         details = {
-            "placeable": "Placeable: uses a UTP template, creates a viewport marker, and exports into the module GIT Placeable List.",
+            "placeable": "Placeables: UTP objects and animated UTD doors share the staging palette. Resolved assets render their actual model; unresolved assets keep an honest marker.",
             "creature": "Creature: uses a UTC template, creates a viewport marker, and exports into the module GIT Creature List.",
-            "door": "Door: uses a UTD template, creates a viewport marker, and can be configured as a transition.",
+            "door": "Animated door: uses a UTD template, resolves genericdoors.2da model geometry for staging, and remains a GIT Door List object with transition controls.",
             "waypoint": "Waypoint: creates a named navigation/start marker and can be used for transitions or spawn/layout checks.",
             "trigger": "Trigger: uses a UTT template, creates generated trigger geometry, and can be configured as a transition.",
             "encounter": "Encounter: uses a UTE template and creates a spatial encounter marker in the module.",
@@ -2569,7 +2650,7 @@ class BuilderTab(QtWidgets.QWidget):
             float(self.gameplayPosXSpinBox.value()),
             float(self.gameplayPosYSpinBox.value()),
             float(self.gameplayPosZSpinBox.value()),
-            float(self.gameplayBearingSpinBox.value()),
+            math.radians(float(self.gameplayBearingSpinBox.value())),
         )
 
     def _emit_module_entry_point(self) -> None:
@@ -2578,7 +2659,7 @@ class BuilderTab(QtWidgets.QWidget):
             float(self.entryPointPosXSpinBox.value()),
             float(self.entryPointPosYSpinBox.value()),
             float(self.entryPointPosZSpinBox.value()),
-            float(self.entryPointFacingSpinBox.value()),
+            math.radians(float(self.entryPointFacingSpinBox.value())),
         )
 
     def _emit_gameplay_placement_status(self) -> None:

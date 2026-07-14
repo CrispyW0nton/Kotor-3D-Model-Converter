@@ -19,7 +19,13 @@ from .module_format import WOKData, WOKFace
 
 @dataclass(frozen=True)
 class TerrainHeightfieldPrimitive:
-    """Editable terrain patch represented by a rectangular height grid."""
+    """Editable terrain patch represented by a rectangular height grid.
+
+    ``holes`` lists carved grid cells as ``(cell_row, cell_column)`` pairs
+    (a cell is the quad between sample rows/columns ``n`` and ``n + 1``).
+    Holed cells emit no render or WOK faces, so the serialized walkmesh
+    perimeter gains one interior loop per hole region.
+    """
 
     room_resref: str
     heights: tuple[tuple[float, ...], ...] = ((0.0, 0.0), (0.0, 0.0))
@@ -28,6 +34,7 @@ class TerrainHeightfieldPrimitive:
     floor_surface_id: int | str = 4
     non_walk_surface_id: int | str = 7
     max_walkable_slope_degrees: float = 35.0
+    holes: tuple[tuple[int, int], ...] = ()
     material: PrimitiveMaterial = field(default_factory=PrimitiveMaterial)
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -698,15 +705,28 @@ def _brush_cells(
     column: int,
     radius: int,
     point_strength: float = 1.0,
+    falloff_hardness: float = 0.5,
 ) -> tuple[tuple[int, int, float], ...]:
     brush_radius = max(0, int(radius))
+    hardness = max(0.0, min(1.0, float(falloff_hardness)))
     cells: list[tuple[int, int, float]] = []
     for row_cursor in range(max(0, row - brush_radius), min(validation.row_count, row + brush_radius + 1)):
         for column_cursor in range(max(0, column - brush_radius), min(validation.column_count, column + brush_radius + 1)):
             distance = math.sqrt(float(row_cursor - row) ** 2 + float(column_cursor - column) ** 2)
             if distance > brush_radius:
                 continue
-            falloff = 1.0 if brush_radius <= 0 else max(0.0, 1.0 - (distance / float(brush_radius + 1)))
+            if brush_radius <= 0 or hardness >= 1.0 - 1.0e-9:
+                falloff = 1.0
+            else:
+                # Hardness is the fully-powered inner disc.  The outer band
+                # eases with smoothstep so terrain does not acquire the
+                # visible linear rings produced by the old fixed kernel.
+                normalized_distance = distance / float(brush_radius + 0.5)
+                if normalized_distance <= hardness:
+                    falloff = 1.0
+                else:
+                    t = max(0.0, min(1.0, (normalized_distance - hardness) / max(1.0e-9, 1.0 - hardness)))
+                    falloff = 1.0 - ((t * t) * (3.0 - (2.0 * t)))
             cells.append((row_cursor, column_cursor, falloff * max(0.0, min(1.0, float(point_strength)))))
     return tuple(cells)
 
@@ -740,6 +760,7 @@ def audit_terrain_brush_stroke_interaction(
     iterations: int = 1,
     budget_ms: float = 8.0,
     symmetry_axis: str | None = None,
+    falloff_hardness: float = 0.5,
 ) -> TerrainBrushPerformanceAudit:
     """Estimate whether a terrain brush stroke can stay inside the live interaction budget."""
 
@@ -763,6 +784,7 @@ def audit_terrain_brush_stroke_interaction(
             column=column,
             radius=brush_radius,
             point_strength=point.strength,
+            falloff_hardness=falloff_hardness,
         ):
             if weight > 0.0:
                 affected_cells.add((row_cursor, column_cursor))
@@ -804,6 +826,7 @@ def apply_terrain_brush_stroke(
     strength: float = 0.5,
     preserve_boundary: bool = True,
     symmetry_axis: str | None = None,
+    falloff_hardness: float = 0.5,
 ) -> TerrainHeightfieldPrimitive:
     """Apply a local, batch terrain brush stroke and record dirty sample bounds."""
 
@@ -853,6 +876,7 @@ def apply_terrain_brush_stroke(
                 column=column,
                 radius=brush_radius,
                 point_strength=point.strength,
+                falloff_hardness=falloff_hardness,
             ):
                 if op == "flatten":
                     local_blend = max(0.0, min(1.0, blend * weight))
@@ -910,6 +934,7 @@ def apply_terrain_brush_stroke(
                 column=column,
                 radius=brush_radius,
                 point_strength=point.strength,
+                falloff_hardness=falloff_hardness,
             ):
                 if weight > 0.0:
                     affected.add((row_cursor, column_cursor))
@@ -960,6 +985,7 @@ def apply_terrain_brush_stroke(
         brush=op,
         iterations=iterations,
         symmetry_axis=symmetry_axis,
+        falloff_hardness=falloff_hardness,
     )
     return _replace_height_rows(
         primitive,
@@ -971,6 +997,7 @@ def apply_terrain_brush_stroke(
             "last_brush_delta": float(delta),
             "last_brush_height": float(height),
             "last_brush_strength": blend,
+            "last_brush_falloff_hardness": max(0.0, min(1.0, float(falloff_hardness))),
             "last_brush_symmetry_axis": str(symmetry_axis or "").strip().lower(),
             "last_brush_slope_report": {
                 "max_slope_degrees": float(slope_report.max_slope_degrees),
@@ -1095,10 +1122,36 @@ def terrain_triangle_slope_degrees(a: Vec3, b: Vec3, c: Vec3) -> float:
     return _triangle_slope_degrees(a, b, c)
 
 
-def _terrain_faces(row_count: int, column_count: int) -> tuple[Face, ...]:
+def normalised_terrain_holes(
+    holes: tuple[tuple[int, int], ...] | list[Any] | None,
+    *,
+    row_count: int,
+    column_count: int,
+) -> tuple[tuple[int, int], ...]:
+    """Return in-range, deduplicated hole cells sorted for stable output."""
+
+    valid: set[tuple[int, int]] = set()
+    for cell in holes or ():
+        try:
+            row_index, column_index = int(cell[0]), int(cell[1])
+        except (IndexError, TypeError, ValueError):
+            continue
+        if 0 <= row_index < row_count - 1 and 0 <= column_index < column_count - 1:
+            valid.add((row_index, column_index))
+    return tuple(sorted(valid))
+
+
+def _terrain_faces(
+    row_count: int,
+    column_count: int,
+    holes: tuple[tuple[int, int], ...] = (),
+) -> tuple[Face, ...]:
+    holed = set(holes or ())
     faces: list[Face] = []
     for row_index in range(row_count - 1):
         for column_index in range(column_count - 1):
+            if (row_index, column_index) in holed:
+                continue
             v00 = row_index * column_count + column_index
             v10 = v00 + 1
             v01 = (row_index + 1) * column_count + column_index
@@ -1106,6 +1159,53 @@ def _terrain_faces(row_count: int, column_count: int) -> tuple[Face, ...]:
             faces.append((v00, v10, v11))
             faces.append((v00, v11, v01))
     return tuple(faces)
+
+
+def carve_terrain_hole(
+    primitive: TerrainHeightfieldPrimitive,
+    *,
+    row_index: int,
+    column_index: int,
+    radius: int = 0,
+) -> TerrainHeightfieldPrimitive:
+    """Remove the grid cells within a Chebyshev radius from the terrain floor."""
+
+    rows = _height_rows(primitive)
+    row_count, column_count = len(rows), len(rows[0]) if rows else 0
+    span = max(0, int(radius))
+    requested = {
+        (int(row_index) + dr, int(column_index) + dc)
+        for dr in range(-span, span + 1)
+        for dc in range(-span, span + 1)
+    }
+    combined = normalised_terrain_holes(
+        tuple(primitive.holes) + tuple(requested),
+        row_count=row_count,
+        column_count=column_count,
+    )
+    total_cells = max(0, (row_count - 1) * (column_count - 1))
+    if len(combined) >= total_cells:
+        raise ValueError("Terrain hole would remove every walkable cell; leave at least one floor cell.")
+    return replace(primitive, holes=combined)
+
+
+def fill_terrain_hole(
+    primitive: TerrainHeightfieldPrimitive,
+    *,
+    row_index: int,
+    column_index: int,
+    radius: int = 0,
+) -> TerrainHeightfieldPrimitive:
+    """Restore previously carved grid cells within a Chebyshev radius."""
+
+    span = max(0, int(radius))
+    restored = {
+        (int(row_index) + dr, int(column_index) + dc)
+        for dr in range(-span, span + 1)
+        for dc in range(-span, span + 1)
+    }
+    remaining = tuple(cell for cell in primitive.holes if tuple(cell) not in restored)
+    return replace(primitive, holes=remaining)
 
 
 def _set_face_adjacent(face: WOKFace, edge_index: int, adjacent: int) -> None:
@@ -1141,7 +1241,11 @@ def analyse_terrain_slopes(primitive: TerrainHeightfieldPrimitive) -> TerrainSlo
     if len(validation_rows) < 2 or not validation_rows or len(validation_rows[0]) < 2:
         return TerrainSlopeReport(0, 0, 0, 0.0, ("Terrain heightfield is too small to analyse.",))
     vertices = _grid_vertices(primitive)
-    faces = _terrain_faces(len(validation_rows), len(validation_rows[0]))
+    faces = _terrain_faces(
+        len(validation_rows),
+        len(validation_rows[0]),
+        normalised_terrain_holes(primitive.holes, row_count=len(validation_rows), column_count=len(validation_rows[0])),
+    )
     max_walkable_slope = float(primitive.max_walkable_slope_degrees)
     max_slope = 0.0
     non_walk = 0
@@ -1164,6 +1268,36 @@ def analyse_terrain_slopes(primitive: TerrainHeightfieldPrimitive) -> TerrainSlo
     )
 
 
+def _grid_normals(
+    primitive: TerrainHeightfieldPrimitive,
+    row_count: int,
+    column_count: int,
+) -> tuple[tuple[float, float, float], ...]:
+    """Per-vertex normals from height central differences.
+
+    Flat (0,0,1) normals made sculpted hills light like a plane in the
+    viewport and in game; these follow the painted slope instead.
+    """
+
+    rows = _height_rows(primitive)
+    dx = float(primitive.width) / max(1, column_count - 1)
+    dy = float(primitive.depth) / max(1, row_count - 1)
+    normals: list[tuple[float, float, float]] = []
+    for row_index in range(row_count):
+        for column_index in range(column_count):
+            left = rows[row_index][max(0, column_index - 1)]
+            right = rows[row_index][min(column_count - 1, column_index + 1)]
+            span_x = dx * (min(column_count - 1, column_index + 1) - max(0, column_index - 1))
+            south = rows[max(0, row_index - 1)][column_index]
+            north = rows[min(row_count - 1, row_index + 1)][column_index]
+            span_y = dy * (min(row_count - 1, row_index + 1) - max(0, row_index - 1))
+            slope_x = (float(right) - float(left)) / max(1.0e-6, span_x)
+            slope_y = (float(north) - float(south)) / max(1.0e-6, span_y)
+            length = (slope_x * slope_x + slope_y * slope_y + 1.0) ** 0.5
+            normals.append((-slope_x / length, -slope_y / length, 1.0 / length))
+    return tuple(normals)
+
+
 def build_terrain_mesh(primitive: TerrainHeightfieldPrimitive) -> PrimitiveMesh:
     """Build the visible terrain mesh for a Map Studio room."""
 
@@ -1172,14 +1306,16 @@ def build_terrain_mesh(primitive: TerrainHeightfieldPrimitive) -> PrimitiveMesh:
         raise ValueError("; ".join(validation.blocking_issues))
     rows = _height_rows(primitive)
     vertices = _grid_vertices(primitive)
-    faces = _terrain_faces(validation.row_count, validation.column_count)
+    holes = normalised_terrain_holes(primitive.holes, row_count=validation.row_count, column_count=validation.column_count)
+    faces = _terrain_faces(validation.row_count, validation.column_count, holes)
     report = analyse_terrain_slopes(primitive)
     heights = [vertex[2] for vertex in vertices]
+    normals = _grid_normals(primitive, validation.row_count, validation.column_count)
     return PrimitiveMesh(
         name=f"{primitive.room_resref}_terrain",
         vertices=vertices,
         faces=faces,
-        normals=((0.0, 0.0, 1.0),) * len(vertices),
+        normals=normals,
         uvs=_grid_uvs(validation.row_count, validation.column_count),
         texture=primitive.material.texture,
         diffuse=primitive.material.diffuse,
@@ -1194,6 +1330,7 @@ def build_terrain_mesh(primitive: TerrainHeightfieldPrimitive) -> PrimitiveMesh:
             "max_slope_degrees": report.max_slope_degrees,
             "walkable_triangle_count": report.walkable_triangle_count,
             "non_walk_triangle_count": report.non_walk_triangle_count,
+            "hole_cell_count": len(holes),
             "height_samples": rows,
             **dict(primitive.metadata),
         },
@@ -1207,7 +1344,11 @@ def build_terrain_wok(primitive: TerrainHeightfieldPrimitive) -> WOKData:
     if not validation.ok:
         raise ValueError("; ".join(validation.blocking_issues))
     vertices = _grid_vertices(primitive)
-    mesh_faces = _terrain_faces(validation.row_count, validation.column_count)
+    mesh_faces = _terrain_faces(
+        validation.row_count,
+        validation.column_count,
+        normalised_terrain_holes(primitive.holes, row_count=validation.row_count, column_count=validation.column_count),
+    )
     walk_surface = resolve_walkmesh_surface_id(primitive.floor_surface_id)
     non_walk_surface = resolve_walkmesh_surface_id(primitive.non_walk_surface_id)
     max_walkable_slope = float(primitive.max_walkable_slope_degrees)
@@ -1266,7 +1407,10 @@ __all__ = [
     "bend_terrain_heightfield",
     "build_terrain_mesh",
     "build_terrain_wok",
+    "carve_terrain_hole",
     "compile_terrain_room_geometry",
+    "fill_terrain_hole",
+    "normalised_terrain_holes",
     "flatten_terrain_heightfield",
     "lattice_terrain_heightfield",
     "mirror_terrain_heightfield_z",

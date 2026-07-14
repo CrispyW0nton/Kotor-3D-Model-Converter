@@ -129,14 +129,18 @@ def test_export_uses_last_preview_animation_block_without_retargeting(monkeypatc
         lambda *_args, **_kwargs: pytest.fail("export must not rebuild preview"),
     )
     writer = SpyWriter()
+    resource_manager = object()
+    request = _request(tmp_path)
+    request.resource_manager = resource_manager
 
-    result = export_retarget_preview_override(_request(tmp_path), writer=writer)
+    result = export_retarget_preview_override(request, writer=writer)
 
     assert result.slot_name == "pause1"
     assert len(writer.calls) == 1
     injection_request, animation_block = writer.calls[0]
     assert injection_request.animation_slot == "pause1"
     assert injection_request.verify_roundtrip is True
+    assert injection_request.resource_manager is resource_manager
     assert animation_block.name == "pause1"
     assert result.export_job_result is not None
     assert result.export_job_result.succeeded is True

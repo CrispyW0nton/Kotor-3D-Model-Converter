@@ -2943,6 +2943,104 @@ def _vertex_bounds(model: Any) -> Optional[Tuple[Tuple[float, float, float], Tup
     return (tuple(mins), tuple(maxs))  # type: ignore[return-value]
 
 
+def _quat_rotate_vec(rotation: Sequence[float], point: Sequence[float]) -> Vec3:
+    """Rotate a point/vector by an XYZW quaternion."""
+
+    try:
+        x, y, z, w = (
+            float(rotation[0]),
+            float(rotation[1]),
+            float(rotation[2]),
+            float(rotation[3]),
+        )
+        px, py, pz = float(point[0]), float(point[1]), float(point[2])
+    except Exception:
+        return (
+            float(point[0]) if len(point) > 0 else 0.0,
+            float(point[1]) if len(point) > 1 else 0.0,
+            float(point[2]) if len(point) > 2 else 0.0,
+        )
+    length = math.sqrt(x * x + y * y + z * z + w * w)
+    if length <= 1.0e-12:
+        return (px, py, pz)
+    x /= length
+    y /= length
+    z /= length
+    w /= length
+    # q * p * q^-1, expanded for a pure-vector quaternion p.
+    tx = 2.0 * (y * pz - z * py)
+    ty = 2.0 * (z * px - x * pz)
+    tz = 2.0 * (x * py - y * px)
+    return (
+        px + w * tx + (y * tz - z * ty),
+        py + w * ty + (z * tx - x * tz),
+        pz + w * tz + (x * ty - y * tx),
+    )
+
+
+def _node_world_vertex_bounds(
+    model: Any,
+    *,
+    skin_only: bool = False,
+) -> Optional[Tuple[Tuple[float, float, float], Tuple[float, float, float]]]:
+    """Return vertex bounds after each node's local transform is applied.
+
+    Native KOTOR skin vertices are stored in node-local space.  Bounds used as
+    Character Builder reference frames must match the visible template body, so
+    selected native templates need node-local skin vertices lifted into model
+    space before their height drives OBJ/PLY fallback scaling.
+    """
+
+    mins = [float("inf"), float("inf"), float("inf")]
+    maxs = [float("-inf"), float("-inf"), float("-inf")]
+    found = False
+    for node in _iter_model_nodes(model):
+        vertices = list(getattr(node, "vertices", []) or [])
+        if not vertices:
+            continue
+        if skin_only and not bool(getattr(node, "is_skin", False)):
+            continue
+        position: Vec3 = (0.0, 0.0, 0.0)
+        rotation: Tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
+        try:
+            world_transform = node.world_transform()
+            if world_transform and len(world_transform) >= 2:
+                raw_pos, raw_rot = world_transform[0], world_transform[1]
+                position = (float(raw_pos[0]), float(raw_pos[1]), float(raw_pos[2]))
+                rotation = (
+                    float(raw_rot[0]),
+                    float(raw_rot[1]),
+                    float(raw_rot[2]),
+                    float(raw_rot[3]),
+                )
+        except Exception:
+            try:
+                raw_pos = node.bone_world_position()
+                position = (float(raw_pos[0]), float(raw_pos[1]), float(raw_pos[2]))
+            except Exception:
+                position = (0.0, 0.0, 0.0)
+        for vert in vertices:
+            if len(vert) < 3:
+                continue
+            try:
+                rotated = _quat_rotate_vec(rotation, vert)
+                x = rotated[0] + position[0]
+                y = rotated[1] + position[1]
+                z = rotated[2] + position[2]
+            except Exception:
+                continue
+            mins[0] = min(mins[0], x)
+            mins[1] = min(mins[1], y)
+            mins[2] = min(mins[2], z)
+            maxs[0] = max(maxs[0], x)
+            maxs[1] = max(maxs[1], y)
+            maxs[2] = max(maxs[2], z)
+            found = True
+    if not found:
+        return None
+    return (tuple(mins), tuple(maxs))  # type: ignore[return-value]
+
+
 def _refresh_external_render_bounds(
     model: Any,
 ) -> Optional[Tuple[Tuple[float, float, float], Tuple[float, float, float]]]:
@@ -2997,7 +3095,7 @@ def _height_from_bounds(bounds: Optional[Tuple[Tuple[float, float, float], Tuple
 
 def reference_model_height(reference_model: Any) -> float:
     """Return the KOTOR-space height of a selected base skeleton/model."""
-    mesh_height = _height_from_bounds(_vertex_bounds(reference_model))
+    mesh_height = _height_from_bounds(_reference_model_fit_bounds(reference_model))
     if mesh_height > 0.01:
         return mesh_height
     bone_height = _height_from_bounds(_model_bone_bounds(reference_model))
@@ -3016,9 +3114,15 @@ def _reference_model_fit_bounds(reference_model: Any) -> Optional[Tuple[Tuple[fl
     """
     if reference_model is None:
         return None
-    mesh_bounds = _vertex_bounds(reference_model)
+    skin_bounds = _node_world_vertex_bounds(reference_model, skin_only=True)
+    if skin_bounds is not None and _height_from_bounds(skin_bounds) > 0.01:
+        return skin_bounds
+    mesh_bounds = _node_world_vertex_bounds(reference_model)
     if mesh_bounds is not None and _height_from_bounds(mesh_bounds) > 0.01:
         return mesh_bounds
+    raw_mesh_bounds = _vertex_bounds(reference_model)
+    if raw_mesh_bounds is not None and _height_from_bounds(raw_mesh_bounds) > 0.01:
+        return raw_mesh_bounds
     bone_bounds = _model_bone_bounds(reference_model)
     if bone_bounds is not None and _height_from_bounds(bone_bounds) > 0.01:
         return bone_bounds
@@ -4366,6 +4470,254 @@ def _transform_point_for_kotor(
         mapped[1] * scale + offset[1],
         mapped[2] * scale + offset[2],
     )
+
+
+def _yaw_rotation_matrix_z(degrees_value: float) -> Tuple[Vec3, Vec3, Vec3]:
+    """Rotation about KOTOR +Z (yaw) as row-major 3x3."""
+    rad = math.radians(float(degrees_value))
+    c = math.cos(rad)
+    s = math.sin(rad)
+    return (
+        (c, -s, 0.0),
+        (s, c, 0.0),
+        (0.0, 0.0, 1.0),
+    )
+
+
+def _mat_mul(
+    a: Tuple[Vec3, Vec3, Vec3],
+    b: Tuple[Vec3, Vec3, Vec3],
+) -> Tuple[Vec3, Vec3, Vec3]:
+    return tuple(
+        tuple(
+            sum(a[row][k] * b[k][col] for k in range(3))
+            for col in range(3)
+        )
+        for row in range(3)
+    )  # type: ignore[return-value]
+
+
+def _reference_world_vertex_sample(
+    reference_model: Any,
+    *,
+    max_points: int = 1500,
+) -> List[Vec3]:
+    """Visible reference vertices lifted into model/world space.
+
+    Prefers skin nodes (the visible body envelope — same preference as
+    :func:`_reference_model_fit_bounds`), falling back to any mesh node.
+    Used as the target cloud for yaw-candidate scoring.
+    """
+    if reference_model is None:
+        return []
+    for skin_only in (True, False):
+        points: List[Vec3] = []
+        for node in _iter_model_nodes(reference_model):
+            vertices = list(getattr(node, "vertices", []) or [])
+            if not vertices:
+                continue
+            if skin_only and not bool(getattr(node, "is_skin", False)):
+                continue
+            position: Vec3 = (0.0, 0.0, 0.0)
+            rotation = (0.0, 0.0, 0.0, 1.0)
+            try:
+                world_transform = node.world_transform()
+                if world_transform and len(world_transform) >= 2:
+                    raw_pos, raw_rot = world_transform[0], world_transform[1]
+                    position = (float(raw_pos[0]), float(raw_pos[1]), float(raw_pos[2]))
+                    rotation = (
+                        float(raw_rot[0]), float(raw_rot[1]),
+                        float(raw_rot[2]), float(raw_rot[3]),
+                    )
+            except Exception:
+                try:
+                    raw_pos = node.bone_world_position()
+                    position = (float(raw_pos[0]), float(raw_pos[1]), float(raw_pos[2]))
+                except Exception:
+                    position = (0.0, 0.0, 0.0)
+            for vert in vertices:
+                if len(vert) < 3:
+                    continue
+                try:
+                    rotated = _quat_rotate_vec(rotation, vert)
+                    points.append((
+                        rotated[0] + position[0],
+                        rotated[1] + position[1],
+                        rotated[2] + position[2],
+                    ))
+                except Exception:
+                    continue
+        if points:
+            stride = max(1, len(points) // max(1, int(max_points)))
+            return points[::stride][:max_points]
+    return []
+
+
+def _model_vertex_sample_mapped(
+    model: Any,
+    *,
+    vertical_axis: int,
+    max_points: int = 1500,
+) -> List[Vec3]:
+    """Raw imported-model vertices after the vertical-axis map to KOTOR Z-up."""
+    points: List[Vec3] = []
+    for node in _iter_model_nodes(model):
+        for vert in list(getattr(node, "vertices", []) or []):
+            if len(vert) < 3:
+                continue
+            try:
+                points.append(_axis_map_to_kotor_z(
+                    (float(vert[0]), float(vert[1]), float(vert[2])),
+                    vertical_axis,
+                ))
+            except Exception:
+                continue
+    if not points:
+        return []
+    stride = max(1, len(points) // max(1, int(max_points)))
+    return points[::stride][:max_points]
+
+
+def _solve_reference_yaw_candidates(
+    source_points: Sequence[Vec3],
+    reference_points: Sequence[Vec3],
+) -> Optional[Dict[str, Any]]:
+    """Score 0/90/180/270-degree yaw candidates against the reference cloud.
+
+    Both clouds are normalized in-place (XY bounds center at origin, ground at
+    z=0, source scaled to the reference height) so only orientation differs.
+    Score = symmetric chamfer distance; tie-break inside a 5% relative band
+    prefers the candidate whose facing cue (forward protrusion of the toe and
+    head slabs) agrees with the reference, then the smaller rotation.  A
+    mirrored (X-flip) candidate set is scored for the trace but never applied —
+    fit must stay rigid + uniform scale (no anatomy warping).
+
+    Returns None when numpy or usable clouds are unavailable, so the caller
+    can skip the stage without changing legacy behavior.
+    """
+    try:
+        import numpy as np
+    except Exception:                                       # pragma: no cover
+        return None
+    if len(source_points) < 16 or len(reference_points) < 16:
+        return None
+
+    def _normalize(cloud: Any) -> Any:
+        mins = cloud.min(axis=0)
+        maxs = cloud.max(axis=0)
+        center = (mins + maxs) * 0.5
+        out = cloud.copy()
+        out[:, 0] -= center[0]
+        out[:, 1] -= center[1]
+        out[:, 2] -= mins[2]
+        return out
+
+    def _chamfer(a: Any, b: Any) -> float:
+        # Symmetric mean nearest-neighbour distance, chunked to bound memory.
+        def one_way(src: Any, dst: Any) -> float:
+            total = 0.0
+            chunk = 256
+            for start in range(0, src.shape[0], chunk):
+                block = src[start:start + chunk]
+                diff = block[:, None, :] - dst[None, :, :]
+                dist = np.sqrt((diff * diff).sum(axis=2))
+                total += float(dist.min(axis=1).sum())
+            return total / float(src.shape[0])
+        return 0.5 * (one_way(a, b) + one_way(b, a))
+
+    def _facing_cue(cloud: Any) -> float:
+        # Forward (+Y) protrusion asymmetry: toes (bottom 10% slab) carry the
+        # strongest humanoid signal; head/face slab (top 15%) is secondary.
+        height = float(cloud[:, 2].max())
+        if height <= 1.0e-6:
+            return 0.0
+        toe_mask = cloud[:, 2] <= height * 0.10
+        head_mask = cloud[:, 2] >= height * 0.85
+        toe_cue = float(cloud[toe_mask, 1].mean()) if toe_mask.any() else 0.0
+        head_cue = float(cloud[head_mask, 1].mean()) if head_mask.any() else 0.0
+        return toe_cue + 0.5 * head_cue
+
+    src = _normalize(np.asarray(source_points, dtype=np.float64))
+    ref = _normalize(np.asarray(reference_points, dtype=np.float64))
+    src_height = float(src[:, 2].max())
+    ref_height = float(ref[:, 2].max())
+    if src_height <= 1.0e-6 or ref_height <= 1.0e-6:
+        return None
+    src = src * (ref_height / src_height)
+    ref_cue = _facing_cue(ref)
+
+    candidates: List[Dict[str, Any]] = []
+    for mirrored in (False, True):
+        base = src.copy()
+        if mirrored:
+            base[:, 0] *= -1.0
+        for deg in (0.0, 90.0, 180.0, 270.0):
+            rows = _yaw_rotation_matrix_z(deg)
+            rot = np.asarray(rows, dtype=np.float64)
+            cand = _normalize(base @ rot.T)
+            cue = _facing_cue(cand)
+            candidates.append({
+                "yaw_degrees": deg,
+                "mirrored": mirrored,
+                "chamfer": _chamfer(cand, ref),
+                "facing_cue": cue,
+            })
+
+    # Selection: near-front-back-symmetric humanoids give chamfer gaps of
+    # only a few percent between 0 and 180 degrees, so chamfer alone cannot
+    # decide facing.  KOTOR native models face +Y by format convention (the
+    # reference is already in KOTOR space), so the facing cue is judged
+    # against that fixed prior rather than a measured (and noisy) reference
+    # cue.  Geometry still gates first: only candidates within a 15% chamfer
+    # band of the best are facing-eligible; 90/270 misfits stay excluded.
+    applied = [c for c in candidates if not c["mirrored"]]
+    best_chamfer = min(c["chamfer"] for c in applied)
+    band = [
+        c for c in applied
+        if c["chamfer"] <= best_chamfer * 1.15 + 1.0e-12
+    ]
+    cue_threshold = max(1.0e-6, ref_height * 0.005)
+    for c in candidates:
+        cue = float(c["facing_cue"])
+        c["faces_kotor_forward"] = (
+            True if cue > cue_threshold
+            else False if cue < -cue_threshold
+            else None
+        )
+    forward_band = [c for c in band if c.get("faces_kotor_forward") is True]
+    preference = {0.0: 0, 180.0: 1, 90.0: 2, 270.0: 3}
+    pool = forward_band or band
+    winner = sorted(
+        pool,
+        key=lambda c: (
+            float(c["chamfer"]),
+            preference.get(float(c["yaw_degrees"]), 9),
+        ),
+    )[0]
+    return {
+        "ok": True,
+        "method": "reference_cloud_yaw_candidates",
+        "selected_degrees": float(winner["yaw_degrees"]),
+        "selected_chamfer": float(winner["chamfer"]),
+        "selected_faces_kotor_forward": winner.get("faces_kotor_forward"),
+        "facing_prior": "kotor_plus_y_forward",
+        "facing_cue_threshold": float(cue_threshold),
+        "reference_facing_cue": float(ref_cue),
+        "chamfer_band_relative": 0.15,
+        "forward_candidates_in_band": len(forward_band),
+        "source_sample_count": int(src.shape[0]),
+        "reference_sample_count": int(ref.shape[0]),
+        "candidates": [
+            {
+                "yaw_degrees": float(c["yaw_degrees"]),
+                "mirrored": bool(c["mirrored"]),
+                "chamfer": round(float(c["chamfer"]), 6),
+                "facing_cue": round(float(c["facing_cue"]), 6),
+                "faces_kotor_forward": c.get("faces_kotor_forward"),
+            }
+            for c in candidates
+        ],
+    }
 
 
 def _apply_point_transform_to_model(
@@ -6013,6 +6365,38 @@ def normalize_external_model_for_kotor(
     target = float(target_height or reference_height or _kotor_template_humanoid_height(game_version))
     scale = target / source_height if source_height > 1e-6 else 1.0
 
+    # ---- Yaw orientation stage (T2529) ---------------------------------
+    # The bounds fallback historically only mapped the vertical axis to Z
+    # and never solved facing, so posed OBJ imports without skeleton
+    # landmarks could land rotated 90/180/270 degrees from the reference
+    # (Bendak vs n_mandalorian). Score yaw candidates against the visible
+    # reference cloud; on any failure fall back to identity yaw (legacy
+    # behavior). Correspondence/landmark policies solve rotation upstream
+    # and never reach this path.
+    yaw_stage: Optional[Dict[str, Any]] = None
+    yaw_degrees = 0.0
+    if reference_model is not None and reference_bounds is not None:
+        try:
+            yaw_stage = _solve_reference_yaw_candidates(
+                _model_vertex_sample_mapped(
+                    model, vertical_axis=vertical_axis, max_points=1500,
+                ),
+                _reference_world_vertex_sample(
+                    reference_model, max_points=1500,
+                ),
+            )
+        except Exception:
+            log.warning(
+                "normalize_external_model_for_kotor: yaw orientation stage "
+                "failed; keeping identity yaw",
+                exc_info=True,
+            )
+            yaw_stage = None
+        if yaw_stage is not None and yaw_stage.get("ok"):
+            yaw_degrees = float(yaw_stage.get("selected_degrees") or 0.0)
+    yaw_matrix = _yaw_rotation_matrix_z(yaw_degrees)
+    apply_yaw = abs(yaw_degrees) > 1.0e-9
+
     mapped_min = _axis_map_to_kotor_z(bb_min, vertical_axis)
     mapped_max = _axis_map_to_kotor_z(bb_max, vertical_axis)
     norm_min = tuple(min(mapped_min[i], mapped_max[i]) for i in range(3))
@@ -6033,6 +6417,11 @@ def normalize_external_model_for_kotor(
         target_center_y - center_y * scale,
         target_ground_z - norm_min[2] * scale,
     )
+    # Yaw rotates about the mapped-bounds center so the XY center and the
+    # ground plane stay fixed for 0/90/180/270 candidates — the legacy
+    # offset math above remains valid for every candidate.
+    source_pivot = (center_x, center_y, norm_min[2])
+    target_pivot = (target_center_x, target_center_y, target_ground_z)
     source_origin = _bounds_ground_center(bounds)
     target_origin = _transform_point_for_kotor(
         source_origin,
@@ -6040,35 +6429,65 @@ def normalize_external_model_for_kotor(
         scale=scale,
         offset=offset,
     )
+    rotation_total = (
+        _mat_mul(yaw_matrix, _axis_map_matrix_to_kotor_z(vertical_axis))
+        if apply_yaw else
+        _axis_map_matrix_to_kotor_z(vertical_axis)
+    )
+    if apply_yaw:
+        mapped_origin = _axis_map_to_kotor_z(source_origin, vertical_axis)
+        rel_origin = _vec_sub(mapped_origin, source_pivot)
+        target_origin = _vec_add(
+            target_pivot,
+            _mat_vec(yaw_matrix, _vec_scale(rel_origin, scale)),
+        )
     fit_transform = _fit_transform_metadata(
         policy="selected_reference_bounds" if reference_bounds is not None else "origin_height",
         scale=scale,
-        rotation_matrix=_axis_map_matrix_to_kotor_z(vertical_axis),
+        rotation_matrix=rotation_total,
         source_origin=source_origin,
         target_origin=target_origin,
     )
+    if yaw_stage is not None:
+        fit_transform["orientation_stage"] = yaw_stage
 
     def transform_point(point: Vec3) -> Vec3:
-        return _transform_point_for_kotor(
-            point,
-            vertical_axis=vertical_axis,
-            scale=scale,
-            offset=offset,
+        if not apply_yaw:
+            return _transform_point_for_kotor(
+                point,
+                vertical_axis=vertical_axis,
+                scale=scale,
+                offset=offset,
+            )
+        mapped = _axis_map_to_kotor_z(point, vertical_axis)
+        rel = _vec_sub(mapped, source_pivot)
+        return _vec_add(
+            target_pivot,
+            _mat_vec(yaw_matrix, _vec_scale(rel, scale)),
         )
 
     def transform_direction(direction: Vec3) -> Vec3:
-        if vertical_axis == 2:
+        mapped = (
+            direction
+            if vertical_axis == 2 else
+            _axis_map_to_kotor_z(direction, vertical_axis)
+        )
+        if apply_yaw:
+            mapped = _mat_vec(yaw_matrix, mapped)
+        if vertical_axis == 2 and not apply_yaw:
             return direction
-        mapped = _axis_map_to_kotor_z(direction, vertical_axis)
         return _vec_normalize(mapped) or mapped
 
     def transform_node_position(point: Vec3) -> Vec3:
-        return _transform_point_for_kotor(
+        mapped = _transform_point_for_kotor(
             point,
             vertical_axis=vertical_axis,
             scale=scale,
             offset=(0.0, 0.0, 0.0),
         )
+        if apply_yaw:
+            mapped = _mat_vec(yaw_matrix, mapped)
+        return mapped
 
     fitted_visual_overlay = {
         "coordinate_space": "kotor_world_after_fit",
@@ -6111,6 +6530,8 @@ def normalize_external_model_for_kotor(
         "target_ground_z": target_ground_z,
         "external_world_positions_fit": True,
         "fit_policy": "selected_reference_bounds" if reference_bounds is not None else "origin_height",
+        "orientation_stage": yaw_stage,
+        "applied_yaw_degrees": yaw_degrees,
         "fit_transform": fit_transform,
         "fit_report": fit_report,
         "fitted_visual_overlay": fitted_visual_overlay,
@@ -6544,6 +6965,20 @@ def _split_mesh_node_by_components(node: Any) -> List[Any]:
 #: KOTOR skin-node palette limit: a skin mesh's bonemap may reference at most
 #: 16 bones.  PR E (T2512) enforces this as a hard export gate.
 _SKIN_PALETTE_LIMIT = 16
+_SPLIT_WEIGHT_SMOOTH_MIN_VERTICES = 128
+_SPLIT_WEIGHT_SMOOTH_DENSITY_RATIO = 2.0
+_SPLIT_WEIGHT_SMOOTH_ITERATIONS = 4
+_RANCOR_HAND_FINGER_COLLAPSE = 1.0
+_RANCOR_HAND_FOREARM_BLEND = 0.80
+_RANCOR_HAND_FOREARM_START_QUANTILE = 0.35
+_RANCOR_HAND_FOREARM_END_QUANTILE = 0.90
+_RANCOR_HAND_MIN_SHARE = 0.10
+_RANCOR_HAND_MAX_SHARE = 0.90
+_SPLIT_WEIGHT_SEAM_POSITION_TOLERANCE = 1.0e-4
+#: Seam weld fires only above this weight delta: vanilla models carry ~1e-4
+#: authored noise between boundary twins (invisible in game), and D-5
+#: byte-identity must hold when no weight mutator ran (T2533).
+_SPLIT_SEAM_WELD_MIN_DELTA = 1.0e-3
 
 
 def validate_skin_node_palettes(model: Any) -> Dict[str, Any]:
@@ -6571,34 +7006,921 @@ def validate_skin_node_palettes(model: Any) -> Dict[str, Any]:
     return {"ok": not violations, "violations": violations}
 
 
-def _bone_bind_arrays_by_name(model: Any) -> Dict[str, Tuple[Tuple[float, float, float, float], Vec3]]:
-    """Map lowercase bone-node name → (world rotation quat XYZW, world position).
+def _kotor_skin_inverse_bind_arrays(
+    model: Any,
+    skin_node: Any,
+    *,
+    reference_model: Any = None,
+) -> Tuple[List[Tuple[float, float, float, float]], List[Vec3], List[str]]:
+    """Build compact KOTOR qBone/tBone rows for one final skin node.
 
-    Mirrors ``skeleton_builder._node_world`` semantics (bone_world_position for
-    the pivot, world_transform for the rotation) so rebuilt qBone/tBone entries
-    match what the binder would have produced.
+    KOTOR stores each qBone/tBone row as the transform from the skin node's
+    bind space into the influenced bone's bind space::
+
+        inverse_bind = inverse(bone_world) * skin_world
+
+    qBone is serialized WXYZ (despite ordinary ``ModelNode`` rotations being
+    XYZW), while tBone is the translation column of that relative transform.
+    The engine then evaluates ``bone_world * inverse_bind``; at bind pose this
+    must collapse exactly to ``skin_world`` for every palette entry.
+
+    Newly bound imported meshes historically carried each bone's *forward*
+    world XYZW rotation and world position.  Those values look finite and pass
+    structural reload checks, but drive vertices metres away from the skin as
+    soon as KOTOR consumes them.  Recompute from the final node transform so
+    split/localized skins and identity/world-space payload skins both obey the
+    same engine contract.  ``reference_model`` is only a fallback for focused
+    splitter fixtures that do not embed the donor DAG in ``model``.
     """
-    out: Dict[str, Tuple[Tuple[float, float, float, float], Vec3]] = {}
-    for bone in _iter_model_nodes(model):
-        name = str(getattr(bone, "name", "") or "").strip().lower()
-        if not name or name in out:
+
+    bone_by_name: Dict[str, Any] = {}
+    for source in (model, reference_model):
+        if source is None:
+            continue
+        for bone in _iter_model_nodes(source):
+            key = str(getattr(bone, "name", "") or "").strip().lower()
+            if key and key not in bone_by_name:
+                bone_by_name[key] = bone
+
+    skin_pos, skin_q_xyzw = _node_world_transform_or_local(skin_node)
+    qbones: List[Tuple[float, float, float, float]] = []
+    tbones: List[Vec3] = []
+    missing: List[str] = []
+    for raw_name in list(getattr(skin_node, "bone_map", []) or []):
+        name = str(raw_name or "").strip()
+        bone = bone_by_name.get(name.lower())
+        if bone is None:
+            missing.append(name)
+            qbones.append((1.0, 0.0, 0.0, 0.0))  # identity, disk WXYZ
+            tbones.append((0.0, 0.0, 0.0))
+            continue
+
+        bone_pos, bone_q_xyzw = _node_world_transform_or_local(bone)
+        inv_bone_q = _quat_inverse_xyzw(bone_q_xyzw)
+        relative_q_xyzw = _quat_mul(inv_bone_q, skin_q_xyzw)
+        relative_t = _quat_rotate_vec(
+            inv_bone_q,
+            (
+                skin_pos[0] - bone_pos[0],
+                skin_pos[1] - bone_pos[1],
+                skin_pos[2] - bone_pos[2],
+            ),
+        )
+        qbones.append(
+            (
+                relative_q_xyzw[3],
+                relative_q_xyzw[0],
+                relative_q_xyzw[1],
+                relative_q_xyzw[2],
+            )
+        )
+        tbones.append(relative_t)
+
+    return qbones, tbones, missing
+
+
+def _reference_skin_ambient(reference_model: Any) -> Optional[Vec3]:
+    """Return the selected native creature's rendered-skin ambient baseline."""
+
+    for node in _iter_model_nodes(reference_model):
+        if not bool(getattr(node, "is_skin", False)) or not bool(
+            getattr(node, "render", True)
+        ):
+            continue
+        raw = getattr(node, "ambient", None)
+        try:
+            values = tuple(float(raw[index]) for index in range(3))
+        except Exception:
+            continue
+        if all(math.isfinite(value) for value in values):
+            return values  # type: ignore[return-value]
+    return None
+
+
+def _donor_skin_bind_arrays_by_skin_name(
+    reference_model: Any,
+) -> Dict[str, Tuple[List[str], List[Tuple[float, float, float, float]], List[Vec3]]]:
+    """Return donor-authored compact qbone/tbone arrays keyed by skin-node name."""
+
+    node_index_by_name: Dict[str, int] = {}
+    for candidate in _iter_model_nodes(reference_model):
+        name = str(getattr(candidate, "name", "") or "").strip().lower()
+        if not name or name in node_index_by_name:
             continue
         try:
-            pos = tuple(float(v) for v in bone.bone_world_position()[:3])
+            node_index = int(getattr(candidate, "index"))
         except Exception:
+            continue
+        if node_index >= 0:
+            node_index_by_name[name] = node_index
+
+    out: Dict[str, Tuple[List[str], List[Tuple[float, float, float, float]], List[Vec3]]] = {}
+    for skin_node in _iter_model_nodes(reference_model):
+        if not bool(getattr(skin_node, "is_skin", False)):
+            continue
+        skin_name = str(getattr(skin_node, "name", "") or "").strip().lower()
+        if not skin_name:
+            continue
+        palette = [
+            str(name or "").strip()
+            for name in list(getattr(skin_node, "bone_map", []) or [])
+            if str(name or "").strip()
+        ]
+        qbones = list(getattr(skin_node, "qbone_list", []) or [])
+        tbones = list(getattr(skin_node, "tbone_list", []) or [])
+        if not palette or not qbones or not tbones:
+            continue
+
+        compact_q: List[Tuple[float, float, float, float]] = []
+        compact_t: List[Vec3] = []
+        for slot, bone_name in enumerate(palette):
+            bone_key = str(bone_name or "").strip().lower()
+            node_index = node_index_by_name.get(bone_key)
+            if node_index is not None and node_index < len(qbones) and node_index < len(tbones):
+                q = qbones[node_index]
+                t = tbones[node_index]
+            elif slot < len(qbones) and slot < len(tbones):
+                q = qbones[slot]
+                t = tbones[slot]
+            else:
+                compact_q = []
+                compact_t = []
+                break
             try:
-                pos = tuple(float(v) for v in bone.world_transform()[0][:3])
+                compact_q.append(tuple(float(value) for value in q[:4]))  # type: ignore[index]
+                compact_t.append(tuple(float(value) for value in t[:3]))  # type: ignore[index]
             except Exception:
-                pos = tuple(
-                    float(v) for v in (getattr(bone, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))[:3]
-                )
+                compact_q = []
+                compact_t = []
+                break
+        if len(compact_q) == len(palette) and len(compact_t) == len(palette):
+            out[skin_name] = (palette, compact_q, compact_t)
+    return out
+
+
+def _donor_skin_node_metadata_by_name(reference_model: Any) -> Dict[str, Dict[str, Any]]:
+    """Return donor-authored skin-node transform/render metadata by name."""
+
+    out: Dict[str, Dict[str, Any]] = {}
+    for skin_node in _iter_model_nodes(reference_model):
+        if not bool(getattr(skin_node, "is_skin", False)):
+            continue
+        name = str(getattr(skin_node, "name", "") or "").strip().lower()
+        if not name or name in out:
+            continue
+        world_position, world_rotation = _node_world_transform_or_local(skin_node)
+        out[name] = {
+            "position": tuple(
+                float(value)
+                for value in (getattr(skin_node, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))[:3]
+            ),
+            "rotation": tuple(
+                float(value)
+                for value in (getattr(skin_node, "rotation", (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0))[:4]
+            ),
+            "world_position": world_position,
+            "world_rotation": world_rotation,
+            "render": bool(getattr(skin_node, "render", True)),
+            "has_shadow": bool(getattr(skin_node, "has_shadow", False)),
+            "beaming": bool(getattr(skin_node, "beaming", False)),
+            "background_geometry": bool(getattr(skin_node, "background_geometry", False)),
+            "has_lightmap": bool(getattr(skin_node, "has_lightmap", False)),
+            "rotate_texture": bool(getattr(skin_node, "rotate_texture", False)),
+            "transparency_hint": int(getattr(skin_node, "transparency_hint", 0) or 0),
+            "diffuse": tuple(
+                float(value)
+                for value in (getattr(skin_node, "diffuse", (1.0, 1.0, 1.0)) or (1.0, 1.0, 1.0))[:3]
+            ),
+            "ambient": tuple(
+                float(value)
+                for value in (getattr(skin_node, "ambient", (1.0, 1.0, 1.0)) or (1.0, 1.0, 1.0))[:3]
+            ),
+            "vertex_count": len(list(getattr(skin_node, "vertices", []) or [])),
+        }
+    return out
+
+
+def _normalize_skin_weight_influences(
+    influences: Sequence[Any],
+    *,
+    max_influences: int = 4,
+) -> List[Any]:
+    md = _import_model_data()
+    BoneWeight = md.BoneWeight
+    merged: Dict[int, float] = {}
+    for influence in list(influences or []):
         try:
-            rot = tuple(float(v) for v in bone.world_transform()[1][:4])
+            if isinstance(influence, (tuple, list)) and len(influence) >= 2:
+                bone_index = int(influence[0])
+                weight = float(influence[1] or 0.0)
+            else:
+                bone_index = int(getattr(influence, "bone_index", -1))
+                weight = float(getattr(influence, "weight", 0.0) or 0.0)
         except Exception:
-            rot = tuple(
-                float(v) for v in (getattr(bone, "rotation", (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0))[:4]
+            continue
+        if bone_index < 0 or weight <= 1.0e-9:
+            continue
+        merged[bone_index] = merged.get(bone_index, 0.0) + weight
+    ordered = sorted(merged.items(), key=lambda item: item[1], reverse=True)
+    ordered = ordered[:max(1, min(4, int(max_influences or 4)))]
+    total = sum(weight for _bone_index, weight in ordered)
+    if not math.isfinite(total) or total <= 1.0e-12:
+        return []
+    return [
+        BoneWeight(int(bone_index), float(weight) / total)
+        for bone_index, weight in ordered
+    ]
+
+
+def _skin_weight_adjacency(node: Any) -> List[set[int]]:
+    vertices = list(getattr(node, "vertices", []) or [])
+    adjacency: List[set[int]] = [set() for _ in vertices]
+    for face in list(getattr(node, "faces", []) or []):
+        try:
+            a, b, c = (int(face[0]), int(face[1]), int(face[2]))
+        except Exception:
+            continue
+        if min(a, b, c) < 0 or max(a, b, c) >= len(adjacency):
+            continue
+        for u, v in ((a, b), (b, c), (c, a)):
+            if u == v:
+                continue
+            adjacency[u].add(v)
+            adjacency[v].add(u)
+    return adjacency
+
+
+def _position_duplicate_groups(
+    vertices: Sequence[Sequence[float]],
+    tolerance: float,
+) -> List[List[int]]:
+    """Group indices of vertices that are bind-coincident within tolerance."""
+    buckets: Dict[Tuple[int, int, int], List[int]] = {}
+    for index, vertex in enumerate(vertices):
+        if len(vertex) < 3:
+            continue
+        try:
+            key = (
+                int(round(float(vertex[0]) / tolerance)),
+                int(round(float(vertex[1]) / tolerance)),
+                int(round(float(vertex[2]) / tolerance)),
             )
-        out[name] = (rot, pos)  # type: ignore[assignment]
+        except Exception:
+            continue
+        buckets.setdefault(key, []).append(index)
+    return [indices for indices in buckets.values() if len(indices) > 1]
+
+
+def _skin_weight_position_duplicate_stats(node: Any) -> Dict[str, int]:
+    vertices = list(getattr(node, "vertices", []) or [])
+    if len(vertices) <= 1:
+        return {
+            "position_duplicate_groups": 0,
+            "position_duplicate_vertices": 0,
+        }
+    tolerance = max(1.0e-9, float(_SPLIT_WEIGHT_SEAM_POSITION_TOLERANCE))
+    duplicate_groups = _position_duplicate_groups(vertices, tolerance)
+    return {
+        "position_duplicate_groups": len(duplicate_groups),
+        "position_duplicate_vertices": sum(len(indices) for indices in duplicate_groups),
+    }
+
+
+def _smooth_skin_weights_across_edges(
+    node: Any,
+    *,
+    iterations: int = _SPLIT_WEIGHT_SMOOTH_ITERATIONS,
+    self_weight: float = 1.0,
+    neighbor_weight: float = 1.0,
+) -> Dict[str, Any]:
+    """Blend skin rows over mesh adjacency to remove donor-transfer speckle.
+
+    Bind-coincident vertices (UV/normal seam twins) are WELDED for the blend:
+    they share one union adjacency and always receive identical influences.
+    Smoothing them independently over their disjoint face neighborhoods
+    diverges their weights, and any weight delta between coincident twins is
+    an animated crack (T2526 Rancor seam-divergence evidence).
+    """
+
+    skin_rows = list(getattr(node, "skin_data", []) or [])
+    if not skin_rows:
+        return {"applied": False, "reason": "no_skin_rows"}
+    adjacency = _skin_weight_adjacency(node)
+    if not adjacency or not any(adjacency):
+        return {"applied": False, "reason": "no_adjacency"}
+
+    tolerance = max(1.0e-9, float(_SPLIT_WEIGHT_SEAM_POSITION_TOLERANCE))
+    weld_groups = _position_duplicate_groups(
+        list(getattr(node, "vertices", []) or []), tolerance
+    )
+    root_of: Dict[int, int] = {}
+    for group in weld_groups:
+        root = min(group)
+        for index in group:
+            root_of[index] = root
+    if root_of:
+        welded: List[set[int]] = [set() for _ in adjacency]
+        for vertex_index, neighbours in enumerate(adjacency):
+            root = root_of.get(vertex_index, vertex_index)
+            for neighbor_index in neighbours:
+                neighbor_root = root_of.get(neighbor_index, neighbor_index)
+                if neighbor_root != root:
+                    welded[root].add(neighbor_root)
+        adjacency = welded
+
+    md = _import_model_data()
+    changed_rows = 0
+    for _iteration in range(max(1, int(iterations or 1))):
+        next_rows: List[Any] = []
+        computed: Dict[int, List[Any]] = {}
+        for row_index, row in enumerate(skin_rows):
+            root = root_of.get(row_index, row_index)
+            normalized = computed.get(root)
+            if normalized is None:
+                merged: Dict[int, float] = {}
+
+                def add_row(source_row: Any, scale: float) -> None:
+                    for influence in list(getattr(source_row, "influences", []) or []):
+                        try:
+                            bone_index = int(getattr(influence, "bone_index", -1))
+                            weight = float(getattr(influence, "weight", 0.0) or 0.0)
+                        except Exception:
+                            continue
+                        if bone_index < 0 or weight <= 1.0e-9:
+                            continue
+                        merged[bone_index] = merged.get(bone_index, 0.0) + weight * scale
+
+                add_row(skin_rows[root], float(self_weight))
+                neighbours = adjacency[root] if root < len(adjacency) else set()
+                if neighbours:
+                    per_neighbor = float(neighbor_weight) / float(len(neighbours))
+                    for neighbor_index in neighbours:
+                        if 0 <= neighbor_index < len(skin_rows):
+                            add_row(skin_rows[neighbor_index], per_neighbor)
+                normalized = _normalize_skin_weight_influences(merged.items())
+                if not normalized:
+                    normalized = list(getattr(skin_rows[root], "influences", []) or [])
+                computed[root] = normalized
+            try:
+                new_row = copy.copy(row)
+            except Exception:
+                new_row = row
+            old_signature = [
+                (
+                    int(getattr(influence, "bone_index", -1)),
+                    round(float(getattr(influence, "weight", 0.0) or 0.0), 6),
+                )
+                for influence in list(getattr(row, "influences", []) or [])
+            ]
+            new_signature = [
+                (
+                    int(getattr(influence, "bone_index", -1)),
+                    round(float(getattr(influence, "weight", 0.0) or 0.0), 6),
+                )
+                for influence in normalized
+            ]
+            if old_signature != new_signature:
+                changed_rows += 1
+            # Twins share values but never influence objects: later passes
+            # replace row.influences wholesale, and a shared list would let a
+            # single-row rewrite silently retarget its welded twins too.
+            setattr(new_row, "influences", [
+                md.BoneWeight(
+                    int(getattr(influence, "bone_index", -1)),
+                    float(getattr(influence, "weight", 0.0) or 0.0),
+                )
+                for influence in normalized
+            ])
+            next_rows.append(new_row)
+        skin_rows = next_rows
+
+    setattr(node, "skin_data", skin_rows)
+    duplicate_stats = _skin_weight_position_duplicate_stats(node)
+    return {
+        "applied": True,
+        "iterations": max(1, int(iterations or 1)),
+        "changed_rows": int(changed_rows),
+        "welded_duplicate_groups": len(weld_groups),
+        **duplicate_stats,
+        "vertex_count": len(skin_rows),
+    }
+
+
+def _maybe_smooth_high_density_split_weights(
+    split_node: Any,
+    donor_meta: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    if donor_meta is None:
+        return None
+    try:
+        donor_vertex_count = int(donor_meta.get("vertex_count") or 0)
+    except Exception:
+        donor_vertex_count = 0
+    vertex_count = len(list(getattr(split_node, "vertices", []) or []))
+    if donor_vertex_count <= 0:
+        return None
+    topology_weld_report = getattr(split_node, "_gr_topology_weld_report", None)
+    force_topology_smoothing = (
+        isinstance(topology_weld_report, dict)
+        and bool(topology_weld_report.get("applied", False))
+    )
+    if vertex_count < _SPLIT_WEIGHT_SMOOTH_MIN_VERTICES and not force_topology_smoothing:
+        return None
+    density_ratio = float(vertex_count) / max(1.0, float(donor_vertex_count))
+    if density_ratio < _SPLIT_WEIGHT_SMOOTH_DENSITY_RATIO and not force_topology_smoothing:
+        return None
+
+    report = _smooth_skin_weights_across_edges(split_node)
+    report["donor_vertex_count"] = donor_vertex_count
+    report["density_ratio"] = round(density_ratio, 3)
+    report["topology_weld_smoothing"] = bool(force_topology_smoothing)
+    if force_topology_smoothing:
+        report["topology_weld"] = {
+            "original_vertices": int(topology_weld_report.get("original_vertices") or 0),
+            "welded_vertices": int(topology_weld_report.get("welded_vertices") or 0),
+            "removed_vertices": int(topology_weld_report.get("removed_vertices") or 0),
+        }
+    try:
+        setattr(split_node, "_gr_split_weight_smoothing", dict(report))
+    except Exception:
+        pass
+    return report
+
+
+def _rancor_hand_side_info(split_node: Any) -> Optional[Dict[str, Any]]:
+    bone_map = [
+        str(name or "").strip()
+        for name in list(getattr(split_node, "bone_map", []) or [])
+    ]
+    if not bone_map:
+        return None
+    lower = [name.lower() for name in bone_map]
+    node_name = str(getattr(split_node, "name", "") or "").strip().lower()
+    sides = ("l", "r")
+    if "larm" in node_name:
+        sides = ("l",)
+    elif "rarm" in node_name:
+        sides = ("r",)
+
+    for side in sides:
+        hand_name = f"ran_hand{side}"
+        forearm_name = f"ran_forearm{side}"
+        if hand_name not in lower or forearm_name not in lower:
+            continue
+        suffix = f"_{side}"
+        finger_indices = [
+            index for index, name in enumerate(lower)
+            if name.endswith(suffix)
+            and (
+                name.startswith("ran_index_")
+                or name.startswith("ran_mid_")
+                or name.startswith("ran_pink_")
+                or name.startswith("ran_thumb_")
+            )
+        ]
+        if not finger_indices:
+            continue
+        return {
+            "side": side,
+            "hand": lower.index(hand_name),
+            "forearm": lower.index(forearm_name),
+            "fingers": finger_indices,
+            "bone_names": bone_map,
+        }
+    return None
+
+
+def _quantile(values: Sequence[float], fraction: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(float(value) for value in values)
+    if len(ordered) == 1:
+        return ordered[0]
+    index = int(max(0.0, min(1.0, float(fraction))) * float(len(ordered) - 1))
+    return ordered[index]
+
+
+def _stabilize_rancor_hand_split_weights(split_node: Any) -> Optional[Dict[str, Any]]:
+    """Damp imported Rancor hand/finger donor weights after anatomical split.
+
+    The stock Rancor hand and finger chain is much more articulated than many
+    external creature meshes.  Nearest-donor transfer can put neighboring
+    custom-hand triangles on different distal finger bones; the mesh remains
+    connected, but high-bend attack clips pull those tiny edges apart.  This
+    pass keeps the native Rancor arm animation while making the imported claw
+    surface behave like one skinned hand with a gradual wrist transition.
+    """
+
+    info = _rancor_hand_side_info(split_node)
+    if info is None:
+        return None
+
+    vertices = list(getattr(split_node, "vertices", []) or [])
+    skin_rows = list(getattr(split_node, "skin_data", []) or [])
+    if not vertices or not skin_rows:
+        return None
+
+    side = str(info["side"])
+    hand_index = int(info["hand"])
+    forearm_index = int(info["forearm"])
+    finger_indices = {int(index) for index in list(info["fingers"])}
+    direction = -1.0 if side == "l" else 1.0
+    outward_values: List[float] = []
+    for vertex in vertices:
+        try:
+            outward_values.append(float(vertex[0]) * direction)
+        except Exception:
+            outward_values.append(0.0)
+    start = _quantile(outward_values, _RANCOR_HAND_FOREARM_START_QUANTILE)
+    end = _quantile(outward_values, _RANCOR_HAND_FOREARM_END_QUANTILE)
+    span = max(1.0e-6, end - start)
+
+    changed_rows = 0
+    finger_rows = 0
+    forearm_rows = 0
+    for row_index, row in enumerate(skin_rows):
+        merged: Dict[int, float] = {}
+        for influence in list(getattr(row, "influences", []) or []):
+            try:
+                bone_index = int(getattr(influence, "bone_index", -1))
+                weight = float(getattr(influence, "weight", 0.0) or 0.0)
+            except Exception:
+                continue
+            if bone_index < 0 or weight <= 1.0e-9:
+                continue
+            merged[bone_index] = merged.get(bone_index, 0.0) + weight
+        if not merged:
+            continue
+        original = [
+            (int(index), round(float(weight), 6))
+            for index, weight in sorted(merged.items())
+            if weight > 1.0e-9
+        ]
+
+        finger_weight = sum(merged.get(index, 0.0) for index in finger_indices)
+        if finger_weight > 1.0e-9:
+            move = finger_weight * float(_RANCOR_HAND_FINGER_COLLAPSE)
+            for finger_index in finger_indices:
+                if finger_index in merged:
+                    merged[finger_index] = max(
+                        0.0,
+                        merged[finger_index] - merged[finger_index] * float(_RANCOR_HAND_FINGER_COLLAPSE),
+                    )
+            merged[hand_index] = merged.get(hand_index, 0.0) + move
+            finger_rows += 1
+
+        hand_forearm_total = merged.get(hand_index, 0.0) + merged.get(forearm_index, 0.0)
+        if hand_forearm_total > 0.05:
+            outward = outward_values[row_index] if row_index < len(outward_values) else start
+            t = max(0.0, min(1.0, (outward - start) / span))
+            target_hand_share = (
+                float(_RANCOR_HAND_MIN_SHARE)
+                + (float(_RANCOR_HAND_MAX_SHARE) - float(_RANCOR_HAND_MIN_SHARE)) * t
+            )
+            target_hand_weight = hand_forearm_total * target_hand_share
+            current_hand_weight = merged.get(hand_index, 0.0)
+            delta = (target_hand_weight - current_hand_weight) * float(_RANCOR_HAND_FOREARM_BLEND)
+            merged[hand_index] = max(0.0, current_hand_weight + delta)
+            merged[forearm_index] = max(0.0, merged.get(forearm_index, 0.0) - delta)
+            forearm_rows += 1
+
+        normalized = _normalize_skin_weight_influences(merged.items())
+        if not normalized:
+            continue
+        new_signature = [
+            (
+                int(getattr(influence, "bone_index", -1)),
+                round(float(getattr(influence, "weight", 0.0) or 0.0), 6),
+            )
+            for influence in normalized
+        ]
+        if new_signature == original:
+            continue
+        setattr(row, "influences", normalized)
+        changed_rows += 1
+
+    if changed_rows <= 0:
+        return None
+    setattr(split_node, "skin_data", skin_rows)
+    report = {
+        "applied": True,
+        "method": "rancor_hand_finger_collapse_forearm_gradient",
+        "side": side,
+        "changed_rows": int(changed_rows),
+        "finger_rows": int(finger_rows),
+        "forearm_gradient_rows": int(forearm_rows),
+        "finger_slots": [
+            str(info["bone_names"][index])
+            for index in sorted(finger_indices)
+            if 0 <= index < len(info["bone_names"])
+        ],
+        "hand_slot": str(info["bone_names"][hand_index]),
+        "forearm_slot": str(info["bone_names"][forearm_index]),
+        "start_outward": round(float(start), 6),
+        "end_outward": round(float(end), 6),
+    }
+    try:
+        setattr(split_node, "_gr_rancor_hand_weight_stabilization", dict(report))
+    except Exception:
+        pass
+    return report
+
+
+def _weld_seam_weights_across_split_nodes(parts: Sequence[Any]) -> Optional[Dict[str, Any]]:
+    """Unify skin weights of bind-coincident vertices across split region nodes.
+
+    The pre-split mesh carries identical weights on every bind-coincident
+    vertex (verified empirically on the Rancor pipeline), but the post-split
+    per-node passes — edge smoothing, Rancor hand stabilization — each see
+    only their own region's one-sided neighborhood, so twins duplicated along
+    region boundaries drift apart in weight space.  Any such delta is an
+    animated crack.  This pass restores the invariant: every group of
+    bind-coincident vertices (within and across region nodes) ends with the
+    same effective influences, expressed through each node's local palette.
+
+    A bone missing from one member's palette is dropped from the whole group
+    (weights renormalise) — seam consistency beats retaining a residual
+    weight only some members could express.  Reports the worst weight dropped
+    this way so the trade stays observable.
+
+    Groups whose divergence stays below ``_SPLIT_SEAM_WELD_MIN_DELTA`` are
+    left byte-identical: vanilla models themselves carry ~1e-4 authored noise
+    between boundary twins (c_drexlf), which is invisible in game, and D-5
+    byte-identity must survive a split that ran no weight mutators.
+    """
+    if not parts:
+        return None
+    try:
+        import numpy as np
+    except Exception:
+        return None
+    tolerance = max(1.0e-9, float(_SPLIT_WEIGHT_SEAM_POSITION_TOLERANCE))
+
+    part_rows: List[List[Any]] = []
+    part_palettes: List[Dict[str, int]] = []
+    part_bone_names: List[List[str]] = []
+    buckets: Dict[Tuple[int, int, int], List[Tuple[int, int]]] = {}
+    for part_index, part in enumerate(parts):
+        rows = list(getattr(part, "skin_data", []) or [])
+        bone_names = [
+            str(name or "").strip() for name in list(getattr(part, "bone_map", []) or [])
+        ]
+        palette = {}
+        for local_index, name in enumerate(bone_names):
+            key = name.lower()
+            if key and key not in palette:
+                palette[key] = local_index
+        part_rows.append(rows)
+        part_palettes.append(palette)
+        part_bone_names.append(bone_names)
+        try:
+            world = _node_world_vertices_for_split(part, np)
+        except Exception:
+            continue
+        for vertex_index in range(min(len(rows), int(world.shape[0]))):
+            point = world[vertex_index]
+            try:
+                key = (
+                    int(round(float(point[0]) / tolerance)),
+                    int(round(float(point[1]) / tolerance)),
+                    int(round(float(point[2]) / tolerance)),
+                )
+            except Exception:
+                continue
+            buckets.setdefault(key, []).append((part_index, vertex_index))
+
+    def name_weights(part_index: int, vertex_index: int) -> Dict[str, float]:
+        out: Dict[str, float] = {}
+        names = part_bone_names[part_index]
+        for influence in list(
+            getattr(part_rows[part_index][vertex_index], "influences", []) or []
+        ):
+            try:
+                bone_index = int(getattr(influence, "bone_index", -1))
+                weight = float(getattr(influence, "weight", 0.0) or 0.0)
+            except Exception:
+                continue
+            if bone_index < 0 or bone_index >= len(names) or weight <= 1.0e-9:
+                continue
+            key = names[bone_index].lower()
+            if key:
+                out[key] = out.get(key, 0.0) + weight
+        return out
+
+    groups_checked = 0
+    groups_welded = 0
+    members_rewritten = 0
+    max_delta = 0.0
+    max_dropped_weight = 0.0
+    welded_by_pair: Dict[str, int] = {}
+    for members in buckets.values():
+        if len(members) < 2:
+            continue
+        groups_checked += 1
+        resolved = [name_weights(pi, vi) for pi, vi in members]
+        union_names = sorted({name for weights in resolved for name in weights})
+        delta = 0.0
+        for name in union_names:
+            values = [weights.get(name, 0.0) for weights in resolved]
+            delta = max(delta, max(values) - min(values))
+        if delta <= _SPLIT_SEAM_WELD_MIN_DELTA:
+            continue
+        max_delta = max(max_delta, delta)
+        averaged = {
+            name: sum(weights.get(name, 0.0) for weights in resolved) / len(resolved)
+            for name in union_names
+        }
+        # Drop bones any member's palette cannot express — identically for all.
+        for name in union_names:
+            if any(name not in part_palettes[pi] for pi, _vi in members):
+                max_dropped_weight = max(max_dropped_weight, averaged.pop(name, 0.0))
+        if not averaged:
+            continue
+        groups_welded += 1
+        pair_key = " <-> ".join(
+            sorted({str(getattr(parts[pi], "name", "?") or "?") for pi, _vi in members})
+        )
+        welded_by_pair[pair_key] = welded_by_pair.get(pair_key, 0) + 1
+        ordered = sorted(averaged.items(), key=lambda item: item[1], reverse=True)
+        for pi, vi in members:
+            palette = part_palettes[pi]
+            normalized = _normalize_skin_weight_influences(
+                [(palette[name], weight) for name, weight in ordered]
+            )
+            if not normalized:
+                continue
+            setattr(part_rows[pi][vi], "influences", normalized)
+            members_rewritten += 1
+
+    return {
+        "applied": groups_welded > 0,
+        "coincident_groups": groups_checked,
+        "welded_groups": groups_welded,
+        "members_rewritten": members_rewritten,
+        "max_pre_weld_delta": round(max_delta, 6),
+        "max_dropped_bone_weight": round(max_dropped_weight, 6),
+        "welded_by_node_pair": welded_by_pair,
+    }
+
+
+def _ensure_skin_node_bind_controllers(parts: Sequence[Any]) -> int:
+    """Synchronize each split skin's static bind controllers to its transform.
+
+    KOTOR skin nodes always carry a single-key position (type 8) and
+    orientation (type 20) controller holding the node's bind transform.  The
+    anatomical split copies the imported payload mesh, which has no MDL
+    controllers, so the region nodes ship with an empty controller list — and
+    a skin node with zero controllers crashes the engine's node-tree walker on
+    area load (T2545).  Authored-donor localization can also change a copied
+    node's transform while leaving inherited controller values stale.  This
+    therefore synthesizes missing rows and rewrites existing type 8/20 rows to
+    the final ``position``/``rotation`` that the writer will serialize.
+    """
+    added = 0
+    for node in parts or ():
+        existing = list(getattr(node, "controllers", []) or [])
+        have_types = {
+            int(c.get("type")) for c in existing if isinstance(c, dict) and c.get("type") is not None
+        }
+        pos = tuple(
+            float(v) for v in (getattr(node, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))[:3]
+        )
+        rot = tuple(
+            float(v) for v in (getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0))[:4]
+        )
+        new_controllers = []
+        for controller in existing:
+            if not isinstance(controller, dict):
+                new_controllers.append(controller)
+                continue
+            controller_type = controller.get("type")
+            try:
+                controller_type = int(controller_type)
+            except Exception:
+                new_controllers.append(controller)
+                continue
+            if controller_type == 8:
+                synchronized = dict(controller)
+                synchronized.update({
+                    "name": "position",
+                    "columns": 3,
+                    "times": [0.0],
+                    "values": [[pos[0], pos[1], pos[2]]],
+                    "binary_column_count": 3,
+                })
+                new_controllers.append(synchronized)
+            elif controller_type == 20:
+                synchronized = dict(controller)
+                synchronized.update({
+                    "name": "orientation",
+                    "columns": 4,
+                    "times": [0.0],
+                    "values": [[rot[0], rot[1], rot[2], rot[3]]],
+                    "binary_column_count": 4,
+                })
+                new_controllers.append(synchronized)
+            else:
+                new_controllers.append(controller)
+        if 8 not in have_types:
+            new_controllers.append({
+                "type": 8,
+                "name": "position",
+                "columns": 3,
+                "times": [0.0],
+                "values": [[pos[0], pos[1], pos[2]]],
+                "binary_unknown0": 65535,
+                "binary_column_count": 3,
+            })
+            added += 1
+        if 20 not in have_types:
+            new_controllers.append({
+                "type": 20,
+                "name": "orientation",
+                "columns": 4,
+                "times": [0.0],
+                "values": [[rot[0], rot[1], rot[2], rot[3]]],
+                "binary_unknown0": 65535,
+                "binary_column_count": 4,
+            })
+            added += 1
+        try:
+            node.controllers = new_controllers
+        except Exception:
+            pass
+    return added
+
+
+def _quat_inverse_xyzw(rotation: Sequence[float]) -> Tuple[float, float, float, float]:
+    try:
+        x, y, z, w = (
+            float(rotation[0]),
+            float(rotation[1]),
+            float(rotation[2]),
+            float(rotation[3]),
+        )
+    except Exception:
+        return (0.0, 0.0, 0.0, 1.0)
+    length_sq = x * x + y * y + z * z + w * w
+    if length_sq <= 1.0e-12:
+        return (0.0, 0.0, 0.0, 1.0)
+    inv = 1.0 / length_sq
+    return (-x * inv, -y * inv, -z * inv, w * inv)
+
+
+def _node_world_transform_or_local(node: Any) -> Tuple[Vec3, Tuple[float, float, float, float]]:
+    try:
+        pos, rot = node.world_transform()
+    except Exception:
+        pos = getattr(node, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
+        rot = getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
+    return (
+        (float(pos[0]), float(pos[1]), float(pos[2])),
+        (float(rot[0]), float(rot[1]), float(rot[2]), float(rot[3])),
+    )
+
+
+def _node_vertices_are_model_world_for_split(node: Any) -> bool:
+    """Return True when an imported payload stores vertices in model space."""
+
+    if bool(getattr(node, "_gr_vertices_in_kotor_world", False)):
+        return True
+    try:
+        return int(getattr(node, "vertex_space", 0) or 0) == 1
+    except Exception:
+        return False
+
+
+def _retarget_vectors_between_node_spaces(
+    vectors: Sequence[Sequence[float]],
+    *,
+    source_position: Vec3,
+    source_rotation: Sequence[float],
+    target_position: Vec3,
+    target_rotation: Sequence[float],
+    translate: bool,
+) -> List[Vec3]:
+    """Move points/vectors from source-node local space into target-node local space."""
+
+    target_inverse = _quat_inverse_xyzw(target_rotation)
+    out: List[Vec3] = []
+    for vector in vectors:
+        try:
+            value = (float(vector[0]), float(vector[1]), float(vector[2]))
+        except Exception:
+            value = (0.0, 0.0, 0.0)
+        world = _quat_rotate_vec(source_rotation, value)
+        if translate:
+            world = (
+                world[0] + source_position[0],
+                world[1] + source_position[1],
+                world[2] + source_position[2],
+            )
+            world = (
+                world[0] - target_position[0],
+                world[1] - target_position[1],
+                world[2] - target_position[2],
+            )
+        out.append(_quat_rotate_vec(target_inverse, world))
     return out
 
 
@@ -6817,8 +8139,8 @@ def _split_skinned_node_by_anatomical_regions(
     except Exception as exc:
         return [], f"donor_build_failed:{exc}"
 
-    # Lazily built name→(qbone, tbone) table for the rebuild path (T2518).
-    bind_by_name: Optional[Dict[str, Tuple[Tuple[float, float, float, float], Vec3]]] = None
+    donor_skin_node_meta: Dict[str, Dict[str, Any]] = {}
+    donor_skin_ambient = _reference_skin_ambient(reference_model)
 
     try:
         np_vertices = np.asarray(
@@ -6832,6 +8154,7 @@ def _split_skinned_node_by_anatomical_regions(
 
     partition_method = "anatomical_partition_weight_remap"
     partition_region_names: Dict[int, str] = {}
+    partition_region_palettes: Dict[int, List[str]] = {}
     partition_diag: Dict[str, Any] = {}
 
     authored = _authored_donor_skin_node_regions(
@@ -6855,6 +8178,14 @@ def _split_skinned_node_by_anatomical_regions(
             face_to_region = authored_face_to_region
             partition_method = "authored_donor_skin_node_weight_remap"
             partition_region_names = dict(authored.get("region_names") or {})
+            partition_region_palettes = {
+                int(region_id): [
+                    str(name)
+                    for name in list(palette or [])
+                    if str(name or "").strip()
+                ]
+                for region_id, palette in dict(authored.get("region_palettes") or {}).items()
+            }
             partition_diag = {
                 "method": str(authored.get("method") or "authored_donor_skin_nodes"),
                 "palette_sizes": dict(authored_palette_sizes),
@@ -6891,6 +8222,8 @@ def _split_skinned_node_by_anatomical_regions(
     face_mats = list(getattr(node, "face_mats", []) or [])
 
     split_nodes: List[Any] = []
+    source_position, source_rotation = _node_world_transform_or_local(node)
+    source_vertices_are_model_world = _node_vertices_are_model_world_for_split(node)
     for region_id in region_ids:
         face_indices = [
             int(i) for i in np.where(face_to_region == region_id)[0].tolist()
@@ -6982,7 +8315,84 @@ def _split_skinned_node_by_anatomical_regions(
                 if old_bone not in seen:
                     seen.add(old_bone)
                     used_local_indices.append(old_bone)
-        used_local_indices.sort()
+        if region_id in partition_region_palettes:
+            name_to_old: Dict[str, int] = {}
+            for old_index, raw_name in enumerate(bone_map):
+                key = str(raw_name or "").strip().lower()
+                if key and key not in name_to_old:
+                    name_to_old[key] = int(old_index)
+            ordered_indices: List[int] = []
+            ordered_set: set[int] = set()
+            for raw_name in partition_region_palettes.get(region_id, []):
+                old_index = name_to_old.get(str(raw_name or "").strip().lower())
+                if old_index is None or old_index in ordered_set:
+                    continue
+                ordered_indices.append(old_index)
+                ordered_set.add(old_index)
+            for old_index in sorted(used_local_indices):
+                if old_index not in ordered_set:
+                    ordered_indices.append(old_index)
+                    ordered_set.add(old_index)
+            used_local_indices = ordered_indices
+        else:
+            used_local_indices.sort()
+
+        if len(used_local_indices) > _SKIN_PALETTE_LIMIT:
+            # T2558: diffusion-regularized payloads can leave trace influences
+            # of anatomically nearby bones in a region.  Before failing, prune
+            # bones whose contribution to this region is negligible (< 2% of
+            # the regional weight mass AND never dominant on any vertex),
+            # renormalizing the affected rows over their remaining influences.
+            bone_totals: Dict[int, float] = {o: 0.0 for o in used_local_indices}
+            bone_peak: Dict[int, float] = {o: 0.0 for o in used_local_indices}
+            for row in new_skin_rows:
+                for influence in list(getattr(row, "influences", []) or []):
+                    ob = int(getattr(influence, "bone_index", -1))
+                    w = float(getattr(influence, "weight", 0.0) or 0.0)
+                    if ob in bone_totals and w > 0.0:
+                        bone_totals[ob] += w
+                        bone_peak[ob] = max(bone_peak[ob], w)
+            grand_total = sum(bone_totals.values()) or 1.0
+            pruned_bone_names: List[str] = []
+            while len(used_local_indices) > _SKIN_PALETTE_LIMIT:
+                candidate = min(
+                    used_local_indices, key=lambda o: bone_totals.get(o, 0.0)
+                )
+                share = bone_totals.get(candidate, 0.0) / grand_total
+                # T2561: once the safe (trace, never-dominant) bones are gone,
+                # keep pruning the single least-contributing bone anyway — a
+                # region physically cannot exceed the 16-bone engine palette, so
+                # a forced drop (reassigning its verts to their next influence)
+                # is strictly better than failing the export.  Only the last
+                # bone can never be pruned.
+                is_safe = share <= 0.02 and bone_peak.get(candidate, 0.0) <= 0.3
+                if not is_safe and len(used_local_indices) <= _SKIN_PALETTE_LIMIT:
+                    break
+                used_local_indices.remove(candidate)
+                pruned_bone_names.append(str(bone_map[candidate]))
+                for row in new_skin_rows:
+                    influences = list(getattr(row, "influences", []) or [])
+                    kept_influences = [
+                        b for b in influences
+                        if int(getattr(b, "bone_index", -1)) != candidate
+                        and float(getattr(b, "weight", 0.0) or 0.0) > 0.0
+                    ]
+                    if len(kept_influences) == len(influences):
+                        continue
+                    total = sum(
+                        float(getattr(b, "weight", 0.0)) for b in kept_influences
+                    )
+                    if total > 1.0e-9:
+                        for b in kept_influences:
+                            b.weight = float(b.weight) / total
+                    row.influences = kept_influences
+            if pruned_bone_names:
+                log.info(
+                    "anatomical split region %s: pruned %d trace bone(s) %s "
+                    "to fit the %d-bone palette",
+                    region_id, len(pruned_bone_names), pruned_bone_names,
+                    _SKIN_PALETTE_LIMIT,
+                )
 
         if len(used_local_indices) > _SKIN_PALETTE_LIMIT:
             return [], (
@@ -7013,7 +8423,79 @@ def _split_skinned_node_by_anatomical_regions(
                 # carry no weight and must not disturb byte-identity elsewhere.
 
         split_node = copy.deepcopy(node)
-        split_node.name = f"{base_name}_anat{region_id:02d}"
+        authored_region_name = str(partition_region_names.get(region_id, "") or "").strip()
+        split_node.name = (
+            authored_region_name
+            if authored_region_name and partition_method.startswith("authored_donor_skin_node")
+            else f"{base_name}_anat{region_id:02d}"
+        )
+        donor_meta = None
+        if partition_method.startswith("authored_donor_skin_node"):
+            if not donor_skin_node_meta:
+                donor_skin_node_meta = _donor_skin_node_metadata_by_name(reference_model)
+            donor_meta = donor_skin_node_meta.get(str(split_node.name or "").strip().lower())
+        if donor_meta is not None:
+            if source_vertices_are_model_world:
+                setattr(split_node, "_gr_authored_donor_skin_node_localized", False)
+                setattr(
+                    split_node,
+                    "_gr_authored_donor_space_preserved_reason",
+                    "source_vertices_are_model_world",
+                )
+            else:
+                target_position = tuple(donor_meta.get("world_position", donor_meta["position"]))  # type: ignore[arg-type]
+                target_rotation = tuple(donor_meta.get("world_rotation", donor_meta["rotation"]))  # type: ignore[arg-type]
+                new_vertices = _retarget_vectors_between_node_spaces(
+                    new_vertices,
+                    source_position=source_position,
+                    source_rotation=source_rotation,
+                    target_position=target_position,  # type: ignore[arg-type]
+                    target_rotation=target_rotation,  # type: ignore[arg-type]
+                    translate=True,
+                )
+                new_normals = _retarget_vectors_between_node_spaces(
+                    new_normals,
+                    source_position=source_position,
+                    source_rotation=source_rotation,
+                    target_position=target_position,  # type: ignore[arg-type]
+                    target_rotation=target_rotation,  # type: ignore[arg-type]
+                    translate=False,
+                )
+                new_tangents = _retarget_vectors_between_node_spaces(
+                    new_tangents,
+                    source_position=source_position,
+                    source_rotation=source_rotation,
+                    target_position=target_position,  # type: ignore[arg-type]
+                    target_rotation=target_rotation,  # type: ignore[arg-type]
+                    translate=False,
+                )
+                split_node.position = tuple(donor_meta["position"])  # type: ignore[assignment]
+                split_node.rotation = tuple(donor_meta["rotation"])  # type: ignore[assignment]
+                setattr(split_node, "_gr_authored_donor_skin_node_localized", True)
+            for attr in (
+                "render",
+                "has_shadow",
+                "beaming",
+                "background_geometry",
+                "has_lightmap",
+                "rotate_texture",
+                "transparency_hint",
+                "diffuse",
+                "ambient",
+            ):
+                if attr in donor_meta:
+                    try:
+                        setattr(split_node, attr, donor_meta[attr])
+                    except Exception:
+                        pass
+        elif donor_skin_ambient is not None:
+            # External FBX materials commonly default ambient to 0.2.  KOTOR
+            # multiplies that into the lit diffuse result, making an otherwise
+            # correct dark creature atlas nearly black.  Adopt only the native
+            # donor's ambient-lighting baseline; keep the imported diffuse
+            # colour and custom texture/UV identity untouched.
+            split_node.ambient = tuple(donor_skin_ambient)
+            setattr(split_node, "_gr_kotor_ambient_from_reference", True)
         split_node.parent = getattr(node, "parent", None)
         split_node.children = []
         split_node.vertices = new_vertices
@@ -7025,6 +8507,27 @@ def _split_skinned_node_by_anatomical_regions(
         split_node.face_mats = new_face_mats
         split_node.skin_data = new_skin_rows
         split_node.bone_map = [bone_map[old] for old in used_local_indices]
+        for attr in (
+            "_gr_bound_to_kotor_skeleton",
+            "_gr_kotor_skeleton_root",
+            "_gr_kotor_bone_map_source",
+            "_gr_use_animation_base_bind_for_preview",
+        ):
+            if hasattr(node, attr):
+                try:
+                    setattr(split_node, attr, getattr(node, attr))
+                except Exception:
+                    pass
+        # The copy above is authoritative for the base-bind preview flag:
+        # apply_template_rig gates it OFF for creature-fit imports (T2532 —
+        # their vertices are in rest-pose space, and base-bind skinning
+        # deforms every position-track animation). Do not force it back on.
+        if source_vertices_are_model_world:
+            setattr(split_node, "_gr_vertices_in_kotor_world", True)
+            try:
+                split_node.vertex_space = 1
+            except Exception:
+                pass
         # Stale packed skin arrays from the source node must not survive the
         # split; the writer rebuilds bonemap floats from bone_map names.
         if hasattr(split_node, "bone_map_floats"):
@@ -7032,41 +8535,43 @@ def _split_skinned_node_by_anatomical_regions(
                 split_node.bone_map_floats = []
             except Exception:
                 pass
-        # qBone/tBone bind-pose arrays are per-bonemap-entry (T2513 round-trip
-        # finding): subset them by the same local indices so the writer emits
-        # bind data aligned with the region palette.  When the source arrays
-        # are absent or misaligned, REBUILD them per palette name from the
-        # model's bone nodes (T2518: the export preflight hard-blocks regions
-        # whose qbone/tbone lengths don't match the bone map — clearing them,
-        # the previous defensive behavior, made every region unexportable in
-        # the 2026-07-01 22:38 manual export).
-        source_qbones = list(getattr(node, "qbone_list", []) or [])
-        source_tbones = list(getattr(node, "tbone_list", []) or [])
-        if (
-            len(source_qbones) == len(bone_map)
-            and len(source_tbones) == len(bone_map)
-        ):
-            split_node.qbone_list = [source_qbones[old] for old in used_local_indices]
-            split_node.tbone_list = [source_tbones[old] for old in used_local_indices]
-        else:
-            if bind_by_name is None:
-                bind_by_name = _bone_bind_arrays_by_name(model)
-            rebuilt_q: List[Tuple[float, float, float, float]] = []
-            rebuilt_t: List[Vec3] = []
-            for bone_name in split_node.bone_map:
-                rot, pos = bind_by_name.get(
-                    str(bone_name or "").strip().lower(),
-                    ((0.0, 0.0, 0.0, 1.0), (0.0, 0.0, 0.0)),
-                )
-                rebuilt_q.append(rot)
-                rebuilt_t.append(pos)
-            split_node.qbone_list = rebuilt_q
-            split_node.tbone_list = rebuilt_t
+        # qBone/tBone are transforms, not palette metadata that can safely be
+        # subset from the imported source.  Rebuild them after the split node
+        # has its FINAL parent/local transform.  The writer later expands these
+        # compact rows into the model's node-indexed arrays.
+        rebuilt_q, rebuilt_t, missing_bind_bones = _kotor_skin_inverse_bind_arrays(
+            model,
+            split_node,
+            reference_model=reference_model,
+        )
+        split_node.qbone_list = rebuilt_q
+        split_node.tbone_list = rebuilt_t
+        setattr(split_node, "_gr_kotor_inverse_bind_qt", True)
+        if missing_bind_bones:
+            return [], (
+                "missing_bind_bones:region "
+                f"{region_id} cannot resolve {missing_bind_bones[:8]}"
+            )
         setattr(split_node, "_external_imported", True)
         setattr(split_node, "_gr_node_splitter_component", True)
         setattr(split_node, "_gr_weight_remap_split", True)
         setattr(split_node, "_gr_anatomical_region_id", int(region_id))
         setattr(split_node, "_gr_anatomical_split_method", partition_method)
+        smoothing_report = None
+        if partition_method.startswith("authored_donor_skin_node"):
+            smoothing_report = _maybe_smooth_high_density_split_weights(
+                split_node,
+                donor_meta,
+            )
+            if smoothing_report is not None:
+                setattr(split_node, "_gr_anatomical_weight_smoothing", smoothing_report)
+        rancor_hand_report = _stabilize_rancor_hand_split_weights(split_node)
+        if rancor_hand_report is not None:
+            setattr(
+                split_node,
+                "_gr_anatomical_rancor_hand_stabilization",
+                rancor_hand_report,
+            )
         if region_id in partition_region_names:
             setattr(split_node, "_gr_anatomical_region_name", partition_region_names[region_id])
         if partition_diag:
@@ -7086,6 +8591,358 @@ def _split_skinned_node_by_anatomical_regions(
     if not split_nodes:
         return [], "no_regions_produced_geometry"
     return split_nodes, None
+
+
+def _node_path_tuple(node: Any) -> Tuple[str, ...]:
+    names: List[str] = []
+    current = node
+    seen: set[int] = set()
+    while current is not None:
+        current_id = id(current)
+        if current_id in seen:
+            break
+        seen.add(current_id)
+        names.append(str(getattr(current, "name", "") or ""))
+        current = getattr(current, "parent", None)
+    names.reverse()
+    return tuple(names)
+
+
+def _restore_native_snapshot_child_order(model: Any, parent: Any) -> bool:
+    """Reorder children to the selected native DAG's child order when known."""
+
+    snapshot = getattr(model, "_gr_native_skeleton_snapshot", None)
+    if snapshot is None or parent is None:
+        return False
+    parent_path = _node_path_tuple(parent)
+    child_order: Tuple[str, ...] = ()
+    for snap_node in list(getattr(snapshot, "nodes", ()) or ()):
+        if tuple(getattr(snap_node, "full_path", ()) or ()) == parent_path:
+            child_order = tuple(str(name or "") for name in getattr(snap_node, "child_names", ()) or ())
+            break
+    if not child_order:
+        return False
+
+    children = list(getattr(parent, "children", []) or [])
+    if len(children) <= 1:
+        return False
+
+    buckets: Dict[str, List[Any]] = {}
+    for child in children:
+        key = str(getattr(child, "name", "") or "").strip().lower()
+        if key:
+            buckets.setdefault(key, []).append(child)
+
+    ordered: List[Any] = []
+    used: set[int] = set()
+    for raw_name in child_order:
+        key = str(raw_name or "").strip().lower()
+        bucket = buckets.get(key)
+        if not bucket:
+            continue
+        child = bucket.pop(0)
+        ordered.append(child)
+        used.add(id(child))
+
+    for child in children:
+        if id(child) not in used:
+            ordered.append(child)
+
+    if [id(child) for child in ordered] == [id(child) for child in children]:
+        return False
+    parent.children = ordered
+    for child in ordered:
+        try:
+            child.parent = parent
+        except Exception:
+            pass
+    return True
+
+
+def _drop_restored_native_replacement_evidence(model: Any) -> List[dict]:
+    """Remove replacement audit rows for native render paths restored by splits."""
+
+    metadata = getattr(model, "metadata", None)
+    if not isinstance(metadata, dict):
+        return []
+    bind_meta = metadata.get("character_builder_bind")
+    if not isinstance(bind_meta, dict):
+        return []
+    native_base = bind_meta.get("native_base")
+    if not isinstance(native_base, dict):
+        return []
+    replacements = native_base.get("replaced_render_payload_nodes")
+    if not isinstance(replacements, list) or not replacements:
+        return []
+
+    current_paths = {_node_path_tuple(node) for node in _iter_model_nodes(model)}
+    kept: List[dict] = []
+    dropped: List[dict] = []
+    for entry in replacements:
+        if not isinstance(entry, dict):
+            kept.append(entry)
+            continue
+        raw_path = entry.get("path")
+        path = (
+            tuple(str(value or "") for value in raw_path)
+            if isinstance(raw_path, (list, tuple)) else
+            ()
+        )
+        if path and path in current_paths:
+            dropped.append(entry)
+        else:
+            kept.append(entry)
+    if not dropped:
+        return []
+
+    native_base["replaced_render_payload_nodes"] = kept
+    native_base["replaced_render_payload_count"] = len(kept)
+    return dropped
+
+
+def regularize_imported_skin_weights(
+    mesh_node: Any,
+    *,
+    bridge_scale: float = 2.5,
+    iterations: int = 24,
+    max_influences: int = 4,
+    anchor_l1_tolerance: float = 0.6,
+    min_anchor_fraction: float = 0.25,
+    donor_surface_points: Any = None,
+    confidence_distance: float = 0.04,
+) -> Optional[Dict[str, Any]]:
+    """Enforce spatial coherence on donor-transferred skin weights (T2557).
+
+    Kit-bashed DCC exports are often shell soups: hundreds of disconnected
+    plates (robe panels, straps, satchels) inside one mesh.  Euclidean
+    nearest-donor weight transfer freely mixes anatomically distant bones
+    inside a single rigid plate (K1 Sith Ithorian: one 49-vertex robe panel
+    carried pelvis_g 22 / lbicep_g 18), so the plate tears out of the body as
+    soon as either bone animates.  Disconnected shells share no mesh edges,
+    which also makes the failure invisible to edge-stretch audits.
+
+    This pass is purely geometric (no game or species branching):
+
+    1. Build a weight-diffusion graph: face edges + proximity bridges that
+       link every vertex to its nearest neighbors on OTHER shells within
+       ``bridge_scale`` x median edge length (layered cloth stays coupled).
+    2. Anchor vertices whose weight rows already agree with their graph
+       neighborhood (same dominant bone, L1 distance below tolerance).
+    3. Diffuse anchor weights across the non-anchor minority (Jacobi
+       iterations, anchors held fixed), then requantize to the engine's
+       4-influence limit.
+
+    Coherent single-shell payloads (Drexl, Rancor) anchor almost everywhere
+    and come through untouched.  Returns a report dict, or None when the
+    node has no usable skin data or too few anchors to trust diffusion.
+    """
+    import numpy as np
+    from scipy.spatial import cKDTree
+    from scipy import sparse
+
+    verts_raw = list(getattr(mesh_node, "vertices", []) or [])
+    faces = [
+        tuple(int(i) for i in f[:3])
+        for f in (getattr(mesh_node, "faces", []) or [])
+    ]
+    rows = list(getattr(mesh_node, "skin_data", []) or [])
+    slots = list(getattr(mesh_node, "bone_map", []) or [])
+    n = len(verts_raw)
+    if n < 8 or not faces or len(rows) != n or not slots:
+        return None
+    verts = np.asarray(
+        [tuple(float(c) for c in v[:3]) for v in verts_raw], dtype=np.float64
+    )
+    s = len(slots)
+    weights = np.zeros((n, s), dtype=np.float64)
+    for i, row in enumerate(rows):
+        for b in list(getattr(row, "influences", []) or []):
+            idx = int(getattr(b, "bone_index", -1))
+            w = float(getattr(b, "weight", 0.0))
+            if 0 <= idx < s and w > 0.0:
+                weights[i, idx] += w
+    totals = weights.sum(axis=1)
+    valid = totals > 1.0e-9
+    if not bool(valid.any()):
+        return None
+    weights[valid] /= totals[valid, None]
+
+    # ---- graph: face edges + inter-shell proximity bridges -----------------
+    edge_set = set()
+    for a, b, c in faces:
+        for u, v in ((a, b), (b, c), (a, c)):
+            if u != v:
+                edge_set.add((min(u, v), max(u, v)))
+    edges = np.asarray(sorted(edge_set), dtype=np.int64)
+    edge_len = np.linalg.norm(verts[edges[:, 0]] - verts[edges[:, 1]], axis=1)
+    median_edge = float(np.median(edge_len[edge_len > 1.0e-9])) or 0.01
+
+    parent = list(range(n))
+
+    def _find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for u, v in edges:
+        ru, rv = _find(int(u)), _find(int(v))
+        if ru != rv:
+            parent[ru] = rv
+    island_of = np.asarray([_find(i) for i in range(n)], dtype=np.int64)
+    island_count = len(set(island_of.tolist()))
+
+    bridge_radius = bridge_scale * median_edge
+    tree = cKDTree(verts)
+    bridge_pairs = np.zeros((0, 2), dtype=np.int64)
+    if island_count > 1:
+        pairs = tree.query_pairs(r=bridge_radius, output_type="ndarray")
+        if pairs.size:
+            cross = island_of[pairs[:, 0]] != island_of[pairs[:, 1]]
+            bridge_pairs = pairs[cross].astype(np.int64)
+    all_pairs = [edges]
+    if len(bridge_pairs):
+        all_pairs.append(bridge_pairs)
+    links = np.concatenate(all_pairs, axis=0)
+
+    data = np.ones(links.shape[0] * 2, dtype=np.float64)
+    rows_idx = np.concatenate([links[:, 0], links[:, 1]])
+    cols_idx = np.concatenate([links[:, 1], links[:, 0]])
+    adj = sparse.csr_matrix((data, (rows_idx, cols_idx)), shape=(n, n))
+    degree = np.asarray(adj.sum(axis=1)).ravel()
+    degree[degree < 1.0] = 1.0
+    norm = sparse.diags(1.0 / degree) @ adj
+
+    # ---- anchors: rows that agree with their neighborhood ------------------
+    neigh_mean = norm @ weights
+    dominant = weights.argmax(axis=1)
+    neigh_dominant = neigh_mean.argmax(axis=1)
+    l1 = np.abs(weights - neigh_mean).sum(axis=1)
+    anchors = (dominant == neigh_dominant) & (l1 < anchor_l1_tolerance) & valid
+    # T2561: near the donor SURFACE the custom skin coincides with the donor
+    # body, so the nearest-donor weight transfer is authoritative there.
+    # FREEZE those vertices (arm, hand, fingers, exposed skin) with their donor
+    # weights — only vertices FAR from the donor surface (floating robe plates,
+    # satchels, straps that have no donor correspondence) get reweighted by the
+    # graph diffusion.  T2557 diffused the whole mesh, and the inter-shell
+    # bridges smeared near-surface finger/arm weights across anatomically
+    # distant bones (adjacent fingers, arm<->sleeve) — invisible at cwalk's
+    # small swings but shredding the arms/fingers under large combat rotations
+    # (S_Male01 f2d3: 59% of finger verts mis-weighted vs 28% frozen).
+    near_surface = np.zeros(n, dtype=bool)
+    low_confidence_count = 0
+    if donor_surface_points is not None and len(donor_surface_points):
+        donor_tree = cKDTree(np.asarray(donor_surface_points, dtype=np.float64))
+        surface_dist, _ = donor_tree.query(verts, k=1)
+        near_surface = surface_dist <= float(confidence_distance)
+        low_confidence_count = int((~near_surface).sum())
+    frozen = (anchors | near_surface) & valid
+    anchor_fraction = float(frozen.mean())
+    if anchor_fraction < min_anchor_fraction:
+        return {
+            "applied": False,
+            "reason": "insufficient_anchor_fraction",
+            "anchor_fraction": round(anchor_fraction, 4),
+            "islands": island_count,
+        }
+
+    # ---- diffusion: anchors fixed, minority re-weighted ---------------------
+    # Bone-support mask: a vertex may only end up weighted to bones already
+    # present in its own row or its immediate graph neighborhood.  Diffusion
+    # rebalances local candidates instead of spreading bones spatially, which
+    # keeps the anatomical region palettes from creeping past the 16-bone
+    # engine limit.
+    support = (weights > 1.0e-6).astype(np.float64)
+    allowed = ((adj @ support) + support) > 0.0
+    before_dominant = dominant.copy()
+    moving = ~frozen
+    diffused = weights.copy()
+    for _ in range(int(iterations)):
+        blended = norm @ diffused
+        blended *= allowed
+        row_tot = blended.sum(axis=1)
+        renorm = row_tot > 1.0e-9
+        blended[renorm] /= row_tot[renorm, None]
+        diffused[moving] = 0.35 * diffused[moving] + 0.65 * blended[moving]
+    totals = diffused.sum(axis=1)
+    keep = totals > 1.0e-9
+    diffused[keep] /= totals[keep, None]
+    diffused[~keep] = weights[~keep]
+
+    # ---- coincidence contract (T2526): position twins share one row ---------
+    # UV-seam twins occupy the same position but have different face
+    # neighborhoods, so diffusion can drift them apart by ~1e-3 — enough to
+    # crack the seam-weld gate downstream.  Average each coincident group and
+    # requantize every member identically.
+    twin_groups: Dict[Tuple[int, int, int], List[int]] = {}
+    for i in range(n):
+        key = (
+            int(round(verts[i, 0] / 1.0e-5)),
+            int(round(verts[i, 1] / 1.0e-5)),
+            int(round(verts[i, 2] / 1.0e-5)),
+        )
+        twin_groups.setdefault(key, []).append(i)
+    welded_twins = 0
+    for members in twin_groups.values():
+        if len(members) < 2:
+            continue
+        mean_row = diffused[members].mean(axis=0)
+        total = float(mean_row.sum())
+        if total > 1.0e-9:
+            mean_row = mean_row / total
+        for i in members:
+            diffused[i] = mean_row
+            moving[i] = True   # requantize the whole group identically
+        welded_twins += len(members)
+
+    # ---- requantize to the engine influence limit ---------------------------
+    changed = 0
+    try:
+        from core.geometry.model_data import BoneWeight, VertexSkinData  # type: ignore
+    except ImportError:  # pragma: no cover
+        from src.core.geometry.model_data import BoneWeight, VertexSkinData  # type: ignore
+    # Trace influences picked up during diffusion are visually meaningless
+    # but every distinct bone inflates the anatomical region palettes toward
+    # the 16-bone engine limit — floor them at 5% before requantizing.
+    influence_floor = 0.05
+    for i in range(n):
+        if not moving[i]:
+            continue
+        row = diffused[i]
+        top = [
+            int(t)
+            for t in np.argsort(-row)[:max_influences]
+            if row[t] > influence_floor
+        ]
+        if not top:
+            top = [int(np.argmax(row))] if float(row.max()) > 1.0e-9 else []
+        if not top:
+            continue
+        total = float(sum(row[t] for t in top))
+        influences = [
+            BoneWeight(bone_index=int(t), weight=float(row[t] / total))
+            for t in top
+        ]
+        new_dom = max(influences, key=lambda b: b.weight).bone_index
+        if new_dom != int(before_dominant[i]):
+            changed += 1
+        rows[i] = VertexSkinData(influences=influences)
+    mesh_node.skin_data = rows
+    report = {
+        "applied": True,
+        "vertices": n,
+        "islands": island_count,
+        "bridge_links": int(len(bridge_pairs)),
+        "median_edge": round(median_edge, 5),
+        "anchor_fraction": round(anchor_fraction, 4),
+        "reweighted_vertices": int(moving.sum()),
+        "dominant_bone_reassigned": int(changed),
+        "welded_position_twins": int(welded_twins),
+        "low_confidence_vertices": int(low_confidence_count),
+        "iterations": int(iterations),
+    }
+    setattr(mesh_node, "_gr_skin_weight_regularization", report)
+    return report
 
 
 def split_skinned_mesh_nodes_with_weight_remap(
@@ -7142,6 +8999,7 @@ def split_skinned_mesh_nodes_with_weight_remap(
     split_node_count = 0
     per_node_report: List[Dict[str, Any]] = []
     payload_renames: Dict[str, List[str]] = {}
+    all_parts: List[Any] = []
     for node in list(candidates):
         parts, reason = _split_skinned_node_by_anatomical_regions(
             model, node, reference_model
@@ -7156,6 +9014,7 @@ def split_skinned_mesh_nodes_with_weight_remap(
             }
         split_source_count += 1
         split_node_count += len(parts)
+        all_parts.extend(parts)
         payload_renames[str(getattr(node, "name", "") or "")] = [
             str(p.name) for p in parts
         ]
@@ -7171,6 +9030,16 @@ def split_skinned_mesh_nodes_with_weight_remap(
                 "region_names": [
                     str(getattr(p, "_gr_anatomical_region_name", "") or "")
                     for p in parts
+                ],
+                "weight_smoothing": [
+                    dict(getattr(p, "_gr_anatomical_weight_smoothing", {}) or {})
+                    for p in parts
+                    if getattr(p, "_gr_anatomical_weight_smoothing", None)
+                ],
+                "rancor_hand_stabilization": [
+                    dict(getattr(p, "_gr_anatomical_rancor_hand_stabilization", {}) or {})
+                    for p in parts
+                    if getattr(p, "_gr_anatomical_rancor_hand_stabilization", None)
                 ],
             }
         )
@@ -7200,7 +9069,34 @@ def split_skinned_mesh_nodes_with_weight_remap(
             index = len(siblings)
         for part in parts:
             part.parent = parent
+        orphaned_children = list(getattr(node, "children", []) or [])
+        if orphaned_children:
+            # The source node leaves the DAG; its children must survive.  The
+            # region parts carry the source node's parent-local transform, so
+            # reparenting the children under the first part preserves their
+            # world transforms exactly (T2555 orphan guard).
+            anchor = parts[0]
+            anchor_children = list(getattr(anchor, "children", []) or [])
+            for child in orphaned_children:
+                child.parent = anchor
+            anchor.children = anchor_children + orphaned_children
         parent.children = siblings[:index] + parts + siblings[index + 1 :]
+        _restore_native_snapshot_child_order(model, parent)
+
+    # Seam contract (T2526): after every per-node weight pass has run, all
+    # bind-coincident vertices — across region nodes and within them — must
+    # carry identical effective weights, or the seams crack under animation.
+    seam_weld_report = _weld_seam_weights_across_split_nodes(all_parts)
+
+    # Bind-controller contract (T2545): every KOTOR skin node carries a static
+    # position (type 8) + orientation (type 20) controller for its bind
+    # transform.  The imported payload mesh has none, so the split region
+    # nodes inherited an empty controller list — and a skin node with ZERO
+    # controllers makes the engine's node-tree walker deref garbage and crash
+    # at swkotor2+0x4962c on area load (our working Drexl export has these
+    # controllers; this Rancor export did not).  Synthesize them from each
+    # part's transform.
+    controllers_added = _ensure_skin_node_bind_controllers(all_parts)
 
     palettes = validate_skin_node_palettes(model)
     if not palettes["ok"]:
@@ -7217,6 +9113,7 @@ def split_skinned_mesh_nodes_with_weight_remap(
     if not isinstance(metadata, dict):
         metadata = {}
         setattr(model, "metadata", metadata)
+    restored_replacement_paths = _drop_restored_native_replacement_evidence(model)
 
     # T2518: keep the Character Builder bind evidence coherent — the export
     # transaction verifies the recorded payload mesh names still exist and
@@ -7273,6 +9170,12 @@ def split_skinned_mesh_nodes_with_weight_remap(
         ),
         "per_node": per_node_report,
         "palette_validation": palettes,
+        "seam_weld": seam_weld_report,
+        "restored_native_replacement_paths": [
+            list(entry.get("path") or [])
+            for entry in restored_replacement_paths
+            if isinstance(entry, dict)
+        ],
     }
     return {
         "ok": True,
@@ -7285,6 +9188,7 @@ def split_skinned_mesh_nodes_with_weight_remap(
         "split_nodes": split_node_count,
         "per_node": per_node_report,
         "palette_validation": palettes,
+        "seam_weld": seam_weld_report,
     }
 
 
@@ -7336,9 +9240,27 @@ def split_imported_mesh_nodes(
     split_source_count = 0
     split_node_count = 0
     skipped_skinned = 0
+    skipped_native_helpers = 0
+    skipped_transform_chain = 0
     for node in list(candidates):
         if getattr(node, "skin_data", None) or getattr(node, "bone_map", None):
             skipped_skinned += 1
+            continue
+        if not bool(getattr(node, "render", True)):
+            # Native bone-geometry hulls (NeckUpr_g, pelvis_g, ...) are
+            # render=False trimeshes whose hull geometry is often multiple
+            # islands.  They are skeleton structure, not render payload:
+            # splitting K1 c_ithorian's NeckUpr_g replaced the node and
+            # ORPHANED its child bones (NeckUpr02/03_g, Head_g, ClothFlaps),
+            # so every animation lost the neck/head pose transforms and the
+            # skinned mesh exploded (T2555).
+            skipped_native_helpers += 1
+            continue
+        if list(getattr(node, "children", []) or []):
+            # The replacement below drops the source node from the DAG, so a
+            # node that parents other nodes must never be split — its subtree
+            # (and their parent-local transforms) would be silently lost.
+            skipped_transform_chain += 1
             continue
         parts = _split_mesh_node_by_components(node)
         if not parts:
@@ -7391,6 +9313,8 @@ def split_imported_mesh_nodes(
         "source_nodes_split": split_source_count,
         "component_nodes_created": split_node_count,
         "skipped_skinned_nodes": skipped_skinned,
+        "skipped_native_helper_nodes": skipped_native_helpers,
+        "skipped_transform_chain_nodes": skipped_transform_chain,
         "method": "connected_face_components",
     }
 
@@ -7596,23 +9520,38 @@ def load_body(
             code="load_failed",
         )
 
+    # ── Detect mode (BEFORE fit so the right policies gate on) ──────
+    try:
+        detected = md.detect_character_mode(model)
+    except Exception:                                       # pragma: no cover
+        detected = md.CharacterMode.AMBIGUOUS
+
     normalization: Dict[str, Any] = {}
     if ext in _GLTF_EXTS or ext in _FBX_EXTS:
         _mark_external_import(model, path)
+        # T2527: the scene often still sits in AMBIGUOUS/default mode when
+        # the user imports an external creature mesh — the panel only
+        # auto-switches to CREATURE *after* load_body returns.  Coercing
+        # AMBIGUOUS to HEADLESS_BODY here used to gate off the entire
+        # creature fit ladder (correspondence/containment), dropping the
+        # import to a generic reference-bounds scale that left the mesh
+        # tiny and unstaged next to the donor skeleton.  Fit with the
+        # DETECTED mode when it is definite and disagrees with the scene.
+        fit_mode = expected
+        ambiguous_modes = {
+            md.CharacterMode.AMBIGUOUS,
+            getattr(md.CharacterMode, "UNSUPPORTED", None),
+        }
+        if detected not in ambiguous_modes and detected != expected:
+            fit_mode = detected
         normalization = normalize_external_model_for_kotor(
             model,
             game_version=gv,
             reference_model=fit_reference_model,
             reference_label=fit_reference_label,
             fit_override=fit_override,
-            expected_mode=expected,
+            expected_mode=fit_mode,
         )
-
-    # ── Detect mode ─────────────────────────────────────────────────
-    try:
-        detected = md.detect_character_mode(model)
-    except Exception:                                       # pragma: no cover
-        detected = md.CharacterMode.AMBIGUOUS
 
     # ── Assign to scene ─────────────────────────────────────────────
     resref = _resref_from_path(path)

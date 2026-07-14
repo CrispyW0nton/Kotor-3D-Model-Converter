@@ -2,32 +2,38 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Project",
-    "file_count": 4,
+    "file_count": 5,
     "originals_remain_in_src": true,
     "files": [
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_PROJECT_INIT",
             "source_path": "src/core/project/__init__.py",
             "packaged_path": "Python/src/core/project/__init__.py",
-            "sha256": "e9a3dec6c8c91d93bc58527ebc0ea5b3873a5b6dc56a2cbc5f71520469358896"
+            "sha256": "0a50ad7e118ad5dfbff3dc8d7a02211ada2eead31b10b60797e3d0eb1e99c2e0"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_PROJECT_GHOSTRIGGER_PROJECT",
             "source_path": "src/core/project/ghostrigger_project.py",
             "packaged_path": "Python/src/core/project/ghostrigger_project.py",
-            "sha256": "0f6bb76767529476060ba1272a0ef0ddff88861076ab80959935b8b0e3b39e5d"
+            "sha256": "f1ac343676a225a6cfe4613c531da08b8d35e5c786c382b3ebf7b24286c6f201"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_PROJECT_PLACEABLE_ASSET",
+            "source_path": "src/core/project/placeable_asset.py",
+            "packaged_path": "Python/src/core/project/placeable_asset.py",
+            "sha256": "da3d3772cb52cbd4ab66ed80321f249570abb6e1fb4995585b626b9bbd97ce76"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_PROJECT_PROJECT_VALIDATION",
             "source_path": "src/core/project/project_validation.py",
             "packaged_path": "Python/src/core/project/project_validation.py",
-            "sha256": "0b5abbb63d894f3e14ff3083304eb0413a403368edd441d3ed831fc3159a9581"
+            "sha256": "ad0f4211783b76e43e1672b671dc205c24d58c6887cad492239bda2e8c77d234"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_PROJECT_RESOURCE_ADDRESS",
             "source_path": "src/core/project/resource_address.py",
             "packaged_path": "Python/src/core/project/resource_address.py",
-            "sha256": "d51f7e2d651a5b498326f5ca7d6b8344402485865cfa5384016374b5d84eed56"
+            "sha256": "3da3b21fb0e0717f7cea870e78a0f89a3928953c82b694ff5458de6b5bb87455"
         }
     ]
 }

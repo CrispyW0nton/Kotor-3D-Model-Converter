@@ -665,6 +665,17 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
             "transition_pathing_sanity_confirmed": "Transitions and PTH pathing behave sanely",
             "no_inherited_base_game_geometry_or_scripted_movers": "No inherited vanilla geometry or scripted movers appear",
             "screenshot_or_video_captured": "Screenshot or video evidence is attached",
+            "texture_paint_visible_in_game": "Painted textures are visible on the staged surfaces in KOTOR",
+            "terrain_sculpt_and_generated_walkmesh_work_in_game": "Sculpted terrain and its generated WOK work in KOTOR",
+            "placed_assets_match_editor_staging": "Placed assets match their Map Studio position and orientation",
+            "enemy_spawns_hostile": "Placed enemy spawns and attacks the player",
+            "npc_spawns_and_free_roams": "Placed friendly NPC spawns and free-roams",
+            "terminal_operates": "Placed terminal can be used and performs its configured action",
+            "container_opens_with_inventory": "Placed container opens and contains its configured inventory",
+            "puzzle_sequence_unlocks_door": "The staged 1-2-3 puzzle unlocks its reward door",
+            "animated_door_operates": "Placed animated door opens and closes correctly",
+            "configured_transition_operates": "Configured door/trigger transition reaches its destination",
+            "player_start_position_and_facing_match": "Player start position and facing match Map Studio",
         }.get(check, check.replace("_", " "))
 
     @staticmethod
@@ -1164,7 +1175,7 @@ class ModuleReadinessPanel(QtWidgets.QWidget):
                 self.template_reference_table.setItem(row, column, self._table_item(text))
 
     def _set_transition_reference_rows(self, references: tuple[Any, ...] | list[Any]) -> None:
-        """Show authored door, trigger, or waypoint transition link readiness."""
+        """Show authored door/trigger transition link readiness; waypoints are destinations."""
 
         rows = list(references or ())
         if not rows:

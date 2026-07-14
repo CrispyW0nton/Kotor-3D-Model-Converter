@@ -680,24 +680,28 @@ def test_same_resref_creature_replacement_uses_native_cloud_to_choose_orientatio
     )
 
     fit_report = source.metadata["kotor_fit_report"]
-    assert result["fit_policy"] == "native_template_scaled_bounds_replacement"
-    assert result["orientation_score_basis"] == "native_vertex_cloud_chamfer"
-    assert result["native_vertex_cloud_score"] < 0.001
-    assert result["all_bones_inside"] is True
-    assert result["outside_count"] == 0
-    assert result["bone_position_source"] == "skin_weighted_vertex_centroids"
-    assert result["deformation_bone_count"] == len(donor_bones)
-    assert result["skeleton_containment_adjusted_axes"] == []
-    assert fit_report["bone_position_source"] == "skin_weighted_vertex_centroids"
-    assert fit_report["skeleton_containment_adjusted_axes"] == []
-    assert fit_report["source_forward_axis"] == "+x"
+    # Correspondence registration is now the first creature-fit policy.  This
+    # fixture is an exact rigid+uniform transform of the donor surface, so the
+    # stronger policy must win instead of falling through to the legacy
+    # bounds/chamfer lane.
+    assert result["fit_policy"] == "correspondence_surface_registration"
+    assert result["trace_version"] == "ghostrigger.fit/v2"
+    assert result["scale"] == pytest.approx(scale)
+    assert result["surface_confidence"] == pytest.approx(1.0)
+    trace = result["correspondence_fit"]
+    assert trace["trace_version"] == "ghostrigger.correspondence/v1"
+    assert trace["falsifier_a"]["passed"] is True
+    assert trace["falsifier_b"]["passed"] is True
+    assert trace["applied_transform_direction"] == (
+        "imported_to_kotor(inverse_of_donor_to_imported)"
+    )
+    assert fit_report["fit_policy"] == "correspondence_surface_registration"
+    assert fit_report["fallback_used"] is False
+    assert fit_report["source_forward_axis"] == "+z"
     assert fit_report["source_up_axis"] == "+y"
-    assert max(result["axis_scales"]) / min(result["axis_scales"]) < 1.001
     fitted_min, fitted_max = _vertex_bounds(source)
-    assert fitted_min[:2] == pytest.approx(reference.bb_min[:2])
-    assert fitted_max[:2] == pytest.approx(reference.bb_max[:2])
-    assert fitted_min[2] == pytest.approx(reference.bb_min[2])
-    assert fitted_max[2] == pytest.approx(reference.bb_max[2])
+    assert fitted_min == pytest.approx(reference.bb_min)
+    assert fitted_max == pytest.approx(reference.bb_max)
 
 
 def test_same_resref_anchor_padding_scales_without_retranslating() -> None:

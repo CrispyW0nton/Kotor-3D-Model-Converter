@@ -55,7 +55,7 @@ class QtAboutDialog(QtWidgets.QDialog):
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
         self.setObjectName("AboutGhostRiggerDialog")
-        self.setWindowTitle("About GhostRigger")
+        self.setWindowTitle("About GhostStudio")
         self.setModal(True)
         self.setMinimumSize(980, 700)
         self.resize(1040, 760)
@@ -63,8 +63,8 @@ class QtAboutDialog(QtWidgets.QDialog):
         self._company_buttons: list[QtWidgets.QPushButton] = []
 
         version = str(getattr(parent, "APP_VERSION", "") or "6.1.0")
-        app_title = str(getattr(parent, "APP_TITLE", "") or "GhostRigger-K1-K2")
-        title = app_title.split("//", 1)[0].strip() or "GhostRigger"
+        app_title = str(getattr(parent, "APP_TITLE", "") or "GhostStudio")
+        title = app_title.split("//", 1)[0].strip() or "GhostStudio"
         subtitle = "Odyssey Engine Pipeline  //  KotOR 1 & 2 TSL"
         renderer = self._renderer_status(parent)
         theme = self._theme_status(parent)
@@ -294,7 +294,7 @@ class QtAboutDialog(QtWidgets.QDialog):
         return panel
 
     def _build_developer_credits(self) -> QtWidgets.QFrame:
-        panel, layout = self._credit_panel("GhostRigger Developers")
+        panel, layout = self._credit_panel("GhostStudio Developers")
         for name, description in self.DEVELOPER_CREDITS:
             layout.addLayout(self._credit_row(name, description))
         return panel

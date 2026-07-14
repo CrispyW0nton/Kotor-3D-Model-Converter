@@ -9,133 +9,133 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MESH_RENDER_DATA",
             "source_path": "src/adapters/rendering/mesh_render_data.py",
             "packaged_path": "Python/src/adapters/rendering/mesh_render_data.py",
-            "sha256": "fe44594971e6df6790c324b28aea3381cf447d5b3f3ec5ee618251a587a9cb54"
+            "sha256": "814a3f05ade45e4633af530e96da1b38e59e86339700b6e26eb820fd8d684a82"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_NATIVE_CORE_INIT",
             "source_path": "src/adapters/rendering/native_core/__init__.py",
             "packaged_path": "Python/src/adapters/rendering/native_core/__init__.py",
-            "sha256": "7a70653b5dc27b6547fc4141bdddf5c94314169b581b51a4a1c2fd42f422cdce"
+            "sha256": "72f27d931591ae36819a6fd71860e3f2ea301fef13d2e11623563ee8b324e72b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_NATIVE_CORE_BINDING",
             "source_path": "src/adapters/rendering/native_core/binding.py",
             "packaged_path": "Python/src/adapters/rendering/native_core/binding.py",
-            "sha256": "4412eeec1d426bd79fe5038057f55eaffa5da987a0abce853a3e150802a72285"
+            "sha256": "45b26ed2bd72c9afd7d805464edf4c67af337849eed3aa1bc19be67f399025d0"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_NATIVE_CORE_RENDERER",
             "source_path": "src/adapters/rendering/native_core/renderer.py",
             "packaged_path": "Python/src/adapters/rendering/native_core/renderer.py",
-            "sha256": "01d5ad12de4f0f8a83f57647b01a704bb61288e681f3c0308543b638f840609c"
+            "sha256": "993545220474b4bf69474a0ce7ca82acfc826099ab3e7ea2be23b4d9915f1498"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ASSETS_OVERRIDE_LAYER",
             "source_path": "src/core/assets/override_layer.py",
             "packaged_path": "Python/src/core/assets/override_layer.py",
-            "sha256": "446065473cd665658dc8b33f9ef59837375a516e488f73426c615e9919cfc1b5"
+            "sha256": "3b1804ecb485e1b106d96e59410f83aa1a368eff13edf2e6cccc771ec64af4f2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ASSETS_RESOURCE_MANAGER",
             "source_path": "src/core/assets/resource_manager.py",
             "packaged_path": "Python/src/core/assets/resource_manager.py",
-            "sha256": "65c1b858613f738a5708ddee45599f43a59e93f2c66972bfb2b2a55bec76156b"
+            "sha256": "a189fb3d82a5ec3bfffd65451243704cb86a4ee2ec8051d5bb26e73508a2fe97"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_PORTS_INIT",
             "source_path": "src/core/ports/__init__.py",
             "packaged_path": "Python/src/core/ports/__init__.py",
-            "sha256": "abd617e8b9df76a4da82d53425e93f67974cd84160f4be784ae79b4f290e8933"
+            "sha256": "1f5292fbd07fa3b75751fd2443f43e51a7e73815da4cb5ff3dc28fe51f70f372"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_PORTS_FILES",
             "source_path": "src/core/ports/files.py",
             "packaged_path": "Python/src/core/ports/files.py",
-            "sha256": "7c8ecd808d150a69e2a2874694a00dc99c5d73813e8e2efc688777716c86c079"
+            "sha256": "4e7caeebbc1f8b876f1bd61efd569d187ccbb026fe1d9b7fbdfd352a46a06103"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_PORTS_RESOURCES",
             "source_path": "src/core/ports/resources.py",
             "packaged_path": "Python/src/core/ports/resources.py",
-            "sha256": "33b10817016f640bb8e7b89fa3a891d8ac40b230a3d5dccd1d7df17812ee939c"
+            "sha256": "98a6d2f2831a56dba275cec060a9cf5c3af80bcb0d7c781c34a0468d5132c0e4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_PORTS_SCRIPTS",
             "source_path": "src/core/ports/scripts.py",
             "packaged_path": "Python/src/core/ports/scripts.py",
-            "sha256": "9fb60a7a79c0d41efb84886dcd64f3b3abe36e6417b5cdf18e2f507e647321ac"
+            "sha256": "72ee8adaebcb53d79b2b52680b0504c7c5151235f0f80513c7431076d83a5bbd"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_PORTS_TEXTURES",
             "source_path": "src/core/ports/textures.py",
             "packaged_path": "Python/src/core/ports/textures.py",
-            "sha256": "8494c46dcb8276a71da7711a1f8747b98ac4e0ddb85088d341f18cdbaf4d5177"
+            "sha256": "c5e9335bd44a4329c048f655a576d8965e46656cb6f68e9b7084856088ac1efe"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_PORTS_VIEWPORT_RENDERER",
             "source_path": "src/core/ports/viewport_renderer.py",
             "packaged_path": "Python/src/core/ports/viewport_renderer.py",
-            "sha256": "4f6a5959df29e859afb29ad79ccf14d434e440102aa86818c66ab594a7d28ab5"
+            "sha256": "2f9fec364d8209c91e396178846fc6d11371de3220d5a1fde79d13e142ddbeec"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_PROJECT_RESOURCE_ADDRESS",
             "source_path": "src/core/project/resource_address.py",
             "packaged_path": "Python/src/core/project/resource_address.py",
-            "sha256": "d51f7e2d651a5b498326f5ca7d6b8344402485865cfa5384016374b5d84eed56"
+            "sha256": "3da3b21fb0e0717f7cea870e78a0f89a3928953c82b694ff5458de6b5bb87455"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_MESH_RENDER_DATA",
             "source_path": "src/core/rendering/mesh_render_data.py",
             "packaged_path": "Python/src/core/rendering/mesh_render_data.py",
-            "sha256": "35700ae28964e82d2be2d94a82f36039e568c20655487a6c03366ab4ce199866"
+            "sha256": "8a5bbd5d20a2f0647918a64913c5945a9e61515fef619e72fcd5065d6a516fb5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_RENDERER_BACKEND",
             "source_path": "src/core/rendering/renderer_backend.py",
             "packaged_path": "Python/src/core/rendering/renderer_backend.py",
-            "sha256": "8c24ae7ed2d71dc53a3005b7c238f8f4b5e30314dc975a39303d3b3c096aec5e"
+            "sha256": "953862f4543fa5b780983ab4187d81c1985f99ed935f12a6c863cda937e8bc93"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_RENDERER_CAPABILITIES",
             "source_path": "src/core/rendering/renderer_capabilities.py",
             "packaged_path": "Python/src/core/rendering/renderer_capabilities.py",
-            "sha256": "6b1008086fb5b79ee1ecadcb6df8d7d4ad9cdcb2432cf8e151ce25c6df793539"
+            "sha256": "099c3cd20b280e8c61ba00496dd5e2883baece69066967fef0bfbbd351e958a2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_RENDERER_INTERFACE",
             "source_path": "src/core/rendering/renderer_interface.py",
             "packaged_path": "Python/src/core/rendering/renderer_interface.py",
-            "sha256": "d3ddda6533de69b0596b85159c75f0984910fb8e28e56cd6a43953252f95886d"
+            "sha256": "49ea38d643951e4c04f3339f98d6fbb9c321e13ffcc77e7b2cae75df63446651"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_SKELETON_RENDER_DATA",
             "source_path": "src/core/rendering/skeleton_render_data.py",
             "packaged_path": "Python/src/core/rendering/skeleton_render_data.py",
-            "sha256": "f635366cb3e97538b24cf9fea72c70b559587724085f77360cfbee66b0167c02"
+            "sha256": "194881f9cbab06423161d31cbc7c2d39194cce16ff63471507f2d21ee4e186ae"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RESOURCES_INIT",
             "source_path": "src/core/resources/__init__.py",
             "packaged_path": "Python/src/core/resources/__init__.py",
-            "sha256": "b872fa553676a74f18a232694aea5665a5a1acbeee4a5c8a03a6f58d8829ae76"
+            "sha256": "a06a2b3a39431652bb840b2111cc1c30a372f1c0172f0f57d87c4a88174f995b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RESOURCES_GAME_RESOURCE_PROVIDER",
             "source_path": "src/core/resources/game_resource_provider.py",
             "packaged_path": "Python/src/core/resources/game_resource_provider.py",
-            "sha256": "f36cafda7c61df4e11a64dbb3a612384e9f34893bb0741887d17dd37b9cac9c6"
+            "sha256": "b02b90ff851d70042f893ea753a9195828e8907719db979554e093be125d7ba2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_SCENE_SCENE_OBJECT",
             "source_path": "src/core/scene/scene_object.py",
             "packaged_path": "Python/src/core/scene/scene_object.py",
-            "sha256": "bf40551440c49246123bd0797ef16ad8911f6982151f69e6e4af862bd1a66f6e"
+            "sha256": "ee96d71249020346b57c577fc5ab87052d92c5ae941a1699dfaee7535c21eab6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_SCENE_SCENE_OBJECT_INSTANCE",
             "source_path": "src/core/scene/scene_object_instance.py",
             "packaged_path": "Python/src/core/scene/scene_object_instance.py",
-            "sha256": "38c6f23d7cc74b29fadd4b5940114f2e687c84410bf1ef7e2d06885d6e06fc01"
+            "sha256": "38b72cc15798ed2077361a3c2fa8101f9a4506fbbb5d0f89a11064050cf3b332"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_RESOURCES_INIT",
@@ -147,13 +147,13 @@
             "resource_name": "PYTHON_PAYLOAD_RESOURCES_GAME_DETECTOR",
             "source_path": "src/resources/game_detector.py",
             "packaged_path": "Python/src/resources/game_detector.py",
-            "sha256": "082f707ced2f16da2dc487d709fd9883edba96b484e6a19301abb041754502ab"
+            "sha256": "6b8ac9c8ae95f6c024acaee655782112ec87db27777f99eec15a958cbeb590e6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_RESOURCES_GAME_LIBRARY",
             "source_path": "src/resources/game_library.py",
             "packaged_path": "Python/src/resources/game_library.py",
-            "sha256": "ba903d7c5b33ab66b52a01e64af9d8d05b1374964d78b401fc6d05eb73044392"
+            "sha256": "55483bac5cb25efe677f80cbaa140275d905f3292fcba3e9d2bb6ea33fbb148e"
         }
     ]
 }

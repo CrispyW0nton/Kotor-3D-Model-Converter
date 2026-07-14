@@ -7,6 +7,7 @@ PYTHON_PAYLOAD_ADAPTERS_GPU_MODERNGL_CONTEXT RCDATA "Python/src/adapters/gpu/mod
 PYTHON_PAYLOAD_ADAPTERS_GPU_MODERNGL_RUNTIME RCDATA "Python/src/adapters/gpu/moderngl_runtime.py"
 PYTHON_PAYLOAD_ADAPTERS_GPU_VIEWPORT_PROBE RCDATA "Python/src/adapters/gpu/viewport_probe.py"
 PYTHON_PAYLOAD_ADAPTERS_RENDERING_DIRECT3D_RENDERER RCDATA "Python/src/adapters/rendering/direct3d_renderer.py"
+PYTHON_PAYLOAD_ADAPTERS_RENDERING_GPU_RENDERER_EXPORTS RCDATA "Python/src/adapters/rendering/gpu_renderer_exports.py"
 PYTHON_PAYLOAD_ADAPTERS_RENDERING_MESH_RENDER_DATA RCDATA "Python/src/adapters/rendering/mesh_render_data.py"
 PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_BENCHMARK RCDATA "Python/src/adapters/rendering/moderngl_benchmark.py"
 PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_CLI RCDATA "Python/src/adapters/rendering/moderngl_cli.py"

@@ -233,6 +233,91 @@ class ViewportHistoryAnimationMixin:
         self._fast_frame_until = max(self._fast_frame_until, time_module.perf_counter() + 0.12)
         self._request_render(fast=True, reason="sequence character pose changed", animation=True, overlay=True, hud=True)
 
+    def update_runtime_character_frame(
+        self,
+        root_node,
+        character_instance_id: str,
+        pose,
+        *,
+        name: str = "",
+        time: float = 0.0,
+        length: float = 0.0,
+        camera_changed: bool = True,
+    ) -> None:
+        """Commit one retained actor transform/pose with one render request.
+
+        Runtime previews update the camera, actor root, and skin pose together.
+        Calling the ordinary transform and animation APIs independently queues
+        multiple paints and can present an intermediate frame.  This method
+        invalidates both caches first, then schedules one coherent frame.
+        """
+
+        self.update_runtime_character_frames(
+            ((root_node, character_instance_id, pose, name, time, length),),
+            camera_changed=camera_changed,
+        )
+
+    def update_runtime_character_frames(
+        self,
+        frames,
+        *,
+        camera_changed: bool = True,
+        scene_changed: bool = False,
+    ) -> None:
+        """Commit all runtime actors, then queue exactly one retained frame.
+
+        ``scene_changed`` is the runtime-attachment path: the resident model
+        object is unchanged, but its child DAG changed.  A scene/resources
+        request lets retained backends reconcile just those nodes without
+        calling ``load_model`` and clearing every room cache/framebuffer.
+        """
+
+        rows = []
+        roots = []
+        for frame in tuple(frames or ()):
+            try:
+                root_node, character_instance_id, pose, name, time, length = frame
+            except (TypeError, ValueError):
+                continue
+            rows.append((character_instance_id, pose, name, time, length))
+            if root_node is not None:
+                roots.append(root_node)
+        if not rows:
+            return
+        batch_setter = getattr(self._renderer, "set_character_animation_poses", None)
+        if callable(batch_setter):
+            batch_setter(rows, request_render=False)
+        else:
+            setter = getattr(self._renderer, "set_character_animation_pose", None)
+            if callable(setter):
+                for character_instance_id, pose, name, time, length in rows:
+                    try:
+                        setter(
+                            character_instance_id,
+                            pose,
+                            name=name,
+                            time=time,
+                            length=length,
+                            request_render=False,
+                        )
+                    except TypeError:
+                        setter(character_instance_id, pose, name=name, time=time, length=length)
+            else:
+                character_instance_id, pose, name, time, length = rows[-1]
+                self._renderer.set_animation_pose(pose, name=name, time=time, length=length)
+        for root_node in roots:
+            self._evict_transform_cache(root_node)
+        self._fast_frame_until = max(self._fast_frame_until, time_module.perf_counter() + 0.05)
+        self._request_render(
+            fast=True,
+            reason="runtime character frame",
+            animation=True,
+            transform=True,
+            camera=bool(camera_changed),
+            scene=bool(scene_changed),
+            resources=bool(scene_changed),
+        )
+
     def set_animation_playback_active(self, active: bool, reason: str = "animation playback") -> None:
         self._frame_governor.set_animation_playing(bool(active), reason)
         if active:

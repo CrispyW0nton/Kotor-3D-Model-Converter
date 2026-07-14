@@ -116,7 +116,7 @@ class QtTextureToolWindow(QtWidgets.QMainWindow):
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
-        self.setWindowTitle("GhostRigger Texture Tool")
+        self.setWindowTitle("Ghost-Studio Texture Tool")
         self.setWindowFlag(QtCore.Qt.Window, True)
         self.resize(760, 700)
         self.tabs = QtWidgets.QTabWidget()

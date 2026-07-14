@@ -62,6 +62,11 @@ class LYTDoorHook:
     qy: float = 0.0
     qz: float = 0.0
     qw: float = 1.0   # identity rotation by default
+    #: Room model the hook belongs to.  Vanilla LYT doorhook lines are
+    #: "room door_name 0 x y z qw qx qy qz" — the engine sscanf's that exact
+    #: shape; emitting fewer tokens crashed swkotor2 (strlen AV in vscan_fn,
+    #: live session 20260708-114626-runtime-test-plcaa-k2-warp).
+    room: str = ""
 
 @dataclass
 class LYTLayout:
@@ -116,20 +121,41 @@ class LYTLayout:
                     state = None
                 continue
 
-            # Parse doorhook entry
-            # v7.2 FIX-DOORHOOK (Finding 4.2): Parse optional quaternion (qx,qy,qz,qw)
-            # KotorBlender format: parent_name door_name x y z qx qy qz qw
-            # Minimal format: name x y z
+            # Parse doorhook entry.  Supported shapes:
+            #   vanilla:      room door_name 0 x y z qw qx qy qz   (10 tokens)
+            #   KotorBlender: room door_name x y z qx qy qz qw     (9 tokens)
+            #   legacy:       name x y z [qx qy qz qw]
             if state == 'doorhookcount':
                 try:
-                    dx, dy, dz = float(tokens[1]), float(tokens[2]), float(tokens[3])
-                    # Parse optional quaternion rotation (tokens 4-7)
-                    qx = float(tokens[4]) if len(tokens) > 4 else 0.0
-                    qy = float(tokens[5]) if len(tokens) > 5 else 0.0
-                    qz = float(tokens[6]) if len(tokens) > 6 else 0.0
-                    qw = float(tokens[7]) if len(tokens) > 7 else 1.0
-                    lyt.doorhooks.append(LYTDoorHook(
-                        tokens[0].lower(), dx, dy, dz, qx, qy, qz, qw))
+                    second_is_number = True
+                    try:
+                        float(tokens[1])
+                    except (IndexError, ValueError):
+                        second_is_number = False
+                    if not second_is_number and len(tokens) >= 6:
+                        room_name = tokens[0].lower()
+                        door_name = tokens[1].lower()
+                        nums = [float(value) for value in tokens[2:]]
+                        if len(nums) >= 8:
+                            # vanilla: flag, pos, then quat stored w-first
+                            dx, dy, dz = nums[1], nums[2], nums[3]
+                            qw, qx, qy, qz = nums[4], nums[5], nums[6], nums[7]
+                        else:
+                            dx, dy, dz = nums[0], nums[1], nums[2]
+                            qx = nums[3] if len(nums) > 3 else 0.0
+                            qy = nums[4] if len(nums) > 4 else 0.0
+                            qz = nums[5] if len(nums) > 5 else 0.0
+                            qw = nums[6] if len(nums) > 6 else 1.0
+                        lyt.doorhooks.append(LYTDoorHook(
+                            door_name, dx, dy, dz, qx, qy, qz, qw, room=room_name))
+                    else:
+                        dx, dy, dz = float(tokens[1]), float(tokens[2]), float(tokens[3])
+                        qx = float(tokens[4]) if len(tokens) > 4 else 0.0
+                        qy = float(tokens[5]) if len(tokens) > 5 else 0.0
+                        qz = float(tokens[6]) if len(tokens) > 6 else 0.0
+                        qw = float(tokens[7]) if len(tokens) > 7 else 1.0
+                        lyt.doorhooks.append(LYTDoorHook(
+                            tokens[0].lower(), dx, dy, dz, qx, qy, qz, qw))
                 except (IndexError, ValueError):
                     pass
                 idx += 1
@@ -155,24 +181,25 @@ class LYTLayout:
         lines.append("#MAXLAYOUT ASCII")
         lines.append(f"filedependancy {dependency}")
         lines.append("beginlayout")
-        lines.append(f"roomcount {len(self.rooms)}")
+        lines.append(f"   roomcount {len(self.rooms)}")
         for r in self.rooms:
-            lines.append(f"  {r.model}  {r.x:.6f}  {r.y:.6f}  {r.z:.6f}")
-        lines.append("trackcount 0")
-        lines.append("obstaclecount 0")
-        if self.doorhooks:
-            lines.append(f"doorhookcount {len(self.doorhooks)}")
-            for d in self.doorhooks:
-                # v7.2: Write quaternion if non-identity (Finding 4.2)
-                if abs(d.qx) > 1e-6 or abs(d.qy) > 1e-6 or abs(d.qz) > 1e-6 or abs(d.qw - 1.0) > 1e-6:
-                    lines.append(f"  {d.name}  {d.x:.6f}  {d.y:.6f}  {d.z:.6f}  "
-                                 f"{d.qx:.6f}  {d.qy:.6f}  {d.qz:.6f}  {d.qw:.6f}")
-                else:
-                    lines.append(f"  {d.name}  {d.x:.6f}  {d.y:.6f}  {d.z:.6f}")
-        else:
-            lines.append("doorhookcount 0")
+            lines.append(f"      {r.model} {r.x:.6f} {r.y:.6f} {r.z:.6f}")
+        lines.append("   trackcount 0")
+        lines.append("   obstaclecount 0")
+        lines.append(f"   doorhookcount {len(self.doorhooks)}")
+        default_room = self.rooms[0].model if self.rooms else "room"
+        for d in self.doorhooks:
+            # Engine contract (vanilla 101PER/202TEL, and the crash it fixes:
+            # sscanf/strlen AV when tokens are missing): every doorhook line
+            # is "room door_name 0 x y z qw qx qy qz".
+            room = d.room or default_room
+            lines.append(
+                f"      {room} {d.name} 0 {d.x:.6f} {d.y:.6f} {d.z:.6f} "
+                f"{d.qw:.6f} {d.qx:.6f} {d.qy:.6f} {d.qz:.6f}"
+            )
         lines.append("donelayout")
-        return "\n".join(lines) + "\n"
+        # Vanilla LYT/VIS are CRLF text; match them byte-for-byte.
+        return "\r\n".join(lines) + "\r\n"
 
     def write(self, path: str):
         Path(path).write_text(self.to_text(), encoding='latin-1')
@@ -215,7 +242,8 @@ class VISData:
             lines.append(f"{room} {len(visible)}")
             for v in visible:
                 lines.append(f"  {v}")
-        return "\n".join(lines) + "\n"
+        # Vanilla VIS files are CRLF text; match them.
+        return "\r\n".join(lines) + "\r\n"
 
     def write(self, path: str):
         Path(path).write_text(self.to_text(), encoding='latin-1')
@@ -320,6 +348,7 @@ class GITDoor:
     bearing: float = 0.0
     linked_to: str = ""
     linked_to_module: str = ""
+    linked_to_flags: int = 0
     transition: int = 0
 
 @dataclass
@@ -348,6 +377,8 @@ class GITTrigger:
     z: float = 0.0
     geometry: List[Tuple[float,float,float]] = field(default_factory=list)
     linked_to: str = ""
+    linked_to_module: str = ""
+    linked_to_flags: int = 0
     transition: int = 0
 
 @dataclass
@@ -414,6 +445,8 @@ class GITData:
 
         def _i(d, key, default=0):
             v = d.get(key)
+            if isinstance(v, dict):
+                v = v.get('strref', v.get('stringref', v.get('value')))
             try: return int(v) if v is not None else default
             except: return default
 
@@ -462,7 +495,7 @@ class GITData:
                 x       = _f(c, 'XPosition'),
                 y       = _f(c, 'YPosition'),
                 z       = _f(c, 'ZPosition'),
-                bearing = _f(c, 'XOrientation'),
+                bearing = math.atan2(_f(c, 'YOrientation'), _f(c, 'XOrientation', 1.0)),
             ))
 
         # Doors
@@ -477,6 +510,7 @@ class GITData:
                 bearing           = _f(d_raw, 'Bearing'),
                 linked_to         = _s(d_raw, 'LinkedTo'),
                 linked_to_module  = _s(d_raw, 'LinkedToModule'),
+                linked_to_flags   = _i(d_raw, 'LinkedToFlags'),
                 transition        = _i(d_raw, 'TransitionDestin'),
             ))
 
@@ -518,6 +552,8 @@ class GITData:
                 z          = _f(t, 'ZPosition'),
                 geometry   = geom,
                 linked_to  = _s(t, 'LinkedTo'),
+                linked_to_module = _s(t, 'LinkedToModule'),
+                linked_to_flags = _i(t, 'LinkedToFlags'),
                 transition = _i(t, 'TransitionDestin'),
             ))
 
@@ -543,11 +579,12 @@ class GITData:
                 z      = _f(s, 'ZPosition'),
             ))
 
-        # Stores
+        # Stores: engine contract is "ResRef" (vanilla 202TEL GIT); older
+        # authored payloads may still carry "TemplateResRef".
         for store in (raw.get('StoreList') or []):
             if not isinstance(store, dict): continue
             g.stores.append(GITStore(
-                resref = _s(store, 'TemplateResRef'),
+                resref = _s(store, 'ResRef') or _s(store, 'TemplateResRef'),
                 tag    = _s(store, 'Tag'),
             ))
 
@@ -642,10 +679,11 @@ WOK_SURFACE_NAMES = {
     19: 'SNOW',
     20: 'SAND',
     21: 'BAREBONES',
+    30: 'TRIGGER',
 }
 
 NON_WALK_ID   = 7
-WALKABLE_IDS  = {1,3,4,5,9,10,11,12,13,14,18,19,20,21}  # materials NPCs can traverse
+WALKABLE_IDS  = {1,3,4,5,6,9,10,11,12,13,14,18,30}  # canonical Odyssey walkable materials
 
 @dataclass
 class WOKFace:
@@ -656,6 +694,9 @@ class WOKFace:
     adj1: int = -1      # adjacent face index (or -1)
     adj2: int = -1
     adj3: int = -1
+    trans1: int = -1    # door/area transition index for each directed edge
+    trans2: int = -1
+    trans3: int = -1
 
 @dataclass
 class WOKData:
@@ -697,7 +738,6 @@ class WOKData:
             (round(float(v.x), 6), round(float(v.y), 6), round(float(v.z), 6)): i
             for i, v in enumerate(vertices)
         }
-        face_by_id = {id(face): i for i, face in enumerate(getattr(bwm, "faces", []) or [])}
 
         def vertex_index(vertex) -> int:
             idx = index_by_id.get(id(vertex))
@@ -708,12 +748,11 @@ class WOKData:
                 0,
             )
 
-        def face_index(value) -> int:
-            if value is None:
+        def transition_index(value) -> int:
+            try:
+                return -1 if value is None else int(value)
+            except (TypeError, ValueError):
                 return -1
-            if isinstance(value, int):
-                return value
-            return face_by_id.get(id(value), -1)
 
         for face in getattr(bwm, "faces", []) or []:
             wok.faces.append(
@@ -722,11 +761,15 @@ class WOKData:
                     vertex_index(face.v2),
                     vertex_index(face.v3),
                     int(getattr(face, "material", 0) or 0),
-                    face_index(getattr(face, "trans1", None)),
-                    face_index(getattr(face, "trans2", None)),
-                    face_index(getattr(face, "trans3", None)),
+                    -1,
+                    -1,
+                    -1,
+                    transition_index(getattr(face, "trans1", None)),
+                    transition_index(getattr(face, "trans2", None)),
+                    transition_index(getattr(face, "trans3", None)),
                 )
             )
+        wok.rebuild_adjacencies()
         return wok
 
     @classmethod
@@ -805,6 +848,23 @@ class WOKData:
                     edges.append((va, vb, fi, ei))
         return edges
 
+    def rebuild_adjacencies(self) -> None:
+        """Rebuild geometric face adjacency without conflating transitions."""
+
+        owners: Dict[Tuple[int, int], List[Tuple[int, int]]] = {}
+        for face_index, face in enumerate(self.faces):
+            face.adj1 = face.adj2 = face.adj3 = -1
+            triangle = (face.v1, face.v2, face.v3)
+            for local_edge in range(3):
+                key = tuple(sorted((triangle[local_edge], triangle[(local_edge + 1) % 3])))
+                owners.setdefault(key, []).append((face_index, local_edge))
+        for rows in owners.values():
+            if len(rows) != 2:
+                continue
+            (face_a, edge_a), (face_b, edge_b) = rows
+            setattr(self.faces[face_a], f"adj{edge_a + 1}", face_b)
+            setattr(self.faces[face_b], f"adj{edge_b + 1}", face_a)
+
     def summary(self) -> str:
         return (f"WOK: {len(self.verts)} verts, {len(self.faces)} faces, "
                 f"{self.walkable_face_count()} walkable, "
@@ -817,7 +877,9 @@ class WOKData:
         if face_idx < 0 or face_idx >= len(self.faces):
             return False
         f = self.faces[face_idx]
-        self.faces[face_idx] = WOKFace(f.v1, f.v2, f.v3, surface_id, f.adj1, f.adj2, f.adj3)
+        self.faces[face_idx] = WOKFace(
+            f.v1, f.v2, f.v3, surface_id, f.adj1, f.adj2, f.adj3, f.trans1, f.trans2, f.trans3
+        )
         return True
 
     def bulk_replace_surface(self, src_id: int, dst_id: int) -> int:
@@ -825,7 +887,9 @@ class WOKData:
         count = 0
         for i, f in enumerate(self.faces):
             if f.surface == src_id:
-                self.faces[i] = WOKFace(f.v1, f.v2, f.v3, dst_id, f.adj1, f.adj2, f.adj3)
+                self.faces[i] = WOKFace(
+                    f.v1, f.v2, f.v3, dst_id, f.adj1, f.adj2, f.adj3, f.trans1, f.trans2, f.trans3
+                )
                 count += 1
         return count
 
@@ -896,6 +960,9 @@ class WOKData:
                 bwm_face.material = SurfaceMaterial(int(face.surface))
             except ValueError:
                 bwm_face.material = SurfaceMaterial.UNDEFINED
+            for local_edge, transition in enumerate((face.trans1, face.trans2, face.trans3), start=1):
+                if int(transition) >= 0:
+                    setattr(bwm_face, f"trans{local_edge}", int(transition))
             # WOKFace.adj* stores geometric adjacency in GhostRigger's light
             # editor model.  BWMFace.trans* is a door/area transition index, not
             # adjacency, so leave it empty and let PyKotor derive adjacency and
@@ -904,12 +971,97 @@ class WOKData:
 
         output = _NonClosingBytesIO()
         write_bwm(bwm, output)
-        return output.getvalue()
+        return _patch_bwm_perimeters(output.getvalue())
 
     def write_binary(self, path: str):
         """Write the WOKData to a binary .wok file at *path*."""
         Path(path).write_bytes(self.to_bytes())
         log.info("WOKData.write_binary → %s  (%d verts, %d faces)", path, len(self.verts), len(self.faces))
+
+
+def _patch_bwm_perimeters(data: bytes) -> bytes:
+    """Emit the walkmesh perimeter loop(s) that PyKotor's BWM writer omits.
+
+    A KOTOR area walkmesh needs perimeter records grouping its boundary edges
+    into closed loops; without them the engine treats the walkable region as
+    undefined and the player cannot move (perim=0).  PyKotor can omit boundary
+    edges or emit touching/multiple loops out of order.  Rebuild the boundary
+    from the serialized walkable triangles, trace every closed directed loop,
+    preserve transition indices, then replace the edge/perimeter tail.
+    """
+
+    if len(data) < 136:
+        return data
+    fc, fo = struct.unpack_from("<II", data, 80)
+    walkable_count = struct.unpack_from("<I", data, 112)[0]
+    ec, eo = struct.unpack_from("<II", data, 120)
+    if not fc or not walkable_count:
+        return data  # nothing walkable to trace
+    if fo + fc * 12 > len(data) or eo + ec * 8 > len(data) or walkable_count > fc:
+        return data
+    faces = [struct.unpack_from("<III", data, fo + 12 * i) for i in range(fc)]
+
+    existing_rows = [struct.unpack_from("<ii", data, eo + 8 * i) for i in range(ec)]
+    transition_by_edge: Dict[int, int] = {}
+    for edge_id, transition in existing_rows:
+        if transition != -1 or edge_id not in transition_by_edge:
+            transition_by_edge[edge_id] = transition
+
+    edge_owners: Dict[Tuple[int, int], List[Tuple[int, int, int]]] = {}
+    for face_index in range(walkable_count):
+        triangle = faces[face_index]
+        for local_edge in range(3):
+            start = triangle[local_edge]
+            end = triangle[(local_edge + 1) % 3]
+            key = tuple(sorted((start, end)))
+            edge_owners.setdefault(key, []).append((face_index * 3 + local_edge, start, end))
+    boundary = [rows[0] for rows in edge_owners.values() if len(rows) == 1]
+    if not boundary:
+        return data
+
+    outgoing: Dict[int, List[Tuple[int, int, int]]] = {}
+    for row in boundary:
+        outgoing.setdefault(row[1], []).append(row)
+    unvisited = {row[0]: row for row in boundary}
+    ordered: List[Tuple[int, int, int]] = []
+    perimeters: List[int] = []
+    while unvisited:
+        first = min(unvisited.values(), key=lambda row: row[0])
+        start_vertex = first[1]
+        current = first
+        while True:
+            if current[0] not in unvisited:
+                return data
+            del unvisited[current[0]]
+            ordered.append(current)
+            if current[2] == start_vertex:
+                perimeters.append(len(ordered))
+                break
+            candidates = sorted(
+                (row for row in outgoing.get(current[2], ()) if row[0] in unvisited),
+                key=lambda row: row[0],
+            )
+            if not candidates:
+                return data  # open/non-manifold boundary: let the raw gate block it
+            current = candidates[0]
+
+    boundary_ids = {row[0] for row in ordered}
+    edge_rows = [(edge_id, transition_by_edge.get(edge_id, -1)) for edge_id, _start, _end in ordered]
+    edge_rows.extend(
+        (edge_id, transition)
+        for edge_id, transition in existing_rows
+        if edge_id not in boundary_ids and transition != -1
+    )
+
+    buf = bytearray(data[:eo])
+    for edge_id, transition in edge_rows:
+        buf += struct.pack("<ii", edge_id, transition)
+    perim_off = len(buf)
+    for value in perimeters:
+        buf += struct.pack("<I", value)
+    struct.pack_into("<II", buf, 120, len(edge_rows), eo)
+    struct.pack_into("<II", buf, 128, len(perimeters), perim_off)
+    return bytes(buf)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

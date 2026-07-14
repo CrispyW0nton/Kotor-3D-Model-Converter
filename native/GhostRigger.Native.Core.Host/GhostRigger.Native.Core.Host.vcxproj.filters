@@ -37,6 +37,9 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <Image Include="..\..\assets\icons\ghostrigger.ico">
+      <Filter>Resources\icons</Filter>
+    </Image>
     <Image Include="..\..\assets\icons\ghostrigger_1024x1024.png">
       <Filter>Resources\icons</Filter>
     </Image>

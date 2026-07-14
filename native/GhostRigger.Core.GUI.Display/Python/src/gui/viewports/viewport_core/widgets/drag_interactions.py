@@ -119,6 +119,18 @@ class ViewportDragInteractionsMixin:
         self._commit_transform_gizmo_symmetry()
         self._request_render(reason="gizmo drag ended", gizmo=True, selection=True, overlay=True)
 
+    def cancel_selection_marquee(self) -> None:
+        """Dismiss any in-progress authoring selection before runtime input takes over."""
+
+        band = getattr(self, "_selection_rubber_band", None)
+        if band is not None:
+            band.hide()
+        self._mesh_box_start = None
+        self._mesh_box_selecting = False
+        self._marquee_base_selection = []
+        self._joint_marquee_selecting = False
+        self._is_dragging = False
+
     def _press_lmb(self, event) -> None:
         x, y = int(event.position().x()), int(event.position().y())
         self._mx = self._press_x = x

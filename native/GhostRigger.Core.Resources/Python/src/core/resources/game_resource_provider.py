@@ -37,6 +37,7 @@ _RESTYPE_TO_EXT: dict[str, str] = {
     "NCS": "ncs",
     "LYT": "lyt",
     "VIS": "vis",
+    "PTH": "pth",
     "WOK": "wok",
     "2DA": "2da",
     "TLK": "tlk",
@@ -154,7 +155,10 @@ class GameResourceProvider(Protocol):
     def list_resources(self, query: GameResourceQuery | ResourceAddress | None = None) -> list[GameResourceRecord]:
         ...
 
-    def resolve(self, query: GameResourceQuery | ResourceAddress) -> GameResourceResult:
+    def resolve(
+        self,
+        query: GameResourceQuery | ResourceAddress,
+    ) -> GameResourceResult:
         ...
 
     def read_bytes(self, query: GameResourceQuery | ResourceAddress) -> bytes:
@@ -383,8 +387,12 @@ class ResourceManagerGameResourceProvider:
             raise GameResourceNotFoundError(f"Unsupported resource type: {q.restype}")
         game = _manager_game_name(q.game)
         candidates = self.list_resources(q)
+        getter = getattr(self.manager, "get_strict", None) if q.game else None
+        read_manager = getter if callable(getter) else self.manager.get
         if not candidates:
-            data = self.manager.get(q.resref, restype_id, game)
+            if q.module_id or q.layer or q.path:
+                raise GameResourceNotFoundError(_missing_message(q))
+            data = read_manager(q.resref, restype_id, game)
             if data is None:
                 raise GameResourceNotFoundError(_missing_message(q))
             address = q.to_address(scheme="game_resource")
@@ -396,18 +404,24 @@ class ResourceManagerGameResourceProvider:
                     priority=_LAYER_PRIORITY["unknown"],
                 )
             ]
-        data = self.manager.get(q.resref, restype_id, game)
+        selected = candidates[0]
+        inst = _manager_install(self.manager, game)
+        data = _read_selected_install_record(inst, selected, q.resref, restype_id)
+        if data is None:
+            if q.module_id or q.layer or q.path:
+                raise GameResourceNotFoundError(_missing_message(q))
+            data = read_manager(q.resref, restype_id, game)
         if data is None:
             raise GameResourceNotFoundError(_missing_message(q))
-        selected = candidates[0]
         if selected.size == 0:
             selected = replace(selected, size=len(data))
         shadowed = candidates[1:]
+        warnings = _shadow_warnings(selected, shadowed)
         return GameResourceResult(
             record=selected,
             data=bytes(data),
             shadowed_records=shadowed,
-            warnings=_shadow_warnings(selected, shadowed),
+            warnings=warnings,
         )
 
     def read_bytes(self, query: GameResourceQuery | ResourceAddress) -> bytes:
@@ -430,6 +444,43 @@ class ResourceManagerGameResourceProvider:
             return True
         except GameResourceNotFoundError:
             return False
+
+
+def _read_selected_install_record(inst: Any, record: GameResourceRecord, resref: str, type_id: int) -> bytes | None:
+    """Read the exact indexed provenance selected by a typed query.
+
+    ``ResourceManager.get`` intentionally applies global Override/module/base
+    priority. That is wrong when Map Studio selected a particular source-module
+    template whose resref is duplicated elsewhere, so address-scoped reads use
+    the indexed archive directly.
+    """
+
+    if inst is None:
+        return None
+    layer = str(record.address.layer or "").lower()
+    source_path = str(record.source_path or record.address.path or "")
+    if layer == "override" and source_path:
+        try:
+            return Path(source_path).read_bytes()
+        except OSError:
+            return None
+    if layer in {"module", "texturepack"}:
+        collection = getattr(inst, "_mod_erfs" if layer == "module" else "_tex_erfs", ()) or ()
+        wanted = str(Path(source_path).resolve()).lower() if source_path else ""
+        for archive in collection:
+            archive_path = str(Path(str(getattr(archive, "path", "") or "")).resolve()).lower()
+            if wanted and archive_path != wanted:
+                continue
+            data = archive.read(resref, type_id)
+            if data is not None:
+                return bytes(data)
+        return None
+    if layer == "base":
+        reader = getattr(inst, "get_bif", None)
+        if callable(reader):
+            data = reader(resref, type_id)
+            return bytes(data) if data is not None else None
+    return None
 
 
 def restype_to_extension(restype: str | None) -> str:

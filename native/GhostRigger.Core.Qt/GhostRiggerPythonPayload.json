@@ -2,68 +2,80 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Qt",
-    "file_count": 10,
+    "file_count": 12,
     "originals_remain_in_src": true,
     "files": [
+        {
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_AUDIO_INIT",
+            "source_path": "src/adapters/qt_audio/__init__.py",
+            "packaged_path": "Python/src/adapters/qt_audio/__init__.py",
+            "sha256": "3cf73d386c423c6f816024657d63909bef4600499588b2cdb1244359c36a6a87"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_AUDIO_MAP_STUDIO_PIE_AUDIO",
+            "source_path": "src/adapters/qt_audio/map_studio_pie_audio.py",
+            "packaged_path": "Python/src/adapters/qt_audio/map_studio_pie_audio.py",
+            "sha256": "8110844e8ce113d255ee0f4d5f4719cbcfc28b4f1073e5791d24980b90250851"
+        },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_AUTORIG_INIT",
             "source_path": "src/adapters/qt_autorig/__init__.py",
             "packaged_path": "Python/src/adapters/qt_autorig/__init__.py",
-            "sha256": "f22fc95fb466bf8456ca63604db4c13d3c0238bf06395bb63b2b8c76917c688e"
+            "sha256": "b8d1eae1b3df3481beb5511e3f13043fc71d030680f5a3903a4b134687cd8dbe"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_AUTORIG_CLOTH_DIALOGS",
             "source_path": "src/adapters/qt_autorig/cloth_dialogs.py",
             "packaged_path": "Python/src/adapters/qt_autorig/cloth_dialogs.py",
-            "sha256": "4908d28ac6f2061a31f5006fe7363a0a1b51a22e8e2a59525136b7e09dd7b410"
+            "sha256": "e8a2fae61815e76c2a24e8d669cd2f3e6a1bdf84feaf2d68a0e859bc341f90ec"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_IPC_INIT",
             "source_path": "src/adapters/qt_ipc/__init__.py",
             "packaged_path": "Python/src/adapters/qt_ipc/__init__.py",
-            "sha256": "063fba04c95351dbc394f4772c7aef66f09357d9548e8480ff6c531624efd604"
+            "sha256": "e461a6088431876679e6f3be594a2a9079442a5c565e4055ed20fa85c3937791"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_IPC_THREADING",
             "source_path": "src/adapters/qt_ipc/threading.py",
             "packaged_path": "Python/src/adapters/qt_ipc/threading.py",
-            "sha256": "5bde764de5f7af4d0bf9ac9314623bc9be3da598eb1bda7b1e3ec40b6569e574"
+            "sha256": "e96896e16a04e27e95949e5f323d42af49688ef045c8edca8b10a92b87700d41"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_VIEWPORT_INIT",
             "source_path": "src/adapters/qt_viewport/__init__.py",
             "packaged_path": "Python/src/adapters/qt_viewport/__init__.py",
-            "sha256": "7a1133c47f53bca0fc1f936a842abf06cab54772baece20fe756134e1cf48e7a"
+            "sha256": "8da59e3fcdcaf1fc29e518c970e563ec783b3631759d9c39d935fc913fa3bd13"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_VIEWPORT_CAMERA_GIZMO_RENDERER",
             "source_path": "src/adapters/qt_viewport/camera_gizmo_renderer.py",
             "packaged_path": "Python/src/adapters/qt_viewport/camera_gizmo_renderer.py",
-            "sha256": "1b4c871e0c7c8132cabcd93255e05c5fe23d334954a9fdd06782495e80f63a7b"
+            "sha256": "a802e8ca09876dd2185b96ac8528ea26e65a479c54507b6905b6fb8716252e70"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_VIEWPORT_CAMERA_OVERLAYS",
             "source_path": "src/adapters/qt_viewport/camera_overlays.py",
             "packaged_path": "Python/src/adapters/qt_viewport/camera_overlays.py",
-            "sha256": "537e85a8fedd27efa6e443a6e56c8d3802c627012c5eefbeb8e26bd242aa5730"
+            "sha256": "09f2c9ae8c7395803634a0c224416253c418da0a8f1b6b40e7dd8ff7546f63ec"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_VIEWPORT_FRAME_RENDERER",
             "source_path": "src/adapters/qt_viewport/frame_renderer.py",
             "packaged_path": "Python/src/adapters/qt_viewport/frame_renderer.py",
-            "sha256": "5117f4cafd3bf64a521ea2b11ea9bb5855129a125a2cdc253c8033fc1d72994d"
+            "sha256": "2cc547bf090b0b178f79618dfe9fbf13837345feb9ace8ad3459ed7c4076ec52"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_VIEWPORT_LIGHTING_VIEWPORT_CONTROLLER",
             "source_path": "src/adapters/qt_viewport/lighting_viewport_controller.py",
             "packaged_path": "Python/src/adapters/qt_viewport/lighting_viewport_controller.py",
-            "sha256": "53994138db661fe802e1b04226a8e5b4961d1a386242aaa8aca6ba8f968b3093"
+            "sha256": "870f27a05aefc1787c7f22ab45f12614b29346dd6dccdb09f806e30737188825"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_VIEWPORT_STILL_FRAME_RENDERER",
             "source_path": "src/adapters/qt_viewport/still_frame_renderer.py",
             "packaged_path": "Python/src/adapters/qt_viewport/still_frame_renderer.py",
-            "sha256": "c2a4be2e31dfb72a709c223dc03f840c7821b0b98fc6963f73a00f4c95b15334"
+            "sha256": "44ffaac223ed41e09a5e2500d236423404d533a48ae59924266305bc0754a427"
         }
     ]
 }

@@ -127,7 +127,7 @@ class ViewportConstructionMixin:
         self.locomotion_disc_button = self._icon_button(
             "Locomotion",
             self.toggle_locomotion_discs,
-            "locomotion_disc",
+            "viewport_locomotion_disc",
             checkable=True,
             tooltip="Show locomotion discs on key joints. Right-click to set disc size.",
         )
@@ -204,7 +204,7 @@ class ViewportConstructionMixin:
         self.center_pivot_button = self._icon_button(
             "Center Pivot",
             self.center_pivot_to_selection,
-            "viewport_gimbal",
+            "viewport_center_pivot",
             tooltip="Center pivot on the selected object or mesh bounds",
         )
         self.center_pivot_button.setObjectName("ViewportCenterPivotButton")
@@ -212,7 +212,7 @@ class ViewportConstructionMixin:
         self.freeze_transform_button = self._icon_button(
             "Freeze Transforms",
             self.freeze_selected_transform,
-            "viewport_scale",
+            "viewport_freeze_transform",
             tooltip="Bake the selected mesh transform into its vertices and reset transform values",
         )
         self.freeze_transform_button.setObjectName("ViewportFreezeTransformsButton")
@@ -220,7 +220,7 @@ class ViewportConstructionMixin:
         self.walkmesh_button = self._icon_button(
             "WalkMesh",
             self.toggle_walkmesh,
-            "viewport_wire",
+            "viewport_walkmesh",
             checkable=True,
             tooltip="Walkmesh overlay",
         )
@@ -325,16 +325,20 @@ class ViewportConstructionMixin:
         toolbar_scroll.setMinimumHeight(26)
         toolbar_scroll.setMinimumWidth(0)
         self.viewport_toolbar_scroll = toolbar_scroll
-        self.viewport_map_studio_modeling_tabs = self._make_map_studio_modeling_tabs(self)
+        self.viewport_map_studio_modeling_tabs = None
+        if self._map_studio_authoring_chrome_enabled:
+            self.viewport_map_studio_modeling_tabs = self._make_map_studio_modeling_tabs(self)
         if self._compact_controls:
             toolbar_scroll.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
             root.addWidget(toolbar_scroll)
-            root.addWidget(self.viewport_map_studio_modeling_tabs)
+            if self.viewport_map_studio_modeling_tabs is not None:
+                root.addWidget(self.viewport_map_studio_modeling_tabs)
             self.setMinimumSize(140, 130)
             self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Expanding)
         else:
             root.addWidget(toolbar_scroll)
-            root.addWidget(self.viewport_map_studio_modeling_tabs)
+            if self.viewport_map_studio_modeling_tabs is not None:
+                root.addWidget(self.viewport_map_studio_modeling_tabs)
         root.addWidget(self.canvas, 1)
         self.transform_typein_bar = QtTransformTypeInBar(self)
         self.transform_typein_bar.transformValueEdited.connect(self._on_transform_typein_edited)
@@ -539,6 +543,7 @@ class ViewportConstructionMixin:
             ("flatten", "Flatten", "Flatten selected floor-plan vertices."),
             ("cleanup", "Cleanup", "Cleanup duplicate or collinear authored geometry."),
             ("triangulate", "Triang.", "Triangulate selected room or WOK-facing faces."),
+            ("texture_paint", "Paint", "Paint a unique project texture on the nearest visible Map Studio face."),
             ("paint_material", "Material", "Assign KOTOR texture/material intent to the active room or selected primitive."),
             ("paint_wok", "WOK", "Assign KOTOR WOK surface intent to the active room or selected walkmesh primitive."),
             ("center_pivot", "Pivot", "Center the selected primitive pivot."),
@@ -701,6 +706,12 @@ class ViewportConstructionMixin:
     @property
     def transform_typein_chrome_visible(self) -> bool:
         return bool(self._transform_typein_visible)
+
+    @property
+    def map_studio_authoring_chrome_enabled(self) -> bool:
+        """Whether this viewport owns KMAP Modeling and Blockout controls."""
+
+        return bool(self._map_studio_authoring_chrome_enabled)
 
     def _button(
         self,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 import zipfile
@@ -34,6 +35,21 @@ def test_t2600_map_studio_and_module_editor_are_separate_main_screen_entries() -
         "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/"
         "viewport_core/widgets/construction.py"
     )
+    viewport_widget_source = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/"
+        "viewport_core/widgets/viewport_widget.py"
+    )
+    viewport_variants_source = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/"
+        "viewport_core/widgets/variants.py"
+    )
+    map_viewport_panel_source = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"
+        "module_editor/module_editor_viewport_panel.py"
+    )
+    map_window_source = _read(
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py"
+    )
     resource_source = _read(
         "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/"
         "application_core/shared/resource_panels.py"
@@ -43,25 +59,25 @@ def test_t2600_map_studio_and_module_editor_are_separate_main_screen_entries() -
         "integration/tool_integration_registry.py"
     )
 
-    assert 'QtGui.QAction(self._icon("modular"), "Open Map Studio (KMAP Area Authoring)", self)' in chrome_source
+    assert 'QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["map_studio"]), "Open Map Studio (KMAP Area Authoring)", self)' in chrome_source
     assert "self.modules_action.triggered.connect(self._open_map_studio_modeling_workspace)" in chrome_source
-    assert 'QtGui.QAction(self._icon("module_meshes"), "Open Module Editor (Stock MOD/RIM Patcher)", self)' in chrome_source
+    assert 'QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["module_editor"]), "Open Module Editor (Stock MOD/RIM Patcher)", self)' in chrome_source
     assert "self.stock_module_editor_action.triggered.connect(self._open_stock_module_editor_window)" in chrome_source
     assert '"CommandStripMapStudioButton"' in chrome_source
     assert '"CommandStripModuleEditorButton"' in chrome_source
     assert "Patch textures, walkmeshes, and objects in existing stock" in chrome_source
-    assert "ViewportToolbarMapStudioModelingButton" in chrome_source
-    assert "modeling_button.clicked.connect(self._open_map_studio_modeling_workspace)" in chrome_source
-    assert "ViewportToolbarMapStudioModelingTabs" in chrome_source
-    assert "ViewportToolbarMapStudioModelingScrollArea" in chrome_source
-    assert "ViewportToolbarMapStudioBlockoutScrollArea" in chrome_source
-    assert 'tabs.addTab(tab, "Modeling")' in chrome_source
-    assert "ViewportToolbarMapStudioModeButton_{mode.lower()}" in chrome_source
-    assert "ViewportToolbarMapStudioToolButton_{key}" in chrome_source
-    assert "ViewportToolbarMapStudioBlockoutTab" in chrome_source
-    assert 'tabs.addTab(blockout_tab, "Blockout")' in chrome_source
-    assert "ViewportToolbarMapStudioBlockoutButton_{key}" in chrome_source
-    assert "take_viewport_modeling_tabs" in chrome_source
+    main_toolbar_band_source = chrome_source.split("def _make_viewport_toolbar_band", 1)[1].split(
+        "def _make_viewport_modeling_tabs",
+        1,
+    )[0]
+    assert "ViewportToolbarMapStudioModelingButton" not in main_toolbar_band_source
+    assert "ViewportToolbarMapStudioModelingTabs" not in main_toolbar_band_source
+    assert "take_viewport_modeling_tabs" not in main_toolbar_band_source
+    assert "DEFAULT_MAP_STUDIO_AUTHORING_CHROME = False" in viewport_widget_source
+    assert "class QtMapStudioViewportWidget" in viewport_variants_source
+    assert 'VIEWPORT_ROLE = "map_studio"' in viewport_variants_source
+    assert "DEFAULT_MAP_STUDIO_AUTHORING_CHROME = True" in viewport_variants_source
+    assert "QtMapStudioViewportWidget(self)" in map_viewport_panel_source
     assert "def _make_map_studio_modeling_tabs" in viewport_source
     assert "self.viewport_map_studio_modeling_tabs" in viewport_source
     assert "ViewportToolbarMapStudioModelingTabs" in viewport_source
@@ -74,20 +90,19 @@ def test_t2600_map_studio_and_module_editor_are_separate_main_screen_entries() -
     assert "def _open_map_studio_mode_from_toolbar" in viewport_source
     assert "def _run_map_studio_command_from_toolbar" in viewport_source
     for mode_label in ("Object", "Vertex", "Edge", "Face", "Terrain", "Walkmesh"):
-        assert f'"{mode_label}"' in chrome_source
+        assert f'"{mode_label}"' in viewport_source
     for action_key in (
         "duplicate_selected",
         "delete_selected",
         "extrude",
         "bevel",
         "triangulate",
+        "texture_paint",
         "paint_material",
         "paint_wok",
     ):
-        assert f'"{action_key}"' in chrome_source
         assert f'"{action_key}"' in viewport_source
-    for tool_label in ("Material", "WOK"):
-        assert f'"{tool_label}"' in chrome_source
+    for tool_label in ("Paint", "Material", "WOK"):
         assert f'"{tool_label}"' in viewport_source
     for blockout_key in (
         "blockout_room",
@@ -100,16 +115,13 @@ def test_t2600_map_studio_and_module_editor_are_separate_main_screen_entries() -
         "arch",
         "terrain_patch",
     ):
-        assert f'"{blockout_key}"' in chrome_source
+        assert f'"{blockout_key}"' in viewport_source
     for blockout_label in ("Room", "Floor", "Wall", "Cube", "Ramp", "Stairs", "Doorway", "Arch", "Terrain"):
-        assert f'"{blockout_label}"' in chrome_source
-    assert "def _open_map_studio_mode_from_viewport" in chrome_source
-    assert "def _run_map_studio_viewport_modeling_command" in chrome_source
-    assert 'getattr(window, "select_map_studio_authored_context", None)' in chrome_source
-    assert 'getattr(window, "_execute_map_studio_tool_belt_command", None)' in chrome_source
-    assert 'getattr(window, "move_map_studio_authored_primitive_selection", None)' in chrome_source
-    assert 'execute("duplicate_selected")' in chrome_source
-    assert 'execute("delete_selected")' in chrome_source
+        assert f'"{blockout_label}"' in viewport_source
+    assert "def _open_map_studio_mode_from_viewport" in map_window_source
+    assert "def _run_map_studio_viewport_modeling_command" in map_window_source
+    assert "self.move_map_studio_authored_primitive_selection()" in map_window_source
+    assert 'self._execute_map_studio_tool_belt_command("' not in chrome_source
     assert "def _open_map_studio_modeling_workspace" in resource_source
     assert "def _open_stock_module_editor_window" in resource_source
     assert "def _configure_stock_module_editor_game_library" in resource_source
@@ -1268,6 +1280,7 @@ def test_stock_module_git_inventory_lists_runtime_objects(tmp_path: Path) -> Non
                 position=(2.0, 3.0, 0.0),
                 linked_to="wp_exit",
                 linked_to_module="koq201",
+                linked_to_flags=2,
                 transition_destination=1,
             ),
         ),
@@ -3263,6 +3276,7 @@ def test_t2600_level_editor_window_is_branded_as_map_studio_without_new_surface(
         "object_vertex_snap",
         "center_pivot",
         "freeze_transform",
+        "texture_paint",
         "paint_material",
         "paint_wok",
     ):
@@ -3340,7 +3354,7 @@ def test_t2600_main_screen_map_studio_action_opens_window_and_tool_belt_runtime(
         assert window.findChild(QtWidgets.QWidget, "mapStudioToolBeltWidget") is not None
         for action_key in ("floor", "wall", "cube", "ramp", "stairs", "door_frame", "arch", "terrain_patch"):
             assert window.findChild(QtWidgets.QToolButton, f"mapStudioToolBeltButton_{action_key}") is not None
-        for action_key in ("select", "move", "duplicate_selected", "delete_selected", "paint_material", "paint_wok"):
+        for action_key in ("select", "move", "duplicate_selected", "delete_selected", "texture_paint", "paint_wok"):
             assert window.findChild(QtWidgets.QToolButton, f"mapStudioToolBeltButton_{action_key}") is not None
     finally:
         window = getattr(host, "module_editor_window", None)
@@ -3349,8 +3363,8 @@ def test_t2600_main_screen_map_studio_action_opens_window_and_tool_belt_runtime(
         host.close()
 
 
-def test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runtime() -> None:
-    """The actual Qt main window exposes the Map Studio belt and opens the Level Editor."""
+def test_t2600_modeling_tabs_exist_only_after_the_main_window_opens_map_studio() -> None:
+    """The main scene stays clean while the opened Map Studio owns its authoring belt."""
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     _configure_native_python_roots()
@@ -3385,31 +3399,18 @@ def test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runti
         command_icon = window.findChild(QtWidgets.QToolButton, "CommandStripMapStudioButton")
         assert command_icon is not None
         assert command_icon.toolTip() == "Open Map Studio (KMAP Area Authoring)"
-        assert window.findChild(QtWidgets.QToolButton, "ViewportToolbarMapStudioModelingButton") is not None
+        assert window.findChild(QtWidgets.QToolButton, "ViewportToolbarMapStudioModelingButton") is None
         top_toolbar = window.findChild(QtWidgets.QToolBar, "ReservedTopToolbar")
         assert top_toolbar is not None
         modeling_tabs = window.findChild(QtWidgets.QTabWidget, "ViewportToolbarMapStudioModelingTabs")
-        assert modeling_tabs is not None
-        assert modeling_tabs.isVisible()
-        assert modeling_tabs.minimumHeight() > 0
+        assert modeling_tabs is None
         default_row = window.findChild(QtWidgets.QWidget, "ViewportToolbarDefaultRow")
         assert default_row is not None
         toolbar_band = window.findChild(QtWidgets.QFrame, "ViewportToolbarBand")
         assert toolbar_band is not None
-        assert toolbar_band.height() >= default_row.minimumHeight() + modeling_tabs.minimumHeight()
+        assert toolbar_band.height() == default_row.height()
         assert top_toolbar.minimumHeight() >= toolbar_band.height()
         assert top_toolbar.maximumHeight() >= toolbar_band.height()
-        modeling_scroll = window.findChild(QtWidgets.QScrollArea, "ViewportToolbarMapStudioModelingScrollArea")
-        assert modeling_scroll is not None
-        assert modeling_scroll.horizontalScrollBar().maximum() > 0
-        for mode_key in ("object", "vertex", "edge", "face", "terrain", "walkmesh"):
-            assert window.findChild(QtWidgets.QToolButton, f"ViewportToolbarMapStudioModeButton_{mode_key}") is not None
-        for action_key in ("blockout_room", "floor", "wall", "cube", "ramp", "stairs", "door_frame", "arch", "terrain_patch"):
-            assert window.findChild(QtWidgets.QToolButton, f"ViewportToolbarMapStudioBlockoutButton_{action_key}") is not None
-        modeling_tabs.setCurrentIndex(1)
-        app.processEvents()
-        blockout_scroll = window.findChild(QtWidgets.QScrollArea, "ViewportToolbarMapStudioBlockoutScrollArea")
-        assert blockout_scroll is not None
 
         command_icon.click()
         app.processEvents()
@@ -3427,6 +3428,39 @@ def test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runti
         assert module_window.findChild(QtWidgets.QScrollArea, "mapStudioViewportPanelScrollArea") is None
         embedded_viewport = module_window.findChild(QtWidgets.QWidget, "MapStudioViewportWidget")
         assert embedded_viewport is not None
+        assert embedded_viewport.map_studio_authoring_chrome_enabled is True
+        modeling_tabs = module_window.findChild(QtWidgets.QTabWidget, "ViewportToolbarMapStudioModelingTabs")
+        assert modeling_tabs is not None
+        assert modeling_tabs.isVisible()
+        assert [modeling_tabs.tabText(index) for index in range(modeling_tabs.count())] == [
+            "Modeling",
+            "Blockout",
+        ]
+        for mode_key in ("object", "vertex", "edge", "face", "terrain", "walkmesh"):
+            assert module_window.findChild(
+                QtWidgets.QToolButton,
+                f"ViewportToolbarMapStudioModeButton_{mode_key}",
+            ) is not None
+        for action_key in ("blockout_room", "floor", "wall", "cube", "ramp", "stairs", "door_frame", "arch", "terrain_patch"):
+            assert module_window.findChild(
+                QtWidgets.QToolButton,
+                f"ViewportToolbarMapStudioBlockoutButton_{action_key}",
+            ) is not None
+        mode_requests: list[str] = []
+        command_requests: list[str] = []
+        module_window._open_map_studio_mode_from_viewport = mode_requests.append
+        module_window._run_map_studio_viewport_modeling_command = command_requests.append
+        module_window.findChild(
+            QtWidgets.QToolButton,
+            "ViewportToolbarMapStudioModeButton_vertex",
+        ).click()
+        module_window.findChild(
+            QtWidgets.QToolButton,
+            "ViewportToolbarMapStudioBlockoutButton_floor",
+        ).click()
+        app.processEvents()
+        assert mode_requests == ["Vertex"]
+        assert command_requests == ["floor"]
         assert embedded_viewport.property("_gr_suppress_renderer_diagnostics") is True
         assert embedded_viewport.property("_gr_map_studio_clean_viewport") is True
         presentation = getattr(embedded_viewport, "_map_studio_viewport_presentation", {})
@@ -3460,6 +3494,7 @@ def test_t2600_real_main_window_exposes_modeling_tabs_and_opens_map_studio_runti
             "center_pivot",
             "freeze_transform",
             "terrain_patch",
+            "texture_paint",
             "paint_material",
             "paint_wok",
             "validate",
@@ -3612,8 +3647,8 @@ def test_t2600_map_studio_load_lyt_uses_indexed_resource_picker_runtime(monkeypa
         window.close()
 
 
-def test_t2600_main_viewport_mode_buttons_route_map_studio_workspaces_runtime() -> None:
-    """Main viewport Map Studio mode buttons open the editor and focus the matching workflow."""
+def test_t2600_map_studio_viewport_mode_buttons_route_owning_workspaces_runtime() -> None:
+    """Map Studio's viewport mode buttons focus workflows inside the owning editor."""
 
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     _configure_native_python_roots()
@@ -3636,17 +3671,25 @@ def test_t2600_main_viewport_mode_buttons_route_map_studio_workspaces_runtime() 
     try:
         window.show()
         app.processEvents()
+        assert window.findChild(
+            QtWidgets.QToolButton,
+            "ViewportToolbarMapStudioModeButton_object",
+        ) is None
+        command = window.findChild(QtWidgets.QToolButton, "CommandStripMapStudioButton")
+        assert command is not None
+        command.click()
+        app.processEvents()
+        module_window = getattr(window, "module_editor_window", None)
+        assert module_window is not None
+        assert module_window.isVisible()
 
         for mode_key, (preset_key, workspace_key, component_key, tool_key, tab_name) in expected.items():
-            button = window.findChild(QtWidgets.QToolButton, f"ViewportToolbarMapStudioModeButton_{mode_key}")
+            button = module_window.findChild(QtWidgets.QToolButton, f"ViewportToolbarMapStudioModeButton_{mode_key}")
             assert button is not None
             assert button.isEnabled()
             button.click()
             app.processEvents()
 
-            module_window = getattr(window, "module_editor_window", None)
-            assert module_window is not None
-            assert module_window.isVisible()
             assert module_window.map_studio_tool_belt_preset_combo.currentData() == preset_key
             assert module_window.map_studio_workspace_combo.currentData() == workspace_key
             assert module_window.builder_tab.componentModeComboBox.currentData()["key"] == component_key
@@ -3686,18 +3729,21 @@ def test_t2600_map_studio_marking_menus_route_modes_and_tools_runtime() -> None:
     try:
         mode_menu = window._build_map_studio_mode_marking_menu(window)
         assert mode_menu.objectName() == "mapStudioModeMarkingMenu"
-        for key in ("object", "vertex", "edge", "face", "select"):
+        # 2026-07-07 redesign: GModeler picks faces/edges/vertices by hover,
+        # so the menu offers Edit Mode + Object Mode (+ Terrain/Placement)
+        # instead of per-component modes.
+        for key in ("edit", "object", "terrain", "placement"):
             assert mode_menu.findChild(QtWidgets.QToolButton, f"mapStudioModeMarkingButton_{key}") is not None
             assert mode_menu.findChild(QtGui.QAction, f"mapStudioModeMarkingAction_{key}") is not None
 
-        vertex_action = mode_menu.findChild(QtGui.QAction, "mapStudioModeMarkingAction_vertex")
-        assert vertex_action is not None
-        vertex_action.trigger()
+        edit_action = mode_menu.findChild(QtGui.QAction, "mapStudioModeMarkingAction_edit")
+        assert edit_action is not None
+        edit_action.trigger()
         app.processEvents()
-        assert window.builder_tab.componentModeComboBox.currentData()["key"] == "vertex"
-        assert window.toolbar.selection_mode.currentText() == "Vertex"
-        assert window.controller.map_studio_active_selection()["component_mode"] == "vertex"
-        assert window.controller.map_studio_active_selection()["tool_key"] == "select"
+        assert window.toolbar.selection_mode.currentText() == "Edit (GModeler)"
+        panel = window.viewport_panel
+        assert panel._hover_probe_enabled is True
+        assert panel._hover_component_mode == ""  # all components at once
 
         tool_menu = window._build_map_studio_tool_marking_menu(window)
         assert tool_menu.objectName() == "mapStudioToolMarkingMenu"
@@ -3717,6 +3763,7 @@ def test_t2600_map_studio_marking_menus_route_modes_and_tools_runtime() -> None:
             "mirror",
             "separate",
             "combine",
+            "texture_paint",
             "paint_material",
             "paint_wok",
             "validate",
@@ -3727,8 +3774,9 @@ def test_t2600_map_studio_marking_menus_route_modes_and_tools_runtime() -> None:
             assert f"mapStudioToolMarkingAction_{key}" in names
         assert tool_menu.findChild(QtWidgets.QMenu, "mapStudioToolMarkingTerrainBrushesMenu") is not None
         assert tool_menu.findChild(QtWidgets.QMenu, "mapStudioToolMarkingUvMappingMenu") is not None
-        assert tool_menu.findChild(QtWidgets.QMenu, "mapStudioToolMarkingPlannedMenu") is not None
-        assert names["mapStudioToolMarkingPlannedAction_offset_edge_loop"].isEnabled() is False
+        # "Planned / Missing" menu removed in the 2026-07-07 UI cleanup:
+        # roadmap items live in the audit brief and dimmed GModeler actions.
+        assert tool_menu.findChild(QtWidgets.QMenu, "mapStudioToolMarkingPlannedMenu") is None
     finally:
         window.controller.project.dirty = False
         window.close()
@@ -3782,6 +3830,53 @@ def test_t2600_viewport_right_click_marking_menu_requests_split_by_shift_runtime
         assert len(mode_positions) == 2
         assert len(tool_positions) == 2
     finally:
+        panel.close()
+
+
+def test_t3008_pie_start_cancels_authoring_selection_marquees_runtime() -> None:
+    """PIE must never retain either Map Studio or shared-viewport rubber bands."""
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _configure_native_python_roots()
+
+    from PySide6 import QtCore, QtWidgets
+    from src.gui.panels.module_editor.module_editor_viewport_panel import ModuleEditorViewportPanel
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = ModuleEditorViewportPanel()
+    try:
+        panel.show()
+        app.processEvents()
+        canvas = panel.viewport.canvas
+        map_band = QtWidgets.QRubberBand(QtWidgets.QRubberBand.Rectangle, canvas)
+        map_band.setGeometry(QtCore.QRect(20, 20, 160, 90))
+        map_band.show()
+        panel._map_studio_marquee = {
+            "origin": QtCore.QPoint(20, 20),
+            "band": map_band,
+            "widget": canvas,
+        }
+        shared_band = panel.viewport._selection_rubber_band
+        shared_band.setGeometry(QtCore.QRect(40, 40, 120, 70))
+        shared_band.show()
+        panel.viewport._mesh_box_start = QtCore.QPoint(40, 40)
+        panel.viewport._mesh_box_selecting = True
+        panel.viewport._is_dragging = True
+        app.processEvents()
+
+        assert not map_band.isHidden()
+        assert not shared_band.isHidden()
+        panel.set_map_studio_pie_active(True)
+        app.processEvents()
+
+        assert panel._map_studio_marquee is None
+        assert map_band.isHidden()
+        assert shared_band.isHidden()
+        assert panel.viewport._mesh_box_start is None
+        assert panel.viewport._mesh_box_selecting is False
+        assert panel.viewport._is_dragging is False
+    finally:
+        panel.set_map_studio_pie_active(False)
         panel.close()
 
 
@@ -5172,6 +5267,9 @@ def test_t2600_visible_opening_and_transition_marker_persist_kmap_and_validate_r
         window.builder_tab.floorPlanOpeningMarkerTagLineEdit.setText("south_exit_trigger")
         window.builder_tab.floorPlanOpeningMarkerLinkedToLineEdit.setText("wp_dest")
         window.builder_tab.floorPlanOpeningMarkerLinkedModuleLineEdit.setText("grnext01")
+        target_index = window.builder_tab.floorPlanOpeningMarkerTargetTypeComboBox.findData(2)
+        assert target_index >= 0
+        window.builder_tab.floorPlanOpeningMarkerTargetTypeComboBox.setCurrentIndex(target_index)
         window.builder_tab.floorPlanOpeningMarkerTransitionDestSpinBox.setValue(2)
         app.processEvents()
 
@@ -5184,10 +5282,12 @@ def test_t2600_visible_opening_and_transition_marker_persist_kmap_and_validate_r
         assert trigger["tag"] == "south_exit_trigger"
         assert trigger["linked_to"] == "wp_dest"
         assert trigger["linked_to_module"] == "grnext01"
+        assert trigger["linked_to_flags"] == 2
         assert trigger["transition_destination"] == 2
         assert marker_metadata["room_resref"] == "grdev01_room01"
         assert marker_metadata["opening_name"] == "south_door"
         assert marker_metadata["marker_kind"] == "trigger"
+        assert marker_metadata["linked_to_flags"] == 2
         assert marker_metadata["transition_destination"] == 2
         assert window.controller.command_history.undo_label == "Add opening marker south_exit_trigger"
         assert window.controller.command_history.undo_stack[-1].stale_outputs == (
@@ -5202,7 +5302,7 @@ def test_t2600_visible_opening_and_transition_marker_persist_kmap_and_validate_r
 
         issues = window.controller.validate()
         assert any(
-            getattr(issue, "code", "") == "MAP_STUDIO_TRANSITION_WOK_SURFACE_BLOCKER"
+            getattr(issue, "code", "") == "MAP_STUDIO_TRANSITION_WOK_SURFACE_WARNING"
             and "no WOK DOOR/transition surface" in getattr(issue, "message", "")
             for issue in issues
         )
@@ -5219,10 +5319,11 @@ def test_t2600_visible_opening_and_transition_marker_persist_kmap_and_validate_r
             assert reloaded_opening["name"] == "south_door"
             assert reloaded_trigger["tag"] == "south_exit_trigger"
             assert reloaded_trigger["linked_to_module"] == "grnext01"
+            assert reloaded_trigger["linked_to_flags"] == 2
             assert reloaded_payload["extra"]["last_opening_transition_marker"]["opening_name"] == "south_door"
             reloaded_issues = reloaded.controller.validate()
             assert any(
-                getattr(issue, "code", "") == "MAP_STUDIO_TRANSITION_WOK_SURFACE_BLOCKER"
+                getattr(issue, "code", "") == "MAP_STUDIO_TRANSITION_WOK_SURFACE_WARNING"
                 for issue in reloaded_issues
             )
         finally:
@@ -5291,7 +5392,7 @@ def test_t2600_visible_validate_reports_unwalkable_player_start_runtime(tmp_path
         assert payload["placements"]["entry_point"] == {
             "area_resref": "grdev01",
             "position": [99.0, 99.0, 0.0],
-            "facing": 180.0,
+            "facing": math.pi,
         }
         assert window.controller.command_history.undo_label == "Set entry point grdev01"
         assert window.controller.command_history.undo_stack[-1].stale_outputs == (

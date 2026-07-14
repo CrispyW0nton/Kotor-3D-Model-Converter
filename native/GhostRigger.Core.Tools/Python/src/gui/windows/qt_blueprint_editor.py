@@ -118,7 +118,7 @@ class QtBlueprintEditorWindow(QtWidgets.QMainWindow):
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
-        self.setWindowTitle("GhostRigger Blueprint Editor")
+        self.setWindowTitle("Ghost-Studio Blueprint Editor")
         self.setWindowFlag(QtCore.Qt.Window, True)
         self.resize(820, 640)
         self.panel = QtBlueprintEditorPanel(self)

@@ -96,6 +96,13 @@ class ScopedAnimationPoseSet:
                 if str(getattr(pose, "_gr_animation_scene_import_id", "") or "") == node_import_id:
                     return pose
         node_source_id = _source_model_id_for_node(node)
+        # A scoped collection is intentionally stricter than a legacy single
+        # pose.  Identity-free module geometry must never inherit whichever
+        # character happens to be first in ``poses_by_character``.  Runtime
+        # actor descendants still resolve their inherited object/import/source
+        # identity through the parent-chain helpers above.
+        if not node_object_id and not node_import_id and not node_source_id:
+            return None
         for pose in self.poses_by_character.values():
             if _animation_pose_matches_node_identity(node, pose, node_object_id=node_object_id, node_import_id=node_import_id, node_source_id=node_source_id):
                 return pose
@@ -1232,6 +1239,27 @@ def _source_model_id_for_node(node) -> int:
                 return source_id
         current = getattr(current, "parent", None)
     return 0
+
+
+def runtime_source_model_for_node(node):
+    """Return the runtime actor model that owns ``node``'s skin palette.
+
+    PIE actors live inside a much larger resident map model.  Their qBone/tBone
+    rows and DFS indices still belong to the original character model, so a
+    renderer must not infer a palette from the map hierarchy.  The reference is
+    stored on the runtime wrapper and resolved through ancestors to avoid
+    retaining a duplicate strong reference on every copied Odyssey node.
+    """
+
+    current = node
+    visited: set[int] = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        source_model = getattr(current, "_gr_runtime_source_model_ref", None)
+        if source_model is not None:
+            return source_model
+        current = getattr(current, "parent", None)
+    return None
 
 
 def animation_pose_for_node(node, anim_pose):

@@ -79,6 +79,32 @@ def test_t2608_blocks_path_points_outside_walkmesh() -> None:
         raise AssertionError("outside path anchors should block before PTH serialization")
 
 
+def test_t2907_terrain_path_centroid_uses_indexed_wok_buffers_without_full_copies() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_pathing import _face_centroid
+    from src.core.modules.module_format import WOKFace
+
+    class _IndexedOnly:
+        def __init__(self, values):
+            self._values = tuple(values)
+
+        def __len__(self):
+            return len(self._values)
+
+        def __getitem__(self, index):
+            return self._values[index]
+
+        def __iter__(self):
+            raise AssertionError("centroid lookup must not copy or scan the complete WOK buffer")
+
+    class _Wok:
+        faces = _IndexedOnly((WOKFace(0, 1, 2, 4),))
+        verts = _IndexedOnly(((0.0, 0.0, 0.0), (3.0, 0.0, 0.0), (0.0, 3.0, 0.0)))
+
+    assert _face_centroid(_Wok(), 0) == (1.0, 1.0)
+
+
 def test_t2629_blocks_path_connections_that_leave_walkmesh() -> None:
     _install_native_payload_paths()
 

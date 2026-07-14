@@ -66,8 +66,8 @@ def test_t2607_compiles_authored_are_ifo_metadata_for_readback() -> None:
     assert are.fog_far == 200.0
     assert raw_are.root.get_single("MoonFogNear") == 99.0
     assert raw_are.root.get_single("MoonFogFar") == 100.0
-    assert raw_are.root.get_single("SunFogNear") == 99.0
-    assert raw_are.root.get_single("SunFogFar") == 100.0
+    assert raw_are.root.get_single("SunFogNear") == 12.5
+    assert raw_are.root.get_single("SunFogFar") == 345.0
     assert are.sun_fog == 0
     assert raw_are.root.get_uint8("SunFogOn") == 1
     assert ifo.mod_name == "GhostRigger Dev Test"
@@ -81,6 +81,166 @@ def test_t2607_compiles_authored_are_ifo_metadata_for_readback() -> None:
     assert authored_module_id_bytes("GRDEV01") == authored_module_id_bytes("grdev01")
     assert raw_ifo.root.get("Mod_ID") == authored_module_id_bytes("grdev01")
     assert len(raw_ifo.root.get("Mod_ID")) == 16
+
+
+def test_t3105_fullbright_lighting_profile_compiles_game_visible_are_values() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_metadata import AuthoredAreaMetadata, compile_authored_module_metadata
+    from src.core.modules.authored_module_objects import ModuleEntryPoint
+    from src.core.modules.authored_module_project import AuthoredModuleMetadata
+    from pykotor.resource.formats.gff import read_gff
+
+    module = AuthoredModuleMetadata(
+        module_root="grlight",
+        display_name="GhostRigger Fullbright Test",
+        metadata={
+            "lighting": {
+                "profile": "fullbright",
+                "source": "map_studio:test_fullbright",
+            }
+        },
+    )
+    compiled = compile_authored_module_metadata(
+        module,
+        ModuleEntryPoint(area_resref="grlight"),
+        area=AuthoredAreaMetadata(sun_ambient=(0, 0, 0), sun_diffuse=(0, 0, 0)),
+    )
+    raw_are = read_gff(compiled.are_bytes)
+
+    assert compiled.metadata["lighting_profile"] == "fullbright"
+    assert compiled.metadata["lighting"]["sun_ambient"] == [255, 255, 255]
+    assert compiled.metadata["lighting"]["sun_diffuse"] == [255, 255, 255]
+    assert compiled.metadata["lighting"]["dynamic_ambient"] == [255, 255, 255]
+    assert compiled.metadata["lighting"]["shadow_opacity"] == 0
+    assert raw_are.root.get_uint32("SunAmbientColor") == 0xFFFFFF
+    assert raw_are.root.get_uint32("SunDiffuseColor") == 0xFFFFFF
+    assert raw_are.root.get_uint32("DynAmbientColor") == 0xFFFFFF
+    assert raw_are.root.get_uint8("ShadowOpacity") == 0
+
+
+def test_legacy_stock_are_world_lighting_metadata_compiles_without_normalized_fields() -> None:
+    """Older imported KMAPs keep their packed world-lighting values under ``are``."""
+
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_metadata import compile_authored_module_metadata
+    from src.core.modules.authored_module_objects import ModuleEntryPoint
+    from src.core.modules.authored_module_project import AuthoredModuleMetadata
+    from pykotor.resource.formats.gff import read_gff
+
+    module = AuthoredModuleMetadata(
+        module_root="grlegacy",
+        game="K1",
+        metadata={
+            "are": {
+                "sun_ambient_color": 0x123456,
+                "sun_diffuse_color": 0xABCDEF,
+                "dyn_ambient_color": 0x204060,
+                "shadow_opacity": 205,
+                "sun_shadows": 1,
+                "sun_fog_on": 1,
+                "sun_fog_color": 0x010203,
+                "sun_fog_near": 17.5,
+                "sun_fog_far": 345.0,
+            }
+        },
+    )
+
+    compiled = compile_authored_module_metadata(module, ModuleEntryPoint(area_resref="grlegacy"))
+    root = read_gff(compiled.are_bytes).root
+
+    assert root.get_uint32("SunAmbientColor") == 0x123456
+    assert root.get_uint32("SunDiffuseColor") == 0xABCDEF
+    assert root.get_uint32("DynAmbientColor") == 0x204060
+    assert root.get_uint8("ShadowOpacity") == 205
+    assert root.get_uint8("SunShadows") == 1
+    assert root.get_uint8("SunFogOn") == 1
+    assert root.get_uint32("SunFogColor") == 0x010203
+    assert root.get_single("SunFogNear") == 17.5
+    assert root.get_single("SunFogFar") == 345.0
+
+
+def test_stock_are_world_lighting_roundtrips_through_authored_compiler() -> None:
+    """K1/K2 stock ARE lighting values survive import normalization and ARE export."""
+
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_metadata import compile_authored_module_metadata
+    from src.core.modules.authored_module_objects import ModuleEntryPoint
+    from src.core.modules.authored_module_project import AuthoredModuleMetadata
+    from src.core.modules.stock_module_importer import are_gff_to_metadata
+    from pykotor.resource.formats.gff import read_gff
+
+    class MockGFF:
+        def __init__(self, data):
+            self._data = data
+
+        def acquire(self, key, default=None):
+            return self._data.get(key, default)
+
+    source = MockGFF(
+        {
+            "SunAmbientColor": 0x123456,
+            "SunDiffuseColor": 0xABCDEF,
+            "DynAmbientColor": 0x204060,
+            "SunFogOn": 1,
+            "SunFogColor": 0x010203,
+            "SunFogNear": 17.5,
+            "SunFogFar": 345.0,
+            "FogColor": 0x010203,
+            "FogNearDist": 17.5,
+            "FogFarDist": 345.0,
+            "SunShadows": 1,
+            "ShadowOpacity": 205,
+            "Tag": "stock_lighting",
+        }
+    )
+
+    for game, module_root in (("K1", "grk1lit"), ("K2", "grk2lit")):
+        imported = are_gff_to_metadata(source, module_root=module_root, game=game)
+        assert imported["lighting"] == {
+            "profile": "standard",
+            "source": "map_studio:stock_are",
+            "sun_ambient": [0x12, 0x34, 0x56],
+            "sun_diffuse": [0xAB, 0xCD, 0xEF],
+            "dynamic_ambient": [0x20, 0x40, 0x60],
+            "shadow_opacity": 205,
+            "sun_shadows": 1,
+        }
+        assert imported["area"] == {
+            "source": "map_studio:stock_are",
+            "fog_color": [1, 2, 3],
+            "fog_near": 17.5,
+            "fog_far": 345.0,
+            "sun_fog_on": True,
+        }
+
+        module = AuthoredModuleMetadata(
+            module_root=module_root,
+            game=game,
+            metadata={
+                "are": imported,
+                "lighting": dict(imported["lighting"]),
+                "area": dict(imported["area"]),
+            },
+        )
+        compiled = compile_authored_module_metadata(module, ModuleEntryPoint(area_resref=module_root))
+        root = read_gff(compiled.are_bytes).root
+
+        assert root.get_uint32("SunAmbientColor") == 0x123456
+        assert root.get_uint32("SunDiffuseColor") == 0xABCDEF
+        assert root.get_uint32("DynAmbientColor") == 0x204060
+        assert root.get_uint8("ShadowOpacity") == 205
+        assert root.get_uint8("SunShadows") == 1
+        assert root.get_uint8("SunFogOn") == 1
+        assert root.get_uint32("SunFogColor") == 0x010203
+        assert root.get_single("SunFogNear") == 17.5
+        assert root.get_single("SunFogFar") == 345.0
+        if game == "K2":
+            assert root.get_uint32("FogColor") == 0x010203
+            assert root.get_single("FogNearDist") == 17.5
+            assert root.get_single("FogFarDist") == 345.0
 
 
 def test_t2600_compiles_authored_script_hooks_into_are_and_ifo() -> None:

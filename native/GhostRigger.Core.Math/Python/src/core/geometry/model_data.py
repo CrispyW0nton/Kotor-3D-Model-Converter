@@ -814,6 +814,13 @@ class ModelNode:
     # ── Emitter ──
     emitter_params: Dict[str, Any] = field(default_factory=dict)
 
+    # ── Reference ──
+    # Aurora reference nodes instance another MDL by resref.  Keep these
+    # separate from emitter metadata so stock room traffic such as Dantooine's
+    # C_Brith reference survives model conversion, cloning, and binary export.
+    reference_model:        str  = ""
+    reference_reattachable: bool = False
+
     # ── K2/TSL extra mesh fields (Kotor.NET TrimeshHeader TSLUnknown1/2) ──
     # Layout of the 8 bytes after the flag sequence in K2/TSL trimesh headers:
     #   byte 0: dirtenabled      — 1 = dirt decal overlay enabled
@@ -1293,6 +1300,8 @@ class ModelNode:
         n.light_enabled      = self.light_enabled
         n.light_cone_degrees = self.light_cone_degrees
         n.light_area_size    = self.light_area_size
+        n.reference_model        = self.reference_model
+        n.reference_reattachable = self.reference_reattachable
         # Phase 3.7 fields
         n.mesh_average_point = self.mesh_average_point
         n.mesh_unknown0      = self.mesh_unknown0

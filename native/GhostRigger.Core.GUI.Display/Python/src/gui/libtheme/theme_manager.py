@@ -35,13 +35,23 @@ class ThemeManager(QtCore.QObject):
         self.settings = ThemeLayoutSettings.from_settings(settings_data or {})
         self.loader = ThemeLoader()
         self.applier = ThemeApplier(self)
-        self.icons = ThemeIconManager()
+        self.icons = ThemeIconManager(self._packaged_icon_dir())
         self.os_detector = OSThemeDetector()
         self.themes: dict[str, Theme] = {}
         self.current_theme: Theme | None = None
         self.diagnostics: list[str] = []
         self.applier.themeChanged.connect(self.themeChanged.emit)
         self.reload()
+
+    def _packaged_icon_dir(self) -> Path:
+        """Resolve icons from source or the native host's copied RuntimePayload."""
+
+        candidates = (
+            self.app_root / "src" / "gui" / "icons",
+            self.app_root / "GhostRiggerPythonPayload" / "src" / "gui" / "icons",
+            self.app_root / "RuntimePayload" / "src" / "gui" / "icons",
+        )
+        return next((path for path in candidates if path.is_dir()), candidates[0])
 
     @property
     def packaged_theme_dir(self) -> Path:

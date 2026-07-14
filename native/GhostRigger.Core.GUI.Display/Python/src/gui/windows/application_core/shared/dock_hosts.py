@@ -94,10 +94,10 @@ class QtFloatingDockHost(QtWidgets.QMainWindow):
     def _refresh_title(self) -> None:
         if len(self.dock_keys) == 1:
             dock = self.owner._detachable_panels.get(self.dock_keys[0])
-            self.setWindowTitle(dock.windowTitle() if _qt_object_alive(dock) else "GhostRigger Workspace")
+            self.setWindowTitle(dock.windowTitle() if _qt_object_alive(dock) else "Ghost-Studio Workspace")
         else:
             label = self.owner._floating_dock_host_label(self) if hasattr(self.owner, "_floating_dock_host_label") else ""
-            self.setWindowTitle(label or "GhostRigger Workspace")
+            self.setWindowTitle(label or "Ghost-Studio Workspace")
 
     def _relax_dock_size_limits(self, dock: QtWidgets.QDockWidget) -> None:
         max_size = 16777215

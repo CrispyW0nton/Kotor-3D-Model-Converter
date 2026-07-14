@@ -12,9 +12,9 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
     visibilityChanged = QtCore.Signal(str, bool)
     lockChanged = QtCore.Signal(str, bool)
     propertyChanged = QtCore.Signal(str, str, object)
-    transitionChanged = QtCore.Signal(str, str, str, int)
+    transitionChanged = QtCore.Signal(str, str, str, int, int)
     cameraChanged = QtCore.Signal(str, int, float, float, float, float)
-    roomLightChanged = QtCore.Signal(str, str, object, float, float)
+    roomLightChanged = QtCore.Signal(str, object)
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -51,12 +51,25 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         self.transition_module_edit = QtWidgets.QLineEdit()
         self.transition_module_edit.setObjectName("mapStudioTransitionLinkedModuleLineEdit")
         self.transition_module_edit.setPlaceholderText("optional module resref")
+        self.transition_target_type_combo = QtWidgets.QComboBox()
+        self.transition_target_type_combo.setObjectName("mapStudioTransitionTargetTypeComboBox")
+        self.transition_target_type_combo.addItem("No engine link", 0)
+        self.transition_target_type_combo.addItem("Destination door", 1)
+        self.transition_target_type_combo.addItem("Destination waypoint", 2)
+        self.transition_target_type_combo.setToolTip(
+            "KOTOR LinkedToFlags: choose whether Linked To names a door (1) or waypoint (2)."
+        )
         self.transition_destination_spin = QtWidgets.QSpinBox()
         self.transition_destination_spin.setObjectName("mapStudioTransitionDestinationSpinBox")
-        self.transition_destination_spin.setRange(0, 32767)
+        self.transition_destination_spin.setRange(0, 2147483647)
+        self.transition_destination_spin.setSpecialValueText("Use area name")
+        self.transition_destination_spin.setToolTip(
+            "Optional dialog.tlk StringRef displayed as the destination name. This does not choose the target type."
+        )
         transition_layout.addRow("Linked To", self.transition_linked_to_edit)
         transition_layout.addRow("Module", self.transition_module_edit)
-        transition_layout.addRow("Destination", self.transition_destination_spin)
+        transition_layout.addRow("Target type", self.transition_target_type_combo)
+        transition_layout.addRow("Destination name StringRef", self.transition_destination_spin)
         root.addWidget(self.transition_group)
         self.camera_group = QtWidgets.QGroupBox("Camera")
         self.camera_group.setObjectName("mapStudioCameraPropertiesGroup")
@@ -97,10 +110,38 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         color_row.addWidget(self.room_light_color_b_spin)
         self.room_light_radius_spin = self._light_spin("mapStudioRoomLightRadiusSpinBox", 0.01, 1000.0, 8.0)
         self.room_light_intensity_spin = self._light_spin("mapStudioRoomLightIntensitySpinBox", 0.0, 100.0, 1.0)
+        self.room_light_enabled_check = QtWidgets.QCheckBox("Enabled in viewport and bake")
+        self.room_light_enabled_check.setObjectName("mapStudioRoomLightEnabledCheckBox")
+        self.room_light_casts_shadows_check = QtWidgets.QCheckBox("Cast baked shadows")
+        self.room_light_casts_shadows_check.setObjectName("mapStudioRoomLightCastsShadowsCheckBox")
+        self.room_light_affects_diffuse_check = QtWidgets.QCheckBox("Affect realtime diffuse preview")
+        self.room_light_affects_diffuse_check.setObjectName("mapStudioRoomLightAffectsDiffuseCheckBox")
+        self.room_light_affects_lightmap_check = QtWidgets.QCheckBox("Include in lightmap bake")
+        self.room_light_affects_lightmap_check.setObjectName("mapStudioRoomLightAffectsLightmapCheckBox")
+        self.room_light_direction_spins = tuple(
+            self._light_spin(f"mapStudioRoomLightDirection{axis}SpinBox", -1.0, 1.0, value)
+            for axis, value in (("X", 0.0), ("Y", 0.0), ("Z", -1.0))
+        )
+        direction_row = QtWidgets.QHBoxLayout()
+        for spin in self.room_light_direction_spins:
+            direction_row.addWidget(spin)
+        self.room_light_cone_spin = self._light_spin("mapStudioRoomLightConeAngleSpinBox", 1.0, 179.0, 45.0)
+        self.room_light_cone_spin.setSuffix(" deg")
+        self.room_light_bake_group_edit = QtWidgets.QLineEdit()
+        self.room_light_bake_group_edit.setObjectName("mapStudioRoomLightBakeGroupLineEdit")
+        self.room_light_bake_group_edit.setMaxLength(32)
+        self.room_light_bake_group_edit.setPlaceholderText("optional bake set")
         light_layout.addRow("Type", self.room_light_type_combo)
         light_layout.addRow("Color RGB", color_row)
         light_layout.addRow("Radius", self.room_light_radius_spin)
         light_layout.addRow("Intensity", self.room_light_intensity_spin)
+        light_layout.addRow("State", self.room_light_enabled_check)
+        light_layout.addRow("Shadows", self.room_light_casts_shadows_check)
+        light_layout.addRow("Diffuse", self.room_light_affects_diffuse_check)
+        light_layout.addRow("Lightmap", self.room_light_affects_lightmap_check)
+        light_layout.addRow("Spot direction XYZ", direction_row)
+        light_layout.addRow("Spot cone", self.room_light_cone_spin)
+        light_layout.addRow("Bake group", self.room_light_bake_group_edit)
         root.addWidget(self.room_light_group)
         root.addStretch(1)
         self.name_edit.editingFinished.connect(self._name_changed)
@@ -110,19 +151,30 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
             spin.valueChanged.connect(lambda _value: self._transform_changed())
         self.transition_linked_to_edit.editingFinished.connect(self._transition_changed)
         self.transition_module_edit.editingFinished.connect(self._transition_changed)
+        self.transition_target_type_combo.currentIndexChanged.connect(lambda _index: self._transition_changed())
         self.transition_destination_spin.valueChanged.connect(lambda _value: self._transition_changed())
         self.camera_id_spin.valueChanged.connect(lambda _value: self._camera_changed())
         for spin in (self.camera_fov_spin, self.camera_height_spin, self.camera_mic_range_spin, self.camera_pitch_spin):
             spin.valueChanged.connect(lambda _value: self._camera_changed())
-        self.room_light_type_combo.currentIndexChanged.connect(lambda _index: self._room_light_changed())
+        self.room_light_type_combo.currentIndexChanged.connect(lambda _index: self._room_light_type_changed())
         for spin in (
             self.room_light_color_r_spin,
             self.room_light_color_g_spin,
             self.room_light_color_b_spin,
             self.room_light_radius_spin,
             self.room_light_intensity_spin,
+            *self.room_light_direction_spins,
+            self.room_light_cone_spin,
         ):
             spin.valueChanged.connect(lambda _value: self._room_light_changed())
+        for check in (
+            self.room_light_enabled_check,
+            self.room_light_casts_shadows_check,
+            self.room_light_affects_diffuse_check,
+            self.room_light_affects_lightmap_check,
+        ):
+            check.toggled.connect(lambda _value: self._room_light_changed())
+        self.room_light_bake_group_edit.editingFinished.connect(self._room_light_changed)
         self.transition_group.setVisible(False)
         self.camera_group.setVisible(False)
         self.room_light_group.setVisible(False)
@@ -139,6 +191,11 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
             for row in authored_room_lights or ()
             if str(getattr(row, "light_id", "") or "")
         }
+
+    def current_item_id(self) -> str:
+        """Return the item whose values the Details panel is currently showing."""
+
+        return str(getattr(self, "_item_id", "") or "")
 
     def set_selection(self, item_id: str) -> None:
         self._item_id = item_id
@@ -194,6 +251,8 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
             self.transition_group.setVisible(transition_capable)
             self.transition_linked_to_edit.setText(str(getattr(authored, "linked_to", "") or ""))
             self.transition_module_edit.setText(str(getattr(authored, "linked_to_module", "") or ""))
+            target_index = self.transition_target_type_combo.findData(int(getattr(authored, "linked_to_flags", 0) or 0))
+            self.transition_target_type_combo.setCurrentIndex(target_index if target_index >= 0 else 0)
             self.transition_destination_spin.setValue(int(getattr(authored, "transition_destination", 0) or 0))
             if kind_key == "camera":
                 self._set_camera_values(authored)
@@ -286,6 +345,7 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
             self._item_id,
             self.transition_linked_to_edit.text().strip(),
             self.transition_module_edit.text().strip(),
+            int(self.transition_target_type_combo.currentData() or 0),
             int(self.transition_destination_spin.value()),
         )
 
@@ -324,18 +384,45 @@ class ModuleEditorPropertiesPanel(QtWidgets.QWidget):
         self.room_light_color_b_spin.setValue(float(color[2]))
         self.room_light_radius_spin.setValue(float(getattr(authored_light, "radius", 8.0) or 8.0))
         self.room_light_intensity_spin.setValue(float(getattr(authored_light, "intensity", 1.0) or 1.0))
+        self.room_light_enabled_check.setChecked(bool(getattr(authored_light, "enabled", True)))
+        self.room_light_casts_shadows_check.setChecked(bool(getattr(authored_light, "casts_shadows", True)))
+        self.room_light_affects_diffuse_check.setChecked(bool(getattr(authored_light, "affects_diffuse", True)))
+        self.room_light_affects_lightmap_check.setChecked(bool(getattr(authored_light, "affects_lightmap", True)))
+        self._set_vector(self.room_light_direction_spins, getattr(authored_light, "direction", (0.0, 0.0, -1.0)))
+        self.room_light_cone_spin.setValue(float(getattr(authored_light, "cone_angle_degrees", 45.0) or 45.0))
+        self.room_light_bake_group_edit.setText(str(getattr(authored_light, "bake_group", "") or ""))
+        self._sync_room_light_type_controls()
+
+    def _room_light_type_changed(self) -> None:
+        self._sync_room_light_type_controls()
+        self._room_light_changed()
+
+    def _sync_room_light_type_controls(self) -> None:
+        is_spot = str(self.room_light_type_combo.currentData() or "point") == "spot"
+        for spin in self.room_light_direction_spins:
+            spin.setEnabled(is_spot)
+        self.room_light_cone_spin.setEnabled(is_spot)
 
     def _room_light_changed(self) -> None:
         if self.signalsBlocked() or not self._item_id or not self.room_light_group.isVisible():
             return
         self.roomLightChanged.emit(
             self._item_id,
-            str(self.room_light_type_combo.currentData() or "point"),
-            (
+            {
+                "light_type": str(self.room_light_type_combo.currentData() or "point"),
+                "color": (
                 float(self.room_light_color_r_spin.value()),
                 float(self.room_light_color_g_spin.value()),
                 float(self.room_light_color_b_spin.value()),
-            ),
-            float(self.room_light_radius_spin.value()),
-            float(self.room_light_intensity_spin.value()),
+                ),
+                "radius": float(self.room_light_radius_spin.value()),
+                "intensity": float(self.room_light_intensity_spin.value()),
+                "enabled": bool(self.room_light_enabled_check.isChecked()),
+                "casts_shadows": bool(self.room_light_casts_shadows_check.isChecked()),
+                "affects_diffuse": bool(self.room_light_affects_diffuse_check.isChecked()),
+                "affects_lightmap": bool(self.room_light_affects_lightmap_check.isChecked()),
+                "direction": self._vector(self.room_light_direction_spins),
+                "cone_angle_degrees": float(self.room_light_cone_spin.value()),
+                "bake_group": self.room_light_bake_group_edit.text().strip() or None,
+            },
         )

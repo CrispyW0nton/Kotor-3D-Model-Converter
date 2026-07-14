@@ -3,15 +3,45 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
 from .fbx_exporter import FBXExportFailure, find_blender_executable
+from .skeleton_renamer import REPO_ROOT
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-BLENDER_EXTRACT_SCRIPT = REPO_ROOT / "scripts" / "blender_extract_ue5_animation.py"
+def resolve_blender_extract_script() -> Path:
+    """Locate the external Blender helper in source and native-host layouts."""
+
+    configured = os.environ.get("GHOSTRIGGER_BLENDER_EXTRACT_SCRIPT", "").strip()
+    candidates: list[Path] = []
+    if configured:
+        candidates.append(Path(configured))
+    app_root = os.environ.get("GHOSTRIGGER_NATIVE_APP_ROOT", "").strip()
+    if app_root:
+        candidates.append(Path(app_root) / "scripts" / "blender_extract_ue5_animation.py")
+    candidates.extend(
+        [
+            REPO_ROOT / "scripts" / "blender_extract_ue5_animation.py",
+            Path(sys.executable).resolve().parent / "scripts" / "blender_extract_ue5_animation.py",
+            Path.cwd().resolve() / "scripts" / "blender_extract_ue5_animation.py",
+        ]
+    )
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate.resolve(strict=False)).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        if candidate.is_file():
+            return candidate.resolve()
+    return candidates[0].resolve(strict=False)
+
+
+BLENDER_EXTRACT_SCRIPT = resolve_blender_extract_script()
 
 
 def run_blender_animation_extraction(
@@ -25,10 +55,11 @@ def run_blender_animation_extraction(
 ) -> dict[str, Any]:
     """Extract UE5 FBX action data to JSON with Blender."""
 
-    if not BLENDER_EXTRACT_SCRIPT.exists():
+    extract_script = resolve_blender_extract_script()
+    if not extract_script.exists():
         return {
             "success": False,
-            "errors": [f"Blender extraction script not found: {BLENDER_EXTRACT_SCRIPT}"],
+            "errors": [f"Blender extraction script not found: {extract_script}"],
         }
 
     try:
@@ -40,7 +71,7 @@ def run_blender_animation_extraction(
         str(blender),
         "--background",
         "--python",
-        str(BLENDER_EXTRACT_SCRIPT),
+        str(extract_script),
         "--",
         "--fbx",
         str(source_fbx),

@@ -1,0 +1,4 @@
+# Embedded Python payload manifests hash source bytes. Keep Python files LF on
+# every platform so a fresh Windows checkout has the same bytes that the native
+# payload generator and manifest tests validated.
+*.py text eol=lf

@@ -2,30 +2,811 @@
 
 from __future__ import annotations
 
+import json
 import math
+from pathlib import Path
 
+import numpy as np
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.core.level import KMapProject, LevelTransform
-from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
+from src.core.modules.map_studio_hover_context import (
+    MapStudioHoverCandidateFace,
+    map_studio_hover_context_summary,
+    pick_map_studio_hover_context,
+)
+from src.core.modules.map_studio_terrain_sculpt_session import (
+    interpolate_terrain_sculpt_segment,
+    terrain_sculpt_brush_is_deferred,
+)
+from src.core.modules.authored_gameplay_marker_geometry import AuthoredGameplayMarkerGeometry
+from src.gui.qt_lib.viewports.qt_viewport import QtMapStudioViewportWidget
 
 
 class ModuleEditorViewportPanel(QtWidgets.QWidget):
+    MAP_PLACEMENT_MIME_TYPE = "application/x-ghostrigger-map-placement+json"
+    MAP_PLACEMENT_PAYLOAD_SCHEMA = "ghostrigger.map-placement/v1"
+
     itemSelected = QtCore.Signal(str)
     transformEdited = QtCore.Signal(str, object)
+    placementRequested = QtCore.Signal(object)
+    placementModeExited = QtCore.Signal()
     roomOutlinePointEdited = QtCore.Signal(str, int, object)
     roomOutlinePointSnapPreviewRequested = QtCore.Signal(str, int)
     roomOutlinePointSnapped = QtCore.Signal(str, int, int, str)
     roomOutlineEdgeSelected = QtCore.Signal(str, int)
     roomPrimitiveSelected = QtCore.Signal(str, str)
+    roomPrimitivesSelected = QtCore.Signal(object)
     roomPrimitiveMoved = QtCore.Signal(str, str, object)
     roomPrimitiveRotated = QtCore.Signal(str, str, float)
     roomPrimitiveScaled = QtCore.Signal(str, str, object)
+    roomPrimitivesTransformCommitted = QtCore.Signal(object)
     terrainBrushFrameRequested = QtCore.Signal(str, str, object)
     terrainBrushStrokeCommitted = QtCore.Signal(str, str)
     terrainBrushOptionsChanged = QtCore.Signal(int, float)
     modeMarkingMenuRequested = QtCore.Signal(QtCore.QPoint)
+    mapStudioRoomClicked = QtCore.Signal(str, bool)
+    mapStudioRoomsRectSelected = QtCore.Signal(object, bool)
+    componentExtrudeCommitted = QtCore.Signal(dict)
+    componentExtrudePreviewRequested = QtCore.Signal(dict)
+    componentExtrudePreviewCancelled = QtCore.Signal()
+    componentBevelCommitted = QtCore.Signal(dict)
+    componentBevelPreviewRequested = QtCore.Signal(dict)
+    componentBevelPreviewCancelled = QtCore.Signal()
+    texturePaintStrokeBegan = QtCore.Signal(object)
+    texturePaintSampleRequested = QtCore.Signal(object)
+    texturePaintStrokeCommitted = QtCore.Signal()
+    texturePaintStrokeCancelled = QtCore.Signal()
+    groundSnapShortcutRequested = QtCore.Signal()
+    pieMoveInputChanged = QtCore.Signal(object)
+    pieDestinationRequested = QtCore.Signal(object)
+    pieCameraInputChanged = QtCore.Signal(object)
+    pieStopRequested = QtCore.Signal()
+
+    #: Viewport selection interaction state (marquee + click-vs-drag).
+    _map_studio_marquee = None
+    _map_studio_click_candidate = None
+    _map_studio_component_selection: list = []
+    _map_studio_room_primitive_selection: list = []
+    #: Maya-style interactive extrude (Ctrl+E arms, LMB drag pulls, release commits).
+    _component_extrude_armed = None
+    _component_extrude_drag = None
+    _component_bevel_armed = None
+    _component_bevel_drag = None
+
+    def map_studio_component_selection(self) -> list:
+        return list(getattr(self, "_map_studio_component_selection", []) or [])
+
+    def clear_map_studio_component_selection(self) -> None:
+        self._map_studio_component_selection = []
+        self._push_map_studio_component_selection()
+
+    def _push_map_studio_component_selection(self) -> None:
+        setter = getattr(self.viewport, "set_map_studio_component_selection", None)
+        if callable(setter):
+            setter(list(getattr(self, "_map_studio_component_selection", []) or []))
+
+    def selected_room_primitives(self) -> list[tuple[str, str]]:
+        return list(getattr(self, "_map_studio_room_primitive_selection", []) or [])
+
+    def set_selected_room_primitives(self, entries) -> None:
+        selected: list[tuple[str, str]] = []
+        for room_resref, primitive_name in tuple(entries or ()):
+            key = (str(room_resref or "").strip(), str(primitive_name or "").strip())
+            if key[0] and key[1] and key not in selected:
+                selected.append(key)
+        self._map_studio_room_primitive_selection = selected
+        setter = getattr(self.viewport, "set_map_studio_room_primitive_selection", None)
+        if callable(setter):
+            setter(selected)
+
+    def _iter_room_preview_mesh_nodes(self, room_resref: str = ""):
+        """Yield live authored preview mesh nodes, optionally for one room."""
+
+        wanted_room = str(room_resref or "").strip().lower()
+        root = getattr(getattr(self, "_room_preview_model", None), "root_node", None)
+        for room_node in tuple(getattr(root, "children", ()) or ()):
+            room = str(getattr(room_node, "_gr_map_studio_room_resref", "") or "").strip().lower()
+            if wanted_room and room != wanted_room:
+                continue
+            for node in tuple(getattr(room_node, "children", ()) or ()):
+                if bool(getattr(node, "_gr_map_studio_authored_mesh", False)):
+                    yield room_node, node
+
+    def preview_room_mesh_payloads(self, room_resref: str) -> tuple[dict[str, object], ...]:
+        """Return lightweight immutable mesh data for a live operator preview."""
+
+        rows: list[dict[str, object]] = []
+        for _room_node, node in self._iter_room_preview_mesh_nodes(room_resref):
+            rows.append(
+                {
+                    "role": str(getattr(node, "_gr_map_studio_mesh_role", "") or ""),
+                    "name": str(getattr(node, "_gr_map_studio_primitive_name", "") or getattr(node, "name", "") or ""),
+                    "vertices": tuple(tuple(float(value) for value in vertex[:3]) for vertex in tuple(getattr(node, "vertices", ()) or ())),
+                    "faces": tuple(tuple(int(value) for value in face[:3]) for face in tuple(getattr(node, "faces", ()) or ())),
+                    "uvs": tuple(tuple(float(value) for value in uv[:2]) for uv in tuple(getattr(node, "uvs", ()) or ())),
+                    "uvs_lm": tuple(tuple(float(value) for value in uv[:2]) for uv in tuple(getattr(node, "uvs_lm", ()) or ())),
+                    "normals": tuple(tuple(float(value) for value in normal[:3]) for normal in tuple(getattr(node, "normals", ()) or ())),
+                    "texture": str(getattr(node, "texture", "") or ""),
+                    "lightmap": str(getattr(node, "lightmap", "") or ""),
+                    "texture_names": tuple(str(value) for value in tuple(getattr(node, "texture_names", ()) or ())),
+                    "tex_count": int(getattr(node, "tex_count", 1) or 1),
+                }
+            )
+        return tuple(rows)
+
+    def apply_component_mesh_preview(
+        self,
+        room_resref: str,
+        mesh_role: str,
+        *,
+        vertices,
+        faces,
+        normals=(),
+        uvs=(),
+        uvs_lm=(),
+    ) -> bool:
+        """Patch one live mesh node without rebuilding/serializing the KMAP."""
+
+        wanted_role = str(mesh_role or "")
+        for _room_node, node in self._iter_room_preview_mesh_nodes(room_resref):
+            if str(getattr(node, "_gr_map_studio_mesh_role", "") or "") != wanted_role:
+                continue
+            key = id(node)
+            if key not in self._component_mesh_preview_baselines:
+                self._component_mesh_preview_baselines[key] = (
+                    node,
+                    {
+                        "vertices": list(getattr(node, "vertices", ()) or ()),
+                        "faces": list(getattr(node, "faces", ()) or ()),
+                        "normals": list(getattr(node, "normals", ()) or ()),
+                        "uvs": list(getattr(node, "uvs", ()) or ()),
+                        "uvs_lm": list(getattr(node, "uvs_lm", ()) or ()),
+                        "face_mats": list(getattr(node, "face_mats", ()) or ()),
+                    },
+                )
+            node.vertices = [tuple(float(value) for value in vertex[:3]) for vertex in tuple(vertices or ())]
+            node.faces = [tuple(int(value) for value in face[:3]) for face in tuple(faces or ())]
+            node.normals = [tuple(float(value) for value in normal[:3]) for normal in tuple(normals or ())]
+            node.uvs = [tuple(float(value) for value in uv[:2]) for uv in tuple(uvs or ())]
+            node.uvs_lm = [tuple(float(value) for value in uv[:2]) for uv in tuple(uvs_lm or ())]
+            node.face_mats = [0] * len(node.faces)
+            compute_bounds = getattr(node, "compute_bounds", None)
+            if callable(compute_bounds):
+                compute_bounds()
+            invalidate = getattr(self.viewport, "_evict_transform_cache", None)
+            if callable(invalidate):
+                invalidate(node)
+            request = getattr(self.viewport, "_request_render", None)
+            if callable(request):
+                request(fast=True, reason="Map Studio live topology preview", resources=True, overlay=True, hud=True)
+            return True
+        return False
+
+    def clear_component_mesh_preview(self) -> None:
+        """Restore mesh arrays captured before an extrude/bevel preview."""
+
+        baselines = dict(getattr(self, "_component_mesh_preview_baselines", {}) or {})
+        self._component_mesh_preview_baselines = {}
+        invalidate = getattr(self.viewport, "_evict_transform_cache", None)
+        for node, state in baselines.values():
+            for field, values in state.items():
+                setattr(node, field, list(values))
+            compute_bounds = getattr(node, "compute_bounds", None)
+            if callable(compute_bounds):
+                compute_bounds()
+            if callable(invalidate):
+                invalidate(node)
+        if baselines:
+            request = getattr(self.viewport, "_request_render", None)
+            if callable(request):
+                request(fast=True, reason="Map Studio topology preview restored", resources=True, overlay=True, hud=True)
+
+    def promote_component_mesh_preview(self, room_resref: str, mesh_role: str) -> bool:
+        """Keep one committed live topology preview resident in the renderer.
+
+        Live extrusion/bevel frames already patch and invalidate only the mesh
+        being edited.  Promoting that last frame makes it the committed visual
+        state without calling ``load_model()``, which would otherwise discard
+        every stock-room texture/mesh allocation and reset the framebuffers.
+
+        The synthetic preview key deliberately changes after promotion.  A
+        later undo/redo therefore cannot mistake the resident edited model for
+        the old controller-built model and skip the required replacement.
+        """
+
+        wanted_room = str(room_resref or "").strip().lower()
+        wanted_role = str(mesh_role or "")
+        baselines = dict(getattr(self, "_component_mesh_preview_baselines", {}) or {})
+        if not baselines:
+            return False
+        changed_nodes = [entry[0] for entry in baselines.values()]
+        if any(
+            str(getattr(node, "_gr_map_studio_room_resref", "") or "").strip().lower() != wanted_room
+            or str(getattr(node, "_gr_map_studio_mesh_role", "") or "") != wanted_role
+            for node in changed_nodes
+        ):
+            return False
+
+        self._component_mesh_preview_baselines = {}
+        serial = int(getattr(self, "_component_mesh_commit_serial", 0) or 0) + 1
+        self._component_mesh_commit_serial = serial
+        key = f"resident-topology:{wanted_room}:{wanted_role}:{serial}"
+        model = getattr(self, "_room_preview_model", None)
+        if model is not None:
+            setattr(model, "_gr_map_studio_preview_key", key)
+        viewport_model = getattr(getattr(self, "viewport", None), "model", None)
+        if viewport_model is not None:
+            setattr(viewport_model, "_gr_map_studio_preview_key", key)
+        self._room_preview_model_key = key
+        self._hover_candidate_cache = []
+        request = getattr(getattr(self, "viewport", None), "_request_render", None)
+        if callable(request):
+            request(
+                fast=True,
+                reason="Map Studio topology commit promoted",
+                scene=True,
+                overlay=True,
+                hud=True,
+            )
+        return True
+
+    def _map_studio_selection_face_points(self, context) -> tuple:
+        wanted = (
+            str(getattr(context, "room_resref", "") or ""),
+            str(getattr(context, "mesh_role", "") or ""),
+            int(getattr(context, "face_index", -1)),
+        )
+        for candidate in getattr(self, "_hover_candidate_cache", []) or []:
+            key = (
+                str(getattr(candidate, "room_resref", "") or ""),
+                str(getattr(candidate, "mesh_role", "") or ""),
+                int(getattr(candidate, "face_index", -1)),
+            )
+            if key == wanted:
+                return tuple(getattr(candidate, "world_points", ()) or ())
+        return ()
+
+    def _toggle_map_studio_component_selection(self, context, additive: bool) -> None:
+        # Maya-style component selection: click selects, Shift adds/toggles.
+        face_world = self._map_studio_selection_face_points(context)
+        entry = {
+            "component_type": str(getattr(context, "component_type", "") or ""),
+            "room_resref": str(getattr(context, "room_resref", "") or ""),
+            "mesh_role": str(getattr(context, "mesh_role", "") or ""),
+            "face_index": int(getattr(context, "face_index", -1)),
+            "vertex_index": int(getattr(context, "vertex_index", -1)),
+            "edge_indices": tuple(getattr(context, "edge_indices", (-1, -1)) or (-1, -1)),
+            "mesh_vertex_index": int(getattr(context, "mesh_vertex_index", -1)),
+            "mesh_edge_indices": tuple(getattr(context, "mesh_edge_indices", (-1, -1)) or (-1, -1)),
+            "face_world_points": face_world,
+            "world_point": tuple(getattr(context, "world_point", ()) or ()),
+        }
+        selected = list(getattr(self, "_map_studio_component_selection", []) or [])
+
+        def _key(item: dict) -> tuple:
+            component = item.get("component_type")
+            room = item.get("room_resref")
+            role = item.get("mesh_role")
+            if component == "vertex" and int(item.get("mesh_vertex_index", -1)) >= 0:
+                return (component, room, role, int(item.get("mesh_vertex_index", -1)))
+            mesh_edge = tuple(item.get("mesh_edge_indices") or ())
+            if component == "edge" and len(mesh_edge) >= 2 and min(int(value) for value in mesh_edge[:2]) >= 0:
+                return (component, room, role, tuple(sorted(int(value) for value in mesh_edge[:2])))
+            return (
+                component,
+                room,
+                role,
+                item.get("face_index"),
+                item.get("vertex_index"),
+                tuple(item.get("edge_indices") or ()),
+            )
+
+        entry_key = _key(entry)
+        if additive:
+            remaining = [item for item in selected if _key(item) != entry_key]
+            if len(remaining) == len(selected):
+                remaining.append(entry)
+            selected = remaining
+        else:
+            selected = [entry]
+        self._map_studio_component_selection = selected
+        self._push_map_studio_component_selection()
+
+    def select_map_studio_faces(self, room_resref: str, mesh_role: str, face_indices) -> int:
+        """Select faces by index, resolving world points from the live preview.
+
+        Used after commits (e.g. extrude caps) so the fresh faces come up
+        yellow and ready for the next Ctrl+E pull.
+        """
+
+        wanted_room = str(room_resref or "")
+        wanted_role = str(mesh_role or "")
+        wanted = {int(index) for index in tuple(face_indices or ())}
+        entries: list[dict] = []
+        root = getattr(self._room_preview_model, "root_node", None)
+        for room_node in tuple(getattr(root, "children", ()) or ()):
+            if str(getattr(room_node, "_gr_map_studio_room_resref", "") or "") != wanted_room:
+                continue
+            offset = tuple(getattr(room_node, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
+            if len(offset) < 3:
+                offset = (0.0, 0.0, 0.0)
+            for mesh_node in tuple(getattr(room_node, "children", ()) or ()):
+                if str(getattr(mesh_node, "_gr_map_studio_mesh_role", "") or "") != wanted_role:
+                    continue
+                vertices = tuple(getattr(mesh_node, "vertices", ()) or ())
+                faces = tuple(getattr(mesh_node, "faces", ()) or ())
+                for face_index in sorted(wanted):
+                    if not (0 <= face_index < len(faces)):
+                        continue
+                    try:
+                        world = tuple(
+                            (
+                                float(vertices[int(index)][0]) + float(offset[0]),
+                                float(vertices[int(index)][1]) + float(offset[1]),
+                                float(vertices[int(index)][2]) + float(offset[2]),
+                            )
+                            for index in tuple(faces[face_index])[:3]
+                        )
+                    except Exception:
+                        continue
+                    if len(world) < 3:
+                        continue
+                    entries.append(
+                        {
+                            "component_type": "face",
+                            "room_resref": wanted_room,
+                            "mesh_role": wanted_role,
+                            "face_index": int(face_index),
+                            "vertex_index": -1,
+                            "edge_indices": (-1, -1),
+                            "face_world_points": world,
+                            "world_point": world[0],
+                        }
+                    )
+        if entries:
+            self._map_studio_component_selection = entries
+            self._push_map_studio_component_selection()
+        return len(entries)
+
+    # ---- Maya-style interactive extrude (Ctrl+E) -------------------------
+
+    @staticmethod
+    def _vec3_scale(v, s: float) -> tuple[float, float, float]:
+        return (float(v[0]) * s, float(v[1]) * s, float(v[2]) * s)
+
+    @staticmethod
+    def _vec3_normalized(v) -> tuple[float, float, float]:
+        length = (float(v[0]) ** 2 + float(v[1]) ** 2 + float(v[2]) ** 2) ** 0.5
+        if length <= 1.0e-12:
+            return (0.0, 0.0, 1.0)
+        return (float(v[0]) / length, float(v[1]) / length, float(v[2]) / length)
+
+    def _component_extrude_edge_axis(self, points, edge) -> tuple[float, float, float]:
+        """In-plane outward direction: extends floors/walls the Maya way."""
+
+        (ax, ay, az) = points[int(edge[0]) % 3]
+        (bx, by, bz) = points[int(edge[1]) % 3]
+        cx = sum(float(p[0]) for p in points[:3]) / 3.0
+        cy = sum(float(p[1]) for p in points[:3]) / 3.0
+        cz = sum(float(p[2]) for p in points[:3]) / 3.0
+        mx, my, mz = (ax + bx) / 2.0, (ay + by) / 2.0, (az + bz) / 2.0
+        dx, dy, dz = mx - cx, my - cy, mz - cz
+        nx, ny, nz = self._map_studio_face_normal(points)
+        dot = dx * nx + dy * ny + dz * nz
+        return self._vec3_normalized((dx - nx * dot, dy - ny * dot, dz - nz * dot))
+
+    def arm_component_extrude(self) -> bool:
+        """Arm the interactive extrude from the selection (or hover) target."""
+
+        if self._component_bevel_armed is not None:
+            self._disarm_component_bevel(cancel_preview=True)
+
+        selection = self.map_studio_component_selection()
+        faces = [
+            entry
+            for entry in selection
+            if entry.get("component_type") == "face" and len(tuple(entry.get("face_world_points", ()) or ())) >= 3
+        ]
+        edges = [
+            entry
+            for entry in selection
+            if entry.get("component_type") == "edge" and len(tuple(entry.get("face_world_points", ()) or ())) >= 3
+        ]
+        context = self._hover_context
+        if not faces and not edges and context is not None and getattr(context, "is_hit", False):
+            hover_points = self._map_studio_selection_face_points(context)
+            component = str(getattr(context, "component_type", "") or "")
+            if len(hover_points) >= 3 and component in {"face", "edge"}:
+                entry = {
+                    "component_type": component,
+                    "room_resref": str(getattr(context, "room_resref", "") or ""),
+                    "mesh_role": str(getattr(context, "mesh_role", "") or ""),
+                    "face_index": int(getattr(context, "face_index", -1)),
+                    "edge_indices": tuple(getattr(context, "edge_indices", (-1, -1)) or (-1, -1)),
+                    "face_world_points": hover_points,
+                }
+                (faces if component == "face" else edges).append(entry)
+        if faces:
+            room = str(faces[0].get("room_resref", "") or "")
+            role = str(faces[0].get("mesh_role", "") or "")
+            group = [
+                entry
+                for entry in faces
+                if str(entry.get("room_resref", "") or "") == room and str(entry.get("mesh_role", "") or "") == role
+            ]
+            centroids = []
+            normals = []
+            for entry in group:
+                points = tuple(entry.get("face_world_points", ()) or ())[:3]
+                centroids.append(
+                    (
+                        sum(float(p[0]) for p in points) / 3.0,
+                        sum(float(p[1]) for p in points) / 3.0,
+                        sum(float(p[2]) for p in points) / 3.0,
+                    )
+                )
+                normals.append(self._map_studio_face_normal(points))
+            anchor = (
+                sum(c[0] for c in centroids) / len(centroids),
+                sum(c[1] for c in centroids) / len(centroids),
+                sum(c[2] for c in centroids) / len(centroids),
+            )
+            axis = self._vec3_normalized(
+                (
+                    sum(n[0] for n in normals),
+                    sum(n[1] for n in normals),
+                    sum(n[2] for n in normals),
+                )
+            )
+            self._component_extrude_armed = {
+                "kind": "face",
+                "room_resref": room,
+                "mesh_role": role,
+                "face_indices": tuple(sorted({int(entry.get("face_index", -1)) for entry in group})),
+                "anchor": anchor,
+                "axis": axis,
+                "axis_normal": axis,
+                "axis_mode": "normal",
+            }
+            self.marker_summary_label.setText(
+                f"Extrude armed on {len(group)} face(s): drag pulls along the normal; "
+                "click the N/W badge for world axis; Esc cancels."
+            )
+            self._push_component_extrude_overlay()
+            return True
+        if edges:
+            entry = edges[0]
+            points = tuple(entry.get("face_world_points", ()) or ())[:3]
+            edge = tuple(entry.get("edge_indices", (0, 1)) or (0, 1))
+            start = points[int(edge[0]) % 3]
+            end = points[int(edge[1]) % 3]
+            anchor = (
+                (float(start[0]) + float(end[0])) / 2.0,
+                (float(start[1]) + float(end[1])) / 2.0,
+                (float(start[2]) + float(end[2])) / 2.0,
+            )
+            edge_axis = self._component_extrude_edge_axis(points, edge)
+            self._component_extrude_armed = {
+                "kind": "edge",
+                "room_resref": str(entry.get("room_resref", "") or ""),
+                "mesh_role": str(entry.get("mesh_role", "") or ""),
+                "face_index": int(entry.get("face_index", -1)),
+                "edge_corners": (int(edge[0]), int(edge[1])),
+                "anchor": anchor,
+                "axis": edge_axis,
+                "axis_normal": edge_axis,
+                "axis_mode": "normal",
+            }
+            self.marker_summary_label.setText(
+                "Extrude armed on edge: drag pulls outward; click the N/W badge for world axis; Esc cancels."
+            )
+            self._push_component_extrude_overlay()
+            return True
+        self.marker_summary_label.setText("Ctrl+E: select or hover a face/edge first (vertices cannot extrude).")
+        return False
+
+    def _disarm_component_extrude(self, message: str = "", *, cancel_preview: bool = True) -> None:
+        self._component_extrude_armed = None
+        self._component_extrude_drag = None
+        if cancel_preview:
+            self.componentExtrudePreviewCancelled.emit()
+        if message:
+            self.marker_summary_label.setText(message)
+        self._push_component_extrude_overlay()
+
+    #: Screen offset of the N/W axis-mode badge from the projected anchor.
+    _EXTRUDE_TOGGLE_OFFSET = (26.0, -26.0)
+    _EXTRUDE_TOGGLE_RADIUS = 14.0
+
+    @staticmethod
+    def _component_extrude_world_axis(axis) -> tuple[float, float, float]:
+        """Snap to the dominant world axis, sign preserved (Maya world mode)."""
+
+        values = tuple(float(v) for v in tuple(axis)[:3])
+        dominant = max(range(3), key=lambda i: abs(values[i]))
+        world = [0.0, 0.0, 0.0]
+        world[dominant] = 1.0 if values[dominant] >= 0.0 else -1.0
+        return (world[0], world[1], world[2])
+
+    def component_extrude_toggle_screen_pos(self) -> tuple[float, float] | None:
+        armed = self._component_extrude_armed
+        if armed is None:
+            return None
+        anchor_screen = self._project_world_to_screen(tuple(armed.get("anchor", (0.0, 0.0, 0.0))))
+        if anchor_screen is None:
+            return None
+        return (
+            anchor_screen[0] + self._EXTRUDE_TOGGLE_OFFSET[0],
+            anchor_screen[1] + self._EXTRUDE_TOGGLE_OFFSET[1],
+        )
+
+    def toggle_component_extrude_axis_mode(self) -> str:
+        """Flip the pull axis between the component normal and the world axis."""
+
+        armed = self._component_extrude_armed
+        if armed is None:
+            return ""
+        if str(armed.get("axis_mode", "normal")) == "normal":
+            armed["axis_mode"] = "world"
+            armed["axis"] = self._component_extrude_world_axis(armed.get("axis_normal", (0.0, 0.0, 1.0)))
+            self.marker_summary_label.setText("Extrude axis: WORLD (snapped) — click the badge to go back to normal.")
+        else:
+            armed["axis_mode"] = "normal"
+            armed["axis"] = tuple(armed.get("axis_normal", (0.0, 0.0, 1.0)))
+            self.marker_summary_label.setText("Extrude axis: NORMAL (component) — click the badge for world axis.")
+        self._push_component_extrude_overlay()
+        return str(armed["axis_mode"])
+
+    def _push_component_extrude_overlay(self) -> None:
+        armed = self._component_extrude_armed
+        state = None
+        if armed is not None:
+            drag = self._component_extrude_drag or {}
+            state = {
+                "anchor": tuple(armed.get("anchor", (0.0, 0.0, 0.0))),
+                "axis": tuple(armed.get("axis", (0.0, 0.0, 1.0))),
+                "axis_mode": str(armed.get("axis_mode", "normal")),
+                "toggle_offset": self._EXTRUDE_TOGGLE_OFFSET,
+                "distance": float(drag.get("pending_distance", 0.0) or 0.0),
+                "dragging": bool(drag),
+            }
+        setter = getattr(self.viewport, "set_map_studio_component_extrude", None)
+        if callable(setter):
+            setter(state)
+
+    def _begin_component_extrude_drag(self, event: QtCore.QEvent) -> bool:
+        armed = self._component_extrude_armed
+        if armed is None:
+            return False
+        start = self._event_position(event)
+        if start is None:
+            return False
+        toggle_pos = self.component_extrude_toggle_screen_pos()
+        if toggle_pos is not None:
+            dx = float(start[0]) - toggle_pos[0]
+            dy = float(start[1]) - toggle_pos[1]
+            if (dx * dx + dy * dy) ** 0.5 <= self._EXTRUDE_TOGGLE_RADIUS:
+                self.toggle_component_extrude_axis_mode()
+                return True
+        anchor = tuple(armed.get("anchor", (0.0, 0.0, 0.0)))
+        axis = tuple(armed.get("axis", (0.0, 0.0, 1.0)))
+        anchor_screen = self._project_world_to_screen(anchor)
+        tip_screen = self._project_world_to_screen(
+            (anchor[0] + axis[0], anchor[1] + axis[1], anchor[2] + axis[2])
+        )
+        if anchor_screen is None or tip_screen is None:
+            return False
+        axis_screen = (tip_screen[0] - anchor_screen[0], tip_screen[1] - anchor_screen[1])
+        pixels_per_meter = (axis_screen[0] ** 2 + axis_screen[1] ** 2) ** 0.5
+        if pixels_per_meter <= 1.0e-6:
+            # Axis points straight at the camera; fall back to vertical mouse motion.
+            axis_screen = (0.0, -1.0)
+            pixels_per_meter = 40.0
+        self._component_extrude_drag = {
+            "start_screen": start,
+            "axis_screen": axis_screen,
+            "pixels_per_meter": pixels_per_meter,
+            "pending_distance": 0.0,
+        }
+        return True
+
+    def _update_component_extrude_drag(self, event: QtCore.QEvent) -> bool:
+        drag = self._component_extrude_drag
+        if drag is None:
+            return False
+        current = self._event_position(event)
+        if current is None:
+            return True
+        start = drag["start_screen"]
+        axis_screen = drag["axis_screen"]
+        ppm = float(drag["pixels_per_meter"])
+        dx = float(current[0]) - float(start[0])
+        dy = float(current[1]) - float(start[1])
+        # dot(mouse delta, screen axis) / |axis|^2 = meters along the world axis.
+        distance = ((dx * axis_screen[0]) + (dy * axis_screen[1])) / max(1.0e-6, ppm * ppm)
+        drag["pending_distance"] = distance
+        self.marker_summary_label.setText(f"Extrude: {distance:+.2f}m (release to commit, Esc cancels).")
+        self._push_component_extrude_overlay()
+        payload = dict(self._component_extrude_armed or {})
+        payload["distance"] = float(distance)
+        self.componentExtrudePreviewRequested.emit(payload)
+        return True
+
+    def _finish_component_extrude_drag(self, event: QtCore.QEvent | None = None) -> bool:
+        if event is not None:
+            self._update_component_extrude_drag(event)
+        armed = self._component_extrude_armed
+        drag = self._component_extrude_drag
+        if armed is None or drag is None:
+            return False
+        distance = float(drag.get("pending_distance", 0.0) or 0.0)
+        payload = dict(armed)
+        payload["distance"] = distance
+        # The receiver either promotes the already-resident final preview or
+        # restores it on failure.  Do not tear it down before the commit path
+        # gets that choice.
+        self._disarm_component_extrude(cancel_preview=False)
+        self.componentExtrudeCommitted.emit(payload)
+        return True
+
+    # ---- Maya-style interactive bevel ---------------------------------
+
+    def _component_bevel_options(self) -> dict[str, object]:
+        return {
+            "amount": float(self.bevel_width_spin.value()),
+            "segments": int(self.bevel_segments_spin.value()),
+            "profile": float(self.bevel_profile_spin.value()),
+            "miter": str(self.bevel_miter_combo.currentData() or "auto"),
+            "smoothing_angle_degrees": float(self.bevel_smoothing_spin.value()),
+            "uv_mode": str(self.bevel_uv_combo.currentData() or "preserve"),
+            "clamp_overlap": bool(self.bevel_clamp_box.isChecked()),
+        }
+
+    def _component_bevel_payload(self) -> dict[str, object]:
+        payload = dict(self._component_bevel_armed or {})
+        payload.update(self._component_bevel_options())
+        return payload
+
+    def arm_component_bevel(self) -> bool:
+        """Arm a non-destructive edge bevel preview with persistent controls."""
+
+        if self._component_extrude_armed is not None:
+            self._disarm_component_extrude(cancel_preview=True)
+        selection = [
+            entry
+            for entry in self.map_studio_component_selection()
+            if str(entry.get("component_type", "") or "") == "edge"
+        ]
+        context = self._hover_context
+        entry = selection[0] if selection else None
+        if entry is None and context is not None and getattr(context, "is_hit", False):
+            if str(getattr(context, "component_type", "") or "") == "edge":
+                entry = {
+                    "room_resref": str(getattr(context, "room_resref", "") or ""),
+                    "mesh_role": str(getattr(context, "mesh_role", "") or ""),
+                    "face_index": int(getattr(context, "face_index", -1)),
+                    "edge_indices": tuple(getattr(context, "edge_indices", (0, 1)) or (0, 1)),
+                    "face_world_points": self._map_studio_selection_face_points(context),
+                }
+        if entry is None:
+            self.marker_summary_label.setText("Bevel: select or hover an edge first.")
+            return False
+        points = tuple(entry.get("face_world_points", ()) or ())[:3]
+        edge = tuple(entry.get("edge_indices", (0, 1)) or (0, 1))[:2]
+        if len(points) < 3 or len(edge) < 2:
+            self.marker_summary_label.setText("Bevel: the selected edge has no live preview geometry.")
+            return False
+        start = points[int(edge[0]) % 3]
+        end = points[int(edge[1]) % 3]
+        anchor = tuple((float(start[index]) + float(end[index])) * 0.5 for index in range(3))
+        self._component_bevel_armed = {
+            "kind": "edge_bevel",
+            "room_resref": str(entry.get("room_resref", "") or ""),
+            "mesh_role": str(entry.get("mesh_role", "") or ""),
+            "face_index": int(entry.get("face_index", -1)),
+            "edge_corners": tuple(int(value) for value in edge),
+            "anchor": anchor,
+            "axis": self._map_studio_face_normal(points),
+        }
+        self._component_bevel_drag = None
+        self.bevel_options_frame.setVisible(True)
+        self.marker_summary_label.setText(
+            "Bevel armed: drag in the viewport for width; segments/profile/miter/smoothing/UV update live."
+        )
+        self._push_component_bevel_overlay()
+        self.componentBevelPreviewRequested.emit(self._component_bevel_payload())
+        return True
+
+    def _disarm_component_bevel(self, message: str = "", *, cancel_preview: bool = True) -> None:
+        self._component_bevel_armed = None
+        self._component_bevel_drag = None
+        self.bevel_options_frame.setVisible(False)
+        if cancel_preview:
+            self.componentBevelPreviewCancelled.emit()
+        if message:
+            self.marker_summary_label.setText(message)
+        setter = getattr(self.viewport, "set_map_studio_component_extrude", None)
+        if callable(setter):
+            setter(None)
+
+    def _push_component_bevel_overlay(self) -> None:
+        armed = self._component_bevel_armed
+        if armed is None:
+            return
+        payload = self._component_bevel_payload()
+        payload.update(
+            {
+                "operator": "bevel",
+                "distance": float(payload.get("amount", 0.0) or 0.0),
+                "dragging": bool(self._component_bevel_drag),
+            }
+        )
+        setter = getattr(self.viewport, "set_map_studio_component_extrude", None)
+        if callable(setter):
+            setter(payload)
+
+    def _update_component_bevel_options(self, *_args) -> None:
+        if self._component_bevel_armed is None:
+            return
+        self._push_component_bevel_overlay()
+        self.componentBevelPreviewRequested.emit(self._component_bevel_payload())
+        options = self._component_bevel_options()
+        self.marker_summary_label.setText(
+            f"Bevel {float(options['amount']):.3f}m | {int(options['segments'])} segment(s) | "
+            f"profile {float(options['profile']):.2f} | {options['miter']} miter | UV {options['uv_mode']}"
+        )
+
+    def _begin_component_bevel_drag(self, event: QtCore.QEvent) -> bool:
+        if self._component_bevel_armed is None:
+            return False
+        start = self._event_position(event)
+        if start is None:
+            return False
+        self._component_bevel_drag = {
+            "start_screen": start,
+            "start_width": float(self.bevel_width_spin.value()),
+        }
+        self._push_component_bevel_overlay()
+        return True
+
+    def _update_component_bevel_drag(self, event: QtCore.QEvent) -> bool:
+        drag = self._component_bevel_drag
+        if drag is None:
+            return False
+        current = self._event_position(event)
+        if current is None:
+            return True
+        start = tuple(drag.get("start_screen", current))
+        dx = float(current[0]) - float(start[0])
+        dy = float(current[1]) - float(start[1])
+        width = max(0.001, min(25.0, float(drag.get("start_width", 0.25)) + (dx - dy) * 0.01))
+        blocked = self.bevel_width_spin.blockSignals(True)
+        self.bevel_width_spin.setValue(width)
+        self.bevel_width_spin.blockSignals(blocked)
+        self._push_component_bevel_overlay()
+        self.componentBevelPreviewRequested.emit(self._component_bevel_payload())
+        self.marker_summary_label.setText(f"Bevel width: {width:.3f}m (release to apply, Esc cancels).")
+        return True
+
+    def _finish_component_bevel_drag(self, event: QtCore.QEvent | None = None) -> bool:
+        if self._component_bevel_armed is None:
+            return False
+        if event is not None and self._component_bevel_drag is not None:
+            self._update_component_bevel_drag(event)
+        payload = self._component_bevel_payload()
+        self._disarm_component_bevel(cancel_preview=False)
+        self.componentBevelCommitted.emit(payload)
+        return True
+
+    def _apply_component_bevel_from_options(self) -> None:
+        if self._component_bevel_armed is None:
+            return
+        payload = self._component_bevel_payload()
+        self._disarm_component_bevel(cancel_preview=False)
+        self.componentBevelCommitted.emit(payload)
     toolMarkingMenuRequested = QtCore.Signal(QtCore.QPoint)
+    hoverContextChanged = QtCore.Signal(object)
     transformGizmoModeChanged = QtCore.Signal(str)
     undoShortcutRequested = QtCore.Signal()
     redoShortcutRequested = QtCore.Signal()
@@ -86,6 +867,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "Scale/transform the selected authored object without changing its stable KMAP identity.",
         )
         self.viewport_toolbar.addWidget(self.focus_button)
+        self.focus_button.clicked.connect(self.focus_selected)
         self.viewport_toolbar.addWidget(self.grid_box)
         self.viewport_toolbar.addWidget(self.snap_box)
         self.viewport_toolbar.addWidget(self.terrain_brush_box)
@@ -98,14 +880,77 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.marker_summary_label.setObjectName("mapStudioPlacementMarkerSummaryLabel")
         self.marker_summary_label.setWordWrap(True)
         toolbar_frame_layout.addWidget(self.marker_summary_label)
+        self.bevel_options_frame = QtWidgets.QFrame(self.viewport_toolbar_frame)
+        self.bevel_options_frame.setObjectName("mapStudioInteractiveBevelOptions")
+        bevel_layout = QtWidgets.QHBoxLayout(self.bevel_options_frame)
+        bevel_layout.setContentsMargins(0, 0, 0, 0)
+        bevel_layout.setSpacing(5)
+        bevel_layout.addWidget(QtWidgets.QLabel("Bevel"))
+        self.bevel_width_spin = QtWidgets.QDoubleSpinBox(self.bevel_options_frame)
+        self.bevel_width_spin.setObjectName("mapStudioBevelWidthSpinBox")
+        self.bevel_width_spin.setRange(0.001, 25.0)
+        self.bevel_width_spin.setDecimals(3)
+        self.bevel_width_spin.setSingleStep(0.05)
+        self.bevel_width_spin.setValue(0.25)
+        self.bevel_width_spin.setSuffix(" m")
+        self.bevel_segments_spin = QtWidgets.QSpinBox(self.bevel_options_frame)
+        self.bevel_segments_spin.setObjectName("mapStudioBevelSegmentsSpinBox")
+        self.bevel_segments_spin.setRange(1, 64)
+        self.bevel_segments_spin.setValue(1)
+        self.bevel_profile_spin = QtWidgets.QDoubleSpinBox(self.bevel_options_frame)
+        self.bevel_profile_spin.setObjectName("mapStudioBevelProfileSpinBox")
+        self.bevel_profile_spin.setRange(0.0, 1.0)
+        self.bevel_profile_spin.setDecimals(2)
+        self.bevel_profile_spin.setSingleStep(0.05)
+        self.bevel_profile_spin.setValue(0.5)
+        self.bevel_miter_combo = QtWidgets.QComboBox(self.bevel_options_frame)
+        self.bevel_miter_combo.setObjectName("mapStudioBevelMiterComboBox")
+        self.bevel_miter_combo.addItem("Auto miter", "auto")
+        self.bevel_miter_combo.addItem("Sharp miter", "sharp")
+        self.bevel_miter_combo.addItem("Patch miter", "patch")
+        self.bevel_smoothing_spin = QtWidgets.QDoubleSpinBox(self.bevel_options_frame)
+        self.bevel_smoothing_spin.setObjectName("mapStudioBevelSmoothingSpinBox")
+        self.bevel_smoothing_spin.setRange(0.0, 180.0)
+        self.bevel_smoothing_spin.setDecimals(1)
+        self.bevel_smoothing_spin.setValue(180.0)
+        self.bevel_smoothing_spin.setSuffix(" deg")
+        self.bevel_uv_combo = QtWidgets.QComboBox(self.bevel_options_frame)
+        self.bevel_uv_combo.setObjectName("mapStudioBevelUvComboBox")
+        self.bevel_uv_combo.addItem("Preserve UVs", "preserve")
+        self.bevel_uv_combo.addItem("Tile bevel", "tiled")
+        self.bevel_uv_combo.addItem("No bevel UVs", "none")
+        self.bevel_clamp_box = QtWidgets.QCheckBox("Clamp", self.bevel_options_frame)
+        self.bevel_clamp_box.setObjectName("mapStudioBevelClampCheckBox")
+        self.bevel_clamp_box.setChecked(True)
+        self.bevel_apply_button = QtWidgets.QPushButton("Apply", self.bevel_options_frame)
+        self.bevel_apply_button.setObjectName("mapStudioBevelApplyButton")
+        self.bevel_cancel_button = QtWidgets.QPushButton("Cancel", self.bevel_options_frame)
+        self.bevel_cancel_button.setObjectName("mapStudioBevelCancelButton")
+        for label, widget in (
+            ("Width", self.bevel_width_spin),
+            ("Segments", self.bevel_segments_spin),
+            ("Profile", self.bevel_profile_spin),
+            ("Miter", self.bevel_miter_combo),
+            ("Smooth", self.bevel_smoothing_spin),
+            ("UV", self.bevel_uv_combo),
+        ):
+            bevel_layout.addWidget(QtWidgets.QLabel(label))
+            bevel_layout.addWidget(widget)
+        bevel_layout.addWidget(self.bevel_clamp_box)
+        bevel_layout.addStretch(1)
+        bevel_layout.addWidget(self.bevel_apply_button)
+        bevel_layout.addWidget(self.bevel_cancel_button)
+        toolbar_frame_layout.addWidget(self.bevel_options_frame)
+        self.bevel_options_frame.setVisible(False)
         root.addWidget(self.viewport_toolbar_frame)
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.splitter.setChildrenCollapsible(False)
-        self.viewport = QtViewportWidget(self)
+        self.viewport = QtMapStudioViewportWidget(self)
         self.viewport.setObjectName("MapStudioViewportWidget")
         self.viewport.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.viewport.setMinimumHeight(320)
         self.viewport.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        self.viewport.nodeMoved.connect(self._handle_viewport_placement_node_moved)
         self._configure_map_studio_viewport_quality()
         self._ensure_embedded_viewport_toolbar_gap()
         self._marker_pick_filter_ids: set[int] = set()
@@ -130,11 +975,27 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._row_ids: list[str] = []
         self._placement_markers: dict[str, object] = {}
         self._placement_marker_geometry: object | None = None
+        self._pie_overlay_geometry: object | None = None
+        self._pie_active = False
+        self._pie_held_keys: set[int] = set()
+        self._pie_previous_hover: tuple[bool, str] | None = None
+        self._pie_previous_generic_hover: bool | None = None
+        self._pie_previous_viewcube_visible: bool | None = None
+        self._pie_previous_grid_visible: bool | None = None
+        self._pie_previous_gimbal_visible: bool | None = None
+        self._pie_previous_diagnostics_suppressed: object | None = None
+        self._pie_previous_clean_runtime_presentation: object | None = None
+        self._pie_camera_dragging = False
+        self._pie_camera_last_screen: tuple[float, float] | None = None
+        self._pie_free_look = False
         self._room_preview_model: object | None = None
         self._room_preview_model_key = ""
+        self._component_mesh_preview_baselines: dict[int, tuple[object, dict[str, object]]] = {}
         self._terrain_walkability_overlay: object | None = None
         self._universal_transform_overlay: object | None = None
         self._marker_drag: dict[str, object] | None = None
+        self._placement_context: dict[str, object] = {"enabled": False}
+        self._placement_previous_hover: tuple[bool, str] | None = None
         self._room_outline_point_drag: dict[str, object] | None = None
         self._room_outline_vertex_snap_candidates: dict[tuple[str, int], tuple[object, ...]] = {}
         self._vertex_snap_modifier_active = False
@@ -152,7 +1013,38 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "radius": 0,
             "hardness": 0.5,
         }
+        self._hover_probe_enabled = False
+        self._hover_component_mode = ""
+        self._hover_context = None
+        self._hover_candidate_cache_key = None
+        self._hover_candidate_cache: list = []
+        self._hover_candidate_grid: dict = {}
+        self._queued_hover_screen: tuple[float, float] | None = None
+        self._hover_refresh_deferred = False
+        self._generic_mesh_hover_before_map_studio: bool | None = None
+        self._hover_update_timer = QtCore.QTimer(self)
+        self._hover_update_timer.setSingleShot(True)
+        self._hover_update_timer.setInterval(16)
+        self._hover_update_timer.timeout.connect(self._flush_queued_map_studio_hover)
+        self._texture_paint_enabled = False
+        self._texture_paint_drag = None
+        self._texture_paint_previous_hover: tuple[bool, str] | None = None
+        self._project_texture_dirs: tuple[str, ...] = ()
         self._table_updating = False
+        for widget in (
+            self.bevel_width_spin,
+            self.bevel_segments_spin,
+            self.bevel_profile_spin,
+            self.bevel_miter_combo,
+            self.bevel_smoothing_spin,
+            self.bevel_uv_combo,
+            self.bevel_clamp_box,
+        ):
+            signal = getattr(widget, "valueChanged", None) or getattr(widget, "currentIndexChanged", None) or getattr(widget, "toggled", None)
+            if signal is not None:
+                signal.connect(self._update_component_bevel_options)
+        self.bevel_apply_button.clicked.connect(self._apply_component_bevel_from_options)
+        self.bevel_cancel_button.clicked.connect(lambda: self._disarm_component_bevel("Bevel cancelled."))
         self.terrain_brush_box.toggled.connect(self._toggle_terrain_brush_interaction)
         self.set_transform_gizmo_mode("translate", announce=False)
         self._sync_clean_viewport_presentation()
@@ -176,6 +1068,25 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         button.clicked.connect(lambda _checked=False, key=mode_key: self.set_transform_gizmo_mode(key))
         return button
 
+    def set_project_texture_paths(self, project: KMapProject) -> None:
+        """Refresh project texture search directories without touching the model."""
+
+        project_path = str(getattr(project, "path", "") or "").strip()
+        texture_dirs: list[str] = []
+        if project_path:
+            base = Path(project_path).parent
+            for texture in tuple(getattr(project, "textures", ()) or ()):
+                value = str(getattr(texture, "path", "") or "").strip()
+                if not value:
+                    continue
+                path = Path(value)
+                if not path.is_absolute():
+                    path = base / path
+                directory = str(path.parent.resolve())
+                if directory not in texture_dirs:
+                    texture_dirs.append(directory)
+        self._project_texture_dirs = tuple(texture_dirs)
+
     def set_project(
         self,
         project: KMapProject,
@@ -187,6 +1098,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         authored_terrain_walkability_overlay=None,
         authored_room_preview_model=None,
     ) -> None:
+        self._project_game = str(getattr(project, "game", "") or "").strip().upper()
+        self.set_project_texture_paths(project)
         self._table_updating = True
         try:
             self.scene_table.setRowCount(0)
@@ -200,6 +1113,14 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 for marker in authored_gameplay_markers or ()
                 if str(getattr(marker, "placement_id", "") or "")
             }
+            # Resolved placeables render as their real MDL and intentionally do
+            # not receive fallback marker geometry.  Keep their authored GIT
+            # row as the lightweight transform proxy so the real model remains
+            # draggable and focusable instead of becoming selection-only.
+            for placement in authored_gameplay_placements or ():
+                placement_id = str(getattr(placement, "placement_id", "") or "")
+                if placement_id and bool(getattr(placement, "is_spatial", True)):
+                    self._placement_markers.setdefault(placement_id, placement)
             for module in project.modules:
                 pos = module.transform.position
                 self._add_row("Module", module.module_name, module.module_id, pos, module.visible)
@@ -263,23 +1184,163 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 self.scene_table.selectRow(row)
                 self.scene_table.blockSignals(blocked)
                 break
+        self._sync_placement_transform_capabilities(str(item_id or ""))
+
+    def selected_gameplay_placement_id(self) -> str:
+        """Return the selected authored GIT instance, never a stale combo fallback."""
+
+        rows = self.scene_table.selectionModel().selectedRows() if self.scene_table.selectionModel() else []
+        if not rows:
+            return ""
+        row = rows[0].row()
+        item_id = self._row_ids[row] if 0 <= row < len(self._row_ids) else ""
+        return item_id if item_id in self._placement_markers else ""
+
+    def _sync_placement_transform_capabilities(self, item_id: str) -> None:
+        """Keep GIT instances on the transforms the game actually stores."""
+
+        is_placement = str(item_id or "") in self._placement_markers
+        preview_node = self._placement_preview_node(str(item_id or "")) if is_placement else None
+        selected_node = getattr(getattr(self.viewport, "_renderer", None), "selected_node", None)
+        set_selected_node = getattr(self.viewport, "set_selected_node", None)
+        if preview_node is not None and callable(set_selected_node):
+            marker = self._placement_markers.get(str(item_id or ""))
+            setattr(preview_node, "_gr_map_studio_git_placement", True)
+            # The bearing baked into the flattened meshes never changes while
+            # the node lives, so capture it once.  In-place transform commits
+            # keep the node alive across edits, and re-capturing from the
+            # (already committed) marker bearing here would corrupt the
+            # rotation-delta baseline.
+            if not hasattr(preview_node, "_gr_map_studio_authored_bearing"):
+                setattr(preview_node, "_gr_map_studio_authored_bearing", float(getattr(marker, "bearing", 0.0) or 0.0))
+            setattr(preview_node, "_gr_gizmo_world_position", tuple(getattr(preview_node, "position", (0.0, 0.0, 0.0))))
+            set_selected_node(preview_node)
+        elif selected_node is not None and bool(getattr(selected_node, "_gr_map_studio_git_placement", False)) and callable(set_selected_node):
+            set_selected_node(None)
+        scale_button = getattr(self, "scale_gizmo_button", None)
+        if scale_button is not None:
+            scale_button.setEnabled(not is_placement)
+            scale_button.setToolTip(
+                "KOTOR GIT instances store position and bearing only. Use Placeable Builder to create a scaled asset variant."
+                if is_placement
+                else "Scale authored room geometry. Shortcut: R."
+            )
+        if is_placement and self.transform_gizmo_mode() == "scale":
+            self.set_transform_gizmo_mode("translate", announce=False)
+            self.marker_summary_label.setText(
+                "Selected KOTOR placement: W moves and E rotates. Scaling requires a baked Placeable Builder asset variant."
+            )
+
+    def _placement_transform_gizmo_at_event(self, event: QtCore.QEvent) -> bool:
+        renderer = getattr(self.viewport, "_renderer", None)
+        node = getattr(renderer, "selected_node", None)
+        if node is None or not bool(getattr(node, "_gr_map_studio_git_placement", False)):
+            return False
+        position = self._event_position(event)
+        gizmo = getattr(self.viewport, "_transform_gizmo", None)
+        hit_test = getattr(gizmo, "hit_test", None)
+        if position is None or not callable(hit_test):
+            return False
+        try:
+            return bool(hit_test((int(position[0]), int(position[1])), self.viewport.camera))
+        except Exception:
+            return False
+
+    def _handle_viewport_placement_node_moved(self, node: object) -> None:
+        """Commit the real viewport gizmo's final transform to authored GIT state."""
+
+        placement_id = str(getattr(node, "_gr_map_studio_placement_id", "") or "")
+        marker = self._placement_markers.get(placement_id)
+        if marker is None or bool(getattr(node, "_gr_transform_previewing", False)):
+            return
+        gizmo_mode = str(getattr(getattr(self.viewport, "_transform_gizmo", None), "mode", "") or "").lower()
+        if "scale" in gizmo_mode:
+            self.marker_summary_label.setText(
+                "Scale was not applied: KOTOR GIT instances require a baked Placeable Builder asset variant."
+            )
+            node.position = self._marker_position(marker)
+            # Restore the delta from the baked mesh bearing, not identity:
+            # after an in-place transform commit the committed marker bearing
+            # can legitimately differ from the bearing baked at build time.
+            baked = float(getattr(node, "_gr_map_studio_authored_bearing", getattr(marker, "bearing", 0.0)) or 0.0)
+            half = (float(getattr(marker, "bearing", 0.0) or 0.0) - baked) * 0.5
+            node.rotation = (0.0, 0.0, math.sin(half), math.cos(half))
+            request = getattr(self.viewport, "_request_render", None)
+            if callable(request):
+                request()
+            return
+        position = tuple(float(value) for value in tuple(getattr(node, "position", self._marker_position(marker)))[:3])
+        rotation = tuple(float(value) for value in tuple(getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0)))[:4])
+        if len(position) < 3 or len(rotation) < 4:
+            return
+        x, y, z, w = rotation
+        delta_bearing = math.atan2(2.0 * ((w * z) + (x * y)), 1.0 - (2.0 * ((y * y) + (z * z))))
+        bearing = float(getattr(node, "_gr_map_studio_authored_bearing", getattr(marker, "bearing", 0.0)) or 0.0) + delta_bearing
+        self.transformEdited.emit(
+            placement_id,
+            LevelTransform(position=position, rotation=(0.0, 0.0, bearing), scale=(1.0, 1.0, 1.0)),
+        )
 
     def set_view_mode(self, mode: str) -> None:
         renderer = getattr(self.viewport, "_renderer", None)
         if renderer is None:
             return
         lower = mode.lower()
-        if "wire" in lower:
-            setattr(renderer, "wireframe", True)
-        if "textured" in lower:
-            setattr(renderer, "show_texture", True)
-        if "walkmesh" in lower and hasattr(self.viewport, "walkmesh_button"):
-            self.viewport.walkmesh_button.setChecked(True)
+        view_method = {
+            "perspective": "set_view_perspective",
+            "top": "set_view_top",
+            "front": "set_view_front",
+            "side": "set_view_right",
+        }.get(lower)
+        if view_method:
+            callback = getattr(self.viewport, view_method, None)
+            if callable(callback):
+                callback()
+            # Perspective/orthographic choices are camera changes, not shader
+            # modes.  Preserve the user's Lit/Albedo/etc. state instead of
+            # silently disabling slot-2 lightmaps when switching views.
+            request = getattr(self.viewport, "_request_render", None)
+            if callable(request):
+                request(fast=True, reason=f"Map Studio camera view: {mode}", hud=True)
+            return
+
+        wireframe = "wire" in lower
+        show_texture = lower not in {"wireframe"}
+        show_lightmap = "lightmap" in lower or lower == "lit"
+        lighting_mode = "unlit" if lower in {"albedo", "wireframe"} else ("lightmap_preview" if "lightmap" in lower else "scene")
+        for target in (renderer, getattr(self.viewport, "_gpu_renderer", None)):
+            if target is None:
+                continue
+            setattr(target, "show_solid", not wireframe)
+            setattr(target, "show_wireframe", wireframe)
+            setattr(target, "wireframe", wireframe)
+            setattr(target, "show_texture", show_texture)
+            setattr(target, "show_lightmap_map", show_lightmap)
+            setattr(target, "lightmap_mode", "baked" if show_lightmap else "disabled")
+            if show_lightmap:
+                setattr(target, "lightmap_intensity", 1.0)
+            setattr(target, "lighting_mode", lighting_mode)
+        if hasattr(self.viewport, "walkmesh_button"):
+            self.viewport.walkmesh_button.setChecked("walkmesh" in lower)
         request = getattr(self.viewport, "_request_render", None)
         if callable(request):
-            request()
+            request(fast=True, reason=f"Map Studio view mode: {mode}", resources=True, lighting=True, overlay=True, hud=True)
 
     def focus_selected(self) -> None:
+        selected_rows = self.scene_table.selectionModel().selectedRows() if self.scene_table.selectionModel() else []
+        if selected_rows:
+            row = selected_rows[0].row()
+            item_id = self._row_ids[row] if 0 <= row < len(self._row_ids) else ""
+            marker = self._placement_markers.get(item_id)
+            if marker is not None:
+                x, y, z = self._marker_position(marker)
+                camera = getattr(self.viewport, "camera", None)
+                if camera is not None and hasattr(camera, "frame_bounds"):
+                    camera.frame_bounds((x - 1.0, y - 1.0, z - 0.25), (x + 1.0, y + 1.0, z + 2.0))
+                    request = getattr(self.viewport, "_request_render", None)
+                    if callable(request):
+                        request()
+                    return
         if hasattr(self.viewport, "frame_all"):
             self.viewport.frame_all()
 
@@ -294,8 +1355,31 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:  # noqa: N802 - Qt API
         if self._is_marker_pick_event_source(watched):
             event_type = event.type()
+            # Qt may deliver child-attach/focus events while __init__ is still
+            # assembling the viewport.  PIE state is assigned later in that
+            # constructor, so this guard must be construction-safe.
+            if bool(getattr(self, "_pie_active", False)) and self._handle_pie_input_event(event, watched):
+                return True
+            if event_type == QtCore.QEvent.MouseButtonRelease and self._hover_refresh_deferred:
+                screen = self._event_position(event, watched)
+                if screen is not None:
+                    self._queued_hover_screen = screen
+                # The viewport clears _nav_dragging after this event filter
+                # returns.  A queued zero-delay flush therefore rebuilds the
+                # camera-dependent hover buckets once, on the release frame.
+                self._hover_update_timer.start(0)
+            if event_type in {QtCore.QEvent.DragEnter, QtCore.QEvent.DragMove, QtCore.QEvent.Drop}:
+                if self._handle_map_placement_drop_event(event, watched):
+                    return True
+            if event_type in {QtCore.QEvent.Leave, QtCore.QEvent.FocusOut}:
+                if self._texture_paint_drag is not None:
+                    self._cancel_texture_paint_drag()
+                self._clear_map_studio_hover()
             if event_type in {QtCore.QEvent.KeyPress, QtCore.QEvent.KeyRelease}:
                 key = getattr(event, "key", lambda: None)()
+                if event_type == QtCore.QEvent.KeyPress and key == QtCore.Qt.Key_Escape and self._texture_paint_drag is not None:
+                    self._cancel_texture_paint_drag()
+                    return True
                 if event_type == QtCore.QEvent.KeyPress and self._handle_map_studio_shortcut_key(event):
                     return True
                 if key == QtCore.Qt.Key_V:
@@ -327,10 +1411,34 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     focus = getattr(watched, "setFocus", None)
                     if callable(focus):
                         focus()
+                    if self._texture_paint_enabled and self._begin_texture_paint_drag(event):
+                        return True
+                    if self._component_bevel_armed is not None:
+                        if self._begin_component_bevel_drag(event):
+                            return True
+                    if self._component_extrude_armed is not None:
+                        if self._begin_component_extrude_drag(event):
+                            return True
+                    if self._place_from_viewport_event(event):
+                        return True
                     if self._terrain_brush_context_enabled():
                         terrain_sample = self._terrain_sample_at_event(event)
                         if terrain_sample is not None:
                             self._begin_terrain_brush_drag(terrain_sample, event)
+                        return True
+                    if self._placement_transform_gizmo_at_event(event):
+                        # The shared Maya-style gizmo commits through nodeMoved.
+                        # Returning False lets its handle drag run before the
+                        # model-body drag fallback below.
+                        return False
+                    # Prefer the depth-tested rendered model. Abstract overlay
+                    # markers are a fallback for unresolved templates only and
+                    # must never steal a click from visible foreground geometry.
+                    placement_id = self._rendered_placement_at_event(event)
+                    if placement_id:
+                        self.select_id(placement_id)
+                        self.itemSelected.emit(placement_id)
+                        self._begin_marker_drag(placement_id, event)
                         return True
                     placement_id = self._marker_at_event(event)
                     if placement_id:
@@ -338,18 +1446,64 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                         self.itemSelected.emit(placement_id)
                         self._begin_marker_drag(placement_id, event)
                         return True
-                    room_primitive = self._room_primitive_at_event(event)
-                    if room_primitive is not None:
-                        self._begin_room_primitive_drag(room_primitive, event)
-                        return True
-                    room_point = self._room_outline_point_at_event(event)
-                    if room_point is not None:
-                        self._begin_room_outline_point_drag(room_point, event)
-                        return True
-                    room_edge = self._room_outline_edge_at_event(event)
-                    if room_edge is not None:
-                        self._select_room_outline_edge(room_edge)
-                        return True
+                    if not self._hover_probe_enabled:
+                        # Outline/primitive hit zones only when GModeler is off:
+                        # in edit mode those zones stole clicks meant for faces.
+                        room_primitive = self._room_primitive_at_event(event)
+                        if room_primitive is not None:
+                            self._begin_room_primitive_drag(room_primitive, event)
+                            return True
+                        room_point = self._room_outline_point_at_event(event)
+                        if room_point is not None:
+                            self._begin_room_outline_point_drag(room_point, event)
+                            return True
+                        room_edge = self._room_outline_edge_at_event(event)
+                        if room_edge is not None:
+                            self._select_room_outline_edge(room_edge)
+                            return True
+                    modifiers = getattr(event, "modifiers", lambda: QtCore.Qt.NoModifier)()
+                    if bool(modifiers & QtCore.Qt.ControlModifier):
+                        return self._begin_map_studio_marquee(watched, event)
+                    # Plain click (press+release without drag) selects the
+                    # hovered room; recording only, so camera drags still work.
+                    position = self._event_position(event)
+                    if position is not None:
+                        self._map_studio_click_candidate = position
+            if event_type == QtCore.QEvent.MouseMove and self._texture_paint_drag is not None:
+                buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
+                if not (buttons & QtCore.Qt.LeftButton):
+                    return self._finish_texture_paint_drag(event)
+                return self._update_texture_paint_drag(event)
+            if (
+                event_type == QtCore.QEvent.MouseButtonRelease
+                and getattr(event, "button", lambda: None)() == QtCore.Qt.LeftButton
+                and self._texture_paint_drag is not None
+            ):
+                return self._finish_texture_paint_drag(event)
+            if event_type == QtCore.QEvent.MouseMove and self._component_bevel_drag is not None:
+                buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
+                if not (buttons & QtCore.Qt.LeftButton):
+                    return self._finish_component_bevel_drag(event)
+                self._update_component_bevel_drag(event)
+                return True
+            if (
+                event_type == QtCore.QEvent.MouseButtonRelease
+                and getattr(event, "button", lambda: None)() == QtCore.Qt.LeftButton
+                and self._component_bevel_drag is not None
+            ):
+                return self._finish_component_bevel_drag(event)
+            if event_type == QtCore.QEvent.MouseMove and self._component_extrude_drag is not None:
+                buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
+                if not (buttons & QtCore.Qt.LeftButton):
+                    return self._finish_component_extrude_drag(event)
+                self._update_component_extrude_drag(event)
+                return True
+            if (
+                event_type == QtCore.QEvent.MouseButtonRelease
+                and getattr(event, "button", lambda: None)() == QtCore.Qt.LeftButton
+                and self._component_extrude_drag is not None
+            ):
+                return self._finish_component_extrude_drag(event)
             if event_type == QtCore.QEvent.MouseMove and self._marker_drag is not None:
                 buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
                 if not (buttons & QtCore.Qt.LeftButton):
@@ -380,6 +1534,50 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     return self._finish_terrain_brush_drag(event)
                 self._update_terrain_brush_drag(event)
                 return True
+            if event_type == QtCore.QEvent.MouseMove and self._map_studio_marquee is not None:
+                self._update_map_studio_marquee(event)
+                return True
+            if event_type == QtCore.QEvent.MouseMove and getattr(self, "_map_studio_click_candidate", None) is not None:
+                position = self._event_position(event)
+                if position is not None:
+                    start = self._map_studio_click_candidate
+                    if abs(position[0] - start[0]) > 6.0 or abs(position[1] - start[1]) > 6.0:
+                        self._map_studio_click_candidate = None
+                        # Plain LMB drag over the canvas becomes a rubber-band
+                        # selection (3ds Max / Unreal select-tool convention);
+                        # Ctrl+drag keeps working.  Never steal live gestures,
+                        # terrain strokes, placement drops, or component edits.
+                        buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
+                        if (
+                            (buttons & QtCore.Qt.LeftButton)
+                            and isinstance(watched, QtWidgets.QWidget)
+                            and self._marker_drag is None
+                            and self._room_primitive_drag is None
+                            and self._room_outline_point_drag is None
+                            and self._component_extrude_drag is None
+                            and self._component_bevel_drag is None
+                            and not self._terrain_brush_context_enabled()
+                            and not bool(self._placement_context.get("enabled", False))
+                            and str(getattr(self, "_hover_component_mode", "object") or "object") == "object"
+                        ):
+                            origin = QtCore.QPoint(int(start[0]), int(start[1]))
+                            band = QtWidgets.QRubberBand(QtWidgets.QRubberBand.Rectangle, watched)
+                            band.setGeometry(QtCore.QRect(origin, QtCore.QSize(1, 1)))
+                            band.show()
+                            self._map_studio_marquee = {"origin": origin, "band": band, "widget": watched}
+                            self._update_map_studio_marquee(event)
+                            return True
+            if event_type == QtCore.QEvent.MouseButtonRelease and self._map_studio_marquee is not None:
+                return self._finish_map_studio_marquee(event)
+            if (
+                event_type == QtCore.QEvent.MouseButtonRelease
+                and getattr(event, "button", lambda: None)() == QtCore.Qt.LeftButton
+                and getattr(self, "_map_studio_click_candidate", None) is not None
+            ):
+                self._map_studio_click_candidate = None
+                self._emit_map_studio_room_click(event)
+            if event_type == QtCore.QEvent.MouseMove and self._hover_probe_enabled:
+                self._queue_map_studio_hover(event, watched=watched)
             if event_type == QtCore.QEvent.MouseMove and self._terrain_brush_context_enabled():
                 buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
                 if buttons & QtCore.Qt.LeftButton:
@@ -463,9 +1661,82 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 candidate.installEventFilter(self)
                 if hasattr(candidate, "setFocusPolicy"):
                     candidate.setFocusPolicy(QtCore.Qt.StrongFocus)
+                if hasattr(candidate, "setAcceptDrops"):
+                    candidate.setAcceptDrops(True)
             except Exception:
                 continue
             self._marker_pick_filter_ids.add(key)
+
+    @classmethod
+    def _map_placement_drop_payload(cls, event: QtCore.QEvent) -> dict[str, object] | None:
+        mime_data = getattr(event, "mimeData", lambda: None)()
+        if mime_data is None or not mime_data.hasFormat(cls.MAP_PLACEMENT_MIME_TYPE):
+            return None
+        try:
+            raw = bytes(mime_data.data(cls.MAP_PLACEMENT_MIME_TYPE)).decode("utf-8")
+            payload = json.loads(raw)
+        except (TypeError, ValueError, UnicodeDecodeError, json.JSONDecodeError):
+            return None
+        if not isinstance(payload, dict):
+            return None
+        if str(payload.get("schema") or "") != cls.MAP_PLACEMENT_PAYLOAD_SCHEMA:
+            return None
+        kind = str(payload.get("kind", "") or "").strip().lower()
+        template_resref = str(payload.get("template_resref", "") or "").strip()
+        if not kind or (kind != "camera" and not template_resref):
+            return None
+        return payload
+
+    def _handle_map_placement_drop_event(
+        self,
+        event: QtCore.QEvent,
+        watched: QtCore.QObject | None = None,
+    ) -> bool:
+        """Accept a Placeables-browser drag and create one surface-snapped GIT instance."""
+
+        payload = self._map_placement_drop_payload(event)
+        if payload is None:
+            return False
+        event_type = event.type()
+        payload_game = str(payload.get("game") or "").strip().upper()
+        project_game = str(getattr(self, "_project_game", "") or "").strip().upper()
+        if payload_game and project_game and payload_game != project_game:
+            getattr(event, "ignore", lambda: None)()
+            self.marker_summary_label.setText(
+                f"Cannot place {payload_game} content in a {project_game} map. Choose the matching game resource."
+            )
+            return True
+        self._update_map_studio_hover(event, force=True, watched=watched)
+        context = self._hover_context
+        world_point = tuple(getattr(context, "world_point", ()) or ()) if context is not None else ()
+        valid_surface = bool(context is not None and getattr(context, "is_hit", False) and len(world_point) >= 3)
+        if event_type in {QtCore.QEvent.DragEnter, QtCore.QEvent.DragMove}:
+            if valid_surface:
+                getattr(event, "acceptProposedAction", lambda: None)()
+                template = str(payload.get("template_resref", "") or payload.get("kind", "object"))
+                self.marker_summary_label.setText(f"Drop {template} on this visible surface.")
+            else:
+                getattr(event, "ignore", lambda: None)()
+                self.marker_summary_label.setText("Drag the asset over a visible room, terrain, or walkmesh surface.")
+            return True
+        if event_type != QtCore.QEvent.Drop:
+            return False
+        if not valid_surface:
+            getattr(event, "ignore", lambda: None)()
+            self.marker_summary_label.setText("Placeable drop cancelled: no visible level surface was under the cursor.")
+            return True
+        request = {
+            **payload,
+            "enabled": False,
+            "position": tuple(float(value) for value in world_point[:3]),
+            "room_resref": str(getattr(context, "room_resref", "") or ""),
+            "surface_role": str(getattr(context, "mesh_role", "") or ""),
+            "walkable_hit": getattr(context, "walkable", None),
+            "keep_placing": False,
+        }
+        self.placementRequested.emit(request)
+        getattr(event, "acceptProposedAction", lambda: None)()
+        return True
 
     def _is_marker_pick_event_source(self, watched: QtCore.QObject) -> bool:
         canvas = getattr(self.viewport, "canvas", None)
@@ -488,6 +1759,258 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         """Allow the embedded shared viewport to delegate Map Studio-only input first."""
 
         return bool(self.eventFilter(watched or getattr(self.viewport, "canvas", None), event))
+
+    def _cancel_map_studio_selection_marquees(self) -> None:
+        """Remove authoring rubber bands before PIE owns pointer input."""
+
+        state = self._map_studio_marquee
+        self._map_studio_marquee = None
+        if isinstance(state, dict):
+            band = state.get("band")
+            if band is not None:
+                band.hide()
+                band.deleteLater()
+        cancel_viewport_marquee = getattr(self.viewport, "cancel_selection_marquee", None)
+        if callable(cancel_viewport_marquee):
+            cancel_viewport_marquee()
+        else:
+            band = getattr(self.viewport, "_selection_rubber_band", None)
+            if band is not None:
+                band.hide()
+        self._map_studio_click_candidate = None
+
+    def set_map_studio_pie_active(self, active: bool) -> None:
+        """Give runtime navigation input precedence without mutating KMAP state."""
+
+        wanted = bool(active)
+        if wanted == bool(self._pie_active):
+            return
+        self._pie_active = wanted
+        self._pie_held_keys.clear()
+        self._pie_camera_dragging = False
+        self._pie_camera_last_screen = None
+        self._pie_free_look = False
+        self._map_studio_click_candidate = None
+        if wanted:
+            self._cancel_map_studio_selection_marquees()
+            self._pie_previous_hover = (bool(self._hover_probe_enabled), str(self._hover_component_mode or ""))
+            self._pie_previous_generic_hover = bool(getattr(self.viewport, "mesh_hover_enabled", True))
+            # PIE only needs a WOK pick when the user clicks.  Continuous
+            # GModeler hover rebuilt the camera-dependent face grid and the
+            # legacy QPixmap overlay on every pointer move, competing with the
+            # native renderer.  Keep walkmesh-only candidates but do not emit a
+            # hover highlight while simulation owns the viewport.
+            self.set_map_studio_hover_probe(False, "walkmesh")
+            set_generic_hover = getattr(self.viewport, "set_mesh_hover_enabled", None)
+            if callable(set_generic_hover):
+                set_generic_hover(False)
+            self._pie_previous_viewcube_visible = bool(
+                getattr(self.viewport, "viewcube_chrome_visible", True)
+            )
+            self._pie_previous_grid_visible = bool(
+                getattr(getattr(self.viewport, "_renderer", None), "show_grid", True)
+            )
+            ensure_gimbal = getattr(self.viewport, "_ensure_renderer_gimbal_state", None)
+            self._pie_previous_gimbal_visible = bool(ensure_gimbal()) if callable(ensure_gimbal) else None
+            self._pie_previous_diagnostics_suppressed = self.viewport.property(
+                "_gr_suppress_renderer_diagnostics"
+            )
+            self._pie_previous_clean_runtime_presentation = self.viewport.property(
+                "_gr_map_studio_pie_clean_runtime"
+            )
+            # This is a presentation-only switch.  Renderer submission derives
+            # effective helper/selection visibility from it without mutating
+            # the user's authoring toggles or the authored KMAP payload.
+            self.viewport.setProperty("_gr_map_studio_pie_clean_runtime", True)
+            set_chrome = getattr(self.viewport, "set_viewport_chrome_visible", None)
+            if callable(set_chrome):
+                set_chrome(viewcube=False)
+            toggle_grid = getattr(self.viewport, "toggle_grid", None)
+            if callable(toggle_grid):
+                toggle_grid(False)
+            set_gimbal = getattr(self.viewport, "_set_renderer_gimbal_visible", None)
+            if callable(set_gimbal):
+                set_gimbal(False)
+            self.viewport.setProperty("_gr_suppress_renderer_diagnostics", True)
+            clear_diagnostics = getattr(getattr(self.viewport, "canvas", None), "clear_diagnostics_text", None)
+            if callable(clear_diagnostics):
+                clear_diagnostics()
+            suppress = getattr(self.viewport, "set_live_surface_overlay_suppressed", None)
+            if callable(suppress):
+                suppress(True)
+            self._sync_marker_geometry_overlay()
+            self.marker_summary_label.setText(
+                "Simulation — not KOTOR proof | W/S move, Z/C strafe, A/D turn, Ctrl/MMB look, Caps Lock free-look; Esc stops."
+            )
+        else:
+            self.pieMoveInputChanged.emit({"forward": 0.0, "strafe": 0.0, "run": False})
+            previous = self._pie_previous_hover or (False, "")
+            self._pie_previous_hover = None
+            self.set_map_studio_hover_probe(previous[0], previous[1])
+            set_generic_hover = getattr(self.viewport, "set_mesh_hover_enabled", None)
+            if callable(set_generic_hover) and self._pie_previous_generic_hover is not None:
+                set_generic_hover(self._pie_previous_generic_hover)
+            self._pie_previous_generic_hover = None
+            set_chrome = getattr(self.viewport, "set_viewport_chrome_visible", None)
+            if callable(set_chrome) and self._pie_previous_viewcube_visible is not None:
+                set_chrome(viewcube=self._pie_previous_viewcube_visible)
+            toggle_grid = getattr(self.viewport, "toggle_grid", None)
+            if callable(toggle_grid) and self._pie_previous_grid_visible is not None:
+                toggle_grid(self._pie_previous_grid_visible)
+            set_gimbal = getattr(self.viewport, "_set_renderer_gimbal_visible", None)
+            if callable(set_gimbal) and self._pie_previous_gimbal_visible is not None:
+                set_gimbal(self._pie_previous_gimbal_visible)
+            self.viewport.setProperty(
+                "_gr_suppress_renderer_diagnostics",
+                self._pie_previous_diagnostics_suppressed,
+            )
+            self.viewport.setProperty(
+                "_gr_map_studio_pie_clean_runtime",
+                self._pie_previous_clean_runtime_presentation,
+            )
+            self._pie_previous_viewcube_visible = None
+            self._pie_previous_grid_visible = None
+            self._pie_previous_gimbal_visible = None
+            self._pie_previous_diagnostics_suppressed = None
+            self._pie_previous_clean_runtime_presentation = None
+            suppress = getattr(self.viewport, "set_live_surface_overlay_suppressed", None)
+            if callable(suppress):
+                suppress(False)
+            self._pie_overlay_geometry = None
+            self._sync_marker_geometry_overlay()
+            self._restore_marker_summary_after_transform_snap()
+        self._install_marker_pick_filters()
+
+    def set_map_studio_pie_overlay(self, geometry: object | None) -> None:
+        """Replace only transient PIE guides; never reload the resident model."""
+
+        if geometry == self._pie_overlay_geometry:
+            return
+        self._pie_overlay_geometry = geometry
+        self._sync_marker_geometry_overlay()
+
+    def _map_studio_pie_destination_at_screen(self, screen: tuple[float, float]) -> tuple[float, float, float] | None:
+        """Pick one walkable WOK point without changing authoring hover state."""
+
+        self._cached_map_studio_hover_candidates(screen)
+        context = pick_map_studio_hover_context(
+            self._map_studio_hover_candidates_near(screen[0], screen[1]),
+            screen[0],
+            screen[1],
+            tolerance_px=0.0,
+            prefer_walkmesh=True,
+        )
+        point = tuple(getattr(context, "world_point", ()) or ())
+        if not bool(getattr(context, "is_hit", False)) or getattr(context, "walkable", None) is not True or len(point) < 3:
+            return None
+        return tuple(float(value) for value in point[:3])
+
+    def _emit_pie_move_input(self) -> None:
+        keys = self._pie_held_keys
+        self.pieMoveInputChanged.emit(
+            {
+                "forward": float((QtCore.Qt.Key_W in keys) - (QtCore.Qt.Key_S in keys)),
+                "strafe": float((QtCore.Qt.Key_C in keys) - (QtCore.Qt.Key_Z in keys)),
+                "camera_turn": float((QtCore.Qt.Key_D in keys) - (QtCore.Qt.Key_A in keys)),
+                "run": bool(QtCore.Qt.Key_Shift in keys),
+            }
+        )
+
+    def _handle_pie_input_event(self, event: QtCore.QEvent, watched: QtCore.QObject | None = None) -> bool:
+        event_type = event.type()
+        if event_type in {QtCore.QEvent.Leave, QtCore.QEvent.FocusOut}:
+            if self._pie_held_keys:
+                self._pie_held_keys.clear()
+                self._emit_pie_move_input()
+            self._pie_camera_dragging = False
+            self._pie_camera_last_screen = None
+            return False
+        if event_type in {QtCore.QEvent.KeyPress, QtCore.QEvent.KeyRelease}:
+            key = getattr(event, "key", lambda: None)()
+            if event_type == QtCore.QEvent.KeyPress and key == QtCore.Qt.Key_Escape:
+                self.pieStopRequested.emit()
+                return True
+            if event_type == QtCore.QEvent.KeyPress and key == QtCore.Qt.Key_CapsLock:
+                if not bool(getattr(event, "isAutoRepeat", lambda: False)()):
+                    self._pie_free_look = not self._pie_free_look
+                    self._pie_camera_last_screen = None
+                    state = "on" if self._pie_free_look else "off"
+                    self.marker_summary_label.setText(f"Simulation KOTOR-style free-look {state} (Caps Lock).")
+                return True
+            if key in {
+                QtCore.Qt.Key_W,
+                QtCore.Qt.Key_S,
+                QtCore.Qt.Key_Z,
+                QtCore.Qt.Key_C,
+                QtCore.Qt.Key_A,
+                QtCore.Qt.Key_D,
+                QtCore.Qt.Key_Shift,
+                QtCore.Qt.Key_Control,
+            }:
+                if bool(getattr(event, "isAutoRepeat", lambda: False)()):
+                    return True
+                if event_type == QtCore.QEvent.KeyPress:
+                    self._pie_held_keys.add(key)
+                else:
+                    self._pie_held_keys.discard(key)
+                self._emit_pie_move_input()
+                return True
+            # Editing shortcuts are suspended during simulation.
+            return event_type == QtCore.QEvent.KeyPress
+        if event_type == QtCore.QEvent.MouseButtonPress:
+            button = getattr(event, "button", lambda: None)()
+            if button in {QtCore.Qt.MiddleButton, QtCore.Qt.RightButton}:
+                focus = getattr(watched, "setFocus", None)
+                if callable(focus):
+                    focus()
+                self._pie_camera_dragging = True
+                self._pie_camera_last_screen = self._event_position(event, watched)
+                return True
+            if button == QtCore.Qt.LeftButton:
+                if self._map_studio_hover_navigation_active(event):
+                    return False
+                focus = getattr(watched, "setFocus", None)
+                if callable(focus):
+                    focus()
+                screen = self._event_position(event, watched)
+                point = self._map_studio_pie_destination_at_screen(screen) if screen is not None else None
+                if point is not None:
+                    self.pieDestinationRequested.emit(point)
+                else:
+                    self.marker_summary_label.setText(
+                        "Simulation destination rejected: click a walkable floor face."
+                    )
+                return True
+        if event_type == QtCore.QEvent.MouseButtonRelease:
+            button = getattr(event, "button", lambda: None)()
+            if button in {QtCore.Qt.MiddleButton, QtCore.Qt.RightButton}:
+                self._pie_camera_dragging = False
+                self._pie_camera_last_screen = None
+                return True
+            if button == QtCore.Qt.LeftButton:
+                return True
+        modifiers = getattr(event, "modifiers", lambda: QtCore.Qt.NoModifier)()
+        look_about = bool(modifiers & QtCore.Qt.ControlModifier)
+        if event_type == QtCore.QEvent.MouseMove and (
+            self._pie_camera_dragging or self._pie_free_look or look_about
+        ):
+            screen = self._event_position(event, watched)
+            previous = self._pie_camera_last_screen
+            self._pie_camera_last_screen = screen
+            if screen is not None and previous is not None:
+                self.pieCameraInputChanged.emit(
+                    {
+                        "orbit_x": float(screen[0] - previous[0]),
+                        "orbit_y": float(screen[1] - previous[1]),
+                    }
+                )
+            return True
+        if event_type == QtCore.QEvent.Wheel:
+            # Retail KOTOR's documented DEFAULT controls do not expose follow-
+            # camera wheel zoom. Consume the event so the authoring ArcBall
+            # handler cannot silently introduce a non-game camera gesture.
+            return True
+        return False
 
     def _marker_at_event(self, event: QtCore.QEvent) -> str:
         marker_at_screen = getattr(self.viewport, "map_studio_marker_at_screen", None)
@@ -600,6 +2123,89 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._sync_terrain_walkability_overlay(authored_terrain_walkability_overlay)
         self._sync_clean_viewport_presentation()
 
+    def apply_terrain_height_patch(
+        self,
+        room_resref: str,
+        region: object,
+        patch: object,
+        *,
+        row_count: int,
+        column_count: int,
+    ) -> bool:
+        """Upload one dirty height rectangle to the live terrain mesh."""
+
+        if region is None:
+            return False
+        min_row = int(getattr(region, "min_row", 0))
+        max_row = int(getattr(region, "max_row", -1))
+        min_column = int(getattr(region, "min_column", 0))
+        max_column = int(getattr(region, "max_column", -1))
+        rows = tuple(tuple(float(value) for value in row) for row in tuple(patch or ()))
+        if max_row < min_row or max_column < min_column or not rows:
+            return False
+        expected_vertices = int(row_count) * int(column_count)
+        for _room_node, node in self._iter_room_preview_mesh_nodes(room_resref):
+            name = str(getattr(node, "_gr_map_studio_primitive_name", "") or getattr(node, "name", "") or "")
+            vertices = list(getattr(node, "vertices", ()) or ())
+            if not name.endswith("_terrain") or len(vertices) != expected_vertices:
+                continue
+            for patch_row, row_index in enumerate(range(min_row, max_row + 1)):
+                if patch_row >= len(rows):
+                    break
+                values = rows[patch_row]
+                for patch_column, column_index in enumerate(range(min_column, max_column + 1)):
+                    if patch_column >= len(values):
+                        break
+                    vertex_index = row_index * int(column_count) + column_index
+                    x, y, _z = vertices[vertex_index]
+                    vertices[vertex_index] = (float(x), float(y), float(values[patch_column]))
+            normals = list(getattr(node, "normals", ()) or ())
+            if len(normals) != expected_vertices:
+                normals = [(0.0, 0.0, 1.0)] * expected_vertices
+            dx = (
+                abs(float(vertices[1][0]) - float(vertices[0][0]))
+                if int(column_count) > 1
+                else 1.0
+            )
+            dy = (
+                abs(float(vertices[int(column_count)][1]) - float(vertices[0][1]))
+                if int(row_count) > 1
+                else 1.0
+            )
+            for row_index in range(max(0, min_row), min(int(row_count) - 1, max_row) + 1):
+                for column_index in range(max(0, min_column), min(int(column_count) - 1, max_column) + 1):
+                    left_column = max(0, column_index - 1)
+                    right_column = min(int(column_count) - 1, column_index + 1)
+                    south_row = max(0, row_index - 1)
+                    north_row = min(int(row_count) - 1, row_index + 1)
+                    left = float(vertices[row_index * int(column_count) + left_column][2])
+                    right = float(vertices[row_index * int(column_count) + right_column][2])
+                    south = float(vertices[south_row * int(column_count) + column_index][2])
+                    north = float(vertices[north_row * int(column_count) + column_index][2])
+                    span_x = dx * max(1, right_column - left_column)
+                    span_y = dy * max(1, north_row - south_row)
+                    slope_x = (right - left) / max(1.0e-6, span_x)
+                    slope_y = (north - south) / max(1.0e-6, span_y)
+                    length = math.sqrt(slope_x * slope_x + slope_y * slope_y + 1.0)
+                    normals[row_index * int(column_count) + column_index] = (
+                        -slope_x / length,
+                        -slope_y / length,
+                        1.0 / length,
+                    )
+            node.vertices = vertices
+            node.normals = normals
+            compute_bounds = getattr(node, "compute_bounds", None)
+            if callable(compute_bounds):
+                compute_bounds()
+            invalidate = getattr(self.viewport, "_evict_transform_cache", None)
+            if callable(invalidate):
+                invalidate(node)
+            request = getattr(self.viewport, "_request_render", None)
+            if callable(request):
+                request(fast=True, reason="Map Studio terrain dirty patch", resources=True, overlay=False, hud=True)
+            return True
+        return False
+
     def set_universal_transform_overlay(self, overlay=None) -> None:
         """Refresh the Universal Manipulator overlay for the selected primitive."""
 
@@ -624,6 +2230,840 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             and int(context.get("row_count", 0) or 0) > 1
             and int(context.get("column_count", 0) or 0) > 1
         )
+
+    def set_map_studio_hover_probe(self, enabled: bool, component_mode: str = "") -> None:
+        """Enable or disable the read-only Map Studio hover picker."""
+
+        was_enabled = bool(self._hover_probe_enabled)
+        self._hover_probe_enabled = bool(enabled)
+        self._hover_component_mode = str(component_mode or "").strip().lower()
+        set_generic_hover = getattr(self.viewport, "set_mesh_hover_enabled", None)
+        if self._hover_probe_enabled and not was_enabled:
+            self._generic_mesh_hover_before_map_studio = bool(
+                getattr(self.viewport, "mesh_hover_enabled", True)
+            )
+            if callable(set_generic_hover):
+                # GModeler owns the orange component hover.  Running the
+                # generic whole-mesh CPU picker as well projected every vertex
+                # a second time (about 57 ms/move on 207tel) and could replace
+                # the nearest face with an unrelated behind-object outline.
+                set_generic_hover(False)
+        if not self._hover_probe_enabled:
+            self._hover_update_timer.stop()
+            self._queued_hover_screen = None
+            self._hover_refresh_deferred = False
+            self._clear_map_studio_hover()
+            if was_enabled and callable(set_generic_hover):
+                set_generic_hover(
+                    True
+                    if self._generic_mesh_hover_before_map_studio is None
+                    else self._generic_mesh_hover_before_map_studio
+                )
+            self._generic_mesh_hover_before_map_studio = None
+        # Overlay visibility depends on whether GModeler owns the viewport.
+        self._sync_clean_viewport_presentation()
+
+    def _map_studio_hover_navigation_active(self, event: QtCore.QEvent | None = None) -> bool:
+        """Return whether the pointer event is driving viewport navigation."""
+
+        if bool(getattr(self.viewport, "_nav_dragging", "")):
+            return True
+        if event is None:
+            return False
+        buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
+        modifiers = getattr(event, "modifiers", lambda: QtCore.Qt.NoModifier)()
+        action_for_buttons = getattr(self.viewport, "_navigation_action_for_buttons", None)
+        if not callable(action_for_buttons):
+            return False
+        try:
+            action, _button = action_for_buttons(buttons, modifiers)
+            return bool(action)
+        except Exception:
+            return False
+
+    def _queue_map_studio_hover(
+        self,
+        event: QtCore.QEvent,
+        *,
+        watched: QtCore.QObject | None = None,
+    ) -> None:
+        """Coalesce GModeler hover work and defer it throughout camera drags."""
+
+        screen = self._event_position(event, watched)
+        if screen is None:
+            self._clear_map_studio_hover()
+            return
+        self._queued_hover_screen = screen
+        if self._map_studio_hover_navigation_active(event):
+            if not self._hover_refresh_deferred:
+                # The old orange polygon is now in the wrong camera space.
+                # Clear it once instead of redrawing stale geometry each delta.
+                self._clear_map_studio_hover()
+            self._hover_refresh_deferred = True
+            self._hover_update_timer.stop()
+            return
+        self._hover_refresh_deferred = False
+        if not self._hover_update_timer.isActive():
+            self._hover_update_timer.start(16)
+
+    def _flush_queued_map_studio_hover(self) -> None:
+        """Refresh exactly the latest queued pointer after navigation/idle."""
+
+        if not self._hover_probe_enabled:
+            self._queued_hover_screen = None
+            self._hover_refresh_deferred = False
+            return
+        if bool(getattr(self.viewport, "_nav_dragging", "")):
+            self._hover_refresh_deferred = True
+            self._hover_update_timer.start(16)
+            return
+        screen = self._queued_hover_screen
+        self._queued_hover_screen = None
+        self._hover_refresh_deferred = False
+        if screen is not None:
+            self._update_map_studio_hover_at_screen(screen)
+
+    def set_texture_paint_interaction(self, enabled: bool) -> None:
+        """Route LMB drags to diffuse-UV paint samples on visible render faces."""
+
+        wanted = bool(enabled)
+        if wanted == bool(self._texture_paint_enabled):
+            return
+        if wanted:
+            self._texture_paint_previous_hover = (
+                bool(self._hover_probe_enabled),
+                str(self._hover_component_mode or ""),
+            )
+            self._texture_paint_enabled = True
+            # Object tolerance returns a whole face while retaining the same
+            # depth-correct, perspective-correct UV hit contract.
+            self.set_map_studio_hover_probe(True, "object")
+            self.marker_summary_label.setText(
+                "Texture Paint: drag LMB on the nearest visible face; Esc cancels the current stroke."
+            )
+            self._install_marker_pick_filters()
+            return
+        if self._texture_paint_drag is not None:
+            self._cancel_texture_paint_drag()
+        self._texture_paint_enabled = False
+        previous = self._texture_paint_previous_hover or (False, "")
+        self._texture_paint_previous_hover = None
+        self.set_map_studio_hover_probe(previous[0], previous[1])
+
+    @staticmethod
+    def _texture_paint_pressure(event: QtCore.QEvent) -> float:
+        try:
+            value = float(event.pressure())
+        except Exception:
+            value = 1.0
+        return max(0.0, min(1.0, value))
+
+    def _texture_paint_payload_at_event(self, event: QtCore.QEvent) -> dict[str, object] | None:
+        self._update_map_studio_hover(event)
+        context = self._hover_context
+        if context is None or str(getattr(context, "component_type", "") or "") != "face":
+            return None
+        uv = tuple(getattr(context, "uv", ()) or ())
+        if len(uv) < 2:
+            return None
+        return {
+            "context": context,
+            "uv": (float(uv[0]), float(uv[1])),
+            "pressure": self._texture_paint_pressure(event),
+        }
+
+    def _begin_texture_paint_drag(self, event: QtCore.QEvent) -> bool:
+        payload = self._texture_paint_payload_at_event(event)
+        if payload is None:
+            self.marker_summary_label.setText("Texture Paint needs a visible render face with diffuse UV0.")
+            return True
+        self._texture_paint_drag = {"started": True}
+        self.texturePaintStrokeBegan.emit(payload)
+        self.texturePaintSampleRequested.emit(payload)
+        return True
+
+    def _update_texture_paint_drag(self, event: QtCore.QEvent) -> bool:
+        payload = self._texture_paint_payload_at_event(event)
+        if payload is not None:
+            self.texturePaintSampleRequested.emit(payload)
+        return True
+
+    def _finish_texture_paint_drag(self, event: QtCore.QEvent | None = None) -> bool:
+        if self._texture_paint_drag is None:
+            return False
+        if event is not None:
+            payload = self._texture_paint_payload_at_event(event)
+            if payload is not None:
+                self.texturePaintSampleRequested.emit(payload)
+        self._texture_paint_drag = None
+        self.texturePaintStrokeCommitted.emit()
+        return True
+
+    def _cancel_texture_paint_drag(self) -> None:
+        if self._texture_paint_drag is None:
+            return
+        self._texture_paint_drag = None
+        self.texturePaintStrokeCancelled.emit()
+
+    def current_map_studio_hover_context(self):
+        """Return the most recent hover classification (read-only)."""
+
+        return self._hover_context
+
+    def set_placement_tool_context(self, context: object | None = None) -> None:
+        """Arm or disarm direct asset placement in the authored level viewport."""
+
+        values = dict(context) if isinstance(context, dict) else {}
+        enabled = bool(values.get("enabled", False))
+        was_enabled = bool(self._placement_context.get("enabled", False))
+        self._placement_context = {**values, "enabled": enabled}
+        if enabled and not was_enabled:
+            self._placement_previous_hover = (bool(self._hover_probe_enabled), str(self._hover_component_mode or ""))
+            self.set_map_studio_hover_probe(True, "")
+        elif not enabled and was_enabled:
+            previous = self._placement_previous_hover or (False, "")
+            self._placement_previous_hover = None
+            self.set_map_studio_hover_probe(previous[0], previous[1])
+        if enabled:
+            template = str(values.get("template_resref", "") or "camera")
+            snap_state = "on" if values.get("snap_to_walkmesh", True) else "off"
+            self.marker_summary_label.setText(
+                f"Placing {template}: click a visible level surface. Walkmesh snap is {snap_state}; Esc cancels."
+            )
+        else:
+            self._restore_marker_summary_after_transform_snap()
+
+    def placement_tool_context(self) -> dict[str, object]:
+        return dict(self._placement_context)
+
+    def _place_from_viewport_event(self, event: QtCore.QEvent) -> bool:
+        if not bool(self._placement_context.get("enabled", False)):
+            return False
+        self._update_map_studio_hover(event)
+        context = self._hover_context
+        world_point = tuple(getattr(context, "world_point", ()) or ()) if context is not None else ()
+        if context is None or not bool(getattr(context, "is_hit", False)) or len(world_point) < 3:
+            self.marker_summary_label.setText(
+                "Placement needs a visible room, floor, terrain, or walkmesh surface under the cursor."
+            )
+            return True
+        payload = {
+            **self._placement_context,
+            "position": tuple(float(value) for value in world_point[:3]),
+            "room_resref": str(getattr(context, "room_resref", "") or ""),
+            "surface_role": str(getattr(context, "mesh_role", "") or ""),
+            "walkable_hit": getattr(context, "walkable", None),
+        }
+        self.placementRequested.emit(payload)
+        if not bool(self._placement_context.get("keep_placing", True)):
+            self.set_placement_tool_context({"enabled": False})
+            self.placementModeExited.emit()
+        return True
+
+    def _begin_map_studio_marquee(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        """Start a rubber-band selection over the viewport canvas.
+
+        Ctrl+LMB starts immediately; a plain LMB press promotes to this
+        marquee once the pointer drags past the click threshold.
+        """
+
+        position = self._event_position(event)
+        widget = watched if isinstance(watched, QtWidgets.QWidget) else None
+        if position is None or widget is None:
+            return False
+        origin = QtCore.QPoint(int(position[0]), int(position[1]))
+        band = QtWidgets.QRubberBand(QtWidgets.QRubberBand.Rectangle, widget)
+        band.setGeometry(QtCore.QRect(origin, QtCore.QSize(1, 1)))
+        band.show()
+        self._map_studio_marquee = {"origin": origin, "band": band, "widget": widget}
+        return True
+
+    def _update_map_studio_marquee(self, event: QtCore.QEvent) -> None:
+        state = self._map_studio_marquee
+        position = self._event_position(event)
+        if state is None or position is None:
+            return
+        current = QtCore.QPoint(int(position[0]), int(position[1]))
+        state["band"].setGeometry(QtCore.QRect(state["origin"], current).normalized())
+
+    def _finish_map_studio_marquee(self, event: QtCore.QEvent) -> bool:
+        state = self._map_studio_marquee
+        self._map_studio_marquee = None
+        if state is None:
+            return False
+        rect = state["band"].geometry()
+        state["band"].hide()
+        state["band"].deleteLater()
+        modifiers = getattr(event, "modifiers", lambda: QtCore.Qt.NoModifier)()
+        additive = bool(modifiers & QtCore.Qt.ShiftModifier)
+        rooms: list[str] = []
+        for candidate in self._cached_map_studio_hover_candidates():
+            resref = str(getattr(candidate, "room_resref", "") or "")
+            if not resref or resref in rooms:
+                continue
+            if any(
+                rect.contains(QtCore.QPoint(int(sx), int(sy)))
+                for sx, sy in tuple(getattr(candidate, "screen_points", ()) or ())
+            ):
+                rooms.append(resref)
+        self.mapStudioRoomsRectSelected.emit(rooms, additive)
+        return True
+
+    def _emit_map_studio_room_click(self, event: QtCore.QEvent) -> None:
+        context = self._hover_context
+        modifiers = getattr(event, "modifiers", lambda: QtCore.Qt.NoModifier)()
+        additive = bool(modifiers & (QtCore.Qt.ShiftModifier | QtCore.Qt.ControlModifier))
+        if context is None or not getattr(context, "is_hit", False):
+            if not additive:
+                self.clear_map_studio_component_selection()
+            self.mapStudioRoomClicked.emit("", False)
+            return
+        if self._hover_probe_enabled and self._hover_component_mode != "object":
+            # Edit/component modes: clicks build the yellow component
+            # selection (Shift adds, like Maya); rooms stay object-mode.
+            self._toggle_map_studio_component_selection(context, additive)
+            return
+        resref = str(getattr(context, "room_resref", "") or "")
+        self.mapStudioRoomClicked.emit(resref, additive)
+
+    def _clear_map_studio_hover(self) -> None:
+        if self._hover_context is not None:
+            self._hover_context = None
+            self.hoverContextChanged.emit(None)
+        clearer = getattr(self.viewport, "clear_map_studio_hover_highlight", None)
+        if callable(clearer):
+            clearer()
+
+    @staticmethod
+    def _map_studio_face_normal(points) -> tuple[float, float, float]:
+        (ax, ay, az), (bx, by, bz), (cx, cy, cz) = points[:3]
+        ux, uy, uz = bx - ax, by - ay, bz - az
+        vx, vy, vz = cx - ax, cy - ay, cz - az
+        nx, ny, nz = (uy * vz) - (uz * vy), (uz * vx) - (ux * vz), (ux * vy) - (uy * vx)
+        length = (nx * nx + ny * ny + nz * nz) ** 0.5
+        if length <= 1.0e-12:
+            return (0.0, 0.0, 1.0)
+        return (nx / length, ny / length, nz / length)
+
+    @staticmethod
+    def _map_studio_face_uv_points(mesh_node, face_index: int, vertex_indices) -> tuple[tuple[float, float], ...]:
+        """Resolve the diffuse UV0 used by each rendered triangle corner.
+
+        Binary KOTOR meshes may index texture vertices independently from
+        geometry vertices at UV seams.  Match the renderer's ``face_uvs``
+        contract first, falling back per corner to the geometry vertex only
+        when the face-specific texture index is absent or invalid.
+        """
+
+        # These arrays can contain tens of thousands of entries.  They are
+        # already stable sequences on ModelNode; copying all three sequences
+        # once per face made a 207tel hover-cache rebuild effectively O(F²).
+        uvs = getattr(mesh_node, "uvs", ()) or ()
+        indices = tuple(int(value) for value in tuple(vertex_indices or ())[:3])
+        if len(indices) < 3 or not uvs:
+            return ()
+
+        faces = getattr(mesh_node, "faces", ()) or ()
+        face_uvs = getattr(mesh_node, "face_uvs", ()) or ()
+        texture_indices: tuple[object, ...] = ()
+        face_index = int(face_index)
+        if len(face_uvs) == len(faces) and 0 <= face_index < len(face_uvs):
+            texture_indices = tuple(face_uvs[face_index] or ())[:3]
+
+        points: list[tuple[float, float]] = []
+        for corner, vertex_index in enumerate(indices):
+            texture_index = vertex_index
+            if corner < len(texture_indices):
+                try:
+                    candidate_index = int(texture_indices[corner])
+                except (TypeError, ValueError):
+                    candidate_index = -1
+                if 0 <= candidate_index < len(uvs):
+                    texture_index = candidate_index
+            if not 0 <= texture_index < len(uvs):
+                return ()
+            try:
+                uv = tuple(uvs[texture_index] or ())
+                if len(uv) < 2:
+                    return ()
+                points.append((float(uv[0]), float(uv[1])))
+            except (TypeError, ValueError, IndexError):
+                return ()
+        return tuple(points)
+
+    def _map_studio_projected_candidate(
+        self,
+        project,
+        w: int,
+        h: int,
+        world_points,
+        *,
+        room_resref: str,
+        mesh_role: str,
+        material: str,
+        face_index: int,
+        walkable: bool | None,
+        vertex_indices: tuple[int, int, int] = (-1, -1, -1),
+        uv_points=(),
+        cull_backfaces: bool = False,
+        projected_points=(),
+    ):
+        screen_points = []
+        view_depths = []
+        depth_total = 0.0
+        supplied_projection = tuple(projected_points or ())[:3]
+        for corner, point in enumerate(world_points[:3]):
+            if corner < len(supplied_projection):
+                projected = supplied_projection[corner]
+                if projected is None:
+                    return None
+                try:
+                    sx, sy, sz = projected[:3]
+                except Exception:
+                    return None
+            else:
+                try:
+                    sx, sy, sz = project(float(point[0]), float(point[1]), float(point[2]), w, h)[:3]
+                except Exception:
+                    return None
+            screen_points.append((float(sx), float(sy)))
+            view_depths.append(float(sz))
+            depth_total += float(sz)
+        if len(screen_points) < 3:
+            return None
+        if cull_backfaces:
+            # Faces pointing away from the camera (the inside of the far wall,
+            # the back of the near wall you are standing in) must not steal
+            # hover picks from the object you are aiming at.  Front-facing
+            # CCW geometry projects clockwise on y-down screens.
+            (ax, ay), (bx, by), (cx, cy) = screen_points
+            cross = ((bx - ax) * (cy - ay)) - ((by - ay) * (cx - ax))
+            if cross <= 0.0:
+                return None
+        # Cull triangles fully outside the canvas so stock-module face counts
+        # do not exhaust the hover budget on offscreen geometry.
+        margin = 64.0
+        if (
+            all(sx < -margin for sx, _ in screen_points)
+            or all(sx > w + margin for sx, _ in screen_points)
+            or all(sy < -margin for _, sy in screen_points)
+            or all(sy > h + margin for _, sy in screen_points)
+        ):
+            return None
+        return MapStudioHoverCandidateFace(
+            room_resref=str(room_resref or ""),
+            mesh_role=str(mesh_role or ""),
+            face_index=int(face_index),
+            screen_points=tuple(screen_points),
+            world_points=tuple(tuple(float(v) for v in point[:3]) for point in world_points[:3]),
+            view_depths=tuple(view_depths),
+            uv_points=tuple(tuple(float(v) for v in point[:2]) for point in tuple(uv_points or ())[:3]),
+            vertex_indices=tuple(int(value) for value in vertex_indices[:3]),
+            normal=self._map_studio_face_normal(tuple(world_points)),
+            material=str(material or ""),
+            walkable=walkable,
+            depth=depth_total / 3.0,
+        )
+
+    def _map_studio_hover_candidates(self, screen_cell: tuple[int, int] | None = None) -> list:
+        """Project authored room faces and WOK triangles into pick candidates.
+
+        ``screen_cell`` lazily materializes only the bucket under the latest
+        pointer.  Camera projection still runs in vectorized mesh batches, but
+        ordinary hover no longer allocates every visible face in the module.
+        Full materialization remains available for marquee selection.
+        """
+
+        candidates: list = []
+        renderer = getattr(self.viewport, "_renderer", None)
+        project = getattr(renderer, "_proj", None)
+        project_batch = getattr(renderer, "_proj_batch", None)
+        if not callable(project):
+            return candidates
+        w, h = self._viewport_canvas_size()
+        mode = self._hover_component_mode
+        include_render = mode in {"", "object", "vertex", "edge", "face"}
+        include_walkmesh = mode in {"", "walkmesh", "terrain"}
+        # Safety ceiling only — the whole room must be pickable (plcaa alone
+        # exceeds the old 6000 cap, which made most of the map un-hoverable).
+        # Per-move picking stays fast via the screen-space bucket grid.
+        budget = 250000
+        if include_render and self._room_preview_model is not None:
+            root = getattr(self._room_preview_model, "root_node", None)
+            for room_node in tuple(getattr(root, "children", ()) or ()):
+                # Skybox/backdrop geometry is visual context, not editable room
+                # topology.  It must remain visible without ever intercepting
+                # a GModeler face/edge/vertex hover.
+                if bool(getattr(room_node, "_gr_map_studio_backdrop", False)):
+                    continue
+                offset = tuple(getattr(room_node, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
+                if len(offset) < 3:
+                    offset = (0.0, 0.0, 0.0)
+                room_resref = str(getattr(room_node, "_gr_map_studio_room_resref", "") or "")
+                for mesh_node in tuple(getattr(room_node, "children", ()) or ()):
+                    if bool(getattr(mesh_node, "_gr_map_studio_backdrop", False)):
+                        continue
+                    vertices = tuple(getattr(mesh_node, "vertices", ()) or ())
+                    faces = tuple(getattr(mesh_node, "faces", ()) or ())
+                    if not vertices or not faces:
+                        continue
+                    world_vertices = [
+                        (
+                            float(vertex[0]) + float(offset[0]),
+                            float(vertex[1]) + float(offset[1]),
+                            float(vertex[2]) + float(offset[2]),
+                        )
+                        for vertex in vertices
+                    ]
+                    if callable(project_batch):
+                        try:
+                            projected_vertices = project_batch(world_vertices, w, h)
+                        except Exception:
+                            projected_vertices = [
+                                project(vertex[0], vertex[1], vertex[2], w, h)
+                                for vertex in world_vertices
+                            ]
+                    else:
+                        projected_vertices = [
+                            project(vertex[0], vertex[1], vertex[2], w, h)
+                            for vertex in world_vertices
+                        ]
+                    # Bulk-select only front-facing, potentially visible
+                    # triangles.  Iterating all 58k 207tel faces in Python
+                    # merely to reject 46k of them dominated the one-time
+                    # post-navigation hover refresh.
+                    visible_face_indices = None
+                    try:
+                        face_array = np.asarray(faces, dtype=np.int64)
+                        if face_array.ndim == 2 and face_array.shape[1] >= 3:
+                            face_array = face_array[:, :3]
+                            projection_array = np.full((len(projected_vertices), 3), np.nan, dtype=np.float64)
+                            valid_vertex_indices = [
+                                index for index, point in enumerate(projected_vertices) if point is not None
+                            ]
+                            if valid_vertex_indices:
+                                projection_array[valid_vertex_indices] = np.asarray(
+                                    [projected_vertices[index] for index in valid_vertex_indices],
+                                    dtype=np.float64,
+                                )[:, :3]
+                            valid_faces = (
+                                np.all(face_array >= 0, axis=1)
+                                & np.all(face_array < len(projected_vertices), axis=1)
+                            )
+                            safe_faces = np.where(valid_faces[:, None], face_array, 0)
+                            projected_triangles = projection_array[safe_faces]
+                            valid_faces &= np.all(np.isfinite(projected_triangles), axis=(1, 2))
+                            ax = projected_triangles[:, 0, 0]
+                            ay = projected_triangles[:, 0, 1]
+                            bx = projected_triangles[:, 1, 0]
+                            by = projected_triangles[:, 1, 1]
+                            cx = projected_triangles[:, 2, 0]
+                            cy = projected_triangles[:, 2, 1]
+                            valid_faces &= (((bx - ax) * (cy - ay)) - ((by - ay) * (cx - ax))) > 0.0
+                            margin = 64.0
+                            valid_faces &= ~(
+                                ((ax < -margin) & (bx < -margin) & (cx < -margin))
+                                | ((ax > w + margin) & (bx > w + margin) & (cx > w + margin))
+                                | ((ay < -margin) & (by < -margin) & (cy < -margin))
+                                | ((ay > h + margin) & (by > h + margin) & (cy > h + margin))
+                            )
+                            if screen_cell is not None:
+                                grid_x, grid_y = int(screen_cell[0]), int(screen_cell[1])
+                                cell = float(self._HOVER_GRID_CELL)
+                                pad = 8.0
+                                cell_min_x = grid_x * cell
+                                cell_max_x = (grid_x + 1) * cell
+                                cell_min_y = grid_y * cell
+                                cell_max_y = (grid_y + 1) * cell
+                                tri_min_x = np.minimum(np.minimum(ax, bx), cx)
+                                tri_max_x = np.maximum(np.maximum(ax, bx), cx)
+                                tri_min_y = np.minimum(np.minimum(ay, by), cy)
+                                tri_max_y = np.maximum(np.maximum(ay, by), cy)
+                                valid_faces &= (
+                                    ((tri_min_x - pad) <= cell_max_x)
+                                    & ((tri_max_x + pad) >= cell_min_x)
+                                    & ((tri_min_y - pad) <= cell_max_y)
+                                    & ((tri_max_y + pad) >= cell_min_y)
+                                )
+                            visible_face_indices = np.flatnonzero(valid_faces).tolist()
+                    except Exception:
+                        visible_face_indices = None
+                    role = str(getattr(mesh_node, "_gr_map_studio_mesh_role", "") or "")
+                    material = str(getattr(mesh_node, "texture", "") or "")
+                    face_indices = visible_face_indices if visible_face_indices is not None else range(len(faces))
+                    for face_index in face_indices:
+                        face = faces[face_index]
+                        if len(candidates) >= budget:
+                            return candidates
+                        try:
+                            face_vertex_indices = tuple(int(index) for index in tuple(face)[:3])
+                            if len(face_vertex_indices) < 3 or min(face_vertex_indices) < 0:
+                                continue
+                            if max(face_vertex_indices) >= len(world_vertices):
+                                continue
+                            world = tuple(world_vertices[index] for index in face_vertex_indices)
+                            projected_face = tuple(projected_vertices[index] for index in face_vertex_indices)
+                        except Exception:
+                            continue
+                        if len(world) < 3 or any(point is None for point in projected_face):
+                            continue
+                        if visible_face_indices is None:
+                            # Rare non-triangle/ragged-face fallback keeps the
+                            # same exact culling contract without NumPy.
+                            (ax, ay), (bx, by), (cx, cy) = (
+                                (float(point[0]), float(point[1]))
+                                for point in projected_face
+                            )
+                            if ((bx - ax) * (cy - ay)) - ((by - ay) * (cx - ax)) <= 0.0:
+                                continue
+                            margin = 64.0
+                            if (
+                                (ax < -margin and bx < -margin and cx < -margin)
+                                or (ax > w + margin and bx > w + margin and cx > w + margin)
+                                or (ay < -margin and by < -margin and cy < -margin)
+                                or (ay > h + margin and by > h + margin and cy > h + margin)
+                            ):
+                                continue
+                            if screen_cell is not None:
+                                grid_x, grid_y = int(screen_cell[0]), int(screen_cell[1])
+                                cell = float(self._HOVER_GRID_CELL)
+                                pad = 8.0
+                                if (
+                                    min(ax, bx, cx) - pad > (grid_x + 1) * cell
+                                    or max(ax, bx, cx) + pad < grid_x * cell
+                                    or min(ay, by, cy) - pad > (grid_y + 1) * cell
+                                    or max(ay, by, cy) + pad < grid_y * cell
+                                ):
+                                    continue
+                        uv_points = self._map_studio_face_uv_points(mesh_node, face_index, face_vertex_indices)
+                        candidate = self._map_studio_projected_candidate(
+                            project, w, h, world,
+                            room_resref=room_resref, mesh_role=role,
+                            material=material, face_index=face_index, walkable=None,
+                            vertex_indices=face_vertex_indices,
+                            uv_points=uv_points,
+                            cull_backfaces=False,
+                            projected_points=projected_face,
+                        )
+                        if candidate is not None:
+                            candidates.append(candidate)
+        if include_walkmesh and self._terrain_walkability_overlay is not None:
+            triangles = tuple(getattr(self._terrain_walkability_overlay, "triangles", ()) or ())
+            for face_index, triangle in enumerate(triangles):
+                if len(candidates) >= budget:
+                    return candidates
+                points = tuple(getattr(triangle, "points", ()) or ())
+                if len(points) < 3:
+                    continue
+                candidate = self._map_studio_projected_candidate(
+                    project, w, h, points[:3],
+                    room_resref=str(getattr(triangle, "room_resref", "") or ""),
+                    mesh_role="walkmesh",
+                    material=str(getattr(triangle, "surface_name", "") or ""),
+                    face_index=face_index,
+                    walkable=bool(getattr(triangle, "walkable", False)),
+                )
+                if candidate is not None:
+                    if screen_cell is not None:
+                        points = tuple(getattr(candidate, "screen_points", ()) or ())
+                        xs = [float(point[0]) for point in points]
+                        ys = [float(point[1]) for point in points]
+                        grid_x, grid_y = int(screen_cell[0]), int(screen_cell[1])
+                        cell = float(self._HOVER_GRID_CELL)
+                        pad = 8.0
+                        if (
+                            not xs
+                            or min(xs) - pad > (grid_x + 1) * cell
+                            or max(xs) + pad < grid_x * cell
+                            or min(ys) - pad > (grid_y + 1) * cell
+                            or max(ys) + pad < grid_y * cell
+                        ):
+                            continue
+                    candidates.append(candidate)
+        return candidates
+
+    def _map_studio_hover_cache_signature(self) -> tuple | None:
+        """Camera/scene signature for the hover candidate cache.
+
+        Use explicit camera/view state rather than projected fixed probes.
+        A probe behind the near plane returned ``None`` and previously forced
+        a complete 10k+ face rebuild on every stationary mouse move.
+        """
+
+        renderer = getattr(self.viewport, "_renderer", None)
+        camera = getattr(self.viewport, "camera", None) or getattr(renderer, "cam", None)
+        w, h = self._viewport_canvas_size()
+        view_state: tuple = ()
+        view_matrix = getattr(renderer, "_cam_view_matrix", None)
+        if callable(view_matrix):
+            try:
+                view_state = tuple(
+                    round(float(value), 7)
+                    for vector in tuple(view_matrix() or ())
+                    for value in tuple(vector or ())
+                )
+            except Exception:
+                view_state = ()
+        if not view_state and camera is not None:
+            target = tuple(getattr(camera, "target", ()) or ())
+            view_state = (
+                round(float(getattr(camera, "azimuth", 0.0) or 0.0), 7),
+                round(float(getattr(camera, "elevation", 0.0) or 0.0), 7),
+                round(float(getattr(camera, "distance", 0.0) or 0.0), 7),
+                *(round(float(value), 7) for value in target[:3]),
+            )
+        return (
+            id(self._room_preview_model),
+            id(self._terrain_walkability_overlay),
+            self._hover_component_mode,
+            w,
+            h,
+            round(float(getattr(camera, "fov", 0.0) or 0.0), 7) if camera is not None else 0.0,
+            round(float(getattr(camera, "_near", 0.0) or 0.0), 7) if camera is not None else 0.0,
+            view_state,
+        )
+
+    _HOVER_GRID_CELL = 96.0
+
+    def _build_map_studio_hover_grid(self, candidates: list) -> dict:
+        """Bucket candidates by screen cell so picking scans dozens, not all."""
+
+        grid: dict[tuple[int, int], list] = {}
+        cell = self._HOVER_GRID_CELL
+        pad = 8.0  # covers the 5px vertex/edge tolerance across cell borders
+        for candidate in candidates:
+            points = tuple(getattr(candidate, "screen_points", ()) or ())
+            if not points:
+                continue
+            xs = [float(px) for px, _py in points]
+            ys = [float(py) for _px, py in points]
+            x0 = int((min(xs) - pad) // cell)
+            x1 = int((max(xs) + pad) // cell)
+            y0 = int((min(ys) - pad) // cell)
+            y1 = int((max(ys) + pad) // cell)
+            for gx in range(x0, x1 + 1):
+                for gy in range(y0, y1 + 1):
+                    grid.setdefault((gx, gy), []).append(candidate)
+        return grid
+
+    def _map_studio_hover_candidates_near(self, screen_x: float, screen_y: float) -> list:
+        grid = getattr(self, "_hover_candidate_grid", None)
+        if not isinstance(grid, dict):
+            return getattr(self, "_hover_candidate_cache", []) or []
+        cell = self._HOVER_GRID_CELL
+        return grid.get((int(screen_x // cell), int(screen_y // cell)), [])
+
+    def _cached_map_studio_hover_candidates(
+        self,
+        screen: tuple[float, float] | None = None,
+    ) -> list:
+        # Materialize the depth-aware grid once per camera state.  A one-cell
+        # lazy cache looked attractive, but crossing each 96px boundary then
+        # repeated every mesh projection (100+ ms on 207tel).  The full grid's
+        # cached cell queries stay below the interactive hover budget across
+        # the entire canvas.
+        _ = screen
+        signature = self._map_studio_hover_cache_signature()
+        if signature is None:
+            candidates = self._map_studio_hover_candidates()
+            self._hover_candidate_grid = self._build_map_studio_hover_grid(candidates)
+            return candidates
+        if getattr(self, "_hover_candidate_cache_key", None) == signature:
+            return getattr(self, "_hover_candidate_cache", [])
+        candidates = self._map_studio_hover_candidates()
+        self._hover_candidate_cache_key = signature
+        self._hover_candidate_cache = candidates
+        self._hover_candidate_grid = self._build_map_studio_hover_grid(candidates)
+        return candidates
+
+    def _update_map_studio_hover(
+        self,
+        event: QtCore.QEvent,
+        *,
+        force: bool = False,
+        watched: QtCore.QObject | None = None,
+    ) -> None:
+        if not self._hover_probe_enabled and not force:
+            return
+        screen = self._event_position(event, watched)
+        if screen is None:
+            self._clear_map_studio_hover()
+            return
+        self._update_map_studio_hover_at_screen(screen)
+
+    def _update_map_studio_hover_at_screen(self, screen: tuple[float, float]) -> None:
+        """Resolve one already-coalesced canvas-space hover position."""
+
+        self._cached_map_studio_hover_candidates(screen)
+        candidates = self._map_studio_hover_candidates_near(screen[0], screen[1])
+        # Object mode picks whole faces only: zero tolerance disables the
+        # vertex/edge proximity classification.
+        tolerance = 0.0 if self._hover_component_mode == "object" else 5.0
+        context = pick_map_studio_hover_context(
+            candidates,
+            screen[0],
+            screen[1],
+            tolerance_px=tolerance,
+            prefer_walkmesh=self._hover_component_mode in {"walkmesh", "terrain"},
+        )
+        if context == self._hover_context:
+            return
+        self._hover_context = context
+        self.hoverContextChanged.emit(context)
+        setter = getattr(self.viewport, "set_map_studio_hover_highlight", None)
+        if not callable(setter):
+            return
+        if not context.is_hit:
+            setter(None)
+            return
+        wanted = (
+            context.room_resref,
+            context.mesh_role,
+            context.face_index,
+            context.component_type == "walkmesh_face",
+        )
+        matched = None
+        for candidate in candidates:
+            key = (
+                candidate.room_resref,
+                candidate.mesh_role,
+                candidate.face_index,
+                candidate.walkable is not None,
+            )
+            if key == wanted:
+                matched = candidate
+                break
+        setter(
+            {
+                "component_type": context.component_type,
+                "world_points": tuple(matched.world_points) if matched is not None else (),
+                "vertex_index": int(context.vertex_index),
+                "edge_indices": tuple(context.edge_indices),
+                "mesh_vertex_index": int(getattr(context, "mesh_vertex_index", -1)),
+                "mesh_edge_indices": tuple(getattr(context, "mesh_edge_indices", (-1, -1))),
+                "adjacent_face_indices": tuple(getattr(context, "adjacent_face_indices", ())),
+                "is_border": bool(getattr(context, "is_border", False)),
+                "world_point": tuple(context.world_point),
+                "edge_direction": tuple(getattr(context, "edge_direction", (0.0, 0.0, 0.0))),
+                "selector_origin_world_point": tuple(
+                    getattr(context, "selector_origin_world_point", (0.0, 0.0, 0.0))
+                ),
+                "selector_world_point": tuple(getattr(context, "selector_world_point", (0.0, 0.0, 0.0))),
+                "selector_edge_corners": tuple(getattr(context, "selector_edge_corners", (-1, -1))),
+                "walkable": context.walkable,
+                "summary": map_studio_hover_context_summary(context),
+            }
+        )
+
+    def _rendered_placement_at_event(self, event: QtCore.QEvent) -> str:
+        """Return the nearest actual-model placement under the pointer."""
+
+        self._update_map_studio_hover(event, force=True)
+        context = self._hover_context
+        if context is None or not bool(getattr(context, "is_hit", False)):
+            return ""
+        placement_id = str(getattr(context, "room_resref", "") or "")
+        return placement_id if placement_id in self._placement_markers else ""
 
     def _terrain_sample_at_event(self, event: QtCore.QEvent) -> tuple[int, int, float] | None:
         screen = self._event_position(event)
@@ -793,10 +3233,12 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "room_resref": room_resref,
             "brush": brush,
             "points": [sample],
-            "last_sample": sample[:2],
+            "last_sample": sample,
             "active": True,
+            "deferred": terrain_sculpt_brush_is_deferred(brush),
         }
-        self.terrainBrushFrameRequested.emit(brush, room_resref, (sample,))
+        if not bool(self._terrain_brush_drag["deferred"]):
+            self.terrainBrushFrameRequested.emit(brush, room_resref, (sample,))
         return True
 
     def _begin_terrain_brush_option_drag(self, event: QtCore.QEvent) -> bool:
@@ -856,16 +3298,26 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return True
         key = sample[:2]
         points = list(self._terrain_brush_drag.get("points", []) or [])
-        if key != self._terrain_brush_drag.get("last_sample"):
-            points.append(sample)
-        elif points:
-            points[-1] = sample
-        points = points[-32:]
+        previous = self._terrain_brush_drag.get("last_sample")
+        previous_key = tuple(previous[:2]) if isinstance(previous, (tuple, list)) and len(previous) >= 2 else None
+        if key == previous_key:
+            if points:
+                points[-1] = sample
+            self._terrain_brush_drag["points"] = points
+            self._terrain_brush_drag["last_sample"] = sample
+            return True
+        segment = interpolate_terrain_sculpt_segment(previous, sample, include_start=False)
+        points.extend(segment)
+        points = points[-512:]
         self._terrain_brush_drag["points"] = points
-        self._terrain_brush_drag["last_sample"] = key
+        self._terrain_brush_drag["last_sample"] = sample
         brush = str(self._terrain_brush_drag.get("brush", "") or "")
         room_resref = str(self._terrain_brush_drag.get("room_resref", "") or "")
-        self.terrainBrushFrameRequested.emit(brush, room_resref, tuple(points))
+        if segment and not bool(self._terrain_brush_drag.get("deferred", False)):
+            # Emit only the new segment.  Re-sending the accumulated trail on
+            # every mouse move repeatedly sculpted old cells and made strokes
+            # grow lumpy/over-strength.
+            self.terrainBrushFrameRequested.emit(brush, room_resref, tuple(segment))
         return True
 
     def _finish_terrain_brush_drag(self, event: QtCore.QEvent | None = None) -> bool:
@@ -876,17 +3328,55 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         drag = self._terrain_brush_drag
         self._terrain_brush_drag = None
         if bool(drag.get("active", False)):
+            if bool(drag.get("deferred", False)):
+                self.terrainBrushFrameRequested.emit(
+                    str(drag.get("brush", "") or ""),
+                    str(drag.get("room_resref", "") or ""),
+                    tuple(drag.get("points", ()) or ()),
+                )
             self.terrainBrushStrokeCommitted.emit(
                 str(drag.get("brush", "") or ""),
                 str(drag.get("room_resref", "") or ""),
             )
         return True
 
-    def _event_position(self, event: QtCore.QEvent) -> tuple[float, float] | None:
+    def _event_position(
+        self,
+        event: QtCore.QEvent,
+        watched: QtCore.QObject | None = None,
+    ) -> tuple[float, float] | None:
+        """Return the pointer in renderer-canvas coordinates.
+
+        Qt delivers otherwise identical pointer and drop events to the outer
+        viewport, its canvas host, or the active renderer child.  Hover faces
+        are projected in canvas space, so comparing those candidates with the
+        receiver's local coordinates offsets picks by the toolbar/host frame
+        and makes valid drop surfaces appear to miss.
+        """
+
+        canvas = getattr(getattr(self, "viewport", None), "canvas", None)
+        if isinstance(canvas, QtWidgets.QWidget):
+            global_position = getattr(event, "globalPosition", None)
+            if callable(global_position):
+                point = global_position()
+                try:
+                    global_point = point.toPoint()
+                except Exception:
+                    global_point = QtCore.QPoint(int(round(point.x())), int(round(point.y())))
+                mapped = canvas.mapFromGlobal(global_point)
+                return (float(mapped.x()), float(mapped.y()))
+            global_pos = getattr(event, "globalPos", None)
+            if callable(global_pos):
+                mapped = canvas.mapFromGlobal(global_pos())
+                return (float(mapped.x()), float(mapped.y()))
         pos_fn = getattr(event, "position", None)
         pos = pos_fn() if callable(pos_fn) else getattr(event, "pos", lambda: None)()
         if pos is None:
             return None
+        if isinstance(canvas, QtWidgets.QWidget) and isinstance(watched, QtWidgets.QWidget) and watched is not canvas:
+            local_point = QtCore.QPoint(int(round(pos.x())), int(round(pos.y())))
+            mapped = canvas.mapFromGlobal(watched.mapToGlobal(local_point))
+            return (float(mapped.x()), float(mapped.y()))
         return (float(pos.x()), float(pos.y()))
 
     def _event_global_position(self, event: QtCore.QEvent, watched: QtCore.QObject | None = None) -> QtCore.QPoint:
@@ -912,13 +3402,29 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if marker is None or start_screen is None:
             self._marker_drag = None
             return False
+        mode = self.transform_gizmo_mode()
+        if mode == "scale":
+            self.marker_summary_label.setText(
+                "KOTOR GIT placements do not support arbitrary scale. Change the source blueprint/model instead."
+            )
+            self._marker_drag = None
+            return True
+        start_position = self._marker_position(marker)
+        preview_node = self._placement_preview_node(str(placement_id))
+        preview_rotation = tuple(getattr(preview_node, "rotation", (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0))
         self._marker_drag = {
             "placement_id": str(placement_id),
             "start_screen": start_screen,
-            "start_position": self._marker_position(marker),
+            "start_position": start_position,
             "bearing": float(getattr(marker, "bearing", 0.0) or 0.0),
+            "pending_bearing": float(getattr(marker, "bearing", 0.0) or 0.0),
+            "mode": mode,
+            "center_screen": self._project_world_to_screen(start_position),
             "active": False,
-            "pending_position": self._marker_position(marker),
+            "pending_position": start_position,
+            "preview_node": preview_node,
+            "preview_start_position": tuple(getattr(preview_node, "position", start_position) or start_position),
+            "preview_start_rotation": preview_rotation,
         }
         self._sync_clean_viewport_presentation()
         return True
@@ -934,10 +3440,25 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         screen_dy = float(current[1]) - float(start[1])
         if screen_dx * screen_dx + screen_dy * screen_dy < 9.0:
             return True
+        if str(self._marker_drag.get("mode", "translate")) == "rotate":
+            delta_degrees = self._screen_rotation_delta_degrees(
+                tuple(self._marker_drag.get("center_screen") or start),
+                tuple(start),
+                tuple(current),
+            )
+            if self.snap_box.isChecked():
+                delta_degrees = round(delta_degrees / 15.0) * 15.0
+            self._marker_drag["active"] = True
+            self._marker_drag["pending_bearing"] = (
+                float(self._marker_drag.get("bearing", 0.0) or 0.0) + math.radians(delta_degrees)
+            )
+            self._preview_marker_drag_transform()
+            return True
         pending = self._drag_marker_position(screen_dx, screen_dy)
         if pending is not None:
             self._marker_drag["active"] = True
             self._marker_drag["pending_position"] = pending
+            self._preview_marker_drag_transform()
         return True
 
     def _finish_marker_drag(self, event: QtCore.QEvent | None = None) -> bool:
@@ -953,7 +3474,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         position = tuple(float(v) for v in tuple(drag.get("pending_position", drag.get("start_position", (0.0, 0.0, 0.0))))[:3])
         if len(position) < 3:
             return True
-        bearing = float(drag.get("bearing", 0.0) or 0.0)
+        bearing = float(drag.get("pending_bearing", drag.get("bearing", 0.0)) or 0.0)
         self.transformEdited.emit(
             str(drag.get("placement_id", "") or ""),
             LevelTransform(position=position, rotation=(0.0, 0.0, bearing), scale=(1.0, 1.0, 1.0)),
@@ -1124,6 +3645,14 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         """Set the visible Map Studio transform gizmo mode and sync the shared viewport."""
 
         key = str(mode_key or "translate").strip().lower()
+        selected_rows = self.scene_table.selectionModel().selectedRows() if self.scene_table.selectionModel() else []
+        selected_id = self._row_ids[selected_rows[0].row()] if selected_rows and 0 <= selected_rows[0].row() < len(self._row_ids) else ""
+        if key in {"scale", "transform"} and selected_id in self._placement_markers:
+            self.marker_summary_label.setText(
+                "KOTOR placements cannot store per-instance scale. Create a baked scaled asset variant in Placeable Builder."
+            )
+            key = self._transform_gizmo_mode if self._transform_gizmo_mode != "scale" else "translate"
+            announce = False
         if key in {"move", "translate"}:
             key = "translate"
             gimbal_mode = 1
@@ -1178,10 +3707,30 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if ctrl and not alt and key == QtCore.Qt.Key_R:
             self.redoShortcutRequested.emit()
             return True
+        if ctrl and not alt and key == QtCore.Qt.Key_E:
+            return self.arm_component_extrude()
+        if ctrl and not alt and key == QtCore.Qt.Key_B:
+            return self.arm_component_bevel()
         if ctrl or alt or shift:
             return False
+        if key == QtCore.Qt.Key_Escape and bool(self._placement_context.get("enabled", False)):
+            self.set_placement_tool_context({"enabled": False})
+            self.placementModeExited.emit()
+            return True
+        if key == QtCore.Qt.Key_Escape and self._component_extrude_armed is not None:
+            self._disarm_component_extrude("Extrude cancelled.")
+            return True
+        if key == QtCore.Qt.Key_Escape and self._component_bevel_armed is not None:
+            self._disarm_component_bevel("Bevel cancelled.")
+            return True
+        if key == QtCore.Qt.Key_Escape and self._room_primitive_drag is not None:
+            self._cancel_room_primitive_drag("Transform cancelled.")
+            return True
         if key == QtCore.Qt.Key_Delete:
             self.deleteShortcutRequested.emit()
+            return True
+        if key == QtCore.Qt.Key_End:
+            self.groundSnapShortcutRequested.emit()
             return True
         if key == QtCore.Qt.Key_W:
             self.set_transform_gizmo_mode("translate")
@@ -1191,6 +3740,11 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return True
         if key == QtCore.Qt.Key_R:
             self.set_transform_gizmo_mode("scale")
+            return True
+        if key == QtCore.Qt.Key_Space and self._hover_probe_enabled:
+            is_repeat = getattr(event, "isAutoRepeat", lambda: False)
+            if not bool(is_repeat()):
+                self.modeMarkingMenuRequested.emit(QtGui.QCursor.pos())
             return True
         return False
 
@@ -1221,18 +3775,317 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.roomOutlineEdgeSelected.emit(room, edge)
         return True
 
+    def _capture_room_primitive_drag_preview(self, selection) -> tuple[list[dict[str, object]], tuple[float, float, float]]:
+        wanted = {(str(room or "").strip().lower(), str(name or "").strip()) for room, name in tuple(selection or ())}
+        baselines: list[dict[str, object]] = []
+        world_points: list[tuple[float, float, float]] = []
+        for room_node, node in self._iter_room_preview_mesh_nodes():
+            room = str(getattr(room_node, "_gr_map_studio_room_resref", "") or "").strip().lower()
+            name = str(getattr(node, "_gr_map_studio_primitive_name", "") or getattr(node, "name", "") or "").strip()
+            if (room, name) not in wanted:
+                continue
+            room_position = tuple(float(value) for value in tuple(getattr(room_node, "position", (0.0, 0.0, 0.0)))[:3])
+            node_position = tuple(float(value) for value in tuple(getattr(node, "position", (0.0, 0.0, 0.0)))[:3])
+            vertices = tuple(tuple(float(value) for value in vertex[:3]) for vertex in tuple(getattr(node, "vertices", ()) or ()))
+            normals = tuple(tuple(float(value) for value in normal[:3]) for normal in tuple(getattr(node, "normals", ()) or ()))
+            baseline = {
+                "node": node,
+                "room_position": room_position,
+                "node_position": node_position,
+                "vertices": vertices,
+                "normals": normals,
+            }
+            baselines.append(baseline)
+            for vertex in vertices:
+                world_points.append(
+                    (
+                        vertex[0] + room_position[0] + node_position[0],
+                        vertex[1] + room_position[1] + node_position[1],
+                        vertex[2] + room_position[2] + node_position[2],
+                    )
+                )
+        if world_points:
+            mins = tuple(min(point[index] for point in world_points) for index in range(3))
+            maxs = tuple(max(point[index] for point in world_points) for index in range(3))
+            pivot = tuple((mins[index] + maxs[index]) * 0.5 for index in range(3))
+        else:
+            pivot = (0.0, 0.0, 0.0)
+        return baselines, pivot
+
+    def _restore_room_primitive_drag_preview(self, drag: dict[str, object]) -> None:
+        baselines = tuple(drag.get("preview_baselines", ()) or ())
+        invalidate = getattr(self.viewport, "_evict_transform_cache", None)
+        for baseline in baselines:
+            node = baseline.get("node")
+            if node is None:
+                continue
+            node.position = tuple(baseline.get("node_position", (0.0, 0.0, 0.0)))
+            node.vertices = list(baseline.get("vertices", ()) or ())
+            node.normals = list(baseline.get("normals", ()) or ())
+            compute_bounds = getattr(node, "compute_bounds", None)
+            if callable(compute_bounds):
+                compute_bounds()
+            if callable(invalidate):
+                invalidate(node)
+        if baselines:
+            request = getattr(self.viewport, "_request_render", None)
+            if callable(request):
+                request(fast=True, reason="Map Studio transform preview restored", resources=True, overlay=True, gizmo=True)
+
+    def _apply_room_primitive_drag_preview(self, drag: dict[str, object]) -> None:
+        baselines = tuple(drag.get("preview_baselines", ()) or ())
+        if not baselines:
+            return
+        mode = str(drag.get("mode") or "translate")
+        pivot = tuple(float(value) for value in tuple(drag.get("group_pivot", (0.0, 0.0, 0.0)))[:3])
+        delta = tuple(float(value) for value in tuple(drag.get("pending_delta", (0.0, 0.0, 0.0)))[:3])
+        angle = math.radians(float(drag.get("pending_rotation_delta_degrees", 0.0) or 0.0))
+        cos_a, sin_a = math.cos(angle), math.sin(angle)
+        scale = tuple(float(value) for value in tuple(drag.get("pending_scale_multiplier", (1.0, 1.0, 1.0)))[:3])
+        invalidate = getattr(self.viewport, "_evict_transform_cache", None)
+        for baseline in baselines:
+            node = baseline.get("node")
+            if node is None:
+                continue
+            room_position = tuple(float(value) for value in tuple(baseline.get("room_position", (0.0, 0.0, 0.0)))[:3])
+            node_position = tuple(float(value) for value in tuple(baseline.get("node_position", (0.0, 0.0, 0.0)))[:3])
+            updated_vertices: list[tuple[float, float, float]] = []
+            for vertex in tuple(baseline.get("vertices", ()) or ()):
+                world = (
+                    float(vertex[0]) + room_position[0] + node_position[0],
+                    float(vertex[1]) + room_position[1] + node_position[1],
+                    float(vertex[2]) + room_position[2] + node_position[2],
+                )
+                if mode == "rotate":
+                    rx, ry = world[0] - pivot[0], world[1] - pivot[1]
+                    transformed = (
+                        pivot[0] + rx * cos_a - ry * sin_a,
+                        pivot[1] + rx * sin_a + ry * cos_a,
+                        world[2],
+                    )
+                elif mode == "scale":
+                    transformed = tuple(pivot[index] + (world[index] - pivot[index]) * scale[index] for index in range(3))
+                else:
+                    transformed = tuple(world[index] + delta[index] for index in range(3))
+                updated_vertices.append(
+                    tuple(transformed[index] - room_position[index] - node_position[index] for index in range(3))
+                )
+            updated_normals: list[tuple[float, float, float]] = []
+            for normal in tuple(baseline.get("normals", ()) or ()):
+                nx, ny, nz = (float(value) for value in normal[:3])
+                if mode == "rotate":
+                    nx, ny = nx * cos_a - ny * sin_a, nx * sin_a + ny * cos_a
+                elif mode == "scale":
+                    nx = nx / max(1.0e-9, abs(scale[0]))
+                    ny = ny / max(1.0e-9, abs(scale[1]))
+                    nz = nz / max(1.0e-9, abs(scale[2]))
+                length = max(1.0e-12, math.sqrt(nx * nx + ny * ny + nz * nz))
+                updated_normals.append((nx / length, ny / length, nz / length))
+            node.vertices = updated_vertices
+            if updated_normals:
+                node.normals = updated_normals
+            compute_bounds = getattr(node, "compute_bounds", None)
+            if callable(compute_bounds):
+                compute_bounds()
+            if callable(invalidate):
+                invalidate(node)
+        request = getattr(self.viewport, "_request_render", None)
+        if callable(request):
+            request(fast=True, reason="Map Studio live multi-object transform", resources=True, overlay=True, gizmo=True)
+
+    def _cancel_room_primitive_drag(self, message: str = "") -> None:
+        drag = self._room_primitive_drag
+        self._room_primitive_drag = None
+        if drag is not None:
+            self._restore_room_primitive_drag_preview(drag)
+        self._sync_clean_viewport_presentation()
+        if message:
+            self.marker_summary_label.setText(message)
+
+    def set_authored_room_preview_model(self, authored_room_preview_model) -> None:
+        """Replace only authored geometry, preserving camera and panel state."""
+
+        self._room_preview_model = authored_room_preview_model
+        self._sync_room_preview_model(authored_room_preview_model)
+        self._hover_candidate_cache = []
+        self._push_map_studio_component_selection()
+
+    def set_authored_room_outline_geometry(self, authored_room_outline_geometry) -> None:
+        """Replace editable room outlines without resetting the viewport."""
+
+        self._room_outline_geometry = authored_room_outline_geometry
+        self._sync_room_outline_overlay(authored_room_outline_geometry)
+
+    def set_authored_gameplay_markers(
+        self,
+        authored_gameplay_placements=(),
+        authored_gameplay_markers=(),
+        authored_gameplay_marker_geometry=None,
+    ) -> None:
+        """Refresh GIT marker state in place without rebuilding the scene table."""
+
+        self._placement_marker_geometry = authored_gameplay_marker_geometry
+        markers = {
+            str(getattr(marker, "placement_id", "") or ""): marker
+            for marker in authored_gameplay_markers or ()
+            if str(getattr(marker, "placement_id", "") or "")
+        }
+        for placement in authored_gameplay_placements or ():
+            placement_id = str(getattr(placement, "placement_id", "") or "")
+            if placement_id and bool(getattr(placement, "is_spatial", True)):
+                markers.setdefault(placement_id, placement)
+        self._placement_markers = markers
+        # These sibling fields normally arrive through set_project; keep the
+        # partial refresh safe if a caller runs before the first full load.
+        if not hasattr(self, "_room_preview_model"):
+            self._room_preview_model = None
+        self._update_marker_summary(
+            authored_gameplay_markers,
+            authored_gameplay_marker_geometry,
+            getattr(self, "_room_outline_geometry", None),
+            getattr(self, "_terrain_walkability_overlay", None),
+        )
+        self._sync_marker_geometry_overlay(authored_gameplay_marker_geometry)
+        self._hover_candidate_cache_key = None
+
+    def update_authored_scene_rows(
+        self,
+        authored_gameplay_placements=(),
+        authored_room_lights=(),
+        item_ids=(),
+    ) -> None:
+        """Refresh edited authored table rows in place, preserving selection."""
+
+        wanted = {str(value or "") for value in tuple(item_ids or ()) if str(value or "")}
+        if not wanted:
+            return
+        rows_by_id: dict[str, tuple[str, object]] = {}
+        for placement in authored_gameplay_placements or ():
+            placement_id = str(getattr(placement, "placement_id", "") or "")
+            if placement_id in wanted:
+                rows_by_id[placement_id] = ("placement", placement)
+        for light in authored_room_lights or ():
+            light_id = str(getattr(light, "light_id", "") or "")
+            if light_id in wanted:
+                rows_by_id[light_id] = ("light", light)
+        if not rows_by_id:
+            return
+        self._table_updating = True
+        try:
+            for row, row_id in enumerate(self._row_ids):
+                entry = rows_by_id.get(str(row_id))
+                if entry is None:
+                    continue
+                role, data = entry
+                position = tuple(getattr(data, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
+                if len(position) < 3:
+                    position = (tuple(position) + (0.0, 0.0, 0.0))[:3]
+                if role == "placement":
+                    name = str(getattr(data, "tag", "") or getattr(data, "template_resref", "") or row_id)
+                    marker = self._placement_markers.get(str(row_id))
+                    marker_label = str(getattr(marker, "shape", "") or "")
+                    transition_summary = str(getattr(data, "transition_summary", "") or "")
+                    if transition_summary:
+                        marker_label = f"{marker_label}; {transition_summary}" if marker_label else transition_summary
+                    facing = f"{float(getattr(data, 'bearing', 0.0) or 0.0):.2f} rad"
+                else:
+                    name = str(getattr(data, "name", "") or row_id)
+                    marker_label = str(getattr(data, "light_type", "point") or "point")
+                    facing = f"R {float(getattr(data, 'radius', 0.0) or 0.0):.2f}"
+                for column, value in (
+                    (1, name),
+                    (2, f"{float(position[0]):.3f}"),
+                    (3, f"{float(position[1]):.3f}"),
+                    (4, f"{float(position[2]):.3f}"),
+                    (5, marker_label),
+                    (6, facing),
+                ):
+                    item = self.scene_table.item(row, column)
+                    if item is not None:
+                        item.setText(value)
+        finally:
+            self._table_updating = False
+
+    def update_authored_placement_preview_transform(
+        self,
+        placement_id: str,
+        *,
+        position=None,
+        bearing=None,
+    ) -> bool:
+        """Promote a committed GIT transform onto the rendered proxy in place.
+
+        Mirrors the drag-preview promotion: the group node's translation is
+        absolute while its rotation stays a delta from the bearing baked into
+        the flattened meshes, captured once as
+        ``_gr_map_studio_authored_bearing``.  Callers must invoke this before
+        replacing ``_placement_markers`` so the first capture still sees the
+        pre-commit marker bearing.
+        """
+
+        node = self._placement_preview_node(str(placement_id))
+        if node is None:
+            return False
+        self._mark_room_preview_model_promoted()
+        if not hasattr(node, "_gr_map_studio_authored_bearing"):
+            marker = self._placement_markers.get(str(placement_id))
+            setattr(node, "_gr_map_studio_authored_bearing", float(getattr(marker, "bearing", 0.0) or 0.0))
+        if position is not None:
+            point = tuple(float(value) for value in tuple(position)[:3])
+            if len(point) >= 3:
+                node.position = point
+                setattr(node, "_gr_gizmo_world_position", point)
+        if bearing is not None:
+            baked = float(getattr(node, "_gr_map_studio_authored_bearing", 0.0) or 0.0)
+            half = (float(bearing) - baked) * 0.5
+            node.rotation = (0.0, 0.0, math.sin(half), math.cos(half))
+        self._hover_candidate_cache_key = None
+        request = getattr(self.viewport, "_request_render", None)
+        if callable(request):
+            try:
+                request(fast=True, reason="Map Studio placement transform commit", overlay=True, hud=True)
+            except TypeError:
+                request()
+        return True
+
     def _begin_room_primitive_drag(self, hit: tuple[str, str, tuple[float, float, float]], event: QtCore.QEvent) -> bool:
         start_screen = self._event_position(event)
         if start_screen is None:
             self._room_primitive_drag = None
             return False
         room_resref, primitive_name, world_center = hit
+        key = (str(room_resref or ""), str(primitive_name or ""))
+        modifiers = event.modifiers() if hasattr(event, "modifiers") else QtCore.Qt.NoModifier
+        if modifiers & QtCore.Qt.ShiftModifier:
+            selected = self.selected_room_primitives()
+            if key in selected:
+                selected.remove(key)
+            else:
+                selected.append(key)
+            self.set_selected_room_primitives(selected)
+            self.roomPrimitivesSelected.emit(selected)
+            self._room_primitive_drag = None
+            self.marker_summary_label.setText(f"{len(selected)} object(s) selected. Combine, move, or separate from the tool belt.")
+            return True
+        selected = self.selected_room_primitives()
+        # Clicking an already-selected object keeps the complete selection,
+        # matching Maya/Unreal group manipulation.  Clicking outside it starts
+        # a new selection.
+        if key not in selected:
+            selected = [key]
+        self.set_selected_room_primitives(selected)
+        preview_baselines, group_pivot = self._capture_room_primitive_drag_preview(selected)
+        if not preview_baselines:
+            group_pivot = tuple(float(value) for value in world_center[:3])
         self._room_primitive_drag = {
             "room_resref": room_resref,
             "primitive_name": primitive_name,
+            "selection": tuple(selected),
             "start_screen": start_screen,
-            "start_center": world_center,
-            "start_center_screen": self._project_world_to_screen(world_center),
+            "start_center": group_pivot,
+            "start_center_screen": self._project_world_to_screen(group_pivot),
+            "group_pivot": group_pivot,
+            "preview_baselines": preview_baselines,
             "mode": self.transform_gizmo_mode(),
             "active": False,
             "pending_delta": (0.0, 0.0, 0.0),
@@ -1240,6 +4093,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "pending_scale_multiplier": (1.0, 1.0, 1.0),
         }
         self.roomPrimitiveSelected.emit(room_resref, primitive_name)
+        self.roomPrimitivesSelected.emit(tuple(selected))
         self._sync_clean_viewport_presentation()
         return True
 
@@ -1263,13 +4117,19 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             )
             self._room_primitive_drag["active"] = True
             self._room_primitive_drag["pending_rotation_delta_degrees"] = angle_delta
-            self.marker_summary_label.setText(f"Rotate gimbal: {angle_delta:+.1f} deg around selected primitive pivot.")
+            self._apply_room_primitive_drag_preview(self._room_primitive_drag)
+            self.marker_summary_label.setText(
+                f"Rotate gimbal: {angle_delta:+.1f} deg around {len(tuple(self._room_primitive_drag.get('selection', ()) or ()))} object pivot."
+            )
             return True
         if mode == "scale":
             multiplier = self._screen_scale_multiplier(screen_dx, screen_dy)
             self._room_primitive_drag["active"] = True
             self._room_primitive_drag["pending_scale_multiplier"] = (multiplier, multiplier, multiplier)
-            self.marker_summary_label.setText(f"Scale gimbal: {multiplier:.3f}x selected primitive transform.")
+            self._apply_room_primitive_drag_preview(self._room_primitive_drag)
+            self.marker_summary_label.setText(
+                f"Scale gimbal: {multiplier:.3f}x across {len(tuple(self._room_primitive_drag.get('selection', ()) or ()))} object(s)."
+            )
             return True
         start_center = tuple(self._room_primitive_drag.get("start_center", (0.0, 0.0, 0.0)))
         if len(start_center) < 3:
@@ -1285,7 +4145,73 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         )
         self._room_primitive_drag["active"] = True
         self._room_primitive_drag["pending_delta"] = delta
+        self._apply_room_primitive_drag_preview(self._room_primitive_drag)
+        self.marker_summary_label.setText(
+            f"Move {len(tuple(self._room_primitive_drag.get('selection', ()) or ()))} object(s): "
+            f"{delta[0]:+.2f}, {delta[1]:+.2f}, {delta[2]:+.2f}m"
+        )
         return True
+
+    def _placement_preview_node(self, placement_id: str):
+        """Find the immutable-model group used as a lightweight GIT transform proxy."""
+
+        root = getattr(getattr(self, "_room_preview_model", None), "root_node", None)
+        for node in tuple(getattr(root, "children", ()) or ()):
+            if str(getattr(node, "_gr_map_studio_placement_id", "") or "") == str(placement_id):
+                return node
+        return None
+
+    @staticmethod
+    def _quat_multiply_xyzw(left, right) -> tuple[float, float, float, float]:
+        lx, ly, lz, lw = (float(value) for value in tuple(left)[:4])
+        rx, ry, rz, rw = (float(value) for value in tuple(right)[:4])
+        return (
+            lw * rx + lx * rw + ly * rz - lz * ry,
+            lw * ry - lx * rz + ly * rw + lz * rx,
+            lw * rz + lx * ry - ly * rx + lz * rw,
+            lw * rw - lx * rx - ly * ry - lz * rz,
+        )
+
+    def _mark_room_preview_model_promoted(self) -> None:
+        """Invalidate the preview-model key after an in-place node mutation.
+
+        The loaded model no longer matches the key it was built with, so a
+        later rebuild that hashes back to the original key (for example Undo
+        reverting a placement move) must not be skipped by the key cache.
+        """
+
+        if getattr(self, "_room_preview_model_key", "") != "__promoted_in_place__":
+            self._room_preview_model_key = "__promoted_in_place__"
+
+    def _preview_marker_drag_transform(self) -> None:
+        """Move the rendered placement every drag frame without rebuilding the level."""
+
+        drag = self._marker_drag
+        if drag is None:
+            return
+        node = drag.get("preview_node")
+        if node is None:
+            return
+        self._mark_room_preview_model_promoted()
+        mode = str(drag.get("mode", "translate") or "translate")
+        if mode == "rotate":
+            delta = float(drag.get("pending_bearing", 0.0) or 0.0) - float(drag.get("bearing", 0.0) or 0.0)
+            half = delta * 0.5
+            z_rotation = (0.0, 0.0, math.sin(half), math.cos(half))
+            start_rotation = tuple(drag.get("preview_start_rotation", (0.0, 0.0, 0.0, 1.0)))
+            node.rotation = self._quat_multiply_xyzw(z_rotation, start_rotation)
+        else:
+            node.position = tuple(drag.get("pending_position", drag.get("preview_start_position", (0.0, 0.0, 0.0))))
+        # The hover buckets include model-space positions, so invalidate them
+        # while the lightweight proxy moves.  This is far cheaper than the old
+        # broad _refresh_all on every mouse frame.
+        self._hover_candidate_cache_key = None
+        request = getattr(self.viewport, "_request_render", None)
+        if callable(request):
+            try:
+                request(fast=True, reason="Map Studio placement transform preview", overlay=True, hud=True)
+            except TypeError:
+                request()
 
     def _finish_room_primitive_drag(self, event: QtCore.QEvent | None = None) -> bool:
         if self._room_primitive_drag is None:
@@ -1294,10 +4220,26 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self._update_room_primitive_drag(event)
         drag = self._room_primitive_drag
         self._room_primitive_drag = None
+        # The durable controller transaction starts from the immutable KMAP
+        # baseline, so remove the render-only override before committing.
+        self._restore_room_primitive_drag_preview(drag)
         self._sync_clean_viewport_presentation()
         if not bool(drag.get("active", False)):
             return True
         mode = str(drag.get("mode") or "translate")
+        selection = tuple(drag.get("selection", ()) or ())
+        if len(selection) > 1:
+            self.roomPrimitivesTransformCommitted.emit(
+                {
+                    "selection": selection,
+                    "mode": mode,
+                    "world_pivot": tuple(drag.get("group_pivot", (0.0, 0.0, 0.0))),
+                    "world_delta": tuple(drag.get("pending_delta", (0.0, 0.0, 0.0))),
+                    "rotation_delta_degrees": float(drag.get("pending_rotation_delta_degrees", 0.0) or 0.0),
+                    "scale_multiplier": tuple(drag.get("pending_scale_multiplier", (1.0, 1.0, 1.0))),
+                }
+            )
+            return True
         if mode == "rotate":
             self.roomPrimitiveRotated.emit(
                 str(drag.get("room_resref", "") or ""),
@@ -1457,17 +4399,21 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.viewport.setProperty("_gr_suppress_renderer_diagnostics", True)
         self.viewport.setProperty("_gr_map_studio_clean_viewport", True)
         self.viewport.setProperty("_gr_map_studio_hide_embedded_toolbar", True)
-        renderer = getattr(self.viewport, "_renderer", None)
-        if renderer is not None:
+        for renderer in (getattr(self.viewport, "_renderer", None), getattr(self.viewport, "_gpu_renderer", None)):
+            if renderer is None:
+                continue
             setattr(renderer, "wireframe", False)
             setattr(renderer, "show_texture", True)
+            # Map Studio is primarily a module editor: stock room slot-2
+            # textures should be visible on first load without requiring the
+            # user to discover a second lightmap toggle.
+            setattr(renderer, "show_lightmap_map", True)
+            setattr(renderer, "lightmap_mode", "baked")
+            setattr(renderer, "lightmap_intensity", 1.0)
+            setattr(renderer, "lighting_mode", "scene")
         set_chrome = getattr(self.viewport, "set_viewport_chrome_visible", None)
         if callable(set_chrome):
             set_chrome(toolbar=False, transform_typein=False)
-        tabs = getattr(self.viewport, "viewport_map_studio_modeling_tabs", None)
-        if tabs is not None:
-            tabs.setVisible(False)
-            tabs.setMaximumHeight(0)
         canvas = getattr(self.viewport, "canvas", None)
         clear_text = getattr(canvas, "clear_diagnostics_text", None)
         if callable(clear_text):
@@ -1483,6 +4429,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return
         viewport.setProperty("_gr_map_studio_clean_viewport", True)
         terrain_active = self._terrain_brush_context_enabled()
+        walkmesh_active = str(getattr(self, "_hover_component_mode", "") or "") in {"walkmesh", "terrain"}
         room_edit_active = (
             self._room_outline_point_drag is not None
             or bool(self._vertex_snap_modifier_active)
@@ -1504,10 +4451,23 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "show_primitive_labels": False,
             "show_transform_dimensions": primitive_drag_active or self.transform_gizmo_mode() == "scale",
             "show_gimbal_labels": False,
-            "show_terrain_walkability": terrain_active,
+            "show_terrain_walkability": terrain_active or walkmesh_active,
             "show_terrain_brush": terrain_active,
             "show_placement_guides": self._marker_drag is not None,
         }
+        if self._hover_probe_enabled:
+            # GModeler edit mode: the real mesh must stay unobstructed, so the
+            # room fill/outline/guide overlays (the yellow footprint and its
+            # grid of handles) stand down while the hover picker is live.
+            presentation.update(
+                {
+                    "show_render_geometry_overlay": False,
+                    "show_room_mesh_fill_overlay": False,
+                    "show_room_guides": False,
+                    "show_room_vertex_handles": False,
+                    "show_primitive_handles": False,
+                }
+            )
         setter = getattr(viewport, "set_map_studio_viewport_presentation", None)
         if callable(setter):
             setter(presentation)
@@ -1521,10 +4481,47 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if isinstance(surface, QtWidgets.QLabel):
             surface.setText("")
 
+    def _sync_world_lighting_preview_render_state(self, model) -> None:
+        """Expose the preview recipe to this viewport and remove studio ambient.
+
+        World colors are rendered by preview-only LIGHT nodes attached to the
+        authored model.  Clearing the renderer's generic gray ambient prevents
+        that fallback from washing out the authored RGB values.  The previous
+        value is restored when the Map Studio preview model is removed.
+        """
+
+        viewport = getattr(self, "viewport", None)
+        if viewport is None:
+            return
+        state = dict(getattr(model, "_gr_map_studio_world_lighting_preview", {}) or {})
+        viewport.setProperty("_gr_map_studio_world_lighting_preview_active", bool(state))
+        for target in (getattr(viewport, "_renderer", None), getattr(viewport, "_gpu_renderer", None)):
+            if target is None:
+                continue
+            previous_state = dict(getattr(target, "map_studio_world_lighting_preview", {}) or {})
+            setattr(target, "map_studio_world_lighting_preview", dict(state))
+            if state:
+                if getattr(target, "_gr_map_studio_previous_scene_ambient", None) is None:
+                    setattr(
+                        target,
+                        "_gr_map_studio_previous_scene_ambient",
+                        float(getattr(target, "scene_ambient", 0.06) or 0.0),
+                    )
+                setattr(target, "scene_ambient", 0.0)
+            elif getattr(target, "_gr_map_studio_previous_scene_ambient", None) is not None:
+                setattr(target, "scene_ambient", float(getattr(target, "_gr_map_studio_previous_scene_ambient")))
+                # Renderer factory proxies forward __setattr__ but not
+                # __delattr__, so use a sentinel that works for both concrete
+                # backends and the fallback proxy.
+                setattr(target, "_gr_map_studio_previous_scene_ambient", None)
+            if previous_state != state and hasattr(target, "_active_lighting_render_data"):
+                setattr(target, "_active_lighting_render_data", None)
+
     def _sync_room_preview_model(self, authored_room_preview_model=None) -> None:
         viewport = getattr(self, "viewport", None)
         if viewport is None:
             return
+        self._sync_world_lighting_preview_render_state(authored_room_preview_model)
         load_model = getattr(viewport, "load_model", None)
         if authored_room_preview_model is None:
             current_model = getattr(viewport, "model", None)
@@ -1539,7 +4536,32 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             viewport.setProperty("_gr_map_studio_preview_model_loaded", True)
             return
         if callable(load_model):
-            load_model(authored_room_preview_model)
+            # Refreshes after edits must not reset the user's camera: snapshot
+            # the arcball state and restore it when a preview was already up.
+            camera = getattr(viewport, "camera", None)
+            camera_state = None
+            if camera is not None and self._room_preview_model_key:
+                try:
+                    camera_state = (
+                        float(camera.azimuth),
+                        float(camera.elevation),
+                        float(camera.distance),
+                        tuple(float(v) for v in tuple(camera.target)[:3]),
+                    )
+                except Exception:
+                    camera_state = None
+            texture_dirs = list(getattr(self, "_project_texture_dirs", ()) or ())
+            load_model(
+                authored_room_preview_model,
+                texture_dir=texture_dirs[0] if texture_dirs else "",
+                extra_texture_dirs=texture_dirs[1:],
+            )
+            if camera is not None and camera_state is not None:
+                try:
+                    camera.azimuth, camera.elevation, camera.distance = camera_state[0], camera_state[1], camera_state[2]
+                    camera.target = list(camera_state[3])
+                except Exception:
+                    pass
             self._room_preview_model_key = key
             viewport.setProperty("_gr_map_studio_preview_model_loaded", True)
             renderer = getattr(viewport, "_renderer", None)
@@ -1557,10 +4579,6 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if bool(self.viewport.property("_gr_map_studio_hide_embedded_toolbar")):
             toolbar_scroll.setVisible(False)
             toolbar_scroll.setFixedHeight(0)
-            tabs = getattr(self.viewport, "viewport_map_studio_modeling_tabs", None)
-            if tabs is not None:
-                tabs.setVisible(False)
-                tabs.setMaximumHeight(0)
             gap = getattr(self, "_viewport_toolbar_gap", None)
             if gap is not None:
                 gap.setVisible(False)
@@ -1662,8 +4680,9 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if authored_gameplay_marker_geometry is not None:
             footprints = len(tuple(getattr(authored_gameplay_marker_geometry, "footprints", ()) or ()))
             lines = len(tuple(getattr(authored_gameplay_marker_geometry, "lines", ()) or ()))
-            if footprints or lines:
-                geometry_suffix = f" | {footprints} footprint(s), {lines} guide line(s)"
+            icons = len(tuple(getattr(authored_gameplay_marker_geometry, "icons", ()) or ()))
+            if footprints or lines or icons:
+                geometry_suffix = f" | {footprints} footprint(s), {lines} guide line(s), {icons} editor icon(s)"
         if authored_room_outline_geometry is not None:
             polygons = len(tuple(getattr(authored_room_outline_geometry, "polygons", ()) or ()))
             room_lines = len(tuple(getattr(authored_room_outline_geometry, "lines", ()) or ()))
@@ -1677,7 +4696,13 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             walkable = int(getattr(authored_terrain_walkability_overlay, "walkable_triangle_count", 0) or 0)
             blocked = int(getattr(authored_terrain_walkability_overlay, "non_walk_triangle_count", 0) or 0)
             max_slope = float(getattr(authored_terrain_walkability_overlay, "max_slope_degrees", 0.0) or 0.0)
-            geometry_suffix = f"{geometry_suffix} | terrain walkability {walkable} walk / {blocked} blocked, max slope {max_slope:.1f} deg"
+            validation_state = str(getattr(authored_terrain_walkability_overlay, "validation_state", "unknown") or "unknown")
+            valid_rooms = int(getattr(authored_terrain_walkability_overlay, "valid_room_count", 0) or 0)
+            invalid_rooms = int(getattr(authored_terrain_walkability_overlay, "invalid_room_count", 0) or 0)
+            geometry_suffix = (
+                f"{geometry_suffix} | WOK {validation_state}: {valid_rooms} valid / {invalid_rooms} invalid room(s), "
+                f"{walkable} walk / {blocked} blocked triangle(s), max slope {max_slope:.1f} deg"
+            )
         suffix = f" | {warnings} marker warning(s)" if warnings else ""
         if clean_display:
             clean_parts = []
@@ -1712,10 +4737,25 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     def _sync_marker_geometry_overlay(self, authored_gameplay_marker_geometry=None) -> None:
         setter = getattr(self.viewport, "set_map_studio_marker_geometry", None)
         clearer = getattr(self.viewport, "clear_map_studio_marker_geometry", None)
-        footprints = tuple(getattr(authored_gameplay_marker_geometry, "footprints", ()) or ())
-        lines = tuple(getattr(authored_gameplay_marker_geometry, "lines", ()) or ())
-        if authored_gameplay_marker_geometry is not None and (footprints or lines) and callable(setter):
-            setter(authored_gameplay_marker_geometry)
+        base = self._placement_marker_geometry if authored_gameplay_marker_geometry is None else authored_gameplay_marker_geometry
+        pie = self._pie_overlay_geometry
+        # PIE is meant to read like the game, not like the authoring viewport.
+        # Keep the authored marker data resident, but publish none of its
+        # footprints/icons/guides while the runtime presentation owns the view.
+        geometry = None if self._pie_active else base
+        if not self._pie_active and pie is not None:
+            geometry = AuthoredGameplayMarkerGeometry(
+                marker_count=int(getattr(base, "marker_count", 0) or 0) + int(getattr(pie, "marker_count", 0) or 0),
+                footprints=tuple(getattr(base, "footprints", ()) or ()) + tuple(getattr(pie, "footprints", ()) or ()),
+                lines=tuple(getattr(base, "lines", ()) or ()) + tuple(getattr(pie, "lines", ()) or ()),
+                icons=tuple(getattr(base, "icons", ()) or ()) + tuple(getattr(pie, "icons", ()) or ()),
+                warnings=tuple(getattr(base, "warnings", ()) or ()) + tuple(getattr(pie, "warnings", ()) or ()),
+            )
+        footprints = tuple(getattr(geometry, "footprints", ()) or ())
+        lines = tuple(getattr(geometry, "lines", ()) or ())
+        icons = tuple(getattr(geometry, "icons", ()) or ())
+        if geometry is not None and (footprints or lines or icons) and callable(setter):
+            setter(geometry)
             self._install_marker_pick_filters()
             return
         if callable(clearer):
@@ -1756,7 +4796,9 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return
         row = rows[0].row()
         if 0 <= row < len(self._row_ids):
-            self.itemSelected.emit(self._row_ids[row])
+            item_id = self._row_ids[row]
+            self._sync_placement_transform_capabilities(item_id)
+            self.itemSelected.emit(item_id)
 
     def _table_item_changed(self, item: QtWidgets.QTableWidgetItem) -> None:
         if self._table_updating or item is None:

@@ -154,6 +154,17 @@ class ViewportRenderingPipelineMixin:
             self._set_renderer_badge(False)
             return None
         self._set_renderer_badge(True)
+        if bool(self.property("_gr_map_studio_pie_clean_runtime")):
+            # ModernGL returns a composited image rather than a native child
+            # surface.  Returning its scene image here is the backend-neutral
+            # counterpart to the live-surface overlay guard: no axes, helper
+            # diamonds, placement guides, selections, measurements, or HUD
+            # diagnostics are painted over the runtime frame.
+            self._clear_live_surface_diagnostics()
+            if self.canvas.is_live_surface():
+                self._skip_overlay_pixmap_update = True
+            self._record_overlay_rebuild(0.0)
+            return img
         if self.canvas.is_live_surface() and self._gpu_renderer_requires_native_surface_passthrough():
             self._update_live_surface_diagnostics()
             img = self._draw_live_surface_tool_overlay(img, w, h)
@@ -175,6 +186,15 @@ class ViewportRenderingPipelineMixin:
         pygfx owns the retained 3D scene; this transparent image is only for
         legacy screen-space tools that are still Qt/PIL overlay based.
         """
+        if bool(getattr(self, "_live_surface_overlay_suppressed", False)):
+            # Do not place a QWidget/QPixmap over a native child surface while
+            # it is animating.  On Windows the child HWND and Qt sibling do not
+            # have reliable per-pixel composition ordering, which presents as
+            # whole-frame black/blank flicker.  PIE exposes its status in the
+            # surrounding Qt HUD and renders moving actors natively instead.
+            self._record_overlay_rebuild(0.0)
+            self._skip_overlay_pixmap_update = True
+            return img
         if self._can_skip_animation_cpu_overlay():
             self._record_overlay_rebuild(0.0)
             self._skip_overlay_pixmap_update = True
@@ -335,12 +355,19 @@ class ViewportRenderingPipelineMixin:
             self._sync_renderer_surface()
         self._preload_gpu_textures()
         textures = self._gpu_texture_snapshot()
+        clean_runtime = bool(self.property("_gr_map_studio_pie_clean_runtime"))
         self._gpu_renderer.interactive = bool(
             self._renderer.is_interactive
             or self._pan_dragging
             or self._nav_dragging
             or self._is_dragging
             or time_module.perf_counter() < self._fast_frame_until
+            # PIE is a continuously interactive runtime even when the mouse is
+            # not held.  Keeping it on the stationary editor path forced a 4x
+            # MSAA resolve and alpha-composite readback for every locomotion
+            # frame, which made dense stock modules visibly stutter.  The
+            # renderer's interactive path remains full resolution by default.
+            or clean_runtime
         )
         self._gpu_renderer.show_solid = bool(self._renderer.show_solid)
         self._gpu_renderer.show_texture = bool(self._renderer.show_texture)
@@ -353,22 +380,28 @@ class ViewportRenderingPipelineMixin:
         self._gpu_renderer.scene_ambient = float(getattr(self._renderer, "scene_ambient", 0.06))
         self._gpu_renderer.lightmap_intensity = float(getattr(self._renderer, "lightmap_intensity", 0.55))
         self._gpu_renderer.lightmap_mode = str(getattr(self._renderer, "lightmap_mode", "baked") or "baked")
-        self._gpu_renderer.show_light_gizmos = bool(getattr(self._renderer, "show_light_gizmos", True))
-        self._gpu_renderer.show_light_radius_volumes = bool(getattr(self._renderer, "show_light_radius_volumes", False))
-        self._gpu_renderer.show_dummy_helpers = bool(getattr(self._renderer, "show_dummy_helpers", True))
+        self._gpu_renderer.show_light_gizmos = bool(
+            getattr(self._renderer, "show_light_gizmos", True)
+        ) and not clean_runtime
+        self._gpu_renderer.show_light_radius_volumes = bool(
+            getattr(self._renderer, "show_light_radius_volumes", False)
+        ) and not clean_runtime
+        self._gpu_renderer.show_dummy_helpers = bool(
+            getattr(self._renderer, "show_dummy_helpers", True)
+        ) and not clean_runtime
         self._gpu_renderer.show_wireframe = bool(self._renderer.show_wireframe)
         self._gpu_renderer.render_mode = str(getattr(self._renderer, "render_mode", "realistic") or "realistic")
         self._gpu_renderer.display_options = self.display_options
-        self._gpu_renderer.selected_node = getattr(self._renderer, "selected_node", None)
-        self._gpu_renderer.selected_nodes = list(getattr(self, "_selected_meshes", []) or [])
+        self._gpu_renderer.selected_node = None if clean_runtime else getattr(self._renderer, "selected_node", None)
+        self._gpu_renderer.selected_nodes = [] if clean_runtime else list(getattr(self, "_selected_meshes", []) or [])
         self._gpu_renderer.show_grid = bool(getattr(self._renderer, "show_grid", True))
-        self._gpu_renderer.show_bones = bool(getattr(self._renderer, "show_bones", False))
-        self._gpu_renderer.show_joint_dots = bool(getattr(self, "_joint_dot_enabled", True))
+        self._gpu_renderer.show_bones = bool(getattr(self._renderer, "show_bones", False)) and not clean_runtime
+        self._gpu_renderer.show_joint_dots = bool(getattr(self, "_joint_dot_enabled", True)) and not clean_runtime
         self._gpu_renderer._hovered_bone = getattr(self._renderer, "_hovered_bone", None)
         self._gpu_renderer.cull_faces = False
-        gizmo_render_data = self._build_transform_gizmo_render_data(w, h)
+        gizmo_render_data = None if clean_runtime else self._build_transform_gizmo_render_data(w, h)
         skeleton_render_data = None
-        if bool(getattr(self._renderer, "show_bones", False)):
+        if not clean_runtime and bool(getattr(self._renderer, "show_bones", False)):
             try:
                 from src.core.rendering.skeleton_render_data import build_skeleton_render_data
 
@@ -389,14 +422,14 @@ class ViewportRenderingPipelineMixin:
 
             lighting_render_data = build_scene_lighting_render_data(
                 self.model,
-                selected_node=getattr(self._renderer, "selected_node", None),
-                hovered_node=getattr(self._renderer, "_hovered_light", None),
+                selected_node=None if clean_runtime else getattr(self._renderer, "selected_node", None),
+                hovered_node=None if clean_runtime else getattr(self._renderer, "_hovered_light", None),
                 ambient_color_rgb=float(getattr(self._renderer, "scene_ambient", 0.06)),
                 mode=str(getattr(self._renderer, "lighting_mode", "scene") or "scene"),
                 rig=str(getattr(self._renderer, "lighting_rig", "kotor_original") or "kotor_original"),
                 complexity=str(getattr(self._renderer, "shader_complexity_mode", "basic") or "basic"),
-                show_helpers=bool(getattr(self._renderer, "show_light_gizmos", True)),
-                show_volumes=bool(getattr(self._renderer, "show_light_radius_volumes", False)),
+                show_helpers=bool(getattr(self._renderer, "show_light_gizmos", True)) and not clean_runtime,
+                show_volumes=bool(getattr(self._renderer, "show_light_radius_volumes", False)) and not clean_runtime,
                 diffuse_enabled=bool(getattr(self._renderer, "show_diffuse_map", True)),
                 specular_enabled=bool(getattr(self._renderer, "show_specular_map", True)),
                 normal_enabled=bool(getattr(self._renderer, "show_normal_map", True)),
@@ -408,7 +441,7 @@ class ViewportRenderingPipelineMixin:
         except Exception as exc:
             log.debug("WGPU lighting render data build failed: %s", exc)
         helper_render_data = None
-        if str(getattr(self._gpu_renderer, "backend_id", "") or "") == "pygfx_wgpu":
+        if not clean_runtime and str(getattr(self._gpu_renderer, "backend_id", "") or "") == "pygfx_wgpu":
             helper_render_data = self._build_pygfx_helper_render_data()
         try:
             self._gpu_renderer.surface_host_diagnostics = self.canvas.diagnostics()
@@ -436,8 +469,8 @@ class ViewportRenderingPipelineMixin:
             lighting_render_data=lighting_render_data,
             helper_render_data=helper_render_data,
             picking_diagnostics=self._viewport_picking_diagnostics(),
-            hovered_node=getattr(self, "_hovered_mesh_node", None),
-            show_mesh_hover=bool(getattr(self, "mesh_hover_enabled", True)),
+            hovered_node=None if clean_runtime else getattr(self, "_hovered_mesh_node", None),
+            show_mesh_hover=bool(getattr(self, "mesh_hover_enabled", True)) and not clean_runtime,
             anim_pose=getattr(self._renderer, "_anim_pose", None),
             anim_time=float(getattr(self._renderer, "_anim_time", 0.0)),
             anim_base_pose=getattr(self._renderer, "_anim_base_pose", None),
@@ -545,6 +578,15 @@ class ViewportRenderingPipelineMixin:
             except Exception:
                 pass
             draw = ImageDraw.Draw(img, "RGBA")
+            # Map Studio camera navigation is a latency-sensitive interaction.
+            # The final mouse-release frame restores every authoring guide, but
+            # orbit/pan/zoom frames retain only feedback needed to understand
+            # selection and placement.  On 207tel, diagnostics plus unrelated
+            # room/helper overlays consumed roughly 7 ms of every Qt frame.
+            map_interaction_lod = bool(
+                getattr(self, "_map_studio_authoring_chrome_enabled", False)
+                and getattr(self, "_nav_dragging", "")
+            )
             if self._xray_mode:
                 self._renderer._draw_grid(draw, w, h)
             # T405: weight heat-map runs BEFORE bones so the joint dots
@@ -568,24 +610,33 @@ class ViewportRenderingPipelineMixin:
                 self._renderer._draw_character_fit_overlay(draw, w, h)
             if self._renderer.show_walkmesh:
                 self._renderer._draw_walkmesh_overlay(draw, w, h)
-            self._draw_camera_helpers(draw, w, h)
-            self._draw_map_studio_terrain_walkability(draw, w, h)
+            if not map_interaction_lod:
+                self._draw_camera_helpers(draw, w, h)
+                self._draw_map_studio_terrain_walkability(draw, w, h)
+            self._draw_map_studio_component_selection(draw, w, h)
+            self._draw_map_studio_component_extrude_gizmo(draw, w, h)
+            self._draw_map_studio_hover_highlight(draw, w, h)
             self._draw_map_studio_terrain_brush_cursor(draw, w, h)
-            self._draw_map_studio_room_outlines(draw, w, h)
+            if not map_interaction_lod:
+                self._draw_map_studio_room_outlines(draw, w, h)
             self._draw_map_studio_universal_transform_overlay(draw, w, h)
             self._draw_map_studio_placement_markers(draw, w, h)
-            self._draw_wgpu_helper_markers(draw, w, h)
+            if not map_interaction_lod:
+                self._draw_wgpu_helper_markers(draw, w, h)
             if self._ensure_renderer_gimbal_state() and not self._gpu_renderer_supports_native_gizmo_drawing():
                 self._draw_transform_gizmo(draw, w, h)
-            self._draw_measurement_overlay(draw, w, h)
+            if not map_interaction_lod:
+                self._draw_measurement_overlay(draw, w, h)
             self._draw_selected_model_outline(draw, w, h)
             self._draw_mesh_subobject_selection(draw, w, h)
-            self._draw_joint_marquee(draw)
+            if not map_interaction_lod:
+                self._draw_joint_marquee(draw)
             self._renderer._draw_axes(draw, w, h)
-            if not bool(self.property("_gr_suppress_renderer_diagnostics")):
+            if not map_interaction_lod and not bool(self.property("_gr_suppress_renderer_diagnostics")):
                 self._renderer._draw_stats(draw, w, h)
                 self._draw_renderer_statistics_overlay(draw, w, h)
-            self._draw_active_camera_overlays(draw, w, h)
+            if not map_interaction_lod:
+                self._draw_active_camera_overlays(draw, w, h)
             self._record_overlay_rebuild(time_module.perf_counter() - overlay_started)
             return img
         except Exception as exc:

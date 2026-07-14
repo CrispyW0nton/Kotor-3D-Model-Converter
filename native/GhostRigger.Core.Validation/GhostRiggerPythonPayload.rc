@@ -5,6 +5,7 @@ PYTHON_PAYLOAD_CORE_VALIDATION_NATIVE RCDATA "Python/src/core/validation/_native
 PYTHON_PAYLOAD_CORE_VALIDATION_ANIMATION_BLOCK_VALIDATOR RCDATA "Python/src/core/validation/animation_block_validator.py"
 PYTHON_PAYLOAD_CORE_VALIDATION_ANIMATION_ROUNDTRIP_VALIDATOR RCDATA "Python/src/core/validation/animation_roundtrip_validator.py"
 PYTHON_PAYLOAD_CORE_VALIDATION_CAPTURE_SPECS RCDATA "Python/src/core/validation/capture_specs.py"
+PYTHON_PAYLOAD_CORE_VALIDATION_KOTOR_MODULE_ENGINE_CONTRACT RCDATA "Python/src/core/validation/kotor_module_engine_contract.py"
 PYTHON_PAYLOAD_CORE_VALIDATION_VALIDATION_ADAPTERS RCDATA "Python/src/core/validation/validation_adapters.py"
 PYTHON_PAYLOAD_CORE_VALIDATION_VALIDATION_BUS RCDATA "Python/src/core/validation/validation_bus.py"
 PYTHON_PAYLOAD_CORE_VALIDATION_VIEWPORT_VALIDATOR RCDATA "Python/src/core/validation/viewport_validator.py"

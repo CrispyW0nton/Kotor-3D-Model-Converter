@@ -54,6 +54,7 @@ def test_t2605_authored_gameplay_placement_serializes_core_git_lists() -> None:
                 bearing=0.5,
                 linked_to="wp_next",
                 linked_to_module="grdev02",
+                linked_to_flags=2,
                 transition_destination=1,
             ),
         ),
@@ -64,6 +65,8 @@ def test_t2605_authored_gameplay_placement_serializes_core_git_lists() -> None:
                 position=(0.0, 0.0, 0.0),
                 geometry=((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0)),
                 linked_to="wp_next",
+                linked_to_module="grdev02",
+                linked_to_flags=2,
                 transition_destination=1,
             ),
         ),
@@ -90,17 +93,20 @@ def test_t2605_authored_gameplay_placement_serializes_core_git_lists() -> None:
     assert len(git.creatures) == 1
     assert git.creatures[0].resref == "g_tataka"
     assert git.creatures[0].x == 1.0
-    assert git.creatures[0].bearing == 1.25
+    assert git.creatures[0].bearing == pytest.approx(1.25)
     assert len(git.doors) == 1
     assert git.doors[0].resref == "door_dev"
     assert git.doors[0].tag == "door_to_next"
     assert git.doors[0].linked_to == "wp_next"
     assert git.doors[0].linked_to_module == "grdev02"
+    assert git.doors[0].linked_to_flags == 2
     assert git.doors[0].transition == 1
     assert len(git.triggers) == 1
     assert git.triggers[0].resref == "tr_dev"
     assert git.triggers[0].tag == "trigger_exit"
     assert git.triggers[0].linked_to == "wp_next"
+    assert git.triggers[0].linked_to_module == "grdev02"
+    assert git.triggers[0].linked_to_flags == 2
     assert git.triggers[0].transition == 1
     assert len(git.triggers[0].geometry) == 3
     assert len(git.encounters) == 1
@@ -122,9 +128,92 @@ def test_t2605_authored_gameplay_placement_serializes_core_git_lists() -> None:
     assert git.cameras[0].pitch == pytest.approx(0.35)
     assert len(git.stores) == 1
     assert git.stores[0].resref == "st_dev"
-    assert git.stores[0].tag == "dev_store"
+    # Engine contract: GIT store structs carry no Tag — the tag lives in the
+    # UTM template (verified against vanilla 202TEL).
+    assert git.stores[0].tag == ""
     assert len(git.placeables) == 1
     assert len(git.waypoints) == 1
+
+
+@pytest.mark.parametrize("game", ("K1", "K2"))
+def test_transition_git_fields_match_vanilla_k1_k2_types(game: str) -> None:
+    """Door/trigger rows must match the raw field contract used by both engines."""
+
+    _install_native_payload_paths()
+
+    from pykotor.resource.formats.gff import read_gff
+    from src.core.modules.authored_module_objects import (
+        AuthoredDoorInstance,
+        AuthoredGameplayPlacement,
+        AuthoredTriggerInstance,
+        AuthoredWaypointInstance,
+        ModuleEntryPoint,
+        build_git_bytes,
+    )
+
+    placement = AuthoredGameplayPlacement(
+        entry_point=ModuleEntryPoint(area_resref="plcaa"),
+        doors=(
+            AuthoredDoorInstance(
+                template_resref="door_t01",
+                tag="plcaa_exit",
+                linked_to="plcaa_arrive",
+                linked_to_module="plcab",
+                linked_to_flags=2,
+                transition_destination=74183,
+            ),
+        ),
+        triggers=(
+            AuthoredTriggerInstance(
+                template_resref="newtransition",
+                tag="plcaa_trigger",
+                geometry=((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+                linked_to="plcab_door",
+                linked_to_module="plcab",
+                linked_to_flags=1,
+                transition_destination=123845,
+            ),
+        ),
+        waypoints=(
+            # Legacy KMAPs may still carry this attribute, but vanilla waypoint
+            # rows are destinations and must not emit a LinkedTo source field.
+            AuthoredWaypointInstance(template_resref="sw_startloc001", tag="plcaa_arrive", linked_to="legacy_value"),
+        ),
+    )
+
+    root = read_gff(build_git_bytes(placement, game=game)).root
+    door = root.get_list("Door List")[0]
+    trigger = root.get_list("TriggerList")[0]
+    waypoint = root.get_list("WaypointList")[0]
+    expected_types = {
+        "LinkedTo": "String",
+        "LinkedToModule": "ResRef",
+        "LinkedToFlags": "UInt8",
+        "TransitionDestin": "LocalizedString",
+    }
+
+    assert {field: door.what_type(field).name for field in expected_types} == expected_types
+    assert {field: trigger.what_type(field).name for field in expected_types} == expected_types
+    assert tuple(trigger.keys()) == (
+        "TemplateResRef",
+        "Tag",
+        "TransitionDestin",
+        "LinkedToModule",
+        "LinkedTo",
+        "LinkedToFlags",
+        "XPosition",
+        "YPosition",
+        "ZPosition",
+        "XOrientation",
+        "YOrientation",
+        "ZOrientation",
+        "Geometry",
+    )
+    assert str(trigger.get_resref("LinkedToModule")) == "plcab"
+    assert trigger.get_uint8("LinkedToFlags") == 1
+    assert trigger.get_locstring("TransitionDestin").stringref == 123845
+    assert {point.struct_id for point in trigger.get_list("Geometry")} == {3}
+    assert waypoint.exists("LinkedTo") is False
 
 
 def test_t2605_authored_gameplay_validation_blocks_missing_templates() -> None:
@@ -146,6 +235,38 @@ def test_t2605_authored_gameplay_validation_blocks_missing_templates() -> None:
 
     assert validation.ok is False
     assert "Creature placement requires a template resref." in validation.blocking_issues
+
+
+def test_transition_validation_requires_vanilla_link_target_type() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_objects import (
+        AuthoredDoorInstance,
+        AuthoredGameplayPlacement,
+        AuthoredTriggerInstance,
+        ModuleEntryPoint,
+        validate_authored_gameplay_placement,
+    )
+
+    placement = AuthoredGameplayPlacement(
+        entry_point=ModuleEntryPoint(area_resref="plcaa"),
+        doors=(AuthoredDoorInstance(template_resref="door_t01", tag="exit", linked_to="arrival"),),
+        triggers=(
+            AuthoredTriggerInstance(
+                template_resref="newtransition",
+                tag="bad_flags",
+                geometry=((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+                linked_to="arrival",
+                linked_to_flags=3,
+            ),
+        ),
+    )
+
+    validation = validate_authored_gameplay_placement(placement)
+
+    assert validation.ok is False
+    assert any("LinkedToFlags is 0" in issue for issue in validation.blocking_issues)
+    assert any("LinkedToFlags=3" in issue for issue in validation.blocking_issues)
 
 
 def test_t2605_project_validation_includes_gameplay_placement_issues() -> None:
@@ -218,9 +339,12 @@ def test_t2630_gameplay_placement_walkmesh_validation_blocks_unsafe_positions() 
 
     validation = validate_authored_gameplay_placement_against_walkmesh(placement, wok)
 
+    # Only the entry point (player spawn) blocks; other placements off the
+    # mesh are normal in vanilla data (mapnotes, wall consoles) and warn.
     assert validation.ok is False
     assert any("entry_point is outside the generated room walkmesh" in issue for issue in validation.blocking_issues)
-    assert any("placeable:bench Z=1.000 is not on generated floor Z=0.000" in issue for issue in validation.blocking_issues)
+    assert not any("placeable:bench" in issue for issue in validation.blocking_issues)
+    assert any("placeable:bench Z=1.000 is not on generated floor Z=0.000" in warning for warning in validation.warnings)
     assert any(check.label == "waypoint:start" and check.ok for check in validation.checks)
 
 

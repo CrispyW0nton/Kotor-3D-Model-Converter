@@ -300,7 +300,9 @@ def _load_drexl_model():
     mgr = ResourceManager()
     if not mgr.set_k2_dir(k2_dir):
         pytest.skip(f"Could not index K2 install at {k2_dir}")
-    model = mgr.load_model("c_drexlf", "K2")
+    # prefer_base_archive: the user's Override folder carries their own
+    # exported c_drexlf, which must not shadow the vanilla donor fixture.
+    model = mgr.load_model("c_drexlf", "K2", prefer_base_archive=True)
     if model is None:
         pytest.skip("c_drexlf not found in K2 install (cut content / needs Override)")
     return model

@@ -61,6 +61,7 @@ class LightingRigPresets:
                 intensity=intensity,
                 radius=radius,
                 area_size=area,
+                ambient_only=kind == "ambient",
                 metadata={"preview_generated": True, "preset": key},
             )
             for name, kind, pos, color, intensity, radius, area in recipes.get(key, [])

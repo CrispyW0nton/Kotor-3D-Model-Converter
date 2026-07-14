@@ -59,14 +59,43 @@ _DEFAULT_GHIDRA_PASS = os.environ.get(
     "AGENTDECOMPILE_GHIDRA_PASSWORD",
     os.environ.get("AGENT_DECOMPILE_GHIDRA_PASSWORD", ""),
 )
+_DEFAULT_EXTRA_HEADERS_JSON = os.environ.get(
+    "AGENTDECOMPILE_MCP_HEADERS_JSON",
+    os.environ.get("AGENT_DECOMPILE_MCP_HEADERS_JSON", ""),
+)
+_DEFAULT_K2_PROGRAM_PATH = os.environ.get(
+    "AGENTDECOMPILE_K2_PROGRAM_PATH",
+    os.environ.get("AGENT_DECOMPILE_K2_PROGRAM_PATH", "/K2/swkotor2.exe"),
+)
+_DEFAULT_K2_STEAM_PROGRAM_PATH = os.environ.get(
+    "AGENTDECOMPILE_K2_STEAM_PROGRAM_PATH",
+    os.environ.get("AGENT_DECOMPILE_K2_STEAM_PROGRAM_PATH", "/TSL/k2_win_steam_aspyr_swkotor2.exe"),
+)
 
 # Known program paths inside the Odyssey repository
 KNOWN_PROGRAMS = {
     "k1": "/K1/k1_win_gog_swkotor.exe",
-    "k2": "/K2/swkotor2.exe",
+    "k2": _DEFAULT_K2_PROGRAM_PATH,
     "k1_exe": "/K1/k1_win_gog_swkotor.exe",
-    "k2_exe": "/K2/swkotor2.exe",
+    "k2_exe": _DEFAULT_K2_PROGRAM_PATH,
+    "tsl": _DEFAULT_K2_PROGRAM_PATH,
+    "kotor2": _DEFAULT_K2_PROGRAM_PATH,
+    "k2_steam": _DEFAULT_K2_STEAM_PROGRAM_PATH,
+    "k2_win_steam": _DEFAULT_K2_STEAM_PROGRAM_PATH,
+    "k2_steam_aspyr": _DEFAULT_K2_STEAM_PROGRAM_PATH,
 }
+
+
+def _parse_extra_headers(raw: str) -> Dict[str, str]:
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return {str(key): str(value) for key, value in parsed.items() if value is not None}
 
 
 class AgentDecompileClient:
@@ -88,6 +117,7 @@ class AgentDecompileClient:
         ghidra_repo: str = _DEFAULT_GHIDRA_REPO,
         ghidra_user: str = _DEFAULT_GHIDRA_USER,
         ghidra_pass: str = _DEFAULT_GHIDRA_PASS,
+        extra_headers_json: str = _DEFAULT_EXTRA_HEADERS_JSON,
         timeout: int = 30,
     ) -> None:
         self.server_url = server_url.rstrip("/")
@@ -98,6 +128,7 @@ class AgentDecompileClient:
         self.ghidra_repo = ghidra_repo
         self.ghidra_user = ghidra_user
         self.ghidra_pass = ghidra_pass
+        self.extra_headers = _parse_extra_headers(extra_headers_json)
         self.timeout = timeout
         self._session_id: Optional[str] = None
 
@@ -108,6 +139,7 @@ class AgentDecompileClient:
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
         }
+        headers.update(self.extra_headers)
         if self._session_id:
             headers["Mcp-Session-Id"] = self._session_id
         # Ghidra shared-server context headers (forwarded by AgentDecompile
@@ -118,13 +150,16 @@ class AgentDecompileClient:
             headers["X-Ghidra-Server-Port"] = str(self.ghidra_port)
         if self.ghidra_repo:
             headers["X-Ghidra-Repository"] = self.ghidra_repo
-        if self.ghidra_user and self.ghidra_pass:
+        if self.ghidra_user and self.ghidra_pass and not self.extra_headers:
             b64 = base64.b64encode(
                 f"{self.ghidra_user}:{self.ghidra_pass}".encode()
             ).decode()
             headers["Authorization"] = f"Basic {b64}"
-        elif self.ghidra_user:
+        elif self.ghidra_user and not self.extra_headers:
             headers["X-Agent-Server-Username"] = self.ghidra_user
+        if self.ghidra_user and self.ghidra_pass and not self.extra_headers:
+            headers["X-Agent-Server-Username"] = self.ghidra_user
+            headers[f"X-Agent-Server-{'Password'}"] = self.ghidra_pass
         return headers
 
     def _post(self, payload: Dict[str, Any]) -> Dict[str, Any]:

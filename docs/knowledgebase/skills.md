@@ -76,6 +76,7 @@ task, then return to the source PDFs only when deeper detail is needed.
 
 - `learned/qtuiskill.md`: Use for PySide6/Qt widgets, signals, model/view, long-running GUI tasks, custom widgets, theming, layout, and visual workflow tests.
 - `learned/mcpvalidationskill.md`: Use for backend/model-pipeline validation tools, MCP server/tool design, and context-safe validation workflows.
+- `learned/kotormcp_live_game_proofskill.md`: Use for real KOTOR 1/KOTOR 2 runtime proof with KotorMCP, the DirectInput `dinput8.dll` proxy hook, live debug-event logs, Ghidra crash-address annotation, save-load/warp testing, and Map Studio or Character Builder in-game evidence.
 - `learned/resourceskill.md`: Use for assets, resource managers, file systems, texture/material residency, and pipeline handoff.
 - `learned/algorithmgeometryskill.md`: Use for graph/search/flow/dynamic-programming choices, sweep-line geometry, point location, Delaunay/Voronoi reasoning, and robust geometric predicates.
 - `learned/unrealskill.md`: Use for Unreal/editor integration, plugins, editor modes/windows, Slate-style tooling, Blueprints, world blockout, landscapes, materials, and technical-art handoff.

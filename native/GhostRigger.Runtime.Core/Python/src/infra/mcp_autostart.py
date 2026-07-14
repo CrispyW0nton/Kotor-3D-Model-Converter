@@ -21,7 +21,7 @@ def maybe_autostart_kotormcp() -> None:
     ``GHOSTRIGGER_MCP_PORT``.
     """
     if getattr(sys, "frozen", False):
-        # In a PyInstaller app sys.executable is GhostRigger.exe, not python.exe.
+        # In a PyInstaller app sys.executable is GhostStudio.exe, not python.exe.
         # Launching it with "-m kotormcp" starts another GUI instance instead of
         # the MCP module, which can make the compiled app feel badly lagged.
         if os.environ.get("GHOSTRIGGER_ALLOW_FROZEN_MCP_AUTOSTART", "").strip().lower() not in (

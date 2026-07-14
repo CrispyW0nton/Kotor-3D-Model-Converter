@@ -8,7 +8,7 @@ inspector can call the same compiler used by smoke exports.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from .authored_module_objects import ModuleEntryPoint, apply_entry_point_to_ifo
@@ -16,6 +16,7 @@ from .authored_module_project import AuthoredModuleMetadata, authored_resref_blo
 
 
 RGB = tuple[int, int, int]
+FULLBRIGHT_LIGHTING_PROFILE = "fullbright"
 AREA_SCRIPT_FIELDS: tuple[str, ...] = ("OnEnter", "OnExit", "OnHeartbeat", "OnUserDefined")
 MODULE_SCRIPT_FIELDS: tuple[str, ...] = (
     "Mod_OnHeartbeat",
@@ -168,6 +169,203 @@ def _dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
+def _packed_rgb(value: Any, fallback: RGB) -> RGB:
+    """Decode a KOTOR packed ``0xRRGGBB`` color into an RGB tuple."""
+
+    try:
+        packed = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return ((packed >> 16) & 0xFF, (packed >> 8) & 0xFF, packed & 0xFF)
+
+
+def _legacy_are_lighting_metadata(value: Any) -> dict[str, Any]:
+    """Normalize the ARE dictionary stored by older stock-module imports."""
+
+    source = _dict(value)
+    if not source:
+        return {}
+    nested = _dict(source.get("lighting"))
+    if nested:
+        return nested
+    if not any(
+        key in source
+        for key in (
+            "sun_ambient_color",
+            "sun_diffuse_color",
+            "dyn_ambient_color",
+            "shadow_opacity",
+            "sun_shadows",
+        )
+    ):
+        return {}
+    return {
+        "profile": "standard",
+        "source": "map_studio:stock_are_compat",
+        "sun_ambient": list(_packed_rgb(source.get("sun_ambient_color"), (64, 64, 64))),
+        "sun_diffuse": list(_packed_rgb(source.get("sun_diffuse_color"), (255, 255, 255))),
+        "dynamic_ambient": list(_packed_rgb(source.get("dyn_ambient_color"), (64, 64, 64))),
+        "shadow_opacity": source.get("shadow_opacity", 50),
+        "sun_shadows": source.get("sun_shadows", 0),
+    }
+
+
+def normalise_authored_lighting_profile(value: Any) -> str:
+    """Return the stable authored lighting profile key used by Map Studio."""
+
+    text = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if text in {"fullbright", "fullbright_graybox", "graybox_fullbright", "debug_fullbright"}:
+        return FULLBRIGHT_LIGHTING_PROFILE
+    return text
+
+
+def authored_lighting_metadata(module: AuthoredModuleMetadata) -> dict[str, Any]:
+    """Return normalized module-level authored lighting metadata."""
+
+    metadata = _dict(module.metadata)
+    source = metadata.get("lighting")
+    if source is None:
+        source = metadata.get("lighting_profile")
+    if source is None:
+        source = _legacy_are_lighting_metadata(metadata.get("are"))
+    if isinstance(source, dict):
+        result = dict(source)
+    elif isinstance(source, str) and source.strip():
+        result = {"profile": source.strip()}
+    else:
+        result = {}
+    if "profile" not in result and "mode" in result:
+        result["profile"] = result.get("mode")
+    if "profile" not in result and "status" in result:
+        result["profile"] = result.get("status")
+    result["profile"] = normalise_authored_lighting_profile(result.get("profile", ""))
+    return result
+
+
+def authored_area_metadata(
+    module: AuthoredModuleMetadata,
+    area: AuthoredAreaMetadata | None = None,
+) -> AuthoredAreaMetadata:
+    """Merge KMAP/stock-ARE area settings into the explicit area record.
+
+    Older imported KMAPs stored raw ARE values under ``metadata['are']``;
+    newer imports also provide the normalized ``metadata['area']`` mapping.
+    This compatibility merge keeps both forms exportable without changing the
+    caller-owned name, tag, comments, or gameplay flags.
+    """
+
+    current = area or AuthoredAreaMetadata()
+    metadata = _dict(module.metadata)
+    source = _dict(metadata.get("area"))
+    legacy = _dict(metadata.get("are"))
+    if not source:
+        source = _dict(legacy.get("area"))
+    if not source and legacy:
+        source = {
+            "fog_color": list(
+                _packed_rgb(
+                    legacy.get("fog_color", legacy.get("sun_fog_color")),
+                    current.fog_color,
+                )
+            ),
+            "fog_near": legacy.get("fog_near", legacy.get("sun_fog_near", current.fog_near)),
+            "fog_far": legacy.get("fog_far", legacy.get("sun_fog_far", current.fog_far)),
+            "sun_fog_on": legacy.get("sun_fog_on", current.sun_fog_on),
+        }
+    if not source:
+        return current
+
+    fog_color = _rgb_tuple(source.get("fog_color"), current.fog_color)
+    try:
+        fog_near = float(source.get("fog_near", current.fog_near))
+    except (TypeError, ValueError):
+        fog_near = float(current.fog_near)
+    try:
+        fog_far = float(source.get("fog_far", current.fog_far))
+    except (TypeError, ValueError):
+        fog_far = float(current.fog_far)
+    return replace(
+        current,
+        fog_color=fog_color,
+        fog_near=fog_near,
+        fog_far=fog_far,
+        sun_fog_on=bool(source.get("sun_fog_on", current.sun_fog_on)),
+        metadata={
+            **source,
+            **dict(current.metadata),
+            "world_lighting_source": str(source.get("source") or "kmap:area"),
+        },
+    )
+
+
+def authored_lighting_profile(module: AuthoredModuleMetadata) -> str:
+    """Return the authored lighting profile for export/readiness policy."""
+
+    return normalise_authored_lighting_profile(authored_lighting_metadata(module).get("profile"))
+
+
+def authored_lighting_is_fullbright(module: AuthoredModuleMetadata) -> bool:
+    """Return True when the module should compile as a game-visible fullbright graybox."""
+
+    return authored_lighting_profile(module) == FULLBRIGHT_LIGHTING_PROFILE
+
+
+def _rgb_tuple(value: Any, fallback: RGB) -> RGB:
+    if isinstance(value, (list, tuple)) and len(value) >= 3:
+        try:
+            return (
+                max(0, min(255, int(value[0]))),
+                max(0, min(255, int(value[1]))),
+                max(0, min(255, int(value[2]))),
+            )
+        except (TypeError, ValueError):
+            return fallback
+    return fallback
+
+
+def _clamped_byte(value: Any, fallback: int) -> int:
+    try:
+        return max(0, min(255, int(value)))
+    except (TypeError, ValueError):
+        return fallback
+
+
+def authored_area_lighting_values(
+    module: AuthoredModuleMetadata,
+    area: AuthoredAreaMetadata | None = None,
+    *,
+    is_k2: bool = False,
+) -> dict[str, Any]:
+    """Return ARE lighting values after applying the authored lighting profile."""
+
+    area = authored_area_metadata(module, area)
+    lighting = authored_lighting_metadata(module)
+    profile = authored_lighting_profile(module)
+    if profile == FULLBRIGHT_LIGHTING_PROFILE:
+        return {
+            "profile": FULLBRIGHT_LIGHTING_PROFILE,
+            "source": str(lighting.get("source") or "map_studio:authored:fullbright"),
+            "sun_ambient": (255, 255, 255),
+            "sun_diffuse": (255, 255, 255),
+            "dynamic_ambient": (255, 255, 255),
+            "shadow_opacity": 0,
+            "sun_shadows": 0,
+        }
+
+    return {
+        "profile": profile or "standard",
+        "source": str(lighting.get("source") or "map_studio:authored:area_metadata"),
+        "sun_ambient": _rgb_tuple(lighting.get("sun_ambient"), area.sun_ambient),
+        "sun_diffuse": _rgb_tuple(lighting.get("sun_diffuse"), area.sun_diffuse),
+        "dynamic_ambient": _rgb_tuple(
+            lighting.get("dynamic_ambient") or lighting.get("dyn_ambient"),
+            area.sun_ambient,
+        ),
+        "shadow_opacity": _clamped_byte(lighting.get("shadow_opacity"), 128 if is_k2 else 50),
+        "sun_shadows": _clamped_byte(lighting.get("sun_shadows"), 0),
+    }
+
+
 def _script_field_name(value: Any, fields: tuple[str, ...]) -> str:
     wanted = str(value or "").strip().lower()
     for field_name in fields:
@@ -200,7 +398,7 @@ def _normalise_script_hooks(*sources: dict[str, Any], fields: tuple[str, ...]) -
 def authored_area_script_hooks(module: AuthoredModuleMetadata, area: AuthoredAreaMetadata | None = None) -> dict[str, str]:
     """Return normalized ARE script hooks authored in KMAP metadata."""
 
-    area = area or AuthoredAreaMetadata()
+    area = authored_area_metadata(module, area)
     module_metadata = _dict(module.metadata)
     area_metadata = _dict(area.metadata)
     return _normalise_script_hooks(
@@ -311,7 +509,7 @@ def validate_authored_module_metadata(
 ) -> AuthoredModuleMetadataValidation:
     """Validate ARE/IFO metadata before serialization."""
 
-    area = area or AuthoredAreaMetadata()
+    area = authored_area_metadata(module, area)
     time = time or AuthoredModuleTimeMetadata()
     warnings: list[str] = []
     blocking: list[str] = []
@@ -370,11 +568,13 @@ def build_authored_are_gff(
 ) -> Any:
     """Build an ARE GFF from authored area metadata."""
 
-    area = area or AuthoredAreaMetadata()
+    area = authored_area_metadata(module, area)
     root_resref = module.normalised_root()
     display_name = str(area.name or module.display_name or root_resref)
     tag = normalise_resref(area.tag or module.tag or root_resref)
     is_k2 = _is_k2_game(module.game)
+    lighting = authored_area_lighting_values(module, area, is_k2=is_k2)
+    sun_fog_on = bool(area.sun_fog_on) and lighting["profile"] != FULLBRIGHT_LIGHTING_PROFILE
     gff = _new_gff("ARE")
     root = gff.root
     root.set_int32("ID", 0)
@@ -419,22 +619,22 @@ def build_authored_are_gff(
     root.set_uint8("StealthXPEnabled", 0)
     root.set_uint32("StealthXPLoss", 0)
     root.set_uint32("StealthXPMax", 0)
-    root.set_uint32("SunAmbientColor", _rgb(area.sun_ambient))
-    root.set_uint32("SunDiffuseColor", _rgb(area.sun_diffuse))
+    root.set_uint32("SunAmbientColor", _rgb(lighting["sun_ambient"]))
+    root.set_uint32("SunDiffuseColor", _rgb(lighting["sun_diffuse"]))
     if is_k2:
         root.set_uint32("FogColor", _rgb(area.fog_color))
         root.set_single("FogNearDist", float(area.fog_near))
         root.set_single("FogFarDist", float(area.fog_far))
-        root.set_uint8("SunFog", _byte(area.sun_fog_on))
-    root.set_uint8("SunFogOn", _byte(area.sun_fog_on))
-    root.set_single("SunFogNear", float(area.fog_near) if is_k2 else 99.0)
-    root.set_single("SunFogFar", float(area.fog_far) if is_k2 else 100.0)
+        root.set_uint8("SunFog", _byte(sun_fog_on))
+    root.set_uint8("SunFogOn", _byte(sun_fog_on))
+    root.set_single("SunFogNear", float(area.fog_near))
+    root.set_single("SunFogFar", float(area.fog_far))
     root.set_uint32("SunFogColor", _rgb(area.fog_color))
-    root.set_uint8("SunShadows", 0)
-    root.set_uint32("DynAmbientColor", _rgb(area.sun_ambient))
+    root.set_uint8("SunShadows", int(lighting["sun_shadows"]))
+    root.set_uint32("DynAmbientColor", _rgb(lighting["dynamic_ambient"]))
     root.set_uint8("IsNight", 0)
     root.set_uint8("LightingScheme", 0)
-    root.set_uint8("ShadowOpacity", 128 if is_k2 else 50)
+    root.set_uint8("ShadowOpacity", int(lighting["shadow_opacity"]))
     root.set_uint8("DayNightCycle", 0)
     root.set_int32("ChanceRain", 0)
     root.set_int32("ChanceSnow", 0)
@@ -503,6 +703,79 @@ def build_authored_are_bytes(
     return _bytes_gff(build_authored_are_gff(module, area, room_resrefs=room_resrefs))
 
 
+def patch_preserved_stock_are_bytes(
+    source_are_bytes: bytes,
+    module: AuthoredModuleMetadata,
+    area: AuthoredAreaMetadata | None = None,
+    *,
+    room_resrefs: tuple[str, ...] = (),
+    update_world_lighting: bool = False,
+) -> bytes:
+    """Patch only Map Studio-owned fields into an imported stock ARE.
+
+    Unknown moon/weather/grass/audio fields and K1/K2 field presence remain
+    byte-for-byte untouched when no authored change is needed.  When rooms or
+    world lighting change, the source GFF is reserialized but unowned fields
+    and existing per-room structs are preserved semantically.
+    """
+
+    raw = bytes(source_are_bytes or b"")
+    if not raw:
+        return build_authored_are_bytes(module, area, room_resrefs=room_resrefs)
+    from pykotor.resource.formats.gff import read_gff
+
+    source = read_gff(raw)
+    target_rooms = _normalised_unique_room_resrefs(room_resrefs, module.normalised_root())
+    existing_rooms = tuple(source.root.acquire("Rooms", ()) or ())
+    existing_names = tuple(
+        normalise_resref(str(room.acquire("RoomName", "") or ""))
+        for room in existing_rooms
+        if normalise_resref(str(room.acquire("RoomName", "") or ""))
+    )
+    if not update_world_lighting and existing_names == target_rooms:
+        return raw
+
+    candidate = build_authored_are_gff(module, area, room_resrefs=target_rooms)
+    if update_world_lighting:
+        setters = {
+            "SunAmbientColor": source.root.set_uint32,
+            "SunDiffuseColor": source.root.set_uint32,
+            "DynAmbientColor": source.root.set_uint32,
+            "ShadowOpacity": source.root.set_uint8,
+            "SunShadows": source.root.set_uint8,
+            "SunFogOn": source.root.set_uint8,
+            "SunFogNear": source.root.set_single,
+            "SunFogFar": source.root.set_single,
+            "SunFogColor": source.root.set_uint32,
+            "FogColor": source.root.set_uint32,
+            "FogNearDist": source.root.set_single,
+            "FogFarDist": source.root.set_single,
+            "SunFog": source.root.set_uint8,
+        }
+        for label, setter in setters.items():
+            # Preserve the exact vanilla field-presence contract. In
+            # particular, K2 001ebo omits the Fog*/SunFog alias fields.
+            if label in source.root and label in candidate.root:
+                setter(label, candidate.root.get(label))
+
+    if existing_names != target_rooms:
+        existing_by_name = {
+            normalise_resref(str(room.acquire("RoomName", "") or "")): room
+            for room in existing_rooms
+        }
+        candidate_by_name = {
+            normalise_resref(str(room.acquire("RoomName", "") or "")): room
+            for room in tuple(candidate.root.acquire("Rooms", ()) or ())
+        }
+        patched_rooms = _empty_gff_list()
+        for room_name in target_rooms:
+            room = existing_by_name.get(room_name) or candidate_by_name.get(room_name)
+            if room is not None:
+                patched_rooms.append(room)
+        source.root.set_list("Rooms", patched_rooms)
+    return _bytes_gff(source)
+
+
 def build_authored_ifo_bytes(
     module: AuthoredModuleMetadata,
     entry_point: ModuleEntryPoint,
@@ -527,9 +800,10 @@ def compile_authored_module_metadata(
     validation = validate_authored_module_metadata(module, entry_point, area, time)
     if not validation.ok:
         raise ValueError("; ".join(validation.blocking_issues))
-    area = area or AuthoredAreaMetadata()
+    area = authored_area_metadata(module, area)
     time = time or AuthoredModuleTimeMetadata()
     module_root = module.normalised_root()
+    lighting = authored_area_lighting_values(module, area, is_k2=_is_k2_game(module.game))
     area_names = tuple(normalise_resref(value) for value in area_resrefs if normalise_resref(value))
     if not area_names:
         area_names = (normalise_resref(entry_point.area_resref),)
@@ -546,6 +820,21 @@ def compile_authored_module_metadata(
             "area_resrefs": list(area_names),
             "fog_near": float(area.fog_near),
             "fog_far": float(area.fog_far),
+            "lighting_profile": lighting["profile"],
+            "lighting": {
+                "profile": lighting["profile"],
+                "source": lighting["source"],
+                "sun_ambient": list(lighting["sun_ambient"]),
+                "sun_diffuse": list(lighting["sun_diffuse"]),
+                "dynamic_ambient": list(lighting["dynamic_ambient"]),
+                "shadow_opacity": int(lighting["shadow_opacity"]),
+                "sun_shadows": int(lighting["sun_shadows"]),
+            },
+            "sun_ambient": list(lighting["sun_ambient"]),
+            "sun_diffuse": list(lighting["sun_diffuse"]),
+            "dynamic_ambient": list(lighting["dynamic_ambient"]),
+            "shadow_opacity": int(lighting["shadow_opacity"]),
+            "sun_shadows": int(lighting["sun_shadows"]),
             "dawn_hour": int(time.dawn_hour),
             "dusk_hour": int(time.dusk_hour),
             "area_scripts": authored_area_script_hooks(module, area),
@@ -559,15 +848,23 @@ __all__ = [
     "AREA_SCRIPT_FIELDS",
     "AuthoredModuleMetadataValidation",
     "AuthoredModuleTimeMetadata",
+    "FULLBRIGHT_LIGHTING_PROFILE",
     "MODULE_SCRIPT_FIELDS",
     "CompiledAuthoredModuleMetadata",
+    "authored_area_metadata",
+    "authored_area_lighting_values",
     "authored_area_script_hooks",
+    "authored_lighting_is_fullbright",
+    "authored_lighting_metadata",
+    "authored_lighting_profile",
     "authored_module_id_bytes",
     "authored_module_script_hooks",
     "build_authored_are_bytes",
+    "patch_preserved_stock_are_bytes",
     "build_authored_are_gff",
     "build_authored_ifo_bytes",
     "build_authored_ifo_gff",
     "compile_authored_module_metadata",
+    "normalise_authored_lighting_profile",
     "validate_authored_module_metadata",
 ]

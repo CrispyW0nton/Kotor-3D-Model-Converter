@@ -231,7 +231,7 @@ class QtGhostRiggerMainWindow(
     WorkspaceDockMixin,
     QtWidgets.QMainWindow,
 ):
-    APP_TITLE = "GhostRigger-K1-K2  //  Odyssey Engine Pipeline v6.1"
+    APP_TITLE = "GhostStudio  //  Odyssey Engine Pipeline v6.1"
     APP_VERSION = "6.1.0"
     # Source-contract anchors for tests that still inspect this shell after the
     # behavior moved into mixins:
@@ -273,6 +273,7 @@ class QtGhostRiggerMainWindow(
         self.settings_data.setdefault("autoscan", True)
         self.settings_data.setdefault("fbx_sdk", {})
         self.settings_data.setdefault("mixamo_companion_mesh_path", "")
+        self.settings_data.setdefault("getting_started_seen", False)
         RendererSettings.apply_defaults(self.settings_data)
         self._preloaded_library = dict(self.startup_input.get("preloaded_library") or {})
         self._preloaded_hardware_diagnostics = dict(self.startup_input.get("hardware_diagnostics") or {})
@@ -391,6 +392,7 @@ class QtGhostRiggerMainWindow(
         QtCore.QTimer.singleShot(250, self._start_ipc_server)
         QtCore.QTimer.singleShot(1200, self._enable_theme_progress_toasts)
         QtCore.QTimer.singleShot(300, self._finish_pending_prelaunch_after_first_paint)
+        QtCore.QTimer.singleShot(650, self._maybe_show_getting_started_on_first_launch)
         if not self._preloaded_library.get("detection_attempted"):
             QtCore.QTimer.singleShot(350, self._auto_detect_dirs_on_startup)
 
@@ -659,6 +661,14 @@ class QtGhostRiggerMainWindow(
             else:
                 self._log(f"IPC window capture failed: {target}", "warning")
 
+        def map_studio_visual_proof(payload: object = None) -> dict:
+            data = payload if isinstance(payload, dict) else {}
+            return self._map_studio_visual_proof_from_ipc(data)
+
+        def map_studio_pie_visual_proof(payload: object = None) -> dict:
+            data = payload if isinstance(payload, dict) else {}
+            return self._map_studio_pie_visual_proof_from_ipc(data)
+
         try:
             self._ipc_server = GhostRiggerIPCServer(
                 {
@@ -697,10 +707,12 @@ class QtGhostRiggerMainWindow(
                     "select_helper": select_helper,
                     "capture_viewport": capture_viewport,
                     "capture_window": capture_window,
+                    "map_studio_visual_proof": map_studio_visual_proof,
+                    "map_studio_pie_visual_proof": map_studio_pie_visual_proof,
                 }
             )
             self._ipc_server.start()
-            self._log("IPC server starting on port 7001.", "info")
+            self._log(f"IPC server starting on port {self._ipc_server.port}.", "info")
         except Exception as exc:
             self._ipc_server = None
             self._log(f"IPC server failed to start: {exc}", "warning")

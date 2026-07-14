@@ -27,6 +27,29 @@ log = logging.getLogger(__name__)
 class BasWorkflowMixin:
     """Body Attachment System preview and recipe helpers."""
 
+    def _ensure_bas_attachment_catalog(self, *_args) -> None:
+        """Lazily build the game-derived BAS item catalog once games resolve."""
+
+        panel = getattr(self, "body_attachment_panel", None)
+        if panel is None or not hasattr(panel, "set_attachment_catalog"):
+            return
+        if panel.attachment_catalog() is not None:
+            return
+        manager = self._get_resource_manager()
+        if manager is None:
+            return
+        try:
+            from src.systems.bas.attachment_catalog import build_bas_attachment_catalog
+
+            catalog = build_bas_attachment_catalog(manager)
+        except Exception:
+            log.debug("BAS attachment catalog build failed", exc_info=True)
+            return
+        if not catalog.empty:
+            panel.set_attachment_catalog(catalog)
+            slot_count = sum(len(rows) for rows in catalog.entries_by_slot.values())
+            panel.set_status(f"BAS catalog ready: {slot_count} attachable game models across all slots.")
+
     def _handle_bas_mode_changed(self, mode: str) -> None:
         mode_key = str(mode or "headless_body").strip().lower()
         if mode_key not in {"headless_body", "full_body"}:

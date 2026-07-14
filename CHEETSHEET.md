@@ -81,22 +81,143 @@ seek_animation(50)
 The Drexl replacement package is staged in the local KOTOR II Override folder.
 Use these after KOTOR II is running with cheats enabled.
 
-In the KOTOR II console, spawn the direct C_DrexlF test template:
+Start a KotorMCP live debug-event log before launching KOTOR II:
 
-```text
-dm_spawncreature c_drexl_amb
+```python
+import asyncio, json
+from kotormcp.tools import handle_tool
+
+async def start_kotor_log():
+    result = await handle_tool("kotor_log_start", {
+        "game": "k2",
+        "session_label": "drexl-live-test",
+        "wait_for_process": True,
+        "duration_seconds": 180,
+        "asset_resrefs": ["c_drexlf", "appearance"],
+    })
+    print(result["text"])
+
+asyncio.run(start_kotor_log())
 ```
 
-Fallback ambient template using the same appearance row:
+Analyze the latest KOTOR live log and annotate crash offsets through Ghidra:
+
+```python
+import asyncio
+from kotormcp.tools import handle_tool
+
+async def analyze_latest_kotor_log():
+    result = await handle_tool("kotor_log_analyze", {
+        "game": "k2",
+        "annotate_with_ghidra": True,
+        "ghidra_program": "/TSL/k2_win_steam_aspyr_swkotor2.exe",
+    })
+    print(result["text"])
+
+asyncio.run(analyze_latest_kotor_log())
+```
+
+KOTOR II does not expose a `dm_spawncreature` console command. For the KPM
+Issue #98 Drexl proof, close the game and place the unique fixture directly in
+the PLCaa GIT:
+
+```powershell
+py "C:\Users\NewAdmin\Documents\GDeveloper\Workspaces\Kotor-Patch-Manager\tools\stage_k2_plcaa_drexl_fixture.py" --install
+```
+
+Then use the real KOTOR II console command:
 
 ```text
-dm_spawncreature g_drexl_amb01
+warp plcaa
 ```
 
 After capturing screenshot or video evidence, record the proof:
 
 ```powershell
 python scripts/record_drexl_runtime_game_proof.py --proof-manifest "C:\Users\NewAdmin\Documents\KotorMods\HighFidelityKotorCharacters\Drexl\c_drexlf_override_package\c_drexlf_runtime_game_proof_manifest.json" --evidence "C:\path\to\drexl_runtime_evidence.png" --tester "LordVaderCW" --game-launches-with-override --ambient-drexl-spawns --new-texture-visible --uv-alignment-ok --idle-animation-ok --walk-animation-ok --scale-orientation-ok --camera-hook-ok
+```
+
+## KOTOR Live Proof Hook And Logger
+
+Install or verify the GhostRigger DirectInput proxy hook for KOTOR 1:
+
+```python
+import asyncio
+from kotormcp.tools import handle_tool
+
+async def install_k1_hook():
+    result = await handle_tool("kotor_dinput_hook_install", {"game": "k1"})
+    print(result["text"])
+
+asyncio.run(install_k1_hook())
+```
+
+Install or verify the same hook for KOTOR 2:
+
+```python
+import asyncio
+from kotormcp.tools import handle_tool
+
+async def install_k2_hook():
+    result = await handle_tool("kotor_dinput_hook_install", {"game": "k2"})
+    print(result["text"])
+
+asyncio.run(install_k2_hook())
+```
+
+Preflight a Map Studio warp proof and require the hook:
+
+```python
+import asyncio
+from kotormcp.tools import handle_tool
+
+async def preflight_tst_light(game):
+    result = await handle_tool("kotor_prepare_save_warp_test", {
+        "game": game,
+        "target_module": "tst_light",
+        "require_dinput_hook": True,
+    })
+    print(result["text"])
+
+asyncio.run(preflight_tst_light("k1"))
+```
+
+Queue the hidden-console warp through the DirectInput hook:
+
+```python
+import asyncio
+from kotormcp.tools import handle_tool
+
+async def hook_warp(game):
+    result = await handle_tool("kotor_dinput_hook_send", {
+        "game": game,
+        "text": "warp tst_light",
+        "open_console": True,
+        "press_enter": True,
+        "reset_first": True,
+    })
+    print(result["text"])
+
+asyncio.run(hook_warp("k1"))
+```
+
+Start a live crash log for KOTOR 1 and analyze it with Ghidra addresses:
+
+```python
+import asyncio
+from kotormcp.tools import handle_tool
+
+async def k1_live_log():
+    start = await handle_tool("kotor_log_start", {
+        "game": "k1",
+        "session_label": "tst-light-k1",
+        "wait_for_process": True,
+        "duration_seconds": 180,
+        "asset_resrefs": ["tst_light"],
+    })
+    print(start["text"])
+
+asyncio.run(k1_live_log())
 ```
 
 Copy one animation clip over another on the selected model:
@@ -161,6 +282,42 @@ window._log("Hello from the Python terminal", "info")
 
 ## Map Studio Smoke Workflows
 
+Capture a focus-safe stock-sky proof from an already running GhostStudio IPC
+server. This imports K1 Taris into an empty Map Studio project, captures the
+real canvas with its sky hidden and shown, verifies the expected sky textures,
+and refuses to steal foreground focus or overwrite an existing project:
+
+```powershell
+$proofRoot = [IO.Path]::GetFullPath((Join-Path (Get-Location) "Saved\VisibleProof\map_studio_sky"))
+New-Item -ItemType Directory -Force -Path $proofRoot | Out-Null
+
+$body = @{
+    game = "K1"
+    module_resref = "tar_m02aa"
+    modules_dir = "C:\Program Files (x86)\Steam\steamapps\common\swkotor\Modules"
+    before_path = (Join-Path $proofRoot "01_without_sky.png")
+    after_path = (Join-Path $proofRoot "02_with_sky.png")
+    activate = $false
+    # Positive proof requests are normalized to the full five-second renderer
+    # residency window so stock sky textures have time to decode and upload.
+    settle_ms = 5000
+    expected_room_resref = "m02aa_sky"
+    expected_backdrop_surface_count = 6
+    expected_textures = @{
+        lts_sky0001 = @(512, 512)
+        lts_sky0002 = @(512, 512)
+        lts_sky0003 = @(512, 512)
+        lts_sky0004 = @(512, 512)
+        lts_sky0005 = @(512, 512)
+    }
+} | ConvertTo-Json -Depth 5
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:7001/api/map_studio_visual_proof -ContentType "application/json" -Body $body
+```
+
+The resulting images prove GhostStudio viewport behavior only. A KOTOR warp
+and live log are still required before treating the sky or lighting as working
+in game.
+
 Stage both `grdev01` Map Studio smoke-module variants for manual KOTOR testing:
 
 ```powershell
@@ -209,6 +366,26 @@ Each staged variant produces its own `grdev01.mod`. Copy one variant at a time
 into the KOTOR `Modules` folder, run `warp grdev01`, and record screenshot or
 video evidence before treating it as game-tested.
 
+## Map Studio Targeted Refresh Timing
+
+After dragging or property-editing a placed GIT object or room light in Map
+Studio, read the last targeted commit-refresh duration from the embedded
+terminal (T2904; the broad `_refresh_all` path is only used for placement
+add/remove, undo/redo, and load/save):
+
+```python
+ms = window.module_editor_window
+(ms._last_map_studio_gameplay_refresh_ms, ms._last_map_studio_geometry_refresh_ms)
+```
+
+Confirm the combined preview model was NOT rebuilt by a transform commit
+(cache hit stays true and the elapsed preview time stays near zero):
+
+```python
+c = window.module_editor_window.controller
+(c.last_map_studio_preview_cache_hit, c.last_map_studio_preview_elapsed_ms)
+```
+
 ## Mesh Tools IPC
 
 Create a cube in the active KMAX scene through the mesh tool command route:
@@ -229,3 +406,17 @@ Assign a simple material override and run topology validation:
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:7001/api/mesh_tool_command -ContentType "application/json" -Body '{"command":"assign_material","target":{"id":"selected"},"options":{"slot":0,"material":"metal_floor"}}'
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:7001/api/mesh_tool_command -ContentType "application/json" -Body '{"command":"validate_mesh","target":{"id":"selected"}}'
 ```
+
+## Unreal / FBX Animation Injection
+
+Extract an Unreal humanoid FBX clip with Blender, retarget it to a KOTOR model,
+resolve inherited animation slots from the selected game installation, write
+MDL/MDX, and require writer round-trip verification before reporting PASS:
+
+```powershell
+py -3.14 scripts/inject_animation.py --source-fbx "C:\Path\To\UnrealAnimation.fbx" --target-mdl "C:\Path\To\pmbam.mdl" --target-mdx "C:\Path\To\pmbam.mdx" --slot victory --game K1 --game-dir "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --output "Saved\RetargetProof\ue_to_kotor" --write-mdl
+```
+
+Use `--game K2` with the KOTOR 2 installation for TSL targets. A successful
+headless readback is still not an in-game animation proof; trigger the exact
+written slot in the target game before shipping it.

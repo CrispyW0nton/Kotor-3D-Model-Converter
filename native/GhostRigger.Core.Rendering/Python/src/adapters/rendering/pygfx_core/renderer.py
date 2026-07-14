@@ -402,6 +402,14 @@ class PygfxViewportRenderer(ViewportRendererPort):
             self.mesh_cache.clear()
         self._active_model_id = 0
 
+    def update_texture_regions(self, texture_name: str, image, regions) -> bool:
+        # pygfx owns explicit texture objects; use the targeted invalidation
+        # path below until its public dirty-range API is stable across versions.
+        return False
+
+    def invalidate_texture(self, texture_name: str, image=None) -> bool:
+        return bool(self.mesh_cache.invalidate_texture(texture_name, image=image))
+
     def invalidate_node(self, node) -> None:
         if node is None:
             return

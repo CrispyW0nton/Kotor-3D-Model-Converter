@@ -9,6 +9,4482 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-07-13
+
+### [2026-07-13] Native payload hashes survive fresh Windows checkouts
+
+Owner: LordVaderCW
+
+Subsystem: Git text normalization and embedded Python payload integrity
+
+- Added a repository `.gitattributes` rule that keeps Python source at LF on
+  every platform. Native payload manifests hash the exact packaged bytes;
+  without this rule, a fresh Windows clone with `core.autocrlf=true` rewrote
+  Python payloads to CRLF and invalidated all manifest hashes even though the
+  committed blobs were correct.
+
+Verification: the issue was reproduced from a detached clean worktree at the
+  Map Studio milestone commit. Post-amend clean-checkout payload tests are part
+  of the final pre-push gate.
+
+### [2026-07-13] Credential-safe live warp harness
+
+Owner: LordVaderCW
+
+Subsystem: KotorMCP live game-proof helper and repository secret hygiene
+
+- Removed the embedded AgentDecompile password and derived authentication
+  header from `scripts/kotor_live_warp_plcaa.py`. The helper now consumes
+  `AGENTDECOMPILE_GHIDRA_PASSWORD` from the caller environment and constructs
+  the optional header only in memory.
+
+Verification: staged-source secret scan found no private-key, token, or known
+AgentDecompile-password pattern after the change; Python compilation is covered
+by the focused pre-push verification.
+
+### [2026-07-13] T3008: Incomplete community room lists no longer block or corrupt PIE
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio custom-module import, unresolved stock-room provenance,
+preview/camera collision, PIE readiness, export safety, native payloads, and
+visible `rnvcanyon.mod` proof
+
+Intersects: The T3001 complete-module hydration path, T3008 PIE/walkmesh and
+camera work, the renderer performance pass, and the shared dirty worktree.
+
+- Fixed the contradiction where stock-room conversion treated missing or dummy
+  room models as a nonfatal skip, but the PIE gate subsequently blocked every
+  skipped placeholder. Conversion now records a typed unresolved-source state
+  while preserving the LYT/ARE room reference for diagnosis and round-trip
+  intent.
+- PIE walkmesh and preview compilation honor that state only for a non-imported
+  `stock_module_import` room explicitly marked `unresolved`. The temporary
+  10x10 floor-plan is excluded from both player WOK and camera collision; a
+  stray metadata boolean cannot hide ordinary authored/imported geometry.
+- Kept engine-output safety stricter than simulation. Readiness and module
+  export report an actionable blocker for every unresolved room and will not
+  synthesize fake MDL/MDX/WOK resources. Supplying the missing room resources
+  and converting successfully clears the exclusion state.
+- Reworded import feedback as unresolved source room references rather than
+  assuming every missing record is a harmless dummy.
+
+Affected areas: Core.Scene/Core.Tools mirrors of `authored_imported_mesh.py`,
+`authored_module_walkmesh.py`, `authored_module_preview_model.py`,
+`authored_module_readiness.py`, `authored_module_export.py`, and
+`module_editor_controller.py`; canonical/Scene/Tools `map_studio_pie.py`;
+focused PIE/payload tests and regenerated Scene/Tools native payloads.
+
+Verification: direct inspection of
+`C:\Users\NewAdmin\Documents\KotorMods\Modules\rnvcanyon.mod` found 13 unique
+LYT/ARE room references, while `koq200_01l`, `koq200_01m`, `koq200_01n`, and
+`koq200_01h` have no bundled MDL/MDX/WOK. Raw ERF inspection confirmed that all
+104 indexed resources cover the MOD contiguously from byte 3,488 through EOF,
+with no gaps, trailing payload, or orphan resource table entry to recover. The
+four names occur only inside ARE/LYT metadata, are absent from VIS, and cannot
+be resolved from either installed K1 or K2 resource set. The original
+`RNVcanyon.mod` inside the downloaded ZIP is byte-identical (SHA-256
+`D4FA4662B501106F4B451950E9F5E66413F11F7B9226B5E4603B5F2A05413020`), ruling
+out local file damage and identifying stale source metadata rather than hidden
+room-model corruption. Exact in-memory import converted the
+other 9 rooms, excluded those 4 references, produced 1,419 combined WOK faces,
+zero fake preview nodes/camera triangles, no PIE blockers, and four explicit
+export blockers. Seven focused PIE, mirror, payload ABI, and staged-DLL tests
+passed; the only warning was the existing Windows pytest-cache collision.
+`Debug|x64` rebuilt successfully with all 18 payload DLLs staged; build log:
+`Saved/BuildLogs/2026-07-13_rnvcanyon_pie_unresolved_rooms_debug_rebuild.log`.
+The final `GhostStudio.exe` SHA-256 is
+`0C268993406C8CE5AF0868F7CC11CA6C66CBC98B9CE48742DF8E46889F37820C`.
+The real rebuilt app then passed the same Play-button workflow: 6/6 continuous
+frames, 1,197 walkable faces, 37,042 real collision triangles, 4.322754 m player
+movement, `pause1` and `walk`, zero unresolved-room collision, and a 54.875 ms
+viewport median (about 18.2 FPS). Visual inspection confirmed intact canyon
+geometry/textures, a grounded undeformed player, and correct forward movement.
+Artifact:
+`Saved/VisibleProof/2026-07-13_rnvcanyon_pie_unresolved_rooms/rnvcanyon_pie_result.json`.
+This proves GhostStudio PIE behavior, not KOTOR engine acceptance.
+
+### [2026-07-13] T3008: 207TEL PIE frame cost halved without changing rendered output
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE animation scheduling, actor-local transforms, ModernGL
+state submission, viewport timing instrumentation, native Python payloads, and
+visible 207TEL proof
+
+Intersects: The T3001 207TEL hydration work, T3008 creature/head/grounding and
+lighting fixes, retained actor/skin-palette work, and the shared dirty worktree.
+
+- Removed per-frame static-room transform churn by routing identity-free room
+  and placeable nodes through the persistent world-transform cache while each
+  retained actor keeps its own pose-local animated cache. Identity-free nodes
+  can no longer inherit the first actor's scoped pose by accident.
+- Replaced the feedback-prone NPC catch-up scheduler with a bounded round-robin
+  animation budget. A 32-creature scene now samples at most 6-7 NPC poses per
+  tick and advances each sampled actor by its accumulated real elapsed time;
+  slow frames degrade NPC sampling frequency instead of requesting all 32 poses
+  on every subsequent frame.
+- Added exact, pass-local suppression of redundant ModernGL scalar/vector/matrix
+  uniform and blend-state submissions. Bone palettes remain under the existing
+  actor/pose/signature correctness gate and are deliberately excluded from the
+  generic cache. Draw order, material selection, transparency semantics, and
+  submitted values are unchanged.
+- Replaced the generic 3x3 matrix inversion used for normal matrices with an
+  analytic inverse-transpose path, kept PIE on the full-resolution interactive
+  presentation path, and exposed upload/draw/readback/visible/culled timings in
+  the visible proof report.
+- Added a cross-payload byte-identity regression for duplicate renderer contract
+  modules. This prevents the embedded importer's DLL discovery order from
+  selecting a stale `mesh_render_data` copy.
+
+Affected areas: Core.Rendering `moderngl_renderer_impl.py` and
+`mesh_render_data.py`; Runtime.Shared renderer-contract mirror; Core.Tools
+`module_editor_window.py`; Core.Math `gpu_math.py`; GUI.Display viewport
+rendering/proof instrumentation; canonical/Scene/Tools `map_studio_pie.py`;
+focused renderer, animation, PIE, math, and payload tests; retained PIE profile
+script.
+
+Verification: the exact retained 207TEL benchmark (399 draws, 72,065 triangles,
+1032x357, RTX 5090) improved from 52.086 ms to 44.561 ms median (14.4%) in the
+isolated fast path while skipping 14,074 redundant uniform submissions and 399
+blend changes per frame. Five renderer variants remained pixel-identical with
+zero changed pixels. Production-style player-plus-six-NPC animation improved
+from 80.55 ms to 71.58 ms (11.1%) and unchanged animated-world misses fell from
+233 to zero. Nineteen focused behavior tests and three post-build payload
+ABI/staging tests passed; the only warning was the existing Windows pytest-cache
+collision. `Debug|x64` rebuilt successfully with all 18 payload DLLs staged;
+build log:
+`Saved/BuildLogs/2026-07-13_pie_performance_scripter_audit_debug_rebuild.log`.
+The rebuilt `GhostStudio.exe` SHA-256 is
+`EE6E58B7D9F457B929A7ED305458CFD3795376856BDE0216D1C603F4ECC7F01A`.
+The real Debug app then passed a 12-frame 207TEL PIE proof: viewport median
+dropped from the earlier 157.724 ms to 73.569 ms (about 2.14x the previous frame
+rate), GPU median was 67.688 ms, movement covered 3.371667 m, and both `pause1`
+and `walk` were observed. Visual inspection confirmed stable lighting/textures,
+attached heads, grounded undeformed bodies, forward player facing, and no
+authoring marquee. Artifact:
+`Saved/VisibleProof/2026-07-13_pie_performance_submission_cache_final/207tel_pie_result.json`.
+This proves GhostStudio PIE behavior, not KOTOR 2 engine acceptance. The next
+major performance target is reducing the remaining 400 individual draw calls
+through correctness-preserving static room/material batching.
+
+### [2026-07-13] T3008: PIE keeps detachable-head bodies grounded and applies retail full-body RaceTex
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio stock-creature appearance resolution, copy-owned PIE
+actors, BAS animation bind authority, static stock preview materials, native
+Python payloads, and visible 207TEL proof
+
+Intersects: The T3001 207TEL stock-module hydration and headhook work, T3008
+retained actor/skin-palette work, renderer lighting/performance changes, and the
+shared dirty worktree.
+
+- Fixed the approximately 1.1 m vertical collapse affecting the player and
+  body-plus-detachable-head NPCs in PIE. BAS composition retains complete head
+  DAGs that repeat ordinary Odyssey names such as `rootdummy`; the animation
+  engine's last-write name map had allowed a zero-height attachment bind to
+  replace the primary body's 1.06-1.13 m bind. Primary non-attachment nodes now
+  remain the authoritative body bind while attachment-local animation continues
+  through its separate source-model engine. No WOK, GIT placement, model-scale,
+  or blanket visual-offset workaround was added.
+- Added the retail full-body appearance-texture contract missing from stock Map
+  Studio previews and PIE actors. For a non-B creature, `appearance.2da`'s
+  `racetex` is a complete instance override resref; 207TEL's `g_exthgr` selects
+  row 256 (`Alien_Rodian_02`) and therefore uses `n_rodian02`, not the
+  `n_rodian01` fallback authored on one rigid MDL mesh. Static flattened preview
+  meshes and the retained PIE body's deep-copied DAG receive the override on
+  every renderable body mesh. Shared retail source/prototype models and BAS head
+  attachment layers remain unchanged so different appearance rows cannot
+  contaminate one another.
+- Verified the `RaceTex` branch directly in the retail K2 executable with
+  Ghidra 12.1.2: the `RaceTex` string at VA `0x009a4418` has its appearance-path
+  reference at `0x0085bed7` in `FUN_0085b940`; the value is used directly for
+  non-B model types. The separate `%s01` formatting path at `0x009a4480` belongs
+  to `FUN_0085d430`, the B-body/armor variation path.
+
+Affected areas: Core.Workflow `animation_engine.py`; canonical
+`src/core/modules/map_studio_pie_creatures.py` plus Core.Scene/Core.Tools
+payload copies; Core.Scene/Core.Tools package-local
+`map_studio_stock_content_preview.py`; focused animation, ModernGL, stock
+preview, installed-207TEL, grounding, and payload tests.
+
+Verification: MCP `compare_model_pipelines`, `inspect_mdl`, and
+`inspect_mdl_ghostrigger` matched `K2:n_rodian` at 79/79 nodes with zero
+discrepancies and confirmed that RArm/LArm/torso02/Head are intentionally
+texture-null in the MDL while Hair names `n_rodian01`. Thirteen focused tests
+passed together, covering the synthetic duplicate-bind contract, uploaded GPU
+palette/support plane, all 32 installed 207TEL WOK strata, exact PMBAM+PMHC01,
+exact Ramana, exact `g_exthgr -> n_rodian + n_rodian02`, copy ownership, static
+preview override, and existing head graft behavior. Two native payload identity
+and staged-DLL checks passed; canonical/Scene/Tools PIE copies and both stock
+preview copies are SHA-256 identical. `Debug|x64` rebuilt successfully with all
+18 manifest-owned payload DLLs staged; build log:
+`Saved/BuildLogs/2026-07-13_pie_sinking_rodian_debug_rebuild.log`. The rebuilt
+`GhostStudio.exe` SHA-256 is
+`C194E853362BFF7F6AB535476D35F7E1B74302C278E30484F8F826A72B2EE5DA`.
+The real app captured 6/6 continuous 207TEL PIE frames, retained `pause1` and
+`walk`, and moved 1.558333 m on 8,030 collision triangles; visual inspection
+shows upright player/NPC bodies with attached heads. A dedicated ModernGL render
+of the copy-owned installed `n_rodian` actor shows the complete yellow/gray
+`n_rodian02` material instead of a white silhouette. Proof artifacts:
+`Saved/VisibleProof/2026-07-13_pie_sinking_rodian_final/`. The automated proof's
+overall status is `blocked` only because Windows made GhostStudio the foreground
+application during the focus audit; content, movement, animation, clean runtime
+presentation, and capture gates completed. This is GhostStudio PIE proof, not
+KOTOR 2 engine acceptance.
+
+### [2026-07-13] T3008: Converted stock rooms retain vanilla lights for Map Studio and PIE preview
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio stock-room conversion, KMAP runtime-graph audit metadata,
+authored module preview lighting, PIE visibility, and native Python payloads
+
+Intersects: The T3001 207TEL stock-module hydration work, T3008 retained PIE
+actors, renderer performance/residency work, and the shared dirty worktree.
+
+- Preserved compact, human-readable renderer descriptors for the original
+  Aurora LIGHT nodes when a stock room is flattened into editable mesh. The
+  descriptors retain room-local position/orientation, color, radius,
+  multiplier, dynamic type, shadow/flare/fading flags, and controller types.
+- Reconstructed those records as hidden-helper preview lights parented to the
+  converted room, so LYT offsets remain correct and vanilla local lights shade
+  creatures, placeables, and the PIE player without adding selectable gizmos.
+  Baked lightmaps and authored ARE world-light preview semantics are unchanged.
+- Kept the runtime graph explicitly `preserved=False`; these preview records do
+  not bypass the existing export blocker or claim that stock MDL light nodes
+  have been safely round-tripped into a KOTOR module.
+
+Affected areas: Core.Scene and Core.Tools payload copies of
+`authored_imported_mesh.py` and `authored_module_preview_model.py`, focused
+207TEL/backdrop regression tests, and regenerated Scene/Tools payload manifests.
+
+Verification: targeted Python compilation passed; installed K2 `207tel_1`
+structural comparison found and retained all 36 vanilla lights while
+`207tel_2` retained 0, and the converted preview contained 36 source lights plus
+the two ARE world-preview lights. `AuroraLight35` resolved from room-local
+`(-1.2811, 11.6242, 12.9190)` to module-space
+`(7.12922, -32.64330, 12.9190)`. An isolated ModernGL 207TEL entry-camera
+measurement (textures/lightmaps disabled to measure dynamic lighting only)
+rose from mean visible luminance `0.08205` to `0.27416` (`3.34x`) when the
+retained vanilla lights were enabled. Four focused tests passed, including the
+installed 207TEL and `001ebo1` vanilla structural fixtures and the destructive
+runtime-graph export gate. Core.Scene/Core.Tools mirrors are SHA-256 identical
+and their 475 payload-manifest rows have zero hash mismatches. Actual visible
+Debug-app inspection is still required before calling the UI regression closed.
+
+### [2026-07-13] T3008: PIE character skin palettes remain actor-local inside loaded maps
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE retained actors, Odyssey skin-palette ownership,
+ModernGL/PyGFX/WGPU/CPU renderer parity, native payload delivery, and visible
+Debug-app proof
+
+Intersects: The T3008 retained PMBAM/PMHC01 player, T3001 creature/headhook
+hydration, BAS attachment palettes, renderer residency, and the shared dirty
+worktree.
+
+- Fixed the visibly stretched/collapsed PIE player. The retained actor now owns
+  an explicit runtime-only reference to its immutable source model, while its
+  copied nodes retain normal scene-root identity. Palette resolution walks to
+  that actor source instead of treating the complete room, placement wrapper,
+  and every other creature as one character skeleton.
+- Made actor-local palette selection renderer-neutral. ModernGL, PyGFX, WGPU,
+  the CPU skinning fallback, and the software/GPU-parity overlay now all prefer
+  BAS attachment-local palettes first, then the retained actor source, and only
+  then the resident scene model. ModernGL cache keys remain actor-specific so
+  two independently animated copies cannot contaminate one another through
+  duplicate Odyssey bone names.
+- Added a real installed-K2 regression using PMBAM + PMHC01 at nonzero PIE
+  facing. It proves the copied torso still resolves the 61-node human
+  `G5_FULL_REF` / `qBone_tBone_dfs_indexed_TR_no_invert` contract when the
+  normal caller supplies the whole map model, and gates maximum edge stretch
+  below 3x with p99 below 1.5x. Before the fix the same path selected the
+  unknown/F1 fallback and measured approximately 76x maximum and 20x p99 edge
+  stretch.
+
+Affected areas: `src/core/modules/map_studio_pie.py` and its Core.Scene/Tools
+payload mirrors; Core.Rendering/Runtime.Shared `mesh_render_data.py` and
+`skeleton_render_data.py`; ModernGL, PyGFX, WGPU, and frame-renderer palette
+paths; `tests/test_map_studio_pie.py`; `tests/test_pygfx_renderer_backend.py`;
+and `Saved/VisibleProof/2026-07-13_pie_player_palette_final/`.
+
+Verification: MCP-compatible `compare_model_pipelines` checks matched PyKotor
+for `K2:PMBAM` (61/61 nodes) and `K2:PMHC01` (34/34 nodes) with zero
+discrepancies; targeted `py_compile` passed; six isolated focused PIE/audio/
+creature/207TEL/visual-proof/animation files passed 74 tests total, two focused
+PyGFX palette cases passed, and two native payload identity/staging cases
+passed (78 unique focused cases). Scene/Tools payload copies are SHA-256
+identical to canonical root source. `Debug|x64` rebuilt with 0 warnings and 0
+errors in
+`Saved/BuildLogs/2026-07-13_pie_player_palette_debug_rebuild.log`; all 18
+manifest-owned payload DLLs matched their staged hashes and native embedded
+initialization exited 0. The focus-safe real `GhostStudio.exe` proof passed
+with no blockers, 12/12 continuous ModernGL frames, `pause1` then `walk`,
+2.295 m movement, clean runtime presentation, and no foreground activation.
+Direct comparison of the captured before/after frames confirmed that the old
+stretched torso and arms are gone. This is GhostStudio PIE proof, not KOTOR 2
+engine acceptance; a user-run, live-logged `warp plcaa` remains the engine
+oracle.
+
+### [2026-07-13] T3008: Map Studio PIE keeps the native viewport stable and previews retained actors and ambient sound
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio Play in Editor native-surface presentation, KOTOR-style
+input/camera preset, retained Odyssey actor animation, bounded creature preview,
+ambient UTS audio, renderer batching, native payloads, and focus-safe visible
+proof
+
+Intersects: The 2026-07-12 T3008 WOK preflight, T3001 stock-creature hydration
+and headhook work, Character/BAS animation composition, renderer residency, Qt
+audio, Automation IPC, and the shared dirty worktree.
+
+- Removed the PIE blank-frame flicker caused by racing a full-size transparent
+  Qt/PIL overlay against the asynchronous pygfx/WGPU child surface. Simulate
+  now suppresses that sibling overlay plus authoring-only hover/viewcube/grid/
+  gimbal diagnostics, restores their exact prior states on Stop, and submits
+  retained actor poses as one scoped renderer batch and one repaint request.
+- Added a runtime-only player built from the K2 PMBAM body and PMHC01 head via
+  the existing BAS/headhook/supermodel path. Its copied Odyssey DAG follows the
+  simulated WOK player and phase-synchronizes `pause1`, `walk`, and `run`
+  without mutating the source model or KMAP. PIE body/head resources and
+  `SuperModelResolver` inheritance now use target-game-strict model loading so
+  a K2 preview cannot silently fall back to a K1-only model or supermodel.
+- Aligned the visible input preset with documented KOTOR controls: W/S moves,
+  Z/C strafes, A/D turns the camera, Ctrl or middle mouse looks about, Caps
+  Lock toggles free look, and a floor click routes the player. The DEFAULT
+  camera starts at distance 3.2, height 0.45, pitch 83 degrees, and FOV 55;
+  keyboard turn approaches the retail 200-degrees-per-second target using the
+  installed 500 acceleration and 2000 deceleration values. Shift-to-run remains
+  a labeled editor convenience, while camera acceleration shape, obstruction,
+  recovery, integration, and collision remain clean-room approximations rather
+  than a claimed recovery of Odyssey's update routine.
+- Added a bounded ambient UTS preview lane with target-game resource lookup,
+  WAV decoding, interval/variation scheduling, deterministic clip selection,
+  looping/continuous playback, volume, positional attenuation, a 32-voice cap,
+  and clean shutdown. It does not reproduce Odyssey room acoustics, occlusion,
+  mixer behavior, or NCS-triggered sound actions.
+- Ambient voice construction and decoding are now staggered in 12 ms Qt
+  event-loop slices so a cold set cannot synchronously freeze PIE activation.
+  Raw `StreamSounds` `.mp3` files are excluded from the loose-WAV index because
+  decoding accepts WAV payloads only; this prevents case/order-dependent MP3
+  files from nondeterministically shadowing a valid WAV resref.
+- Extended Core.Resources with a lazy, case-insensitive K1/K2 `StreamSounds`
+  path index. Audio lookup now follows the explicit
+  overlay > Override > module > StreamSounds > BIF precedence without loading
+  every loose WAV during indexing.
+- Added a bounded creature plan and retained idle-actor lane. It preserves UTC,
+  NCS, DLG, faction, movement-intent, body, and head references; replaces a
+  flattened authoring creature only after its retained DAG attaches; animates
+  only safe idle clips at 30 Hz; and restores the static preview on Stop. It
+  deliberately does not execute NCS, DLG, AI, action queues, perception,
+  combat, free-roam pathing, or placeable interactions.
+- Moved creature model/BAS/DAG/initial-pose preparation off the Qt thread while
+  keeping every flattened static authoring preview visible. Completion performs
+  one atomic structural promotion, skips the unnecessary full bounds pass, and
+  issues one scene/resource/animation request without calling
+  `viewport.load_model()` or resetting the live renderer. Initial Simulate and
+  Stop still intentionally perform one full load/reload each; steady PIE actor
+  frames remain resident and batched.
+- The worker-facing controller surface now deep-copies placements only, rather
+  than exposing or copying the complete mutable authored project. Running
+  creature preparation also receives a cooperative `Event` cancellation token;
+  Stop/restart can abandon model loads, BAS composition, DAG copies, and idle
+  evaluation between bounded phases instead of publishing a stale result.
+- Corrected the NPC-only tick path: a retained NPC batch now counts as the one
+  frame presentation even if the optional player actor is unavailable, so PIE
+  does not request a second camera-only present and reintroduce flicker.
+- Fixed the KMapProject-shell hydration gap by exposing the controller's public
+  authored-placement snapshot and consuming it for both creature and UTS
+  placements. PIE no longer mistakes a populated shell project for an empty
+  authored placement set.
+- Added a focus-safe Debug-app visual-proof endpoint with a populated-project
+  guard and opt-in non-activating launch/IPC-port overrides. It captures the
+  native render child directly, records player position/animation and frame
+  content, and cleans up PIE without stealing the user's foreground window.
+- Fixed native-host build delivery so the
+  `GhostRigger.Native.Core.Host` post-build step explicitly stages the DLL set
+  named by `GhostRigger.PythonPayloadManifest.json`. The fail-fast staging tool
+  validates every source before changing a destination, prunes only manifest-
+  owned names, snapshots the source set, copies to the repository root and
+  host `OutDir`, and SHA-256 verifies both destinations. Missing, duplicate,
+  invalid, or mismatched payloads now fail the build rather than leaving a
+  partial or stale launch set.
+
+Affected areas: `src/core/modules/map_studio_pie.py`,
+`src/core/modules/map_studio_pie_audio.py`,
+`src/core/modules/map_studio_pie_creatures.py`,
+`src/adapters/qt_audio/map_studio_pie_audio.py`, their Core.Scene/Core.Tools/
+Core.Qt payload copies, `module_editor_window.py`, the GUI Display/Tools Map
+Studio viewport panel, viewport widget/rendering/scene-model mixins,
+`renderer_setup.py`, `module_editor_controller.py`, Core.Resources/Tools/
+Runtime.Shared copies of `core/assets/resource_manager.py`, Automation IPC, the
+focus-safe application launch/proof callback,
+Core.Workflow/Runtime.Core.Host copies of `animation_engine.py`,
+`GhostRigger.Native.Core.Host.vcxproj`,
+`scripts/stage_native_payload_dlls.ps1`, native payload manifests, focused
+PIE/audio/creature/hydration/animation-slot/proof tests, the native payload
+source-contract test, the M30 roadmap, and
+`Saved/VisibleProof/2026-07-13_pie_retained_runtime_ipc/`.
+
+Verification checkpoint before this final hardening pass: targeted `py_compile`;
+the combined focused PIE, audio, creature, 207TEL hydration, and visual-proof
+suite passed 61 cases; focused native payload byte-identity/manifest and
+post-build source-contract tests passed two cases;
+successful payload regeneration for Core.Automation, Core.GUI.Display,
+Core.Rendering, Core.Resources, Core.Scene, Core.Tools, Core.Qt, and
+Runtime.Shared; and a successful latest `Debug|x64` native-host build. After
+the delivery fix, a concise Debug MSBuild
+passed and all 18 freshly built source-package DLL hashes exactly matched both
+the repository-root and host-staged copies; a focused source-contract case in
+`tests/test_native_python_payloads.py` protects that post-build contract. The
+focus-safe real Debug executable, forced to the pygfx/WGPU D3D12 path on the
+custom `plcaa` fixture, retained content in 12/12 stationary native-surface
+frames and its short-motion frame, attached the runtime player, changed
+`pause1` to `walk`, moved 0.878333 m, and never became the foreground window.
+A K2:207TEL retained-actor probe prepared and attached 32/32 creatures with
+zero failures: cold preparation took 11.842 seconds off the Qt thread and a
+warm pass took 1.783 seconds. Atomic structural promotion took 3.17 ms, avoided
+a measured 536.54 ms bounds recomputation, issued one scene/resource/animation
+request, and made no viewport `load_model`/reset call. Steady evaluation of all
+32 idle actors measured mean 16.56 ms, p95 17.72 ms, and max 19.61 ms per
+sample. The initial Simulate load and Stop reload remain intentional.
+Real 207TEL audio planning activated 14/14 UTS specs and decoded all 28/28
+unique referenced clips with zero warnings, missing resources, or decode
+failures; the lazy case-insensitive index scanned 832 `StreamSounds` paths in
+approximately 1.02 ms. Audible playback and a visible 207TEL creature/audio
+acceptance pass are not yet recorded. Arbitrary NWScript/DLG/AI/gameplay parity
+is not implemented, and the user's manual KOTOR 2 `warp plcaa` remains the only
+final engine-acceptance proof. Focused cases for the subsequent strict-loading,
+placement-snapshot, cooperative-cancellation, single-present, sliced-audio,
+WAV-only `StreamSounds`, and manifest-staging hardening are being finalized by
+the root agent; this entry intentionally does not claim a final post-hardening
+test count yet.
+
+### [2026-07-13] T2570: Sith Ithorian posture and arm clearance pass the full animation inventory
+
+Owner: LordVaderCW
+
+T###: T2570
+
+Subsystem: K1 Sith Ithorian animation retargeting and exhaustive visual
+verification
+
+Intersects: T2555-T2569 Sith Ithorian package/retarget work and the shared
+dirty worktree.
+
+- Extended the post-export correction policy beyond the original saber
+  acceptance set to the affected ready, draw, parry, transition, and get-up
+  clips. Independent neck-chain correction keeps the long Ithorian head and
+  eyes upright, while torso-space two-bone IK maps each hand goal and elbow
+  pole onto the longer Ithorian limbs without pulling the forearms through the
+  robe or behind the body. Ready-pose seams and the standing tail of `g1z1`
+  now land exactly on their corrected guard poses.
+- Rebuilt and deployed both `c_ithlord` and `c_ithschol` with the complete 284-
+  clip `N_DarkJediM` inventory. Serialized readback passes the upright-head,
+  IK-landing, saber/head-clearance, ready-seam, and torso-volume gates for both
+  native Ithorian rigs.
+- Added a resumable live-app visual-proof harness. It captures six points from
+  front and right views for every assigned animation, follows root motion for
+  airborne and prone clips, and composes paired rows plus a browsable atlas.
+  The final proof contains 284 animations per model and 6,816 visible samples.
+
+Affected areas: `scripts/build_sith_ithorians.py`,
+`scripts/verify_sith_ithorian_all_animations.py`,
+`artifacts/sith_ithorian_all_animation_proof/`, the generated Sith Ithorian
+package, K1 Override, and `ShaolinTestsMap.mod`.
+
+Verification: targeted `py_compile` and diff checks; successful package build
+and deployment; byte-identical package/Override hashes; exact deployed-model
+readback of 69 nodes, 284 unique local animations, and all required hook
+chains; 30 Hz posture, IK, seam, torso-volume, and saber/head-clearance gates;
+and visible playback/capture in the real Visual Studio `Debug|x64` GhostRigger
+application with a red saber. The final atlas covers both creatures at six
+fractions from front and right for all 284 clips (6,816 samples); corrected
+combat/guard transitions and root-motion rows were additionally reviewed
+frame-by-frame for upright gaze, proper silhouette, arm/body clearance, and
+complete framing.
+
+## 2026-07-12
+
+### [2026-07-12] T3008: Map Studio gains a read-only walkmesh Play in Editor preflight
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio WOK runtime, player/camera simulation, viewport input,
+native payloads, and visible Debug workflow
+
+Intersects: T2904-T2908 and T3001-T3007 Map Studio work in the shared dirty
+worktree.
+
+- Added a deterministic fixed-step K1/K2 WOK runtime with game-specific retail
+  walkable-surface contracts, swept player-disc clearance, boundary sliding,
+  ramp/stacked-floor height sampling, welded-face adjacency, and disconnected-
+  island-safe click routing. K2 player walk/run rates use the retail PLAYER row
+  evidence (`1.70`/`5.40`); K1 uses `3.20`/`5.40`.
+- Added the read-only `MapStudioPIESession` orchestration layer. It derives its
+  state from authored KMAP/WOK data, validates the IFO player start, indexes
+  resident static room triangles once for two-sided camera obstruction, emits
+  transient player/facing/path overlays, and never serializes or mutates KMAP.
+  Retail engine execution, NWScript, dialogue, AI, animation, and placeable
+  interaction are deliberately outside this first phase.
+- Added persistent **Simulate / Stop** controls (including `Alt+P`) to the Map
+  Studio toolbar and Tools menu. PIE gives WASD/Shift/click/Esc input priority,
+  suspends authoring controls, preserves/restores the exact editor camera and
+  tool states, follows the simulated player without reloading the resident
+  model, and reports live XYZ, WOK face, moving/blocked state, route count, and
+  camera obstruction. Every visible state says `Simulation — not KOTOR proof`.
+- Corrected imported stock-room WOK provenance: stock WOK vertices such as
+  K2:207TEL are already in module space and no longer receive the LYT room
+  offset a second time. Generated authored-room WOK remains room-local and is
+  translated once. Added explicit `wok_coordinate_space` metadata to imported
+  mesh primitives.
+- Fixed a construction-order fault found only in the real Debug app: Qt can
+  send viewport events while `ModuleEditorViewportPanel` is still assembling
+  child widgets, so the PIE event-filter guard now tolerates pre-state events.
+  This removed the embedded `python313.dll` access violation observed during
+  the first visible Map Studio launch.
+- Recorded the clean-room retail/Ghidra evidence and its limits in
+  `docs/audits/map_studio_pie_clean_room_contract_2026-07-12.md`. Exact KOTOR
+  follow-camera/locomotion implementation was not claimed; export, vanilla-
+  structural comparison, install, and the user's manual `warp plcaa` remain the
+  authoritative engine proof ladder.
+
+Affected areas: `src/math/walkmesh_runtime.py`,
+`src/core/modules/map_studio_pie.py`, Core.Math/Scene/Tools payload mirrors,
+`authored_module_walkmesh.py`, `authored_imported_mesh.py`,
+`module_editor_controller.py`, Map Studio toolbar/viewport/window modules,
+native payload manifests/RC/vcxproj/filters, the M30 roadmap, focused PIE and
+payload tests, and `Saved/VisibleProof/2026-07-12_map_studio_pie/` evidence.
+
+Verification: `py -3.14 -m pytest tests/test_map_studio_pie.py -q` (10 passed:
+K1/K2 surface IDs, walk speed, boundary capsule, ramp Z, stacked floors,
+disconnected route, camera clipping, fixed-step determinism, collision
+filtering, 207TEL-style no-double-offset, and unchanged KMAP payload); focused
+native payload contracts (3 passed); `py -3.14 scripts/k2_plcaa_gameplay_matrix.py`
+completed its export/package/vanilla-
+contract matrix 19/19; targeted `py_compile`; full
+`Debug|x64` `GhostRigger.sln` build produced
+`build/vs/x64/Debug/GhostStudio.exe`; source-mode UI exercise moved the player
+and restored controls; real rebuilt Debug-app automation opened the K2 `plcaa`
+fixture, entered persistent Stop state, moved held-W from `(0.00,-3.00,0.00)`
+to `(0.00,-4.73,0.00)`, visibly reported perimeter `BLOCKED` at
+`(0.00,-4.76,0.00)`, and restored Simulate/edit controls on stop. Camera
+segment clipping is regression-tested headlessly; manual KOTOR 2 `warp plcaa`
+confirmation is still pending and is not implied by PIE.
+
+### [2026-07-12] T2569: Sith Ithorian combat head posture stands upright
+
+Owner: LordVaderCW
+
+T###: T2569
+
+Subsystem: K1 Sith Ithorian animation retargeting
+
+Intersects: T2555-T2568 Sith Ithorian package/retarget work and the shared
+dirty worktree.
+
+- Added a post-export combat head-posture pass for the Sith Ithorian package.
+  The pass samples the target Ithorian's native upright `cpause1` neck/head
+  local rotations and bakes them densely onto the Dark Jedi saber/Force combat
+  clips before the torso-space arm IK runs. This keeps the long Ithorian neck
+  standing tall and the eyes facing forward instead of inheriting the humanoid
+  combat chain's downward curl.
+- Rebuilt and deployed both `c_ithlord` and `c_ithschol` with 284 local clips
+  each. `c_ithlord` now reads back at `c2a1`/`c2a2` guard with `head_g` at
+  `(-0.028, 0.308, 0.474)` in `torsoUpr_g` space, forward vector
+  `(-0.003, 0.986, 0.167)`, and 21-22 cm right-saber/head forward clearance.
+
+Affected areas: `scripts/build_sith_ithorians.py`,
+`C:\Users\NewAdmin\Documents\KotorMods\HighFidelityKotorCharacters\SithIthorianScholar\MDL\`,
+K1 Override, and `ShaolinTestsMap.mod`.
+
+Verification: `python -m py_compile scripts/build_sith_ithorians.py`;
+`python scripts/build_sith_ithorians.py`; `python scripts/deploy_sith_ithorians_k1.py`;
+deployed-model readback of `c2a1`, `c2a2`, `c2a6`, `g0a1`, `g0a2`, and
+`creadyr`; visible viewport captures with right-hand red saber at
+`artifacts/ithorian_posture_acceptance/c_ithlord_c2a1_t143/frame_0000.png`
+and `artifacts/ithorian_posture_acceptance/c_ithlord_c2a2_t143/frame_0000.png`.
+
+### [2026-07-12] T2568: Sith Ithorian combat arms use torso-space two-bone IK
+
+Owner: LordVaderCW
+
+T###: T2568
+
+Subsystem: K1 Sith Ithorian animation retargeting, reusable limb math, and
+native Python payload generation
+
+Intersects: T2555-T2567 Sith Ithorian package/retarget work and the shared
+dirty worktree.
+
+- Replaced the post-export geometric shoulder clamp for the saber/Force
+  acceptance set with morphology-aware position goals: each Dark Jedi hand
+  endpoint and elbow pole is sampled in animated `torsoUpr_g` space, mapped
+  onto the Ithorian torso, and solved analytically through the target's actual
+  bicep/forearm lengths. A compensating hand key preserves the already-correct
+  saber orientation while the shoulder and elbow move.
+- High guards now keep the right-hand saber socket forward of the Ithorian's
+  projecting head; mapped goals also honor a torso capsule and a torso-relative
+  back plane. Dense keys are float32-canonical, strictly increasing, in clip
+  range, four-column XYZW, and quaternion-sign continuous. This removes the
+  duplicate/out-of-range timestamp defect left by T2567's rounded 30 Hz clamp.
+- Added the format-neutral `solve_two_bone_positions` math owner with reach
+  projection, pole control, and deterministic degenerate fallbacks. Extended
+  the native payload generator so generated Visual Studio filters remain in
+  sync with manifests, RC files, and project payload items.
+- Rebuilt and deployed both `c_ithlord` and `c_ithschol` (284 clips each) to
+  the K1 Override and `ShaolinTestsMap.mod`. The deployed MDLs match the build
+  artifacts byte-for-byte. On both variants, `c2a1`, `c2a2`, `c2a6`, `g0a1`,
+  `g0a2`, and `creadyr` have zero 30 Hz torso-frame violations; serialized
+  endpoint error is at most 0.018 mm and end-guard saber/head forward clearance
+  is 23.0-24.7 cm.
+
+Affected areas: `scripts/build_sith_ithorians.py`,
+`scripts/capture_ithorian_anim_video.py`,
+`native/GhostRigger.Core.Math/Python/src/math/limb_ik.py`, Core.Math/root
+payload manifests/RC/vcxproj/filters, `scripts/native_python_payload_generator.py`,
+`tests/test_limb_ik.py`, and `tests/test_native_python_payloads.py`.
+
+Verification: both full package builds passed inverse-bind, seam, representative
+deformation, cross-shell, export/reload, strict-controller, IK landing, torso
+collision, and head-clearance gates; deploy verification passed 284 clips,
+hooks, appearance rows, and creature animation rows; MCP tool functions report
+PyKotor/GhostRigger pipeline match for both models (69 nodes, `NULL`
+supermodel); focused regressions 39/39 and payload contracts 4/4. Fresh flat
+viewport comparisons with a red saber are in
+`artifacts/ithorian_ik_acceptance/c2a{1,2}_darkjedi_vs_ithorian.png`. Live
+in-game combat confirmation remains for the user's final acceptance pass.
+
+### [2026-07-12] T2904: Undo/redo of placement and light commands repaints the object, not the whole map
+
+Owner: LordVaderCW
+
+T###: T2904
+
+Subsystem: Map Studio undo/redo refresh routing
+
+Intersects: Today's T2904 targeted-refresh and undo-staleness work in the
+shared dirty worktree.
+
+- LordVaderCW's manual test: Ctrl+Z reloaded the entire map even when the
+  undone command was one placement move. Undo/redo restored the whole KMAP
+  snapshot and always routed through the broad `_refresh_all`, which — now
+  that in-place promotions correctly dirty the preview key — forced a full
+  combined-model rebuild and viewport reload on every undo.
+- Added `_refresh_after_map_studio_history`: when the undone/redone record's
+  `action_key` is a placement property command (move, rename, creature
+  behavior, camera, transition, WOK snap) or a light property command
+  (move, edit, rename) and carries its `placement_id`/`light_id`, the window
+  promotes the reverted values through the existing targeted gameplay
+  refresh — the node moves back in place with no model rebuild or reload.
+  Membership commands (add/duplicate/remove), rooms/topology, texture
+  sidecar patches, and unknown commands keep the broad `_refresh_all`
+  correctness fallback.
+
+Affected areas: `module_editor_window.py` (Tools payload), regenerated
+Tools manifest, and `tests/test_map_studio_marquee_delete_undo.py`.
+
+Verification: new focused test proves undo of a move reverts KMAP and the
+scene-table cells while failing hard if `_refresh_all` or a combined preview
+rebuild is invoked, and that undo of a REMOVE still falls back to the broad
+refresh; marquee/undo suite 4/4; targeted refresh, command history, and
+payload contracts 42/42. Debug rebuild verified via IPC health. No in-game
+claim.
+
+### [2026-07-12] T3001: Stock creature head grafts now preserve headhook orientation
+
+Owner: LordVaderCW
+
+T###: T3001
+
+Subsystem: Map Studio stock content preview head grafting
+
+Intersects: Today's T3001 stock creature preview work and the shared dirty
+worktree.
+
+- LordVaderCW's manual 207tel test showed creature heads resolving but
+  attached with the wrong facing on the body. Re-checking real K2 stock
+  pairs (`n_commf` + `comm_w_f`, `n_commm` + `comm_a_m`, and `n_twilekf`
+  + `twilek_f`) showed their body `headhook` and head attachment roots are
+  already in the same orientation. The previous static 180-degree graft
+  flip was fabricated and made the preview diverge from the real model
+  contract.
+- Removed the extra `_HEAD_GRAFT_FLIP` / `_quat_multiply` path. Map Studio
+  now resolves appearance.2da `normalhead` through heads.2da, loads the
+  separate head MDL for body-part creatures, and bakes the body
+  `headhook` world position and rotation exactly once before applying the
+  placed creature bearing.
+- While proving the visible 207tel workflow, the top Map Studio `Focus`
+  button was found unwired. It now routes to `focus_selected`, so selected
+  stock creatures can be framed in the real editor viewport for inspection.
+
+Affected areas: byte-identical Scene/Tools pair of
+`map_studio_stock_content_preview.py`, byte-identical GUI Display/Tools pair
+of `module_editor_viewport_panel.py`, regenerated payload manifests, and
+`tests/test_map_studio_creature_heads.py` /
+`tests/test_map_studio_workflow_panel.py`.
+
+Verification: focused creature-head tests 4/4, stock-preview/head suites
+14/14, Focus wiring + head tests 5/5, native payload contracts 19/19, and
+real K2 BAS parity probes for the three stock body/head pairs above
+(max vertex error within `1.11e-06`). Debug x64 `GhostStudio.exe` rebuilt
+and the full 207tel Map Studio hydration path was visibly exercised in the
+Debug app: 2 rooms, 32 creatures, 4 doors, 35 placeables, 14 sounds, 3
+triggers, 17 waypoints. Editor-preview parity only; no in-game claim.
+
+### [2026-07-12] T2904: Undo visually reverts placement moves; plain-drag marquee + one-undo multi delete
+
+Owner: LordVaderCW
+
+T###: T2904
+
+Subsystem: Map Studio viewport preview-key cache, marquee selection,
+Delete-key routing, and controller batch placement removal
+
+Intersects: The T2904 targeted placement refresh from earlier today (the
+undo defect was a regression of its in-place node promotion) and the shared
+dirty worktree.
+
+- LordVaderCW's manual test: Ctrl+Z after moving a desk did not put it
+  back. Cause: the targeted commit promotes the rendered node in place
+  without rebuilding, so the loaded preview model no longer matches its
+  cache key; an Undo then rebuilds a model that hashes back to the exact
+  pre-move key, and `_sync_room_preview_model` skipped the reload, leaving
+  the mutated node where it was dragged. In-place promotions (targeted
+  commits and live marker drags) now stamp the key with a
+  `__promoted_in_place__` sentinel so any later rebuilt model — including
+  Undo/Redo — reloads. KMAP state was always reverting; this fixes the view.
+- Plain LMB click-drag-release over the canvas now starts the existing
+  rubber-band selection (3ds Max/Unreal select-tool convention) once the
+  pointer passes the click threshold; Ctrl+drag still works, Shift adds.
+  Promotion never steals marker/primitive/outline/extrude/bevel gestures,
+  terrain strokes, placement drops, or component edit modes. Marquee
+  results now also highlight matched placements in the outliner/selection
+  model.
+- Delete with a marquee selection removes every selected placement as ONE
+  undoable command via the new
+  `ModuleEditorController.remove_authored_gameplay_placements` (single
+  command snapshot; per-id failures degrade to log lines). The Del-key
+  priority chain now consumes the explicit marquee/multi selection before
+  the hovered object so deleting five selected desks cannot collapse to
+  the one under the cursor.
+
+Affected areas: byte-identical GUI Display/Tools pair of
+`module_editor_viewport_panel.py`, byte-identical Scene/Tools pair of
+`module_editor_controller.py`, `module_editor_window.py`, regenerated
+payload manifests, and new `tests/test_map_studio_marquee_delete_undo.py`.
+
+Verification: new focused suite 3/3 (promotion dirties the key exactly when
+a node mutates, batch delete of three desks is one undo that restores all
+three, plain-drag marquee + delete-priority source contracts); regression
+suites (targeted refresh, marker drag, command history, creature heads,
+payload contracts) 48/48. Windowed visible proof
+`Saved/VisibleProof/map_studio_undo_move_2026-07-12/`: a real plc_chair2
+moved (1,1,0) -> (6,4,0) with the key trace clean -> `__promoted_in_place__`
+-> clean, and after Undo both the KMAP payload AND the rendered node return
+to (1,1,0) with the reloaded key hashing back to the identical pre-move
+value — proving the reload would have been skipped without the sentinel.
+Debug rebuild succeeded; the exe answers IPC health and closes cleanly. No
+in-game proof is claimed.
+
+### [2026-07-12] T3001: Stock creature previews graft appearance.2da heads at the body headhook
+
+Owner: LordVaderCW
+
+T###: T3001
+
+Subsystem: Map Studio stock content preview (creature template resolution and
+placement mesh composition)
+
+Intersects: The 207tel full-hydration work (T3001/T2605) and the shared dirty
+worktree.
+
+- LordVaderCW reported 207tel NPCs rendering headless. Cause: body-part
+  (modeltype B) appearances carry no head geometry in their body MDL — the
+  engine grafts `appearance.2da normalhead` -> `heads.2da head` at the body's
+  `headhook` node, and the Map Studio preview only loaded the body model.
+- `TemplateModelResolver` gained `creature_head_model`/
+  `head_model_for_placement_kind`: UTC -> appearance row -> `normalhead` ->
+  heads.2da `head`, cached, with safe "" results for full-body appearances,
+  blank/`****` cells, and missing rows. The combined preview builder now
+  loads the resolved head through the shared model cache and flattens its
+  meshes into the creature group with a new `pre_transform` (headhook
+  position + rotation applied after the mesh's model-space bake and before
+  the bearing rotation). Missing heads or hook nodes degrade to explicit
+  warnings and keep the previous headless-body behavior. Resolvers without
+  the new method (test stubs) are tolerated.
+
+Affected areas: byte-identical Scene/Tools pair of
+`map_studio_stock_content_preview.py`, regenerated Scene/Tools payload
+manifests, new `tests/test_map_studio_creature_heads.py`.
+
+Verification: empirical resolution against the real installs — 25/37 K2
+`207tel` creature templates resolve separate heads (203_ramana ->
+n_twilekf + twilek_f; 203_doton -> n_commm + twilek_m; Bith/droids correctly
+resolve none), and a composed Ramana preview carries 9 head meshes with max
+Z 1.72 m above the 1.48 m body. New focused tests 3/3 (normalhead chain,
+full-body/blank/invalid fallbacks, flattener pre-transform math); stock
+preview suite + 207tel hydration + payload contracts 38/38 after making the
+head lookup tolerant of legacy resolver stubs. Windowed visible proof
+`Saved/VisibleProof/map_studio_creature_heads_2026-07-12/`: three real
+207tel NPCs (two body+head, one full-body Bith control) render with heads
+and zero warnings in the actual Map Studio viewport (18 composed head
+meshes). The rebuilt Debug exe answers IPC health and closes cleanly. This
+is editor-preview parity with the engine's head grafting; no in-game claim.
+
+### [2026-07-12] T1210: BAS game-item catalog, lightsaber colors from both games, and Character Builder preview embed
+
+Owner: LordVaderCW
+
+T###: T1210 (Body Attachment System)
+
+Subsystem: Body Attachment System panel, BAS workflow mixin, systems/bas
+catalog, Character Builder inspector Preview page, and native payloads
+
+Intersects: The existing BAS preview/recipe work (attachment_alignment,
+head_resolution, preview_composer) and the shared dirty worktree.
+
+- Added `src/systems/bas/attachment_catalog.py` (Core.Tools payload): a
+  headless catalog that enumerates every attachable item model from both
+  installed games via `ResourceManager.list_models('all')` — 171 weapons,
+  15 masks (shared by MASK/GOGGLES), 18 belts, and 186 heads read from each
+  game's `heads.2da` — with per-entry K1/K2 availability tags and friendly
+  labels. Blaster-bolt/effect models (`w_laserfire*`, `w_lfire*`, `w_null`,
+  `w_notready01`) are excluded.
+- Verified the lightsaber variation -> blade-color mapping empirically by
+  loading every `w_lghtsbr`/`w_shortsbr`/`w_dblsbr` variation from both
+  games and reading its blade texture: K1 carries 8 full-size colors
+  (006 is Malak's unique red hilt), K2 carries 11 including Viridian,
+  Silver, and Bronze; short/double families carry 7 (K1) / 10 (K2) with no
+  unique-hilt slot. The tables live in the catalog with the derivation
+  documented.
+- The BAS panel's Model combo now lists the full catalog for every slot
+  (with `[K1]`/`[K2]`/`[K1+K2]` tags) and gained a Color selector that
+  appears for lightsaber families, offers all installed blade colors, and
+  re-attaches the matching model variation live when the slot is already
+  attached. Cross-game preview loads work through the resource manager's
+  documented K1<->K2 fallback.
+- The main window builds the catalog lazily on first slot selection
+  (`BasWorkflowMixin._ensure_bas_attachment_catalog`); presets remain the
+  offline fallback when no game folders are configured.
+- Embedded the same `QtBodyAttachmentPanel` into the Character Builder
+  inspector's step-4 Preview page (Save Build hidden; CB exports through
+  its own flow). The Character Builder now accumulates multi-slot BAS
+  attachments (`_bas_preview_attachments`) and composes them through
+  `build_bas_preview_model`, so the old single-slot Attachment Preview
+  path and the new panel share one preview state with per-slot clear.
+
+Affected areas: new `native/GhostRigger.Core.Tools/Python/src/systems/bas/
+attachment_catalog.py`; byte-identical GUI Display/Tools pairs of
+`qt_body_attachment_panel.py`, `qt_inspector_panel.py`,
+`qt_character_builder_panel.py`, `application_core/shared/bas_workflow.py`,
+and `application_core/shared/main_layout.py`; regenerated Tools/GUI Display
+payload manifests (payload count 1,248 -> 1,250 in
+`tests/test_native_python_payloads.py`); new
+`tests/test_bas_attachment_catalog.py`.
+
+Verification: new focused suite 4/4 (slot classification and effect-model
+exclusion, empirical color tables, offscreen panel listing + live color
+swap emitting one re-attach, CB embed source contracts); payload contracts
+19/19 after the count bump; `tests/test_character_builder_template_rig.py`
+24/24. Windowed visible proof under
+`Saved/VisibleProof/bas_catalog_2026-07-12/`: the panel lists the real
+catalog, "Lightsaber (Silver) [K2] - w_lghtsbr_010" selected through the
+Color combo, the mask slot lists all 15 masks, and the Character Builder
+Preview page shows the embedded Body Attachment System group. The rebuilt
+Debug exe answers IPC health and closes cleanly. Pre-existing failures in
+`tests/test_core_contracts.py` (72, mostly missing pre-migration root
+`src/` files) were inspected: the four BAS-adjacent ones fail on missing
+`src/systems/bas/README.md`, a skinning assert, a stub attribute, and a
+toolbar-margin literal — none touch this change. No in-game proof is
+claimed for preview-only BAS behavior.
+
+### [2026-07-12] T2907: Terrain holes with multi-loop WOK perimeters, ramp golden, and 129x129 performance evidence
+
+Owner: LordVaderCW
+
+T###: T2907
+
+Subsystem: Map Studio terrain heightfield builder, terrain operations
+dispatcher, KMAP terrain persistence, Builder tab terrain controls, and the
+terrain walkmesh matrix
+
+Intersects: The 2026-07-11 T2905/T2907 dirty-buffer sculpt and floor-only WOK
+work in the shared dirty worktree; pre-manual-test hardening requested by
+LordVaderCW.
+
+- Added carved floor holes to `TerrainHeightfieldPrimitive` as
+  `(cell_row, cell_column)` pairs. Holed cells emit no render or WOK faces, so
+  the serialized floor-only walkmesh perimeter gains one interior loop per
+  hole region. `carve_terrain_hole`/`fill_terrain_hole` operate on a Chebyshev
+  radius, refuse to remove every walkable cell, and are exposed through the
+  existing undoable terrain-operation dispatcher (`carve_hole`/`fill_hole`)
+  and two new Builder terrain buttons.
+- `analyse_terrain_slopes`, `build_terrain_mesh`, `build_terrain_wok`, and the
+  derived walkability overlay all consume the same normalized hole set, so
+  mesh, WOK, and overlay stay face-consistent. KMAP payloads persist holes
+  only when present, keeping pre-hole KMAPs byte-stable.
+- Extended `scripts/terrain_walkmesh_matrix.py` with the T2907 goldens: ramp
+  brush monotonic-grade proof, carve/fill face accounting, KMAP hole
+  round-trip, and a raw exported-WOK assertion that a holed terrain serializes
+  exactly 2 closed perimeter loops through the existing multi-loop
+  `_patch_bwm_perimeters` writer. The matrix also proved the export gate
+  correctly blocks an entry point placed over a hole.
+- Measured current live-sculpt performance on the real controller frame path:
+  0.127/0.124 ms median per brush frame at 65x65/129x129 (handoff-era numbers
+  were 33.18/143.04 ms), with a single deferred 12.0/55.9 ms commit on
+  release. No KMAP serialization occurs per sample; the sparse stroke session
+  from T2905/T2907 already owns the hot path.
+- Reconciled two more stale uncommitted test literals against intended code
+  (same policy as the earlier 8): the geometry-validation worker stub now
+  accepts `validate(readiness_result=...)`, and the paint UI source contract
+  matches the panel's actual `face_uvs` line.
+
+Affected areas: Scene/Tools byte-identical pairs of
+`authored_terrain_builder.py`, `authored_room_operations.py`, and
+`authored_module_kmap_bridge.py`; GUI Display/Tools `builder_tab.py`;
+regenerated Scene/Tools/GUI Display payload manifests;
+`scripts/terrain_walkmesh_matrix.py`; `tests/test_map_studio_terrain_patch.py`
+and `tests/test_map_studio_workflow_panel.py`.
+
+Verification: terrain walkmesh matrix 20/20 including the new hole/ramp
+goldens (2/2 closed loops in the raw exported WOK); focused terrain patch and
+overlay tests 8/8; texture paint suites 19 focused tests green (dirty tiles,
+one-step undo, UV seam routing, sidecar transactions, TGA/TXI package
+readback); GModeler tool matrix 27/27 and UI workflow matrix 53/53 (multi-
+object batch transforms, live extrude preview without KMAP writes, full bevel
+controls, true Combine/Separate); lighting/lightmap/skybox/sky-traffic suites
+52/52; K2 plcaa gameplay matrix 19/19 after all changes; payload byte-identity
+19/19. No in-game proof is claimed; the manual `warp plcaa` remains the
+acceptance gate.
+
+### [2026-07-12] T2600/T2605/T2606/T2655/T3105: Reconciled 8 stale test expectations with the intended engine contracts
+
+Owner: LordVaderCW
+
+T###: T2600 / T2605 / T2606 / T2655 / T3105
+
+Subsystem: Focused Map Studio test suites only (no production code changed)
+
+Intersects: Prior agents' uncommitted store-contract, transition, KMAP
+bearing/identity, VIS compile, preview-loader, and floor-only WOK work in the
+shared dirty worktree.
+
+Eight tests still asserted pre-contract behavior that newer uncommitted code
+had deliberately replaced. Each was verified against CHANGES.md intent and the
+current code before updating the test side; no production behavior was
+weakened:
+
+- `test_authored_gameplay_placement_selection.py`: stores are spatial per the
+  vanilla `202TEL` GIT engine contract (struct 11 ResRef + XYZ + orientation);
+  two `is_spatial is False` asserts flipped and the
+  `non_spatial_store_...` test renamed to `spatial_store_...`. The
+  `transitionChanged` source literal updated to the T2605 5-arg signal
+  (destination type flag + TransitionDestin StringRef).
+- `test_map_studio_command_history.py`: KMAP bearings persist as KOTOR-native
+  radians normalized into (-pi, pi] by the KMAP bridge migration; the raw
+  45.0 expectation now asserts `atan2(sin(45), cos(45))`.
+- `test_authored_module_export.py`: the preview loader literal now matches the
+  demand-preserving key-cached camera-restoring `load_model(...)` call; the
+  camera KMAP payload assert accommodates and round-trips the stable
+  `instance_id` identity; VIS metadata expects self-links dropped and
+  symmetric links (link_count 2, entries without self) per the vanilla VIS
+  contract comments in `authored_module_layout.py`; the golden fixture
+  expects `non_walk_face_count == 0` per the floor-only WOK engine contract
+  (T2538/T2540/T2906) instead of the obsolete NON_WALK-wall count.
+
+Affected areas: `tests/test_authored_gameplay_placement_selection.py`,
+`tests/test_map_studio_command_history.py`,
+`tests/test_authored_module_export.py`.
+
+Verification: all three files pass in full (90 passed); payload byte-identity
+contracts 19/19; no references remained to the renamed test. No production
+code, panels, or payloads were modified.
+
+### [2026-07-12] T2904: Targeted placement/light commit refresh replaces broad _refresh_all
+
+Owner: LordVaderCW
+
+T###: T2904
+
+Subsystem: Map Studio window refresh routing, viewport panel GIT proxy
+promotion, controller readiness laziness, outliner/properties partial updates
+
+Intersects: Prior agents' uncommitted Map Studio placement, transition,
+lighting, and command-history work in the shared dirty worktree (Task
+019f489a-168a-7b20-875e-cd33a47c53da continuation; Holocron demand-aware
+rendering lesson, Phase B).
+
+- Added `ModuleEditorWindow._refresh_map_studio_gameplay_change`, a
+  command-specific refresh for authored GIT placement and room-light commits.
+  It promotes the committed transform onto the live preview node in place,
+  refreshes marker state and the affected scene-table rows without rebuilding
+  the table, updates the placement tab/properties/outliner surfaces
+  incrementally, and reuses the deferred background geometry-validation
+  generation for readiness/export gates. It never rebuilds the combined
+  preview model and never touches selection, so multi-selection survives
+  transform commits.
+- Routed viewport marker-drag/gizmo commits (`_set_transform`), placement-tab
+  transform/behavior edits, WOK snap and End-key ground snap, renames (dialog,
+  inline outliner, and properties), transition destination edits, camera
+  property edits, and room-light move/property edits through the targeted
+  refresh. Placement add/duplicate/delete, undo/redo, and load/save keep the
+  broad `_refresh_all` correctness fallback.
+- Added viewport-panel partial APIs (`set_authored_gameplay_markers`,
+  `update_authored_scene_rows`, `update_authored_placement_preview_transform`),
+  an outliner `update_item_text`, and a properties `current_item_id`. The GIT
+  proxy rotation update captures the mesh-baked bearing once
+  (`_gr_map_studio_authored_bearing`) so repeated in-place commits stay
+  absolute instead of accumulating deltas; the previous unconditional
+  re-capture on selection and the gizmo scale-rejection identity reset were
+  corrected to preserve that baseline.
+- Made the five hot-path controller setters (placement transform, light
+  transform, transition, camera properties, light properties) return a
+  `DeferredAuthoredModuleReadiness` lazy view instead of synchronously
+  computing the ~50 ms readiness projection inside every pointer-release
+  commit. Attribute access still resolves the real readiness result, so the
+  tested `result.readiness` contract is unchanged.
+
+Affected areas: `native/GhostRigger.Core.Tools/Python/src/gui/windows/
+module_editor_window.py`, byte-identical GUI Display/Tools payload pairs of
+`module_editor_viewport_panel.py`, `module_editor_outliner.py`, and
+`module_editor_properties.py`, byte-identical Scene/Tools pair of
+`module_editor_controller.py`, regenerated payload manifests for
+GhostRigger.Core.{GUI.Display,Tools,Scene}, and the new focused test
+`tests/test_map_studio_targeted_gameplay_refresh.py`.
+
+Verification: `py -3.14 -m py_compile` on all touched files; new focused test
+file passes 7/7 including a real offscreen `ModuleEditorWindow` wiring proof
+that a transform commit updates KMAP payload, scene-table cells, and one undo
+command while failing hard if `_refresh_all`, the combined preview rebuild, or
+`viewport_panel.set_project` were invoked; focused suites
+(marker drag/overlay, placement table editing, drop target, stock preview,
+creature behavior, command history, lighting, 207tel hydration source
+contracts, game-proof UI, payload byte identity 19/19) pass except 4 failures
+shown to be pre-existing uncommitted code-vs-test drift (verified at HEAD
+47a096ee: store `is_spatial`, 5-arg `transitionChanged`, bearing
+normalization, plus 4 more in `test_authored_module_export.py`). Headless
+offscreen benchmark on a 69-placement/6-light authored KMAP: window refresh
+after a transform commit fell from 26.673 ms median (broad `_refresh_all`) to
+2.261 ms (targeted), and the complete `_set_transform` drag-release commit
+fell from 73.817 ms to 3.185 ms median (p95 3.491 ms). Broad-path totals are
+unchanged (~86 ms including the readiness the setter no longer pre-pays).
+These are headless Qt measurements; visible Debug-app verification recorded
+separately, and no in-game proof is claimed.
+
+### [2026-07-12] T2904: Map Studio 207tel navigation and GModeler hover performance pass
+
+Owner: LordVaderCW
+
+T###: T2904
+
+Subsystem: Map Studio Qt viewport presentation, texture residency diagnostics,
+GModeler component hover, and focused 207tel performance evidence
+
+Intersects: Active stock-module hydration, texture-mip residency, placeable/
+creature preview, and Map Studio manual-workflow changes in the shared dirty
+worktree.
+
+- Removed synchronous texture resolution from the per-frame renderer statistics
+  pass. The HUD now checks already-decoded residency without archive I/O or TPC
+  decompression, so missing textures remain the background prewarmer's job.
+- Added a Map Studio-only navigation overlay LOD. Orbit/pan/zoom retains actual
+  geometry, placement feedback, component selection, and gizmos while deferring
+  diagnostic, helper, room-guide, measurement, and camera overlays until the
+  release-frame redraw.
+- Prevented GModeler from rebuilding its full component-picking cache during
+  camera navigation, coalesced idle mouse motion, restored one latest-pointer
+  refresh after release, and disabled the separate generic mesh hover only while
+  GModeler owns hover. The prior generic-hover preference is restored on exit.
+- Replaced fragile visible-probe cache keys with stable camera/view state, batch-
+  projected each mesh's unique vertices, vectorized face visibility culling,
+  and removed per-face copies of complete UV/face arrays. Perspective-correct
+  nearest-depth selection remains the final oracle, including overlapping
+  foreground/background faces.
+- Added `scripts/profile_map_studio_207tel_viewport.py` as a bounded headless
+  fixture that separates module hydration, texture residency, raw ModernGL,
+  Qt presentation, overlay stages, and GModeler candidate/cache timings.
+
+Affected areas: `native/GhostRigger.Core.Rendering/Python/src/core/rendering/
+frame_core/renderer_{textures,overlays}.py`, GUI Display viewport overlay/render
+mixins, byte-identical GUI Display/Tools `module_editor_viewport_panel.py`
+payloads, the focused 207tel profiler, and hover/renderer regression tests.
+
+Verification: exact K2 `207tel` converted fixture (352 nodes, 277 meshes, 58,565
+triangles, 1280x720) measured raw full-resolution ModernGL at 13.593 ms median
+(~73.57 FPS). The complete headless Qt orbit path measured 23.009 ms median and
+24.264 ms p95 (~43.46 FPS), versus earlier bounded medians ranging from 30.59 to
+64.19 ms before the residency/overlay fixes. Reduced render scales were slower,
+so full resolution remains active. GModeler's exact camera-state candidate
+rebuild fell from 931.82 ms to 236.944 ms and is deferred outside camera motion;
+occupied-cell picks measured 0.498 ms median and 4.183 ms p95. The active
+navigation overlay stage measured 4.893 ms versus the former 27.47 ms. Focused
+hover/drop/residency tests passed. The rebuilt Debug app then loaded the same
+`207tel`, visibly processed a 90-event 3ds Max-style Alt+MMB orbit in 1.072
+seconds without entering a hung-window state, and produced before/after window
+captures under `Saved/VisibleProof/map_studio_207tel_performance_2026-07-12/`.
+The exact FPS figures remain bounded headless Qt measurements rather than a
+human-observed input-feel claim, and no in-game proof is implied.
+
+### [2026-07-12] T3001/T2605: Full stock-module hydration, responsive texture residency, and plcaa behavior proof slice
+
+Owner: LordVaderCW
+
+T###: T3001 / T2605
+
+Subsystem: Map Studio stock import, KOTOR resource previews, viewport texture
+decode, gameplay behavior authoring, manual proof gates, product branding, and
+embedded-Python runtime compatibility
+
+Intersects: The active Map Studio performance, transition, environment,
+placeable-builder, and manual custom-`plcaa` proof work in the shared dirty
+worktree.
+
+- Changed the Rooms -> Load LYT workflow from layout-only loading to full
+  installed-module hydration when the selected LYT has an indexed module
+  capsule. It now imports GIT/IFO gameplay and entry data while retaining an
+  explicit layout-only fallback when no matching module can be resolved.
+- Proved K2 `207tel` hydration at 32 creatures, 35 placeables, 4 doors, 3
+  triggers, 17 waypoints, 14 sounds, 9 cameras, and 1 store, with the IFO player
+  entry at `(4.3478546, -32.1948013, 10.20047)`. Seventy of 71 model-bearing
+  placements resolve to rendered preview models; the remaining
+  `k_trans_abort -> plc_invis` row intentionally retains its editor fallback.
+- Added bounded viewport TPC mip loading. The normal decoder still preserves
+  full authored mip behavior, while the viewport selects a suitable authored
+  mip from compressed data and converts only that level. The first ten `207tel`
+  textures fell from 53.13 seconds to 1.77 seconds, all 50 texture/lightmap
+  names resolved in 7.2 seconds, and `tel_hw10` fell from 15.455 seconds to
+  0.205 seconds without changing DXT1, DXT5, or uncompressed pixel authority.
+- Added a narrowly detected, process-local compatibility guard for the installed
+  PyKotor 2.3.1 `GFFStruct.acquire` debug-print regression. It is idempotent,
+  preserves acquisition semantics, becomes a no-op for clean upstream builds,
+  and avoids modifying site-packages. Controlled `207tel` import time fell from
+  2.21 seconds to 1.15 seconds with zero GFF field spam.
+- Added creature behavior authoring for hostile/friendly/neutral alignment and
+  stationary/free-roam movement, unique template retagging, and K1/K2 template,
+  script, and dialog export gates. Expanded the custom `plcaa` proof palette and
+  eleven-step acceptance gate to cover texture paint, terrain/WOK, staged
+  models, enemy and roaming NPC behavior, terminal, container, puzzle, animated
+  door, transition, and player start.
+- Kept Map Studio-only modeling controls out of Character Builder, removed its
+  unrelated Module Meshes page, and corrected the application header to use
+  GhostStudio branding and the actual GhostStudio icon.
+
+Affected areas: stock module importer/controller and Rooms panel; authored
+gameplay preview, placement, creature behavior, readiness/export, and plcaa
+proof workflow modules; TPC/texture-cache and renderer residency paths;
+ResourceManager compatibility initialization; Map Studio and Character Builder
+panels; native payload manifests and generated project resources.
+
+Verification: `207tel` hydration/model-resolution checks passed; focused
+hydration and TPC suites passed 11 tests; hover/drop/residency/runtime-guard
+suites passed 40 tests; behavior/proof/branding/transition suites passed 23
+tests; stock-preview and LYT-picker checks passed 2 tests; the complete hover
+suite passed 19 tests; embedded payload coverage, byte identity, and Visual
+Studio inclusion passed 3 checks for 1,248 packaged files. The K2 custom
+`plcaa` gameplay matrix passed 19/19, including MDL/MDX/WOK/LYT/VIS/PTH/GIT/
+ARE/IFO packaging and vanilla-derived raw engine-contract validation. The
+rebuilt Debug app (GhostStudio 6.1.0.0, 18/18 native DLLs and payloads) visibly
+imported the same two rooms and all stock gameplay categories, converted both
+rooms, rendered the module and placement overlays, and remained responsive
+during a scripted real-window orbit. The `207tel` sky toggle remained honestly
+blocked because the module has no classified backdrop surfaces. The
+user-operated GhostStudio custom-`plcaa` staging/export/manual KOTOR 2 warp
+remains required; no in-game success is claimed.
+
+### [2026-07-12] T2605: Vanilla-structural Map Studio door/trigger travel authoring
+
+Owner: LordVaderCW
+
+T###: T2605
+
+Subsystem: Map Studio gameplay placement, KMAP transition persistence, GIT/IFO
+compilation/readback, stock-module hydration, readiness validation, Builder and
+Properties transition UX, and embedded Scene/GUI Display/Tools payloads
+
+Intersects: The active 2026-07-11/12 Map Studio environment, placeable,
+topology, and custom-plcaa game-proof work in the shared dirty worktree.
+
+- Matched K1 and K2 vanilla travel structure for both doors and triggers:
+  `LinkedTo` is String, `LinkedToModule` is ResRef, `LinkedToFlags` is UInt8
+  (`0` none, `1` destination door, `2` destination waypoint), and
+  `TransitionDestin` is a LocalizedString/dialog.tlk StringRef. Transition
+  trigger field ordering, zero orientation fields, and geometry struct ID 3 now
+  match the vanilla `danm13` and `101PER` rows used as structural authority.
+- Added trigger `linked_to_flags` preservation through stock import, KMAP,
+  placement rows/preview metadata, controller edits, export/readiness manifests,
+  and legacy GIT readback. Local validation now proves that flag 1 resolves a
+  door tag and flag 2 resolves a waypoint tag instead of accepting trigger tags
+  or an untyped destination.
+- Removed waypoint-as-transition-source behavior. Waypoints remain selectable
+  destination markers, but no longer expose transition properties, count as an
+  outgoing transition source, or emit the non-vanilla `LinkedTo` GIT field.
+- Added explicit `Destination door` / `Destination waypoint` controls to the
+  selected-object Properties panel and opening-marker Builder workflow. Corrected
+  the old `TransitionDestin` wording to `Destination name StringRef`, expanded
+  its range to signed 32-bit StringRefs, and hid source-only fields when creating
+  a waypoint destination.
+- Fixed the manual tool-belt path so authoring a wall opening refreshes the
+  opening-marker choices immediately; the next click can create its door or
+  trigger without a stale `No authored openings yet` state.
+
+Affected areas: `native/GhostRigger.Core.Scene/Python/src/core/modules/`, mirrored
+`native/GhostRigger.Core.Tools/Python/src/core/modules/`, Map Studio Builder,
+Properties, Readiness, and `module_editor_window.py`, plus focused authored-module,
+stock-import, dispatcher, workflow, and visible-window tests.
+
+Verification: vanilla raw comparisons against K1 `tar_m02aa`/`danm13` and K2
+`101PER`/`201TEL`; 17 focused travel tests passed, including K1/K2 `.mod` archive
+GIT/IFO readback and exact trigger field order/type assertions; the real
+`ModuleEditorWindow` opening -> trigger -> save/reload workflow passed its focused
+Qt runtime test; affected Scene/Tools and GUI Display/Tools payload copies were
+confirmed byte-identical and payload manifests were regenerated. In-game travel
+is not claimed yet: final acceptance remains user-authored custom `plcaa` through
+the GhostStudio UI, staged/exported from the UI, followed by a manual warp and
+door/trigger interaction proof in KOTOR.
+
+## 2026-07-11
+
+### [2026-07-11] T2403/T2405/T2406/T3204/T3302/T3305: DCC-informed tutorials, persistent rig stages, inherited-slot retarget proof, and packaged-host repair
+
+Owner: LordVaderCW
+
+T###: T2403 / T2405 / T2406 / T3204 / T3302 / T3305
+
+Subsystem: Character Studio, Retarget Workbench, tutorial/onboarding, Workflow,
+Rendering compatibility exports, Native.Core.Host packaging, and DCC research
+
+Intersects: The 2026-07-11 Map Studio/GModeler/texture/terrain pass, native
+GhostStudio branding rebuild, and the current dirty worktree.
+
+Completed a bounded clean-room synthesis of the Maya 2025.3.1, ZBrush
+2026.0.1, Blender 5.0.1, AccuRIG 2.1.0.584, and Substance Painter 11.1.1
+Ghidra 12.1.2 studies. The reports distinguish direct symbol/xref/product
+boundary evidence from design inference and explicitly reject claims that the
+studies recovered proprietary algorithms, shaders, schemas, timing, or KOTOR
+compatibility. The combined status and remaining gates are recorded in
+`docs/audits/dcc_authoring_synthesis_2026-07-11.md`.
+
+- Added a theme/layout-aware `GhostStudio Tutorials & Getting Started` window
+  available from Help, F1, and first run. Its ten task-oriented pillars cover
+  Resources, Scene editing, GModeler, Map Studio, Terrain, Texture Paint,
+  Stock Module Editor, Character Builder, Retargeting, and validation/export/
+  manual game proof. Every page names its KOTOR output and readiness boundary
+  and routes to the real owning workspace; it does not present parser or
+  viewport success as game proof.
+- Added a JSON-safe, revisioned Character `RigSession` for source, body
+  landmarks, fingers, skeleton, correspondence, weights, bind, and export.
+  Downstream stages become stale transitively, interrupted running jobs restore
+  as failed, and failed/cancelled retries preserve the last valid artifact.
+  Character Builder persists/restores compatible guide and mask data and wires
+  only stages backed by actual current operations; it does not falsely mark
+  correspondence or bind complete.
+- Corrected retarget POSITION serialization to Odyssey rest-local deltas while
+  retaining absolute local values for FK. Made repository-owned skeleton maps
+  resolve from both source-package and embedded-host layouts, fixed immediate
+  UE/FBX playback's case-insensitive transform lookup, and propagated the
+  current `ResourceManager` through both preview/export controllers and writer
+  requests so a valid animation slot can be resolved through the target's
+  inherited supermodel chain.
+- Proved the CLI path with the real
+  `Characters__UEFN_Mannequin__Animations__Idle__M_Neutral_Stand_Idle_Loop.fbx`
+  (SHA-256
+  `42C605C077E628E275F4A1FB2119448C58FFFCFE7B91E0582D93B5417FBB5330`)
+  onto K1 PMBAM's inherited `victory` slot. The 87-bone source mapped 40,
+  dropped 44, collapsed 3, left 0 unmapped, and produced 302 frames at 30 fps
+  (10.0667 seconds). The writer appended a local override with 61 animated
+  nodes and roundtrip verification enabled. Independent reload found PMBAM,
+  supermodel `S_Female02`, and one `victory` animation. Output hashes are MDL
+  `1DF9D5C7E70034F3BECCCAC9FB9D8C2AC2CD9C33EEF28BA8DA84158536ED4A46`
+  and MDX
+  `A912C9FB3F8E785F06652E778295EBE6655D20FDB82A437456CD71939B4C6B22`;
+  artifacts live under
+  `Saved/RetargetProof/ue5_idle_pmbam_cli_full_injection_2026-07-11/`.
+- Clarified Retarget Workbench's product surface with the GhostStudio title,
+  theme-aware icons, plain-language action/status text, and visible labels for
+  Output policy, KOTOR slot, Custom name, Unreal clip, and Notes. Tooltips now
+  explain vanilla slots, custom patches, and inherited-slot resolution.
+- Restored the package-local lazy renderer compatibility table
+  `adapters/rendering/gpu_renderer_exports.py`, removing a dangling embedded
+  import and unblocking Aurora controller-semantics coverage without moving
+  renderer ownership back into GUI code.
+- Hardened the native post-build handoff: Debug and Release targets copy the
+  Blender animation-extraction helper and all `GhostRigger*.dll` payload
+  owners beside the repository-root `GhostStudio.exe`. This fixes the root
+  executable's previous 0/18 payload startup state. The rebuilt Debug x64 root
+  and build executables are byte-identical (2,175,488 bytes, SHA-256
+  `B165C8CE1BEAC336883BFE40AC4B19653F3A04ED4955E020C5D42EEFFA5D5695`),
+  and `--help` loads 18/18 DLLs plus 18/18 payload manifests. The embedded
+  manifest now covers 18 projects and 1,226 payload files.
+
+Verification: focused overlapping payload/tutorial/RigSession/
+retarget-export/controller/Aurora-semantics/animation-injector tests passed
+97 with 1 skipped; the broader retarget battery passed 155 with 1 skipped and
+1 deselected; DAG/hook/bind/qbone/tbone/weight/reload checks passed 46; and the
+K2 `plcaa` vanilla-derived gameplay/engine-contract matrix passed 18/18. The
+tutorial contract passed 3/3, `RigSession` passed 8/8, and Retarget UI/
+controller coverage passed 27/27 within those overlapping totals. An offscreen
+Retarget constructor smoke confirmed the new labels/icons/title, but this is
+not recorded as visible workflow proof. The separate Map Studio changelog
+entry records the real visible Debug-app Map/Terrain/WOK pass.
+
+Outstanding proof: the written `victory` animation has not been triggered and
+visually inspected in KOTOR, and the exact latest edited/painted map has not
+received a manual KOTOR warp/log session. No in-game animation, rendering,
+movement, lighting, texture, transition, or gameplay claim is made by this
+entry. `T2403`, `T2406`, `T3204`, and `T3305` therefore remain Partial, and
+`T3103` remains Pending.
+
+### [2026-07-11] T2904/T2908/T3002/T3007/T3103/T3302/T3305: Map Studio lighting/lightmaps, authored sky, sky traffic, and visible stock-sky proof
+
+Owner: LordVaderCW
+
+T###: T2904 / T2908 / T3002 / T3007 / T3103 / T3302 / T3305
+
+Subsystem: Map Studio environment authoring, KMAP/ARE metadata, room-light and
+lightmap workflows, stock-room preview/export, authored sky/backdrops, MDL
+animation preservation, sky-traffic authoring, Automation proof capture,
+renderer ordering, and native payload packaging
+
+Intersects: The 2026-07-11 depth-correct GModeler/texture/terrain pass, the
+vanilla-derived `plcaa` exporter contracts, and the current dirty worktree.
+
+- Added a Map Studio-only `Environment` workspace with explicit Apply,
+  Standard/Match Module, Fullbright Graybox, and Custom modes. It edits sun
+  ambient/diffuse/dynamic colors, shadow opacity, sun shadows, and sun fog
+  color/range without exposing modeling controls in unrelated workbenches.
+  Apply is one undoable KMAP command and invalidates only ARE/package output,
+  not geometry, WOK, LYT, VIS, or PTH.
+- Preserved stock ARE world-lighting and fog fields through stock import,
+  editable KMAP state, and authored ARE compilation. Empirical K1 `m02aa` and
+  K2 `001ebo` comparisons matched every source-present audited field. The
+  Fullbright Graybox compile overlay is reversible and preserves the user's
+  baseline settings.
+- Extended authored room lights with stable IDs, deterministic legacy-ID
+  migration, enabled/shadow/diffuse/lightmap flags, direction, spot-cone angle,
+  and bake group. These fields now flow through selected-light Properties,
+  viewport point/spot/ambient nodes, the lightmap baker adapter, readiness, and
+  export metadata. This is a viewport-and-bake contract, not proof of dynamic
+  KOTOR MDL light-node compilation.
+- Added a transactional per-surface lightmap workflow for imported editable
+  rooms. It generates UV2 with the required xatlas seam vertex remap, preserves
+  UV0/normals/faces/WOK/materials/unmodified rooms, bakes from authored lights
+  plus ARE ambient, writes project-owned RGBA TPC assets with embedded
+  lightmap TXI metadata, assigns the
+  surface's lightmap/texture-count/UV2 contract, records proof hashes and
+  package inventory, and registers an undo transaction that restores the
+  surface and removes its sidecar. Existing resource-name collisions fail
+  without mutating the KMAP or project files.
+- Matched the uncompressed 64x64 RGBA TPC structure and embedded lightmap TXI
+  trailer used by installed K2 `001ebo1_lm0` and `001ebo1_lm1`; the focused
+  comparison was byte-for-byte exact for both vanilla fixtures. A real MOD
+  build/readback confirmed the generated TPC and material/UV2 manifest are in
+  the staged package. Readiness deliberately calls this an applied-lightmap
+  candidate, never game proof.
+- Added surface-level stock-sky classification and persistence. Oversized,
+  sky-identified surfaces remain rendered and textured but are non-pickable,
+  excluded from normal framing, and independently controlled by the Skybox
+  toggle. Mixed rooms keep their ordinary geometry and WOK export; a stale
+  legacy room-level backdrop flag can no longer discard a mixed room's
+  walkmesh.
+- Added a focus-safe `/api/map_studio_visual_proof` route that can import a
+  named stock module into the real Map Studio canvas, capture sky-off/sky-on
+  images, audit expected decoded textures and renderer residency, compute a
+  pixel delta, and fail if the foreground window changes. It refuses to replace
+  any existing non-empty or dirty Map Studio project. Positive proof requests
+  now use the full measured five-second renderer-residency window, require at
+  least 1% of the viewport to change, and verify that visible backdrop nodes
+  are actually bound to the expected cached texture resrefs.
+- Corrected the CPU renderer's background-geometry ordering so giant sky
+  surfaces draw before all ordinary opaque/transparent geometry instead of
+  relying on an insufficient centroid-depth bias. A live Debug-app proof of K1
+  Taris `tar_m02aa` resolved, decoded, and cached all five 512x512
+  `lts_sky0001..0005` textures; the sky-on capture visibly retained foreground
+  geometry and changed 320,896 pixels (`0.866144` of the image, mean delta
+  `4.1923`). Evidence is under
+  `Saved/VisibleProof/map_studio_sky_environment_2026-07-12_final/`.
+- Added deterministic five-face authored skyboxes (north/east/south/west/top)
+  with inward-facing panels, manual texture resrefs, a visual-only backdrop
+  role, an exact empty 136-byte WOK, no shadows, and non-pickable preview
+  geometry. Panorama/HDR/EXR conversion and dome creation remain deliberately
+  disabled/planned until projection, tone-mapping, seam, and engine proof exist.
+- Audited vanilla animated sky traffic from K1 Taris/Dantooine and K2 Telos.
+  The engine contract is room MDL/MDX `animloop1/2/3` animation controllers,
+  including model-reference nodes such as `C_Brith`, rather than ordinary GIT
+  placeables. Documented static-vs-animation node `+8`, transition, position,
+  orientation, compressed quaternion, Bezier, and sparse animation-tree
+  requirements. The current MDL load/write path now preserves reference-model
+  identity, `reattachable`, and zero transition times across conversion.
+- Added KMAP sky-traffic authoring with stable traffic/control-point IDs,
+  owning room, resolved model, `animloop1/2/3`, optional model clip, loop/closed
+  path, start/altitude offsets, path-tangent/fixed/preserved facing, and either
+  loop duration or travel speed. Preview shows the real source model at the
+  start plus a cyan path and direction arrows. Readiness and export explicitly
+  block enabled authored traffic until a vanilla-compared room-MDL/MDX
+  animation compiler exists; it is never written as a fake GIT placeable.
+- Added an explicit, versioned `authored_static_room_rebuild` policy for the
+  narrow case where a stock room is intentionally flattened into static
+  authored geometry. It records and revalidates source runtime-graph counts,
+  requires a reason, rejects stale/tampered waivers, and leaves ordinary stock
+  animation/controller flattening blocked. The golden `plcaa` harness opts in
+  explicitly rather than silently discarding runtime data.
+- Replaced ambiguous lower-toolbar glyph fallbacks with semantic SVG icons and
+  corrected drag/drop coordinate normalization so the viewport receives the
+  intended placement position instead of a coordinate from another widget.
+
+Affected areas include Core.Scene/Core.Tools authored environment, room-light,
+imported-surface, skybox, sky-traffic, preview, controller, readiness, and
+export models; Core.Workflow lightmap application; Core.Rendering lightmap
+baking and background draw ordering; GUI Display/Core.Tools Environment and
+Properties panels; Core.IO/Runtime Host MDL writer/porter; Core.Math reference
+node data; Core.Resources model loading; Core.Automation visual proof; semantic
+icon assets; focused tests; and regenerated native payload manifests/resources.
+Design and vanilla evidence are recorded in
+`knowledge_base/roadmap/map_studio_environment_authoring_plan.md`,
+`docs/audits/map_studio_lightmap_apply_contract_2026-07-11.md`, and
+`docs/audits/map_studio_sky_traffic_vanilla_contract_2026-07-11.md`.
+
+Verification: the combined environment/lightmap/sky/traffic/backdrop/visual-
+proof focused battery passed 72/72; the lightmap workflow passed 8/8 and its controller/MOD
+readback/undo/collision proof passed 2/2 within that total. The CPU sky render
+ordering regression passed, native Python payload contracts passed 19/19, and
+Scene/Tools plus GUI Display/Tools mirrors were byte-identical. The K2 `plcaa`
+vanilla-derived gameplay/package/engine-contract matrix passed 19/19 after the
+new exporter changes. Debug x64 rebuilt successfully as `GhostStudio` version
+6.1.0.0 with all 18 native payload DLLs present. The live Taris proof recorded
+the textured-sky metrics and captures above in the actual GhostStudio viewport;
+resource decode, renderer cache residency, expected material bindings, the 1%
+pixel-delta gate, and foreground focus safety all passed with zero blockers.
+
+Outstanding proof and implementation: there is no vanilla-compared or in-game
+proof for compiling authored room lights as dynamic MDL lights. The new applied
+lightmap is structurally/package verified but has not been manually inspected
+after a K1/K2 warp. Panorama/HDR/EXR conversion and dome authoring are absent;
+only the manual five-face box exists. Authored sky traffic has a model/path/
+timing preview but no room-animation compiler. Full stock runtime animation,
+emitter, and arbitrary controller-graph preservation remains absent despite the
+reference-node/Bezier preservation improvements and explicit static-rebuild
+waiver. No manual KOTOR warp/log session was performed for the new lighting,
+lightmap, authored-sky, or traffic features, so this entry makes no in-game
+lighting, sky, traffic, or lightmap claim. The stock module root-vs-ARE resref
+mismatch also remains a known untouched full-build blocker.
+
+### [2026-07-12] T2565: Ithorian carries the FULL N_DarkJediM animation inventory (284 clips)
+
+User wants the Ithorian to "properly use all of the animations that
+N_DarkJediM uses" while keeping the default Ithorian clips, plus a saber
+hold node — verified against a supplied side-by-side of N_DarkJediM next to
+the Ithorian.  Generalized the per-clip world-space retarget (T2564) into
+`bake_full_inventory`: enumerate N_DarkJediM's supermodel chain
+(N_DarkJediM has 0 own clips; chain S_Female02 -> S_Female01 -> S_Male02 ->
+S_Male01 resolves 267 effective clips, nearest-model-wins exactly like the
+engine), and bake every one onto the Ithorian as a LOCAL animation retargeted
+against the rig that OWNS it (male vs female rest frames differ).  The 16
+native Ithorian clips win all name collisions (only listen/tlknorm collided,
+so dialogue/idles keep authored motion), and the creature-contract aliases
+g0a1/g0a2/creadyr (from g2a1/g2a2/g2r1) stay because the modeltype-S resolver
+requests those names.  Result: 284 clips per variant (16 native + 265 chain
++ 3 aliases).
+
+The saber hand hooks (rhand/lhand, T2563) already match N_DarkJediM's own
+offsets within ~1mm, confirmed against the real DJ rig.
+
+Perf/gates: an exhaustive 284-clip audit is too slow for every build, so the
+deformation + cross-shell gates run on a 24-clip representative subset
+(native + creature contract + one clip from each humanoid set: melee/saber/
+flurry/blaster/cast/locomotion/dialogue) by temporarily swapping
+rigged.animations, then restoring the full list before export.  Subset audit:
+g8a1 21.45, g2a1/g0a1 16.47, c2a1 14.64, no hard failures; cross-shell 0.242.
+Export/reload/seam/inverse-bind gates green; deploy verifies >=280 clips incl
+c2a1/walk/pause1 + hooks + animations.2da rows 276/277; both variants
+redeployed to K1.  Verified vs N_DarkJediM on c2a1/c2p1 (sheets
+full_inventory_c2{a,p}1_vs_darkjedi.jpg): motion matches phase-for-phase;
+residual deep-crouch read-down from the Ithorian's forward-set neck at rest.
+
+### [2026-07-11] T2564: world-space orientation retargeting for humanoid clips on the Ithorian rig
+
+Answering "did you verify the retarget?": the honest first answer was only
+partially — and proper verification against the RIGHT oracle found a real
+bug.  Since no vanilla Ithorian has saber combat, the oracle is the actual
+Korriban Dark Jedi male body (`N_SithComM`, appearance row 296, supermodel
+chain S_Female02 -> S_Female01 -> S_Male02 — it plays the exact keyframes our
+bake sources).  Side-by-side rendering showed `creadyr` pointing the
+Ithorian's right arm straight up (flagpole) where the Dark Jedi holds a
+bent-elbow guard.  Discriminating test: the VANILLA Ithorian force-fed g2r1
+flagpoles identically — orientation keys are ABSOLUTE parent-local, and the
+Ithorian's arm rest orientations differ from the humanoid rig, so raw
+controller copy can never place the arms correctly (this is what the
+Retargeting Workbench exists for).
+
+Fix: `retarget_clip_orientations` in build_sith_ithorians.py — true
+world-space retargeting per keyed shared bone:
+C(b) = inv(W_src_rest(b)) * W_ith_rest(b); W_des(t,b) = W_src(t,b) * C(b);
+local(t,b) = inv(W_des(t, parent_ith)) * W_des(t,b).  Preserves the source
+clip's world-space motion while landing every bone in the Ithorian's own
+rest frame; source worlds via evaluate_aurora_animation_pose FK on S_Male02;
+position deltas pass through (both rigs anim_scale 1.0); target-only bones
+hold rest.  All 9 baked clips converted (37-40 orientation tracks each).
+
+Verified vs the Dark Jedi oracle (sheets in the package MDL folder:
+retarget_verify_{creadyr,g0a1,cast}_vs_darkjedi.jpg): creadyr is now a
+bent-elbow high guard, g0a1 matches the swing phase-for-phase (guard ->
+overhead wind-up -> cross swing -> recover), cast loop unchanged-good.
+Audit: g0a1 16.47 / castout1 14.46 / creadyr 11.91, no hard failures;
+cross-shell 0.242; all export gates green; both variants redeployed; 32/32
+regression tests.
+
+### [2026-07-11] T2563: Sith Ithorians get lightsabers + force powers (Korriban academy Dark Jedi parity)
+
+Extends T2562.  Three engine constraints shaped the implementation:
+(1) the creature melee resolver ignores the equipped weapon (Ghidra
+IsCreature branch always returns g0a1/g0a2), so SABER swing motion must live
+in the creature clip slots — the combat bake now sources the S_Male02
+single-lightsaber set: g0a1<-g2a1, g0a2<-g2a2, creadyr<-g2r1 (saber ready).
+(2) an equipped saber only renders at an `rhand` attachment dummy, which
+creature rigs lack — `rhand`/`lhand` hooks are grafted into the donor
+TEMPLATE before apply_template_rig with S_Male02's local offsets
+(rhand@rhand_g (-0.0317,-0.0118,-0.0854); grafting after the rig trips the
+"Non-native node remains in the final DAG" export blocker — template-side
+grafting makes them part of the native snapshot).  (3) force powers need
+cast + victim clips: baked castout1/castoutlp1 (casting) and
+horror/choke/sleep/paralyzed (victim family the fighting rancor also
+carries).  Models now carry 25 clips (16 original untouched).
+
+UTCs are now the REAL Korriban Sith Academy Dark Jedi encounters, extracted
+from korr_m35aa_s.rim via direct RIM parse (`korriban_utc_bytes`):
+k35_enc_jedimale -> sithlord01, k35_enc_jedifema -> sithschol01 — faction 1
+hostile, red Dark Jedi saber g_w_drkjdisbr001, 3 force powers, CR 4,
+Appearance_Type repointed to rows 509/510.  Deploy verifies the full chain:
+25 clips reload including saber/cast/victim set, rhand/lhand hooks present,
+animations.2da rows 276/277 still name g0a1/g0a2.
+
+Verification: deformation audit covers all baked clips (g0a1 16.47,
+castout1 15.03, castoutlp1 13.10 — no hard failures), cross-shell 0.242 <
+0.35, all export gates green, 32/32 regression tests.  Proofs in the package
+MDL folder: `ithorian_saber_attack_g0a1.mp4`, `ithorian_force_cast_loop.mp4`,
+`saber_cast_montage.jpg`.  Honest residual: the fastest mid-swing frames of
+the saber attack still show arm thinning (fast humanoid swing on long
+Ithorian arms); the cast loop is clean.  NPCs are hostile Dark-Jedi-class
+saber wielders on warp-in.
+
+### [2026-07-11] T2562: Ithorian combat animations baked + assigned per the Ghidra creature contract
+
+The Sith Ithorians could never visually attack: modeltype-S creatures request
+`g0a1`/`g0a2` (animations.2da rows 276/277, Ghidra
+`CSWCCreature::UpdateMeleeAttackData` base+0x114, with an `m0a1` preference in
+creature-vs-creature that falls back to g0a1 — the working rancor ships without
+m0a1) plus `creadyr` for combat-ready, and vanilla c_ithorian carries none of
+them.  No humanoid supermodel carries g0a1 either — it is per-creature
+authored — so `build_sith_ithorians.py` now BAKES them as local animations
+retargeted from the S_Female02 combat set (user-selected motion source):
+g0a1<-g3a1, g0a2<-g3a2, creadyr<-g3r1.  `bake_combat_clips` deep-copies each
+source Animation, prunes anim nodes to bones present on the Ithorian
+(74->40 nodes, reparenting survivors to the nearest kept ancestor), renames
+nodes to the EXACT target casing (writer resolves by exact name; female rig
+uses lfoot_g vs Ithorian LFoot_g — first export failed on that), renames the
+anim root per the T2538 contract, and keeps the authored Hit/Swing events
+(g3a1: 2, g3a2: 4 — richer than the rancor's event-less attacks).  Position
+keys are parent-local deltas at anim_scale 1.0 on shared bone names, so
+controllers transfer verbatim; Ithorian-only bones (neck chain, flaps) stay at
+rest.  The 16 original dialogue/idle clips are untouched.
+
+UTC side: donor switched from pacifist g_ithorian01 (no weapons, neutral) to
+g_kinrath01 — faction 1 hostile, dual g_w_crslash002 creature claws, stock
+creature combat AI — so the placed NPCs engage and the engine actually
+requests the new clips.  Deploy now verifies the full assignment chain:
+models reload with 19 clips including g0a1/g0a2/creadyr, and animations.2da
+rows 276/277 still name g0a1/g0a2.
+
+Verification: deformation audit covers the baked clips (g0a1 16.03 / creadyr
+12.48 max stretch, no hard failures), cross-shell tear gate 0.242 < 0.35,
+export/reload/seam/inverse-bind gates green for both variants, redeployed to
+K1 Override + ShaolinTestsMap; 32/32 regression tests pass.  Proof renders:
+`c_ithlord_anim_g0a1.png`, `c_ithlord_anim_creadyr.png`, and 3s attack video
+`ithorian_g0a1_attack_ghoststudio.mp4` in the package MDL folder.  WARNING for
+the live test: both NPCs are now HOSTILE on warp-in.
+
+### [2026-07-11] T2561: T2557 weight regularization shredded arms/fingers under large rotations — freeze near-donor-surface skin
+
+User's 2-minute progress video showed the custom Ithorian's arms and fingers
+SHATTERING into spiky shards under supermodel combat clips (S_Male01 `f2d3`),
+while vanilla c_ithorian plays the exact same inherited clip cleanly (defined
+fingers, bent arms).  So it was NOT a clip-vs-creature mismatch and NOT the
+skeleton (T2560) — it was our own T2557 weight regularization corrupting
+weights the donor transfer had gotten right.  Measured mismatch of final
+dominant bone vs nearest-vanilla-vertex: finger 59%, hand 24%, forearm 24%,
+bicep 18%.  With regularization disabled: finger 28%, hand 1%, forearm 0%,
+bicep 2% — i.e. the donor transfer is authoritative on the body/arm/hand/finger
+skin (it coincides with the donor body), and the graph diffusion's inter-shell
+proximity bridges were smearing near-surface finger/arm weights across
+anatomically distant bones (adjacent fingers, arm<->sleeve).  Invisible at
+cwalk's small swings; catastrophic under large combat rotations.
+
+Fix (headless_body_workflow `regularize_imported_skin_weights`): FREEZE
+vertices within `confidence_distance` (now 4cm) of the donor skin surface with
+their donor weights; only reweight the vertices FAR from the donor body (the
+floating robe plates / satchel / straps that genuinely have no donor
+correspondence and were the original T2557 target).  Distance measurement per
+region confirmed the separation: fingers median 1.6cm / hands 2.3cm (frozen)
+vs torso 7.9cm / cloth 11.2cm (regularized).  Also made the T2558 region
+palette pruning bulletproof: once safe trace bones are exhausted it force-drops
+the single least-contributing bone (reassigning its verts) rather than failing
+export, since a region physically cannot exceed 16 bones.
+
+Result: arm/finger dominant-bone mismatch finger 32% / hand 3% / forearm 6% /
+bicep 13%; worst arm+finger edge-stretch on f2d3 = 9.0 vs vanilla's 6.3 (was a
+full shatter).  Fingers render as individual digits like vanilla.  Robe still
+regularized so the cross-shell tear gate holds (0.242 < 0.35), seam 0 divergent,
+all export/reload gates green, both variants rebuilt + redeployed to K1.
+`tests/test_skinned_node_splitter.py` + `tests/test_character_builder_template_rig.py`
+32/32 pass.  Proof: `f2d3_arm_finger_fix_comparison.jpg` (vanilla / before / fixed).
+
+### [2026-07-11] T2560: creature skeleton-fit collapsed limb chains (Ithorian arms) — segment-integrity guard
+
+User A/B (custom c_ithlord vs vanilla c_ithorian on the same cwalk, both through
+the real Character Builder viewport) showed the custom arms pinched with the
+hands riding up at the waist instead of hanging at thigh level like vanilla.
+Root cause was NOT weights or the animation — it was skeleton placement.
+`_apply_creature_skeleton_fit_targets` reported applied=True and moved 51 bones
+(the earlier "creature_skeleton_fit: None" metadata read was misleading): the
+per-region correspondence fit placed the arm/leg joints near the body centre,
+collapsing whole limb chains.  Measured against the vanilla donor: `rhand_g`
+target z=1.18 vs donor 0.71 (47cm up), `rforearm_g` 1.23 vs 1.03; donor
+hand->forearm segment 0.335 shrank to 0.071 (0.21x).  The correspondence's
+`surface_confidence` was a useless discriminator (uniformly 0.97) — it measures
+proximity-to-a-surface, not fit correctness — because the Ithorian's wide robe
+sleeves merge the arm into the torso silhouette so the region estimate lands the
+joints on the torso.
+
+Fix (character_builder.py `_apply_creature_skeleton_fit_targets`): a limb
+segment-integrity guard.  Snapshot every bone's donor (pre-fit) world position;
+process bones parent-first; reject a correspondence target when it collapses
+(<0.6x), overstretches (>1.7x), or reorients (>45deg from the donor segment
+direction) the bone's segment to its parent.  A rejected bone keeps its
+donor-local offset and rigidly follows its fitted parent, preserving the donor
+limb geometry exactly.  For the Ithorian this rejects 28 pathological limb-chain
+targets (both arms shoulder->fingers, both thighs, neck) while still applying the
+23 legitimate torso/head/pelvis fits.  Genuinely different creatures (Rancor)
+keep their fits because honest reposes preserve segment length/direction within
+the wide tolerances; only anatomically impossible targets are dropped.
+
+Result: custom arm chain restored to donor geometry — rbicep z=1.21 -> rforearm
+0.92 -> rhand 0.60, monotonic descending like vanilla's 1.39/1.03/0.71 (vs the
+collapsed 1.21/1.23/1.18 before).  Rebuilt both variants: all gates green
+(inverse-bind 1.11e-15, seam 0 divergent, cross-shell 0.200, audit crun
+13.87 -> 13.48), redeployed to K1.  `tests/test_skinned_node_splitter.py` +
+`tests/test_character_builder_template_rig.py` 32/32 pass.  New proof video
+`ithorian_cwalk_ghoststudio_FIXED.mp4` + `artifacts/cwalk_vanilla_vs_fixed.jpg`
+(arms now match vanilla frame-for-frame).  Capture harness:
+`scripts/capture_ithorian_anim_video.py` drives the real QtViewportWidget
+(D3D12) and grabs frames at 30fps.
+
+### [2026-07-11] T2904/T2905/T2907: Depth-correct Map Studio editing, transactional texture paint, and terrain/export hardening
+
+Owner: LordVaderCW
+T###: T2904 / T2905 / T2907
+Subsystem: Map Studio GModeler interaction, renderer residency/picking, texture and material authoring, terrain sculpt/WOK generation, KMAP transactions, K1/K2 module export, and native Python payloads
+Intersects: The T2903/T2904/T2907 topology pass, the 2026-07-11 GhostStudio native-host rebuild, K2 plcaa engine contracts, and the current dirty worktree.
+
+Reviewed every one of the 1,036 frames in the user's
+`2026-07-11 12-28-02.mp4` capture. The recording confirmed two independent
+workflow defects: GModeler could highlight occluded faces/edges/vertices behind
+the surface under the cursor, and starting an extrusion could evict/rebuild the
+room renderer instead of presenting the edited topology in place. This pass
+fixed those faults and completed the first end-to-end diffuse-paint authoring
+slice without weakening the vanilla-derived module export gates.
+
+- Replaced component hover's screen-space candidate ordering with a two-pass
+  closest-visible-surface gate. Face depth and world/UV interpolation are
+  perspective-correct; edges and vertices are accepted only when they belong
+  to the visible surface; per-corner KOTOR `face_uvs` preserve UV seams; and
+  skybox/backdrop preview geometry remains visible but cannot steal a pick.
+- Extrude and bevel now promote their resident preview mesh at commit rather
+  than reloading the scene. Modeling refreshes invalidate only changed geometry
+  and material dependencies, while readiness/WOK work is coalesced off the
+  immediate paint path. A 500-surface commit improved from 298.8 ms to 34.7 ms
+  and reduced renderer `load_model` calls from one to zero. Renderer interfaces
+  now support dirty texture-region uploads; a 4x4 update into a 512x512 texture
+  measured about 66.8x faster than full replacement.
+- Performed a clean-room Ghidra 12.1.2 study of the locally installed Substance
+  3D Painter 11.1.1 executable (SHA-256
+  `E0F1B67DB8B824003D3CC1FC90AC66A58C0DA80489F6B882B9636B9D1D8C39AD`).
+  Applied product-level lessons only: distance-resampled deterministic stamps,
+  closest-visible UV projection, linear-light RGB compositing, 64-pixel dirty
+  tiles, pressure/spacing/flow/hardness controls, one undoable command per
+  pointer drag, and separation between editable texture documents and renderer
+  residency. No Adobe code, shaders, data structures, or assets were copied.
+- Added a Texture Paint workflow that imports project textures, creates unique
+  writable sidecars for stock-room materials, assigns a custom texture to the
+  hovered face, paints with game-library or project stamps, updates the live
+  albedo without a scene reload, and packages matching TGA/TXI resources for
+  K1 or K2. Authored lights compile to renderer LIGHT nodes, and optional
+  skybox/backdrop preview participates in framing but not selection.
+- Integrated texture edits with the normal chronological Map Studio command
+  history. A project-bound sidecar journal captures one lazy baseline, stores
+  bounded changed TGA byte spans for same-size strokes, restores sidecars on
+  discard, and keeps undo/redo valid after leaving Paint mode or switching
+  targets. A sparse 4096x4096 one-tile stroke stores 32,768 bytes instead of
+  134,217,764 bytes for full before/after images. Existence, size, SHA, span,
+  orientation, format, and dimension guards reject external or incompatible
+  changes atomically; failed application restores both the history stacks and
+  the paint session.
+- Hardened project/save transactions so a cancelled New/Open operation cannot
+  roll back active sidecars, failed opens restore only after parse succeeds,
+  close-discard restores authored files, same-folder renames clear incompatible
+  history, and cross-folder Save As with live sidecars is blocked before any
+  mutation. Used custom project textures now receive resref, readability,
+  TGA/TPC/TXI, dimension, duplicate, generated-resource, and final merged
+  K1/K2 engine-contract validation. A valid same-resref TGA+TXI pair remains
+  supported.
+- Removed full-WOK buffer copying from terrain face updates and kept sculpt
+  frames on a flat dirty buffer. Median live-frame work is about 0.075 ms at
+  17x17, 65x65, and 129x129; terrain commit improved from
+  263/666/7,599 ms to 0.9/14.7/55.4 ms respectively. Plane -> sculpt -> WOK
+  generation/export remains covered, including a closed raw WOK perimeter.
+  PyKotor's superlinear binary WOK write remains a measured downstream cost and
+  was deliberately not rewritten without vanilla structural proof.
+
+Affected areas: Core.Scene/Core.Tools Map Studio paint, sidecar journal,
+command history, authored module validation/export/preview/pathing, terrain and
+modeling services; GUI Display/Core.Tools texture paint and browser panels,
+viewport hover/toolbar/window integration; Core.Rendering/Runtime.Shared
+renderer interfaces and texture caches; focused tests and matrices; the
+regenerated Scene, Tools, GUI Display, Rendering, Runtime.Shared, and Workflow
+payload manifests/resources; and
+`docs/audits/substance_painter_texture_paint_clean_room_2026-07-11.md`.
+
+Verification: Python compilation passed for the touched core, GUI, renderer,
+and test modules. Relevant Scene/Tools and GUI Display/Tools mirrors are
+byte-identical (18/18), and the native payload byte-identity/manifest contract
+passed. Focused core/regression tests passed 59/59; texture workflow tests
+passed 9/9; sidecar transaction/orientation tests passed 18/18; hover/depth
+tests passed 16/16; renderer-region tests passed 8/8; GModeler core matrix
+passed 27/27; GModeler UI workflow matrix passed 53/53; terrain/WOK/export
+matrix passed 16/16; and the K2 plcaa vanilla-derived gameplay/engine-contract
+matrix passed 18/18. K1 and K2 custom TGA/TXI package readback and resource
+collision cases passed. The rebuilt Debug application was then exercised as a
+real visible desktop workflow: GhostStudio opened Map Studio/Paint, exposed the
+project-texture brush controls, created a Terrain Heightfield, reported a
+0.030 ms live brush frame, committed a raise stroke, regenerated the derived
+WOK, and passed walkmesh validation with 32 walkable / 0 blocked triangles at
+4.9 degrees maximum slope. The visible pass caught and fixed the old
+"experimental editor hook" fallthrough on Generate/Validate Walkmesh without
+adding a broad renderer refresh, KMAP binary blob, dirty-state change, or undo
+item; switching away from deep Builder controls now also resets the workflow
+scroll so the next tab opens at its top. The native session exited through the
+UI and logged `Qt main window exited cleanly.` These are desktop, headless, and
+archive structural/workflow proofs, not live-game proof. A manual KOTOR warp of
+a freshly edited and painted exported map has not been performed, so in-game
+rendering, movement, lighting, and texture appearance remain an explicit
+acceptance gate. Final Debug x64 packaging produced byte-identical root/build
+`GhostStudio.exe` files (2,175,488 bytes, SHA-256
+`B165C8CE1BEAC336883BFE40AC4B19653F3A04ED4955E020C5D42EEFFA5D5695`);
+`--help` loaded 18/18 DLLs and 18/18 embedded payload manifests. Windows version
+fields identify ProductName/FileDescription/InternalName as `GhostStudio`, and
+the executable contains the six-size 16/32/48/64/128/256 32-bit application
+icon group.
+
+### [2026-07-11] T2558: audit-oracle position semantics + distance-aware weight confidence + palette pruning
+
+Frame-by-frame review of the 2026-07-11 videos (custom Sith Ithorian in the
+Character Builder vs vanilla c_ithorian in the Animation Browser) found the
+custom rig reaching the SAME poses as vanilla — the remaining gap was sleeve/
+arm deformation quality — plus one systemic tooling defect:
+
+1. **Audit oracle used wrong position semantics.**  KOTOR position keys are
+   DELTA offsets added to the rest-local position (verified: K1 c_ithorian
+   rootdummy crun key (0.004, 0.02, -0.035) vs rest z=1.126; xoreos
+   ``arePositionFramesRelative()==true``; KotorBlender ``p1 = restloc + val``;
+   AnimationEngine._eval_node already implements this with c_bantha/c_kinrath
+   evidence).  ``evaluate_aurora_animation_pose`` — the oracle behind
+   audit_model, the T2550 gates, and every build render — REPLACED positions
+   instead, offsetting every position-keyed bone by its rest position.  All
+   previous audit numbers were skewed: vanilla c_ithorian's "17.12 cgustandb
+   edge spike" was pure oracle error (clean 5.0 max / 0 failures under
+   correct semantics).  Fixed to rest+delta; viewport and oracle now share
+   one verified semantics.  No game branching — same rule for K1 and K2.
+2. **Distance-aware transfer confidence (T2557-weights extension).**  Thick
+   clothing sits far from the skinny donor surface, so its transferred
+   weights are guesses — they must not anchor the diffusion.
+   ``apply_template_rig`` now passes the weight donor's skin-surface points;
+   verts farther than 6cm lose anchor status and get re-diffused.
+   Bone-support masking keeps diffusion from spreading bones spatially (a
+   vertex may only weight to bones in its own or its 1-ring neighborhood's
+   original support).
+3. **Region palette pruning.**  Diffusion still leaves trace influences that
+   inflate an anatomical region past the 16-bone engine limit.  The splitter
+   now prunes bones contributing < 2% of a region's weight mass and never
+   dominant on any vertex (renormalizing affected rows) before failing.
+
+Also root-caused the user-reported "vanilla cdamages looks broken in Ghost
+Studio": cdamages carries exactly ONE orientation key per bone — it is a
+static authored clutch pose the game only ever blends INTO for a 0.5s flinch.
+Ghost Studio loops the raw pose without transition blending, so it parks on
+the extreme frame.  Data is decoded correctly; a future Animation Browser
+nicety would be idle-blend-in/out preview.
+
+Results (Sith Ithorian rebuild): edge-stretch max 21.6 -> 13.9 (vanilla
+baseline 5.0 under the same corrected oracle), cdamages 27 -> 6.75,
+cross-shell tear worst 0.197 / p99 0.048; all export/reload gates green;
+redeployed to K1 Override + ShaolinTestsMap.  No regressions:
+test_skinned_node_splitter 8/8, template-rig suite passes;
+test_core_contracts' 73 failures are pre-existing (identical with changes
+stashed).  Retargeting recon for the S_Female02 supermodel goal: the
+KotOR-to-KotOR retargeter lives in
+`native/GhostRigger.Core.Workflow/Python/src/core/animation_retargeting/retargeter.py`
+(RetargetConfig + bone-name aliases) with Content Browser/Library "Send to
+Retarget Workbench (Source/Target)" actions already wired.
+
+Files: `native/GhostRigger.Core.Workflow/Python/src/core/animation/animation_engine.py`
+(evaluate_aurora_animation_pose delta semantics),
+`native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`
+(regularizer confidence gate + support mask + region palette pruning),
+`native/GhostRigger.Core.Workflow/Python/src/core/characters/character_builder.py`
+(donor surface points wiring).
+
+### [2026-07-11] GhostStudio embedded topology namespace startup fix
+
+Owner: LordVaderCW
+T###: T2904 / native startup regression
+Subsystem: Core.Math topology imports / Core.Scene / Core.Tools / Native.Core.Host payload startup
+Intersects: The T2904 topology-engine pass and the GhostStudio executable branding rebuild in the current dirty worktree.
+
+Fixed the startup failure shown after the branded executable rebuild. Both the
+repository-root developer launcher and the payload-backed Debug executable
+terminated while importing the new topology façade with
+`ModuleNotFoundError: No module named 'core'`. Embedded manifests register
+`Python/src/...` modules under the canonical `src.*` namespace, but the new
+Scene/Tools topology imports used a bare `core.geometry.*` route. Existing
+topology tests had masked the defect by adding `Python/src` directly to
+`sys.path`.
+
+Changed the eager topology imports to `src.core.geometry.*` in the Core.Tools
+mesh façade and the byte-identical Core.Scene/Core.Tools imported-mesh,
+composition, and room-operation mirrors. Regenerated the Scene and Tools
+payload manifests/resources and relinked the native payload DLLs. Added a
+namespace source contract plus a subprocess regression that recreates the
+native root launcher's actual source-path layout before importing the Qt main
+window. Documented that the repository-root executable is a source-backed
+developer launcher while `build/vs/x64/Debug/GhostStudio.exe` is the complete
+payload-backed Debug application.
+
+Verification: compile checks passed; focused namespace, true source-fallback
+Qt import, payload byte-identity, host dependency, and dependency-table tests
+passed 5/5. Direct DLL manifest inspection confirmed the rebuilt Core.Tools
+payload SHA `aa18b656cf41c4661a65ed82bdc1197bc640fdfee4d9338fc54526660f1d5984`
+matches corrected source. Real Qt launches from both root and Debug-build
+executables reached responsive `GhostStudio` main windows, remained stable
+beyond first paint, bound IPC port 7001, and closed cleanly; both latest logs
+contain zero CRITICAL entries. Embedded-Python initialization returned 0 from
+both executable locations, and the root/build executables remain byte-identical.
+
+### [2026-07-11] GhostStudio Windows executable branding, icon, rebuild, and repository hygiene
+
+Owner: LordVaderCW
+T###: N/A (native application packaging and repository hygiene)
+Subsystem: Native.Core.Host / GUI Display startup branding / Windows packaging
+Intersects: The current Map Studio/GModeler dirty worktree and regenerated embedded Python payloads.
+
+Renamed the public Windows application target from `GhostRigger.exe` to
+`GhostStudio.exe` without renaming the stable `GhostRigger.*` project, DLL,
+environment-variable, settings, or ABI identities. Embedded the tracked
+six-resolution GhostStudio ICO and Windows VERSIONINFO in the native host,
+made embedded Python derive its program identity from the actual executable,
+and aligned the QApplication, main-window, scene, splash, and About branding.
+Updated the legacy PyInstaller path to emit the same executable name, icon, and
+version metadata, and updated current native/build documentation accordingly.
+
+Cleaned reproducible repository debris only: stale PyInstaller bundles, old
+native/package-local build trees, old executable/debug/compiler/log outputs,
+pytest scratch directories, and source-tree Python caches. This reclaimed at
+least 1,203,189,351 bytes (1.12 GiB). Preserved the current `build/vs` runtime,
+`.vs` workspace state, `Saved` game proof, `artifacts`, diagnostics, external
+research repositories, and untracked source. Windows denied access to the
+remaining `.pytest_cache` directory even after a scoped ownership/ACL attempt,
+so it was preserved rather than escalating to a risky repository-wide cleanup.
+
+Affected files: native host project/resource/header/C++/Python entrypoint,
+GUI Display application runner/window/splash/About branding, PyInstaller spec
+and shared version resource, `build.bat`, `.gitignore`, current architecture
+documentation, focused native source contract, and regenerated GUI Display /
+Runtime Core payload metadata.
+
+Verification: full `Debug|x64` host dependency rebuild succeeded and produced
+`build/vs/x64/Debug/GhostStudio.exe`; the root copy is byte-identical (SHA-256
+`CCFC9383177FD286B91256801256E8155A1DD7DB446B99BABE0F6BFF64E479D9`). Windows
+reports ProductName/FileDescription/InternalName `GhostStudio`, FileVersion
+`6.1.0.0`, and OriginalFilename `GhostStudio.exe`. PE inspection found RT_ICON,
+RT_GROUP_ICON, and RT_VERSION plus 16/32/48/64/128/256-pixel 32-bit icon frames;
+Windows extracted the intended green GhostStudio icon. Native-host debug,
+embedded-Python initialization, and `--help` gates all exited 0. A real Debug
+application launch exposed the window title `GhostStudio` and closed cleanly.
+Focused branding, payload byte-identity/dependency/audit, and Qt startup
+contracts passed 6/6; the PyInstaller version resource parsed successfully.
+
+### [2026-07-11] K2 Custom-Animation Passive Debugger Reinstall
+
+Owner: LordVaderCW
+T###: Issue #98 K2 runtime validation
+Subsystem: KotorDebugger / Core.Automation live game logging
+Intersects: KOTOR 2 PLCaa modlist testing and KPM CustomAnimationCore.
+
+Repaired the standalone KotorDebugger session launcher so it executes its
+shipped monitor directly instead of requiring an unavailable embedded
+`kotormcp` module. Added a dedicated PLCaa custom-animation session starter,
+SHA-256 inventories for game-root runtime files and loaded modules, and explicit
+passive-operation documentation. The workflow does not install or replace a
+mod-loader/proxy DLL, so the completed K2 modlist remains authoritative.
+
+Affected files: `KotorDebugger/kotor_debugger.py`,
+`KotorDebugger/start_k2_animation_patch.py`,
+`KotorDebugger/debug_k2_animation_patch.bat`, the Core.Automation logger, and
+`tests/test_kotor_live_log_tools.py`.
+
+Verification: targeted logger tests and standalone session startup smoke test.
+
+### [2026-07-11] T2903/T2904/T2907: Seamless terrain plane, GModeler edge bevel, and multi-object editing
+
+Owner: LordVaderCW
+T###: T2903 / T2904 / T2907
+Subsystem: Map Studio manual geometry, terrain sculpt/WOK workflow, viewport/outliner selection, and native payloads (Core.Scene / Core.GUI.Display / Core.Tools)
+Intersects: Existing GModeler component editing, authored room composition, Holocron-inspired placement UX, K2 plcaa engine contracts, and the current dirty worktree.
+
+Completed a current source-level pass over Holocron Toolset's Module Designer
+and Indoor Map Builder and compared their direct placement, hook/grid snapping,
+marquee selection, room merging, WOK editing, undo, cached previews, and DCC
+roundtrip patterns with GhostRigger's Map Studio.  Updated the Holocron audit
+with the exact source revisions, adopted patterns, and remaining product-proof
+gaps.
+
+- Terrain-workspace Plane now creates a 17x17 sculptable heightfield instead of
+  the non-sculptable four-vertex Geometry platform, so the direct workflow is
+  Plane -> sculpt -> generated WOK.
+- Implemented GModeler single hard-edge Bevel for imported/authored room mesh
+  surfaces.  The operation produces two inset edge rails, a chamfer strip, and
+  endpoint caps; clamps width against adjacent triangle altitude; rejects
+  boundary, coplanar, and non-manifold edges; preserves undo and KMAP export;
+  and uses immediate remembered amounts with Ctrl-only numeric prompting.
+- Added extended authored-object selection shared by the viewport, Outliner,
+  and headless editor model.  Shift-click toggles primitives, selected objects
+  receive a persistent yellow overlay, and Combine/Separate operate directly
+  on valid selections instead of only focusing buried Builder controls.
+- Combine preserves each primitive's editable topology inside a stable KMAP
+  object group.  Separate moves one selected primitive into its own exportable
+  room/object boundary.
+- Expanded the acceptance harnesses to cover hard-edge bevel degeneracy,
+  plane-to-terrain sculpting and WOK generation, multi-object selection,
+  combine, separate, undo, and complete module export.
+
+Affected files: `authored_imported_mesh.py`, `module_editor_controller.py`,
+`module_editor_model.py`, `map_studio_marking_menu_registry.py`,
+`module_editor_outliner.py`, `module_editor_viewport_panel.py`, viewport
+`scene_models.py`/`overlay_layers.py`, `module_editor_window.py`, focused
+GModeler/terrain matrices, `docs/audits/holocron_toolset_comparison.md`, and
+the regenerated Scene/GUI Display/Tools payload manifests.
+
+Verification: Python compile passed; GModeler core matrix 27/27; manual Qt
+workflow matrix 42/42; terrain sculpt/WOK/export matrix 16/16; K2 plcaa
+vanilla-derived gameplay/engine-contract matrix 18/18; targeted native payload
+manifest, byte-identity, and Visual Studio inclusion checks 3/3.  The modified
+package-local mirrors are SHA-256 identical.  The full `Debug|x64` solution
+build completed successfully and embedded the updated Scene, GUI Display, and
+Tools payloads beside the rebuilt `GhostRigger.exe`.  Visible Debug-app
+inspection and a manual in-game warp of a newly beveled/sculpted map remain
+required before claiming visible or live-game proof.
+
+### [2026-07-11] T2904/T2907: Maya-style live topology operators and resolution-local terrain sculpting
+
+Owner: LordVaderCW
+T###: T2904 / T2907
+Subsystem: Map Studio GModeler topology, authored room composition, terrain interaction, viewport refresh, KMAP intent, and native payloads (Core.Math / Core.Scene / Core.GUI.Display / Core.Tools)
+Intersects: The earlier T2903/T2904/T2907 Map Studio pass, the local Maya 2025 Ghidra topology study, K2 plcaa engine contracts, and pre-existing Core.Automation payload-manifest drift in the dirty worktree.
+
+Replaced the remaining placeholder-style manual modeling behavior with tested
+topology and live-operator contracts:
+
+- Added a shared indexed topology/remap engine with raw-versus-geometric vertex
+  identity, half-edge/twin/component audits, stable provenance, attribute
+  channel compaction, true polygon combine, and connected-shell separation.
+- Multi-object viewport manipulation now keeps the complete selection when an
+  already-selected object is grabbed, previews translated/rotated/scaled
+  vertices and inverse-transpose normals during the drag, and commits one
+  undoable authored transaction on release.
+- Extrude now previews the resulting topology before release. Bevel is a
+  persistent interactive operator with width, segments, profile/roundness,
+  real Sharp/Patch/Auto endpoint miter geometry, smoothing-angle-driven
+  smooth/flat vertex normals, Preserve/Tiled/None UV policies, overlap clamp,
+  lightmap-UV preservation, Apply, and Cancel.
+- Replaced the former KMAP grouping operation exposed as Combine with a genuine
+  procedural polygon Combined Mesh. Materials, UVs, normals, source-face
+  provenance, and WOK ownership survive KMAP roundtrip; Odyssey export splits
+  multi-material logical objects into bounded per-material MDL nodes. Separate
+  now creates selectable connected polygon shells in the same room. The old
+  room-boundary operation is labeled `Extract to Export Room`.
+- Fixed a 32-character shell-name collision loop discovered by a timed UI stack
+  dump; suffixes are now preserved inside the KOTOR node-name budget.
+- Terrain sculpt strokes now decode the authored payload once, mutate a flat
+  dirty buffer and viewport height/normal halo per frame, then analyze and
+  serialize once on release. A 100-frame probe measured median dirty-frame
+  times of 0.0306 ms (17x17), 0.0323 ms (65x65), and 0.0331 ms (129x129), with
+  one decode and one serialization per stroke.
+- Routed modeling commands away from the broad all-panel rebuild. The offscreen
+  acceptance fixture made zero broad refresh calls for Combine/Separate and
+  measured the scoped synchronous refresh at 17.14 ms; readiness, WOK, and
+  export gates are deferred until the viewport can paint.
+- Corrected non-uniform authored-object scale normals with inverse-transpose
+  handling, synchronized all packaged mirrors byte-for-byte, and regenerated
+  the Core.Math, Core.Scene, Core.Tools, GUI Display, and stale Core.Automation
+  payload metadata.
+
+Affected files: Core.Math `core/geometry/mesh_topology.py` and
+`polygon_mesh_operations.py`; Core.Scene/Tools `authored_imported_mesh.py`,
+`authored_room_composition.py`, `authored_room_operations.py`,
+`authored_module_kmap_bridge.py`, `authored_module_preview_model.py`,
+`authored_module_export.py`, `map_studio_terrain_sculpt_session.py`,
+`map_studio_modeling_tools.py`, `map_studio_tool_action_dispatch.py`, and
+`module_editor_controller.py`; GUI Display/Tools Map Studio Builder, viewport,
+overlay, marking-menu, and Level Editor window; focused GModeler, terrain,
+topology, dispatch, payload, and export acceptance tests/matrices.
+
+Verification: shared/combined topology and KMAP contracts 26/26; imported-mesh
+regressions 26/26; GModeler core matrix 27/27; manual-workflow Qt matrix 53/53;
+terrain sculpt/WOK/export matrix 16/16; targeted dispatch/source contracts 5/5;
+K2 plcaa vanilla-derived gameplay and engine-contract matrix 18/18; native payload coverage/byte identity/resource
+names/Visual Studio inclusion 4/4. Full `Debug|x64` native-host rebuild passed,
+producing `build/vs/x64/Debug/GhostRigger.exe`; native `--help` startup loaded
+18/18 DLLs and 18/18 payload manifests. The Qt matrix is offscreen workflow
+proof, not a human visual inspection. A visible Debug-app pass and a manual K2
+warp of a newly edited arbitrary map remain required before claiming visual or
+live-game proof.
+
+### [2026-07-11] T3002/T2803/T2904: Holocron-inspired direct placement workspace
+
+Owner: LordVaderCW
+T###: T3002 / T2803 / T2904
+Subsystem: Map Studio gameplay placement, viewport transforms, combined authored WOK snapping, and placement HUD (Core.Scene / Core.GUI.Display / Core.Tools)
+Intersects: Existing authored GIT/IFO placement, pathing/readiness, GModeler viewport, and K2 plcaa engine-contract work in the current dirty worktree.
+
+Completed a second source-level study of Holocron Toolset's current Module
+Designer and Indoor Builder, focusing on drag/drop creation, right-click insert,
+shared 2D/3D selection, live instance inspection, duplicate/delete, transform
+hotkeys, grid/rotation snap, align/distribute, visibility filters, and undo.
+Applied the strongest parts as a focused GhostRigger workflow rather than
+copying Holocron's monolithic editor shell.
+
+- Added a dedicated `Place` workspace with game-resource search, manual resref
+  fallback, sticky `Place in Viewport`, optional WOK snap, a selected-instance
+  inspector, transform apply, Snap to WOK, Focus, Duplicate, and Delete.
+- Direct viewport clicks now create the chosen GIT object at the visible room,
+  terrain, or walkmesh hit and immediately select it. Escape exits placement;
+  changing the armed asset updates the live placement context.
+- Gameplay marker W/E interaction now distinguishes translation and rotation,
+  including 15-degree rotation snap. Scale reports the real KOTOR limitation
+  instead of pretending GIT instances support arbitrary scale.
+- Added module-coordinate nearest-walkable-WOK projection that handles offset
+  rooms, ramps, closest edges, and stacked floors by vertical proximity. Adds
+  and moves can snap within the same undoable command.
+- Fixed trigger transform semantics so moving the marker translates the full
+  trigger polygon; the viewport can no longer leave invisible trigger geometry
+  behind at the old location.
+- Bearing is presented in degrees in the placement HUD but stored and exported
+  in KOTOR-native radians.
+
+Affected files: `authored_module_walkmesh.py`,
+`authored_module_placements.py`, `module_editor_controller.py`,
+`placement_tab.py`, `module_editor_viewport_panel.py`,
+`module_editor_window.py`, payload manifests/projects, roadmap/knowledgebase,
+and focused placement tests.
+
+Verification: Python compile passed; new placement/WOK/trigger/controller/UI
+contracts 4/4; targeted payload manifest/byte-identity/project inclusion checks
+passed after updating the expected payload count to 1,213; K2 plcaa
+vanilla-derived gameplay/engine-contract matrix 18/18. Two older assertions in
+`test_authored_gameplay_placements.py` still expect off-WOK non-player
+placements to block export, while current production policy intentionally
+reports those as warnings because vanilla modules contain legitimate off-mesh
+objects; they are unrelated to this slice. Visible Debug-app gesture testing
+and a manual KOTOR warp with a newly placed object remain required before this
+workflow is called visually or game proven.
+Native `Debug|x64` solution build completed successfully; the placement code is
+embedded in `GhostRigger.Core.Scene.dll`, `GhostRigger.Core.GUI.Display.dll`,
+and `GhostRigger.Core.Tools.dll` beside the rebuilt Debug host.
+
+## 2026-07-10
+
+### [2026-07-10] T2904/T2905/T2906: Holocron-inspired authored room-opening connections
+
+Owner: LordVaderCW
+T###: T2904 / T2905 / T2906
+Subsystem: Map Studio Rooms workflow, KMAP authored floor-plan layout, LYT/VIS intent (Core.Scene / Core.Tools / Core.GUI.Display)
+Intersects: Existing T2905 VIS/WOK editor and T2906 KMAP/LYT/MDL/WOK transform-contract work in the current dirty worktree.
+
+Studied Holocron Toolset 3.1.x/4.x documentation and current open-source
+Module Designer/Indoor Builder implementation. Adopted its strongest layout
+idea — explicit room connection hooks with visible connected/unconnected
+health — inside GhostRigger's stricter KMAP, undo, readiness, export, and game-
+proof boundaries.
+
+- Floor-plan wall openings are now stable world-space room connection hooks
+  with door/window/external-exit semantics, facing vectors, dimensions, and
+  persistent counterpart metadata.
+- `Connect Room Openings` chooses openings on two rooms, rotates/translates the
+  source room so the openings face and coincide, records both sides of the
+  connection in KMAP, and adds symmetric VIS intent in one undoable command.
+- The headless connection audit recognizes explicit and legacy spatial links,
+  flags stale/missing or size-incompatible links, reports unconnected passable
+  openings, and excludes windows/backdrops and intentional external exits.
+- Rooms UI now exposes Connect/Audit actions and an always-visible connection
+  summary. Its language explicitly separates layout/VIS connection health from
+  WOK room-transition structure and live KOTOR traversal proof.
+- Previously inert `Snap Room to Grid` and `Auto Arrange` buttons now mutate
+  the actual authored KMAP rooms. Grid snap preserves room elevation; auto-
+  arrange compiles room geometry bounds to produce non-overlapping rows with
+  user-selected spacing. Both operations are undoable and stale prior exports.
+- Compiled layout provenance now records hook, connected-pair, and unconnected-
+  opening counts for readiness/export diagnostics.
+
+Affected files: `authored_module_layout.py`, `module_editor_controller.py`,
+`rooms_tab.py`, `module_editor_window.py`, their Core.Scene/Core.Tools/
+Core.GUI.Display payload mirrors and manifests, plus focused layout/UI tests.
+
+Verification: Python compile passed; authored layout/connection tests 9/9;
+Rooms UI source contract 1/1; changed Scene, Tools, and GUI Display payload
+packages have valid hashes and synchronized mirrors; K2 plcaa gameplay/vanilla-
+derived engine-contract matrix 18/18. The repository-wide payload test still
+reports four unrelated pre-existing stale hashes in Core.IO and Core.Workflow.
+Visible Debug-app interaction and a live KOTOR multi-room traversal warp were
+not performed, so this slice is structurally verified but not game-tested.
+Native `Debug|x64` solution rebuild succeeded with 0 warnings and 0 errors;
+the repository-root `GhostRigger.exe` and Scene/Tools/GUI Display payload DLLs
+were refreshed with the connection workflow embedded.
+
+### [2026-07-10] T2557: universal skin-weight regularization for multi-shell payloads + cross-shell tear gate
+
+User video (2026-07-10 21-19-05.mp4, reviewed frame-by-frame) showed rigid
+plates — robe panels, satchel, straps — tearing out of the K1 Sith Ithorian
+body under its own clips (cdamages/cdie) even after T2555.  Root cause: the
+payload OBJ is a kit-bashed shell soup (311 disconnected islands, largest 68
+verts), and Euclidean nearest-donor weight transfer freely mixed anatomically
+distant bones inside single rigid shells (one 49-vert robe panel carried
+pelvis_g 22 / lbicep_g 18; its mirror rbicep_g 21 / pelvis_g 16; the satchel
+mixed BackPack_g + rbicep_g + LShoulder_g).  Because disconnected shells share
+no edges, the edge-stretch audit was structurally blind to the failure — the
+build had passed while the viewport showed plates shearing.
+
+Fixes (all purely geometric — no K1/K2 or species branching anywhere):
+
+- `regularize_imported_skin_weights` (headless_body_workflow): builds a
+  weight-diffusion graph from face edges + inter-shell proximity bridges
+  (2.5x median edge length), anchors vertices whose weight rows agree with
+  their neighborhood (same dominant bone, L1 < 0.6), diffuses anchor weights
+  across the incoherent minority (24 Jacobi iterations, anchors fixed),
+  floors trace influences at 5% (palette-inflation guard — first run
+  overflowed a region to 20 bones), hard-welds position-twin rows (UV-seam
+  twins diffuse apart by ~1e-3 otherwise and crack the T2526 seam gate), and
+  requantizes to the 4-influence limit.  Bails without touching anything when
+  anchors < 25%.  Wired into `apply_template_rig` right after
+  `bind_imported_meshes_to_skeleton`, so the GUI Build Skeleton flow and
+  headless builds both get it.  Coherent single-shell payloads (Drexl,
+  Rancor) anchor everywhere and pass through unchanged.
+- Cross-shell divergence gate in build_sith_ithorians.py: vertex pairs closer
+  than 3cm at bind must not separate more than 0.35 under any of the 16
+  clips x 3 samples (measured through the production skinning path) — the
+  metric that would have caught this class before staging.
+
+Results on the Sith Ithorian build: 3300/3520 verts reweighted, 1097 dominant
+bones reassigned; edge-stretch max 44 -> 21.6 (vanilla donor's own baseline
+17), cdamages 27 -> 7.5; cross-shell worst growth 0.252 (p99 0.068) vs plates
+visibly >0.5 before; seam gate 0 divergent; all export/reload gates green;
+package rebuilt and redeployed to K1 Override + ShaolinTestsMap.
+`tests/test_skinned_node_splitter.py` + `tests/test_character_builder_template_rig.py`
+32/32 pass.
+
+### [2026-07-10] T2555: Node Splitter orphaned native bone subtrees + preview double-inverted split-skin binds
+
+Character Builder preview explosion on the K1 c_ithorian rig (user screenshots:
+every animation shredded the mesh into giant triangles).  Two independent
+defects, neither K1-specific animation logic:
+
+1. **Connectivity splitter destroyed native bone chains.**
+   `split_imported_mesh_nodes` treated ANY multi-island mesh node as payload.
+   K1 c_ithorian's `NeckUpr_g` is a render=False bone-hull trimesh whose hull
+   geometry is 3 islands; the splitter replaced it with `NeckUpr_g_part01..03`
+   and the replacement dropped the node's CHILDREN — the whole
+   `NeckUpr02/03_g -> Head_g` chain plus ClothFlaps/eyes/talkdummy — so every
+   pose lost the neck/head transforms (audit: `missing_bone_transforms`, edge
+   stretch 462x).  Fix in `headless_body_workflow.py`: the connectivity pass
+   now skips render=False native helper trimeshes and any node that parents
+   others; the anatomical splitter additionally reparents a split node's
+   children onto its first region part (transform-preserving orphan guard).
+   The K2 Rancor never hit this because its bone hulls are single-island.
+2. **Preview skinning double-inverted T2550 rows.**  T2550 made the split
+   rebuild per-slot qBone/tBone as ENGINE-convention inverse binds
+   (`inverse(bone_world)*skin_world`, WXYZ, consumed directly).  The preview
+   formula resolver (`gpu_skinning._resolve_skin_formula_for_skin_node`) sent
+   all compact-array skins to F1, which INVERTS the rows at use (correct only
+   for legacy forward-transform imports), so every split part double-
+   transformed (stretch 365-462x on all 16 clips) — broken since T2550 for
+   every split rig's PREVIEW (game files unaffected; the writer expands rows
+   correctly, which is why the Rancor works in-game).  Fix: nodes marked
+   `_gr_kotor_inverse_bind_qt` now resolve to G5 (rows used directly), and the
+   G5 branch indexes compact per-slot arrays by slot instead of global DFS
+   index (vanilla MDL-loaded models keep DFS indexing: their arrays are
+   node-count length).
+
+Files: `native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`
+(connectivity-split skip rules + orphan guard + skip counters in the node
+splitter metadata), `native/GhostRigger.Core.Workflow/Python/src/core/animation/gpu_skinning.py`
+(resolver marker branch + G5 compact-layout slot indexing).
+
+Verification: A/B deformation audit (audit_model from
+diag_rancor_full_animation_audit) — K1 c_ithorian rig went from 16/16 clips
+failing (stretch 462x, exploded vertices, missing bones) to 0/16 hard
+failures, max stretch 44 vs the vanilla donor's own 17 on the same gate;
+vanilla model results byte-identical before/after (DFS path untouched).
+`tests/test_skinned_node_splitter.py` 8/8 pass;
+`tests/test_character_builder_template_rig.py` passes; the 4
+`tests/test_pygfx_renderer_backend.py` failures are pre-existing (identical
+with the changes stashed).
+
+### [2026-07-10] T2556: K1 Sith Ithorian package — 'Sith Lord' + 'Sith Scholar' (c_ithlord / c_ithschol)
+
+New `scripts/build_sith_ithorians.py` (generalized from
+build_dathomir_rancor.py, K1 target): fits the two HighFidelityKotorCharacters
+Sith Ithorian OBJ variants (identical 1705-vert geometry, different 4096
+basecolor atlases) against K1 `c_ithorian` (anim_scale 1.0, supermodel NULL,
+16 self-contained clips), welds, rigs, anatomically splits (8 region nodes,
+<=16-bone palettes), and exports with every Rancor-era gate plus new ones:
+
+- native-bone survival gate (T2555 neck-chain regression guard)
+- full 16-clip deformation audit (no exploded/missing-bone/non-finite samples)
+- inverse-bind contract at build (slot-indexed, err 1e-15) and after reload
+  (DFS-indexed, err 6e-8); geometry-header==resref (T2538); anim_root
+  consistency; seam weld (3026 coincident pairs, 0 divergent)
+- payload texture refs retargeted to `<resref>_t00` pre-export (the 25-char
+  OBJ material name exceeded the MDL 16-char texture field, tripping the
+  export transaction's readback digest — includes `texture_names`)
+- textures: 4096 JPG -> 2048 TGA + vertical flip (T2551/T2552)
+- visual confirmation renders per variant: `<resref>_fit_overlay.png` (bind
+  mesh + fitted skeleton, front/side) and three `<resref>_anim_<clip>.png`
+  pose renders produced through the production MatrixPaletteUploader path
+- K1 appearance.2da: vanilla BIF + rows 509 (c_ithlord) / 510 (c_ithschol)
+  cloned from Ithorian row 72, racetex cleared, round-trip verified
+- UTCs `sithlord01` / `sithschol01` cloned from vanilla `g_ithorian01`
+  (faction preserved/neutral), FirstName "Sith Lord" / "Sith Scholar"
+
+`scripts/deploy_sith_ithorians_k1.py` stages the package into the K1 Override
+(timestamped backups), adds both NPCs to `ShaolinTestsMap.mod`'s GIT via a
+K1-exact creature struct cloned from danm13's m13aa GIT (no K2 Bearing field)
+at (-1.8, 2.2) / (1.8, 2.2) facing the entry (walkmesh X/Y -5..5, entry
+(0,-3)), clears the stale `currentgame/ShaolinTestsMap.mod` cache, and
+verifies: reparsed GIT, Override-resolved appearance rows {509, 510} of 511,
+and both models loading with 16 clips.  Awaiting live in-game confirmation.
+
+## 2026-07-09
+
+### [2026-07-09] T2905/T2907: GModeler stable hover identity + gap-free terrain sculpt strokes
+
+Owner: LordVaderCW
+T###: T2905 / T2907
+Subsystem: Map Studio GModeler hover/marking menu and terrain sculpt interaction (Core.Scene / Core.Tools / Core.GUI.Display)
+Intersects: T2554's vanilla-derived export gate and T2558's Map Studio manual-editing UI audit.
+
+Used the ZBrush/ZModeler reverse-engineering findings under the sibling Ghidra
+workspace as the interaction reference. The existing findings already contain
+the complete Action/Target/Modifier model and frame-verified popup/edge-selector
+behavior, so another packed-binary decompile was not necessary for this slice.
+
+- GModeler hover candidates now retain real mesh vertex indices. Hover results
+  expose stable mesh-wide vertex/edge identity, adjacent faces, border status,
+  edge direction, and the face/vertex Edge Selector Widget direction while
+  keeping triangle-local corners for existing topology operations. Shared edges
+  no longer present as unrelated components depending on which triangle wins.
+- The viewport now draws the ZModeler-style orange directional selector and
+  accepts Spacebar as the primary cursor-anchored GModeler menu invocation in
+  addition to RMB. Removed a duplicate `edge_extrude` registry row that could
+  render two conflicting Extrude cells.
+- Live terrain strokes interpolate every crossed heightfield sample, emit only
+  the new segment per pointer frame, and stop repeatedly applying the entire
+  accumulated trail. Ramp/slope gestures defer until release so their start/end
+  grade is evaluated once. Terrain brushes now use an eased hardness-controlled
+  falloff, and Builder exposes separate Strength and Falloff hardness controls;
+  Alt+RMB size/hardness adjustment updates the hardness control instead of
+  silently changing operation strength.
+- Regenerated the Core.Scene, Core.Tools, and Core.GUI.Display embedded Python
+  payload manifests/resources and verified all changed mirrors byte-identical.
+
+Verification: focused hover tests 8 passed; terrain builder/patch tests 12
+passed; focused Map Studio UI/source contracts 4 passed; GModeler tool matrix
+24/24; GModeler offscreen interaction matrix 36/36; terrain/WOK/export matrix
+15/15; K2 plcaa vanilla-derived contract matrix 18/18; K2 001ebo stock
+import/edit/export round trip 13/13. The three affected payload packages have
+valid hashes for all 737 packaged files and their changed mirrors are identical.
+The repository-wide payload hash test remains 3/4 because seven unrelated,
+pre-existing rows are stale in Core.Automation, Core.Resources,
+Core.Workflow, and Runtime.Shared. Visible Debug-app interaction and live KOTOR
+warp proof were not performed in this headless slice and remain required before
+calling the workflow game-tested. Native `Debug|x64` solution rebuild completed
+successfully with 0 warnings and 0 errors; the refreshed host is
+`GhostRigger.exe` at the repository root, with the rebuilt Scene, Tools, and
+GUI Display payload DLLs beside the canonical build output.
+
+### [2026-07-09] T2560: Skybox/backdrop room handling + VIS auto-symmetrize (custom modules)
+
+Owner: CrispyW0nton
+T###: T2560
+Subsystem: Map Studio import/preview/export (Core.Scene)
+
+User report: importing RNVcity showed a giant white box in the middle of the
+map. Root cause: koq201_01j is the skybox/far-backdrop room -- a ~2100-unit sky
+dome (textures lko_sky01..05) that Map Studio imported as a normal editable
+room, so it rendered as a huge box swallowing the edit view.
+
+- **Detection**: new `imported_mesh_room_is_backdrop()` -- flags a room by name
+  ("sky" in the resref, e.g. valsky) or by sky-family textures + oversized
+  footprint (>300u). Tagged into room metadata `is_backdrop` at convert time.
+- **Edit view**: `build_authored_module_preview_model` skips backdrop rooms
+  (with a warning that they still export/render in-game) -- the white box is
+  gone; the user edits the 8 playable rooms.
+- **Export validation**: backdrop rooms are excluded from the merged walkability
+  + pathing WOK (their thousand-unit extent would blow up the merged mesh and
+  false-flag every real placement as off-mesh); their geometry still exports.
+- **VIS auto-symmetrize** (`authored_module_layout`): KOTOR VIS is symmetric,
+  but imported modules ship asymmetric VIS (RNVcity: 01a sees 01h/01j but not
+  vice versa -- a modder mistake the engine tolerates, the base-game contract
+  rejected). Every link is now mirrored so the emitted VIS is symmetric+valid.
+
+Verified: RNVcity + RNVcanyon both export ok=True; preview hides koq201_01j and
+renders 8 rooms; skybox MDL still bundled in the exported .mod. Regression-clean:
+plcaa 18/18, 001ebo 13/13. Mirrors synced (Scene->Tools).
+
+### [2026-07-09] T2559: Custom-module export round-trip works — RNVcanyon imports, edits, and re-exports
+
+Owner: CrispyW0nton
+T###: T2559
+Subsystem: Map Studio export validation (Core.Scene)
+
+RNVcanyon (and RNVcity) imported + edited fine but re-EXPORT hit a cascade of
+validations that assume a from-scratch, single-area, fully-populated module.
+Fixed each so imported custom modules round-trip:
+- **Entry area vs module root** (stock_module_importer): export names ARE/GIT/
+  LYT/VIS after the module root (the filename you warp to), so the entry area
+  must equal it. Custom modules differ (file rnvcanyon / area koq200; RNVcity
+  file rnvcity / area koq201 / entry koq200 which does not even exist). Import
+  now normalises the entry AREA to the module root (keeping spawn pos/facing).
+- **Dangling VIS links** (authored_module_layout): imported modules see rooms
+  we don't carry as authored rooms (skyboxes like valsky, reference rooms with
+  no WOK). The VIS builder now drops links to rooms not in the module instead
+  of blocking; the readiness VIS check follows since the compiled VIS is clean.
+- **Pathing anchor outside walkmesh** (authored_module_pathing): the per-
+  component anchor was the MEAN of face centroids, which lands in a concavity
+  outside curved/L-shaped rooms. Now snaps to the real face centroid nearest
+  the mean -- guaranteed on a walkable face. General robustness fix.
+- **Regenerated pathing when a stock PTH is preserved** (authored_module_export):
+  skip pathing compile/validation when emitting a preserved PTH.
+- **Entry-Z tolerance** (authored_module_export): raised the walkability Z
+  tolerance 0.05m -> 2.0m; the engine snaps spawns/creatures to the floor and a
+  regenerated walkmesh sits at a slightly different Z than the original spawn.
+
+Verified: RNVcanyon exports ok=True -> rnvcanyon.mod, self-consistent entry area
+rnvcanyon with rnvcanyon.are/lyt/vis + 10 room MDLs. Regression-clean: plcaa
+18/18, 001ebo round-trip 13/13. Mirrors synced. KNOWN LIMITATION: skybox
+(valsky) + reference rooms not carried (their VIS links dropped) -- the sky may
+not render; carrying non-editable reference/skybox rooms is a follow-up.
+
+### [2026-07-09] T2558: Map Studio editing-UI audit + wired the dead "Save WOK" walkmesh button
+
+Owner: CrispyW0nton
+T###: T2558
+Subsystem: Map Studio editor UI (Core.Tools window + Core.Scene controller)
+
+Audited which editing controls are actually wired to real controller methods
+vs the audit's "experimental hooks". Finding: MOST core editing is already
+wired end-to-end and usable --
+- placeable/instance locations: outliner select -> viewport gizmo ->
+  _set_transform -> set_authored_gameplay_placement_transform;
+- terrain sculpt: builder brush -> terrainLiveBrushFrameRequested ->
+  prepare/apply/commit_map_studio_terrain_sculpt_frame;
+- per-face textures: set_imported_mesh_room_face_texture via the texture
+  browser dialog;
+- face geometry: delete/extrude/move_imported_mesh_room_faces;
+- whole-room walkmesh surface: roomSurfaceRequested ->
+  set_authored_room_walkmesh_surface.
+The genuinely dead controls are the Walkmesh-tab action buttons (Save WOK,
+Generate Walkmesh, Paint Face, Assign Face Type, Show Face Types/Edges/Normals),
+which emit actionRequested but had no handler in _handle_tab_action.
+
+Wired "Save WOK": new controller.map_studio_room_walkmesh_bytes(room_resref)
+compiles the selected room via the exporter's own compile_authored_room_spec
+and returns .wok bytes; the button now saves them via a file dialog. Verified
+headlessly on imported 001ebo1 -> 8456-byte BWM V1.0, 62 faces, perim=1 (matches
+vanilla). Window compiles; controller synced Scene->Tools.
+
+REMAINING (need viewport-side work + interactive app testing, out of headless
+scope): per-face walkmesh painting needs walkmesh-face picking + a per-WOK-face
+surface setter; "Generate Walkmesh" needs a regenerate-from-edited-geometry
+method; the Show-* toggles need viewport overlay render modes.
+
+### [2026-07-09] T2557: Loaded modules now render every creature/door as its real model — wrong UT* type-ids fixed
+
+Owner: CrispyW0nton
+T###: T2557
+Subsystem: resource resolution + instance preview (Core.Resources / Core.Scene)
+
+User goal: when a .mod is loaded, every creature/placeable/door/merchant shows
+up as its intended model + texture. Measured 001ebo (K2): placeables 43/43
+rendered with all textures resolving (0 missing), but creatures 0/2 and doors
+0/11 fell back to abstract markers.
+
+Root cause: ResourceManager's blueprint type-id constants were WRONG --
+RES_UTC=2023 (canonical 2027), RES_UTD=2038 (canonical 2042), and RES_UTM was
+missing entirely. UTP=2044 happened to be right, which is why only placeables
+worked. The base-game chitin index reads real type-ids from the file (2027),
+but module ERFs / Override / the new module overlay all index via EXT_TO_TYPE
+(the wrong ids), so imported UTC/UTD bytes were stored under a key the preview
+resolver (which correctly requests 2027/2042) never queried -> creatures and
+doors silently resolved to markers for EVERY module, not just custom ones.
+
+Fix: RES_UTC/UTD corrected to canonical Aurora/KOTOR ids (verified against
+PyKotor ResourceType); added RES_UTM/UTI/UTT/UTS/UTE/UTW and their EXT_TO_TYPE
+rows so all object templates resolve. Also: import now overlays the "_s.rim"
+companion for RIM modules (gameplay templates live there, not the main .rim) --
+without it creatures/doors/placeables have no template to resolve.
+
+Verified: 001ebo now renders creatures 2/2, placeables 43/43, doors 11/11;
+placeable model textures 84/84 resolve. Regression-clean: k2_plcaa_gameplay
+18/18, k2_module_roundtrip 13/13. Mirrors synced (Resources->Tools/Runtime.Shared;
+controller Scene->Tools).
+
+### [2026-07-09] T2556: GIT instance field-contract fixes — creature orientation, door/trigger TransitionDestin type
+
+Owner: CrispyW0nton
+T###: T2556
+Subsystem: Map Studio GIT emission (Core.Scene, authored_module_objects.py)
+Intersects: T2554 (audit item #4). Functional half of ARE/IFO/GIT preservation.
+
+Verified the audit's GIT field-contract bugs against vanilla 001ebo and fixed
+the functional ones (the ones that break gameplay, not just byte fidelity):
+- **Creature orientation**: vanilla creature GIT structs store a unit direction
+  vector split across XOrientation/YOrientation (cos/sin of the facing angle)
+  and carry NO scalar "Bearing" field. We were writing the raw bearing into
+  XOrientation and adding a bogus Bearing -> every spawned creature faced the
+  wrong way. Now cos/sin; Bearing removed.
+- **Door TransitionDestin**: vanilla is a CExoLocString (dialog.tlk StringRef,
+  -1 = no override), we wrote int32 -> wrong GFF type. Now a LocalizedString.
+- **Trigger TransitionDestin**: same int32->LocalizedString fix, and it is now
+  emitted only for actual transition triggers (linked_to / sref>0); vanilla
+  sign/map-note triggers omit it.
+
+Verified: rebuilt plcaa GIT -> creature XOrientation=1.0/YOrientation=0.0 (unit,
+no Bearing), door TransitionDestin=LocalizedString(-1) matching vanilla exactly;
+k2_plcaa_gameplay_matrix 18/18. Mirror synced (Scene->Tools).
+
+STILL OPEN in T2554 item #4 (byte-exact source preservation, larger): ARE drops
+13 grass/dirt fields (Dirty*/Grass_Emissive) and adds 5 fog fields
+(are_bytes rebuild); GIT rebuild still loses per-instance cosmetics (TweakColor,
+LinkedToFlags) and instance-only fields for imported modules -- needs the
+stock_resources preserve+patch path (currently PTH-only) extended to ARE/GIT
+with placement dirty-tracking.
+
+### [2026-07-09] T2555: Import custom community modules — bundled room models resolve via ResourceManager overlay
+
+Owner: CrispyW0nton
+T###: T2555
+Subsystem: Map Studio stock/custom import (Core.Resources / Core.Scene)
+
+Testing with a real community module (KotorMods\Modules\RNVcanyon.mod, a K1
+exterior canyon "KOQ200" that bundles its own 17 room MDL/MDX + 14 WOK + 34
+textures + a `valsky` skybox) exposed that "load any map" only worked for
+base-game modules. Custom modules bundle their room models INSIDE the capsule
+rather than referencing base-game rooms; the convert-to-editable step resolved
+models only from the game install, so RNVcanyon imported the module structure
+(10 rooms, LYT/VIS/GIT) but converted 0/10 rooms to editable geometry
+("could not be loaded from the K1 game resources").
+
+Fix: ResourceManager gained an in-memory bundled-module overlay
+(`add_module_overlay(capsule_path)` / `clear_module_overlay`), checked FIRST in
+`get()` (matches the engine's Override priority). `import_stock_module_from_rim`
+registers the source .mod as an overlay so model/WOK/texture resolution finds
+bundled assets. Also: convert now treats "no model bundled anywhere" rooms as
+skipped dummy rooms (like vanilla 001ebo17), not hard failures.
+
+Result: RNVcanyon now imports + converts 7/10 rooms to fully editable geometry
+(koq200_01a..01g, up to 20,724 verts each, with their stock WOKs); the other 3
+are model-less ARE-only dummy rooms, cleanly skipped. Mirrors synced
+(Resources->Tools/Runtime.Shared; controller Scene->Tools).
+
+UI: added a "Import Module File (.mod / .rim)..." action to the Map Studio File
+menu (module_editor_window.py). Picks the capsule directly, auto-detects K1/K2
+from a bundled room MDL's fp1, imports via the overlay path, bakes stock rooms
+editable, and switches to the geometry workspace -- no more typing a resref or
+hunting for the modules folder. Window compiles; game auto-detect returns K1
+for RNVcanyon. KNOWN NEXT (export
+round-trip of custom modules): (1) export wrongly requires entry-area ==
+module-root (RNVcanyon's area is KOQ200); (2) VIS references un-imported rooms
+(skybox `valsky`, `koq200_02` -- MDL but no WOK / not in ARE Rooms).
+
+### [2026-07-09] T2554: Map Studio engine-contract gate + stock hydration + WOK perimeter loops (fable5 revamp tranche 1, verified & landed)
+
+Owner: CrispyW0nton
+T###: T2554
+Subsystem: Map Studio export/validation (Core.Validation / Core.Scene)
+
+Foundation tranche from the Map Studio revamp audit. Motivated by two audit
+findings: (a) headless matrices reported PASS while the exported 001ebo had all
+18 rooms at (0,0,0) and empty VIS; (b) the WOK perimeter patch handled only
+single clean loops and the raw gate blocked 001ebo9 because PyKotor omitted two
+legitimate boundary edges.
+
+Landed and verified this session:
+- **Engine-contract gate** — new `Core.Validation/kotor_module_engine_contract.py`
+  (`validate_kotor_module_engine_contract`): inspects RAW resource bytes for
+  every LYT room — MDL node tree (node+8==0, AABB presence, offsets), MDX
+  sizing, WOK perimeter loops/transitions/materials, LYT/VIS/ARE/IFO/PTH
+  linkage — with plcaa/001ebo1/r00_test as the invariant fixtures. Corrected an
+  invented restriction: r00_test uses legitimate static node-number values
+  outside 0..node_count-1, so the validator must not require a dense range.
+  Wired into authored export before packaging; package readback now checks
+  every expected room, not room 1 only.
+- **Stock hydration** — `stock_module_importer.py` now pulls LYT/VIS/PTH from
+  the selected game's KEY/BIF (not just the module .rim), handles the K1 split
+  where the area resref differs from the module filename and PTH lives in the
+  `_s.rim`, and records source provenance (+SHA-256) in KMAP. Result: 001ebo
+  import preserves all 18 distinct LYT positions, all 116 VIS links, and the
+  exact 19,788-byte PTH. Untouched imports repackage original PTH bytes; the
+  first authored edit marks the graph stale and forces regeneration.
+- **WOK perimeter decomposition** — `module_format._patch_bwm_perimeters`
+  rebuilds boundary edges from the serialized walkable triangles (not PyKotor's
+  edge list, which can drop edges), traces every closed directed loop
+  (holes/touching loops), and preserves per-edge transition indices.
+
+Verification (this session): `k2_module_roundtrip_smoke.py` 13/13 PASS with real
+vanilla comparisons — K03b LYT 18 unique == vanilla, K03c VIS 116 links ==
+vanilla (the audit's #2 false-positive is genuinely fixed).
+`k2_plcaa_gameplay_matrix.py` 18/18 PASS. Perimeter round-trip of vanilla woks
+(001ebo1/2/9/13) reproduces vanilla perim count exactly, loops close, all edges
+used. Map Studio Python mirrors re-synced byte-identical (Scene->Tools etc.).
+
+Follow-up (render<->WOK contract, tranche item 3, this session): the
+`_walkmesh_walkable_only` floor filter and the boundary-wall generator ran
+UNCONDITIONALLY, which stripped legitimate NON_WALK faces from preserved stock
+WOKs (001ebo1 exported as 20 faces vs vanilla 62 -- losing all 42 wall/blocker
+faces the engine needs for camera + line-of-sight) and double-added walls.
+Fixed: both now run ONLY when `geometry.metadata["imported_wok"]` is False
+(from-scratch/regenerated rooms). Imported stock WOKs pass through untouched.
+A pure normal-based filter was rejected because vanilla NON_WALK faces are
+mostly vertical walls but include legitimate horizontal blockers (6 in 001ebo1,
+10 in 001ebo9). Verified: exported 001ebo1/2/9 now match vanilla face count,
+materials, perimeter count, AND door transition records exactly; plcaa keeps
+its proven 18-face floor wok (18/18).
+
+### [2026-07-09] T2554: OBJ export texture sidecars were V-unflipped (Ithorian scrambled in Blender)
+
+Owner: CrispyW0nton
+T###: T2554
+Subsystem: DCC export texture parity (mesh_converter OBJExporter)
+Intersects: T2552 (the same one-flip-per-boundary parity rule, import
+direction); the FBX sidecar path already had the flip.
+
+Viewport OBJ export of c_ithorian showed coherent-but-misplaced texture in
+Blender (V-mirrored atlas islands).  The OBJ exporter converts vt to DCC
+convention (1-v), but `_export_textures_to_dir` saved the decoded TPC in
+game/D3D row order without the matching row flip — the GhostRigger viewport
+masks this because its vertex shader flips V at sample time
+(kotor_loader "1.0 - in_uv.y").  `_export_fbx_textures_to_dir` already
+FLIP_TOP_BOTTOMs its sidecars; the OBJ path now does the same.
+
+PARITY RULE (now applied at every boundary): decoded KOTOR textures and
+DCC-facing images differ by exactly one vertical flip — game->DCC sidecars
+flip on save (T2554/FBX), DCC->game TGAs flip on package (T2552).
+
+NOTE: `_export_textures_to_dir` skips existing files — old export folders
+keep stale unflipped TGAs; re-export to a fresh folder or delete the TGAs.
+Fresh verified export delivered at
+C:\Users\NewAdmin\Documents\KotorMods\Exports\c_ithorian_fixed\.
+
+### [2026-07-09] T2553: Rancor melee damage tuned — the one-shot was the 10d6 creature claws, not Str
+
+Owner: CrispyW0nton
+T###: T2553
+Subsystem: creature UTC combat tuning (build_dathomir_rancor.py)
+Intersects: T2546 (Str/HP/CR tuning — necessary but not sufficient)
+
+T2546 dropped Str 45->16 / HP->80 / CR->6, yet the boss still one-shot the
+test character.  Root cause: stock g_rancor01 dual-wields g_w_crslash006
+creature claws, whose damage is an item PROPERTY (PropertyName 51 "Monster
+Damage", CostValue -> iprp_monstcost row 17 = **10d6 per swing**), invisible
+to ability tuning.  Decoded the whole family as a damage dial:
+crslash001=1d4, 002=1d6, 003=1d10, 005=3d6, 004=2d12, 006=10d6.
+Fix: the UTC builder now rewrites Equip_ItemList to RANCOR_CLAW (default
+g_w_crslash002 = 1d6): ~5-9 damage per hit with Str +3, against the
+player-killable 80 HP boss.  Verified in the rebuilt UTC (2x crslash002)
+and deployed to Override (Override outranks the module-bundled copy).
+
+### [2026-07-09] T2552: Rancor texture wrapping SOLVED (vertical row parity) + vanilla eyeballs hidden
+
+Owner: CrispyW0nton
+T###: T2552
+Subsystem: creature texture export parity + template strip (Core.Workflow)
+Intersects: T2551 (2048 cap — necessary but not sufficient), T2550 (UV data
+verified perfect), T2542/T2549 (eye keep_render experiment, obsoleted)
+
+The 2048 downscale alone still rendered confetti.  With face-level UV
+fidelity proven perfect (4,776/4,776), the last variable was vertical
+parity between the TGA rows and the file UVs as the ENGINE samples them.
+Live A/B: vertically flipping the TGA rows (nothing else) snapped the
+wrapping correct — user screenshot shows the full Dathomir Rancor design
+(skull pauldron, armbands) rendering properly.  The Rizom-packed atlas
+(many small islands) is why the parity error looked like confetti rather
+than a mirrored image.  build_dathomir_rancor.py now bakes
+downscale(2048) + ImageOps.flip into the texture step.
+
+Remaining visual bug from the same screenshot: the two vanilla
+Rancor_eyeL/R trimeshes floated outside the custom head (vanilla head
+positions; the custom texture has its own eyes).  keep_render=True on them
+was a T2542 crash-hunt experiment, obsoleted once T2549 fixed the real
+writer crash.  _strip_render_geometry_from_skeleton now hides native
+rendered detail trimeshes again (render=False, geometry + node + MESH flag
+kept for tree/animation integrity — the proven-safe bone-hull
+configuration).  Rebuilt: Rancor_eyeL/R render=False verified on reload;
+T2550 inverse-bind gates still pass (max_error 4.4e-15 / 4.3e-7).
+Deployed model + flipped 2048 texture; currentgame cleared.  Awaiting final
+visual confirm.
+
+### [2026-07-09] T2551: Rancor texture wrapping fixed — 4096 atlas exceeds the engine's sampler, downscale to 2048
+
+Owner: CrispyW0nton
+T###: T2551
+Subsystem: creature texture export (KOTOR TGA cap)
+Intersects: T2550 (which verified UV data + texture bytes correct), T2549
+
+After T2549/T2550 the custom Rancor loaded and animated in plcaa, but the
+texture wrapping was scrambled (patchwork).  Exhaustive headless audit
+exonerated the UV path end to end:
+- FBX per-loop UVs -> weld -> split -> writer flip contract (uv_v_flip=False
+  from blender_extract_fbx_mesh.py; writer emits (u, 1-v)) verified: exported
+  MDX V == 1 - imported V exactly once.
+- Per-vertex fidelity: 5,113/5,113 exported vertices carry a UV belonging to
+  a legitimate co-located source twin.
+- FACE-level fidelity: 4,776/4,776 exported UV triangles exactly match their
+  source face's UV triangle (seam twins correctly wired).
+Root cause: the texture itself.  Our atlas was 4096x4096 (67 MB TGA); the
+verified-working Drexl ships 2048x2048 (and earlier sessions staged
+"*_1024tex" variants while tuning this).  The 2005 Odyssey engine
+mis-samples/tiles textures above its cap, producing patchwork wrapping with
+perfectly valid UVs.
+Fix: downscaled dat_rancor_t00.tga to 2048x2048 (LANCZOS, RGBA, same TGA
+type-2/descriptor-0x08 convention as the working Drexl; decode round-trip
+verified) and deployed to Override (4096 backed up in Saved/GameTestStaging).
+build_dathomir_rancor.py now downscales any texture above
+RANCOR_MAX_TEX=2048 at package time and asserts the cap before staging.
+Awaiting live confirm.
+
+### [2026-07-09] T2550: Dathomir Rancor inverse-bind deformation and dark material fixed
+
+Owner: LordVaderCW
+T###: T2550
+Subsystem: Character Builder creature skin binding, KOTOR qBone/tBone export,
+material lighting (Core.Workflow / Core.Math contract)
+Intersects: T2518's split bind-array rebuild, T2545's skin bind-controller
+requirement, and T2549's now-fixed animation relocation crash.
+
+The first live build after T2549 loaded successfully, but the Rancor body
+exploded into long triangles and rendered almost black. Binary and runtime
+audits exonerated its weights and palette: all 5,113 MDX bone references were
+finite, integral, in range, and normalized; `bones[16]`, the 59-entry bonemap,
+node IDs, and seven skin palettes were internally consistent.
+
+Root cause and fixes:
+- The anatomical splitter preserved/rebuilt each qBone/tBone row as the bone's
+  **forward world XYZW rotation + world position**. KOTOR instead consumes a
+  W-first transform equal to `inverse(bone_world) * skin_world`. Structurally
+  valid forward rows missed the neutral bind collapse by as much as 15.43 and
+  moved live vertices up to 12.92 model units, exactly matching the screenshot
+  spikes. Final split skins now unconditionally recompute compact WXYZ qBone
+  and tBone rows from their final node transform; the writer remains
+  responsible only for expanding those rows into global node-indexed arrays.
+- Split skins that inherit position/orientation controllers now synchronize
+  the existing type-8/type-20 single-key values to the final node transform.
+  This prevents the MDL reader/game from restoring a different transform than
+  the one used to calculate inverse bind data.
+- Generic custom partitions now inherit only the selected native creature's
+  KOTOR ambient-lighting baseline while preserving the imported diffuse
+  colour, texture resref, bitmap, and UVs. The custom body carried Blender's
+  ambient `(0.2,0.2,0.2)` while every vanilla Rancor and verified Drexl skin
+  uses `(1,1,1)`, which drove the already-dark atlas nearly black in plcaa.
+- `build_dathomir_rancor.py` now hard-gates the bind identity before write and
+  after MDL/MDX reload, and gates the donor ambient baseline, so a parser-clean
+  but explosively deformed package cannot be staged again.
+
+Texture/UV ground truth: `dat_rancor_t00.tga` is the correct 4096x4096 opaque
+base-colour texture; its decoded RGB bytes are identical to the FBX source JPG,
+all seven skins reference it, no conflicting TPC/TXI exists, and all 5,113 UV
+rows equal the expected KOTOR `(u, 1-v)` conversion. No texture or UV rewrite
+was made.
+
+Affected files: Core.Workflow
+`core/characters/headless_body_workflow.py` and its regenerated payload
+manifest; `scripts/build_dathomir_rancor.py`; focused splitter, full-pipeline,
+and Character export tests.
+
+Verification:
+- MCP `compare_model_pipelines(k2, dat_rancor)` remains `match=true`; both
+  readers report 59 nodes and seven skin nodes.
+- Full no-decimation Rancor rebuild: 74/74 active palette rows collapse
+  `bone_world * inverse_bind == skin_world`; max error `4.44e-15` before write
+  and `4.31e-7` after float32 reload. Ambient is `(1,1,1)`, 4,240 coincident
+  seam pairs have zero weight divergence, all 23 animations reload, and the
+  animation relocation/tangent gates from T2549 remain intact.
+- Focused splitter, Drexl full MDL/MDX round-trip, Character export, and writer
+  suites: 28 passed. Drexl's seven split skins also satisfy the bind identity
+  before and after reload with no new audit issues versus vanilla.
+- The three-sample deformation heuristic's lone `limb_collapse` is a known
+  partition-statistic false positive: custom overall is 0.149% collapsed
+  edges, while shipped vanilla Rancor also fails the same sample at 0.227%.
+  Neither has non-finite/missing/exploded vertices in that replay; live KOTOR
+  remains the acceptance gate.
+- `k2_plcaa_gameplay_matrix.py`: 18/18 passed. Corrected package deployed with
+  backup manifest under
+  `Saved/GameTestStaging/dat_rancor_inverse_bind_deploy_20260709-143048` and
+  one stale plcaa current-game cache removed.
+- Live visual/animation/combat retest is armed under
+  `Saved/KotorLiveLogs/20260709-143105-t2550-rancor-inverse-bind-ambient-live`.
+
+### [2026-07-09] T2906: Map Studio export now blocks on a vanilla-derived raw engine contract
+
+Owner: LordVaderCW
+T###: T2906
+Subsystem: Map Studio export validation, Odyssey MDL/MDX/WOK structure,
+all-room package readback (Core.Validation / Core.Scene / Core.Tools)
+Intersects: T2538/T2540's plcaa node-`+8`, embedded-AABB, floor-only WOK,
+and perimeter discoveries; T2549's static/animation MaxTree ownership split.
+
+Added a production-owned `kotor_module_engine_contract` gate in
+Core.Validation. Authored Map Studio export now validates the actual serialized
+resource bytes before packaging instead of treating PyKotor readback as engine
+proof. The gate checks every LYT room for its MDL/MDX/WOK triplet, K1/K2 model
+function pointers, static-node `+8 == 0`, bounded child/controller tables,
+embedded AABB nodes, MDX size agreement, raw BWM tables, walkable faces,
+serialized/closed perimeter loops, ARE/LYT room equality, VIS counts/targets/
+symmetry, IFO area linkage, and PTH parse/point counts. Reports include raw
+fingerprints and the measured `plcaa`, `001ebo1`, and `r00_test` vanilla
+baselines that define the invariants.
+
+Authored export stores the engine report in its manifest and ExportJob
+preflight and treats contract failures as blocking. Package readback now checks
+every expected room rather than only `room_resrefs[0]`. Terrain, GModeler,
+plcaa, and K2 round-trip matrices now return a nonzero process status on any
+failed row; the terrain matrix replaced the obsolete vertical NON_WALK-wall
+expectation with a raw closed-perimeter assertion. The K2 `001ebo` round-trip
+matrix now compares imported LYT positions and VIS adjacency directly with the
+vanilla BIF resources, exposing stock-hydration loss instead of reporting a
+false all-green result.
+
+Affected files: `src/core/validation/kotor_module_engine_contract.py`, its
+Core.Validation payload copy/project resources, Core.Scene/Core.Tools
+`authored_module_export.py` and `dev_module_smoke.py` mirrors, focused contract
+and export tests, payload manifests, and the four Map Studio headless matrices.
+
+Verification:
+- `tests/test_kotor_module_engine_contract.py`: 11 passed, including local
+  K1 `plcaa`, K2 `001ebo1`, and K2 `r00_test` vanilla resources plus corrupt
+  node-`+8`, missing AABB, missing perimeter, asymmetric VIS, and second-room
+  MDX cases.
+- Focused authored package test: 1 passed with the engine contract present and
+  ready in both the package manifest and ExportJob preflight.
+- `terrain_walkmesh_matrix.py`: 15/15 passed; raw WOK perimeter 1/1 closed.
+- `gmodeler_tool_matrix.py`: 24/24 passed.
+- `k2_plcaa_gameplay_matrix.py`: 18/18 passed, including the new raw contract.
+- Core.Validation, Core.Scene, and Core.Tools payload rows/hashes regenerated;
+  the global payload hash test still has three unrelated pre-existing stale
+  rows in Core.Automation/Core.Workflow.
+- No new live KOTOR warp was performed; export candidates remain explicitly
+  pending user-driven in-game proof.
+
+### [2026-07-09] T2549: K2 Rancor crash fixed at animation relocation; tangent-space rows restored
+
+Owner: LordVaderCW
+T###: T2549
+Subsystem: KOTOR MDL/MDX writer, creature animation load, Character export
+(Core.IO / Core.Resources)
+Intersects: T2540's static-node `+8` rule and the T2541-T2548 Dathomir
+Rancor live-game bisection.
+
+Local disassembly of the installed Steam KOTOR II executable identified the
+direct cause of `swkotor2.exe+0x4962c`. `FUN_00512800` unconditionally writes
+the MDL data-base pointer to animation offset `+0x84`. The writer emitted a
+52-byte animation model header, so zero-event animation `cpause1` placed its
+root node at that exact address. The engine overwrote the node flags, the
+`0x512930` type dispatcher skipped relocation, and `FUN_00449450` then treated
+raw child-array offset `0x2CAC` as a live pointer. The static rendered body and
+MDX had not been reached yet.
+
+Fixes:
+- Emit the required reserved/runtime word at animation `+0x84`, making the
+  animation model header 56 bytes and placing roots at
+  `animation + 0x88 + event_count*0x24`, matching vanilla Rancor and Drexl.
+- Preserve the MaxTree ownership asymmetry: static node `+8` remains zero,
+  while every animation node `+8` points to its owning animation geometry
+  block. The engine relocates that value to the owner object at runtime.
+- Restore K2 PC tangent-space MDX rows for generated rendered skins:
+  bitmap `0x80`, slot-7 offset, and the 36-byte bitangent/tangent/normal block
+  before skin weights. Preserve an explicit source tangent flag so the
+  verified no-tangent Drexl format stays `0x23/64`; Rancor skins now match
+  vanilla `0xA3/100` with weights at 68 and bone refs at 84.
+
+Affected files: `src/core/mdl/mdl_writer.py` and its Core.IO / Runtime Host
+payload copies; Core.Resources `kotor_loader.py`; focused round-trip tests and
+the three affected payload manifests.
+
+Verification:
+- 30 focused writer, full-export, animation-override, and Character export
+  tests passed; all three writer copies are byte-identical and targeted payload
+  hashes/manifests pass.
+- Vanilla `c_rancor` round-trip now matches all 23 animation fixed-layout and
+  ownership contracts (1,084 traversed animation nodes); whole MDL delta is
+  only +14 bytes. Verified Drexl matches the same contracts.
+- Full no-decimation Dathomir build (bone limit 15) exports 23 animations,
+  seven rendered skin partitions plus both eyes, zero seam-weight divergence,
+  valid child/MDL/MDX ranges, finite correctly handed tangent bases, and exact
+  animation `+0x84`/root/owner gates.
+- `k2_plcaa_gameplay_matrix.py`: 17/17 passed. Fixed package deployed with
+  backup manifest under `Saved/GameTestStaging/dat_rancor_animation_fix_deploy_20260709-135227`.
+- Live KOTOR II accepted the model and rendered the custom Rancor (user
+  screenshot plus 137 seconds of post-render runtime). The original
+  `swkotor2+0x4962c` signature is absent from the completed logger session.
+  A later `nvoglv32.dll+0x8802ec` out-of-memory exit passed through
+  `DiscordHook.dll` and matches older vanilla Rancor/Drexl/skeleton sessions,
+  so it is unrelated overlay/driver noise. Visual deformation/material issues
+  exposed by this successful load are tracked and fixed separately in T2550.
+
+### [2026-07-09] T2541: plcaa warp crash root-caused to STALE creature MDL (node+8 != 0); re-export fixes it
+
+Owner: CrispyW0nton
+T###: T2541
+Subsystem: live crash triage + creature MDL export staleness (Core.IO writer /
+KotorMCP proof)
+
+Warping to plcaa with the custom Rancor crashed swkotor2.exe at +0x0004962c
+(0xc0000005) every time — deterministic.  Full triage:
+- Remote Ghidra decompile of FUN_00449450 (crash addr): a RECURSIVE model
+  node-tree sizer that reads node.child_count (+0x30) and iterates
+  node.children[] (ptr at +0x2c), recursing.  Crash = child-array deref when
+  a node's children pointer is garbage.
+- Live logger (30-min window finally caught it): EXCEPTION_ACCESS_VIOLATION
+  at 0x0044962c, 16-frame stack, callers swkotor2+0x11286b/+0x1126d2.
+- Headless bisection via k2_plcaa_gameplay_matrix RANCOR_TEST_RESREF knob:
+  * VANILLA g_rancor01 in plcaa -> loads, renders, animates, aggros (user
+    screenshot).  Map + GIT placement + big rancor all fine.
+  * OUR custom model on the vanilla data path (g_rancor01 -> row 80 ->
+    Override c_rancor.mdl = our mesh) -> SAME crash.  => the fault is our
+    MODEL, not the appearance.2da (which pykotor also reads clean) or UTC.
+- Node-header diff vs vanilla c_rancor.mdl: our model wrote node-header +8
+  (root_off) = 0x30cf8 (the root node offset) on ALL 57 nodes; vanilla is 0
+  on all 57.  This is the exact bug in [[plcaa-mdl-controller-crash]] /
+  T2540's writer fix: *(node+8) must be 0 or the engine casts the bogus
+  pointer as a geometry object and NULL-derefs.
+
+Root cause: the deployed dat_rancor/c_rancor MDLs were STALE — exported
+before T2540 added the node+8=0 fix to mdl_writer.py (_write_node_tree pass
+2, lines ~892-901).  The CURRENT writer already writes 0.  A fresh
+build_dathomir_rancor.py export produces node+8=0 on all 57 nodes
+(verified).  No code change needed — the fix was re-exporting with the
+current writer.
+
+Deployed (fixed): rebuilt plcaa.mod with dat_rancor01; re-exported +
+re-staged dat_rancor.mdl/.mdx/_t00.tga + appearance.2da to Override (removed
+the stale c_rancor.* test files); a node+8==0 gate now asserts on the
+deployed model before copy.  Manifest
+Saved/GameTestStaging/plcaa_rancor_FIXED_deploy_*.  Awaiting user warp to
+confirm the custom Rancor now renders in plcaa.
+
+LESSON: after ANY writer fix, re-export every staged artifact — a stale MDL
+in Override silently carries the old bug.  Add a node+8==0 preflight to the
+creature export path (follow-up).
+
+UPDATE (T2542, same day): node+8=0 was necessary but NOT the crash — a fresh
+export with node+8=0 STILL crashed at the identical 0x0044962c.  Node-by-
+node header diff vs vanilla c_rancor (both 57 nodes) found the true cause:
+EXACTLY TWO nodes differed — the Rancor eyes (node numbers 37/38), which
+T2536's strip logic turned from rendered trimesh (flags 0x21) into dummies
+(0x1) via _clear_template_render_payload.  Dummying a native detail mesh
+(stripping its MESH flag while the loader/runtime node still expected a
+trimesh) desynced the engine's recursive node-tree sizer (FUN_00449450) and
+NULL-derefed during plcaa area load.  Fix: _strip_render_geometry_from_
+skeleton now PRESERVES native rendered non-skin detail trimeshes intact
+(_normalize_preserved_helper_trimesh(keep_render=True)) instead of dummying
+them — only is_skin body meshes (replaced by the import) still leave the DAG.
+Rebuilt model now matches vanilla node headers EXACTLY (0 flag/childcount
+diffs, node+8 all zero).  Also fixed build_dathomir_rancor.py to read the
+VANILLA appearance.2da from KEY/BIF (get_bif), not Override — it was reading
+its own prior staged output and appending a DUPLICATE dat_rancor row each
+run (index drifted 671->672); now idempotent at row 671, asserted.
+Redeployed with a node+8==0 gate + single-dat_rancor-row assertion.  Awaiting
+user warp.
+
+## 2026-07-08
+
+### [2026-07-08] T2538: dat_rancor internal MDL name fix + Rancor placed in plcaa test map
+
+Owner: CrispyW0nton
+T###: T2538
+Subsystem: KOTOR MDL resref naming + plcaa module authoring (Core.Workflow /
+Map Studio)
+
+Two live tst_light attempts spawned no rancor: attempt 1 was out-of-bounds
+(fixed T2537), attempt 2 was in-bounds but still empty.  Prime suspect for
+attempt 2: dat_rancor.mdl carried geometry-header name 'c_rancor' (the
+adopted template-root identity, T2534), not 'dat_rancor'.  Every Override
+model that renders in-game has its header name == file resref (C_DrexlF <->
+c_drexlf, c_rancorS <-> c_rancors); a mismatch is a known silent-drop.
+
+Fix (build_dathomir_rancor.py): after fit/rig/split, rename ONLY model.name
+(the MDL +0x14 geometry-header field) to the file resref; leave the root
+NODE name and every anim_root at the base name 'c_rancor'.  Rationale
+discovered by two failed rename attempts:
+- Renaming the root node broke the export preflight (native helper nodes
+  read as "moved / non-native" — the path check keys off root-node name).
+- Also renaming the native-skeleton snapshot to compensate broke the
+  bind-provenance check (fingerprint/model_name legitimately record the
+  base skeleton IS c_rancor).
+model.name is independent of both checks, so a header-only rename passes
+cleanly, and keeping root/anim_root mutually consistent preserves animation
+binding.  Build now asserts header==resref and anim_root <= {root_node}.
+
+Rancor added to the plcaa test map (k2_plcaa_gameplay_matrix.py):
+- creatures tuple += AuthoredCreatureInstance(dat_rancor01, tag=test_rancor,
+  (30,48,0), bearing pi) — position walkmesh-validated against the plcaa WOK
+  (floor X -1..59, Y -0.6..58.5; entry point 30,30).
+- extra_resources += (dat_rancor01, utc, <bytes>); S06 11->12, S09/S13
+  creature count 3->4 with an explicit dat_rancor01-present assertion.
+Full rebuild: S06..S14 all PASS; S13 GIT round-trip = "4 creatures (rancor
+OK)".
+
+Deployed + verified in place: plcaa.mod -> Modules (backed up first,
+currentgame cleared); Override staged with dat_rancor.mdl (header name
+'dat_rancor') / .mdx / _t00.tga / appearance.2da (row 671).  Reparse of the
+DEPLOYED module confirms dat_rancor01 at (30,48), UTC bundled, all Override
+assets present.  Manifests under Saved/GameTestStaging/plcaa_rancor_deploy_*
+and c_rancor_override_stage_* (the tst_light single-variable test files
+coexist).
+
+Handoff: launch via Steam, `warp plcaa` (T2540 confirms plcaa now loads),
+entry at (30,30) — the boss stands in front at (30,48).  STILL PENDING
+in-game visual confirmation.  If the boss is still absent with the correct
+header name, the next suspect is the hand-rolled binary appearance.2da
+(twoda_to_binary_v2b) — validate row 671 against the engine or switch to an
+MDLedit/pykotor-written 2DA.
+
+### [2026-07-08] T2540: K2 plcaa loads in-game — node-header +8 crash fixed via local disassembly; walkmesh reduced to walkable floor
+
+Owner: CrispyW0nton
+T###: T2540
+Subsystem: MDL binary writer + authored room walkmesh (Core.IO / Core.Scene)
+
+**MILESTONE: the K2 plcaa test map warps and renders in-game (KOTOR 2).**
+
+Root cause of the swkotor2+0x44b3a8 crash (found by disassembling the exe
+LOCALLY with capstone/pefile — the remote Ghidra server was stuck on the xbox
+program and unrestartable): the engine builds "<roomname>a" (e.g. "plcaaa")
+and runs a node-name lookup; that lookup reads node->model->nameTable[idx] and
+type-checks the model backpointer *(node+8) as geometry (type 2=model /
+5=animation via the +0x4c type byte). Our writer patched node-header +8 with
+the root-NODE offset, so the engine treated a node as the geometry, failed the
+cast, and NULL-deref'd at 0x44b3a8. Every vanilla model (K1 room, K2 placeable)
+writes 0 there (runtime pointer). Fix: mdl_writer node-header +8 stays 0 (both
+geometry and animation node passes). The geometry header's own root_off (+40)
+still points to the root node. This is why it crashed for ANY room name
+("plcaaa"/"r00_testa") and why BioWare models are immune. Live-captured the
+"plcaaa" string in the crash frames; confirmed in-game load after the fix.
+
+Chain of fixes that got here this session (all kept):
+- T2538 removed synthetic per-node transform controllers (crash 0x44920e ->
+  0x44b3a8); T2539 (interim) proved via transplant t3 the crash was model-side.
+- T2540 node+8=0 -> loads.
+
+Walkmesh: the exported room WOK carried the whole room (18 walkable floor faces
++ ~108 NON_WALK wall/ceiling faces). The ceiling is a full horizontal slab, so
+the floor was enclosed by NON_WALK geometry (perim=0) and the player could not
+move. Added authored_module_export._walkmesh_walkable_only: filters the room
+WOK to WALKABLE_IDS faces before both the .wok file and the model AABB node.
+Result now matches vanilla plcaa.wok (18 faces, 18 walkable, flat, adj=18,
+edges=18). KNOWN GAP: PyKotor's write_bwm drops the perimeter loop (perim=0
+even round-tripping a vanilla wok), so perimeter is not yet emitted — pending
+in-game confirmation whether basic walking needs it.
+
+Mirrors synced (IO->Host+repo-root; Scene->Tools). k2_plcaa_gameplay_matrix.py
+17/17 PASS. capstone added to the py3.14 env for local disassembly.
+
+### [2026-07-08] T2538: plcaa room-MDL crash narrowed to synthetic transform controllers; export now emits none (matches vanilla 001ebo1)
+
+Owner: CrispyW0nton
+T###: T2538
+Subsystem: MDL binary writer + authored room export (Core.IO / Core.Scene)
+
+Context: the K2 plcaa room MDL loaded far enough to advance the crash from
+0x4b3a8 to a 0x44920e array-grow, but that array-grow reproduced on a minimal
+room. Ghidra disassembly of FUN_00513620 was blocked (remote AgentDecompile
+server stuck on /TSL/k2_xbox_default.xbe; open/analyze-program/manage-files
+cannot switch the server-global active program and it cannot be restarted from
+this machine).
+
+Pivoted to a headless raw-offset audit comparing our plcaa.mdl against TWO
+known-K2-loadable rooms: vanilla 001ebo1 (models.bif) and tst_light r00_test
+(loads in-game). Findings:
+- All offsets in-bounds; AABB tree valid (251 nodes walked clean); WOK sane;
+  mesh header fields all legitimate or unused (tst_light ships garbage
+  total_area and still loads). read_mdl parses all three (too lenient).
+- AABB-node-in-MDL and per-node controllers are NOT the cause: tst_light has
+  both and loads.
+- The ONLY traits our crashing model had that NEITHER loadable room shared were
+  both in the controllers: unknown0=0 (vanilla uses 0xFFFF) and controllers on
+  the ROOT node (both vanilla roots have ck=0). Decisively, stock K2 room
+  001ebo1 -- same model_type=0 as ours -- loads with ZERO controllers on every
+  node; the mdl_porter writer also deliberately emits none, commenting that
+  synthetic controllers crash.
+
+Fix:
+- authored_module_export._make_room_model_bytes no longer applies synthetic
+  position/orientation controllers; placement comes from node-header
+  position/rotation (which the writer already falls back to). Room MDL now
+  emits ck=0/cd=0 on every node, matching 001ebo1.
+- mdl_writer controller-key writer defaults unknown0 to 0xFFFF (vanilla
+  sentinel) instead of 0, so any future synthetic controllers are vanilla-shaped.
+
+Mirrors synced byte-identical (IO->Host+repo-root src; Tools->Scene). Rebuilt
+via k2_plcaa_gameplay_matrix.py (17/17 PASS). Re-audit confirms every node
+ck=0/cd=0, all offsets in-bounds. Fixed plcaa.mod installed to K2 Modules
+(old crashing build backed up as plcaa.mod.crashbak_20260708_212835).
+PENDING: single in-game warp `warp plcaa` to confirm the room now loads.
+
+### [2026-07-08] T2537: Dathomir BIG Rancor boss package (dat_rancor) built + staged; live launch blocked by pre-existing env crash
+
+Owner: CrispyW0nton
+T###: T2537
+Subsystem: creature package authoring + live proof staging (Core.Workflow /
+KotorMCP)
+
+Goal (user): a large Rancor BOSS, not the small c_rancorS variant.
+
+Built scripts/build_dathomir_rancor.py: fits the custom Rancor FBX against
+the BIG donor c_rancor (11.34-unit rigged height vs 8.42 vanilla,
+anim_scale 1.0, supermodel NULL so all 23 clips are self-contained), splits
+(5 region nodes, 37,896 coincident seam pairs, 0 divergent — T2533 holds on
+the big donor), exports as resref dat_rancor, and generates a full creature
+package:
+- dat_rancor.mdl (723,984 B) + dat_rancor.mdx (1,041,328 B), reload-verified
+  (name c_rancor, anim_scale 1.0, 23 anims, skin texture dat_rancor_t00).
+- appearance.2da: effective binary V2.b copy + new row 671
+  (race=dat_rancor, label Creature_Rancor_Dathomir) cloned from vanilla
+  Creature_Rancor row 80 (sizecategory 5). Round-trip verified cell-for-cell
+  against rows 0/80/309/671.
+- dat_rancor01.utc: clone of the g_rancor01 boss template (CR 20, 350 HP)
+  repointed to appearance row 671; reparse-verified.
+- dat_rancor_t00.tga body texture.
+Staged into Override with backup+manifest
+(Saved/GameTestStaging/dat_rancor_stage_manifest_*.json); no prior shadows.
+
+LIVE PROOF BLOCKED (environmental, NOT the package): swkotor2.exe exits
+~12 s after launch on EVERY attempt. Bisected by removing appearance.2da,
+then ALL staged Rancor files — the clean Override still crashes, so the
+package is exonerated. WER: swkotor2.exe+0x0004b3a8 (0xc0000005) — the SAME
+offset logged at 14:00 BEFORE any Rancor staging, and matching the earlier
+PLCAA runtime session; plus an nvoglv32.dll OpenGL AV (the known tst_light
+fullbright driver class). The debugger sees only a benign first-chance
+ntdll breakpoint (0x80000003) before the process exits -1. Evidence:
+Saved/KotorLiveLogs/20260708-145946-dat-rancor-boss-spawn.
+
+Placement (corrected): `dm_spawncreature` is NOT used in this project.
+Creatures are placed by a GIT instance in the target module, exactly like
+the existing Drexl example — tst_light.mod's GIT carries one creature
+`g_drexl_amb01` at (2.8, 3.74) whose model is overridden from Override.
+scripts/place_rancor_in_tst_light.py clones that entry, repoints it to
+`dat_rancor01` at (2.8, 10.0), and repackages tst_light.mod with the stock
+ERF/MOD builder (module_save_pipeline.build_erf_v1_archive). Verified by
+reparse: creature list = [g_drexl_amb01, dat_rancor01]; all 9 module
+resources preserved; original backed up to
+Saved/GameTestStaging/tst_light_mod_backup_*.mod; stale currentgame copy
+removed.
+
+First live attempt (user, 15:28): module loaded, Drexl visible, NO rancor.
+Root cause found by parsing the module's r00_test WOK walkmesh: walkable
+bounds are X -8.17..9.10, Y -23.08..8.25 — the boss was placed at
+(2.8, 10.0), OUTSIDE the walkmesh, and the engine silently dropped the
+out-of-bounds spawn. Lesson: always validate GIT creature positions against
+the room WOK before packaging. Re-placed at (0.0, -8.0) facing +Y (the room
+opens toward -Y with ample floor for the 8+ unit boss), repackaged,
+reparse-verified, currentgame confirmed clean.
+
+Second live attempt (user): module loaded, walkmesh-valid position, still
+no rancor.  Next root cause identified: INTERNAL MDL NAME MISMATCH.  Every
+Override model that works in-game has its geometry-header name equal to the
+file resref (C_DrexlF <-> c_drexlf.mdl, c_rancorS <-> c_rancors.mdl); our
+dat_rancor.mdl carried internal name 'c_rancor' (T2534 adopts the template
+root identity), and the engine silently fails such creatures.  A proper
+resref-rename export (model name + root node + animation node references +
+animroot) is follow-up work.
+
+Single-variable retest staged instead: exported the boss AS c_rancor
+(internal name already matches), staged c_rancor.mdl/.mdx +
+c_rancor_t00.tga into Override, REMOVED the custom appearance.2da +
+dat_rancor01.utc + dat_rancor.* from Override (preserved in the MDL dir +
+stage manifests), and repointed the tst_light GIT at the VANILLA g_rancor01
+template (appearance row 80 -> c_rancor).  The only custom element left in
+the chain is the model itself.  place_rancor_in_tst_light.py now defaults
+to g_rancor01 and takes --utc <resref> for custom templates.
+Manifest: Saved/GameTestStaging/c_rancor_override_stage_*.json.
+
+Handoff: launch via Steam, load a save, `warp tst_light` — Drexl reference
+at (2.8, 3.74), the boss (hostile vanilla template, CR 20) at (0.0, -8.0)
+in the open area.  WARNING: it will aggro on sight.
+
+### [2026-07-08] T2536: MDL export failed — template strip deleted leaf bone trimeshes (also the "feet" artifact)
+
+Owner: CrispyW0nton
+T###: T2536
+Subsystem: Character Builder template rig skeleton strip / KOTOR export
+(Core.Workflow payload)
+Intersects: T2534 (helper-trimesh preservation — texture condition relaxed
+here), T2518 (export transaction)
+
+Symptom: Character Builder export wrote only the TGA + sidecar; no
+c_rancors.mdl/.mdx.  Sidecar export_results recorded the writer refusal:
+"Animation 'm0a1' export tree references nodes not present in the target
+model hierarchy" listing 15 nodes (distal fingers, jaw, mouth, eyes,
+Ran_Tail03, Ran_FootL/R).
+
+Root cause: vanilla c_rancorS stores those bones as LEAF TRIMESH nodes
+named without the _g/_dum convention (is_mesh, textured c_rancor01, mostly
+render=False, no children).  _strip_render_geometry_from_skeleton only
+recognised helpers by name suffix or children, so it REMOVED them as render
+payloads; c_rancorS's own animations still animate them, and the writer
+correctly hard-failed.  Drexl never hit this (its bones end in _g).  Bonus:
+Ran_FootL/R are in the Legs split palette, so the missing nodes also
+degraded foot skinning in the preview — the user's "slight things happening
+with the feet".
+
+Fix (character_builder.py):
+- _is_native_nonrendered_helper_trimesh no longer requires the trimesh to
+  be untextured (vanilla bone geometry carries texture refs it never
+  renders).
+- _strip_render_geometry_from_skeleton removal is now restricted to
+  REPLACED body skins (is_skin) and geometry-less placeholder meshes; any
+  other geometric non-skin trimesh survives — preserved intact when
+  render=False, cleared to a transform dummy when rendered (Rancor eyes,
+  rigid attachments) so it cannot double-render under the imported body.
+
+New scripts/export_rancor_mdl.py mirrors the GUI flow headlessly (fit ->
+rig -> scene assign resref c_rancors -> Node Splitter -> export_scene) and
+verifies the written pair.
+
+Verification: rigged model now drops ONLY larm/rarm/legs/tail/torso (the
+replaced skins; their names return as split region nodes);
+export succeeds: c_rancors.mdl (607,848 B) + c_rancors.mdx (1,041,328 B),
+reload-verified (anim_scale 0.336, supermodel c_rancor, 5 split skins, 10
+animations, all 15 previously-missing nodes present);
+diag_rancor_seam_divergence --static-only still zero divergence;
+test_character_builder_template_rig + splitter + both export suites = 34
+passed.  Texture staged as c_rancors_t00.tga (MDL references c_rancors_t00
++ vanilla c_rancor01 on non-rendered bone geometry).
+
+### [2026-07-08] T2535: Rigged creatures adopt the template's anim_scale (root-motion 3x overshoot)
+
+Owner: CrispyW0nton
+T###: T2535
+Subsystem: Character Builder template rig / animation playback contract
+(Core.Workflow payload)
+Intersects: T2533 (whose audit could not see this — see below), T2532 (the
+original anim_scale!=1.0 creature heuristic failed BECAUSE of this bug)
+
+Symptom (user video, Character Builder preview, 2026-07-08): mesh
+deformation fixed by T2533, but the root position drifted per animation —
+sleep sank into the floor, ctaunt dove head-first through it, cdie dropped
+the model entirely below the grid.  Native c_rancorS clips (cwalk/crun/
+m0*/g0*) behaved; only supermodel-inherited [c_rancor] clips broke.
+
+Root cause: supermodel-inherited position tracks are multiplied by the
+REQUESTING model's anim_scale (KotorBlender p1 = restloc + animscale*val;
+SuperModelResolver seeds its cumulative product with model.anim_scale).
+Vanilla c_rancorS ships anim_scale=0.336; apply_template_rig kept the FBX
+import's default 1.0, so every inherited clip's translations played ~2.98x
+too large — in preview AND in game (the MDL writer serialises
+model.anim_scale at header +52).
+
+Why T2533's audit missed it: diag_rancor_full_animation_audit merges
+supermodel animations onto the model (making them "own" clips, never
+scaled) and evaluates through evaluate_aurora_animation_pose, which is
+scale-blind by design — both vanilla and custom played inherited clips
+unscaled, hiding the asymmetry (and inflating the "vanilla cdie explodes
+too" artifact).
+
+Fix: apply_template_rig's identity-adoption block now also adopts the
+template's anim_scale (when > 0).
+
+Evidence: new scripts/diag_rancor_root_motion.py drives BOTH models through
+the real playback path (AnimationEngine.play/evaluate + SuperModelResolver)
+and compares per-animation pelvis root-motion deltas (deltas cancel
+rest-pivot differences, isolating track scaling):
+- REPRODUCTION (--force-anim-scale-1): every inherited clip's custom motion
+  = vanilla / 0.336; cdie deviation 2.36 units, model ends min-Z -2.44
+  (vanilla -0.06) — exactly the video.
+- FIXED: 16 of 18 inherited clips at deviation 0.0000; sleep/ctaunt floor
+  contact restored; cdie residual 0.43 (min-Z -0.41) — that residual is the
+  T2524 fitted pivots interacting with the death-roll rotations
+  (proportional to the refit, identical math in-game), not a scale error.
+  Own-clip deviations <= 0.10 for the same reason.
+Verification: test_character_builder_template_rig + splitter + both export
+suites = 34 passed; py_compile clean.  Outputs: Saved/rancor_root_motion.json.
+
+NOTE: the user must re-run Import -> Build Skeleton -> Node Splitter ->
+Export to regenerate the asset with the corrected anim_scale before
+re-testing in preview or game.
+
+### [2026-07-08] T2534: Vanilla-model fixtures resist Override shadowing; lost template-rig contracts restored
+
+Owner: CrispyW0nton
+T###: T2534
+Subsystem: ResourceManager base-archive loading, Character Builder template
+rig (Core.Resources + Core.Workflow payloads)
+Intersects: T2533 (seam weld — threshold calibrated here), T2513 (round-trip
+audit baseline), T2532-pattern lost-code drift
+
+Root causes (6 failing tests, two distinct classes):
+
+1. OVERRIDE CONTAMINATION (2 sites): tests and audit baselines resolved
+   "vanilla" c_drexlf through the engine priority (Override > BIF), so the
+   user's own exported model silently replaced the true vanilla donor.
+   test_creature_obj_to_mdl_export_end_to_end compared split palettes against
+   a contaminated donor; the T2513 round-trip audit compared the export
+   against a contaminated "vanilla" baseline.
+2. LOST-CODE DRIFT (5 tests in test_character_builder_template_rig.py): the
+   test file carried 173 uncommitted lines of contracts whose implementation
+   was missing from character_builder.py — the same drift pattern as T2532:
+   - load_game_skeleton_source did not prefer KEY/BIF over Override;
+   - _restore_native_static_controllers did not exist;
+   - apply_template_rig kept the imported payload's model name/classification
+     (e.g. "bendak"/TILE) instead of adopting the native skeleton identity;
+   - _strip_render_geometry_from_skeleton cleared non-rendered bone-geometry
+     trimeshes (pelvis_g etc.) to empty dummies, diverging the exported DAG
+     from vanilla structure.
+
+Fixes:
+- ResourceManager: `_GameInstall.get_bif()` (KEY/BIF-only fetch) and
+  `load_model(..., prefer_base_archive=True)` which reads the BIF pair first
+  and tags `_gr_source_layer` ("base_game_archive" / "game_library").
+- character_builder.load_game_skeleton_source prefers get_mdl_bif/get_mdx_bif
+  and tags the layer accordingly (falls back to override-inclusive lookup).
+- apply_template_rig adopts the template's name/model_type/classification.
+- New `_restore_native_static_controllers(result, donor)`: nodes with no
+  controllers get deep-copied donor blocks; kept controllers get missing
+  `binary_*` writer metadata refreshed per matching type.  Wired after
+  animation adoption (no-op when the skeleton deepcopy kept controllers).
+- Strip pass preserves non-rendered, untextured helper trimeshes with
+  geometry intact (`_is_native_nonrendered_helper_trimesh`), normalized to
+  HEADER|MESH; rendered payload leaves are removed as before.
+- T2533 seam weld now fires only above `_SPLIT_SEAM_WELD_MIN_DELTA=1e-3`:
+  vanilla c_drexlf ships ~1e-4 authored weight noise between boundary twins,
+  and welding that noise broke the D-5 byte-identity contract for splits
+  that ran no weight mutators.  (Rancor mutation deltas are 0.01-0.66, far
+  above the threshold — its seam divergence audit remains all-zero.)
+- Test fixtures: _load_drexl_model + the T2513 full-pipeline test load with
+  prefer_base_archive=True; the T2513 audit baseline audits the reference's
+  BIF bytes written to exports/t2513_c_drexlf/c_drexlf_vanilla_baseline.mdl
+  instead of resolving the resref through the install.
+
+Files: Core.Resources `resource_manager.py`; Core.Workflow
+`character_builder.py`, `headless_body_workflow.py`;
+`tests/test_anatomical_partition.py`, `tests/test_full_pipeline_export.py`.
+
+Verification: tests/test_character_export_pipeline.py +
+test_character_builder_template_rig.py = 25 passed (was 6 failed);
+test_anatomical_partition.py + test_skinned_node_splitter.py +
+test_full_pipeline_export.py = 18 passed, 1 xfailed; T2513 export now audits
+at exact parity with the true vanilla baseline (15 issues both sides, all
+shipped-data bone-geometry UV quirks);
+scripts/diag_rancor_seam_divergence.py --static-only still reports 0
+divergent groups across all node pairs; py_compile clean on all touched
+files.
+
+### [2026-07-08] T2533: Rancor split-seam weight welding + creature base-bind gate restored
+
+Owner: CrispyW0nton
+T###: T2533
+Subsystem: Character Builder anatomical node splitter + creature skinning
+(Core.Workflow payload)
+Intersects: T2512 (splitter), T2525 (hand stabilizer), T2532 (base-bind gate,
+code lost from an uncommitted tree — restored here with a corrected signal)
+
+Root cause (two stacked defects, isolated empirically with the new
+`scripts/diag_rancor_seam_divergence.py`):
+
+1. SEAM CRACKS: the post-split per-node weight passes
+   (`_smooth_skin_weights_across_edges`, `_stabilize_rancor_hand_split_weights`)
+   each see only one region's face adjacency.  Bind-coincident duplicated
+   vertices (UV-seam twins in-node, boundary twins across region nodes)
+   received different smoothed weights — max effective weight delta 0.66,
+   producing animated seam gaps up to 3.49 units on the 2.79-unit Rancor
+   (~1000 cracking vertex groups per animation).  The pre-split mesh was
+   verified weight-consistent (2465 coincident groups, zero divergence), so
+   all divergence was mutation-induced.  The old full-animation audit could
+   not see this: it ran on the UNSPLIT model and measured only in-node edge
+   stretch — seams have no edges across them.
+2. BASE-BIND DEFORMATION: T2532's creature gate for
+   `_gr_use_animation_base_bind_for_preview` was missing from the tree
+   (`character_builder.py:1360` still set it unconditionally), and the
+   splitter additionally FORCED the flag back to True on every split node.
+   Rest-pose-space creature vertices routed through
+   `set_bind_pose_from_anim()` deformed every position-track animation.
+
+Fix:
+- `_smooth_skin_weights_across_edges` now welds bind-coincident vertices
+  (tolerance `_SPLIT_WEIGHT_SEAM_POSITION_TOLERANCE`) into shared adjacency:
+  twins blend over the union neighborhood and always receive identical
+  influences (fresh per-row BoneWeight copies, never shared lists).
+- New `_weld_seam_weights_across_split_nodes(parts)` runs after ALL per-node
+  mutators in `split_skinned_mesh_nodes_with_weight_remap`: coincident
+  vertices across region nodes are unified in bone-NAME space (averaged,
+  re-expressed through each node's local palette; a bone missing from any
+  member's palette is dropped identically for all members).  Report exposed
+  as `seam_weld` in the splitter result + model metadata.
+- Restored the T2532 gate in `apply_template_rig`, keyed on the
+  creature-skeleton-fit signal (`creature_skeleton_fit_report.applied`)
+  instead of the original `anim_scale != 1.0` heuristic, which misclassified
+  n_mandalorian (1.06, humanoid) and c_drexlf (1.0, creature).
+  `GHOSTRIGGER_FORCE_ANIM_BASE_BIND=1` forces the flag back on.
+- Removed the splitter's unconditional re-force of the base-bind flag; the
+  source node's gated value now propagates to split nodes.
+
+Files: Core.Workflow `headless_body_workflow.py`, `character_builder.py`;
+new `scripts/diag_rancor_seam_divergence.py`;
+`scripts/diag_rancor_full_animation_audit.py` now splits by default
+(`--no-split` keeps the old unsplit behavior, `--no-base-bind` probes the
+palette path); `tests/test_full_pipeline_export.py` stale assertions
+repaired (authored region names per T2521/T2522; round-trip texture contract
+instead of a hard-coded vanilla name).
+
+Verification (all headless, real RancorTamedConceptFinal.fbx + K2 data):
+- `scripts/diag_rancor_seam_divergence.py --vanilla`: stock c_rancorS control
+  = 0 divergent groups, 0.0000 seam gap (harness validated).
+- Custom split model BEFORE: 985/2465 divergent groups, seam gap up to
+  3.4923.  AFTER: 0 divergent groups, seam gap 0.0000 across all 29
+  animations.
+- `scripts/diag_rancor_full_animation_audit.py` (split included): max edge
+  stretch 8.36, p95 <= 1.33, 9/169 failing samples — all cdie/cdead
+  `exploded_vertices`, which the vanilla control also fails (death-slide
+  displacement artifact).  Vanilla control: max stretch 25.7, p95 <= 2.8.
+  The custom Rancor now audits better than the vanilla donor on every
+  region metric (hands went from 9 failing edges/anim to 0).
+- pytest: test_skinned_node_splitter (8 passed), test_full_pipeline_export
+  (1 passed, includes byte-identity weight round-trip through writer),
+  test_correspondence_fit (22 passed, 1 pre-existing failure unrelated —
+  verified by stash A/B).  Pre-existing failures in
+  test_character_builder_template_rig / test_character_export_pipeline are
+  K2-override contamination (custom exports shadow vanilla models) — see
+  spawned follow-up task.
+- NOT yet verified: live in-game warp proof (requires GhostRigger app +
+  dinput hook MCP stack).  The user must re-run Import -> Build Skeleton ->
+  Node Splitter -> Export on the Rancor FBX to regenerate weights, then run
+  the standard tst_light warp proof.
+
+### [2026-07-08] MILESTONE: K2 PLCaa gameplay test map — shell port + staging + scripted puzzle (17/17)
+
+Owner: LordVaderCW
+Subsystem: cross-game porting, export extra-resources, GIT store contract, scripting
+
+New `scripts/k2_plcaa_gameplay_matrix.py` builds the user's K2 test map end
+to end and verifies it by reading the packaged .mod back:
+- K1 plcaa geometry -> demo objects stripped (2292 faces; floor/walls/
+  ceiling only) -> vanilla K1 GIT/mover scripts discarded -> retargeted to
+  K2 with K2 MDL headers; the 4 K1 shell textures/lightmaps (ruler01 +
+  plcaa_a00003-5) ported to an install Override folder AND bundled.
+- Four cordoned test zones marked with GModeler-extruded pillars; staged:
+  2 Peragus assassin droids (enemies), a merchant (n_commf001 body +
+  m_202_001 store retagged gr_store) opened via a gr_shopterm terminal
+  script, 2 containers (cont_med012, ebstrg001).
+- Naga Sadow-style puzzle: three pedestals (comppnl001-based custom UTPs,
+  OnUsed=gr_puzzle) must be used in order 1->2->3; the compiled K2 NCS
+  tracks progress with local booleans and unlocks + opens gr_pzdoor; wrong
+  order resets. Templates + scripts bundled byte-exact into the module.
+Artifacts: `artifacts/map_studio/k2_plcaa_test_map/install/Modules/plcaa.mod`
+(+ Override TPCs). In TSL: copy both, `warp plcaa`.
+
+Product changes:
+1. `AuthoredModuleExportRequest.extra_resources` — bundle arbitrary
+   (resref, restype, bytes) payloads (templates/scripts/textures) into
+   exports.
+2. GIT store contract fixed to the ENGINE contract (validated against
+   vanilla 202TEL GIT): struct 11 uses `ResRef` + XPosition/YPosition/
+   ZPosition + orientation vector, no Tag (tag lives in the UTM).
+   AuthoredStoreInstance gained position/bearing; writer, importer, kmap
+   bridge, and GITData parser all updated (+t2605 test).
+3. `scripts/agdec_query.py` — raw JSON-RPC client for the OpenKotOR
+   AgentDecompile Ghidra MCP (Odyssey engine) for engine-contract
+   validation.
+
+Verification: k2_plcaa_gameplay_matrix 17/17, plcaa_cleanup 15/15,
+k2_roundtrip 11/11, terrain 15/15, gmodeler_ui 36/36, affected pytest 73
+passed, payload gate 17/17, rebuild exit 0. In-game warp test pending (the
+one thing headless can't prove).
+
+### [2026-07-08] KOTOR 2 round-trip verified: Ebon Hawk (001ebo) imports, edits, and repacks
+
+Owner: LordVaderCW
+Subsystem: importers, export validators, K2 support
+
+New `scripts/k2_module_roundtrip_smoke.py` (11/11 PASS against the real TSL
+install): index K2 -> import 001ebo (18 rooms, 43 placeables) -> convert to
+editable meshes (17 rooms, 79,346 faces, stock WOKs preserved) -> GModeler
+edit -> export -> package readback verified; the emitted MDL carries genuine
+K2 PC function pointers (0x41E850). Artifact:
+`artifacts/map_studio/k2_roundtrip_smoke/install/Modules/001ebo.mod`.
+
+Fixes the dive produced (all vanilla-data-vs-strict-validator, shared K1/K2):
+1. Dummy rooms with no render geometry (001ebo17) are SKIPPED by
+   convert-all instead of failing the whole conversion.
+2. Walkability + pathing now validate against ALL room WOKs merged
+   (`_merged_validation_wok`) instead of only the entry room — multi-room
+   modules always failed before because the spawn is in room 3 and the
+   waypoints in room 7.
+3. WOK audit findings degenerate/non-manifold/steep/islands downgraded to
+   warnings: vanilla 001ebo ships all of them and runs in game.
+4. Cleared the long-standing pre-existing test failures: t2601 x2 and t2704
+   updated to the current WOK contract (4 walkable faces = 2 floor + 2 door
+   transition, 12 boundary walls; fullbright ShadowOpacity 0), plus the five
+   tests that encoded the old blocking contracts.
+
+Verification: k2_module_roundtrip_smoke 11/11, plcaa_cleanup_matrix 15/15,
+terrain_walkmesh_matrix 15/15, gmodeler_ui_matrix 36/36, gmodeler_tool_matrix
+24/24, dev-module/export/readiness/walkmesh pytest 88 passed (0 failures —
+including the formerly pre-existing ones), payload gate 17/17, rebuild exit 0.
+
+### [2026-07-08] plcaa acceptance rehearsal passes headlessly + Maya axis-mode toggle on the extrude gizmo
+
+Owner: LordVaderCW
+Subsystem: stock module import/export pipeline, GModeler extrude, validators
+
+**plcaa deep dive (`scripts/plcaa_cleanup_matrix.py`, 15/15).** The full
+acceptance flow now runs headlessly against the real game install: import
+vanilla plcaa from swkotor/modules -> convert the stock room to an editable
+imported mesh (2728 faces, 22 surfaces, stock WOK) -> identify the 19 baked
+demo-object surfaces (BoxSpin/Box/GeoSphere/ScriptLoop/ConeRef node names,
+geometrically cross-checked) -> delete their 2292 faces with the same
+controller ops the GModeler UI uses -> keep the 3-surface floor/walls/
+ceiling shell -> place the spawn on the cleaned floor -> export. Package
+verification (GFF/WOK/MDL readback) PASSES; the warpable module lands at
+`artifacts/map_studio/plcaa_cleanup/install/Modules/plcaa.mod`.
+
+Bugs the dive found and fixed (each blocked the manual flow):
+1. **"Make all stock rooms editable" did nothing after Import Stock Module**
+   (the user's exact symptom): stock-imported rooms carry a placeholder
+   floor-plan primitive, and conversion only scanned KMAP rows. Without the
+   fix, GModeler edits — and exports — targeted a 10x10 placeholder square
+   instead of the real room. `convert_all_stock_rooms_to_imported_mesh` now
+   also converts authored rooms with source `stock_module_import`.
+2. **Store placements lost their template on import**: KOTOR GIT stores name
+   the template `ResRef`, unlike every other list (`TemplateResRef`);
+   importer read the wrong field, which blocked round-trip export.
+3. **Duplicate door hook names blocked layout compile**: vanilla plcaa uses
+   man26aa_door05 for two doors. Duplicates now warn and LYT emission
+   numbers the extras.
+4. **Off-walkmesh placements blocked export**: vanilla plcaa GIT ships a
+   dozen cut-content waypoints far off the WOK. Only the entry point (player
+   spawn) still blocks; every other placement warns.
+5. **Missing WOK DOOR/surface-18 faces blocked export** despite vanilla WOKs
+   shipping linked transitions without them; now a warning (export +
+   readiness + t2911/t2632/t2630 tests updated to the new contract).
+
+**Maya axis-mode toggle (extrude gizmo).** The extrude gizmo now shows a
+clickable N/W badge next to the anchor (like Maya's extrude manipulator
+orientation toggle): N pulls along the component normal, W snaps the pull
+axis to the dominant world axis. Clicking the badge never starts a drag;
+world-mode face extrudes pass `direction=` through
+`extrude_imported_mesh_faces`. UI matrix H6j/H6k/H6l cover badge hit,
+axis restore, and world-mode commit — 36/36 PASS.
+
+Verification: plcaa_cleanup_matrix 15/15 (real game data),
+gmodeler_ui_matrix 36/36, gmodeler_tool_matrix 24/24,
+terrain_walkmesh_matrix 15/15, affected-area pytest 94 passed, payload gate
+17/17, full solution rebuild exit 0.
+
+## 2026-07-07 (late night)
+
+### [2026-07-07] Maya-style interactive extrude (Ctrl+E) + terrain paint -> wrapping walkmesh deep dive
+
+Owner: LordVaderCW
+Subsystem: GModeler interaction, imported-mesh ops, terrain builder, harnesses
+
+**Maya-style extrude.** Ctrl+E (or Face/Edge menu -> Extrude) now ARMS an
+interactive pull: a gizmo arrow draws at the face-region/edge anchor along
+the pull axis, LMB-drag maps mouse motion to meters along that axis with a
+live distance label, release commits ONE undoable extrude, Esc cancels.
+After a face extrude the new cap faces auto-select (yellow) so Ctrl+E pulls
+again immediately. New mesh op `extrude_imported_mesh_edge` (edges had no
+extrude): appends an outward in-plane quad — extends floors/walls.
+- panel: `arm_component_extrude` + `_begin/_update/_finish_component_extrude_drag`
+  + `select_map_studio_faces` (module_editor_viewport_panel.py, mirrored)
+- overlay: `_draw_map_studio_component_extrude_gizmo` (arrow + distance label)
+- window: `_commit_map_studio_component_extrude` routes to controller; menu
+  Extrude arms the same flow; controller gained "edge_extrude" op; registry
+  gained implemented edge Extrude action.
+- `scripts/gmodeler_ui_matrix.py` extended with H6a-H6i: arm from hover,
+  pixel->meter drag math, commit (+6 faces), cap auto-select, edge quad
+  (+2), Esc disarm, menu arming. 33/33 PASS.
+
+**Terrain paint -> walkmesh wrap.** New `scripts/terrain_walkmesh_matrix.py`
+(15/15 PASS): create 17x17 patch -> raise/smooth brush strokes -> proves the
+WOK wraps the sculpt by construction (WOK verts == render verts), 35-degree
+slope auto-classification walk/non-walk, mutual adjacency, walkability
+overlay parity, stroke undo, live sculpt-session frames, shrink-wrap
+placements, full module export, PyKotor WOK readback (walkable max height ==
+painted height), and the boundary policy's non-walk perimeter fence.
+Findings the dive produced:
+1. FIXED: `build_terrain_mesh` emitted flat (0,0,1) normals for every vertex
+   — sculpted hills lit like a plane in viewport and in game. Normals now
+   follow the painted slope via height central differences (`_grid_normals`).
+2. Verified-correct (not bugs): export refuses an entry point on a too-steep
+   face; steep sculpts export as non-walk; exporter adds a 3m non-walk
+   containment wall around the patch perimeter.
+
+Verification: gmodeler_ui_matrix 33/33, gmodeler_tool_matrix 24/24,
+terrain_walkmesh_matrix 15/15, payload gate 17/17, affected-area pytest
+82 passed / 1 pre-existing failure (t2704 rectangular-WOK contract drift,
+same family as the known t2601 failures; reproduces without these changes),
+full solution rebuild exit 0.
+
+### [2026-07-07] UI workflow matrix: every GModeler tool driven the way a MANUAL USER drives it — 24/24; modal dialogs removed from the normal flow
+
+Owner: LordVaderCW
+Subsystem: Map Studio window interaction layer, verification harness
+
+New `scripts/gmodeler_ui_matrix.py`: unlike the controller matrix below, this
+one exercises the REAL user pipeline headlessly inside an offscreen
+`ModuleEditorWindow` — switch to Edit (GModeler) mode, produce a hover
+context, RMB opens the GModeler panel (verified FACE/EDGE/VERTEX headers),
+activate each action through `_handle_map_studio_gmodeler_action`, verify
+geometry changed and undo exists. Also verifies: real projection-based hover
+candidates + picking work offscreen (H00/H01), Maya-style Shift multi-select
+of 3 faces then Delete removes exactly those 3 (H3), object-mode Delete
+removes the whole room (H4). 24/24 PASS. Rerun:
+`py -3.14 -u scripts/gmodeler_ui_matrix.py`.
+
+Manual-workflow tuning driven by the harness's friction metric (H5 counted
+6 modal QInputDialog prompts interrupting the flow):
+
+- **ZModeler-style immediate apply**: extrude/inset/move-face/move-edge/
+  move-vertex/weld no longer pop a modal dialog. They apply immediately with
+  a remembered per-action amount (sensible default first use) and rely on
+  Ctrl+Z. **Hold Ctrl while picking the action** to type an exact value,
+  which is then remembered for subsequent uses
+  (`_gmodeler_amount` in module_editor_window.py). H5 asserts zero dialogs
+  in the normal flow.
+- `gmodeler_tool_matrix.py` gained a `__main__` guard so it can be imported
+  as a fixture library without re-running the whole suite.
+- Note: the machine-specific moderngl access violation in offscreen mode is
+  worked around IN THE HARNESS ONLY by no-opping `VertexArray.render` —
+  projection/camera math still runs, GL submission is skipped. No product
+  code affected.
+
+Verification: `gmodeler_ui_matrix.py` 24/24, `gmodeler_tool_matrix.py`
+24/24, `tests/test_native_python_payloads.py` 17 passed, full solution
+rebuild exit 0.
+
+### [2026-07-07] Empirical tool matrix: every GModeler tool tested headlessly on a cube — 24/24
+
+Owner: LordVaderCW
+Subsystem: Tool verification harness, controller, WOK validator
+
+New `scripts/gmodeler_tool_matrix.py`: runs EVERY wired tool against an
+imported-mesh cube + a Create-menu cube primitive, printing PASS/FAIL.
+Initial run: 19/24. Fixes driven by the data:
+
+1. **Export WOK validator API mismatch** (blocked EVERY export incl. the
+   user's plcaa attempt): dev_module_smoke called PyKotor's read_bwm with a
+   regenerate_derived kwarg the installed version lacks — now falls back.
+2. **Selection-delete swallow**: `_delete_map_studio_component_selection`
+   returned True even when it deleted nothing, eating the Delete key and
+   blocking all fallbacks (the user's "couldn't delete yellow selection").
+   Now returns handled.
+3. **GModeler is universal — bake-on-edit**: any authored room (composition
+   primitive, floor plan, terrain) auto-bakes to an imported mesh on its
+   first component edit, so a translated Create-menu cube is editable (the
+   user's "translate then can't enter edit mode"). Preview "helper_<n>"
+   roles alias onto baked surface roles.
+4. Matrix had wrong method names for primitive delete/center-pivot/freeze —
+   the controller methods EXIST (`remove_authored_room_primitive`,
+   `center_authored_room_primitive_pivot`,
+   `freeze_authored_room_primitive_transform`); UI wiring of these to the
+   viewport selection remains open.
+
+Final matrix: 24/24 PASS (all 16 imported-mesh component ops, multi-face
+batch delete, undo, whole-room delete, full module export, primitive
+create/delete/pivot/freeze). t2601 x2 remain pre-existing failures (WOK
+contract drift, reproduced at clean HEAD). Solution rebuilt clean.
+
+## 2026-07-07 (night)
+
+### [2026-07-07] Maya-style component selection, whole-object delete, camera preservation
+
+Owner: LordVaderCW
+Subsystem: Viewport selection model, Delete routing, preview reload
+
+First confirmed in-app geometry edit this test ("delete face worked").
+User redesign adopted: YELLOW is now the SELECTION color, not an overlay.
+
+1. **Component selection set** (viewport panel + scene_models + overlay +
+   pipeline): in Edit/component modes, click selects a face/edge/vertex
+   (yellow fill/line/ring), Shift+click adds or toggles (Maya-style),
+   clicking empty space clears. Selection renders via a new
+   `_draw_map_studio_component_selection` overlay pass before the hover
+   highlight.
+2. **Delete deletes the whole yellow selection at once** — faces batch per
+   (room, surface) through `delete_imported_mesh_room_faces`; edges/vertices
+   route through the component-op dispatcher; selection clears after.
+3. **Object mode Delete = whole object** — the hovered-face delete route is
+   skipped in object mode (deleting one face when the user meant the whole
+   room was a bad surprise); hovered/selected placements and rooms delete
+   as objects.
+4. **Camera no longer resets after edits** — `_sync_room_preview_model`
+   snapshots the arcball (azimuth/elevation/distance/target) before
+   reloading the preview model and restores it when a preview was already
+   loaded.
+
+DEFERRED (explicitly, per user list): center-pivot/freeze that operate on
+imported rooms; placeable palette UX; texture-change discoverability.
+
+Verification: 75 tests + smoke pass; payloads regenerated; solution rebuilt
+clean (DLLs 21:14).
+
+## 2026-07-07 (evening, second pass)
+
+### [2026-07-07] Vanilla-module replacement readiness: lightmap re-emit + placement deletion
+
+Owner: LordVaderCW
+Subsystem: Module export, viewport deletion, replacement workflow
+
+Target acceptance test: edit plcaa geometry with GModeler, remove objects,
+repack as <root>.mod replacing the vanilla module, warp in. Research
+confirmed the mechanics (DeadlyStream/KOTOR Tool docs): a Modules/<root>.mod
+takes precedence over the paired .rim set; Override tops everything; no
+subfolders in Modules/Override.
+
+Changes:
+1. **Lightmap re-emit in export** — `_primitive_mesh_to_node` (export, both
+   mirrors) now applies the imported-surface render recipe (texture_names,
+   tex_count, lightmap name, lightmap UVs). The MDL writer already supported
+   the lightmap channel; exported edited rooms now reference the ORIGINAL
+   vanilla lightmap TPCs, so a replaced module keeps vanilla lighting
+   instead of rendering dark. Export test asserts the lightmap resref is in
+   the emitted MDL bytes.
+2. **Placement deletion from the viewport** — stock preview instance groups
+   carry placement_id as the hover resref; Delete now routes hovered or
+   click-selected placement ids through
+   `remove_authored_gameplay_placement` before the room-deletion path, so
+   "remove some of the objects" works by pointing at a crate and pressing
+   Delete.
+
+Replacement flow for the manual test: File -> Import Stock Module (plcaa's
+module) -> Make All Stock Rooms Editable -> GModeler edits + Delete objects
+-> Export/stage with the SAME module root -> install to Modules (backup is
+automatic) -> warp <root>.
+
+Verification: 113 tests pass (lightmap round-trip into MDL bytes asserted);
+smoke passes; payloads regenerated; solution rebuilt clean (exit 0, Tools
+DLL 18:36).
+
+## 2026-07-07 (evening)
+
+### [2026-07-07] Audit of failed GModeler test: texture-loss yellow slab + hover budget truncation
+
+Owner: LordVaderCW
+Subsystem: Imported-mesh conversion, authored preview, hover picking
+
+Frame-by-frame audit of the 18:06 manual-test video. What the user reported
+vs what actually happened:
+- "LYT did not become editable" — conversion DID succeed this time (banner
+  showed "1 authored room mesh(es)", stock row retired). But the converted
+  floor rendered as an UNTEXTURED YELLOW SLAB, which read as broken.
+  Root cause: plcaa's floor node keeps its diffuse map in texture_names[0]
+  (multi-texture + lightmap channel) with the plain `texture` attr empty;
+  conversion dropped texture_names/tex_count/lightmap/uvs_lm entirely.
+- "Yellow highlight interfered" — the yellow was the untextured slab, and
+  the (255,210,77) edge/vertex hover highlights were invisible against it.
+- "Faces/edges/vertices not detected properly" + "GModeler menu never
+  showed" — the 6000-face hover budget TRUNCATED plcaa (it has more
+  triangles), so most of the map was un-hoverable; RMB over unhovered
+  geometry fell back to the mode menu. Hover DID work on the low-index
+  faces (status bar showed correct face/edge hits all video).
+
+Fixes:
+1. **Conversion keeps the full render recipe**: ImportedMeshSurface gains
+   texture_names/tex_count/uvs_lm (lightmap existed); builder captures them
+   and falls back to texture_names[0] when `texture` is empty; compile puts
+   the recipe in mesh metadata; the authored preview `_mesh_node` applies it
+   (multi-texture + lightmap channel). KMAP payload round-trips the fields.
+   Regression test reproduces the exact plcaa node shape.
+2. **Hover budget 6000 -> 250000 safety ceiling** with a screen-space bucket
+   grid (96px cells, built once per camera-pose cache refresh): picking
+   scans only the cursor's bucket, so whole-map coverage stays fast.
+3. **Edge/vertex highlights**: bright orange (255,128,16) with heavier black
+   outline — visible against terrain and textured floors.
+
+Verification: 113 tests pass incl. the new multitexture regression; smoke
+passes; payload DLLs rebuilt 18:29 (host copy step blocked by the running
+app again — harmless; the root exe loads disk sources).
+
+## 2026-07-07 (afternoon)
+
+### [2026-07-07] GModeler manual-test fixes: silent conversion failure, overlay obstruction, Edit Mode
+
+Owner: LordVaderCW
+Subsystem: Stock room conversion, viewport overlays, mode menu
+
+User manual test (video) diagnosis:
+- "Make All Stock Rooms Editable did nothing": plcaa was a LYT-loaded loose
+  room with NO authored module, and conversion raised "No authored Map
+  Studio module..." into the status bar only — a silent failure. The room
+  stayed read-only stock, so no face edit could ever work.
+- The yellow footprint fill + guide grid (authored room outline overlay)
+  obstructed the real mesh, and its edge/point hit zones stole plain-LMB
+  clicks meant for GModeler.
+- The RMB mode menu still offered Object/Vertex/Select/Edge/Face — redundant
+  since GModeler picks all components by hover.
+
+Fixes:
+1. **Conversion auto-creates the authored module** when the KMAP has none
+   (minimal metadata + entry point at module root), so "edit any loaded
+   map" works from a bare Load LYT session. Failure ordering preserved (no
+   side effects when the resource manager is missing).
+2. **Convert-all failures now raise a warning dialog**, not just a status
+   line — silent failures cost a full manual test run.
+3. **Overlay suppression in edit mode**: while the GModeler hover probe is
+   active, room fill / outline guides / vertex+primitive handles are hidden
+   (presentation overrides applied after the test-pinned literals), and
+   outline/primitive hit zones no longer intercept LMB, so clicks reach
+   face selection.
+4. **Edit (GModeler) mode**: new toolbar edit mode with empty component mode
+   — hover picks vertices, edges, AND faces by proximity (true ZModeler, no
+   switching). RMB fallback menu redesigned: Edit Mode (GModeler), Object
+   Mode, Terrain, Placement. Legacy vertex/edge/face keys still work in the
+   runner for compatibility.
+
+Verification: headless — Edit mode activation drives probe(all) and Object
+restores face-only click-select; conversion on a loose-room KMAP now fails
+only on a missing resource manager (correct) instead of the missing module;
+smoke + 76 workflow/hover/payload/imported-mesh/terrain tests pass; the two
+pinning test suites updated to the new mode-menu contract. Payload DLLs
+rebuilt 15:35 (host post-build copy failed only because GhostRigger.exe was
+running during the build — relaunch picks up the new DLLs; no C++ changed).
+
+## 2026-07-06
+
+### [2026-07-07] Rebrand: GhostRigger -> Ghost-Studio (visual + git/GitHub)
+
+Owner: LordVaderCW
+Subsystem: App branding, splash, window titles, git/GitHub
+
+Visual product name changed GhostRigger -> Ghost-Studio (both GUI.Display +
+Tools mirrors AND the repo-root src/ mirror, all three kept byte-identical
+for the payload generator):
+- Splash: PRODUCT_TEXT, product_label, header_label ("Preparing
+  Ghost-Studio"), COPYRIGHT_TEXT; style_tokens splash.productText/
+  copyrightText. Rendered + screenshot-verified.
+- Main window APP_TITLE, About dialog (title + fallback), "Ghost-Studio
+  Developers" credit panel.
+- All panel/window titles: Character Builder, Sequence Editor, Texture
+  Tool, Rigging, Diagnostics, Module Editor, Blueprint Editor, Map Studio
+  Level Editor, Workspace dock.
+
+Deliberately NOT changed (would orphan user data / break the build, and are
+not visible chrome): the `GhostRigger.*` C++ project/namespace/DLL/RCDATA
+identifiers, the `GhostRigger` QSettings org key and platformdirs config
+dir, and internal docstrings. Export-metadata comments ("Generated by
+GhostRigger Map Studio") left as-is (not app chrome; pinned by tests).
+
+Git/GitHub (user-confirmed):
+- Local branch qt-ghostrigger -> ghost-studio.
+- GitHub repo CrispyW0nton/Kotor-3D-Model-Converter -> CrispyW0nton/
+  Ghost-Studio (gh repo rename; old URL auto-redirects). `github` remote URL
+  updated. Note: the GitHub repo never had the '-qt' suffix; that is only
+  the local folder name.
+- Pushed ghost-studio, set it as the repo default branch, deleted the old
+  qt-ghostrigger remote branch.
+
+KNOWN NOT DONE (needs the user / external):
+- Logo art `assets/icons/ghostrigger_*.png` has "GHOSTRIGGER" baked into the
+  raster image; cannot be regenerated in-code. Needs a new Ghost-Studio logo.
+- Local folder rename (Kotor-3D-Model-Converter-qt -> Ghost-Studio) cannot be
+  done from inside the running session; commands handed to the user.
+
+Verify: 17 payload identity tests pass (all three mirrors byte-identical);
+py_compile clean; splash rendered showing Ghost-Studio. Solution rebuilt.
+
+### [2026-07-07] Terrain painting create-patch loop wired (backend was orphaned)
+
+Owner: LordVaderCW
+Subsystem: Terrain patch creation, terrain painting UI
+
+The terrain sculpt backend (6 shape presets, 10 brushes, live sculpt-frame
+pipeline with dirty-region updates + commit-on-release) was fully built and
+wired to the viewport brush — but ORPHANED: nothing created the terrain room
+it needs to target. The `terrain_patch` belt button routed to
+`add_authored_room_primitive`, which only handles composition primitives,
+never terrain heightfields. So terrain painting had nothing to paint on.
+
+Changes:
+1. **`create_terrain_patch`** (controller, both mirrors): adds a sculptable
+   `TerrainHeightfieldPrimitive` room to the authored module (auto-creating
+   the module via `create_terrain_room_project` if the KMAP has none),
+   optional shape preset, unique resref on repeat, one undoable command.
+2. **`_create_and_focus_map_studio_terrain_patch`** (window): the
+   `terrain_patch` belt button now creates the patch, selects it in the
+   terrain room combo, picks the raise brush, enables the viewport brush,
+   and switches to Terrain edit mode — one click from "no terrain" to
+   "painting".
+
+Verified end-to-end headlessly: create patch -> appears as a paintable
+terrain room -> brush stroke mutates it -> undo restores -> second patch
+gets a unique resref -> flat patch exports a full module (mdl/mdx/wok/lyt/
+vis/are/git/ifo/pth). New `tests/test_map_studio_terrain_patch.py` (2 tests).
+Also confirmed a real content guard: a raised preset correctly fails
+entry-point-on-floor export validation.
+
+Tests: 113 pass across terrain/workflow/hover/imported-mesh/payload/export.
+Payloads regenerated; solution rebuilt.
+
+### [2026-07-07] Map Studio UI/UX cleanup pass (dead weight removed)
+
+Owner: LordVaderCW
+Subsystem: Map Studio window, tool belt, dock tabs, outliner
+
+Professional UI pass with before/after offscreen screenshots. Verified the
+functional pillars headlessly along the way.
+
+Dead weight removed:
+- Deleted `radial_marking_menu.py` (both mirrors) — deprecated/unwired since
+  the GModeler popup shipped.
+- Deleted the "Planned / Missing" tool-marking submenu (6 non-functional
+  entries) — roadmap lives in the audit brief + dimmed GModeler actions.
+
+Decluttered:
+- Tool belt: the ~20-button Maya shelf is now 6 pinned essentials (Select,
+  Move, Duplicate, Delete, Paint WOK Surface, Paint Material) plus grouped
+  Create ▾ / Tools ▾ / Mode ▾ dropdowns. Per-key buttons stay findable and
+  clickable (tests unaffected). Label "Default Tool Belt" → "Belt".
+- Rooms tab: three help paragraphs collapsed to a one-line header +
+  tooltip; the dock now shows controls, not prose.
+- Builder tab: four guide paragraphs collapsed to tooltips.
+- Outliner: name column stretches, Type column fits contents — no more
+  "Scen..."/"Auth..." truncation. Full labels now read (Scene Objects,
+  Authored Rooms, Modules, Loose Rooms, Blueprints, ...).
+- Workflow tabs: elide + expanding tab bar instead of scroll arrows; left
+  dock min width 240 → 300.
+
+Functional pillars verified headlessly (not just compiled):
+- Placement: all 9 KOTOR object kinds place through
+  `add_authored_gameplay_placement` (creature, placeable, door, waypoint,
+  trigger, encounter, sound, camera, store) — this is the trees/rocks/ruins
+  path (placeables).
+- Terrain: sculpt MATH works (6 shape presets + 10 brushes; gentle_mound
+  raises center to 0.6, corners 0.0; brush-stroke/sculpt-frame pipeline
+  present). GAP: no surfaced "create terrain patch → paint" UI loop yet;
+  the viewport terrain brush needs a terrain room to target.
+- ZModeler: 15 wired ops (prior passes), tests green.
+
+Tests: workflow-panel + hover + payload suites pass (56); rooms/builder
+source-inspection tests updated for the tooltip move; payload count
+1212 → 1210 after the two file deletions. Identity-file GPU test still
+crashes offscreen (pre-existing moderngl access violation).
+
+### [2026-07-06] Full Map Studio audit + export-to-game blockers fixed
+
+Owner: LordVaderCW
+Subsystem: Export/proof invalidation, stock room baking, audit
+
+Audit brief: `Saved/Codex/brief_map_studio_full_audit.md` (modding-ecosystem
+research vs Map Studio, stub inventory, dead-weight cleanup list, priority
+roadmap anchored on open → edit → export → in-game).
+
+Fixes for the in-game loop:
+1. **t2912 fixed** — `_mark_map_studio_export_proof_stale` (both controller
+   mirrors) now REMOVES stale stage/proof keys after an edit instead of
+   restoring them from the previous payload, resets
+   runtime_resources/game_tested/manual_proof_required, and defers to the
+   bridge's richer `export_proof_invalidation` (edited_rooms,
+   latest_operation) instead of clobbering it.
+2. **t2683 fixed** — the test's launch-helper assertion contradicted six
+   sibling tests: grdev01 keeps its bespoke smoke pipeline; the generic
+   `launch_authored_module_smoke_test.py` remains for all other roots
+   (covered by the grgold01 staging test).
+3. **Make All Stock Rooms Editable** (File menu + controller
+   `convert_all_stock_rooms_to_imported_mesh`): bakes every stock KMAP room
+   to imported geometry (real MDL surfaces + stock WOK) so export packages
+   the complete map — the missing step between "edit one room of plcaa" and
+   "warp into the whole map in game".
+
+Verification: 76 export/readiness/bridge/game-proof tests pass (was 4
+failing: 2 fixed, 2 confirmed pre-existing at clean HEAD — t2601 WOK
+contract drift, logged in the audit). 70 payload/hover/export tests pass;
+smoke passes; solution rebuilt (DLLs 21:16).
+
+### [2026-07-06] Selection workflow repair after failed manual test
+
+Owner: LordVaderCW
+Subsystem: Viewport selection, Delete routing, undo shortcuts, Edit menu
+
+User manual test found the core workflow broken: no way to select geometry
+in the viewport, Delete key did nothing useful, no marquee multi-select,
+Ctrl+Z/Ctrl+R appeared dead (the Edit-menu actions existed but were
+disabled because no edits ever landed — a selection problem, not an undo
+problem), and Center Pivot / Freeze Transforms were undiscoverable.
+
+Changes:
+1. **Click-select rooms in the viewport** (`module_editor_viewport_panel.py`
+   both mirrors + window): plain LMB click (press+release without drag —
+   camera drags unaffected) on any hovered geometry selects that room;
+   Ctrl/Shift-click adds/toggles. Status bar reports the selection and the
+   Delete hint. Clicking empty space clears the selection.
+2. **Ctrl+LMB marquee** (QRubberBand): drag-release selects every room whose
+   projected geometry intersects the rectangle (reuses the cached hover
+   candidates); Shift keeps the existing selection.
+3. **Delete key chain**: hovered component → selected rooms (one undoable
+   batch via new controller `delete_map_studio_rooms`, removing stock KMAP
+   rows AND authored rooms) → selected authored primitive → scene object.
+4. **Redo alias**: Ctrl+Y added beside Ctrl+R (Edit-menu actions already
+   owned Ctrl+Z/Ctrl+R window-wide).
+5. **Center Pivot / Freeze Transforms** added to the Edit menu, executing
+   the existing `center_pivot` / `freeze_transform` tool-belt routes.
+
+Verification: headless smoke now runs the full loop — click-select a stock
+room row, Delete removes it, undo restores it — and passes. 67 tests pass.
+Payloads regenerated (Display, Tools, Scene); solution rebuilt (DLLs 13:46).
+Known remaining gap (next slice): interactive click-drag modeling to replace
+the distance dialogs — the "seamless ZModeler feel" item.
+
+### [2026-07-06] Delete key deletes hovered geometry + exe launch-path audit
+
+Owner: LordVaderCW
+Subsystem: Map Studio Delete key routing, host launch paths
+
+1. **Delete key** (`module_editor_window.py`): pressing Delete now deletes
+   the hovered component first — face/edge/vertex, with stock rooms
+   auto-converting to editable geometry — then falls back to the selected
+   authored primitive, then the selected scene object. Same undoable path
+   as the GModeler menu Delete actions.
+2. **Launch-path audit** (documented from `main.py` +
+   `Native.Core.Host/Private/main.cpp`): the host sets
+   `GHOSTRIGGER_NATIVE_BUILD_OUTPUT_DIR` to the exe's own directory.
+   `build/vs/x64/Debug/GhostRigger.exe` therefore loads embedded RCDATA
+   payloads from the DLLs beside it; the repo-root `GhostRigger.exe`
+   (byte-identical host binary) finds no DLLs beside it and falls back to
+   loading Python from live disk sources (repo `src/` + every
+   `native/*/Python` payload tree). Both paths serve current code after a
+   payload regen + rebuild; the root exe additionally reflects disk edits
+   without a rebuild — this is the real "dev source mode".
+
+Verification: smoke extended with Delete-key routing (face/vertex hover +
+no-hover fallback) and passes; 42 hover/imported-mesh/payload tests pass;
+solution rebuilt clean (Tools DLL 11:21); root exe md5-identical to the
+freshly built host exe.
+
+### [2026-07-06] GModeler menu completeness pass (user screenshot review)
+
+Owner: LordVaderCW
+Subsystem: GModeler registry vocabulary, face Split op
+
+Second pass against the user's ZBrush menu screenshots (POLYGON/EDGE/POINT
+action inventories) before manual testing:
+1. **face_split implemented** (`split_imported_mesh_face`, both mirrors):
+   centroid insert — one triangle becomes three with interpolated UV/normal
+   (ZModeler "Insert Point" / "Split"). Wired through the component-op
+   dispatcher + panel; 15 actions now execute.
+2. **Registry vocabulary expanded** to read like the reference menus, as
+   dimmed scaffold with KOTOR guardrails: face Inflate/Equalize, edge
+   Extrude/Align/Close/Unweld, vertex Extrude/Slide. Deliberately excluded
+   (no KOTOR authoring meaning): NanoMesh, Mesh To Brush, Spherize, QMesh,
+   Add To Curve/Make Curve, Set Camera Perpendicular, ZModeler Modifiers.
+
+Verification: 61 tests pass (new centroid-split test), smoke passes,
+payloads regenerated, solution rebuilt (DLLs 11:07).
+
+### [2026-07-06] GModeler full component toolset: 14 face/edge/vertex actions live
+
+Owner: LordVaderCW
+Subsystem: Imported-mesh component ops, GModeler edge/vertex UI wiring
+
+The GModeler panel now executes a full KOTOR-relevant toolset across all
+three component contexts (verified against the ZBrush reference video's
+POLYGON/EDGE/POINT menus):
+- FACE (8): Extrude, Inset, Move, Delete, Set Texture, Flat, Flip + Do Nothing
+- EDGE (4): Move, Split, Collapse, Delete
+- VERTEX (3): Move, Weld/Stitch, Delete
+
+Changes:
+1. **Position-welded component core** (`authored_imported_mesh.py`, both
+   mirrors): stock meshes duplicate vertices at UV seams and texture-surface
+   boundaries, so edge/vertex ops key on rounded world positions and edit
+   every co-located copy across ALL surfaces (`_position_key`,
+   `_translate_positions`, `_snap_positions`, `_drop_degenerate_faces`).
+   New ops: `move_imported_mesh_vertex/edge`, `weld_imported_mesh_vertex`
+   (nearest-neighbor snap + degenerate cleanup),
+   `delete_imported_mesh_vertex_faces` (fan delete),
+   `delete_imported_mesh_edge_faces`, `split_imported_mesh_edge` (midpoint
+   insert into every adjacent face, UV/normal interpolated),
+   `collapse_imported_mesh_edge` (midpoint merge),
+   `flatten_imported_mesh_faces` (average-plane projection),
+   `flip_imported_mesh_faces` (winding reverse + exclusive-normal negate).
+   Ops that would empty the room are rejected.
+2. **Controller** — `apply_imported_mesh_room_component_op` dispatches all
+   nine ops with undo + stale-output metadata.
+3. **UI wiring** — the window routes edge/vertex hover contexts (which the
+   hover picker already classifies by proximity) through the same
+   auto-convert-then-edit flow as faces; Move ops prompt for a distance
+   along the hovered face normal, Weld prompts for max snap distance.
+   Registry: face_flat/face_flip/edge_collapse/edge_delete added;
+   14 actions implemented=True. Unimplemented KOTOR-relevant scaffold
+   remaining: face_bevel, face_material_region, face_mask, edge_bevel,
+   edge_bridge, edge_slide, edge_crease, vertex_split, walkmesh actions.
+   Out-of-scope ZBrush ops (QMesh booleans, NanoMesh, Spherize, Dynamic
+   Subdivision) intentionally not replicated for KOTOR authoring.
+
+Verification: 78 tests pass (3 new: seam-welded vertex ops across surfaces,
+edge split/collapse/delete adjacency, flatten coplanarity + flip winding).
+Headless smoke passes. Panels for all three contexts rendered and visually
+verified against the reference video structure. Payloads regenerated;
+solution rebuilt (MSBuild Debug x64).
+
+### [2026-07-06] GModeler Phase 3 start: Extrude, Inset, Move faces live end-to-end
+
+Owner: LordVaderCW
+Subsystem: Imported-mesh geometry ops, GModeler action wiring
+Spec: `Ghidra/projects/active/ZBrush/findings/handoffs/GMODELER_FINAL_HANDOFF.md`
+(meets its checklist item "at least 3 actions functional end-to-end").
+
+Changes:
+1. **Core ops** (`authored_imported_mesh.py`, Scene+Tools mirrors):
+   - `extrude_imported_mesh_faces` — region extrude along averaged normal
+     (SHIFT=Point Normal uses per-vertex normals): cap keeps original UVs,
+     boundary edges grow side quads with world-density tiled UVs, orphaned
+     vertices compacted. Cap is duplicated, not welded (fine for KOTOR
+     render meshes; WOK untouched).
+   - `inset_imported_mesh_faces` — per-face centroid inset (border ring of
+     6 side tris + inner face); UVs interpolate toward the UV centroid so
+     mapping survives (doorway/recess workflow).
+   - `move_imported_mesh_faces` — translate face vertices (shared vertices
+     drag neighbors); UVs untouched.
+2. **Controller** — `extrude/inset/move_imported_mesh_room_faces` wrappers
+   with undo + stale-output metadata via `_apply_imported_mesh_room_edit`.
+3. **Wiring** — registry `face_extrude`/`face_inset`/`face_move` are
+   implemented=True (5 face actions live total); window prompts for
+   distance/inset via QInputDialog (interactive drag is a later phase),
+   Move offsets along the hovered face normal, SHIFT at activation =
+   Point Normal extrude. Stock rooms still auto-convert on first edit.
+4. **Handoff correction:** `GHOSTRIGGER_DEV_SOURCE_MODE=1` (claimed live
+   disk loading in GMODELER_FINAL_HANDOFF §GhostRigger Constraints) does
+   not exist anywhere in the host code — solution-level MSBuild rebuild
+   remains the only way to refresh embedded payloads.
+
+Verification: 21 imported-mesh/hover tests pass (3 new op tests: cap+side
+face counts and UV density, inset ring, shared-vertex move), 48
+payload/dispatch/component tests pass, headless smoke updated for wired
+actions and passes. Payloads regenerated; solution rebuilt (DLLs 10:33).
+
+### [2026-07-06] Vanilla-matching UVs for new geometry + KOTOR polycount guardrails
+
+Owner: LordVaderCW
+Subsystem: Imported-mesh UV generation, validation
+
+Answering "will new pieces texture-match vanilla modules?": yes — vanilla
+KOTOR architecture uses tiling level textures at consistent world-space
+density, so new geometry blends when its UVs are world-position / tile-size.
+
+Changes (authored_imported_mesh.py, Scene+Tools mirrors):
+1. `tiled_uvs_for_vertices(vertices, tile_size)` — world-space dominant-axis
+   projection (one repeat per tile-size meters). Replaces normalized 0..1
+   planar as the compile/merge UV fallback (0..1 stretched one repeat across
+   whole surfaces — wrong for level geometry; kept as preview-only helper).
+2. `surface_uv_tile_size` / `matched_uv_tile_size` — sample a vanilla
+   surface's meters-per-repeat density (same texture preferred) so new faces
+   tile at the same rate as the room they extend.
+3. Polycount guardrails in validation: blocking at
+   `MDL_MAX_VERTICES_PER_SURFACE` (65535 — MDL u16 index limit) and a
+   warning at `ROOM_TRIANGLE_WARNING_BUDGET` (15000 tris/room).
+
+Verification: 11 imported-mesh tests pass (3 new: tiled density, vanilla
+density sampling, polycount guardrails). Payloads regenerated (Scene,
+Tools); solution rebuilt (MSBuild Debug x64).
+
+### [2026-07-06] GModeler map editing: edit stock rooms, retexture faces, export as new module
+
+Owner: LordVaderCW
+Subsystem: Imported-mesh room primitive, GModeler face actions, texture browser, export
+
+Goal delivered: load a game map (KMAP with stock rooms), edit its geometry
+face-by-face through the GModeler panel, and compile the result as a new
+module — plus a Set Texture face action with a thumbnail browser over every
+texture in the game directory.
+
+Changes:
+1. **Imported-mesh room primitive** — new `authored_imported_mesh.py`
+   (Scene+Tools mirrors): `ImportedMeshRoomPrimitive` bakes a stock room MDL
+   into editable per-texture surfaces (world transforms baked, original UVs
+   and normals preserved, stock WOK parsed via `WOKData.from_bytes` with a
+   flat-floor fallback). Face ops: `delete_imported_mesh_faces` (vertex
+   compaction, empty-surface removal), `set_imported_mesh_face_texture`
+   (splits faces into a surface of the new texture or merges into an
+   existing one — UVs travel with the faces), `planar_uvs_for_vertices`
+   fallback for geometry without UVs. KMAP payloads pack vertex data as
+   base64 float32/int32 blocks (a stock room is too big for inline JSON
+   lists). Wired into `compile_authored_room_spec`, project validation, and
+   the KMAP bridge (`type: imported_mesh`), so preview, undo snapshots, and
+   export all flow through the existing seams.
+2. **Stock room → editable conversion** — controller
+   `convert_stock_room_to_imported_mesh` loads the stock model + WOK
+   (Override/KEY-BIF, then the import-source RIM), keeps the room's LYT
+   position, retires the read-only stock KMAP room row, and records one
+   undoable command. `delete_imported_mesh_room_faces` /
+   `set_imported_mesh_room_face_texture` apply face edits with full undo.
+   Stock preview mesh roles are now indexed (`stock_room_<i>`) so a hovered
+   face maps 1:1 onto the baked surface (`_flattened_mesh_nodes` traversal
+   order == import bake order).
+3. **GModeler wiring** — `face_delete` and new `face_set_texture` registry
+   actions are implemented=True. The window intercepts them: hovering a
+   stock room auto-converts it first, then applies the edit ("Same Texture
+   Faces" target edits the whole surface). Everything else still reports its
+   guardrail read-only.
+4. **Texture browser** — new `texture_browser_dialog.py` (Display+Tools):
+   filterable thumbnail grid over `resource_manager.list_textures()` with
+   lazy TPC/TGA decoding (QTimer batches via `load_texture_image`),
+   double-click/OK selection; used by Set Texture.
+5. **UV automation** — imported stock geometry keeps its original UVs, so
+   retexturing needs no unwrap; new faces fall back to planar projection.
+   For full auto-unwrap + packing, the RizomUVMCP workspace
+   (`C:\...\Workspaces\RizomUVMCP`) provides `run_full_pipeline`
+   (seam planning → RizomUV native or xatlas+Blender fallback → packed UVs,
+   OBJ/FBX out) — the planned bridge is: export edited surfaces to OBJ, run
+   the pipeline, re-import UVs onto the imported-mesh primitive.
+6. **Mirror repair** — Scene/Tools `module_editor_controller.py` had drifted
+   (T3005 stock import existed only in Tools); Tools (superset) now syncs to
+   Scene, both including the new conversion/face-edit methods.
+
+Verification: 77 tests pass (8 new imported-mesh tests incl. end-to-end
+export: converted room → packaged .mod with room MDL/WOK; stock preview,
+hover, dispatch, KMAP bridge, payloads, component editing). Export suite: 36
+pass, 2 deselected failures (`test_t2912_style_edit...`,
+`test_t2683_controller_installs...`) reproduce on a clean HEAD worktree —
+pre-existing, unrelated. Headless smoke passes. Payload manifests
+regenerated (Scene, Tools, GUI.Display; payload count 1208 → 1212). Solution
+rebuilt (MSBuild Debug x64).
+
+### [2026-07-06] GModeler Phase 2b: true ZModeler sectioned panel + stock-geometry hover
+
+Owner: LordVaderCW
+Subsystem: Map Studio GModeler menu, viewport hover picker, module editor window
+
+Root cause of failed manual test (user video, 2026-07-06 08-12): (1) the exe
+was never rebuilt after Phase 2 — Tools DLL was from 07-05 21:35, GUI.Display
+DLL from 07-04 22:29, so RCDATA served pre-GModeler code; (2) the user was in
+Object mode, where the hover probe was disabled, so RMB fell through to the
+legacy Maya-style flat QMenu; (3) the Phase 2 cascade layout did not match the
+real ZModeler panel (frame analysis of the user's ZBrush capture shows one
+sectioned panel: ACTIONS grid + TARGET grid + MODIFIERS, all visible at once).
+
+Changes:
+1. **Widget rewritten as the true ZModeler sectioned panel**
+   (`gmodeler_marking_menu.py`, Display+Tools mirrors): header
+   "GMODELER | <CONTEXT> ACTIONS", ACTIONS grid (up to 3 columns, includes
+   Do Nothing), TARGET grid for the current action, MODIFIERS hint strip.
+   Sticky selections like ZModeler (current action per context, target per
+   action, class-level so reopening remembers). Clicking an ACTION executes
+   with the current target and closes; clicking a TARGET re-targets and keeps
+   the panel open. Keyboard: arrows/Enter/Space/Escape.
+2. **Object-mode hover** (`module_editor_window.py`): Object mode now enables
+   the hover probe with component mode "object"; the viewport picks faces only
+   (tolerance 0) in that mode, so RMB over any geometry — including loaded
+   stock rooms like plcaa — opens the GModeler panel instead of the Maya menu.
+3. **Hover scaling for stock modules** (`module_editor_viewport_panel.py`,
+   both mirrors): offscreen-triangle culling (64px margin) before candidates
+   count against the 6000-face budget, and a candidate cache keyed on a
+   camera-projection signature + model identities, so candidates are rebuilt
+   only when the camera/scene changes instead of on every mouse move.
+
+Verification: 55 tests pass (hover context incl. rewritten sectioned-panel
+runtime test, dispatch, component editing, native payloads). Headless smoke
+passes with new Object-mode assertions. py_compile clean. Payload manifests
+regenerated (Display+Tools). Solution rebuilt via MSBuild Debug x64 so the
+next manual run includes this code.
+
+### [2026-07-06] GModeler Phase 2: compact ZModeler marking menu replaces radial pie
+
+Owner: LordVaderCW
+Subsystem: Map Studio marking menu (GModeler), module editor window wiring
+
+Changes:
+1. **New GModeler popup** — `gmodeler_marking_menu.py` (GUI.Display + Tools
+   mirrors): compact cursor-anchored text popup per the ZModeler RE findings
+   (video frame analysis confirmed ZModeler uses a text list at cursor, NOT a
+   radial pie). Instant open/close, Action → Target submenu cascade
+   (single-target actions emit immediately), keyboard navigation
+   (Up/Down/Enter/Space, digits 1-9, Escape backs out of target view then
+   dismisses), "Do Nothing" always last, unimplemented registry actions render
+   dimmed but still surface the KOTOR guardrail via the window handler.
+   Registry (`map_studio_marking_menu_registry`) stays the sole owner of the
+   action/target/modifier vocabulary; the widget is presentation-only.
+2. **Window wiring** — `module_editor_window.py`:
+   `_open_map_studio_radial_marking_menu` → `_open_map_studio_gmodeler_marking_menu`,
+   `_handle_map_studio_radial_action` → `_handle_map_studio_gmodeler_action`,
+   instantiates `MapStudioGModelerMarkingMenu`. Flat-QMenu fallback for the
+   no-hover case is preserved (T2600 contract).
+3. **Radial pie deprecated** — `radial_marking_menu.py` (both mirrors) marked
+   DEPRECATED in its docstring; no production code instantiates it. Retained
+   until the GModeler popup passes a full manual test, then it gets deleted.
+   First step of the broader Maya-style tool deprecation for Map Studio.
+4. **Phase 0 audit brief** — `Saved/Codex/brief_gmodeler_audit.md`: geometry
+   backend audit (no half-edge mesh needed for P0; floor-plan/composition ops
+   already exist headless; hover picker needs candidate caching; radial vs
+   text-popup conflict resolved in favor of RE findings).
+
+Verification: 87 Map Studio tests pass (hover context incl. new GModeler
+widget runtime test, dispatch, component editing, command history, KB
+cross-ref, workflow panel). 17 payload tests pass after regenerating all
+payload manifests (`native_python_payload_generator.py --all`; expected
+payload file count 1206 → 1208). Headless smoke `scripts/_smoke_hover_slice.py`
+passes (open/cascade/close + read-only dispatch). py_compile clean. Known
+pre-existing failure (unrelated, reproduced on stashed HEAD): moderngl access
+violation in `test_map_studio_level_editor_identity.py::test_t2600_..._runtime`
+during offscreen GPU render. Note: a stash/pop during verification normalized
+LF → CRLF on ~40 uncommitted files (project convention is CRLF), which is why
+manifests for other projects were regenerated too. DLL rebuild required before
+manual testing (RCDATA shadows disk).
+
+## 2026-07-05
+
+### [2026-07-05] T3005: Full stock module import (RIM→KMAP) + KB cross-reference fixes
+
+Owner: LordVaderCW
+T###: T3005 (Map Studio full module import + KOTOR engine correctness)
+Subsystem: Map Studio module import, KOTOR contract validation, MDL writer
+
+Changes:
+1. **Full stock module import** — `stock_module_importer.py` (Scene+Tools):
+   Reads ARE/GIT/IFO/LYT/VIS from a module RIM, converts GIT placements
+   (creatures/placeables/doors/triggers/encounters/sounds/cameras/stores/
+   waypoints), ARE metadata, IFO entry point, LYT room positions, and VIS
+   room visibility pairs into an editable AuthoredModuleProject.
+   New helpers: `lyt_room_positions_from_resource()`,
+   `lyt_room_positions_from_rim()`, `vis_pairs_from_resource()`.
+   Controller: `import_stock_module_from_rim()`.
+   Window: File → Import Stock Module (RIM)... action + handler.
+
+2. **Multi-level walkmesh overlap warning** (KB cross-ref):
+   `map_studio_base_game_contract.py` warns when rooms have overlapping XY
+   footprints at different Z heights (engine `GetRoom()` returns first room
+   in array order, not nearest Z — bridges over ground always navigate at
+   ground level).
+
+3. **surfacemat.2da 3-bit field logic** (KB cross-ref):
+   `SURFACE_BITFIELDS` dict with `LineOfSight` (bit 0), `Walk` (bit 1),
+   `WalkCheck` (bit 2). Surface 7 (NonWalk) has zero flags — engine never
+   tests it during pathfinding. Query functions: `is_walkable_surface()`,
+   `is_los_blocking_surface()`, `is_walkcheck_surface()`.
+
+4. **-0.0 sanitization in MDL writer** (KB cross-ref):
+   `mdl_writer.py` `_sanitize_float()` converts NaN/Inf→0.0 and -0.0→+0.0
+   (prevents Linux/Wine crashes). Applied to `_wf32()` and all vertex/
+   normal/UV `struct.pack_into` calls.
+
+Verification: 28 tests pass (stock importer, base contract, hover context,
+KB cross-ref). 17 payload byte-identity tests pass. Payload manifests
+regenerated for Scene, Tools, Workflow. DLLs rebuilt (Scene+Tools fresh
+at 21:35 with `import_stock_module` embedded). py_compile clean on all
+touched files.
+
+## 2026-07-04
+
+### [2026-07-04] T3001: Map Studio stock KOTOR geometry rendering + minimal UI layout
+
+Owner: LordVaderCW
+T###: T3001 (Map Studio truthful textured rendering groundwork)
+Subsystem: Map Studio viewport preview + window/toolbar layout
+(Scene/Tools/GUI.Display payloads)
+
+Root cause fixed: Load LYT indexed rooms but rendered nothing because
+ModuleEditorWindow never pushed the game ResourceManager into the viewport
+(set_resource_manager was never called) and the preview model only contained
+authored primitives - stock LYT rooms and GIT instances had no geometry path.
+
+New core module (Scene + Tools payloads, byte-identical):
+- map_studio_stock_content_preview.py: TemplateModelResolver resolves GIT
+  template resrefs to renderable MDL resrefs with the correct chains
+  (UTC Appearance_Type -> appearance.2da modeltype B ? modela : race;
+  UTP Appearance -> placeables.2da modelname; UTD GenericType ->
+  genericdoors.2da modelname; UTM stores geometry-free by design) and the
+  correct Aurora res-type ids (UTC 2027 / UTP 2044 / UTD 2042 - NOTE:
+  resource_manager.py's own RES_UTC/RES_UTD constants are wrong, do not
+  swap). append_stock_content_to_preview_root bakes loaded KotorModel
+  meshes into flat root->group->mesh nodes (world_transform baked into
+  group-local vertices, skin nodes translation-only, AABB/non-render
+  skipped, bearing rotation, lightmap UVs preserved, _gr_map_studio_stock_*
+  tags). build_map_studio_combined_preview_model merges authored + stock
+  under one root and rewrites _gr_map_studio_preview_key from the stock
+  composition so the viewport reloads when either side changes. All
+  failures degrade to warnings + marker fallback, never crashes.
+
+Controller (module_editor_controller.py, Scene + Tools byte-identical):
+- map_studio_viewport_preview_model(resource_manager=): merged preview
+  with per-game model cache and last_map_studio_stock_preview_warnings;
+  returns the authored-only preview unchanged when headless.
+
+Window (module_editor_window.py, Tools):
+- _sync_map_studio_viewport_resource_manager wires the ResourceManager
+  into the viewport texture cache once per (manager, game) in _refresh_all.
+- _refresh_all now feeds the viewport the merged stock+authored preview
+  and logs stock preview warnings (deduplicated).
+- _apply_map_studio_minimal_layout (T3001 UI cleanup): hides the scope
+  banner, Workspace row, command-readiness banner, and tool-belt tab
+  chrome; widgets stay constructed for dispatch/tests.
+
+Toolbar (module_editor_toolbar.py, Tools + GUI.Display byte-identical):
+- HIDDEN_DUPLICATE_ACTIONS hides the five buttons duplicating File/Tools
+  menu entries; the 16-button Modeling strip (exact duplicates of
+  tool-belt dispatcher keys) is hidden by default. All buttons remain
+  constructed and dispatch-reachable.
+
+Tests/guards updated:
+- New tests/test_map_studio_stock_content_preview.py (6 cases): resolver
+  kind routing + fail-closed, room flattening/tagging, bearing rotation,
+  warning surfacing, preview-key change on stock composition change,
+  stock-only standalone model / None fallback. All pass.
+- tests/test_authored_module_export.py guard now asserts the merged
+  preview wiring (map_studio_viewport_preview_model) in window source and
+  both controller mirrors.
+- tests/test_native_python_payloads.py payload count 1202 -> 1204 (new
+  module packaged into Scene + Tools).
+
+Verification: py_compile on all touched files; runtime import smoke test
+(py -3.14, stacked payload paths) confirms controller method + module
+exports; payload regeneration for GhostRigger.Core.Scene / Tools /
+GUI.Display; pytest: test_map_studio_stock_content_preview (6 passed),
+test_native_python_payloads (17 passed), test_native_core_package_registry
++ test_native_module_package_sweep (38 passed),
+test_map_studio_workflow_panel (32 passed),
+test_map_studio_tool_action_dispatch (19 passed),
+test_authored_module_export (35 passed; t2912 and t2683 failures proven
+pre-existing by stash-baseline runs - unrelated to T3001: t2912 is
+proof-invalidation on apply_authored_room_style, t2683 expects
+launch_authored_module_smoke_test.py in launch_helper_command).
+test_map_studio_level_editor_identity crashes with a pre-existing Windows
+access violation at the delete-key runtime test when run as a full suite
+(baseline control crashes identically; the test passes in isolation both
+with and without T3001 edits).
+Pending visible proof: Debug-app Load LYT session confirming stock room
+geometry renders (requires VS Debug build with regenerated payloads or
+GHOSTRIGGER_DEV_SOURCE_MODE=1).
+
+### [2026-07-04] T2904/T2905: Map Studio hover picker, ZModeler radial menu scaffold, base-game module contract gates
+
+Owner: LordVaderCW
+T###: T2904 (Map Studio shell consolidation), T2905 (WOK editor UI groundwork)
+Subsystem: Map Studio viewport interaction + core validation (Scene/Tools/GUI.Display payloads)
+
+First slice of the ZModeler/terrain revamp (Fable 5 handoff). Read-only:
+no geometry mutation paths added.
+
+New core modules (Scene + Tools payloads, byte-identical):
+- map_studio_hover_context.py: headless hover classification
+  (vertex/edge/face/walkmesh_face) from pre-projected screen candidates,
+  5px tolerance, depth tie-break, walkmesh preference for walkmesh/terrain
+  modes.
+- map_studio_marking_menu_registry.py: ZModeler Action+Target+Modifier
+  vocabulary as data (Face 7 / Edge 6 / Vertex 4 / Walkmesh 4 actions),
+  every action carries KOTOR guardrail + resource impacts + tool-belt key;
+  all implemented=False in this slice.
+- map_studio_base_game_contract.py: export gates distilled from a full scan
+  of all 199 base-game modules (117 K1 + 82 K2): ARE Rooms==LYT rooms,
+  VIS symmetry, WOK-per-room, single IFO area, PTH presence, walkable-face
+  presence, surface-id vocabulary, resref length, shadows-off norm.
+
+New GUI (Tools + Display payloads, byte-identical):
+- radial_marking_menu.py: QPainter radial menu (center=cancel, 8 sectors,
+  footer target/modifier hints), palette-driven colors (theme-safe).
+- module_editor_viewport_panel.py: hoverContextChanged signal,
+  set_map_studio_hover_probe(), candidate projection from authored preview
+  model + terrain walkability overlay via renderer _proj.
+- module_editor_window.py: RMB opens radial menu when hover context exists,
+  falls back to the existing flat mode marking menu otherwise (T2600
+  contract preserved); component-mode changes drive the hover probe;
+  status-bar hover echo; unimplemented radial actions report read-only
+  status, implemented ones route to existing tool-belt actions.
+- scene_models/overlay_layers/rendering_pipeline (GUI.Display): hover
+  highlight overlay (face tint, edge/vertex markers, WOK green/red).
+
+Research artifacts (Saved/Codex/): brief_kotor_net_analysis.md (Kotor.NET
+deep dive: WOK serializer contract, live-GFF pattern, save-alternatives UX,
+GPU-ID picking), brief_kpl_video_analysis.md (KPL DSL + Area Designer video
+UX), base_module_scan.json + base_module_contract_summary.md (full base-game
+scan, scripts/scan_base_game_modules.py). New knowledgebase doc:
+docs/knowledgebase/basegamemodulecontract.md.
+
+Payload manifests regenerated for Core.Scene, Core.Tools, Core.GUI.Display
+(manifest count 1187 -> 1202; includes files from other in-flight sessions
+picked up by regeneration).
+
+Verification: py_compile on all touched files; pytest
+test_map_studio_hover_context.py (7) + test_map_studio_base_game_contract.py
+(8) + test_native_python_payloads.py (17) + T2600 marking-menu guards (2) +
+test_map_studio_workflow_panel.py (32) all pass on py -3.14; headless
+offscreen smoke (scripts/_smoke_hover_slice.py) exercises hover probe,
+radial open/close, and read-only action dispatch through ModuleEditorWindow.
+Visible Debug-app test still required for hover highlight + radial menu.
+
+### [2026-07-04] T2532: Disable animation base-bind for creature imports
+
+Owner: CrispyW0nton
+T###: T2532
+Subsystem: Character Builder creature skinning (Core.Workflow payload)
+Intersects: T2530 (creature bind integrity), T2531 (skeleton authority)
+
+Root cause: apply_template_rig unconditionally set
+_gr_use_animation_base_bind_for_preview=True on all template-rigged mesh
+nodes. This routes the skinning palette through set_bind_pose_from_anim()
+which builds inverse bind matrices from the animation t=0 pose. This is
+correct for vanilla KOTOR skin vertices (authored in t=0 pose space), but
+imported creature meshes fit by the auto-fit pipeline have vertices in
+REST-pose space. Applying base-bind to rest-pose-space vertices produced
+severe deformation on 16 of 29 Rancor animations with POSITION tracks.
+
+Fix: Gate the flag on creature detection (anim_scale != 1.0). Creature
+imports fall through to the hierarchy bind fallback (gpu_skinning.py
+~line 1048) which correctly handles rest-pose vertices. Humanoid models
+keep the existing path. Env escape: GHOSTRIGGER_FORCE_ANIM_BASE_BIND=1.
+
+Files: character_builder.py (apply_template_rig, ~line 1486)
+
+Verification: Full 29-animation deformation audit: BEFORE 102/169 failing
+(max stretch 121.09), AFTER 9/169 failing (max stretch 25.73) = vanilla
+parity. py_compile passed. Diff: 21 insertions, 1 deletion.
+
+NOTE: Earlier T2532 entries from today's prior sessions (hand stabilizer,
+triangle-soup weld, smoothing, etc.) were in the uncommitted working tree
+and need to be re-added from session history if required.
+
 ## 2026-07-01
 
 ### [2026-07-02] T2525: External auto-fit refreshes viewport bounds after transform

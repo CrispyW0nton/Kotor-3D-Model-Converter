@@ -20,6 +20,11 @@ from .authored_room_composition import (
     create_rectangular_room_composition,
     validate_authored_room_composition,
 )
+from .authored_imported_mesh import (
+    ImportedMeshRoomPrimitive,
+    compile_imported_mesh_room_geometry,
+    validate_imported_mesh_room_primitive,
+)
 from .authored_room_floorplan import FloorPlanRoomPrimitive, compile_floor_plan_room_geometry, validate_floor_plan_room_primitive
 from .authored_room_geometry import AuthoredRoomGeometry, RectangularRoomPrimitive, build_rectangular_room_geometry
 from .authored_terrain_builder import (
@@ -30,7 +35,13 @@ from .authored_terrain_builder import (
 
 
 Vec3 = tuple[float, float, float]
-RoomPrimitiveIntent = Union[RectangularRoomPrimitive, FloorPlanRoomPrimitive, AuthoredRoomComposition, TerrainHeightfieldPrimitive]
+RoomPrimitiveIntent = Union[
+    RectangularRoomPrimitive,
+    FloorPlanRoomPrimitive,
+    AuthoredRoomComposition,
+    TerrainHeightfieldPrimitive,
+    ImportedMeshRoomPrimitive,
+]
 _RESREF_PATTERN = re.compile(r"^[A-Za-z0-9_]+$")
 
 
@@ -58,39 +69,49 @@ def authored_resref_blocking_issue(label: str, value: Any) -> str | None:
     return None
 
 
-def _local_transition_tags(placements: AuthoredGameplayPlacement) -> set[str]:
-    tags: set[str] = set()
-    for items in (
-        tuple(getattr(placements, "doors", ()) or ()),
-        tuple(getattr(placements, "triggers", ()) or ()),
-        tuple(getattr(placements, "waypoints", ()) or ()),
+def _local_transition_targets(placements: AuthoredGameplayPlacement) -> dict[str, set[int]]:
+    """Map local destination tags to the engine link types that can resolve them."""
+
+    targets: dict[str, set[int]] = {}
+    for link_type, items in (
+        (1, tuple(getattr(placements, "doors", ()) or ())),
+        (2, tuple(getattr(placements, "waypoints", ()) or ())),
     ):
         for item in items:
             tag = str(getattr(item, "tag", "") or "").strip()
             if tag:
-                tags.add(tag)
-    return tags
+                targets.setdefault(tag, set()).add(link_type)
+    return targets
 
 
 def _validate_local_transition_targets(placements: AuthoredGameplayPlacement, blocking: list[str]) -> None:
-    local_tags = _local_transition_tags(placements)
+    local_targets = _local_transition_targets(placements)
     for kind, items in (
         ("Door", tuple(getattr(placements, "doors", ()) or ())),
         ("Trigger", tuple(getattr(placements, "triggers", ()) or ())),
-        ("Waypoint", tuple(getattr(placements, "waypoints", ()) or ())),
     ):
         for item in items:
             linked_to = str(getattr(item, "linked_to", "") or "").strip()
             linked_module = normalise_resref(getattr(item, "linked_to_module", ""))
             if not linked_to or linked_module:
                 continue
-            if linked_to in local_tags:
+            linked_to_flags = int(getattr(item, "linked_to_flags", 0) or 0)
+            valid_types = local_targets.get(linked_to, set())
+            if linked_to_flags in valid_types:
                 continue
             label = str(getattr(item, "tag", "") or getattr(item, "template_resref", "") or "(unnamed)").strip()
-            blocking.append(
-                f"{kind} {label} links to local destination {linked_to}, but no authored local door, "
-                "trigger, or waypoint has that tag. Add a matching waypoint or set LinkedToModule for a cross-module transition."
-            )
+            expected = "door" if linked_to_flags == 1 else "waypoint" if linked_to_flags == 2 else "typed door/waypoint"
+            if valid_types:
+                actual = "/".join("door" if value == 1 else "waypoint" for value in sorted(valid_types))
+                blocking.append(
+                    f"{kind} {label} links to local {expected} {linked_to}, but that tag belongs to a local {actual}. "
+                    "Choose the matching LinkedToFlags target type."
+                )
+            else:
+                blocking.append(
+                    f"{kind} {label} links to local {expected} {linked_to}, but no authored local door or waypoint "
+                    "has that tag. Add a matching destination or set LinkedToModule for a cross-module transition."
+                )
 
 
 @dataclass(frozen=True)
@@ -190,6 +211,10 @@ def validate_authored_module_project(project: AuthoredModuleProject) -> Authored
             terrain_validation = validate_terrain_heightfield_primitive(room.primitive)
             warnings.extend(terrain_validation.warnings)
             blocking.extend(terrain_validation.blocking_issues)
+        elif isinstance(room.primitive, ImportedMeshRoomPrimitive):
+            imported_validation = validate_imported_mesh_room_primitive(room.primitive)
+            warnings.extend(imported_validation.warnings)
+            blocking.extend(imported_validation.blocking_issues)
         elif isinstance(room.primitive, RectangularRoomPrimitive):
             if float(room.primitive.width) <= 0.0 or float(room.primitive.depth) <= 0.0:
                 blocking.append(f"Room {resref} rectangular primitive requires positive width and depth.")
@@ -232,6 +257,8 @@ def compile_authored_room_spec(room: AuthoredRoomSpec) -> AuthoredRoomGeometry:
         return compile_floor_plan_room_geometry(room.primitive)
     if isinstance(room.primitive, TerrainHeightfieldPrimitive):
         return compile_terrain_room_geometry(room.primitive)
+    if isinstance(room.primitive, ImportedMeshRoomPrimitive):
+        return compile_imported_mesh_room_geometry(room.primitive)
     if isinstance(room.primitive, RectangularRoomPrimitive):
         return build_rectangular_room_geometry(room.primitive)
     raise TypeError(f"Unsupported authored room primitive: {type(room.primitive)!r}")

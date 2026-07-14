@@ -131,8 +131,8 @@ def test_t2907_map_studio_viewport_draws_terrain_walkability_overlay() -> None:
     assert "def clear_map_studio_terrain_brush_cursor" in scene_models_source
     assert "def _draw_map_studio_terrain_walkability" in overlay_source
     assert "def _draw_map_studio_terrain_brush_cursor" in overlay_source
-    assert "terrain walkability" in panel_source
-    assert "terrain walkability" in mirrored_panel_source
+    assert "WOK {validation_state}" in panel_source
+    assert "WOK {validation_state}" in mirrored_panel_source
     assert "mapStudioViewportTerrainBrushCheckBox" in panel_source
     assert "def _set_terrain_brush_cursor" in panel_source
     assert "mapStudioViewportTerrainBrushCheckBox" in mirrored_panel_source

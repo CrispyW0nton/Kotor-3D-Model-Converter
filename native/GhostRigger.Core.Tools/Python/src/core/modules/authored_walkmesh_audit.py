@@ -198,24 +198,28 @@ def audit_authored_wok(room_resref: str, wok: Any) -> AuthoredWalkmeshAudit:
         blocking.append(f"Room {label} generated WOK has no walkable faces.")
     if invalid_faces:
         blocking.append(f"Room {label} generated WOK has {len(invalid_faces)} face(s) with invalid vertex indices.")
+    # Degenerate/non-manifold/steep/island findings are advisory: vanilla
+    # BioWare WOKs ship all of them (001ebo alone has degenerate faces, a
+    # >45deg walkable face, and intentionally disconnected walkable islands)
+    # and run fine in game, so stock round-trips must not be vetoed by them.
     if degenerate_faces:
-        blocking.append(f"Room {label} generated WOK has {len(degenerate_faces)} degenerate face(s).")
+        warnings.append(f"Room {label} generated WOK has {len(degenerate_faces)} degenerate face(s).")
     if non_manifold_edge_count:
-        blocking.append(f"Room {label} generated WOK has {non_manifold_edge_count} non-manifold walkable edge(s).")
+        warnings.append(f"Room {label} generated WOK has {non_manifold_edge_count} non-manifold walkable edge(s).")
     if open_edge_count:
         warnings.append(
             f"Room {label} generated WOK has {open_edge_count} open/boundary walkable edge(s); "
             "confirm each one is an intentional room perimeter, doorway seam, or transition boundary before export."
         )
     if steep_walkable_faces:
-        blocking.append(
+        warnings.append(
             f"Room {label} generated WOK has {len(steep_walkable_faces)} walkable face(s) steeper than "
-            f"{MAX_WALKABLE_SLOPE_DEGREES:.1f} degrees; paint them blocked/ramp-safe or flatten the terrain before export."
+            f"{MAX_WALKABLE_SLOPE_DEGREES:.1f} degrees; paint them blocked/ramp-safe if creatures should not path there."
         )
     if component_count > 1:
-        blocking.append(
+        warnings.append(
             f"Room {label} generated WOK has {component_count} disconnected walkable island(s); "
-            "bridge/weld/snap room floors or remove isolated walkable faces before export."
+            "bridge/weld/snap room floors if they should be one navigable area."
         )
     if face_count > 0 and walkable_face_count == face_count:
         warnings.append(f"Room {label} WOK is fully walkable; paint blockers for walls, pits, or out-of-bounds floor if needed.")

@@ -9,7 +9,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6 import QtWidgets  # noqa: E402
+from PySide6 import QtCore, QtWidgets  # noqa: E402
 
 from src.gui.qt_lib.panels.qt_inspector_panel import QtInspectorPanel  # noqa: E402
 
@@ -164,3 +164,94 @@ def test_import_fit_report_shows_core_quality_summary(inspector):
     assert "Fit readiness: Skeleton-driven Auto-Fit passed" in text
     assert "8 skeleton pairs, RMS 0.040, max 0.080" in text
     assert "Final skeleton: selected KOTOR base" in text
+
+
+def test_import_fit_controls_remain_readable_in_the_packaged_inspector_width(qapp):
+    panel = QtInspectorPanel()
+    try:
+        panel.set_step(1)
+        panel.resize(380, 425)
+        panel.show()
+        qapp.processEvents()
+
+        scroll = panel._stack.currentWidget()
+        assert isinstance(scroll, QtWidgets.QScrollArea)
+        assert scroll.horizontalScrollBarPolicy() == QtCore.Qt.ScrollBarAlwaysOff
+        assert scroll.horizontalScrollBar().maximum() == 0
+        assert scroll.verticalScrollBar().maximum() > 0
+        assert scroll.widget().width() == scroll.viewport().width()
+
+        fit_group = panel.findChild(
+            QtWidgets.QGroupBox,
+            "CharacterBuilderImportFitGroup",
+        )
+        assert fit_group is not None
+        fit_layout = fit_group.layout()
+        assert isinstance(fit_layout, QtWidgets.QFormLayout)
+        assert fit_layout.rowWrapPolicy() == QtWidgets.QFormLayout.WrapLongRows
+
+        expected_labels = {
+            "CharacterBuilderFitScaleLabel": "Scale",
+            "CharacterBuilderFitPosXLabel": "Pos X",
+            "CharacterBuilderFitPosYLabel": "Pos Y",
+            "CharacterBuilderFitPosZLabel": "Pos Z",
+            "CharacterBuilderFitRotXLabel": "Rot X",
+            "CharacterBuilderFitRotYLabel": "Rot Y",
+            "CharacterBuilderFitRotZLabel": "Rot Z",
+            "CharacterBuilderFitSourceForwardLabel": "Source Forward",
+            "CharacterBuilderFitSourceUpLabel": "Source Up",
+            "CharacterBuilderFitHeightLabel": "Height",
+            "CharacterBuilderFitGroundLabel": "Ground",
+        }
+        targets: list[QtWidgets.QWidget] = []
+        for object_name, text in expected_labels.items():
+            label = panel.findChild(QtWidgets.QLabel, object_name)
+            assert label is not None
+            assert label.text() == text
+            targets.append(label)
+
+        targets.extend(
+            widget
+            for widget in (
+                panel._fit_scale_spin,
+                panel._fit_pos_x_spin,
+                panel._fit_pos_y_spin,
+                panel._fit_pos_z_spin,
+                panel._fit_rot_x_spin,
+                panel._fit_rot_y_spin,
+                panel._fit_rot_z_spin,
+                panel._fit_source_forward_combo,
+                panel._fit_source_up_combo,
+                panel._fit_height_source_combo,
+                panel._fit_ground_basis_combo,
+                panel.findChild(QtWidgets.QPushButton, "CharacterBuilderResetFitButton"),
+                panel.findChild(
+                    QtWidgets.QPushButton,
+                    "CharacterBuilderRefitToSelectedBaseButton",
+                ),
+                panel.findChild(
+                    QtWidgets.QLabel,
+                    "CharacterBuilderFitAdjustmentStatusLabel",
+                ),
+                panel.findChild(
+                    QtWidgets.QLabel,
+                    "CharacterBuilderImportFitReportLabel",
+                ),
+            )
+            if widget is not None
+        )
+        assert len(targets) == len(expected_labels) + 15
+
+        viewport_rect = scroll.viewport().rect()
+        for widget in targets:
+            scroll.ensureWidgetVisible(widget, 0, 0)
+            qapp.processEvents()
+            origin = widget.mapTo(scroll.viewport(), QtCore.QPoint(0, 0))
+            widget_rect = QtCore.QRect(origin, widget.size())
+            visible_rect = viewport_rect.intersected(widget_rect)
+            assert visible_rect.width() == widget.width()
+            assert visible_rect.height() == widget.height()
+            assert widget.height() >= widget.minimumSizeHint().height()
+    finally:
+        panel.close()
+        panel.deleteLater()

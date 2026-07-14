@@ -4681,8 +4681,14 @@ def test_moderngl_sprite_material_panel_state_reaches_renderer_shader() -> None:
     assert "sprite_emissive" in _FRAG_SRC
     assert "self._sprite_alpha_source(nd)" in render_source
     assert "not self._has_sprite_material_override(node)" in render_source
-    assert "_node_classification_signature(nodes)" in render_source
-    assert "_node_cache_signature" in invalidate_source
+    assert "_node_classification_signature(nodes)" not in render_source
+    assert "self._node_cache_built_revision != self._node_classification_revision" in render_source
+    assert "len(nodes) != self._node_cache_node_count" in render_source
+    assert "_gr_classification_revision" in render_source
+    revision = renderer._node_classification_revision
+    renderer.invalidate_node_cache()
+    assert renderer._node_classification_revision == revision + 1
+    assert "self._node_classification_revision += 1" in invalidate_source
 
 
 def test_kmax_scene_object_sprite_material_overrides_round_trip() -> None:
@@ -10320,17 +10326,19 @@ def test_main_window_exposes_module_meshes_as_detachable_dock() -> None:
     assert "self.module_geometry_panel.set_module_browser_only(True)" in layout_source
     assert '"module_meshes"' in layout_source
     assert "self.module_meshes_panel_action" in actions_source
-    assert 'self._icon("module_meshes")' in actions_source
+    assert 'self._icon(MAIN_ACTION_ICON_KEYS["module_meshes"])' in actions_source
     assert "self.mesh_tools_panel_action" in actions_source
     assert 'self._icon("mesh_tools")' in actions_source
     assert "self.output_log_panel_action" in actions_source
     assert 'self._icon("output_log")' in actions_source
     assert "self.python_terminal_panel_action" in actions_source
     assert 'self._icon("python_terminal")' in actions_source
-    assert "modules_menu.addAction(self.module_meshes_panel_action)" in menu_source
-    assert "modules_menu.addAction(self.mesh_tools_panel_action)" in menu_source
-    assert "modules_menu.addAction(self.output_log_panel_action)" in menu_source
-    assert "modules_menu.addAction(self.python_terminal_panel_action)" in menu_source
+    assert 'window_menu = self.menuBar().addMenu("Window")' in menu_source
+    assert "self.module_meshes_panel_action," in menu_source
+    assert "self.mesh_tools_panel_action," in menu_source
+    assert "self.output_log_panel_action," in menu_source
+    assert "self.python_terminal_panel_action," in menu_source
+    assert "self._add_menu_action(window_menu, action)" in menu_source
     assert "self.module_geometry_panel.show_model(self._active_viewport_model())" in refresh_source
     assert "self.viewport.meshSelectionChanged.connect(self.module_geometry_panel.select_module_meshes)" in layout_source
     assert "self.viewport.meshVisibilityChanged.connect(self._on_viewport_mesh_visibility_changed)" in layout_source
@@ -12567,3 +12575,138 @@ def test_wgpu_frustum_culling_keeps_animated_skinned_meshes_visible() -> None:
     )
 
     assert renderer._mesh_data_outside_frustum(mesh, unit_cube_planes) is False
+
+
+def test_main_viewport_lighting_panel_applies_persisted_preview_controls() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.core.lighting.settings import LightingSettings
+    from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtLightingPanel()
+    calls: list[tuple] = []
+    viewport = SimpleNamespace(
+        set_lighting_mode=lambda mode: calls.append(("lighting", mode)),
+        set_texture_map_enabled=lambda name, enabled: calls.append(("map", name, enabled)),
+        set_lightmap_settings=lambda intensity, mode: calls.append(("lightmap", intensity, mode)),
+        set_shader_complexity_mode=lambda mode: calls.append(("complexity", mode)),
+    )
+    panel._settings = LightingSettings(
+        scene_lighting_mode="fullbright",
+        diffuse_map=True,
+        normal_map=False,
+        environment_map=False,
+        specular_map=True,
+        lightmap_map=True,
+        lightmap_intensity=0.7,
+        lightmap_mode="baked",
+        shader_complexity_mode="lighting_cost",
+    )
+    try:
+        panel.apply_preview_settings_to_viewport(viewport)
+    finally:
+        panel.deleteLater()
+
+    assert calls == [
+        ("lighting", "fullbright"),
+        ("map", "diffuse", True),
+        ("map", "normal", False),
+        ("map", "environment", False),
+        ("map", "specular", True),
+        ("map", "lightmap", True),
+        ("lightmap", 0.7, "baked"),
+        ("complexity", "lighting_cost"),
+    ]
+
+
+def test_main_viewport_lighting_panel_reapplies_one_preview_rig_without_stacking() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+    from PySide6 import QtWidgets
+
+    from src.core.lighting.settings import LightingSettings
+    from src.gui.qt_lib.panels.qt_lighting_panel import QtLightingPanel
+
+    QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = QtLightingPanel()
+    panel._settings = LightingSettings(selected_lighting_rig_preset="neutral_studio")
+    model = SimpleNamespace(all_nodes=lambda: [])
+    try:
+        panel.set_model(model)
+        first_nodes = list(getattr(model, "_gr_generated_lights", []) or [])
+        panel.set_model(model)
+        second_nodes = list(getattr(model, "_gr_generated_lights", []) or [])
+    finally:
+        panel.deleteLater()
+
+    assert len(first_nodes) == 3
+    assert len(second_nodes) == 3
+    assert all(str(getattr(node, "source_type", "")) == "GeneratedRig" for node in second_nodes)
+    assert all(bool(getattr(node, "light_enabled", False)) for node in second_nodes)
+    assert all(bool(getattr(node, "_gr_light_deleted", False)) for node in first_nodes)
+
+
+def test_main_viewport_syncs_lighting_on_construction_and_regular_model_load() -> None:
+    from src.gui.windows.application_core.shared.main_layout import MainWindowLayoutMixin
+    from src.gui.windows.application_core.shared.resource_loading import ResourceLoadingMixin
+
+    expected = "self.lighting_panel.apply_preview_settings_to_viewport(self.viewport)"
+    assert expected in inspect.getsource(MainWindowLayoutMixin._build_layout)
+    assert expected in inspect.getsource(ResourceLoadingMixin._on_model_loaded)
+
+
+def test_moderngl_lightmap_preview_mode_preserves_baked_shading() -> None:
+    from src.adapters.rendering.moderngl_renderer_impl import GpuRenderer
+
+    renderer = GpuRenderer()
+    uniforms = {
+        "u_scene_lighting": SimpleNamespace(value=-1),
+        "u_scene_ambient": SimpleNamespace(value=-1.0),
+        "u_scene_light_count": SimpleNamespace(value=-1),
+    }
+
+    renderer.lighting_mode = "lightmap_preview"
+    renderer._upload_scene_lights(None, uniforms, [])
+    assert uniforms["u_scene_lighting"].value == 3
+
+    renderer.lighting_mode = "fullbright"
+    renderer._upload_scene_lights(None, uniforms, [])
+    assert uniforms["u_scene_lighting"].value == 0
+
+    renderer.lighting_mode = "scene"
+    renderer._upload_scene_lights(None, uniforms, [])
+    assert uniforms["u_scene_lighting"].value == 1
+
+
+def test_generated_ambient_preview_lights_are_global_in_moderngl() -> None:
+    from src.adapters.rendering.moderngl_renderer_impl import GpuRenderer
+    from src.core.lighting.lighting_rig_presets import LightingRigPresets
+    from src.core.rendering.gpu_shaders import _FRAG_SRC
+
+    lights = LightingRigPresets.create("exterior_moonlight")
+    ambient = next(light for light in lights if light.type == "ambient")
+    assert ambient.ambient_only is True
+
+    node = SimpleNamespace(
+        is_light=True,
+        light_enabled=True,
+        light_kind="ambient",
+        light_ambient_only=ambient.ambient_only,
+        light_color=ambient.color,
+        light_radius=ambient.radius,
+        light_multiplier=ambient.intensity,
+        light_cone_degrees=ambient.cone_angle,
+        light_area_size=ambient.area_size,
+    )
+    record = GpuRenderer()._scene_light_records(
+        [node],
+        lambda _node: ((1000.0, 1000.0, 1000.0), (0.0, 0.0, 0.0, 1.0)),
+    )[0]
+
+    assert record["kind"] == 4
+    assert record["ambient_only"] == 1
+    assert "else if (kind == 4)" in _FRAG_SRC
+    assert "u_scene_light_ambient_only[i] == 1 || kind == 4" in _FRAG_SRC

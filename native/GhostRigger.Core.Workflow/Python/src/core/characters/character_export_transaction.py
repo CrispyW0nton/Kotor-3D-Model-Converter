@@ -449,6 +449,9 @@ def _verify_reloaded_payload_contract(
             ("faces", "character.export.reload_payload_face_count_changed", "face count"),
             ("bone_map_count", "character.export.reload_payload_bone_map_count_changed", "bone-map count"),
             ("skin_rows", "character.export.reload_payload_skin_rows_changed", "skin row count"),
+            ("uv_count", "character.export.reload_payload_uv_count_changed", "UV count"),
+            ("uv_digest", "character.export.reload_payload_uv_rows_changed", "UV rows"),
+            ("texture_digest", "character.export.reload_payload_textures_changed", "texture references"),
         ):
             if expected.get(key) == actual.get(key):
                 continue
@@ -476,7 +479,7 @@ def _verify_reloaded_payload_contract(
             code="character.export.reload_payload_verified",
             message=(
                 "Reloaded MDL/MDX preserved imported Character Builder payload "
-                "mesh geometry and skin binding counts."
+                "mesh geometry, UV rows, textures, and skin binding counts."
             ),
             details=_json_safe({
                 "payload_names": payload_names,
@@ -608,6 +611,8 @@ def _payload_summary(node: Any) -> dict[str, Any]:
     bone_map = list(getattr(node, "bone_map", []) or [])
     while bone_map and not str(bone_map[-1] or "").strip():
         bone_map.pop()
+    uvs = _payload_uvs_for_reload_contract(node)
+    textures = _payload_texture_refs(node)
     return {
         "name": str(getattr(node, "name", "") or ""),
         "is_mesh": bool(getattr(node, "is_mesh", False)),
@@ -616,7 +621,62 @@ def _payload_summary(node: Any) -> dict[str, Any]:
         "faces": len(list(getattr(node, "faces", []) or [])),
         "bone_map_count": len(bone_map),
         "skin_rows": len(list(getattr(node, "skin_data", []) or [])),
+        "uv_count": len(uvs),
+        "uv_digest": _digest_float_pairs(uvs),
+        "texture_refs": textures,
+        "texture_digest": _digest_strings(textures),
     }
+
+
+def _payload_uvs_for_reload_contract(node: Any) -> list[tuple[float, float]]:
+    """Return expected reloaded UV rows in KOTOR MDX orientation."""
+
+    result: list[tuple[float, float]] = []
+    flip_v = getattr(node, "uv_v_flip", True) is False
+    for raw in list(getattr(node, "uvs", []) or []):
+        try:
+            u = float(raw[0])
+            v = float(raw[1])
+        except Exception:
+            continue
+        if flip_v:
+            v = 1.0 - v
+        result.append((u, v))
+    return result
+
+
+def _payload_texture_refs(node: Any) -> list[str]:
+    refs: list[str] = []
+    for attr in (
+        "texture",
+        "lightmap",
+        "bump_map",
+        "txi_envmaptexture",
+        "txi_bumpmaptexture",
+    ):
+        text = str(getattr(node, attr, "") or "").strip()
+        if text and text.upper() not in {"NULL", "NONE"}:
+            refs.append(text.lower())
+    for value in list(getattr(node, "texture_names", []) or []):
+        text = str(value or "").strip()
+        if text and text.upper() not in {"NULL", "NONE"}:
+            refs.append(text.lower())
+    return sorted(set(refs))
+
+
+def _digest_float_pairs(values: list[tuple[float, float]]) -> str:
+    digest = hashlib.sha256()
+    for u, v in values:
+        digest.update(f"{u:.7f},{v:.7f};".encode("ascii"))
+    return digest.hexdigest()
+
+
+def _digest_strings(values: list[str]) -> str:
+    digest = hashlib.sha256()
+    for value in values:
+        digest.update(str(value).encode("utf-8", errors="replace"))
+        digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def _write_validation_artifacts(

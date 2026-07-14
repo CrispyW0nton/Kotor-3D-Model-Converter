@@ -42,6 +42,7 @@ class SceneLightRenderData:
     hovered: bool
     visible: bool
     revision: int
+    helper_visible: bool = True
     active_selected: bool = False
     original_ref: object | None = field(default=None, compare=False)
 
@@ -156,7 +157,7 @@ def build_light_helper_line_batches(lighting: SceneLightingRenderData | None) ->
         return []
     batches: dict[tuple[float, float, float], list[Vec3]] = {}
     for light in lighting.lights:
-        if not light.visible:
+        if not light.visible or not light.helper_visible:
             continue
         color = _helper_color(light, getattr(lighting, "helper_palette", None))
         vertices = _marker_lines(light)
@@ -171,7 +172,7 @@ def build_light_volume_line_batches(lighting: SceneLightingRenderData | None) ->
         return []
     batches: dict[tuple[float, float, float], list[Vec3]] = {}
     for light in lighting.lights:
-        if not light.visible:
+        if not light.visible or not light.helper_visible:
             continue
         color = _helper_color(light, getattr(lighting, "helper_palette", None))
         vertices = _volume_lines(light)
@@ -235,6 +236,7 @@ def _light_from_node(
         hovered=node is hovered_node,
         visible=not bool(getattr(node, "_gr_light_hidden", False)) and not bool(getattr(node, "_gr_light_deleted", False)),
         revision=int(getattr(node, "_gr_light_revision", 0) or 0),
+        helper_visible=not bool(getattr(node, "_gr_light_helper_hidden", False)),
         original_ref=node,
     )
 
@@ -245,6 +247,7 @@ def _lighting_revision(lights: tuple[SceneLightRenderData, ...], *settings: obje
             light.node_id,
             light.enabled,
             light.visible,
+            light.helper_visible,
             light.selected,
             light.active_selected,
             light.light_type,

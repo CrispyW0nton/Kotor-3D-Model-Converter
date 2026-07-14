@@ -266,7 +266,7 @@ a launcher and native workspace first, not a rewrite of the application.
   verification bridge only; the active embedded Python runtime still imports
   the original `src/` files until a later extraction/import path is implemented
   and verified.
-- `GhostRigger.exe` depends on every payload DLL project for build order and
+- `GhostStudio.exe` depends on every payload DLL project for build order and
   probes the DLL set before Python starts. After the native log console opens,
   the host checks DLL load state, version/capability exports, and payload file
   counts, then writes the audit directly to the console before `main.py` begins

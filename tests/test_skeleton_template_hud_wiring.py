@@ -407,8 +407,8 @@ def test_character_builder_has_rig_tool_belt_and_marking_menus() -> None:
     assert "rigTransformMarkingMenuRequested" in viewport_variants
     assert "rigToolsMarkingMenuRequested" in viewport_variants
     assert "DEFAULT_VIEWPORT_TOOLBAR_VISIBLE = False" in viewport_variants
-    assert "viewport_map_studio_modeling_tabs" in viewport_variants
-    assert "tabs.hide()" in viewport_variants
+    assert "DEFAULT_MAP_STUDIO_AUTHORING_CHROME = True" in viewport_variants
+    assert "tabs.hide()" not in viewport_variants
 
 
 def test_selected_imported_mesh_outline_uses_projected_mesh_hover_path_not_bbox() -> None:

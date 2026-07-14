@@ -18,7 +18,7 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from .custom_module_packager import (
     CustomModulePackRequest,
@@ -51,7 +51,14 @@ from .authored_module_project import (
 from .authored_room_floorplan import FloorPlanRoomPrimitive, FloorPlanWallOpening
 from .authored_room_primitives import PrimitiveMaterial
 from .authored_module_layout import compile_authored_module_layout
-from .authored_module_metadata import AuthoredAreaMetadata, authored_module_id_bytes, compile_authored_module_metadata
+from .authored_module_metadata import (
+    AuthoredAreaMetadata,
+    FULLBRIGHT_LIGHTING_PROFILE,
+    authored_lighting_is_fullbright,
+    authored_lighting_profile,
+    authored_module_id_bytes,
+    compile_authored_module_metadata,
+)
 from .authored_module_pathing import AuthoredPathAnchor, compile_authored_pathing_for_module
 from .authored_room_materials import (
     AuthoredRoomMaterialPreflight,
@@ -391,7 +398,7 @@ def _import_mdl_runtime() -> tuple[Any, Any]:
 
 
 def _make_git_bytes(request: DevModuleSmokeRequest) -> bytes:
-    return build_git_bytes(_make_gameplay_placement(request))
+    return build_git_bytes(_make_gameplay_placement(request), game=request.game)
 
 
 def _room_primitive(request: DevModuleSmokeRequest) -> RectangularRoomPrimitive:
@@ -522,6 +529,11 @@ def _make_authored_project(request: DevModuleSmokeRequest) -> AuthoredModuleProj
                 "task": "T2601",
                 "source": "map_studio:authored_project",
                 "room_geometry_mode": "floor_plan",
+                "lighting": {
+                    "profile": "fullbright",
+                    "source": "map_studio:dev_module_smoke_fullbright",
+                    "purpose": "canonical_graybox_visibility",
+                },
             },
         )
     if mode not in {"rectangular_composition", "rectangular", "composition"}:
@@ -541,6 +553,11 @@ def _make_authored_project(request: DevModuleSmokeRequest) -> AuthoredModuleProj
             "task": "T2601",
             "source": "map_studio:authored_project",
             "room_geometry_mode": "rectangular_composition",
+            "lighting": {
+                "profile": "fullbright",
+                "source": "map_studio:dev_module_smoke_fullbright",
+                "purpose": "canonical_graybox_visibility",
+            },
         },
     )
 
@@ -680,7 +697,9 @@ def _validate_gameplay_templates(
     return checks, [f"Gameplay templates resolved against KOTOR install: {game_root}"]
 
 
-def _primitive_mesh_to_node(md: Any, mesh: PrimitiveMesh, parent: Any) -> Any:
+def _primitive_mesh_to_node(md: Any, mesh: PrimitiveMesh, parent: Any, *, fullbright: bool = False) -> Any:
+    diffuse = (1.0, 1.0, 1.0) if fullbright else mesh.diffuse
+    ambient = (1.0, 1.0, 1.0) if fullbright else mesh.ambient
     node = md.ModelNode(
         name=mesh.name,
         flags=int(md.NodeFlags.MESH),
@@ -690,22 +709,30 @@ def _primitive_mesh_to_node(md: Any, mesh: PrimitiveMesh, parent: Any) -> Any:
         faces=list(mesh.faces),
         face_mats=[0] * len(mesh.faces),
         texture=str(mesh.texture or ""),
-        diffuse=mesh.diffuse,
-        ambient=mesh.ambient,
+        diffuse=diffuse,
+        ambient=ambient,
         vertex_space=0,
     )
+    if fullbright:
+        node.has_shadow = False
     node.parent = parent
     node.compute_bounds()
     return node
 
 
-def _make_room_model_bytes(request: DevModuleSmokeRequest, geometry: AuthoredRoomGeometry) -> tuple[bytes, bytes]:
+def _make_room_model_bytes(
+    request: DevModuleSmokeRequest,
+    geometry: AuthoredRoomGeometry,
+    *,
+    lighting_profile: str = "",
+) -> tuple[bytes, bytes]:
     md, Writer = _import_mdl_runtime()
+    fullbright = str(lighting_profile or "").strip().lower() == FULLBRIGHT_LIGHTING_PROFILE
     root = md.ModelNode(name=geometry.room_resref, flags=int(md.NodeFlags.HEADER))
-    mesh = _primitive_mesh_to_node(md, geometry.room_mesh, root)
+    mesh = _primitive_mesh_to_node(md, geometry.room_mesh, root, fullbright=fullbright)
     root.children.append(mesh)
     for helper_mesh in geometry.helper_meshes:
-        root.children.append(_primitive_mesh_to_node(md, helper_mesh, root))
+        root.children.append(_primitive_mesh_to_node(md, helper_mesh, root, fullbright=fullbright))
     model = md.KotorModel(
         name=geometry.room_resref,
         supermodel="NULL",
@@ -775,7 +802,11 @@ def build_dev_test_module(request: DevModuleSmokeRequest | None = None) -> Autho
         _make_packaged(ENGINE_MODULE_IFO_RESREF, "ifo", compiled_metadata.ifo_bytes, "map_studio:t2601:ifo"),
         _make_packaged(root, "pth", compiled_pathing.pth_bytes, "map_studio:t2601:pth"),
     ]
-    mdl_bytes, mdx_bytes = _make_room_model_bytes(request, geometry)
+    mdl_bytes, mdx_bytes = _make_room_model_bytes(
+        request,
+        geometry,
+        lighting_profile=authored_lighting_profile(project.metadata),
+    )
     packaged.extend(
         [
             _make_packaged(room, "mdl", mdl_bytes, "map_studio:t2601:room_model"),
@@ -824,11 +855,13 @@ def build_dev_test_module(request: DevModuleSmokeRequest | None = None) -> Autho
 def _archive_restype_by_id() -> dict[int, str]:
     from .module_save_pipeline import RESTYPE_IDS
 
-    expected = {"are", "git", "ifo", "pth", "lyt", "vis", "wok", "mdl", "mdx"}
+    # Read every type the packager can write so custom templates, scripts, and
+    # painted TGA/TPC/TXI resources participate in archive readback proof too.
+    # VIS and RIM share Odyssey type id 3001; a module payload at that id is VIS.
     restype_by_id = {
         value: restype
         for restype, value in RESTYPE_IDS.items()
-        if restype in expected and restype != "vis"
+        if restype != "rim"
     }
     restype_by_id[RESTYPE_IDS["vis"]] = "vis"
     return restype_by_id
@@ -1059,13 +1092,21 @@ def verify_dev_test_module_package(
     *,
     expected_module_root: str = "grdev01",
     expected_room_resref: str = "grdev01_room01",
+    expected_room_resrefs: Iterable[str] | None = None,
     game: str = "K1",
 ) -> DevModulePackageVerification:
-    """Read back the generated MOD and verify the smoke-test resource contract."""
+    """Read back the generated MOD and verify every expected room resource."""
 
     module_path = Path(module_path)
     module_root = _normalise_resref(expected_module_root)
     room = _normalise_resref(expected_room_resref)
+    rooms = tuple(
+        dict.fromkeys(
+            _normalise_resref(value)
+            for value in (expected_room_resrefs or (room,))
+            if _normalise_resref(value)
+        )
+    ) or (room,)
     try:
         payloads = _read_mod_archive_payloads(module_path)
     except Exception as exc:
@@ -1084,10 +1125,8 @@ def verify_dev_test_module_package(
         (module_root, "pth"),
         (module_root, "lyt"),
         (module_root, "vis"),
-        (room, "wok"),
-        (room, "mdl"),
-        (room, "mdx"),
     }
+    expected.update((room_resref, restype) for room_resref in rooms for restype in ("wok", "mdl", "mdx"))
     blocking = [f"Missing generated resource {resref}.{restype}." for resref, restype in sorted(expected - set(payloads))]
     warnings: list[str] = []
     parsed_gff: list[str] = []
@@ -1123,44 +1162,56 @@ def verify_dev_test_module_package(
             blocking.append(f"{resref}.{restype} did not parse as GFF: {exc}")
 
     parsed_wok: list[str] = []
-    wok_key = (room, "wok")
-    if wok_key in payloads:
-        try:
-            from pykotor.resource.formats.bwm import read_bwm
-
-            bwm = read_bwm(payloads[wok_key][1], regenerate_derived=True)
-            faces = list(getattr(bwm, "faces", ()) or ())
-            walkable_count = sum(
-                1
-                for face in faces
-                if getattr(getattr(face, "material", None), "walkable", lambda: False)()
-            )
-            if not faces:
-                blocking.append(f"{room}.wok parsed without walkmesh faces.")
-            elif walkable_count < 1:
-                blocking.append(f"{room}.wok parsed but contains no walkable faces.")
-            else:
-                parsed_wok.append(f"{room}.wok")
-        except Exception as exc:
-            blocking.append(f"{room}.wok did not parse as WOK/BWM: {exc}")
-
     model_pairs: list[str] = []
-    mdl_key = (room, "mdl")
-    mdx_key = (room, "mdx")
-    if mdl_key in payloads and mdx_key in payloads:
-        ok, message = _verify_room_model_pair(room, payloads[mdl_key][1], payloads[mdx_key][1])
-        if ok:
-            model_pairs.append(f"{room}.mdl/.mdx")
-        else:
-            blocking.append(message)
+    for room_resref in rooms:
+        wok_key = (room_resref, "wok")
+        if wok_key in payloads:
+            try:
+                from pykotor.resource.formats.bwm import read_bwm
+
+                try:
+                    bwm = read_bwm(payloads[wok_key][1], regenerate_derived=True)
+                except TypeError:
+                    # Older PyKotor read_bwm has no regenerate_derived kwarg;
+                    # the raw Core.Validation gate still checks serialized
+                    # perimeter records before this archive readback.
+                    bwm = read_bwm(payloads[wok_key][1])
+                faces = list(getattr(bwm, "faces", ()) or ())
+                walkable_count = sum(
+                    1
+                    for face in faces
+                    if getattr(getattr(face, "material", None), "walkable", lambda: False)()
+                )
+                if not faces:
+                    blocking.append(f"{room_resref}.wok parsed without walkmesh faces.")
+                elif walkable_count < 1:
+                    blocking.append(f"{room_resref}.wok parsed but contains no walkable faces.")
+                else:
+                    parsed_wok.append(f"{room_resref}.wok")
+            except Exception as exc:
+                blocking.append(f"{room_resref}.wok did not parse as WOK/BWM: {exc}")
+
+        mdl_key = (room_resref, "mdl")
+        mdx_key = (room_resref, "mdx")
+        if mdl_key in payloads and mdx_key in payloads:
+            pair_ok, message = _verify_room_model_pair(
+                room_resref,
+                payloads[mdl_key][1],
+                payloads[mdx_key][1],
+            )
+            if pair_ok:
+                model_pairs.append(f"{room_resref}.mdl/.mdx")
+            else:
+                blocking.append(message)
 
     for restype in ("lyt", "vis"):
         key = (module_root, restype)
         if key not in payloads:
             continue
         text = payloads[key][1].decode("latin-1", errors="replace").lower()
-        if room not in text:
-            blocking.append(f"{module_root}.{restype} does not reference room {room}.")
+        for room_resref in rooms:
+            if room_resref not in text:
+                blocking.append(f"{module_root}.{restype} does not reference room {room_resref}.")
 
     resources = [record for record, _payload in sorted(payloads.values(), key=lambda item: (item[0].resref, item[0].restype))]
     ok = not blocking
@@ -1230,6 +1281,23 @@ def _augment_manifest(
     helper_mesh_names = [mesh.name for mesh in helper_meshes]
     has_doorway_marker = any(mesh.metadata.get("primitive") == "doorway_marker" or "door_marker" in mesh.name for mesh in helper_meshes)
     has_wall_opening = int(geometry_metadata.get("opening_count") or 0) > 0
+    lighting_profile = authored_lighting_profile(authored.project.metadata) if authored.project else "standard"
+    fullbright_lighting = authored_lighting_is_fullbright(authored.project.metadata) if authored.project else False
+    authored_light_count = len(authored.project.lights) if authored.project else 0
+    authored_lighting_status = (
+        "fullbright_export_candidate"
+        if fullbright_lighting
+        else ("viewport_lit_only" if authored_light_count else "not_started")
+    )
+    authored_lighting_message = (
+        "Fullbright ARE and room MDL material values are compiled for graybox in-game visibility; record a live warp proof before calling this game-tested."
+        if fullbright_lighting
+        else (
+            "Authored room lights are editor/export intent; bake or verify lighting in-game before calling this game-tested."
+            if authored_light_count
+            else "No authored room lights are present in this smoke build."
+        )
+    )
     data["map_studio_smoke_test"] = {
         "task": "T2601",
         "module_root": authored.module_root,
@@ -1392,15 +1460,13 @@ def _augment_manifest(
         },
         "authored_lighting": {
             "source": "src.core.modules.authored_module_lighting",
-            "lighting_count": len(authored.project.lights) if authored.project else 0,
+            "lighting_profile": lighting_profile or "standard",
+            "ready": fullbright_lighting,
+            "lighting_count": authored_light_count,
             "room_lights": [authored_room_light_payload(light) for light in (authored.project.lights if authored.project else ())],
-            "lightmap_status": "viewport_lit_only" if authored.project and authored.project.lights else "not_started",
+            "lightmap_status": authored_lighting_status,
             "game_tested_lighting": False,
-            "message": (
-                "Authored room lights are editor/export intent; bake or verify lighting in-game before calling this game-tested."
-                if authored.project and authored.project.lights
-                else "No authored room lights are present in this smoke build."
-            ),
+            "message": authored_lighting_message,
         },
         "pre_game_checks": {
             "gameplay_anchors_on_walkmesh": all(check.ok for check in authored.walkability_checks),

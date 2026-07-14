@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import threading
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from .dependencies import Image, _NUMPY, _PIL, log, np
 from src.math.frame_math import _clean_tex_name, _clamp, _lerp
@@ -22,7 +22,9 @@ class TextureCache:
     - Supports DXT1 (enc=2), DXT5 (enc=4), uncompressed Grey/RGB/RGBA
     - Supports plain TGA, PNG via Pillow
     - Loads and caches TXI metadata (from embedded TPC TXI or standalone .txi files)
-    Returns PIL.Image in RGBA mode at full resolution (capped at MAX_SIZE).
+    Returns PIL.Image in RGBA mode at viewport resolution. TPC sources select
+    the first authored mip within MAX_SIZE before decompression; ordinary image
+    sources retain the resize fallback.
     """
 
     MAX_SIZE = 512   # max viewport texture resolution per axis
@@ -310,6 +312,124 @@ class TextureCache:
                 self._cache[key] = img
         return img
 
+    @staticmethod
+    def normalize_dirty_regions(
+        image_size: tuple[int, int],
+        regions: Optional[Iterable[object]],
+    ) -> tuple[tuple[int, int, int, int], ...]:
+        """Clip dirty rectangles to an image without changing row orientation.
+
+        Rectangles use ``(x, y, width, height)`` in the cached PIL image's
+        pixel coordinate system.  GhostRigger's decoded KOTOR images are stored
+        bottom-up, so PIL row zero is also the row uploaded to GPU texture row
+        zero.  This helper deliberately performs no vertical flip.
+
+        A region may also be a mapping/object exposing ``x``, ``y``,
+        ``width`` and ``height``.  ``None`` means the whole image; malformed or
+        empty rectangles are ignored.
+        """
+        width, height = (max(0, int(v)) for v in image_size[:2])
+        if width <= 0 or height <= 0:
+            return ()
+        if regions is None:
+            return ((0, 0, width, height),)
+
+        normalized: list[tuple[int, int, int, int]] = []
+        for region in regions:
+            try:
+                if isinstance(region, dict):
+                    x = int(region.get("x", region.get("left", 0)))
+                    y = int(region.get("y", region.get("top", 0)))
+                    w = int(region.get("width", region.get("w", 0)))
+                    h = int(region.get("height", region.get("h", 0)))
+                elif all(hasattr(region, attr) for attr in ("x", "y", "width", "height")):
+                    x = int(getattr(region, "x"))
+                    y = int(getattr(region, "y"))
+                    w = int(getattr(region, "width"))
+                    h = int(getattr(region, "height"))
+                else:
+                    x, y, w, h = (int(value) for value in region)  # type: ignore[misc]
+            except (TypeError, ValueError, AttributeError):
+                continue
+            if w <= 0 or h <= 0:
+                continue
+            x0 = max(0, x)
+            y0 = max(0, y)
+            x1 = min(width, x + w)
+            y1 = min(height, y + h)
+            if x1 <= x0 or y1 <= y0:
+                continue
+            rect = (x0, y0, x1 - x0, y1 - y0)
+            if rect not in normalized:
+                normalized.append(rect)
+        return tuple(normalized)
+
+    def update_image_regions(
+        self,
+        name: str,
+        image: 'Image.Image',
+        regions: Optional[Iterable[object]] = None,
+    ) -> tuple['Image.Image', tuple[tuple[int, int, int, int], ...]]:
+        """Publish authored RGBA pixels while preserving cached image identity.
+
+        When a texture with the same dimensions is already cached, dirty pixels
+        are pasted into that object instead of replacing it.  Software and GPU
+        caches key on image identity, so preserving the object lets the renderer
+        update only the dirty regions.  A size change necessarily installs a new
+        image and reports the whole image dirty.
+
+        The returned image is the authoritative cache object and should be sent
+        to the active GPU renderer together with the returned clipped regions.
+        No model, scene, framebuffer or unrelated texture cache is invalidated.
+        """
+        if not _PIL:
+            raise RuntimeError("Pillow is required for live texture updates")
+        clean = _clean_tex_name(name or "")
+        if not clean:
+            raise ValueError("texture name is required")
+        stem, extension = os.path.splitext(clean)
+        if extension.lower() in {
+            ".tga", ".tpc", ".png", ".dds", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff",
+        }:
+            clean = stem
+        if image is None or not hasattr(image, "size"):
+            raise TypeError("image must be a PIL image")
+
+        incoming = image if getattr(image, "mode", "") == "RGBA" else image.convert("RGBA")
+        incoming_size = tuple(int(v) for v in incoming.size)
+        if incoming_size[0] <= 0 or incoming_size[1] <= 0:
+            raise ValueError("texture image dimensions must be positive")
+        requested = self.normalize_dirty_regions(incoming_size, regions)
+        key = clean.lower()
+
+        with self._lock:
+            previous = self._cache.get(key)
+            same_shape = (
+                previous is not None
+                and getattr(previous, "mode", "") == "RGBA"
+                and tuple(getattr(previous, "size", ())) == incoming_size
+            )
+            if same_shape:
+                target = previous
+                if target is not incoming:
+                    for x, y, width, height in requested:
+                        box = (x, y, x + width, y + height)
+                        target.paste(incoming.crop(box), (x, y))
+                    self._copy_texture_attrs(incoming, target)
+            else:
+                target = incoming
+                # A new allocation has no resident pixels yet.  Report a full
+                # update even when the caller supplied a narrower dirty set.
+                requested = ((0, 0, incoming_size[0], incoming_size[1]),)
+                self._cache[key] = target
+
+            # Same-object edits still need derived mip data to be regenerated.
+            self._mip_bias_cache.pop(id(target), None)
+            if previous is not None and previous is not target:
+                self._mip_bias_cache.pop(id(previous), None)
+
+        return target, requested
+
     def _load(self, name: str) -> Optional['Image.Image']:
         """Load texture by name: disk search dirs first, then BIF archives.
         Called under per-key lock — safe for concurrent access.
@@ -510,7 +630,11 @@ class TextureCache:
 
     @staticmethod
     def _copy_texture_attrs(src: 'Image.Image', dst: 'Image.Image') -> 'Image.Image':
-        for attr in ('_gr_gpu_uv_v_flip', '_txi_str', '_tpc_raw', '_txi_alpha_test'):
+        for attr in (
+            '_gr_gpu_uv_v_flip', '_txi_str', '_tpc_raw', '_txi_alpha_test',
+            '_tpc_mip_level', '_tpc_mip_size', '_tpc_source_size',
+            '_tpc_viewport_max_size',
+        ):
             if hasattr(src, attr):
                 try:
                     setattr(dst, attr, getattr(src, attr))
@@ -623,14 +747,15 @@ class TextureCache:
         V-flip formula (tv = (1-v)*h) produces correct UV mapping.
         KotOR MDL UV V=0 means TOP of texture (Direct3D/top-down convention).
         The render-time flip converts from KotOR UV-space to PIL row-space.
-        - TPC files: _load_tpc_bytes() returns bottom-up (flips DXT and uncompressed).
+        - TPC files: _load_tpc_bytes(max_size=MAX_SIZE) selects an authored mip
+          before conversion and returns it bottom-up.
         - Standard TGA files (bottom-up origin): PIL loads bottom-up correctly.
         - PNG/other: PIL loads top-down, must flip to bottom-up.
         """
         if not _PIL:
             return None
         if _is_tpc_data(raw):
-            img = _load_tpc_bytes(raw)
+            img = _load_tpc_bytes(raw, max_size=self.MAX_SIZE)
             if img is not None:
                 img._gr_gpu_uv_v_flip = True  # type: ignore[attr-defined]
             return img
@@ -664,7 +789,7 @@ class TextureCache:
         All returned images are in bottom-up orientation so that the render-time
         V-flip (tv = (1-v)*h) produces correct UV mapping.
         KotOR MDL UV V=0 = top of texture (Direct3D convention).
-        - TPC files: bottom-up from _load_tpc_bytes() (flips DXT and uncompressed).
+        - TPC files: bottom-up from the authored-mip viewport fast path.
         - All PIL-opened images (TGA, PNG, DDS): PIL always returns top-down
           → flip to bottom-up for consistency.
         """
@@ -676,7 +801,7 @@ class TextureCache:
             return None
 
         if _is_tpc_data(raw):
-            img = _load_tpc_bytes(raw)
+            img = _load_tpc_bytes(raw, max_size=self.MAX_SIZE)
             if img is not None:
                 img._gr_gpu_uv_v_flip = True  # type: ignore[attr-defined]
             return img

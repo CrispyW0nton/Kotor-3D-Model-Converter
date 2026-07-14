@@ -221,7 +221,7 @@ uniform float u_shininess;      // Phong shininess exponent (overridden per-node
 uniform int   u_lm_shade;       // FIX-LMSHADE: 1 = lightmap-only shading (skip Phong)
 uniform float u_lightmap_intensity;
 uniform int   u_lightmap_mode;  // 0 baked multiply, 1 Phong modulate, 2 emissive add
-uniform int   u_scene_lighting; // 0 unlit, 1 studio, 2 Aurora scene lights
+uniform int   u_scene_lighting; // 0 unlit, 1 studio, 2 Aurora scene lights, 3 baked-lightmap preview
 uniform float u_scene_ambient;
 uniform int   u_scene_light_count;
 uniform int   u_scene_light_enabled[16];
@@ -281,6 +281,9 @@ vec3 sceneLightShade(vec3 N, vec3 V, vec3 world_pos, float spec_intensity, float
 
         if (kind == 1) {
             L = normalize(-u_scene_light_dir[i]);
+        } else if (kind == 4) {
+            // Ambient lights are global energy, not local point emitters.
+            attenuation = 1.0;
         } else {
             vec3 delta = u_scene_light_pos[i] - world_pos;
             float dist = length(delta);
@@ -301,7 +304,7 @@ vec3 sceneLightShade(vec3 N, vec3 V, vec3 world_pos, float spec_intensity, float
             }
         }
 
-        if (u_scene_light_ambient_only[i] == 1) {
+        if (u_scene_light_ambient_only[i] == 1 || kind == 4) {
             accum += color * attenuation;
         } else {
             float ndotl = max(dot(N, L), 0.0);
@@ -585,6 +588,13 @@ void main() {
         float soft_shade = clamp(0.76 + max(dot(N, u_light_dir), 0.0) * 0.24, 0.70, 1.0);
         lit_color = diffuse_samp.rgb * soft_shade;
         diffuse_samp.a = 1.0;
+    }
+
+    // The blade mask is already an emissive RGB texture.  Preserve its black
+    // card edges and colored falloff exactly; adding u_selfillum would turn the
+    // whole additive quad into a visible rectangle.
+    if (featureEnabled(u_features, FEAT_SABER)) {
+        lit_color = diffuse_samp.rgb;
     }
 
     if (u_selected == 1) {

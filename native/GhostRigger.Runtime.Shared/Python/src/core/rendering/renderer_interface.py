@@ -60,6 +60,14 @@ class IViewportRenderer(ABC):
     def upload_texture(self, texture):
         return None
 
+    def update_texture_regions(self, texture_name: str, image, regions) -> bool:
+        """Patch dirty cached-image rectangles when the backend supports it."""
+        return False
+
+    def invalidate_texture(self, texture_name: str, image=None) -> bool:
+        """Evict only one named texture as a partial-update fallback."""
+        return False
+
     def release_resource(self, resource_id) -> None:
         return None
 

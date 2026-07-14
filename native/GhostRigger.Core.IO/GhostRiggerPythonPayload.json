@@ -2,20 +2,20 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.IO",
-    "file_count": 35,
+    "file_count": 37,
     "originals_remain_in_src": true,
     "files": [
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_FILES_INIT",
             "source_path": "src/adapters/files/__init__.py",
             "packaged_path": "Python/src/adapters/files/__init__.py",
-            "sha256": "c2eff1ca9ea8fb886540bbc9f41ed1ecd0b33e6318adb5f02917605203ce1ba5"
+            "sha256": "b5c8fcbe904e71bfa7bfe881f4a1fff74717fa6608c699e82e7ec5a72b2cfe4d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_FILES_LOCAL_FILE_WRITER",
             "source_path": "src/adapters/files/local_file_writer.py",
             "packaged_path": "Python/src/adapters/files/local_file_writer.py",
-            "sha256": "905efe02543956a67141623173582731521c07e8689b475229e01b992f909713"
+            "sha256": "5237fb2642689509ee9d50a3f2f16c7ae843d656ddfecd10086eff85bc552cc1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CONVERTERS_INIT",
@@ -27,37 +27,37 @@
             "resource_name": "PYTHON_PAYLOAD_CONVERTERS_BLENDER_FBX_MESH_IMPORTER",
             "source_path": "src/converters/blender_fbx_mesh_importer.py",
             "packaged_path": "Python/src/converters/blender_fbx_mesh_importer.py",
-            "sha256": "1a2e286244215683ff8055a7b402c507811dbf38cfc3f1221e3a97ec933a7eba"
+            "sha256": "3d53557c1b530dfbfbe69aa7b390e31c3face2870f7003f0c1ad4a4c6c0cd5a5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CONVERTERS_MESH_CONVERTER",
             "source_path": "src/converters/mesh_converter.py",
             "packaged_path": "Python/src/converters/mesh_converter.py",
-            "sha256": "854f34341c4c7100aca4733d07724a7bea4cd67e74673dcb6bd77469edd4c2a9"
+            "sha256": "10526ce383795cf6bc6059aaaaf95a3b020343aafbaa40518d72d336e6e9e1e3"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CONVERTERS_NORMAL_MAP",
             "source_path": "src/converters/normal_map.py",
             "packaged_path": "Python/src/converters/normal_map.py",
-            "sha256": "c948148a7d7915730f224df4fd243dbdb1d5084c8150a0a370f75f213492efc8"
+            "sha256": "13087158b05e259889830eb733384283544e7a08009d16e888f8f08399e3ca48"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_INIT",
             "source_path": "src/core/export/__init__.py",
             "packaged_path": "Python/src/core/export/__init__.py",
-            "sha256": "31069c54bea069b2f708f8c3b26a63c892a2361ee150180edb2729b98c793f14"
+            "sha256": "212a106debe6f566a76f87f7daa5788363c18b39d588b8e3f0d975374be7b190"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_EXPORT_JOB",
             "source_path": "src/core/export/export_job.py",
             "packaged_path": "Python/src/core/export/export_job.py",
-            "sha256": "b92f053cb33e38e673a5cc23fc8f733d5035589ee586ef3291e74f615aa984f2"
+            "sha256": "949a87fd8edfac6e3c748802c3289ab6f242b64a6a3d1fd789d4d7df937976a5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_GLTF_IMPORTER",
             "source_path": "src/core/export/gltf_importer.py",
             "packaged_path": "Python/src/core/export/gltf_importer.py",
-            "sha256": "ada95f322f3c2cdeec20f3d319fbdc4d3feb469c7f37e55f45030c4a385b2744"
+            "sha256": "bc6b32b36c9b66bb11d26d55ce340eb5ba262b5fb9e589809e5bfeb531e99ee9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_KOTOR_FBX_MANIFEST",
@@ -69,151 +69,163 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_UNITY_EXPORT_BRIDGE",
             "source_path": "src/core/export/unity_export_bridge.py",
             "packaged_path": "Python/src/core/export/unity_export_bridge.py",
-            "sha256": "9358ae2b456a743ed8c5f9564404dfe51b8bcf045cebf160dc49d0d05cfb923c"
+            "sha256": "ce4422490775f3109a57a554751c7326d5e4f481efc47e015541c77ed1ec6ae4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_UNITY_IMPORT_VALIDATOR",
             "source_path": "src/core/export/unity_import_validator.py",
             "packaged_path": "Python/src/core/export/unity_import_validator.py",
-            "sha256": "b0da59941d7ddee20fd8d07cccf6f53e9afa42126f239241c0c284ffc341c584"
+            "sha256": "d5cb2db2ae338c4c40cd961b47a441694d12536845f8ae689a081a2154edb043"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MDL_INIT",
             "source_path": "src/core/mdl/__init__.py",
             "packaged_path": "Python/src/core/mdl/__init__.py",
-            "sha256": "83f0b858ab0bcc529645d7273bb51d02fcbc9f03c3892d0f331d8bc621ac2fde"
+            "sha256": "97f1b08adfd0abe5dde3d62cf02cb37912af7f8c197e97a52639607131b8e208"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MDL_GHOSTRIGGER_MDL_READER",
             "source_path": "src/core/mdl/ghostrigger_mdl_reader.py",
             "packaged_path": "Python/src/core/mdl/ghostrigger_mdl_reader.py",
-            "sha256": "7834af4c1eccdb3c41bd07ef3b9b4d03c0c69dbe09a4b266c01ad69e1bdd0497"
+            "sha256": "9a196bb54142b99f87faadd79e2641e379d1bcf53089e6671188416d61849a4d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MDL_MDL_PARSER",
             "source_path": "src/core/mdl/mdl_parser.py",
             "packaged_path": "Python/src/core/mdl/mdl_parser.py",
-            "sha256": "7719477c89bc139c1e5c2d7b818a7a93e1d1f74e33e4f3702e59621c722ac381"
+            "sha256": "d0ddde6ba2a6e2b0be31b9ba1775db3a40ef6c50268cd375e8e7ae7fb990235b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MDL_MDL_PORTER",
             "source_path": "src/core/mdl/mdl_porter.py",
             "packaged_path": "Python/src/core/mdl/mdl_porter.py",
-            "sha256": "7bf5ee2dd8ce2ce0e9c35e2767a70ad589ac9dd8ba713abf7f29d407bf827d73"
+            "sha256": "df09cd5f2b8de45472fe8999195c469f68a9af5b237b407dcb13f9003a2a823a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MDL_MDL_READER_WRAPPER",
             "source_path": "src/core/mdl/mdl_reader_wrapper.py",
             "packaged_path": "Python/src/core/mdl/mdl_reader_wrapper.py",
-            "sha256": "9adc23ed0c21a5c73a2d94c009b13339652dfbabb6b4ead8345c358f89564bb2"
+            "sha256": "8ef543431c24f731e926192f08345419c1f6bb4b6331acef3c76899dae49f1d9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MDL_MDL_WRITER",
             "source_path": "src/core/mdl/mdl_writer.py",
             "packaged_path": "Python/src/core/mdl/mdl_writer.py",
-            "sha256": "ebdcf18f2c88c7244426a55cd2e8b30bd7d53e9f5a65dbeff58fd6a03bc26adb"
+            "sha256": "642ac698cc034ddfd5d26d8b678b089e090ae1110558e86e04bd33762971e6b0"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_PLACEABLES_INIT",
+            "source_path": "src/core/placeables/__init__.py",
+            "packaged_path": "Python/src/core/placeables/__init__.py",
+            "sha256": "aa45c0b08aaa830c90bc7eaf9ed7193b4b4319f5948f5c402651c1373c40f4d2"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_PLACEABLES_PLACEABLE_UTP_IO",
+            "source_path": "src/core/placeables/placeable_utp_io.py",
+            "packaged_path": "Python/src/core/placeables/placeable_utp_io.py",
+            "sha256": "2545c8e78326eb9059c8204691ee13904d989be9ac2369b33ecd5021051fff11"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_TEMPLATES_INIT",
             "source_path": "src/core/templates/__init__.py",
             "packaged_path": "Python/src/core/templates/__init__.py",
-            "sha256": "d8fe86c4b6e1067449bcb182b7ecbd208943cdb1a85b617595454171e29741d2"
+            "sha256": "b2f79015d55a0d3371cddde209ffd787d1e219b8ea0346473580afdf43910286"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_TEMPLATES_NATIVE",
             "source_path": "src/core/templates/_native.py",
             "packaged_path": "Python/src/core/templates/_native.py",
-            "sha256": "4cadbfdc79aacd133d616cd3905e4770a94ba6e489075307bd9a278deaa63443"
+            "sha256": "a481266940cdb1128e23d9c12fa2a03a7e6ab6a4f5c32369f8f5012dcc87ae6a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_TEMPLATES_TEMPLATE_BUILDER",
             "source_path": "src/core/templates/template_builder.py",
             "packaged_path": "Python/src/core/templates/template_builder.py",
-            "sha256": "0c8f8a5cffdbee4ec0df136ff6ed3535c616ce086f99a6ecfd79fb83147dfb31"
+            "sha256": "dda3bdac5e342602724c391da52c2259bc0803f354820c8a2c6333b64aff24a6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_TEMPLATES_TWODA",
             "source_path": "src/core/templates/twoda.py",
             "packaged_path": "Python/src/core/templates/twoda.py",
-            "sha256": "b1f4fdec23b0dc8f8f73b5c57b45145d8762ccc680e5e5082fc8bd6aad34c776"
+            "sha256": "385d1ce5491e16f3944df79e3754e6f1377c31a0e9198c847b386bb9d32ba27e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_FORMATS_INIT",
             "source_path": "src/formats/__init__.py",
             "packaged_path": "Python/src/formats/__init__.py",
-            "sha256": "219fe7c8304e7157b8e83a23c20ec28f59d856c356f00ee1946dd4100489bf44"
+            "sha256": "fd672ec011b055e6bf9a56608e85af81166180bb79f5000387592cc28bed71e7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_FORMATS_GFF_READER",
             "source_path": "src/formats/gff_reader.py",
             "packaged_path": "Python/src/formats/gff_reader.py",
-            "sha256": "b82b37300020eb73cd56178a12eac14f63bd7a1c188e167cd6f3541f7ec592e5"
+            "sha256": "f9eaf5a313e0d2e7936b21a267ecf713608d97b09eb527bbd4210f0f03d1b54c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_FORMATS_GFF_TYPES",
             "source_path": "src/formats/gff_types.py",
             "packaged_path": "Python/src/formats/gff_types.py",
-            "sha256": "c524f5e895b4eb83746a2691f062b4c1e9e43e48eb8d118ec3d81b2d0d2812da"
+            "sha256": "fa2c7fbbf4d579f226d4841bdf4537edf8b1d874595e4fe39ae779887e362938"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_FORMATS_GFF_WRITER",
             "source_path": "src/formats/gff_writer.py",
             "packaged_path": "Python/src/formats/gff_writer.py",
-            "sha256": "95fb5dfc7ed2586e13c8952717ffb726d08a10f3d298e050cc2ac8bca0e5f0cb"
+            "sha256": "016a9d4743160828bd4afb3fe273391e7b6ce3461522db7e1ef4a7aec14d3344"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_INIT",
             "source_path": "src/io/__init__.py",
             "packaged_path": "Python/src/io/__init__.py",
-            "sha256": "8bb10e85762a5deefc9f7f46ae1982b1606f9a0246a51964474379bee49dabee"
+            "sha256": "2ebd05d1b4fa7f2174deb594a5a3e5a71077cbd6ddadd4f7614d0f10267111d6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_FBX_INIT",
             "source_path": "src/io/fbx/__init__.py",
             "packaged_path": "Python/src/io/fbx/__init__.py",
-            "sha256": "e187d884187f6fe86585e99fd5f71c98f65ed76e789f7b11984fb6ac70b74ec9"
+            "sha256": "aeff0d2f8311718b8f0910b33f965f657d35357e763c57ee031a3568e632ab78"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_FBX_FBX_DIAGNOSTICS",
             "source_path": "src/io/fbx/fbx_diagnostics.py",
             "packaged_path": "Python/src/io/fbx/fbx_diagnostics.py",
-            "sha256": "4f73d8c63a0dcc7dbcf643d72117efc52fb8c03869966f7e09d257452eafd7a6"
+            "sha256": "7aa6498f44b86af7df3b5f3819ae59cc0d8eec3bf75fd1b4aec82475c8943e1f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_FBX_FBX_EXPORTER",
             "source_path": "src/io/fbx/fbx_exporter.py",
             "packaged_path": "Python/src/io/fbx/fbx_exporter.py",
-            "sha256": "2ec9af77112545ba3bcd3771e3a96b7278bda341f6b47c42d80522acdadb66aa"
+            "sha256": "439bd70ab6d8822750a87590b15d41c9ef2e9c7198bf040b4d044a1013395b88"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_FBX_FBX_IMPORTER",
             "source_path": "src/io/fbx/fbx_importer.py",
             "packaged_path": "Python/src/io/fbx/fbx_importer.py",
-            "sha256": "ffbdbfbdbf82b48d1bab5fc35a873ab04147d99888388dafdaabaafdd4ab0b41"
+            "sha256": "2e82a6904c8ac1a594151cb97fb08e86a9987d9295a6de199103c5ec0c22be5c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_FBX_FBX_SCENE_ADAPTER",
             "source_path": "src/io/fbx/fbx_scene_adapter.py",
             "packaged_path": "Python/src/io/fbx/fbx_scene_adapter.py",
-            "sha256": "0822dec32cedbce3f48b76ea2515af5bf1f0696515d2f4164299d86d3573c496"
+            "sha256": "faecc4a5cf70f4a3ea30cd2df09f8ac36a782eb9dca14be9eb99e8a334409a73"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_FBX_FBX_SDK_LOADER",
             "source_path": "src/io/fbx/fbx_sdk_loader.py",
             "packaged_path": "Python/src/io/fbx/fbx_sdk_loader.py",
-            "sha256": "65837bbbdbc00bd574337007ed95746b9551f06cde667fb29d4ef602d1ffef49"
+            "sha256": "4defbd920a16a1306037838e07bae653f97f232fb07c556b1acfc783e88d04d9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_FBX_FBX_SDK_PATHS",
             "source_path": "src/io/fbx/fbx_sdk_paths.py",
             "packaged_path": "Python/src/io/fbx/fbx_sdk_paths.py",
-            "sha256": "ff22db7683412ea8e6a6ba8d4f55547c55aeb3ea2e3d458b4f478a830bb33994"
+            "sha256": "06df57ac6d002452e6a561b9b3379c5320df9480308b244ff71139ba6e671d6b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_IO_FBX_FBX_SDK_SETUP",
             "source_path": "src/io/fbx/fbx_sdk_setup.py",
             "packaged_path": "Python/src/io/fbx/fbx_sdk_setup.py",
-            "sha256": "a03d2dcb15284ef56ed2da29618fb0860ddd7de18377c224b6689e3c38027810"
+            "sha256": "1b4a6ea2c515cfdf0cef629bf43c09d64bf7839a85c2d7a181cd5332c249ac7b"
         }
     ]
 }

@@ -14,6 +14,13 @@ class QtMainViewportWidget(QtViewportWidget):
     DEFAULT_THUMBNAIL_ENABLED = False
 
 
+class QtMapStudioViewportWidget(QtViewportWidget):
+    """Map Studio viewport with KMAP-only Modeling and Blockout chrome."""
+
+    VIEWPORT_ROLE = "map_studio"
+    DEFAULT_MAP_STUDIO_AUTHORING_CHROME = True
+
+
 class QtCharacterBuilderViewportWidget(QtViewportWidget):
     """Character Builder viewport with builder-specific HUD affordances."""
 
@@ -27,9 +34,6 @@ class QtCharacterBuilderViewportWidget(QtViewportWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._mesh_transform_promotes_to_model_root = True
-        tabs = getattr(self, "viewport_map_studio_modeling_tabs", None)
-        if tabs is not None:
-            tabs.hide()
 
     @staticmethod
     def _event_global_position(event, fallback_widget=None) -> QtCore.QPoint:
@@ -91,6 +95,7 @@ class QtUnrealAnimatorViewportWidget(QtViewportWidget):
 
 __all__ = (
     "QtMainViewportWidget",
+    "QtMapStudioViewportWidget",
     "QtCharacterBuilderViewportWidget",
     "QtRetargetViewportWidget",
     "QtUnrealAnimatorViewportWidget",

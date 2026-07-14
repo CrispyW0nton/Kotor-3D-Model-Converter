@@ -2,14 +2,14 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.GUI.Display",
-    "file_count": 289,
+    "file_count": 295,
     "originals_remain_in_src": true,
     "files": [
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_INIT",
             "source_path": "src/gui/__init__.py",
             "packaged_path": "Python/src/gui/__init__.py",
-            "sha256": "f40aeb7fd37c3689c8509f1e6661eeac1e6dc58fd388c91971cc9e693a1e65f6"
+            "sha256": "e4a44cb6bd7548a04c76a74771f3872a4bcb770cf6b3874cba5979a9feaf51ca"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_ASSETS_INIT",
@@ -21,55 +21,55 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_ASSETS_QT_ICON_MANAGER",
             "source_path": "src/gui/assets/qt_icon_manager.py",
             "packaged_path": "Python/src/gui/assets/qt_icon_manager.py",
-            "sha256": "3ac5ceaa07f86aff28d30687ad0af1fc8cfb56a3799e022dd677f7e9318aa675"
+            "sha256": "f4c9f4e0bbc0fd74a9aa4f4e5178f64a2c2417ac75684e4836d15c247049234e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_ASSETS_QT_MATRIX_BACKGROUND",
             "source_path": "src/gui/assets/qt_matrix_background.py",
             "packaged_path": "Python/src/gui/assets/qt_matrix_background.py",
-            "sha256": "31210008f44960d8d876c0f30ad42dd5509925a05c87d26ea4a0f3e983a75f59"
+            "sha256": "018abf7b1a400ef2a52622a156fa487bba27907f6d88405629c875bb2f8980b5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_ASSETS_QT_THEME",
             "source_path": "src/gui/assets/qt_theme.py",
             "packaged_path": "Python/src/gui/assets/qt_theme.py",
-            "sha256": "ab5159d756c070f1b32ed901e117e54abf7a337e95f63e6e37acefea9a4697a0"
+            "sha256": "9da1ba913efcc08ec9fc46ea25728304818ee8ac1baff53a0ef5afb8c58e7053"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_INIT",
             "source_path": "src/gui/camera/__init__.py",
             "packaged_path": "Python/src/gui/camera/__init__.py",
-            "sha256": "2072357865dbc90ee8dcdae1a0d73782e93ad132023c84d0731b4ffa0a642f5e"
+            "sha256": "823ba4a14d9db8c1b137e5f78c51cbbf723150b410c6a75995b9cdc39a2a76ca"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_OVERLAYS",
             "source_path": "src/gui/camera/camera_overlays.py",
             "packaged_path": "Python/src/gui/camera/camera_overlays.py",
-            "sha256": "f256f260e7698dc096fc215b9a3bc63faf438665804077beff6a4ab59a8255df"
+            "sha256": "b2e057bde869d28b786e787e6aeee0864d90669b6e51c95168ad629772833aad"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_VIEWPORT_ADAPTER",
             "source_path": "src/gui/camera/camera_viewport_adapter.py",
             "packaged_path": "Python/src/gui/camera/camera_viewport_adapter.py",
-            "sha256": "715964e827ad56c219b65922b747337d973d9765175cbb802790836698bbb3a7"
+            "sha256": "574ebc4c71776ff3b3eef22e0bf80326303bc9401c0df7eb090f193a54e7f732"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_FRAME_RENDERER",
             "source_path": "src/gui/camera/frame_renderer.py",
             "packaged_path": "Python/src/gui/camera/frame_renderer.py",
-            "sha256": "1f77ea2771f312d6d715637863e798fa226529dde1e6d54a68f94ba29916d18e"
+            "sha256": "28db580c96a3a237b24e9a2e8dfdaeb508d3310bd091a45c0b857af405a51ccf"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_RENDER_MANIFEST",
             "source_path": "src/gui/camera/render_manifest.py",
             "packaged_path": "Python/src/gui/camera/render_manifest.py",
-            "sha256": "1daadbf63e944f4d7281b5c93933dd2dc01b5a55f149eee446d96d0384b38cc1"
+            "sha256": "b78b86f8c3da94ad3eef29e87f23029d7853b57e50b2eaa7ac58a260b6cd8c50"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_RENDER_OUTPUT",
             "source_path": "src/gui/camera/render_output.py",
             "packaged_path": "Python/src/gui/camera/render_output.py",
-            "sha256": "a23e818d8b0d76e33787a0e9c1b9712521914099431f7df55c48adbba99b0d20"
+            "sha256": "922f35ffc05b2ed832ded7c70b0c4218f115d70707f642873a4316877d5853ed"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_INIT",
@@ -81,7 +81,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_ADD_MODEL_TO_SCENE_DIALOG",
             "source_path": "src/gui/dialogs/add_model_to_scene_dialog.py",
             "packaged_path": "Python/src/gui/dialogs/add_model_to_scene_dialog.py",
-            "sha256": "d58526ef010651c4e7873969e2083d21bb6a3d24459c9ea61f834e4ee2754b81"
+            "sha256": "221e5f5fc1107a3d8a7a9159697256f898296ab5db08a9025059c3b047b223cd"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_ERROR_REPORT",
@@ -93,481 +93,487 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_FBX_SDK_SETUP_DIALOG",
             "source_path": "src/gui/dialogs/fbx_sdk_setup_dialog.py",
             "packaged_path": "Python/src/gui/dialogs/fbx_sdk_setup_dialog.py",
-            "sha256": "eb0d2b6919b63e731a2eab300b50025606d9a0ef388f61f76aaac2ee2fb0cbce"
+            "sha256": "b316bef0307889e70a8cd3ed3f7e90356884612363a24bd0422a7e39e47411d7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_LIGHTMAP_BAKE_WORKER",
             "source_path": "src/gui/dialogs/lightmap_bake_worker.py",
             "packaged_path": "Python/src/gui/dialogs/lightmap_bake_worker.py",
-            "sha256": "401945718c9974832a90af20ecf5b7c2ea8a1260d8232993c4ac2f311d64f1e6"
+            "sha256": "b0563e8ae2c155fdc633051c92bc600914e00aaf13667dfaa9aa1ae97a2f680c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_LIGHTMAP_PREVIEW_WINDOW",
             "source_path": "src/gui/dialogs/lightmap_preview_window.py",
             "packaged_path": "Python/src/gui/dialogs/lightmap_preview_window.py",
-            "sha256": "b1085d799e9c95e92f63d5e921609d4f6914e56f7b3c2050fd7bca71c84dca15"
+            "sha256": "8190cac8110f815715a4ebf7ebd7d79ce43ec73c0a4d79278ac379706bd0bb7d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_QT_DIALOGS",
             "source_path": "src/gui/dialogs/qt_dialogs.py",
             "packaged_path": "Python/src/gui/dialogs/qt_dialogs.py",
-            "sha256": "d03e1390b65d38e835617eb904bd6e3d854be306c171fdf736bc7b1a83d88beb"
+            "sha256": "e5faa30ed3213cfd09dba7e1b43559c2c8b13e384595c812f1399ba260928f20"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_QT_EXPORT_DIALOG",
             "source_path": "src/gui/dialogs/qt_export_dialog.py",
             "packaged_path": "Python/src/gui/dialogs/qt_export_dialog.py",
-            "sha256": "a335febf363d97ea5c01033af3e26a173e03d8b46eb8bea082437a440d39f0ca"
+            "sha256": "69ec2ed83f0dc2ff097a07afea8d52bccc3e6c3836d89e477abb28e81b96a0a2"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_QT_GETTING_STARTED_WINDOW",
+            "source_path": "src/gui/dialogs/qt_getting_started_window.py",
+            "packaged_path": "Python/src/gui/dialogs/qt_getting_started_window.py",
+            "sha256": "d305731b106328111eff7f38535bf49421902e0fadc75940e89a13f6bf1bbf6d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_QT_LIGHTMAP_BAKER_DIALOG",
             "source_path": "src/gui/dialogs/qt_lightmap_baker_dialog.py",
             "packaged_path": "Python/src/gui/dialogs/qt_lightmap_baker_dialog.py",
-            "sha256": "2a1312f56cb9bb6d815e196e9bab1e1f47c126fa5fd7b89973cfc1fbaae6c5a4"
+            "sha256": "4f8c943458462a1242de34afb041396b27c67d0af06aeddfabd900b7a23d3f78"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_QT_RENDER_FRAME_DIALOG",
             "source_path": "src/gui/dialogs/qt_render_frame_dialog.py",
             "packaged_path": "Python/src/gui/dialogs/qt_render_frame_dialog.py",
-            "sha256": "46711149c05bc34f582449d98fdf0620605e455b8fa9ee685138d7743d619ba6"
+            "sha256": "f6b9030d039ba776b1a989d760457b54d2c4f1d1b0a591be273df8c92d9f0ddd"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_QT_SETTINGS_DIALOG",
             "source_path": "src/gui/dialogs/qt_settings_dialog.py",
             "packaged_path": "Python/src/gui/dialogs/qt_settings_dialog.py",
-            "sha256": "860398daa99fc0d6800037edd94b4b7e7b9e71306f87e1892006a69606bc9e0d"
+            "sha256": "ec8cc255a12c46a351bdb7f10ea9ad6077b15e7cea8bc2eea6a155943260a7e1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_UV_GEOMETRY_PREVIEW_WINDOW",
             "source_path": "src/gui/dialogs/uv_geometry_preview_window.py",
             "packaged_path": "Python/src/gui/dialogs/uv_geometry_preview_window.py",
-            "sha256": "13fdbc58bd5514d7992dcb4536dfe75970a7b4f237b2e4472a98ff9573161316"
+            "sha256": "ea0b7459840587b5ffefbd4c6c2852c360e7b4d9b788f4ede131a0e717f6a34d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_UV_PREVIEW_WINDOW",
             "source_path": "src/gui/dialogs/uv_preview_window.py",
             "packaged_path": "Python/src/gui/dialogs/uv_preview_window.py",
-            "sha256": "b13f5327d5b6ef0f4b1081216af0b63b46d719be4b2f8e47b7a27fdddc90b9a4"
+            "sha256": "94fe0e6300172815782651f35d78da2bca00370710a1d337e0593c4e1863ed02"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_GIZMO_INIT",
             "source_path": "src/gui/gizmo/__init__.py",
             "packaged_path": "Python/src/gui/gizmo/__init__.py",
-            "sha256": "b26ec44fbcd46becd6e5f1eafab125764908137470fe83017ed6715790857495"
+            "sha256": "5d39c54a6c4a2c3cfc0ba7e52d4695f4dcbdeaa7141d0321af61019f95a1ee5c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_GIZMO_GIZMO_DRAW_DATA",
             "source_path": "src/gui/gizmo/gizmo_draw_data.py",
             "packaged_path": "Python/src/gui/gizmo/gizmo_draw_data.py",
-            "sha256": "ad106c70dffd78e854ab05aaa38d3e77faaec17b1c2e8db0e6ee012cdbfe5d2e"
+            "sha256": "1109bbe3c7c1273447a417683ebba6bbcca3b9276d4b0c17e58362498d418666"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_GIZMO_GIZMO_MODE",
             "source_path": "src/gui/gizmo/gizmo_mode.py",
             "packaged_path": "Python/src/gui/gizmo/gizmo_mode.py",
-            "sha256": "9c9ed654b4ea1b5ef9ea9052e44aec6f7b20e9ed20212f7849d64f2c82d4568a"
+            "sha256": "687dca3112e13b4ed0efa5848017081594ab247757f3e7451bc8a760a40678e5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_GIZMO_GIZMO_PICKER",
             "source_path": "src/gui/gizmo/gizmo_picker.py",
             "packaged_path": "Python/src/gui/gizmo/gizmo_picker.py",
-            "sha256": "f304001b8e5d8be70c290871bd78d30c52e0d88e7ed1715710a216787576ac1d"
+            "sha256": "fb08174d118e5aef55dd79b800a38760f82e3f42fb567dd4e99e0f0c1de81565"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_GIZMO_GIZMO_RENDERER",
             "source_path": "src/gui/gizmo/gizmo_renderer.py",
             "packaged_path": "Python/src/gui/gizmo/gizmo_renderer.py",
-            "sha256": "f80d5566330ac64bd80db691b2ebca987ab96bbda8254a312cb0eca15e2b3479"
+            "sha256": "72fa683c580a033ad398e90fabf908de66440385635747a82140d3ad780f10bf"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_GIZMO_TRANSFORM_CONTROLLER",
             "source_path": "src/gui/gizmo/transform_controller.py",
             "packaged_path": "Python/src/gui/gizmo/transform_controller.py",
-            "sha256": "e11036a8da12ced27d691e8aa868496822dfb051c1cfe95a58d3995fd681adf4"
+            "sha256": "81a364c4f047b0fd4a4b8e1221b7fe46aed27b197c7c8eb57a78d06c6c974690"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_GIZMO_TRANSFORM_GIZMO",
             "source_path": "src/gui/gizmo/transform_gizmo.py",
             "packaged_path": "Python/src/gui/gizmo/transform_gizmo.py",
-            "sha256": "2e27c25b7d57d8290c87f3a9b368a9e9f00daff6a9f2297980df5d7cc367dc6a"
+            "sha256": "e5baaee6d26fc83245886262c492feb5d2bf164164d723383e11c0c4a76ee7b0"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_GIZMO_TRANSFORM_MATH",
             "source_path": "src/gui/gizmo/transform_math.py",
             "packaged_path": "Python/src/gui/gizmo/transform_math.py",
-            "sha256": "875c6f53db68dc536a08114a5fceb14693b90e2940482c18e5394904326eb3a8"
+            "sha256": "06ab6c0f2c8290f4f11eaa558da873f82c7b8edce824dbb774ced4cdeab768c6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_INTEGRATION_INIT",
             "source_path": "src/gui/integration/__init__.py",
             "packaged_path": "Python/src/gui/integration/__init__.py",
-            "sha256": "11cb2cfcbb80227b124fa667c7ec9bde784c4784dfd12dcd95a5d1bc42b1a8ac"
+            "sha256": "c0b58ec2d0f7580524db57a16aec3e6c5da700f7deb0440a16a7454add9c0390"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_INTEGRATION_EDITOR_SERVICES",
             "source_path": "src/gui/integration/editor_services.py",
             "packaged_path": "Python/src/gui/integration/editor_services.py",
-            "sha256": "876c2f7e76cef7a082674f6dffa9a2e516ca3fc2f2d8077194681e974ac9094c"
+            "sha256": "726e00bca9bcd62d4c13bb580d72f8cab2528bdef954402fb7061ab4618d7154"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_INTEGRATION_TOOL_INTEGRATION_REGISTRY",
             "source_path": "src/gui/integration/tool_integration_registry.py",
             "packaged_path": "Python/src/gui/integration/tool_integration_registry.py",
-            "sha256": "edfd311053a6a0fd08c2b773c97451863a67d45fdb5fcb3c49cd6df5e0b2238a"
+            "sha256": "bc0b2fed9cb0b3ccecbf8d77e8786874c509adc2450fe672d1c0421700687154"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_INIT",
             "source_path": "src/gui/libtheme/__init__.py",
             "packaged_path": "Python/src/gui/libtheme/__init__.py",
-            "sha256": "33a8ab9734d780ceca50809baac351960130dc33ee07dfd2fc88335795738a0f"
+            "sha256": "5c257302b18173cd841f5b430195fa914ddc6b08153b3238c2fcfdcc844753ec"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_COLLAPSIBLE_GROUP",
             "source_path": "src/gui/libtheme/collapsible_group.py",
             "packaged_path": "Python/src/gui/libtheme/collapsible_group.py",
-            "sha256": "73faa1fc1c5240761525c54878ae5371230a2408517e676172627e6837ac2eb2"
+            "sha256": "a1895f8ca8607359e5ebf920599977c4511470a17a7966a507e02340c4915f8d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_FONT_MANAGER",
             "source_path": "src/gui/libtheme/font_manager.py",
             "packaged_path": "Python/src/gui/libtheme/font_manager.py",
-            "sha256": "6da233af66bd35127ef4c7655bed2b94b7d4c47af41c08b0379942e382f1f74f"
+            "sha256": "abd429430695ef63d421d866c56c4ea91d78b72484009e224a3a5cc33576dc8f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_ICON_MANAGER",
             "source_path": "src/gui/libtheme/icon_manager.py",
             "packaged_path": "Python/src/gui/libtheme/icon_manager.py",
-            "sha256": "67e6450465996a4f88d6a2cd67e2f8235acf14d0d6586f12d0dbb95e27923ec7"
+            "sha256": "363888c8d5c21391902bb349106e7e61c6df92e91e916a7dfcaa98ccceccac4a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_LAYOUT_APPLIER",
             "source_path": "src/gui/libtheme/layout_applier.py",
             "packaged_path": "Python/src/gui/libtheme/layout_applier.py",
-            "sha256": "5c8d31499ec6fbebdf16d6b76ae7936c9541fc3021bd8a8184fe1bcbfec5ac11"
+            "sha256": "a6d23d5a1f3ee11af561a3355b630248a31d700db0dea456823628191031308e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_LAYOUT_LOADER",
             "source_path": "src/gui/libtheme/layout_loader.py",
             "packaged_path": "Python/src/gui/libtheme/layout_loader.py",
-            "sha256": "fff15b9a2bfbfc834c297a1ef4bdfba212128c4e9c397694d0827b1b7c4516e2"
+            "sha256": "93389472ede6892876f6957ad4546b9f882e1d8126ec6ce12e1a20bbfc7eca69"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_LAYOUT_MANAGER",
             "source_path": "src/gui/libtheme/layout_manager.py",
             "packaged_path": "Python/src/gui/libtheme/layout_manager.py",
-            "sha256": "1f3070acf4375465fc751d54c16b0565790c591b0190994ac0011954ef779fb4"
+            "sha256": "452647cfd375ff08679a4653f4efe785cf1e7a1803c412a31ad7aa7d35ced458"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_LAYOUT_MODEL",
             "source_path": "src/gui/libtheme/layout_model.py",
             "packaged_path": "Python/src/gui/libtheme/layout_model.py",
-            "sha256": "a39a8fa72fb0e7a79bca7622bbe026ebab1344f1c6f148af3bc13bef7bf44f2e"
+            "sha256": "694e44022c1bcc9d058b56ea346249eedb614e4ea3ec3fa78aceec0991c1e143"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_LAYOUT_VALIDATOR",
             "source_path": "src/gui/libtheme/layout_validator.py",
             "packaged_path": "Python/src/gui/libtheme/layout_validator.py",
-            "sha256": "faf24886533297149fac9a4aa9ca306c298f6a8a92930e94dd3bdefe8c3be9b6"
+            "sha256": "7e9fab885cd86ad5b1ea6fba9feb7d0f06e0d023e1549a4eeb611d44d1def6a3"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_OS_THEME_DETECTOR",
             "source_path": "src/gui/libtheme/os_theme_detector.py",
             "packaged_path": "Python/src/gui/libtheme/os_theme_detector.py",
-            "sha256": "f1ddb1bd9a6e371c59cd5fc0f20ecdefacd8c0d6a794037ffdd59ee6e268dbaf"
+            "sha256": "3da9f3e124fb34891c76aafea2abced23d960d7c171fe074e87a8c5ff09f8adb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_QT_STYLESHEET_BUILDER",
             "source_path": "src/gui/libtheme/qt_stylesheet_builder.py",
             "packaged_path": "Python/src/gui/libtheme/qt_stylesheet_builder.py",
-            "sha256": "e7fae65bb6f8ce8795d306e0f8426349cd7b6fd42766ac1622a9c4f374a431f8"
+            "sha256": "9c6cd35750a5375f21d7ab1d8b2f20757a4c4f14a035f6dc7cc27df0df45783f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_STYLE_TOKENS",
             "source_path": "src/gui/libtheme/style_tokens.py",
             "packaged_path": "Python/src/gui/libtheme/style_tokens.py",
-            "sha256": "3d2425827c076bf7ee3f79c38c8dc2368181c3c4da4ab8141a5a3143cc3c9ed2"
+            "sha256": "79702e4dd9ce048cd397513570d65de9f0d9be1ac7fccd08c7806303f2878414"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_APPLIER",
             "source_path": "src/gui/libtheme/theme_applier.py",
             "packaged_path": "Python/src/gui/libtheme/theme_applier.py",
-            "sha256": "7fe4977410d4a1315307e0be2ce899a35262c494f151baa28da49a6e1449d220"
+            "sha256": "2e568fa5a77068cb746c50f8d20b0559da5482771e2295b8d6a1fca2485c52ab"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_AWARE",
             "source_path": "src/gui/libtheme/theme_aware.py",
             "packaged_path": "Python/src/gui/libtheme/theme_aware.py",
-            "sha256": "9fab15ff16f02d4941b0b66edb226dea03e926156f020aad93972a65620c1e9c"
+            "sha256": "2d91e27f53436b44555d6c5ef1302fab75fe48199227ef73fdc41a93c4c6f754"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_EDITOR_WINDOW",
             "source_path": "src/gui/libtheme/theme_editor_window.py",
             "packaged_path": "Python/src/gui/libtheme/theme_editor_window.py",
-            "sha256": "461ab6cc33bf6cf80824ffce9ecccc21f7c1be6b44be27fb2c3abd767c7d65e7"
+            "sha256": "1ba4aab07838c39853146c8be1cc813b58164c56f1fbcdba72fcbd2686275a9e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_LOADER",
             "source_path": "src/gui/libtheme/theme_loader.py",
             "packaged_path": "Python/src/gui/libtheme/theme_loader.py",
-            "sha256": "2075dfb3b056d86d9d3e5d82a7501d18d27af4fccdd89562a16261fbd043d929"
+            "sha256": "f64318996fb1fb587bf3022800d50877c46485a0264a39117e431d0aa66a2b16"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_MANAGER",
             "source_path": "src/gui/libtheme/theme_manager.py",
             "packaged_path": "Python/src/gui/libtheme/theme_manager.py",
-            "sha256": "9872d0668e045ed541f49df06428d08e0b275a2b95935b32576f2143fd5554f0"
+            "sha256": "fd403bc8b95fc94f639fbd6c92c281a98420f6da4215b7102ebd7a19379719de"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_MODEL",
             "source_path": "src/gui/libtheme/theme_model.py",
             "packaged_path": "Python/src/gui/libtheme/theme_model.py",
-            "sha256": "19cbe3f2ee201251f2d26dc7dd41a63c6d1d5aad8af14c56f072cda88facd19b"
+            "sha256": "e202cdae1a4410715da3a3351d0d76d179f70f69c0de795f7c56ec9cc4055cd6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_REGISTRY",
             "source_path": "src/gui/libtheme/theme_registry.py",
             "packaged_path": "Python/src/gui/libtheme/theme_registry.py",
-            "sha256": "d91aae1f2967ea8740f15c54b1cd35ff276327f4959c074be187156f1b7b826e"
+            "sha256": "f59211d9183a1488c1bf3adfc4bc678f907e675bd078232f8dcc351bdab5715d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_SETTINGS",
             "source_path": "src/gui/libtheme/theme_settings.py",
             "packaged_path": "Python/src/gui/libtheme/theme_settings.py",
-            "sha256": "a1550a2f1c97b544aa504371ee34c223c97c3148db6caf3750d55c4b3080aaac"
+            "sha256": "2584ed5b6512b52a96c5f915d0235b7e15573e2ed3b6f4482583e75066784b4d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_VALIDATOR",
             "source_path": "src/gui/libtheme/theme_validator.py",
             "packaged_path": "Python/src/gui/libtheme/theme_validator.py",
-            "sha256": "363163e13c5660bdc5b7122577efeb134db95d54bc90b4e2a4a89db31d3be1b9"
+            "sha256": "890995f81541242ff5bcd5ea1b6e08ca998d388bde1be2a8985e19499a435955"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIBTHEME_THEME_WATCHER",
             "source_path": "src/gui/libtheme/theme_watcher.py",
             "packaged_path": "Python/src/gui/libtheme/theme_watcher.py",
-            "sha256": "120bafc1e548e308795158085d50d0b5ffa70588a33ac70aa17e5700df331a2b"
+            "sha256": "7d83b50b43794e0d103e2b9c37a93089d992edc99fcf110c9f7b1a219a9d0963"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_INIT",
             "source_path": "src/gui/lighting/__init__.py",
             "packaged_path": "Python/src/gui/lighting/__init__.py",
-            "sha256": "6970c27bfd334fd78491c294a08d96f8976d30fcbe3fedbf1d83def0c7f1d744"
+            "sha256": "c48633d2b51cdd9d530affe93c0dea670862e6101a2e3fb31011607932eafaa9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_AURORA_LIGHT_ADAPTER",
             "source_path": "src/gui/lighting/aurora_light_adapter.py",
             "packaged_path": "Python/src/gui/lighting/aurora_light_adapter.py",
-            "sha256": "b92de1a44d55a286f19924f0cfee991d22cb56179da38f9717b96f00ab170cdc"
+            "sha256": "19afdba6ca2dddb4a0a237f11598fc545b47f4efd51f7ff30395b4f9d90fdd90"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHT_EXPORT_BRIDGE",
             "source_path": "src/gui/lighting/light_export_bridge.py",
             "packaged_path": "Python/src/gui/lighting/light_export_bridge.py",
-            "sha256": "e84dd2984e8408486c3a2ac6b5ec240ef8763d54613c4152f0626110377bc523"
+            "sha256": "4d14ca51a2691951d6620f0f7b16d8cfd70649ff847cb916985ab58a8b09ad80"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHT_GIZMO_RENDERER",
             "source_path": "src/gui/lighting/light_gizmo_renderer.py",
             "packaged_path": "Python/src/gui/lighting/light_gizmo_renderer.py",
-            "sha256": "6c7a0df47ce8089a5140f675061fee41bb14d7653dd159d9c38a32ac625b82a2"
+            "sha256": "1a25b14f0a7a58366a806b092dbeb52771be88b039c4dabdd10a1889f8530986"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHT_GROUPING",
             "source_path": "src/gui/lighting/light_grouping.py",
             "packaged_path": "Python/src/gui/lighting/light_grouping.py",
-            "sha256": "e24711dd7538b46574888b625a4fc4c4342e97bac22a6dddb1320129783cd3de"
+            "sha256": "70d5860b6bf17d3dea0f068958f409f74c8caf3c1b463924c12551edba71fb70"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHT_MANAGER",
             "source_path": "src/gui/lighting/light_manager.py",
             "packaged_path": "Python/src/gui/lighting/light_manager.py",
-            "sha256": "603d6ef73f2c275e0105d8f8d261f7eafe401d7a50621a9a3a87a7f8d1976058"
+            "sha256": "eeb2c62c859768af879a1ad8e98876aed697d2b9652a950be2786a5acdba2207"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHT_MODEL",
             "source_path": "src/gui/lighting/light_model.py",
             "packaged_path": "Python/src/gui/lighting/light_model.py",
-            "sha256": "a0835c5680cb6a08d2b29e6e3d0e44784f5c4464908848bc9b0c9a3a953f4986"
+            "sha256": "46c9adda6e8749109a020aafde130c6ad8eda5c93d396a5abe4fdbceec286b56"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHT_PICKER",
             "source_path": "src/gui/lighting/light_picker.py",
             "packaged_path": "Python/src/gui/lighting/light_picker.py",
-            "sha256": "5105c3e52be5b66e5fdea35f17e73757f5345f1882018ca7b4b8c1e50eb38aa3"
+            "sha256": "9d1b8f4d00c27be227906fc5becd961a42465e01a29809aeea80e703b1d6fc0b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHT_SELECTION",
             "source_path": "src/gui/lighting/light_selection.py",
             "packaged_path": "Python/src/gui/lighting/light_selection.py",
-            "sha256": "347aff198f7c61df705804ee7ddf292576bb6312ad7654ce38ffdc9b0d8e2a02"
+            "sha256": "f44b5e2af49402af3604395a1d083b5e83fa74b6a563f6704d7b26e43f60acfb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHT_TYPES",
             "source_path": "src/gui/lighting/light_types.py",
             "packaged_path": "Python/src/gui/lighting/light_types.py",
-            "sha256": "78f7d24b29bc1b502dda49da7bfc902876edbf1d855dcaf2b2991244fc64dfd1"
+            "sha256": "3358fa24f67345bdb7f9bec5437740fad599d3dbc4aa968240879e05b089eeec"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTING_RIG_PRESETS",
             "source_path": "src/gui/lighting/lighting_rig_presets.py",
             "packaged_path": "Python/src/gui/lighting/lighting_rig_presets.py",
-            "sha256": "18a8c60ad8737ad8b5eda3ee7c6c1291518a3f5a6328abcae0098e929b86a537"
+            "sha256": "126760ed4be547d633b6080af40f7115d1d2306c40541b3d6f4b9e4f1b452209"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTING_VIEWPORT_CONTROLLER",
             "source_path": "src/gui/lighting/lighting_viewport_controller.py",
             "packaged_path": "Python/src/gui/lighting/lighting_viewport_controller.py",
-            "sha256": "50dc8bef30482587104142772bb43db3eebf8b45d9a35ab9bbb0afa526a22cc9"
+            "sha256": "586a171db676b2c8b91954f6e45ad7ea752f832a7f40673ca5b46b0ba62601d4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTMAP_BAKE_JOB",
             "source_path": "src/gui/lighting/lightmap_bake_job.py",
             "packaged_path": "Python/src/gui/lighting/lightmap_bake_job.py",
-            "sha256": "b83f7b2ff743e6f0b63d54335593dc4b8e9753ba1a756d49071df4410b05056e"
+            "sha256": "61df3dcf8c61b3fdb2d2a27725adbb51be5fbecbfd6a5e51dbb34020aaf73b77"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTMAP_BAKE_SETTINGS",
             "source_path": "src/gui/lighting/lightmap_bake_settings.py",
             "packaged_path": "Python/src/gui/lighting/lightmap_bake_settings.py",
-            "sha256": "99869efb279c113108bcdf87c9d7a289abb2140b47d6cd4bcf7ced043a049678"
+            "sha256": "2b58d1b8ccc49ff1f9af0e1291afb9a5d8826364f223df153e132d941f3a3f0d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTMAP_BAKE_WORKER",
             "source_path": "src/gui/lighting/lightmap_bake_worker.py",
             "packaged_path": "Python/src/gui/lighting/lightmap_bake_worker.py",
-            "sha256": "c4e5c4342401e18454ad0004964f7262d49a2dba9e68d9b4c4cbe0b09e3a030f"
+            "sha256": "3520bca45e2c6b476e14f6ecb3b43a26adcbeb78ec6c5af1a03dca1c319d3fb1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTMAP_BAKER",
             "source_path": "src/gui/lighting/lightmap_baker.py",
             "packaged_path": "Python/src/gui/lighting/lightmap_baker.py",
-            "sha256": "969c8692bf0b8c68c7944bb957d6aaeaf833a0a066ff7f0b1f0691b65f418858"
+            "sha256": "626ca9fe8c49fbfe33e6615b20323141f597634416af133533038af26e82a5da"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTMAP_COMPARE",
             "source_path": "src/gui/lighting/lightmap_compare.py",
             "packaged_path": "Python/src/gui/lighting/lightmap_compare.py",
-            "sha256": "f7283ec56153c1444a881e6ec94988702aff46dd1705ecc2a81e5f1cc92e0115"
+            "sha256": "e32d1093fac1f70e339045765f7de161df2e0c0c608cd34fe209fc0a5c595442"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTMAP_CONTROLLER",
             "source_path": "src/gui/lighting/lightmap_controller.py",
             "packaged_path": "Python/src/gui/lighting/lightmap_controller.py",
-            "sha256": "9145b5228ad57c5ec20aabbb3ed0b32c2c35b0d6f6962d54f880f36158a8610f"
+            "sha256": "f8b1caeb5e9ebaf2e53d0b571341e12764094ae0a1fb93f56b352798666a7e57"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTMAP_DENOISER",
             "source_path": "src/gui/lighting/lightmap_denoiser.py",
             "packaged_path": "Python/src/gui/lighting/lightmap_denoiser.py",
-            "sha256": "08a9028e24c717135aa7a09b8bf1c80f97ebd932f83a85aedf41e5d846d6b175"
+            "sha256": "d4a2d313b60cc8836f5e88a56cd4843c0268d431bdcaab34026a2696b27cff28"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTMAP_EXPORT_BRIDGE",
             "source_path": "src/gui/lighting/lightmap_export_bridge.py",
             "packaged_path": "Python/src/gui/lighting/lightmap_export_bridge.py",
-            "sha256": "ca6fba88f96df8dd141333b1bd8f8816fc4923ac062c8bf31af87a6f77dae86f"
+            "sha256": "c630704fc24e19dd2aa0dff6698c9c185f716b01b1f2e4e1274ad112697b3a0b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTMAP_GPU_SOLVER",
             "source_path": "src/gui/lighting/lightmap_gpu_solver.py",
             "packaged_path": "Python/src/gui/lighting/lightmap_gpu_solver.py",
-            "sha256": "45df2749458d14f7fb224ac1a66c893ef3fef69715c8daf6e483255deebb8a53"
+            "sha256": "0a4e5a85025bf3a9b1959286c0ef942102c0f9ad9709094bc26230f4fa99f3db"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTMAP_LIGHTING_SOLVER",
             "source_path": "src/gui/lighting/lightmap_lighting_solver.py",
             "packaged_path": "Python/src/gui/lighting/lightmap_lighting_solver.py",
-            "sha256": "bb9e4bd935d9b9494e5cb97423b3015fa6351ae3c3840bfe9df41f338e3b1f4f"
+            "sha256": "b3501d9d47933d5833b4212f573fa75cf6e57ae5123de20e1ea8529be1fafc51"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTMAP_MANIFEST",
             "source_path": "src/gui/lighting/lightmap_manifest.py",
             "packaged_path": "Python/src/gui/lighting/lightmap_manifest.py",
-            "sha256": "ff2cdd462bfef0d6b52dd438bc49f8b3ec3384e78dd6db6229b011ad99fc53f7"
+            "sha256": "840366407d028dc76d02952e5e8bfebea29a6399f79976c50cf390cb9b39fe14"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTMAP_OUTPUT",
             "source_path": "src/gui/lighting/lightmap_output.py",
             "packaged_path": "Python/src/gui/lighting/lightmap_output.py",
-            "sha256": "840ccc672bf3c0a3c81620bb706666e94314c983089b4b8628ef0bac0f00c2c4"
+            "sha256": "3f517d43f1ccc7b5d53505513cb8f0cf4af9ad52251d234c6d7e898325c40070"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTMAP_PADDING",
             "source_path": "src/gui/lighting/lightmap_padding.py",
             "packaged_path": "Python/src/gui/lighting/lightmap_padding.py",
-            "sha256": "3e18dc7bb3e1f9766fdcf215b1d714de7ba8ee6007f7254a36990295cb1f295b"
+            "sha256": "54fd789f1c763869d3bd27f727427f6b04b358497dcb088b4ef92a7f1f2f9c9b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTMAP_RASTERIZER",
             "source_path": "src/gui/lighting/lightmap_rasterizer.py",
             "packaged_path": "Python/src/gui/lighting/lightmap_rasterizer.py",
-            "sha256": "ca262d9f546959ec7b23f5a2d5c1c627226cc6be59995f907eac0b27d8226771"
+            "sha256": "fe442e83475c7c06b6cd3d40e4a63e30c5d4598347b6bc6cfb1583187e0adc66"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTMAP_SAMPLER",
             "source_path": "src/gui/lighting/lightmap_sampler.py",
             "packaged_path": "Python/src/gui/lighting/lightmap_sampler.py",
-            "sha256": "e072f10bfd636b85549d27a6c2ba2703ccdebc0b84418851cfa1977eb0f34443"
+            "sha256": "72d4c31e3737c22542035af71deb7c59c58930b7cf29f91334de0cad18b08c41"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTMAP_SHADOW_SOLVER",
             "source_path": "src/gui/lighting/lightmap_shadow_solver.py",
             "packaged_path": "Python/src/gui/lighting/lightmap_shadow_solver.py",
-            "sha256": "afe03e36963bbaa13a7fe1ceb3704e9639a2b143431976dcc300863b8bf265ca"
+            "sha256": "e87533541f3e7cb1645d44c2a030da80c3f1beaa70b42de5337088e7a73ed768"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_LIGHTMAP_UV_VALIDATOR",
             "source_path": "src/gui/lighting/lightmap_uv_validator.py",
             "packaged_path": "Python/src/gui/lighting/lightmap_uv_validator.py",
-            "sha256": "3415bd99ee6a713223c58a917f6b69683de7c9cb779af8c3a3dc6e1ffd4cbf5c"
+            "sha256": "960eff0e69052f2cfa192a79fe22860d5a92999b616f4277f086a4ffaa993f6f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_MATERIAL_MAP_CONTROLLER",
             "source_path": "src/gui/lighting/material_map_controller.py",
             "packaged_path": "Python/src/gui/lighting/material_map_controller.py",
-            "sha256": "d6021971c46006897e81ddf6e4c8e42d2c03c385e98b64a91887eecce7accb64"
+            "sha256": "1616f1886c946a820291bb10ba434e4f6675b9b2c3fdf6b46f30cb4b8fc35a34"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_PREVIEW_CACHE",
             "source_path": "src/gui/lighting/preview_cache.py",
             "packaged_path": "Python/src/gui/lighting/preview_cache.py",
-            "sha256": "80be52d557dd68814c1a3238dd4de5b8544d93f5c7a7f79f5881b3b738351330"
+            "sha256": "44b77362eeb3aa6d3fcc813b04fe96ab1b7d0e9641d5fae10b74755cb49fae01"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_RAYCAST_BACKEND",
             "source_path": "src/gui/lighting/raycast_backend.py",
             "packaged_path": "Python/src/gui/lighting/raycast_backend.py",
-            "sha256": "23cceb501199727a1e35c972cf9fa6df3acf5c50e9ffceae34446dd196b8761f"
+            "sha256": "ba2d9cf778814874d6650f4270a322103221bf069c4150544dddbef9ca4ed6d4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_RENDER_DATA",
             "source_path": "src/gui/lighting/render_data.py",
             "packaged_path": "Python/src/gui/lighting/render_data.py",
-            "sha256": "25964742664f1c40eccbb582a439593ec7920142e9d584b6b49017143cc8120c"
+            "sha256": "7aa57749ac464a29320aad275bd831ac135898aa2e988b82458bc2ee31055122"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_SETTINGS",
             "source_path": "src/gui/lighting/settings.py",
             "packaged_path": "Python/src/gui/lighting/settings.py",
-            "sha256": "3a165ecc1ee70700097e231b150324c7967bc8d4963d75f6076c367c23258d38"
+            "sha256": "098e3a2ceeaad4b776a15f0e1bf5650c31925f0f37b515b98b895a5be2e4007f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_SHADER_COMPLEXITY",
             "source_path": "src/gui/lighting/shader_complexity.py",
             "packaged_path": "Python/src/gui/lighting/shader_complexity.py",
-            "sha256": "1d35134939f5ac61f30d387087c968405ba5fde3d6f626440d42c67d8392483f"
+            "sha256": "b4fe78e3b1ddba9c12de2b4b09ce43e8f1e4adb7eb617b25f544dcf4d7a64148"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_UV_ATLAS_GENERATOR",
             "source_path": "src/gui/lighting/uv_atlas_generator.py",
             "packaged_path": "Python/src/gui/lighting/uv_atlas_generator.py",
-            "sha256": "9558eafae0bc8b00ab71fe0ae42c35bb0840b56479912c344423069bb5ff2f59"
+            "sha256": "c6c3a3d87df82cd2949a73da0ca130edbfb43cf9bbf212dd1264a471e5d12c24"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_UV_CHANNEL_INFO",
             "source_path": "src/gui/lighting/uv_channel_info.py",
             "packaged_path": "Python/src/gui/lighting/uv_channel_info.py",
-            "sha256": "fa246b94575341496853e5b97845f98f1904e5dde8b80e54502ee8f8d7ed5114"
+            "sha256": "c7669b386f4c830f3b6de0ac9b0812b156ab694ee8ea552a5a1f328eb18dc27d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_INIT",
@@ -579,271 +585,301 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_ADJUST_PIVOT_PANEL",
             "source_path": "src/gui/panels/adjust_pivot_panel.py",
             "packaged_path": "Python/src/gui/panels/adjust_pivot_panel.py",
-            "sha256": "c4673d8775ed5303eda30b1026c8e025e454a031c74f449ae598570b54efcb57"
+            "sha256": "055907f3a9a3cbd3265fad293ddd2b459ddd4ece47be1370810c0b9c771d1320"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_AXIS_MODE_CONTROL",
             "source_path": "src/gui/panels/axis_mode_control.py",
             "packaged_path": "Python/src/gui/panels/axis_mode_control.py",
-            "sha256": "56e15560ed4961b60fb64ca7b0a08e8ef6caec4495d60dfea360e05dfbfd00da"
+            "sha256": "8c5d35b5d8266c3c1d44c48e4e00a2eab7816015e0e68329361369eff3441ce7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_INIT",
             "source_path": "src/gui/panels/module_editor/__init__.py",
             "packaged_path": "Python/src/gui/panels/module_editor/__init__.py",
-            "sha256": "fcc17717ae05272ad1a7c0ddddd53a1ea5a55943b829cd537436c6a9c669055c"
+            "sha256": "78489253018ce4754c5689b6a05c1f3ab6d0f1e60a5b9bb4eaa790a84fefc73f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_BLUEPRINTS_TAB",
             "source_path": "src/gui/panels/module_editor/blueprints_tab.py",
             "packaged_path": "Python/src/gui/panels/module_editor/blueprints_tab.py",
-            "sha256": "e1d291614f0f5f8c7d3f35744ff4186944e956744011a1ce671c620f92b70162"
+            "sha256": "6c9c8bfb9fab420eb550cb2102fc638f5dc20e72eaaeb92bd2ab4689be58ea75"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_BUILDER_TAB",
             "source_path": "src/gui/panels/module_editor/builder_tab.py",
             "packaged_path": "Python/src/gui/panels/module_editor/builder_tab.py",
-            "sha256": "fe5a870148dfaf91f3362d96dfd4ac7b74213f700cace82cde5cf2a9bfcf69cb"
+            "sha256": "e0b338b7c40b1068bbc355c30559b11d613f84efe94787598a1d5c3ace35dfe6"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_ENVIRONMENT_TAB",
+            "source_path": "src/gui/panels/module_editor/environment_tab.py",
+            "packaged_path": "Python/src/gui/panels/module_editor/environment_tab.py",
+            "sha256": "857bb218c377425fab0771ad6e0752c407314a4de1e85f420d2b5f9822fd5d30"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_EXPORT_PANEL",
             "source_path": "src/gui/panels/module_editor/export_panel.py",
             "packaged_path": "Python/src/gui/panels/module_editor/export_panel.py",
-            "sha256": "043c7ff3568074a449fb65f2e27e7a0247bfd2ace86ddf92da6a40fb4ea94523"
+            "sha256": "4cf35d46a87634f9dac00464ccfe6f7ef94172845a90cb665673ef2d08f57648"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_GMODELER_MARKING_MENU",
+            "source_path": "src/gui/panels/module_editor/gmodeler_marking_menu.py",
+            "packaged_path": "Python/src/gui/panels/module_editor/gmodeler_marking_menu.py",
+            "sha256": "5bbdffc64c1060049b08ca6a5aa0eee719a0e1b8c564bd30d6a7a80b508c5c3d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_MODULE_EDITOR_ASSET_BROWSER",
             "source_path": "src/gui/panels/module_editor/module_editor_asset_browser.py",
             "packaged_path": "Python/src/gui/panels/module_editor/module_editor_asset_browser.py",
-            "sha256": "eed79e154af8c5d08b47a246df99affb0e9f8c180742cc521f80f4620710e640"
+            "sha256": "19de355b2c1d8745eda431240efbc57fad721e728adc56316162fe533067e443"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_MODULE_EDITOR_OUTLINER",
             "source_path": "src/gui/panels/module_editor/module_editor_outliner.py",
             "packaged_path": "Python/src/gui/panels/module_editor/module_editor_outliner.py",
-            "sha256": "dd9e07333208d07b3ce4a7e62cbcbfce66117467662f525451a4c945c907068e"
+            "sha256": "37af6fbea5658581a1f739f70f8f21821ac17c092b35cf0e065c2fb271a05f69"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_MODULE_EDITOR_PROPERTIES",
             "source_path": "src/gui/panels/module_editor/module_editor_properties.py",
             "packaged_path": "Python/src/gui/panels/module_editor/module_editor_properties.py",
-            "sha256": "f0c958decd55597fab68ee5af55cc3a48ad19cf7259ca5d706c3db1e320693bf"
+            "sha256": "65ae7753dbcc7fcf807f0554b0be986ca907927a1ecc77d4ce718f8493885afb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_MODULE_EDITOR_TOOLBAR",
             "source_path": "src/gui/panels/module_editor/module_editor_toolbar.py",
             "packaged_path": "Python/src/gui/panels/module_editor/module_editor_toolbar.py",
-            "sha256": "9a461eaed040509dea05e2486102bca581eba111cd9482a4b481fb32ddc93119"
+            "sha256": "ce65ba1bd01503c03fef23745661e90e8d3055ed754f4b0d7e0593586dd85226"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_MODULE_EDITOR_VIEWPORT_PANEL",
             "source_path": "src/gui/panels/module_editor/module_editor_viewport_panel.py",
             "packaged_path": "Python/src/gui/panels/module_editor/module_editor_viewport_panel.py",
-            "sha256": "49f2b6e13436d85e88ae630878749bacfa939aea42e7dbd00616990830b07068"
+            "sha256": "6877952d978187b46fc3af50b8db4ef6914ef8a7ad38dff332f05d8f408ea1bc"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_PLACEMENT_TAB",
+            "source_path": "src/gui/panels/module_editor/placement_tab.py",
+            "packaged_path": "Python/src/gui/panels/module_editor/placement_tab.py",
+            "sha256": "68170de8d4947598fd71143b36c275323da1e6e652dedd280bfe481035560fcf"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_PORTER_TAB",
             "source_path": "src/gui/panels/module_editor/porter_tab.py",
             "packaged_path": "Python/src/gui/panels/module_editor/porter_tab.py",
-            "sha256": "3a6bf8887cd8af5942904be144eef74c0567297374da8d0121a939521c1d54d7"
+            "sha256": "ef4d4fcc524fd6a06818af79a5610569864b8de75c0701884aee131e7fb56149"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_READINESS_PANEL",
             "source_path": "src/gui/panels/module_editor/readiness_panel.py",
             "packaged_path": "Python/src/gui/panels/module_editor/readiness_panel.py",
-            "sha256": "6a72bbd55f047e1c2bbed423c5ff0092e6a0ceed3207d02b53455180f70b318a"
+            "sha256": "7f99583df1da0c52f3960a30f7f0164e5906b6145d4913d9cdd57e499c215b81"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_ROOMS_TAB",
             "source_path": "src/gui/panels/module_editor/rooms_tab.py",
             "packaged_path": "Python/src/gui/panels/module_editor/rooms_tab.py",
-            "sha256": "664f7bc5183537e98299e7d5fc47419f49599f0337e0a2ace81e62d348b6e193"
+            "sha256": "f14a69fca0679bed321b6df1a082dbcfd0f44595df6e842b739c84f8109b7345"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_TEXTURE_BROWSER_DIALOG",
+            "source_path": "src/gui/panels/module_editor/texture_browser_dialog.py",
+            "packaged_path": "Python/src/gui/panels/module_editor/texture_browser_dialog.py",
+            "sha256": "7b89ddc3c22b6702edac913f511f12b003c849db0f45c36eeb78c0172b4eabce"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_TEXTURE_PAINT_TAB",
+            "source_path": "src/gui/panels/module_editor/texture_paint_tab.py",
+            "packaged_path": "Python/src/gui/panels/module_editor/texture_paint_tab.py",
+            "sha256": "5ab3bffe39a633c23e809ee207d8169bdb27984a1898cc4c69c6b69f7581916f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_VALIDATION_PANEL",
             "source_path": "src/gui/panels/module_editor/validation_panel.py",
             "packaged_path": "Python/src/gui/panels/module_editor/validation_panel.py",
-            "sha256": "0fddfa86dc6260f9bc8506a3606a1ce631dbee57771cfc5d6980f752d67aa66a"
+            "sha256": "dbc830a54592a75c7f4348b8f1ba98b020da6cfeee86b7b7f2fa2c650d822c4d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_WALKMESH_TAB",
             "source_path": "src/gui/panels/module_editor/walkmesh_tab.py",
             "packaged_path": "Python/src/gui/panels/module_editor/walkmesh_tab.py",
-            "sha256": "22cd68edde7232a1590559bad57d8c8f11308c4d4f463ae49db3005ef9847855"
+            "sha256": "0902785d55b803c1ac21b7cbbe1260fa3ab1c4c1bf65873d404d3b106a1f1b3d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_WORKFLOW_PANEL",
             "source_path": "src/gui/panels/module_editor/workflow_panel.py",
             "packaged_path": "Python/src/gui/panels/module_editor/workflow_panel.py",
-            "sha256": "a703baff824855ab4aefd43ebe67bc72288cba0ce95bdd187e86baddc021621b"
+            "sha256": "64fe4bb76f1c94a1bb72a61c1a082572d8921324de6702abf35c35a2b9c2cc71"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_ANIMATION_PANEL",
             "source_path": "src/gui/panels/qt_animation_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_animation_panel.py",
-            "sha256": "bbf03f6b513e941e9c707ceb1de8f1125e95eb6634a2740e557dc099e342c16f"
+            "sha256": "b22fcee1e3c17be0c8bd60517757176a717271adcac4ac3e7e85126b486d182b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_BODY_ATTACHMENT_PANEL",
             "source_path": "src/gui/panels/qt_body_attachment_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_body_attachment_panel.py",
-            "sha256": "cac719324be88e7d9efbc54394fad52e0be508af41868820d24e251adba80e49"
+            "sha256": "e1d89afcc2d89ac8f154c84eaecdcdfd397df3149bb53f984ce1d82cc8e3fd08"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_BOTTOM_STRIP",
             "source_path": "src/gui/panels/qt_bottom_strip.py",
             "packaged_path": "Python/src/gui/panels/qt_bottom_strip.py",
-            "sha256": "ef1123adae4ca23e3571d4eaab792c0fdbe2600568ca57a72e92214c1f535a5a"
+            "sha256": "329798bf0082d2646469162139512f895b97ce0da00ae83ce6d336807dc41f81"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_CAMERA_PANEL",
             "source_path": "src/gui/panels/qt_camera_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_camera_panel.py",
-            "sha256": "45f03ebca16cdaff96158791dde23e3494d5d14cd779b630c18486b7271c522b"
+            "sha256": "e811443b484b96cfa09d83f58ed15007e93df2b5b0b542acbc36999be81df198"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_CHARACTER_BUILDER_PANEL",
             "source_path": "src/gui/panels/qt_character_builder_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_character_builder_panel.py",
-            "sha256": "98a99822770b4316dbd8409d99bf3e5bba6a8eeca68eb0f1c2808e1802747f6a"
+            "sha256": "7297c47627cf2a96df21a954e446653f4b5678caf6dba1e7f46e4f3ebc9f7106"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_COMMON_PANELS",
             "source_path": "src/gui/panels/qt_common_panels.py",
             "packaged_path": "Python/src/gui/panels/qt_common_panels.py",
-            "sha256": "a75cca211e10cbc960a90ae550add7a2fc1b2399f21e34f4ed447de1b1b8d6a0"
+            "sha256": "212dd78ce74019f3c380699ee606af31ea59b03b8e3b44d772ba3c014fb48ccd"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_CONTENT_BROWSER_PANEL",
             "source_path": "src/gui/panels/qt_content_browser_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_content_browser_panel.py",
-            "sha256": "b7e55667bc06c80ab868454b4bb3d20bb31778c0d606817bc7c541d8f08c6b04"
+            "sha256": "86dc5753ca4d7c4d2ac3169dbb32390a03656c76a08a9a41af0befcd63bf3459"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_DIAGNOSTICS_PANEL",
             "source_path": "src/gui/panels/qt_diagnostics_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_diagnostics_panel.py",
-            "sha256": "01902d9fab8d35a28744d2c8d6b1c8a9c48bd5338cbbda207586ebe6b5d522e3"
+            "sha256": "4e11aa48acf741fef21519ef76fd102518584c09981c13015ac5ee04873f0d69"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_INSPECTOR_PANEL",
             "source_path": "src/gui/panels/qt_inspector_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_inspector_panel.py",
-            "sha256": "124a81ac818b9718fdeb4d6fcc3353544c8d8900c90c482192e9cc6c60f21ecc"
+            "sha256": "cf94d05642deb6f97b3ebb5bfc2aa410f9135f74e024c0c5a511dff6dcde2b80"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_LIBRARY_PANEL",
             "source_path": "src/gui/panels/qt_library_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_library_panel.py",
-            "sha256": "3b32af1eceb0f4eb7e128821d4780055f1fe1142ec1690c0bd96fd543c720247"
+            "sha256": "1ef45123a79973f7fa28271b51d16c195c76f998a313fcd1ca6e9b77f8eb461c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_LIGHTING_PANEL",
             "source_path": "src/gui/panels/qt_lighting_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_lighting_panel.py",
-            "sha256": "742239510d050780df225ed013259c42f4abd1a50835a9b90fab2fe5738d5c10"
+            "sha256": "64d1f0ce288726474ab0196d8928a4c992beb3aad947708c7311ea9f88451ccb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_LOG_PANEL",
             "source_path": "src/gui/panels/qt_log_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_log_panel.py",
-            "sha256": "5450505a257070a9641e13e8c0591f1d2a5c054e451c867491c6253558c821c1"
+            "sha256": "51a2268a055ee6f2e8981a8ca0ad3a0480dc466cec14383b34f84636281fe0dd"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_MESH_OPERATION_OPTIONS",
             "source_path": "src/gui/panels/qt_mesh_operation_options.py",
             "packaged_path": "Python/src/gui/panels/qt_mesh_operation_options.py",
-            "sha256": "05cbabc41d8e6e9cbcb7d63f43baf7ac2abb4945d41106f48b32098a1ee589b1"
+            "sha256": "fc097e744baff065d79132c5d50a68d2e5279fee75e039856a37af04b1309f7b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_MESH_SELECTION_TOOLBAR",
             "source_path": "src/gui/panels/qt_mesh_selection_toolbar.py",
             "packaged_path": "Python/src/gui/panels/qt_mesh_selection_toolbar.py",
-            "sha256": "ae300dc17d38d72df3e1224adf717f8efc5476d4530649f28faf179ce2b9cbea"
+            "sha256": "b6bed3a00eafe7ec2ed25240b98523f27ac471db48ad0fb443090e43082edf8e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_MESH_TOOLS_PANEL",
             "source_path": "src/gui/panels/qt_mesh_tools_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_mesh_tools_panel.py",
-            "sha256": "df4d1884d069ca28aedfb4757ec7675b94d05f22b47b0f93ca7256a7c8c95852"
+            "sha256": "f355a8c0f73b2077f06c4bd34f9e337b4437b895f038c5bbb21e2fcc5be4c34d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_MODULAR_PANEL",
             "source_path": "src/gui/panels/qt_modular_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_modular_panel.py",
-            "sha256": "2dea4aa83e056b766648756d5e9bb8173e70eb5237db1fbc19d2cba854bbbfa7"
+            "sha256": "231f6b4209ab1643cd13b1cd10bbcbdf4b7c3115b449d553b8d62e8956d4afec"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_NORMAL_MAP_PANEL",
             "source_path": "src/gui/panels/qt_normal_map_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_normal_map_panel.py",
-            "sha256": "b5e203ea93d5ae88a6a7f2564c8ad73834268fd9bc1c88c5bb7d72200c20cff6"
+            "sha256": "7d4097a2765004a22be69a24d6812958444f050c4232e79512fc000e15e411de"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_PROPERTIES_PANEL",
             "source_path": "src/gui/panels/qt_properties_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_properties_panel.py",
-            "sha256": "5750560165a88f118b26367ef82bc9562b0f6448269c6555a94f6a2d2ed1c133"
+            "sha256": "4a75ed5c1397118938d2e7dc4a5d5ca80deb4a2b39f9158047a817fd9e9b3395"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_RESOURCE_BROWSER_MODEL",
             "source_path": "src/gui/panels/qt_resource_browser_model.py",
             "packaged_path": "Python/src/gui/panels/qt_resource_browser_model.py",
-            "sha256": "0dc2c125288e44f3772397e10e6375695d3d33cc95883071a55c313b46d00f95"
+            "sha256": "faaa740d50f72e10a0aa111f42b4d441b91c915529a0710c42b3b1ae95432d8f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_RESOURCE_PANEL",
             "source_path": "src/gui/panels/qt_resource_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_resource_panel.py",
-            "sha256": "94437bbbeb210fd7d4d2d9a4046330bcbdd8f63785cdd5e36efee090ffcfc1e7"
+            "sha256": "db1d7b7a60debcd4d5f6b8b81bd343a663cfb4624a9932f0731f3e0d9260794e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_RIG_PANEL",
             "source_path": "src/gui/panels/qt_rig_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_rig_panel.py",
-            "sha256": "57fc89c23b6dd73e964767f1ff2b7203f28b73be97557c8682c114909bfa3d74"
+            "sha256": "74dabb4352e5260ffcf684a766162be8d263580f62f65319df4e3bdbb907ec2f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_SCENE_OUTLINER_PANEL",
             "source_path": "src/gui/panels/qt_scene_outliner_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_scene_outliner_panel.py",
-            "sha256": "a1e5960e908edcd7f4ef096d69b8a2bf033de79d4bd857624dbc435238fdbc5a"
+            "sha256": "cba99c7ff7bba14a34ec967d98efa2b508c89e6a2108ee5597ff2443d98bf168"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_SKELETON_PANEL",
             "source_path": "src/gui/panels/qt_skeleton_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_skeleton_panel.py",
-            "sha256": "a01fc46270daeefeb4832181e32db93250dbd190be912dac7e8e6ca0832c0792"
+            "sha256": "ef7d2bfb95eea0cf1a439c2f90c5dff1df63be96d0aa7eab4faf0ae195330a94"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_SPRITE_MATERIAL_PANEL",
             "source_path": "src/gui/panels/qt_sprite_material_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_sprite_material_panel.py",
-            "sha256": "0442702943cae28ef2ea57fee49bd9e2ccc12584741bc3771399bd96f62cd190"
+            "sha256": "cc9a742b972e85fea6649e762aafea1b98eba25abc916fcbc2685c5ba4bf4101"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_TEXTURE_PANEL",
             "source_path": "src/gui/panels/qt_texture_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_texture_panel.py",
-            "sha256": "d063140831c8bb4db57bf7c15461bc4da3fe9a2c116b43e9db641e82c687501d"
+            "sha256": "f5cd3d03061a4f14e0748535f224f315c889b60791c20b5f3b38d605070ebe49"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_UE5_RIG_EXPORT_PANEL",
             "source_path": "src/gui/panels/qt_ue5_rig_export_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_ue5_rig_export_panel.py",
-            "sha256": "fe69ccdcd3a72b4e5d0c71d1c30574d7cefea6b6a2e150606a5a73bd150098f8"
+            "sha256": "5ddc907188ce12211fdbce328007e8a64949536829c5786f5b2dc5956ad2edcf"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_WORKFLOW_RAIL",
             "source_path": "src/gui/panels/qt_workflow_rail.py",
             "packaged_path": "Python/src/gui/panels/qt_workflow_rail.py",
-            "sha256": "d2a57b6c9001709e8fdad6a152d7d1d42c28c50b6445f69d5194e5b9f62c1a40"
+            "sha256": "d7b97d31e410b528a8a0347d34bba313e5e60e588e066c4c6c1c623784a6d0c6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_QT_LIB",
             "source_path": "src/gui/qt_lib.py",
             "packaged_path": "Python/src/gui/qt_lib.py",
-            "sha256": "9e3328b4f37c00fb148546644b9d03bcf8edd499ccfa63341c9af788e3b53ca5"
+            "sha256": "feab0be82d85bb15d11f3085aceabbda530a4fb80796507878d49abdf3e8a631"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_INIT",
@@ -855,385 +891,385 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_ACCEL",
             "source_path": "src/gui/rendering/accel.py",
             "packaged_path": "Python/src/gui/rendering/accel.py",
-            "sha256": "04c6556b5c544f720a8bcd1a70bc4a7a2f5231e6df38fd4a7e90d7b737610e49"
+            "sha256": "a8791289b4cb61b3ef504931255cd00840599463559e65cdcf9a67772619f2f1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_DIRECT3D_RENDERER",
             "source_path": "src/gui/rendering/direct3d_renderer.py",
             "packaged_path": "Python/src/gui/rendering/direct3d_renderer.py",
-            "sha256": "4f3a47a9f0ffc89c8fee25c38fd971a003d21d80a92a87798fa0b86ac02ebe72"
+            "sha256": "081c7664589160e33d3c2e820925cf834b7806581fe21400da3ab98273cb78b8"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_FRAME_CORE_INIT",
             "source_path": "src/gui/rendering/frame_core/__init__.py",
             "packaged_path": "Python/src/gui/rendering/frame_core/__init__.py",
-            "sha256": "53d57ee5795679eb545923379eace5550fa374dfe110a39a442743ccfa86ce86"
+            "sha256": "0d4e5f4b535cec7a1b9bb8352333cc7df248324701a8085df7c5122e8f57899e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_FRAME_CORE_COLORS",
             "source_path": "src/gui/rendering/frame_core/colors.py",
             "packaged_path": "Python/src/gui/rendering/frame_core/colors.py",
-            "sha256": "e9be22a59d83fd78e770b6451e716f833df08ebc9d7857f9f9e9aab30d9c753f"
+            "sha256": "1318192efaa610d70be7e97d2ec23b80f09d31dedd87b5a396cafe763ee4ceb5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_FRAME_CORE_DEPENDENCIES",
             "source_path": "src/gui/rendering/frame_core/dependencies.py",
             "packaged_path": "Python/src/gui/rendering/frame_core/dependencies.py",
-            "sha256": "6f297a1e7c88bc7b58d3656ebd72fcc40a4b6f764b0a4f7870d9ea1e4018a560"
+            "sha256": "735e04ff340a62329427b3035e0e78b08213c068f7f33f8a6efa455817c15d16"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_FRAME_CORE_DIAGNOSTICS",
             "source_path": "src/gui/rendering/frame_core/diagnostics.py",
             "packaged_path": "Python/src/gui/rendering/frame_core/diagnostics.py",
-            "sha256": "ec8b082d64f76bd8055de38165917e19278153f1e30e819c9186ac22c333896d"
+            "sha256": "6e2be438769573cfa4136e96e872a40c12674f741846405635a8902b2f707a08"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_FRAME_CORE_MATH_HELPERS",
             "source_path": "src/gui/rendering/frame_core/math_helpers.py",
             "packaged_path": "Python/src/gui/rendering/frame_core/math_helpers.py",
-            "sha256": "e255032a0b9bf4904628427079b5567779b9564e6a9e62b86f5069af7779d19c"
+            "sha256": "3bda0c57116a3ced59bf791d70a37865dfda644a4394c11401a027c135eed44a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_FRAME_CORE_MIXIN_IMPORTS",
             "source_path": "src/gui/rendering/frame_core/mixin_imports.py",
             "packaged_path": "Python/src/gui/rendering/frame_core/mixin_imports.py",
-            "sha256": "c9389dcda7c7e5d33b8a910498f5b38678cdc46a17c8e95d5c1286692a87834f"
+            "sha256": "05c36d04f2eba50763c671a0de1ff871a36f72b1c0a8cd81a3d55ed9ccd9a401"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_FRAME_CORE_RASTERIZER",
             "source_path": "src/gui/rendering/frame_core/rasterizer.py",
             "packaged_path": "Python/src/gui/rendering/frame_core/rasterizer.py",
-            "sha256": "8e29fb8292d7afd6dc0c1cb6d3b21fa0cae0000b406f0142c2c0e2c50ac88f49"
+            "sha256": "dc26e6999751a610b9d002e94b1a999b49030cbaa5f0ee6f2176e4130dd1ab45"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_FRAME_CORE_RENDERER",
             "source_path": "src/gui/rendering/frame_core/renderer.py",
             "packaged_path": "Python/src/gui/rendering/frame_core/renderer.py",
-            "sha256": "2ace6cb2a5c3966c3658e70a99013b1c9883389b5e6aae666d8c5e9d45aba70f"
+            "sha256": "69b134d40c079825ee2510f6137a93474c719c4947b87252b73a4223a1f3cf96"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_FRAME_CORE_RENDERER_GEOMETRY",
             "source_path": "src/gui/rendering/frame_core/renderer_geometry.py",
             "packaged_path": "Python/src/gui/rendering/frame_core/renderer_geometry.py",
-            "sha256": "43e4048fa42819f6bbd8a876cc72b4752d9ba042f16f68ebd4ac4aba918e2934"
+            "sha256": "f903417a529fbfb8588d27cc9db38a7e88901bd69f23df87d14f91c92b216f76"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_FRAME_CORE_RENDERER_MESHES",
             "source_path": "src/gui/rendering/frame_core/renderer_meshes.py",
             "packaged_path": "Python/src/gui/rendering/frame_core/renderer_meshes.py",
-            "sha256": "bd466f52e2779c3ac497036abc14b2fb3f82da39781b1bb5ae6ad557832e9d88"
+            "sha256": "6b0cf4887b23c26bedf92a6755eefa5bb3ff92112584092eae0f247f1b5b23f0"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_FRAME_CORE_RENDERER_OVERLAYS",
             "source_path": "src/gui/rendering/frame_core/renderer_overlays.py",
             "packaged_path": "Python/src/gui/rendering/frame_core/renderer_overlays.py",
-            "sha256": "1bd189b523565220dabf69b3e53190c32839f0ccc747831b0064b38f50554c7b"
+            "sha256": "702efcf0585a4fd2ce89e00c86ebe32b8388c76aad41e2ac8d1a9aff28721551"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_FRAME_CORE_RENDERER_RENDER_LOOP",
             "source_path": "src/gui/rendering/frame_core/renderer_render_loop.py",
             "packaged_path": "Python/src/gui/rendering/frame_core/renderer_render_loop.py",
-            "sha256": "713ffaec5a4061037fd2bd7e728f0b9717f714ca72e8e0ed97cf50e8452d9e94"
+            "sha256": "b60baf58d4d6265a87f5dc10b6f5940121685a8574ad82fca70266cfa3bfeb40"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_FRAME_CORE_RENDERER_SETUP",
             "source_path": "src/gui/rendering/frame_core/renderer_setup.py",
             "packaged_path": "Python/src/gui/rendering/frame_core/renderer_setup.py",
-            "sha256": "08d5829f9e416a6b2106344e1e31310b73e2b6927fda2e4fd5df925106788cd6"
+            "sha256": "285180f81d9c5ac5c5c2dcc19c33731d484c6d92e68c0cbc0947e026dc9bf407"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_FRAME_CORE_RENDERER_TEXTURES",
             "source_path": "src/gui/rendering/frame_core/renderer_textures.py",
             "packaged_path": "Python/src/gui/rendering/frame_core/renderer_textures.py",
-            "sha256": "0aaabd6a6a517ac2b4782adb38a5c609124b5908375e25fea196b1c8e93ca99c"
+            "sha256": "057894809b3e73d8b88073956b2729c1c4c3f5dc1d6d6d8200dc28e142369421"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_FRAME_CORE_TEXTURE_CACHE",
             "source_path": "src/gui/rendering/frame_core/texture_cache.py",
             "packaged_path": "Python/src/gui/rendering/frame_core/texture_cache.py",
-            "sha256": "0cabf1e222bb962a4428e4cd6b133aa68b7072a1922fb36620b30b777a52db1d"
+            "sha256": "f02e5042b12714b9c642338e080c63f894cbf6e227eaf55528bb9abf4d1c32ba"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_GPU_CORE_INIT",
             "source_path": "src/gui/rendering/gpu_core/__init__.py",
             "packaged_path": "Python/src/gui/rendering/gpu_core/__init__.py",
-            "sha256": "bcc0cc7b9e436fc469acd69c0af2d4cbb9ea9515197c42bef5c967cc374a1074"
+            "sha256": "238d42b9bcaf4f347f90859f9f46018654999209c9bc357489975c27dd100651"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_GPU_CORE_BENCHMARK",
             "source_path": "src/gui/rendering/gpu_core/benchmark.py",
             "packaged_path": "Python/src/gui/rendering/gpu_core/benchmark.py",
-            "sha256": "ee83c93031ee41b44b84b60838e13a68ef3a2b4d00807e8fa677a9887fa5018d"
+            "sha256": "a3fe1453fd6966bd973d3fe1926ebdb01fb451cdec523237ddc650d5b1d4a258"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_GPU_CORE_CLI",
             "source_path": "src/gui/rendering/gpu_core/cli.py",
             "packaged_path": "Python/src/gui/rendering/gpu_core/cli.py",
-            "sha256": "5312d18cc8808a5e3084cd204bdb802a05d56cbd224704c17cda315175d3daf6"
+            "sha256": "5c0ebbbc2e1dd761c8631b62f86bc911921da7f0f3ea8ecaf042503c31ea2a08"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_GPU_CORE_DEBUG_TABLES",
             "source_path": "src/gui/rendering/gpu_core/debug_tables.py",
             "packaged_path": "Python/src/gui/rendering/gpu_core/debug_tables.py",
-            "sha256": "485c3ab17820f3659166abfff2478795da377a0176dd549de5bfb4dd0363776e"
+            "sha256": "e0b78cbd8e1a1c17c08f9246fd6e5f2d32566b501f61780c0a2909ae4cf62151"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_GPU_CORE_DIAGNOSTICS",
             "source_path": "src/gui/rendering/gpu_core/diagnostics.py",
             "packaged_path": "Python/src/gui/rendering/gpu_core/diagnostics.py",
-            "sha256": "2f742cf40f83f22368e8831d8f46087e2ffe39a3ab8089c032b0f93923489169"
+            "sha256": "49cb742883cee4bc105693ffba122a653ec2f308432b3677455eb8cd218b71aa"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_GPU_CORE_MATH_HELPERS",
             "source_path": "src/gui/rendering/gpu_core/math_helpers.py",
             "packaged_path": "Python/src/gui/rendering/gpu_core/math_helpers.py",
-            "sha256": "763ed995fbed654696980a80a39d62e79700e8a7a0bb9853c6407525ef4e99d7"
+            "sha256": "80ee1717558b72549564c0ef3baa502f2b27cd828d6cfbbcc4fd68a93871ba5e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_GPU_CORE_RENDERER",
             "source_path": "src/gui/rendering/gpu_core/renderer.py",
             "packaged_path": "Python/src/gui/rendering/gpu_core/renderer.py",
-            "sha256": "f571f8f104dfa712fb72938347de9e8fe382bc4c8a41d10ae7248c990f9a8b4e"
+            "sha256": "57ba70fe42adaeab6e0484a5c20b7eebf74f105598fd4ee5e69a5c626587b789"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_GPU_CORE_RESOURCES",
             "source_path": "src/gui/rendering/gpu_core/resources.py",
             "packaged_path": "Python/src/gui/rendering/gpu_core/resources.py",
-            "sha256": "b959cd953a74af3bc58df8e40679b8baba4b05e1dacf41a2c9f68a8b51202a5c"
+            "sha256": "04eb734debb7bb4cc0dde660e4be469a2bb18609836364b257e2a108123b0a4c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_GPU_CORE_SCENE_HELPERS",
             "source_path": "src/gui/rendering/gpu_core/scene_helpers.py",
             "packaged_path": "Python/src/gui/rendering/gpu_core/scene_helpers.py",
-            "sha256": "bef409001a416e6e6e9a323ba9ccd371488f5b53473d3336144470402aab5a5b"
+            "sha256": "218a55fc0ebdcbf028e9ced14f465863976f78976d96b7b286b0d8efb6c0808c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_GPU_CORE_SHADERS",
             "source_path": "src/gui/rendering/gpu_core/shaders.py",
             "packaged_path": "Python/src/gui/rendering/gpu_core/shaders.py",
-            "sha256": "7d01ca49df209727db319e96387235539824af3bdf14b3aef5b4c6111bbd6ea1"
+            "sha256": "c2a9345ec5378c5a784e6c1c6557b8bba5bf7156e02bd44f2ffaf2b1903c20c6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_GPU_RENDERER",
             "source_path": "src/gui/rendering/gpu_renderer.py",
             "packaged_path": "Python/src/gui/rendering/gpu_renderer.py",
-            "sha256": "88fd0232b866d44488f50b837256682828f6aa186569f20a395e6cb284925f1e"
+            "sha256": "e125098c72f9deb9ad042f7851b4b99787c3332b9ebb71b2814de1f3651509ba"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_HARDWARE_INFO",
             "source_path": "src/gui/rendering/hardware_info.py",
             "packaged_path": "Python/src/gui/rendering/hardware_info.py",
-            "sha256": "1db195cc11e38296bc597af98d7f215fefdfa795c42159b66ab6104928de4916"
+            "sha256": "479615e4a92c7520a467dc431964f5fe83e14025d5086eb1dea5048d95936c9e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_MESH_RENDER_DATA",
             "source_path": "src/gui/rendering/mesh_render_data.py",
             "packaged_path": "Python/src/gui/rendering/mesh_render_data.py",
-            "sha256": "e63446bcd46c3e5d2893196f9cfe50751cacb3d1d82990f7f14c9c2158596e68"
+            "sha256": "8358cd3d0c1361d3c065ff1c07efaa7b975181b0a729037f44ab2e3b933f6c82"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_MODERNGL_RENDERER",
             "source_path": "src/gui/rendering/moderngl_renderer.py",
             "packaged_path": "Python/src/gui/rendering/moderngl_renderer.py",
-            "sha256": "c4a8e885fd1b2c8fd537d44d4b82b775a58386b5c4903e7ab4fdf392a0c68a25"
+            "sha256": "98c2b7514364d74f9753abf52b3310d6cb7a80a6b7fc0b3be751ecf346172875"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_NULL_RENDERER",
             "source_path": "src/gui/rendering/null_renderer.py",
             "packaged_path": "Python/src/gui/rendering/null_renderer.py",
-            "sha256": "967d3c9a6f362045c494eb32aec9be14e1aa03d15df55884c769a91567aa2275"
+            "sha256": "ea9bba0153cb34919f190040e56457cbe7dd92b8729a909d033e5f826778468a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_PICKING",
             "source_path": "src/gui/rendering/picking.py",
             "packaged_path": "Python/src/gui/rendering/picking.py",
-            "sha256": "85443217984fb3af365564c092ec9d616cb06ff10440b22f1766f28f09718646"
+            "sha256": "2052449321947dac17d3aa07169e7a862b6f162da672af210530685e98e005f1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_PYGFX_RENDERER",
             "source_path": "src/gui/rendering/pygfx_renderer.py",
             "packaged_path": "Python/src/gui/rendering/pygfx_renderer.py",
-            "sha256": "1ac99f09b3610500a20406f6f653c1d584617fda01af0ad484ec7f38034794c8"
+            "sha256": "4445d4c739c8d03439656ea6c3ed42ea804224b0b35652479f639dd01b97b41a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_QT_ACCEL",
             "source_path": "src/gui/rendering/qt_accel.py",
             "packaged_path": "Python/src/gui/rendering/qt_accel.py",
-            "sha256": "7e27865464ea8c106ac4d752adf42b511572ad5c43eb4874cd1b1218ab8be1fa"
+            "sha256": "008ce9c0668621ddfb600865d8efe346d37d62c8fce5ce629b830b7d80a0766b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_QT_GPU_RENDERER",
             "source_path": "src/gui/rendering/qt_gpu_renderer.py",
             "packaged_path": "Python/src/gui/rendering/qt_gpu_renderer.py",
-            "sha256": "c7f1c368a78379fb0d37ae692214d783d405c4a223beb8c1b04488cb76e2ef8c"
+            "sha256": "641f80ed6d709317d680d63e9b2c45ae5f19c58c2ff888f74a3de95b93df2f38"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_RENDERER_BACKEND",
             "source_path": "src/gui/rendering/renderer_backend.py",
             "packaged_path": "Python/src/gui/rendering/renderer_backend.py",
-            "sha256": "3b6dd18bb70fba82c851623a162636abec73c87dc57df62f7b054af822d796d0"
+            "sha256": "e47641b987c53c1faa73558d2ceaeb5669087636a0c704934262e6fb28b42e47"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_RENDERER_CAPABILITIES",
             "source_path": "src/gui/rendering/renderer_capabilities.py",
             "packaged_path": "Python/src/gui/rendering/renderer_capabilities.py",
-            "sha256": "1c9d39b53cffc96ce2b4ddad308040895162fbf968cf249bc205b91f9fff1f69"
+            "sha256": "a971a74206ca152f025c072c676640b99a3123ac63aa9cb8fc2ed9c1ca9dda04"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_RENDERER_FACTORY",
             "source_path": "src/gui/rendering/renderer_factory.py",
             "packaged_path": "Python/src/gui/rendering/renderer_factory.py",
-            "sha256": "46fd5860fbbe30cae595d94a5b496924e5db7d69dfbf0382088079ee47bb32a4"
+            "sha256": "13faaafca121240708d5f7c7d65f35b614fb6dcf1bbc17a214111ea89e73498c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_RENDERER_INTERFACE",
             "source_path": "src/gui/rendering/renderer_interface.py",
             "packaged_path": "Python/src/gui/rendering/renderer_interface.py",
-            "sha256": "f1731c2a832709bc5194baf81211c2abd616bdadafde8cc8f6ee4bc3422b4e05"
+            "sha256": "04da57f6577d8185dab219117967c9a6c2be1c7dc9def2deb6562de68c27959f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_RENDERER_PERFORMANCE",
             "source_path": "src/gui/rendering/renderer_performance.py",
             "packaged_path": "Python/src/gui/rendering/renderer_performance.py",
-            "sha256": "0c2a26f6cd795e704152284c1bcd9bcd121cd8f284f744a8efc3a48ae82cf477"
+            "sha256": "9a70cf1f0f485e67c1d7bd32702b98f124774b18283ac8e7d12843e2c6f6bb12"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_RENDERER_PROFILER",
             "source_path": "src/gui/rendering/renderer_profiler.py",
             "packaged_path": "Python/src/gui/rendering/renderer_profiler.py",
-            "sha256": "41848093388568b5906913ac42dc367ea97eb342d2569b82ec00c9a519d39266"
+            "sha256": "20ba6e85b925d7b93be0b7172babe191e99792ff04ee784c07f9b1edf12dab67"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_RENDERER_SETTINGS",
             "source_path": "src/gui/rendering/renderer_settings.py",
             "packaged_path": "Python/src/gui/rendering/renderer_settings.py",
-            "sha256": "b4ac63feb8e5c646b053050b17d31e686c87b5297539b684f7c570fd5fa8d91d"
+            "sha256": "1665a57b315e6e98716059548eb03c6a5df658559cccc0d873381f4477aba14a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_SKELETON_RENDER_DATA",
             "source_path": "src/gui/rendering/skeleton_render_data.py",
             "packaged_path": "Python/src/gui/rendering/skeleton_render_data.py",
-            "sha256": "78ff8e41b389f60ba23aecb8e9bafb726cb4eedf3655f3dd9e6d7a9ba454418a"
+            "sha256": "e29221c38b943dbbe72a67b6b0aacd4a232ee06b8cf4c4c422dc1fb31e6c34c4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_VIEWPORT_CORE",
             "source_path": "src/gui/rendering/viewport_core.py",
             "packaged_path": "Python/src/gui/rendering/viewport_core.py",
-            "sha256": "625090cc841e5337ddb7beaaefdb5cf31d0a979a237f81d9dd0078e2b8fd2d7c"
+            "sha256": "92862da94dff505453ebb0a536d13ab593cc6be85061438f403fd881388ccbc6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_VIEWPORT_DISPLAY",
             "source_path": "src/gui/rendering/viewport_display.py",
             "packaged_path": "Python/src/gui/rendering/viewport_display.py",
-            "sha256": "a95e4eaf72cb1e9aac9ab7451c9d740957a90d2bdac580cbd68308a8075c7a3c"
+            "sha256": "e8a92ad0e9b67f6b5792e4826b00855043ed2a7e54f1024fe89854356356e390"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_VIEWPORT_NAVIGATION",
             "source_path": "src/gui/rendering/viewport_navigation.py",
             "packaged_path": "Python/src/gui/rendering/viewport_navigation.py",
-            "sha256": "64ad0a29db85d76ffc5fe780618eff4831edfe74fb29dd076bf280b116417695"
+            "sha256": "051f68eb7394015f80e52f0548d4b6417d7ea3a346862f400ae119bfc2599044"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_WGPU_CORE_INIT",
             "source_path": "src/gui/rendering/wgpu_core/__init__.py",
             "packaged_path": "Python/src/gui/rendering/wgpu_core/__init__.py",
-            "sha256": "78bd11dc62cefb79ea3a14e8e2a7dc789dcb5a3f4e322285a53c3c00631bf63d"
+            "sha256": "bbc39c2dd7847f40eaa331a2803bdc686544d16eb92c4082de483708e0ed3b7d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_WGPU_CORE_RENDERER",
             "source_path": "src/gui/rendering/wgpu_core/renderer.py",
             "packaged_path": "Python/src/gui/rendering/wgpu_core/renderer.py",
-            "sha256": "80ce7486d55e72b6de5d075759e320b06b6a8e65e7bcbadf790f7a9e639b087d"
+            "sha256": "2c5950bb083d14e6bfae81d7136a9f8b620e47608c338653aa86eb81f309c21b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_WGPU_CORE_RESOURCES",
             "source_path": "src/gui/rendering/wgpu_core/resources.py",
             "packaged_path": "Python/src/gui/rendering/wgpu_core/resources.py",
-            "sha256": "fbc9e3f560c0b1f246b0c3ec8294bcec171a2215de75bcbce634288bde5ad24b"
+            "sha256": "29d26ca7a0c123881ce53c8f342c26e0679bb21688f3aa440c73b5e10b93d25e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_WGPU_CORE_SHADERS",
             "source_path": "src/gui/rendering/wgpu_core/shaders.py",
             "packaged_path": "Python/src/gui/rendering/wgpu_core/shaders.py",
-            "sha256": "8cb8eba8b4776ee201e152e6c802bc7429a21d11222b84dca752b556f4e496a0"
+            "sha256": "a4fd0e8c0a84792ffbc1c2fbd55071a4c002af14641770dbea2b08868da07633"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_WGPU_CORE_SHARED",
             "source_path": "src/gui/rendering/wgpu_core/shared.py",
             "packaged_path": "Python/src/gui/rendering/wgpu_core/shared.py",
-            "sha256": "d37735f4c58675db8d2a52c328faca9fb6fdb1ae0d165cd30af0f202596702b3"
+            "sha256": "9358e90f41eae1930a840ca790df2cbf4d010049365c624bbb92abaa2284cd87"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_RENDERING_WGPU_RENDERER",
             "source_path": "src/gui/rendering/wgpu_renderer.py",
             "packaged_path": "Python/src/gui/rendering/wgpu_renderer.py",
-            "sha256": "f6616213b83e14bf1b4115d72d70b23c2ee23361407f50ee972dca08a35814cc"
+            "sha256": "3eceacd6264992114034665d74770feb0d341873e2458e42addf9dcea06dc464"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_INIT",
             "source_path": "src/gui/sequence_editor/__init__.py",
             "packaged_path": "Python/src/gui/sequence_editor/__init__.py",
-            "sha256": "1423d16708c8b24f1cd9f99623543d14cb8360a4317f0cc30d01da79dd9dbbb5"
+            "sha256": "8e0ee7dc551fda2b5934f3314248a66fb3caa2aa34af74fe4a792d7a01ff7dee"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_CURVE_EDITOR",
             "source_path": "src/gui/sequence_editor/sequence_curve_editor.py",
             "packaged_path": "Python/src/gui/sequence_editor/sequence_curve_editor.py",
-            "sha256": "6e34af89a18cbf94038ed093073c9fc1696097051d2022cd1a4fa49cd8eb6f5d"
+            "sha256": "70cfa7f3943f9ebb3af4784d6457862853dbd4733e33a1c1864a8be73b5d9dfb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_DOPESHEET",
             "source_path": "src/gui/sequence_editor/sequence_dopesheet.py",
             "packaged_path": "Python/src/gui/sequence_editor/sequence_dopesheet.py",
-            "sha256": "5c2bd9ebd997b07e92fe27c771e97d58257329982929df55855c5cca8c6c1aa2"
+            "sha256": "b500e51ea11b5b68a3ba55e7921f98836e9751716e24af81600f0cd1118c8dc1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_EDITOR_WINDOW",
             "source_path": "src/gui/sequence_editor/sequence_editor_window.py",
             "packaged_path": "Python/src/gui/sequence_editor/sequence_editor_window.py",
-            "sha256": "476263f51beb93c6c51d43f4d1e1f8abd427f395de7e8f43af70b767ceb4ec0f"
+            "sha256": "c7311d370da6e49a8594216e0f4607dbed44fd7272f2072453ef5435da7722a7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_OUTLINER",
             "source_path": "src/gui/sequence_editor/sequence_outliner.py",
             "packaged_path": "Python/src/gui/sequence_editor/sequence_outliner.py",
-            "sha256": "45c31fb154eebbdc835d4faf4fcada42017b259600166bb591cf44654773c55d"
+            "sha256": "550e851169b8b2b1e5a40fb52362cdedbb2ec3f826d517e5043ca2e2eae03d92"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_PROPERTY_PANEL",
             "source_path": "src/gui/sequence_editor/sequence_property_panel.py",
             "packaged_path": "Python/src/gui/sequence_editor/sequence_property_panel.py",
-            "sha256": "85ed86dd838301c81e06235fdab3a47d656daadcae5cfda3afb1dbc139d40f8c"
+            "sha256": "452f407ece5151e883b29bf0fa3c00368fcc2385fbf172622fc997a0cb43e9e6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_TIMELINE_WIDGET",
             "source_path": "src/gui/sequence_editor/sequence_timeline_widget.py",
             "packaged_path": "Python/src/gui/sequence_editor/sequence_timeline_widget.py",
-            "sha256": "0965feec5597e16e2529e4fbc8265a719d3b909aa6d3c1114a6046655f2e6528"
+            "sha256": "785904f0d8cd08f59d158a7e04a01f1472b96518eb0d324a1849479c48f97b16"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_TOOLBAR",
             "source_path": "src/gui/sequence_editor/sequence_toolbar.py",
             "packaged_path": "Python/src/gui/sequence_editor/sequence_toolbar.py",
-            "sha256": "6095bc39e215652097842e0f1ba0dd1dfde567d3f867d0df91d79cca25fd821e"
+            "sha256": "d5b7d32dc1b1c21ba99ebceb5ae23624be3779fb7cd204131d41f88c2f303e80"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_TRACK_LIST_WIDGET",
             "source_path": "src/gui/sequence_editor/sequence_track_list_widget.py",
             "packaged_path": "Python/src/gui/sequence_editor/sequence_track_list_widget.py",
-            "sha256": "f8d728e9eb83ed26c068dc0bfcde6f0b83810b7b3c6b2abe61e933620c0be2b5"
+            "sha256": "733fa55bb4df205c51705b4ed70a1e495eae91b556a4d5861c7e4e3d02007c3a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_TRANSPORT_BAR",
             "source_path": "src/gui/sequence_editor/sequence_transport_bar.py",
             "packaged_path": "Python/src/gui/sequence_editor/sequence_transport_bar.py",
-            "sha256": "f190826ba50cbd232a0c88c4addcfce47f73eee46e56355dc45f761d0ede4774"
+            "sha256": "6de62b14227df6eb26d448ffc9aa6c21e3cfbae3dff6189cfa78f9303e726eb8"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_SEQUENCE_EDITOR_SEQUENCE_VIEWPORT_PANEL",
             "source_path": "src/gui/sequence_editor/sequence_viewport_panel.py",
             "packaged_path": "Python/src/gui/sequence_editor/sequence_viewport_panel.py",
-            "sha256": "c9c2bf96837056fb937f596cd4992a947bd379e6070b7dd0d13e6e50e239ed21"
+            "sha256": "4ea195e40b44bc2d5e71dca994adb93dd26eecc8738de55c456e5ae77673701e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_TEXTURES_INIT",
@@ -1245,37 +1281,37 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_TEXTURES_QT_TEX_ATLAS",
             "source_path": "src/gui/textures/qt_tex_atlas.py",
             "packaged_path": "Python/src/gui/textures/qt_tex_atlas.py",
-            "sha256": "57b52dd887c3a186d92ef12742c4e3becba96086b8ec85949cc0065fb3a65c14"
+            "sha256": "2c7381bf82f614754b50af3a4707f3a48a4516360ffb6a883b18b06c7948556f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_TEXTURES_QT_TPC_RENDER_UTILS",
             "source_path": "src/gui/textures/qt_tpc_render_utils.py",
             "packaged_path": "Python/src/gui/textures/qt_tpc_render_utils.py",
-            "sha256": "68b34749ee3dd2a118882d266638f2a6d453ae95a6ceb91790789c6887322976"
+            "sha256": "c5e28c4ac7afca1eaee2b31a436dbc747f11b740ece4078061e42a005d14cdd7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_TEXTURES_TEX_ATLAS",
             "source_path": "src/gui/textures/tex_atlas.py",
             "packaged_path": "Python/src/gui/textures/tex_atlas.py",
-            "sha256": "7e0d8f405de44f38d3691087b5d0642ff25e916ae43630ce53ab1cafd1928592"
+            "sha256": "8349c53aa495c7b51f07614cc86a1e41b56952141d7e9dbb37367ba164fe5eee"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_TEXTURES_TPC",
             "source_path": "src/gui/textures/tpc.py",
             "packaged_path": "Python/src/gui/textures/tpc.py",
-            "sha256": "c6beb7545fee4a37f32eb2e07e725e0adea8cdfe4ce3587d17f9906db66dba73"
+            "sha256": "8d9efdf237ab728f183035ef7c7584aeab703f51d242fd18d32777e7a6f15c67"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_TEXTURES_TPC_RENDER_UTILS",
             "source_path": "src/gui/textures/tpc_render_utils.py",
             "packaged_path": "Python/src/gui/textures/tpc_render_utils.py",
-            "sha256": "ed24624ef1e42954d48e6608d909c63e31fe07a20f52f7ad727c739fe08eb270"
+            "sha256": "c1e68ea560852bbf151a2db0d4dfd46fcb012a66f1cb0555c40935e479a091af"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_TEXTURES_TXI",
             "source_path": "src/gui/textures/txi.py",
             "packaged_path": "Python/src/gui/textures/txi.py",
-            "sha256": "6544fc9203316f5bef313ac8782f78f4a8ff047dddbf4f7476688308fbd3ea03"
+            "sha256": "f7748e7a84579c187d905c2cb6e55aa400dcbe9e532e2cd5c795d12b8789f38e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_INIT",
@@ -1287,229 +1323,229 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_FRAME_RENDERER",
             "source_path": "src/gui/viewports/frame_renderer.py",
             "packaged_path": "Python/src/gui/viewports/frame_renderer.py",
-            "sha256": "d6e0a6985757006238142f79403cc9aa275a1532e821dd172c23f5536e1c3d67"
+            "sha256": "421ba0983aa9f4d9101a4fe17fc1dc7da63658765acf4fa4ee529b64fd849372"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_QT_TRANSFORM_TYPEIN_BAR",
             "source_path": "src/gui/viewports/qt_transform_typein_bar.py",
             "packaged_path": "Python/src/gui/viewports/qt_transform_typein_bar.py",
-            "sha256": "a129a5919e321e57398ff82cf9174ee52a8551566d37fd7174d2838314029313"
+            "sha256": "f6f12afd96b72240c678b4c948077029ab808d74ee369d239db418e51d308276"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_QT_UV_VIEWER",
             "source_path": "src/gui/viewports/qt_uv_viewer.py",
             "packaged_path": "Python/src/gui/viewports/qt_uv_viewer.py",
-            "sha256": "b33b27d35a505e659536d5d4f4e99353bec3388077b74b958277565d823b9884"
+            "sha256": "d56543b9f72e60489008718e0a7f1a43635a0ff27bb5d84d0e7b743843f7cc23"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_QT_VIEWPORT",
             "source_path": "src/gui/viewports/qt_viewport.py",
             "packaged_path": "Python/src/gui/viewports/qt_viewport.py",
-            "sha256": "d78bcdd043b08b447965852c79ee3008a57c5cadaffed0b71203daaae1f5344f"
+            "sha256": "b95180a5f69ec0e8fa79bdd88e9f2b7f61c79380db79dc35f3149ad40f38d01d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWCUBE",
             "source_path": "src/gui/viewports/viewcube.py",
             "packaged_path": "Python/src/gui/viewports/viewcube.py",
-            "sha256": "1529b05714a365e01adf2d235f5a52ea59f3a4b100693fb134d98f0ee1918c28"
+            "sha256": "ff0067309807c0717b1fd7f2eb26141bb9fb81604a7395174b9e5afe14280c2f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWCUBE_MATH",
             "source_path": "src/gui/viewports/viewcube_math.py",
             "packaged_path": "Python/src/gui/viewports/viewcube_math.py",
-            "sha256": "67627e4cd9c16285c78356842d7c41c0db57d6aec10aef9ef6d7071473022872"
+            "sha256": "f027b5019611d074ce51002d94a2ed3dc018389d3bfbf219e9254929589f1072"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_INIT",
             "source_path": "src/gui/viewports/viewport_core/__init__.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/__init__.py",
-            "sha256": "316cc219747cf9f604d03dccb1f7efbace17ba29d61ccf93b80d305999b74fa9"
+            "sha256": "aaf62c3db03005289959e176532374188d1a8d9c00463db496ad3a795d84ac89"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_SHARED_INIT",
             "source_path": "src/gui/viewports/viewport_core/shared/__init__.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/shared/__init__.py",
-            "sha256": "2bdf4876bed77a297db7632537cfaf1cf424e7633bde467514b7fd8e90ca9a17"
+            "sha256": "42416a35f850ce1580f7231959a3728a69a450025b2f16b2c17672de52b1ea02"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_SHARED_DEPENDENCIES",
             "source_path": "src/gui/viewports/viewport_core/shared/dependencies.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/shared/dependencies.py",
-            "sha256": "94c267cb85e65deabfc91f1bd98561ac00b170af1ff5117e69de37bd82396dd2"
+            "sha256": "ecf9122c02b7b62f5122ca5cb30050081876085c7351ef5e59db2c02578801cf"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_SHARED_ICONS",
             "source_path": "src/gui/viewports/viewport_core/shared/icons.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/shared/icons.py",
-            "sha256": "cd0e53417c2b5f19223e72c1f6a1c6b6bb599e0f587c1104c442f4e43f201e48"
+            "sha256": "6af24a3fe7fad0e62237e5ed1f15f5de1a8768db818e8c28a5d77293d8107d50"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_SHARED_JOINT_PALETTE",
             "source_path": "src/gui/viewports/viewport_core/shared/joint_palette.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/shared/joint_palette.py",
-            "sha256": "e1bbb666194750f802fde9d43ca54ef95b1d6d1ea6b3e2f653b70926975496aa"
+            "sha256": "1666bcb79496d836be8de94f451ecff2ddba34717927ed0604a1e9662e753aad"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_SHARED_SELECTION_MODES",
             "source_path": "src/gui/viewports/viewport_core/shared/selection_modes.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/shared/selection_modes.py",
-            "sha256": "aedbb27c6fe7a1415eddbdb6009989ac73f4c017bd56b882c3003946f26cd541"
+            "sha256": "54434a23a17ba930d9136c9794ac6017e142e9c46124f7a21fe5bf65633d9039"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_SHARED_WEIGHT_HEATMAP",
             "source_path": "src/gui/viewports/viewport_core/shared/weight_heatmap.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/shared/weight_heatmap.py",
-            "sha256": "e036071c373f80bec1f6a230ffc7b7109441c53f33f4a7b8339f5ff12c57e396"
+            "sha256": "1034f0aaa16e7d27d4b0a32e777b22c0a4fd176e75e0801977cabd8ae06e6155"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGET",
             "source_path": "src/gui/viewports/viewport_core/widget.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widget.py",
-            "sha256": "5232deb93b74240843890f009ee413f2e0066bfea026e9e7f019099b80f0c339"
+            "sha256": "8065fbdca7cd694c58e66738986dd89c4498cfcaa983e99cf5e001fe8b0dc30b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGET_SCAFFOLD",
             "source_path": "src/gui/viewports/viewport_core/widget_scaffold.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widget_scaffold.py",
-            "sha256": "6c39164e86807432318500608926446fce3e78c3728dd7f23fba45d304db6221"
+            "sha256": "e1e890083f980ec3058e77f83142bba3bd4725be2f59b05bffd38ef58b5d9127"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_INIT",
             "source_path": "src/gui/viewports/viewport_core/widgets/__init__.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/__init__.py",
-            "sha256": "1578c86d4b9a18f57b4e47b0c34c54d7641eb86a23055413103478adce184d6c"
+            "sha256": "0b4f2a140d8147887f7fc924295563635670643d6732a397d73b83e03c57c16a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_CAMERA_WORKFLOW",
             "source_path": "src/gui/viewports/viewport_core/widgets/camera_workflow.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/camera_workflow.py",
-            "sha256": "2f42e934ea7ae6bbbc9d9a25bd3866c46dbcfc01a879aaee2daccf16e490d578"
+            "sha256": "985228b9e68d9222ffe27de36416dc0d2e836406ff12d5a7d48f963ab463da44"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_CONSTRUCTION",
             "source_path": "src/gui/viewports/viewport_core/widgets/construction.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/construction.py",
-            "sha256": "60c432177d30cd59d0f5f882c9d45db551cd74e5bd0a0a1f1d20daac8837a902"
+            "sha256": "4be1d7ba5edd59b2692855a086d64568edb38d95ba8783bb9ec7f7124d0e05cd"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_DISPLAY_CONTROLS",
             "source_path": "src/gui/viewports/viewport_core/widgets/display_controls.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/display_controls.py",
-            "sha256": "52fdb40615d40f78a204dd01f0d37e922263f81db3f9a6d425fc34825742f47c"
+            "sha256": "f010615d584238dcfccb38284259866347cee97cd29c3d7f4de1881567c34848"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_DRAG_INTERACTIONS",
             "source_path": "src/gui/viewports/viewport_core/widgets/drag_interactions.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/drag_interactions.py",
-            "sha256": "40097d1b03f1478d150d4ea3d999090670a66870b223bfc63573d4c01f96d481"
+            "sha256": "f6f787f0c5e27c92c8b7865a846f78c717579b02aeaab61dfd0f30973fcdd20c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_EVENT_NAVIGATION",
             "source_path": "src/gui/viewports/viewport_core/widgets/event_navigation.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/event_navigation.py",
-            "sha256": "4e3b72c57b16e6e372508bf5cfc433172402de5263148d69208c0edfe6976dee"
+            "sha256": "3523a6130732dff1f15769344b21c986fba2428214fb362abd8084293f5e2c61"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_HISTORY_ANIMATION",
             "source_path": "src/gui/viewports/viewport_core/widgets/history_animation.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/history_animation.py",
-            "sha256": "4f3ec3a6beec16d8e52600ecba4b64514f18115deb358f7fa1cd4944a5c12ffd"
+            "sha256": "e9a869e72ee7eef8bcafbf0184412566127ddb5f677f7d528831c7077bd10bd2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_MEASUREMENT_CONTROLS",
             "source_path": "src/gui/viewports/viewport_core/widgets/measurement_controls.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/measurement_controls.py",
-            "sha256": "dcae166e5ceb6a0b5411bfb1c317c7e673cda9a56edf1e76eede1571ee9ef4fe"
+            "sha256": "a5fb768f608d16b68a72c513e537eaebbb1f09b93c0bc5420a958a223edf5e06"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_MINI_THUMBNAIL",
             "source_path": "src/gui/viewports/viewport_core/widgets/mini_thumbnail.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/mini_thumbnail.py",
-            "sha256": "276b8cc357650a4cb77426e4fa01717a90033ac2df5ffb10e75efe3cb935111b"
+            "sha256": "1a44978100c2e83341262ca17f918b5ff4a69a24a5bdda2fc2cea06ef04fbfa0"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_OVERLAY_LAYERS",
             "source_path": "src/gui/viewports/viewport_core/widgets/overlay_layers.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py",
-            "sha256": "d301b2acbf3c8a6ec6721997d07d586d52e95c42b342cce6abf8d4f66dfebef4"
+            "sha256": "780e13f604bc41545c21fe057625ee89dc9f4b191b95a46a4b16bb7144f9530a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_PICKING_HOVER",
             "source_path": "src/gui/viewports/viewport_core/widgets/picking_hover.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/picking_hover.py",
-            "sha256": "8a78027509640982e02927bfa2bf5c47864f50188ac634379ae851e411e019f6"
+            "sha256": "fa31accb1fabff31b9cd2a07570246decc06e69b61fadfedc8b625ccce68be0a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_RENDERING_PIPELINE",
             "source_path": "src/gui/viewports/viewport_core/widgets/rendering_pipeline.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py",
-            "sha256": "5864ed833fea94675c565a9c69bdb1ffc9fddf5804058d009450be33418141ab"
+            "sha256": "9e8e07164f59e2099cd4bbc588411fd5d236c9bf0960a24d811c07f0cf814311"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_RESOURCE_CACHE",
             "source_path": "src/gui/viewports/viewport_core/widgets/resource_cache.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/resource_cache.py",
-            "sha256": "06d1683409bde77e82227aa98f81972f3f19a19c7a925814c7a42f0c70b2a063"
+            "sha256": "519aa60b0ba5eff6a264b5afee22a3b24be8b74d8bc4bb59cc16e74d135d6b46"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_SCENE_MODELS",
             "source_path": "src/gui/viewports/viewport_core/widgets/scene_models.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/scene_models.py",
-            "sha256": "911729f272e6ea78d45c3c310da13927cd149bbab8d9f154036d095be6d8a04b"
+            "sha256": "ff54870b4eece1cb0ece52c231fdf6bda9065a44ff3220ae10cfc083c6f5eebb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_SELECTION_MESH",
             "source_path": "src/gui/viewports/viewport_core/widgets/selection_mesh.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/selection_mesh.py",
-            "sha256": "fed6288860c7a9f94e7a089c356a62ed084b271f048a6c5e1942a8dd745bd339"
+            "sha256": "03177f29d2a3368933b13521a44460e821af2a97134cbedfed286f25df1a615d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_SNAP_VIEW_BAR",
             "source_path": "src/gui/viewports/viewport_core/widgets/snap_view_bar.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/snap_view_bar.py",
-            "sha256": "f45015fb9fb106054bb41ea9503c6450013078106806955176ed387cb8e40b4f"
+            "sha256": "0120f6c272cecc494dc36cb30b15f19d057223a1d1764a952da72a7154e765c4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_STATE_HELPERS",
             "source_path": "src/gui/viewports/viewport_core/widgets/state_helpers.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/state_helpers.py",
-            "sha256": "b17bec6842dfbb59816b2a09e5280a4831e465a7195bd1d2e1125c806cd8460e"
+            "sha256": "eaf4412e3936661a6f4b43ed819e8ae82fa1bf4d3a1b3269ccb710b58100f43a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_TRANSFORM_CAMERA",
             "source_path": "src/gui/viewports/viewport_core/widgets/transform_camera.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/transform_camera.py",
-            "sha256": "a884df732e882d06e360fb30c42f9d0f87aec30bb633147cb44f6e1756c444d1"
+            "sha256": "08f614d9786f84acccdd55fd9a9871d2e4754b519bf1505c3c286b488ecd547a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_VARIANTS",
             "source_path": "src/gui/viewports/viewport_core/widgets/variants.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/variants.py",
-            "sha256": "3c81bf696cba17358a908aa9205bca0808af73b7bc7583897e6297cce896a53e"
+            "sha256": "970ce7a2ccdfff64abebf596dfaa32f4b92f0a41803f99b460ccfdc8586aab48"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_VIEWPORT_WIDGET",
             "source_path": "src/gui/viewports/viewport_core/widgets/viewport_widget.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/viewport_widget.py",
-            "sha256": "6d028b26ce205f04299c83aaa6ff70aeefa82580ab8a0a5398616c8c98e737df"
+            "sha256": "a8e4d31a78620be5e03cfc95769e8f870719423359ea37f36c7e4b545963faf1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_DISPLAY",
             "source_path": "src/gui/viewports/viewport_display.py",
             "packaged_path": "Python/src/gui/viewports/viewport_display.py",
-            "sha256": "a95e4eaf72cb1e9aac9ab7451c9d740957a90d2bdac580cbd68308a8075c7a3c"
+            "sha256": "e8a92ad0e9b67f6b5792e4826b00855043ed2a7e54f1024fe89854356356e390"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_HOST",
             "source_path": "src/gui/viewports/viewport_host.py",
             "packaged_path": "Python/src/gui/viewports/viewport_host.py",
-            "sha256": "708a65ce4e80bce25a6e7cfb6dffeb5a89068ad65b9c7dfccca9169c4915e9a1"
+            "sha256": "d772dc4f49647a8218832cf3914b3508e81746b745d7e49854e929006dda33bb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_NAVIGATION",
             "source_path": "src/gui/viewports/viewport_navigation.py",
             "packaged_path": "Python/src/gui/viewports/viewport_navigation.py",
-            "sha256": "97a5b15c361fcb22e3e5453c45a99ea26e7d8195d8a782167de8bff6d147f76e"
+            "sha256": "532100cefe9dca265d40394f378dc0c5d5a2ef4272b76b38658e2b0b3f94dac5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_INIT",
@@ -1521,163 +1557,163 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_INIT",
             "source_path": "src/gui/windows/application_core/__init__.py",
             "packaged_path": "Python/src/gui/windows/application_core/__init__.py",
-            "sha256": "3f414c8d68d83804d43aac647d8232577996bf9fb910af66a89ed0ff1a5af37e"
+            "sha256": "92fc9c9109c1dd0772778054905129806c175c4a302cf3e37205ffa8a4adc70b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_APPLICATION_CORE_LIB",
             "source_path": "src/gui/windows/application_core/application_core_lib.py",
             "packaged_path": "Python/src/gui/windows/application_core/application_core_lib.py",
-            "sha256": "00b7c11fbf87a4e5856b0fd321c75220652f00708949910121a315bce59c91dc"
+            "sha256": "5625824532c2e1dc0bf7f53464d551204cdfbc4cd18f737a050978df6ba08e06"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_FUNCTIONS_INIT",
             "source_path": "src/gui/windows/application_core/functions/__init__.py",
             "packaged_path": "Python/src/gui/windows/application_core/functions/__init__.py",
-            "sha256": "b2799a2f1b259be9938c09f191c5354767b5c614dcbd7b90c5a5d87fafa561eb"
+            "sha256": "915f458e678894c307d7a0e5e017abacebff09ff49f7ffac71c434fb4fecf6ff"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_FUNCTIONS_APP_RUNNER",
             "source_path": "src/gui/windows/application_core/functions/app_runner.py",
             "packaged_path": "Python/src/gui/windows/application_core/functions/app_runner.py",
-            "sha256": "5b70e0f4d6b76a43fe8894826641deeba8313d2f57aba9d29c5941b0f768110f"
+            "sha256": "b0765ab363ae3ac8af7a850013399c3c3516ffcb8f3c5868a5f8e5321f3412c5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_FUNCTIONS_GEOMETRY",
             "source_path": "src/gui/windows/application_core/functions/geometry.py",
             "packaged_path": "Python/src/gui/windows/application_core/functions/geometry.py",
-            "sha256": "e3285a035fa1f0fe1df4cd457c612470ace9a231e809ea10adcdd6b2410decfe"
+            "sha256": "2fd42c91067ff4cae8b64a103c9521f6b3a07a5e5a70343c7914e75697739474"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_FUNCTIONS_NATIVE_PRELAUNCH",
             "source_path": "src/gui/windows/application_core/functions/native_prelaunch.py",
             "packaged_path": "Python/src/gui/windows/application_core/functions/native_prelaunch.py",
-            "sha256": "1187205f8727924b5b3f4678ed6f2b90b81edea251beedd8c810f214d21553b6"
+            "sha256": "00c355723f87e04bb65671a13347934c000379325b2cfb8c96a32e3350c35165"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_FUNCTIONS_QT_HELPERS",
             "source_path": "src/gui/windows/application_core/functions/qt_helpers.py",
             "packaged_path": "Python/src/gui/windows/application_core/functions/qt_helpers.py",
-            "sha256": "cef719686f83b729dbe735911043bce3af5c857804fd3793488b50d7f0baa003"
+            "sha256": "c1bfd97ca9acba92b2dbdcfd92edea01f594253b21cbeaf520d2480d5d781085"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_FUNCTIONS_SPLASH_THEME",
             "source_path": "src/gui/windows/application_core/functions/splash_theme.py",
             "packaged_path": "Python/src/gui/windows/application_core/functions/splash_theme.py",
-            "sha256": "7fe174b87c224c10f4661b0e8c2dd329398102362fbcba1d8849988bfc5f1dfa"
+            "sha256": "373de9effc4ccf6a60c9696887d94ba17665ffea4783644b8d063230d8335f5b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_FUNCTIONS_STARTUP_LIBRARY",
             "source_path": "src/gui/windows/application_core/functions/startup_library.py",
             "packaged_path": "Python/src/gui/windows/application_core/functions/startup_library.py",
-            "sha256": "e323efb30e33d0812196d26d109583dff98fd92494287a1502b139c73166e6eb"
+            "sha256": "645d3fa835ac1620a5f1b9c8d1b34f06edf26bedd15a556503b305fd8c87e8fe"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_INIT",
             "source_path": "src/gui/windows/application_core/shared/__init__.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/__init__.py",
-            "sha256": "c36b5653fe2ae8b5d4ce7cf381cef68fa3c5d429fe76e890f8d4376284b07f2a"
+            "sha256": "de792dc83dd73b525fb66ab170b8ebe5ca81d90486804254205eb1bd8c508c4e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_ANIMATION_WORKFLOW",
             "source_path": "src/gui/windows/application_core/shared/animation_workflow.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/animation_workflow.py",
-            "sha256": "aed0fd55a24581fcef6344693c82825ba1514572a743de6e39aa5b58c6fb7402"
+            "sha256": "8f339ae8671663b9d380853253266d69c738d260ade313b3d8b3cb7ec257c389"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_BAS_WORKFLOW",
             "source_path": "src/gui/windows/application_core/shared/bas_workflow.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/bas_workflow.py",
-            "sha256": "3c1e689facc5e7829c82393ef01d4ba140eb672f46cf30f34c1cd59037956d4a"
+            "sha256": "baef7914aa0bb93bb743688d9df5cb37c62c76c243343d2f49af1e781c7e41b4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_DOCK_HOSTS",
             "source_path": "src/gui/windows/application_core/shared/dock_hosts.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/dock_hosts.py",
-            "sha256": "cd63738bbcc311eefa724479fb4125e441b222d6da87bd047b0e5fa94734a2fb"
+            "sha256": "a469bb180cf2fe010bfce5ab1c7a61b74edc45da5fd290a50d29708ed14b1fa6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_EDITOR_SERVICES",
             "source_path": "src/gui/windows/application_core/shared/editor_services.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/editor_services.py",
-            "sha256": "ad9e57879079b71bb1854ce7ba6dc1333a6c27d3e2e4372ce06c81c622002e28"
+            "sha256": "ae03ae48ae70e57936f4a84cc6fc5599e073bcd72e26af6416175ee3653dfbcf"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_GEOMETRY",
             "source_path": "src/gui/windows/application_core/shared/geometry.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/geometry.py",
-            "sha256": "0eee7e211034e3bb0b27d998fd3aba54c454ef4dac8ac1eccad943dec001a8f8"
+            "sha256": "839a90f56f8510da5bb9def0617552cfbd2e3f98cf50bad352a526ade2cb9d82"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_LOG_PANEL",
             "source_path": "src/gui/windows/application_core/shared/log_panel.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/log_panel.py",
-            "sha256": "4cc0507c5f33dec4d2697dcc5c05e1a5a9eab38041b0e45e4c00c16f6acc48ec"
+            "sha256": "0989e8933a46ade062386f16910916c29e64a6029dbc2d8534e301d7aa9a55bd"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_MAIN_LAYOUT",
             "source_path": "src/gui/windows/application_core/shared/main_layout.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/main_layout.py",
-            "sha256": "6267605b22170b62f467c45e0faea5a94d7e133308a4397bd69e5778860463b7"
+            "sha256": "d771d71574aa5949c20431f65c94b165d977d9d417d5f6ed1356ec68688503f7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_MODEL_IO",
             "source_path": "src/gui/windows/application_core/shared/model_io.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/model_io.py",
-            "sha256": "caf704cab9880fdb28c24cb73cce65b3e3362f7e85f1297c9217742b7f21c0ee"
+            "sha256": "2d1763dbdd01d7ef8f61bb05f12b6fcf7f003b0509138cff73d6b2802aaa134d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_QT_HELPERS",
             "source_path": "src/gui/windows/application_core/shared/qt_helpers.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/qt_helpers.py",
-            "sha256": "ebbfecfc220b5faf54abf9e8f82db9f2e5eb8393d1cfde5ade09a26ab2764cfc"
+            "sha256": "3feba869c761fc26c59c2d0818e4a87436f368742fa3150f5730ca6705c24034"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_RESOURCE_LOADING",
             "source_path": "src/gui/windows/application_core/shared/resource_loading.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/resource_loading.py",
-            "sha256": "01ffe197629cbc5a06a4aba16d44bf1d7a721aa3d14a9fd19c6dd8f6a091c88a"
+            "sha256": "ca0e4247d885485a6f3f7fe39765daf76e20f6f8f3c53b5a1ed8d4148c25e07a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_RESOURCE_PANELS",
             "source_path": "src/gui/windows/application_core/shared/resource_panels.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/resource_panels.py",
-            "sha256": "58bffd86d05e2fa45af42e202c3ee69bcc81a3837eeec0611e5ee2e7108d38fc"
+            "sha256": "d1ad69d21eb50fbfefd81204e7cad631fbdd3e8c24ce11a294a2346e3de49729"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_RETARGET_WINDOW_WORKFLOW",
             "source_path": "src/gui/windows/application_core/shared/retarget_window_workflow.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/retarget_window_workflow.py",
-            "sha256": "099ed1c244391c5ec2f5cd596775a4977b02c1aae49a91f38167f8151158ae6c"
+            "sha256": "485f42b28dc444da6dfe2cb610f6162294da8eb11727734c4b2272a9353032ac"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_RETARGET_WORKFLOW",
             "source_path": "src/gui/windows/application_core/shared/retarget_workflow.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/retarget_workflow.py",
-            "sha256": "1bdf6f70e64478fa1c2b07faf1e887eab1068ae35d565afd26d2fa5e161ceb14"
+            "sha256": "d4f19c4ed9d4457660740809659cf9a5df6940b181e474b502afff97e973c4c4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_SCENE_WORKFLOW",
             "source_path": "src/gui/windows/application_core/shared/scene_workflow.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/scene_workflow.py",
-            "sha256": "9938d68b9dd4a472f7050e49e3ad9c0c38350879f0705392a8434de94f59efea"
+            "sha256": "e45259ed984676fd0472eff49202d7ebc4685af221fcc1f2deb89cf444ae0b0d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_SPLASH",
             "source_path": "src/gui/windows/application_core/shared/splash.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/splash.py",
-            "sha256": "8fe36a8ebae7d8d23f63d16b54076a59345828ca30706493dd3f4d3ad45e9352"
+            "sha256": "83360004af04a9e792f545933cab499c626c7905a4a584650420b99c35c80082"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_STARTUP_LIBRARY",
             "source_path": "src/gui/windows/application_core/shared/startup_library.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/startup_library.py",
-            "sha256": "2b8ea651f130e0b2a748c60bc50fb042a76da470b158d1558a3f583674b58bcb"
+            "sha256": "05751f633a3806e97e51efbee04dec9d5efdb551e5a74986be6d930ea4c07682"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_THEME_LAYOUT",
             "source_path": "src/gui/windows/application_core/shared/theme_layout.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/theme_layout.py",
-            "sha256": "d726b6156d19e1cad97e1402e26193380d44ae4e6162f952ba4a6ac8fedb17f8"
+            "sha256": "827bbc3e75d0bcb429e30cba2489d3b8d36bfac72e28174cb2f32b05ad7e4e37"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_UNDO_STACK",
@@ -1689,25 +1725,25 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_VIEWPORT_TOOLS",
             "source_path": "src/gui/windows/application_core/shared/viewport_tools.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/viewport_tools.py",
-            "sha256": "c0569db02faf35164004b6a8ad8f68257b15b5f75e200821b9fe4e81853ed1f9"
+            "sha256": "41c69076626c803c3a1d78bd28f5f3438bf2593e6c7cae4f65215ed9b4683936"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WINDOW_CHROME",
             "source_path": "src/gui/windows/application_core/shared/window_chrome.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/window_chrome.py",
-            "sha256": "bd9290f2ad7d5052e868a4a2986b269b2f27b292899028a3f515fd266ae15b77"
+            "sha256": "6499575409a478fd8cbf062300f9cd926c2e1946cfddd2facec18b6f2ea685f6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WINDOW_LIFECYCLE",
             "source_path": "src/gui/windows/application_core/shared/window_lifecycle.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/window_lifecycle.py",
-            "sha256": "34647d96c2b40a18851fabb35b26dd6ffec85c4c01e5f79d2d457a94138833fa"
+            "sha256": "43121d62361f6bda715648e5bc858161b681fbb83634feb9b72067c5fd76a1fb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WORKERS",
             "source_path": "src/gui/windows/application_core/shared/workers.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/workers.py",
-            "sha256": "f12e1b852581e650f6ff6b2f359441ba744e473628a47ea1ba5c1401afb29495"
+            "sha256": "a4fa5c83c4d36195b68cd1875f48dc443fce31e449c85e19802ae79bfdedff47"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WORKSPACE_PRESETS",
@@ -1719,25 +1755,25 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_TOOLBOXES_INIT",
             "source_path": "src/gui/windows/application_core/toolboxes/__init__.py",
             "packaged_path": "Python/src/gui/windows/application_core/toolboxes/__init__.py",
-            "sha256": "3ad992f2568310e0a257dd3ef056c3b45fcbcba958f357b13e483362876d94f0"
+            "sha256": "5bd5a6efa8fd250bfb42108e40c7f0a9ed9927d4ec56fbac18c149e342c566e1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_TOOLBOXES_WORKSPACE_DOCKS",
             "source_path": "src/gui/windows/application_core/toolboxes/workspace_docks.py",
             "packaged_path": "Python/src/gui/windows/application_core/toolboxes/workspace_docks.py",
-            "sha256": "0462eddf3256282de351f9076d2e313b05055db76f5f47e34ca76858fe4f0158"
+            "sha256": "935c94e1fa5e988227623fa44bc69a26d503c09735381bc4ad08413965b80211"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_PROGRESS_TOAST",
             "source_path": "src/gui/windows/progress_toast.py",
             "packaged_path": "Python/src/gui/windows/progress_toast.py",
-            "sha256": "0723fa17227b6cb38186b1a9efcfa019bb9e639e672b5874ddd7eec73ce90bc8"
+            "sha256": "95578ca1a5ccaf387bef479fd721ef82ad4f28ae7fa3e5f60e342b556b8d0a86"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_MAIN_WINDOW",
             "source_path": "src/gui/windows/qt_main_window.py",
             "packaged_path": "Python/src/gui/windows/qt_main_window.py",
-            "sha256": "c4ce0d72d198a904a31ffa3a8f9856b1a194a800d45d31e857edc9cea97a8ec4"
+            "sha256": "8484d89b9d7461aa6beb9d3e4b3c0878defbca2b0dd3cb0db3a313d73beae380"
         }
     ]
 }

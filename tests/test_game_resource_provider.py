@@ -17,6 +17,8 @@ from src.core.resources.game_resource_provider import (
     LocalFileResourceProvider,
     ResourceManagerGameResourceProvider,
 )
+from src.core.resources.placeable_library import discover_placeable_library_rows
+from src.core.project.placeable_asset import PlaceableAsset, save_placeable_asset
 
 
 def _record(
@@ -41,6 +43,158 @@ def _record(
         priority=priority,
         size=0,
     )
+
+
+def test_placeable_library_discovery_returns_map_studio_utp_rows_and_project_priority(tmp_path: Path) -> None:
+    asset = PlaceableAsset(
+        game="K1",
+        template_resref="plc_bench",
+        tag="custom_bench",
+        display_name="Custom Bench",
+        category="decor",
+        appearance_id=12,
+    )
+    save_placeable_asset(asset, tmp_path / "plc_bench.ghostplaceable.json")
+    provider = InMemoryGameResourceProvider(
+        [
+            (
+                _record(resref="plc_bench", restype="UTP", layer="base", priority=40, source="chitin:templates.bif"),
+                b"stock-utp",
+            ),
+            (
+                _record(resref="plc_terminal", restype="UTP", layer="base", priority=40, source="chitin:templates.bif"),
+                b"stock-terminal",
+            ),
+        ]
+    )
+
+    rows = discover_placeable_library_rows(asset_roots=(tmp_path,), provider=provider, game="K1")
+    by_resref = {row["resref"]: row for row in rows}
+
+    assert set(by_resref) == {"plc_bench", "plc_terminal"}
+    custom = by_resref["plc_bench"]
+    assert custom["source"] == "placeable_builder"
+    assert custom["restype"] == "utp"
+    assert custom["kind"] == "placeable"
+    assert custom["subcategory"] == "Decor"
+    assert custom["engine_ready"] is False
+    assert custom["metadata"]["shadowed"][0]["source"] == "chitin:templates.bif"
+    stock = by_resref["plc_terminal"]
+    assert stock["confidence"] == "stock_template"
+    assert "not proven" in stock["warning"]
+
+
+def test_interactive_library_exposes_true_utd_rows_and_rejects_unbacked_door_models() -> None:
+    from src.core.modules.authored_gameplay_palette import gameplay_palette_entry_from_library_row
+
+    provider = InMemoryGameResourceProvider(
+        [
+            (
+                _record(
+                    resref="door_narshad01",
+                    restype="UTD",
+                    layer="module",
+                    module_id="301nar_s",
+                    priority=80,
+                    source="module:301NAR_s.rim",
+                ),
+                b"utd-bytes",
+            ),
+        ]
+    )
+
+    rows = discover_placeable_library_rows(provider=provider, game="K1")
+    door = next(row for row in rows if row["resref"] == "door_narshad01")
+    entry = gameplay_palette_entry_from_library_row(door)
+    enriched_model_entry = gameplay_palette_entry_from_library_row(
+        {
+            "game": "K1",
+            "resref": "dor_nar01",
+            "category": "Doors",
+            "door_template_resref": "door_narshad01",
+            "source": "models.bif",
+        }
+    )
+
+    assert door["restype"] == "utd"
+    assert door["kind"] == "door"
+    assert door["metadata"]["address"]["module_id"] == "301nar_s"
+    assert entry is not None and entry.template_resref == "door_narshad01"
+    assert entry.confidence == "template"
+    assert enriched_model_entry is not None
+    assert enriched_model_entry.template_resref == "door_narshad01"
+    assert gameplay_palette_entry_from_library_row(
+        {"game": "K1", "resref": "dor_nar01", "category": "Doors", "source": "models.bif"}
+    ) is None
+
+
+def test_non_core_interactive_templates_bundle_declared_utp_utd_dlg_ncs_uti_graph() -> None:
+    from pykotor.common.misc import InventoryItem, ResRef
+    from pykotor.resource.generics.dlg import DLG, DLGEntry, DLGLink, bytes_dlg
+    from pykotor.resource.generics.utd import UTD, bytes_utd
+    from pykotor.resource.generics.utp import UTP, bytes_utp
+    from src.core.workflow.placeable_builder_service import referenced_interactive_resource_report
+
+    terminal = UTP()
+    terminal.resref = ResRef("puzzle_terminal")
+    terminal.tag = "puzzle_terminal"
+    terminal.appearance_id = 1
+    terminal.conversation = ResRef("puzzle_dialog")
+    terminal.on_used = ResRef("puzzle_start")
+    terminal.has_inventory = True
+    terminal.inventory = [InventoryItem(ResRef("puzzle_key"))]
+
+    dialog = DLG()
+    entry = DLGEntry()
+    entry.script1 = ResRef("puzzle_action")
+    dialog.starters = [DLGLink(entry)]
+
+    door = UTD()
+    door.resref = ResRef("puzzle_door")
+    door.tag = "puzzle_door"
+    door.appearance_id = 1
+    door.on_open = ResRef("door_opened")
+    door.key_required = True
+    door.key_name = "puzzle_key"
+
+    module_id = "source_s"
+    records = [
+        (_record(resref="puzzle_terminal", restype="UTP", layer="module", module_id=module_id, priority=80), bytes_utp(terminal)),
+        (_record(resref="puzzle_door", restype="UTD", layer="module", module_id=module_id, priority=80), bytes_utd(door)),
+        (_record(resref="puzzle_dialog", restype="DLG", layer="module", module_id="source_dlg", priority=80), bytes_dlg(dialog)),
+        (_record(resref="puzzle_start", restype="NCS", layer="module", module_id=module_id, priority=80), b"ncs-start"),
+        (_record(resref="puzzle_action", restype="NCS", layer="module", module_id="source_dlg", priority=80), b"ncs-action"),
+        (_record(resref="door_opened", restype="NCS", layer="module", module_id=module_id, priority=80), b"ncs-door"),
+        (_record(resref="puzzle_key", restype="UTI", layer="module", module_id=module_id, priority=80), b"uti-key"),
+    ]
+    report = referenced_interactive_resource_report(
+        "",
+        (("puzzle_terminal", "UTP"), ("puzzle_door", "UTD")),
+        game="K1",
+        provider=InMemoryGameResourceProvider(records),
+    )
+
+    keys = {(resref, restype.lower().lstrip(".")) for resref, restype, _data in report.resources}
+    assert keys == {
+        ("puzzle_terminal", "utp"),
+        ("puzzle_door", "utd"),
+        ("puzzle_dialog", "dlg"),
+        ("puzzle_start", "ncs"),
+        ("puzzle_action", "ncs"),
+        ("door_opened", "ncs"),
+        ("puzzle_key", "uti"),
+    }
+    assert report.has_blocking is False
+    assert any(issue.code == "compiled_script_graph_requires_game_proof" for issue in report.issues)
+
+    missing = referenced_interactive_resource_report(
+        "",
+        (("puzzle_terminal", "UTP"),),
+        game="K1",
+        provider=InMemoryGameResourceProvider(records[:-3]),
+    )
+    assert missing.has_blocking is True
+    assert any(issue.code == "missing_interactive_dependency" for issue in missing.issues)
 
 
 def test_in_memory_provider_resolves_resource_address_with_provenance() -> None:
@@ -174,6 +328,32 @@ def test_resource_manager_adapter_reads_public_manager_and_reports_record() -> N
     assert result.record.source == "resource_manager"
 
 
+def test_explicit_game_query_uses_strict_manager_lookup_without_cross_game_fallback() -> None:
+    calls: list[tuple[str, int, str]] = []
+
+    class FakeManager:
+        def get_strict(self, name, res_type, game="K1"):
+            calls.append((name, res_type, game))
+            return None
+
+        def get(self, *_args, **_kwargs):
+            raise AssertionError("Explicit Map Studio game queries must not use cross-game fallback.")
+
+        def get_k1(self):
+            return None
+
+        def get_k2(self):
+            return None
+
+    provider = ResourceManagerGameResourceProvider(FakeManager())
+
+    with pytest.raises(GameResourceNotFoundError):
+        provider.resolve(GameResourceQuery(game="k2", resref="k1_only_prop", restype="utp"))
+
+    assert calls and calls[0][0] == "k1_only_prop"
+    assert calls[0][2] == "K2"
+
+
 def test_resource_manager_adapter_can_list_indexed_override_records(tmp_path: Path) -> None:
     override_file = tmp_path / "pmbam.mdl"
     override_file.write_bytes(b"mdl")
@@ -186,3 +366,77 @@ def test_resource_manager_adapter_can_list_indexed_override_records(tmp_path: Pa
     assert len(records) == 1
     assert records[0].layer == "override"
     assert records[0].source_path == str(override_file)
+
+
+def test_resource_manager_adapter_reads_exact_selected_module_archive(tmp_path: Path) -> None:
+    class FakeErf:
+        def __init__(self, path: Path, payload: bytes) -> None:
+            self.path = str(path)
+            self.payload = payload
+            self._index = {"shared_terminal:2044": (0, len(payload))}
+
+        def read(self, name: str, restype: int):
+            return self.payload if (name.lower(), restype) == ("shared_terminal", 2044) else None
+
+    first = FakeErf(tmp_path / "first_s.rim", b"first-module-utp")
+    second = FakeErf(tmp_path / "second_s.rim", b"second-module-utp")
+    inst = SimpleNamespace(
+        _override={},
+        _mod_erfs=[first, second],
+        _tex_erfs=[],
+        _key_map={},
+    )
+
+    class FakeManager:
+        get_k1 = lambda self: inst
+        get_k2 = lambda self: None
+        get_strict = lambda self, *_args, **_kwargs: b"wrong-global-priority-result"
+
+    provider = ResourceManagerGameResourceProvider(FakeManager())
+    result = provider.resolve(
+        ResourceAddress(
+            scheme="module_resource",
+            game="K1",
+            module_id="second_s",
+            resref="shared_terminal",
+            restype="UTP",
+            layer="module",
+            path=second.path,
+        )
+    )
+
+    assert result.data == b"second-module-utp"
+    assert result.address.module_id == "second_s"
+    assert result.record.source_path == second.path
+
+
+def test_exact_module_address_never_falls_back_to_shadowing_global_resource(tmp_path: Path) -> None:
+    class FakeErf:
+        path = str(tmp_path / "selected_s.rim")
+        _index = {"shared_terminal:2044": (0, 8)}
+
+        @staticmethod
+        def read(_name: str, _restype: int):
+            return None
+
+    archive = FakeErf()
+    inst = SimpleNamespace(_override={}, _mod_erfs=[archive], _tex_erfs=[], _key_map={})
+
+    class FakeManager:
+        get_k1 = lambda self: inst
+        get_k2 = lambda self: None
+        get_strict = lambda self, *_args, **_kwargs: b"wrong-global-priority-result"
+
+    provider = ResourceManagerGameResourceProvider(FakeManager())
+    with pytest.raises(GameResourceNotFoundError):
+        provider.resolve(
+            ResourceAddress(
+                scheme="module_resource",
+                game="K1",
+                module_id="selected_s",
+                resref="shared_terminal",
+                restype="UTP",
+                layer="module",
+                path=archive.path,
+            )
+        )

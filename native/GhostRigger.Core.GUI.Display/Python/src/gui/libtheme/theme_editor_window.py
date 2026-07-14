@@ -402,7 +402,7 @@ class SplashPreviewWidget(QtWidgets.QFrame):
         content_layout = QtWidgets.QVBoxLayout(self.content_panel)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(10)
-        self.header_label = QtWidgets.QLabel("Preparing GhostRigger")
+        self.header_label = QtWidgets.QLabel("Preparing Ghost-Studio")
         self.header_label.setObjectName("SplashPreviewHeader")
         self.progress_block = QtWidgets.QFrame()
         self.progress_block.setObjectName("SplashPreviewProgress")

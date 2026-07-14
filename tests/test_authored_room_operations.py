@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -89,7 +90,7 @@ def test_t2604_controller_updates_module_entry_point_for_ifo_export() -> None:
     result = controller.set_authored_module_entry_point(
         area_resref="grentry",
         position=(1.25, -2.5, 0.125),
-        facing=180.0,
+        facing=math.pi,
     )
 
     entry = controller.authored_module_entry_point()
@@ -97,10 +98,10 @@ def test_t2604_controller_updates_module_entry_point_for_ifo_export() -> None:
     assert entry is not None
     assert entry.area_resref == "grentry"
     assert entry.position == (1.25, -2.5, 0.125)
-    assert entry.facing == 180.0
+    assert entry.facing == math.pi
     assert payload["placements"]["entry_point"]["area_resref"] == "grentry"
     assert payload["placements"]["entry_point"]["position"] == [1.25, -2.5, 0.125]
-    assert payload["placements"]["entry_point"]["facing"] == 180.0
+    assert payload["placements"]["entry_point"]["facing"] == math.pi
     assert payload["game_tested"] is False
     assert result.readiness is not None
 
@@ -277,6 +278,7 @@ def test_t2601_wall_opening_can_create_linked_transition_marker() -> None:
         tag="south_exit_trigger",
         linked_to="wp_dest",
         linked_to_module="grnext01",
+        linked_to_flags=2,
         transition_destination=2,
     )
     trigger = marked.placements.triggers[-1]
@@ -288,10 +290,12 @@ def test_t2601_wall_opening_can_create_linked_transition_marker() -> None:
     assert trigger.position == (0.0, -5.0, 0.0)
     assert trigger.linked_to == "wp_dest"
     assert trigger.linked_to_module == "grnext01"
+    assert trigger.linked_to_flags == 2
     assert trigger.transition_destination == 2
     assert marker_metadata["opening_name"] == "south_door"
     assert marker_metadata["marker_kind"] == "trigger"
     assert marker_metadata["position"] == [0.0, -5.0, 0.0]
+    assert marker_metadata["linked_to_flags"] == 2
     assert marker_metadata["transition_destination"] == 2
     assert readiness.doorway_transition.opening_count == 1
     assert readiness.doorway_transition.transition_reference_count == 1
@@ -1762,14 +1766,31 @@ def test_t2603_controller_prepares_and_applies_live_terrain_sculpt_frame_without
         max_points_per_frame=3,
         budget_ms=8.0,
     )
+    # Live frames mutate only the stroke-owned flat buffer.  KMAP remains
+    # byte-for-byte untouched until release/commit.
     payload = controller.project.extra_sections["authored_module"]
     authored = authored_project_from_kmap_payload(payload)
     terrain = authored.rooms[0].primitive
 
     assert result.applied is True
     assert result.full_rebuild_deferred is True
-    assert "full MDL/WOK rebuild deferred" in result.message
-    assert controller.project.dirty is True
+    assert "KMAP serialization remain deferred" in result.message
+    assert result.project_serialized is False
+    assert result.dirty_height_patch
+    assert terrain.heights == before_heights
+
+    def _unexpected_readiness_rebuild():
+        raise AssertionError("terrain stroke commit must not run full authored-module readiness")
+
+    controller.authored_module_readiness = _unexpected_readiness_rebuild
+    commit = controller.commit_map_studio_terrain_sculpt_stroke(brush="raise", room_resref="grlive_room01")
+    assert commit is not None
+    assert commit.serialization_count == 1
+    assert commit.decode_count == 1
+    payload = controller.project.extra_sections["authored_module"]
+    authored = authored_project_from_kmap_payload(payload)
+    terrain = authored.rooms[0].primitive
+
     assert terrain.metadata["last_operation"] == "terrain_brush_stroke"
     assert terrain.metadata["dirty_region_only"] is True
     assert terrain.metadata["defer_full_rebuild_until_stroke_end"] is True
@@ -2660,3 +2681,156 @@ def test_t2676_builder_tab_exposes_primitive_style_controls() -> None:
     assert "def _emit_primitive_style" in source
     assert "self.builder_tab.roomPrimitiveStyleRequested.connect(self.apply_authored_room_primitive_style)" in window_source
     assert "self.controller.set_authored_room_primitive_style" in window_source
+
+
+def _t2601_two_cube_batch_transform_project():
+    _install_native_payload_paths()
+    from src.core.modules.authored_room_operations import add_authored_room_composition_primitive
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="composition_starter_room",
+        module_root="grbatch",
+        game="K1",
+    )
+    project = add_authored_room_composition_primitive(
+        project,
+        primitive_kind="cube",
+        room_resref="grbatch_room01",
+        primitive_name="left_cube",
+        translation=(-1.0, 0.0, 0.0),
+        rotation_degrees_z=10.0,
+        scale=(1.0, 2.0, 1.0),
+    )
+    return add_authored_room_composition_primitive(
+        project,
+        primitive_kind="cube",
+        room_resref="grbatch_room01",
+        primitive_name="right_cube",
+        translation=(1.0, 0.0, 0.0),
+        rotation_degrees_z=-20.0,
+        scale=(0.5, 1.0, 2.0),
+    )
+
+
+def _t2601_batch_transform_rows(project):
+    from src.core.modules.authored_room_operations import authored_room_composition_primitives
+
+    return {row.primitive_name: row for row in authored_room_composition_primitives(project)}
+
+
+def test_t2601_batch_translate_moves_complete_object_selection_by_one_world_delta() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.authored_room_operations import transform_authored_room_composition_primitives
+
+    updated = transform_authored_room_composition_primitives(
+        _t2601_two_cube_batch_transform_project(),
+        selections=(
+            {"room_resref": "grbatch_room01", "primitive_name": "left_cube"},
+            ("grbatch_room01", "right_cube"),
+        ),
+        mode="translate",
+        world_delta=(2.0, -3.0, 4.0),
+    )
+    rows = _t2601_batch_transform_rows(updated)
+
+    assert rows["left_cube"].translation == (1.0, -3.0, 4.0)
+    assert rows["right_cube"].translation == (3.0, -3.0, 4.0)
+    assert rows["left_cube"].rotation_degrees_z == 10.0
+    assert rows["right_cube"].rotation_degrees_z == -20.0
+    assert rows["grbatch_room01_floor"].translation == (0.0, 0.0, 0.0)
+    assert updated.extra["batch_transform_mode"] == "translate"
+    assert updated.extra["batch_transform_count"] == 2
+
+
+def test_t2601_batch_rotate_orbits_pivots_and_retains_object_rotation_offsets() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.authored_room_operations import transform_authored_room_composition_primitives
+
+    updated = transform_authored_room_composition_primitives(
+        _t2601_two_cube_batch_transform_project(),
+        selections=(("grbatch_room01", "left_cube"), ("grbatch_room01", "right_cube")),
+        mode="rotate",
+        rotation_delta_degrees_z=90.0,
+        world_pivot=(0.0, 0.0, 0.0),
+    )
+    rows = _t2601_batch_transform_rows(updated)
+
+    assert tuple(round(value, 9) for value in rows["left_cube"].translation) == (0.0, -1.0, 0.0)
+    assert tuple(round(value, 9) for value in rows["right_cube"].translation) == (0.0, 1.0, 0.0)
+    assert rows["left_cube"].rotation_degrees_z == 100.0
+    assert rows["right_cube"].rotation_degrees_z == 70.0
+    assert rows["left_cube"].scale == (1.0, 2.0, 1.0)
+    assert rows["right_cube"].scale == (0.5, 1.0, 2.0)
+
+
+def test_t2601_batch_scale_orbits_pivots_and_multiplies_each_object_scale() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.authored_room_operations import transform_authored_room_composition_primitives
+
+    updated = transform_authored_room_composition_primitives(
+        _t2601_two_cube_batch_transform_project(),
+        selections=(("grbatch_room01", "left_cube"), ("grbatch_room01", "right_cube")),
+        mode="scale",
+        scale_multiplier=(2.0, 3.0, 4.0),
+        world_pivot=(0.0, 0.0, 0.0),
+    )
+    rows = _t2601_batch_transform_rows(updated)
+
+    assert rows["left_cube"].translation == (-2.0, 0.0, 0.0)
+    assert rows["right_cube"].translation == (2.0, 0.0, 0.0)
+    assert rows["left_cube"].scale == (2.0, 6.0, 4.0)
+    assert rows["right_cube"].scale == (1.0, 3.0, 8.0)
+    assert rows["left_cube"].rotation_degrees_z == 10.0
+    assert rows["right_cube"].rotation_degrees_z == -20.0
+
+
+def test_t2601_controller_batch_transform_records_one_undo_and_restores_selection() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grbatch", game="K1")
+    controller.create_authored_room_preset_module(
+        preset_id="composition_starter_room",
+        module_root="grbatch",
+    )
+    controller.add_authored_room_primitive(
+        primitive_kind="cube",
+        room_resref="grbatch_room01",
+        primitive_name="left_cube",
+        translation=(-1.0, 0.0, 0.0),
+    )
+    controller.add_authored_room_primitive(
+        primitive_kind="cube",
+        room_resref="grbatch_room01",
+        primitive_name="right_cube",
+        translation=(1.0, 0.0, 0.0),
+    )
+    controller.command_history.clear()
+    controller.model.selected_ids = ["primitive:left_cube", "primitive:right_cube"]
+
+    controller.transform_authored_room_primitives(
+        selections=(("grbatch_room01", "left_cube"), ("grbatch_room01", "right_cube")),
+        mode="translate",
+        world_delta=(0.5, 1.5, 2.5),
+        world_pivot=(0.0, 0.0, 0.0),
+    )
+
+    assert len(controller.command_history.undo_stack) == 1
+    record = controller.command_history.undo_stack[-1]
+    assert record.action_key == "map_studio.primitive.batch_transform"
+    assert record.label == "Move 2 primitives"
+    assert record.metadata["selection_count"] == 2
+    moved = {row.primitive_name: row for row in controller.authored_room_primitive_transforms()}
+    assert moved["left_cube"].translation == (-0.5, 1.5, 2.5)
+    assert moved["right_cube"].translation == (1.5, 1.5, 2.5)
+
+    undo = controller.undo_map_studio_command()
+
+    assert undo is not None
+    assert undo.record.action_key == "map_studio.primitive.batch_transform"
+    assert controller.model.selected_ids == ["primitive:left_cube", "primitive:right_cube"]
+    restored = {row.primitive_name: row for row in controller.authored_room_primitive_transforms()}
+    assert restored["left_cube"].translation == (-1.0, 0.0, 0.0)
+    assert restored["right_cube"].translation == (1.0, 0.0, 0.0)

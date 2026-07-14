@@ -6,6 +6,7 @@ from PySide6 import QtCore, QtWidgets
 
 
 class ModuleExportPanel(QtWidgets.QWidget):
+    targetGameRequested = QtCore.Signal(str)
     exportRequested = QtCore.Signal(bool)
     devTestModuleRequested = QtCore.Signal(bool)
     authoredModuleRequested = QtCore.Signal(bool)
@@ -26,12 +27,33 @@ class ModuleExportPanel(QtWidgets.QWidget):
         )
         self.export_scope_label.setObjectName("mapStudioExportScopeLabel")
         self.export_scope_label.setWordWrap(True)
+        target_row = QtWidgets.QWidget(self)
+        target_row.setObjectName("mapStudioExportTargetGameRow")
+        target_layout = QtWidgets.QHBoxLayout(target_row)
+        target_layout.setContentsMargins(0, 0, 0, 0)
+        target_layout.addWidget(QtWidgets.QLabel("KOTOR target game"))
+        self.target_game_combo = QtWidgets.QComboBox(target_row)
+        self.target_game_combo.setObjectName("mapStudioExportTargetGameComboBox")
+        self.target_game_combo.addItem("Knights of the Old Republic (K1)", "K1")
+        self.target_game_combo.addItem("The Sith Lords (K2)", "K2")
+        self.target_game_combo.setToolTip(
+            "Retarget the authored KMAP before export. This changes MDL binary flavor and invalidates prior package/game proof."
+        )
+        self.target_game_combo.activated.connect(self._emit_target_game)
+        target_layout.addWidget(self.target_game_combo, 1)
+        self.target_game_hint_label = QtWidgets.QLabel(
+            "Target changes are transactional and undoable; source-game resrefs remain dependency risks until validation passes."
+        )
+        self.target_game_hint_label.setObjectName("mapStudioExportTargetGameHintLabel")
+        self.target_game_hint_label.setWordWrap(True)
         self.export_safety_label = QtWidgets.QLabel(
             "Safe install: stage first, then install to a chosen Modules folder with backup. A module is not game-ready until a live warp test is recorded."
         )
         self.export_safety_label.setObjectName("mapStudioExportSafetyLabel")
         self.export_safety_label.setWordWrap(True)
         root.addWidget(self.export_scope_label)
+        root.addWidget(target_row)
+        root.addWidget(self.target_game_hint_label)
         root.addWidget(self.export_safety_label)
         self.visible_only = QtWidgets.QCheckBox("Visible Only")
         self.visible_only.setChecked(True)
@@ -145,6 +167,29 @@ class ModuleExportPanel(QtWidgets.QWidget):
         root.addWidget(self.authored_install_button)
         self.set_readiness(None)
         root.addStretch(1)
+
+    def set_target_game(self, game: str, *, source_game: str = "") -> None:
+        """Reflect the KMAP export target without recursively requesting a port."""
+
+        target = str(game or "K1").strip().upper()
+        index = self.target_game_combo.findData(target)
+        blocked = self.target_game_combo.blockSignals(True)
+        try:
+            self.target_game_combo.setCurrentIndex(index if index >= 0 else 0)
+        finally:
+            self.target_game_combo.blockSignals(blocked)
+        source = str(source_game or target).strip().upper()
+        if source and source != target:
+            self.target_game_hint_label.setText(
+                f"Source {source} -> target {target}: validate every preserved texture/template resref, then rebuild and re-prove in game."
+            )
+        else:
+            self.target_game_hint_label.setText(
+                f"Target {target}: changing this runs the K1/K2 port transaction and invalidates prior package/game proof."
+            )
+
+    def _emit_target_game(self, _index: int) -> None:
+        self.targetGameRequested.emit(str(self.target_game_combo.currentData() or "K1"))
 
     def _populate_action_guide(self) -> None:
         rows = (

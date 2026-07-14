@@ -2,386 +2,392 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Workflow",
-    "file_count": 117,
+    "file_count": 122,
     "originals_remain_in_src": true,
     "files": [
         {
             "resource_name": "PYTHON_PAYLOAD_AUTORIG_INIT",
             "source_path": "src/autorig/__init__.py",
             "packaged_path": "Python/src/autorig/__init__.py",
-            "sha256": "4244c403d1426ef468e7aff2c6ee5ee5e60a0165a09be548c162b3f191eddfc2"
+            "sha256": "ba5d490af8bd346e3a7769c753483391cf3187b45577d7de610ac87adb8f53f1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_AUTORIG_ACCURIG",
             "source_path": "src/autorig/accurig.py",
             "packaged_path": "Python/src/autorig/accurig.py",
-            "sha256": "4a8c4fcf0fc9aede318ced82a3788fe90b7015e936e1fff8a2323bb70ca11473"
+            "sha256": "69cce084bfa9e309856c6d962c3f21beb538ad30c7e293d9e3a92d21f4e066b2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_AUTORIG_AUTO_RIGGER",
             "source_path": "src/autorig/auto_rigger.py",
             "packaged_path": "Python/src/autorig/auto_rigger.py",
-            "sha256": "1e6c06d9c2caa4dc5a9ea2b1dad9611e28e533e036dc06e8de0fd34ad6ccda5f"
+            "sha256": "6d967b61472162c108bc372f34f8bb44ae183fe0752b7b1bd9f6aa00ecb2d5ca"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_AUTORIG_CLOTH_RIG",
             "source_path": "src/autorig/cloth_rig.py",
             "packaged_path": "Python/src/autorig/cloth_rig.py",
-            "sha256": "074a229418861a104e1b69cbba11d0795d047301da12fdbc349cb2070556b461"
+            "sha256": "4a67fe25b6aa07e1e686850194bb0a0be83aa92e2230b65bc4f95790cc9ff062"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_AUTORIG_GRIG",
             "source_path": "src/autorig/grig.py",
             "packaged_path": "Python/src/autorig/grig.py",
-            "sha256": "80c072aaaf030abdf796037fff7aef0e9b8ac8048422269b8a4654b6eee14187"
+            "sha256": "72e4ee214df2ce4ed8a427019c666b6da78489fee8a6d5e6d8b5a08fa7b1aca0"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_AUTORIG_RETARGET_ENGINE",
             "source_path": "src/autorig/retarget_engine.py",
             "packaged_path": "Python/src/autorig/retarget_engine.py",
-            "sha256": "ed6370665884352cf3363fac015a95e98687c7b36de47c2289c6ae9f0ae37ae3"
+            "sha256": "fac26dc3d8251d3be3a746fab1b9317d48ece2981c3326fa0efb2d8dde6d084b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_INIT",
             "source_path": "src/core/animation/__init__.py",
             "packaged_path": "Python/src/core/animation/__init__.py",
-            "sha256": "3f01b7b623c752e225cd270de9e7465a342b597f0f405381f7b42918b78ab154"
+            "sha256": "0342c2cac3a4a444ab30aa248d76d4f860e9b5fdfd80444c8987726ed7618de1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_ANIMATION_ENGINE",
             "source_path": "src/core/animation/animation_engine.py",
             "packaged_path": "Python/src/core/animation/animation_engine.py",
-            "sha256": "20e275c70fb63e7e4f9c10cac39f6866a08910b1362621e9e42b5e438473782e"
+            "sha256": "c7f03e2fac0968e8dc5d3f4f87f22eeed55e494e40041624cae066d5cb72c449"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_ANIMATION_LIBRARY",
             "source_path": "src/core/animation/animation_library.py",
             "packaged_path": "Python/src/core/animation/animation_library.py",
-            "sha256": "c0b8428cc0c641d507af3865933a8ac62ee3e229c8cb5dff34076311e56cbe23"
+            "sha256": "ff0aae6d6fd341343e52ae02cf29bbb610ec0f166fe7eaf1362d9be86ef010e7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_GPU_SKINNING",
             "source_path": "src/core/animation/gpu_skinning.py",
             "packaged_path": "Python/src/core/animation/gpu_skinning.py",
-            "sha256": "2edb30fc4f700d34633cc2b1bcd164a922650d70048213c248dd4ed91e204a2c"
+            "sha256": "aa4dad367330cffc4efcfba5d1050ece2133bdcb8a54dc773e3748bd155917c7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_INIT",
             "source_path": "src/core/animation/skinning_profiles/__init__.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/__init__.py",
-            "sha256": "5ad44a135472570327917cbd469b2694ba9a16e8b5729cdf909d4cf9dd9ec3e6"
+            "sha256": "4612a5673b0d7d2239c714e12ba8b3a85e58334814793b102b1d89286e22e572"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_ANIMATION_SUPERMODEL_SKINNING",
             "source_path": "src/core/animation/skinning_profiles/animation_supermodel_skinning.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/animation_supermodel_skinning.py",
-            "sha256": "266685f5e29914eb98e961811a97130906cab411107839db6a4f5399810098a0"
+            "sha256": "2b94742c1b239158d7f904a7794c9e38565539be5cf792f765086c146eea8b96"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_CREATURE_SKINNING",
             "source_path": "src/core/animation/skinning_profiles/creature_skinning.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/creature_skinning.py",
-            "sha256": "2dcde2dcbd52857d44b24d76d257dadc0fc0a5ad4c6d737623a50b20bf30ee31"
+            "sha256": "45d902d072299b5a7f2f8ce2dc447a68708544c8068238edd73dcdd7e4514f07"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_DEFAULT_SKINNING",
             "source_path": "src/core/animation/skinning_profiles/default_skinning.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/default_skinning.py",
-            "sha256": "bbdd77d29ef34c49454cc6372b247713f8b7e2314bea0c2429a09751881b5b40"
+            "sha256": "8733fa19e4a0af37b4d0d20067e00214f09c620d01ab67024b93c6599735d47b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_DROID_RIGID_SKINNING",
             "source_path": "src/core/animation/skinning_profiles/droid_rigid_skinning.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/droid_rigid_skinning.py",
-            "sha256": "929721299befedeb53ed1017552d5721867ed9426c0af299ef218fe419c0b345"
+            "sha256": "6200984cb52eddac527c1f84240e77ce21ec141fb9502742b53e28f3ce9b3a6c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_DROID_SKINNED_SKINNING",
             "source_path": "src/core/animation/skinning_profiles/droid_skinned_skinning.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/droid_skinned_skinning.py",
-            "sha256": "690068cb20ef182d5870dcbbae87bdb00f17ed47f299d85a89a7804c5d142058"
+            "sha256": "e5a4b3e7436ede6e3b7492779082e09ccccc5e969c7f3d06e763939a2e6202d6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_GENERATED_CHARACTER_SKINNING",
             "source_path": "src/core/animation/skinning_profiles/generated_character_skinning.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/generated_character_skinning.py",
-            "sha256": "801f803550bd68487a95b4b7cb58db9cf68fe9b6927e14dabf84bcc666dbeeec"
+            "sha256": "664ede49cd5e5cd368c5ed990593cee4b0ad81627ac8a2ddeb9236af68ee85b8"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_HEAD_ATTACHMENT_SKINNING",
             "source_path": "src/core/animation/skinning_profiles/head_attachment_skinning.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/head_attachment_skinning.py",
-            "sha256": "0c2f158ca863cd23cc0aa00ebc48465c4a6c9931b6ae01abd694d7ca4ba9c39d"
+            "sha256": "fe06362f610a68b984fa72c0e494bb2da66e4496c5dd8ee5ac772e1cf2373a46"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_HUMANOID_SUPERMODEL_SKINNING",
             "source_path": "src/core/animation/skinning_profiles/humanoid_supermodel_skinning.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/humanoid_supermodel_skinning.py",
-            "sha256": "0a97ffa607b48568971dc8340050f2e1715b7e6133ee7fae756b7ce72c7dcf99"
+            "sha256": "6c876b1f8f4f3abae4e22d72b8276a47bbaf0c0a1922a0e4e6c8bf8aae1954e2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_LOCAL_CHARACTER_SKINNING",
             "source_path": "src/core/animation/skinning_profiles/local_character_skinning.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/local_character_skinning.py",
-            "sha256": "99128c7eda8d6c5ccfb3bbac6bfc1bb107ae03a4249efdf2f20bf8768e1fdd10"
+            "sha256": "3f94cc80a84e350f7354432aa6c55581d14f6aa8fe5c361f1017323f16c56490"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_MODULAR_BODY_SKINNING",
             "source_path": "src/core/animation/skinning_profiles/modular_body_skinning.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/modular_body_skinning.py",
-            "sha256": "45a768b7912750e25f21aa896808a596428407668f2f0d80cdc4c656fb6c4a54"
+            "sha256": "173109661df73cbbd59ac4068d6833f519dd52519b6730d233cc5420964ebf00"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_INIT",
             "source_path": "src/core/animation/skinning_profiles/types/__init__.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/__init__.py",
-            "sha256": "ef2ede4daec06a720ca5107327f1163db98274b53f4acb91125e9773f57a5151"
+            "sha256": "2ff1d1b382bc6456860d74449d0e8ce1186793a28978d870c51f72f037de0e9a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_CHARACTERS_INIT",
             "source_path": "src/core/animation/skinning_profiles/types/characters/__init__.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/characters/__init__.py",
-            "sha256": "81dcdec4e39fd385dcb4cbcaaf722419abcd890653519c389aa13af63202d53b"
+            "sha256": "f2a11948e2fa4be3f77704f915d98fe9ab67e6e855c587f25996e267cd2f9f02"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_CHARACTERS_BITH",
             "source_path": "src/core/animation/skinning_profiles/types/characters/bith.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/characters/bith.py",
-            "sha256": "27b26de8ac5097bf11d520df192fb337c43801d58102de3a0443e0f5e960d7dc"
+            "sha256": "6c0a51c82577fd9d702936dfd5d3a6e876a9188c8e29cab25bea8f81ae79a322"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_CHARACTERS_DUROS",
             "source_path": "src/core/animation/skinning_profiles/types/characters/duros.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/characters/duros.py",
-            "sha256": "584f4d58794316b4ea88630e7f51119077ff77937dc463bde2cbbe6759746c13"
+            "sha256": "03970279b06715d350de727dc37461fafd2f78102af7add65a3589d04d0512ae"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_CHARACTERS_HERO",
             "source_path": "src/core/animation/skinning_profiles/types/characters/hero.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/characters/hero.py",
-            "sha256": "ea8c6fe9786fa7d4d9820b4633d1afdfc879954562006bb359420f737cc332e7"
+            "sha256": "6d831e73a5eddb3e731e2d2d7d76f475ed58aaab3b736297b85428c17a30962e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_CHARACTERS_HUMAN",
             "source_path": "src/core/animation/skinning_profiles/types/characters/human.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/characters/human.py",
-            "sha256": "a7b3d3d25813c6b7a578b5626f7de5475c6268f9a1e5f4bd1ccf36648e6acca7"
+            "sha256": "2b461ad17578407cfb8e45103eb66d249ddf2951f915d869cb2778f45d85087c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_CHARACTERS_MANDALORIAN",
             "source_path": "src/core/animation/skinning_profiles/types/characters/mandalorian.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/characters/mandalorian.py",
-            "sha256": "0d7104f93712aaf3ce85a0f6983191fa794c9d7bb7e1f5735bc44f343eb7ee8b"
+            "sha256": "79085beb11a0173826d0561bc9d15d979bf40c93a01a1876b57966eed2de77e2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_CHARACTERS_PARTY",
             "source_path": "src/core/animation/skinning_profiles/types/characters/party.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/characters/party.py",
-            "sha256": "b3240bc45fe308778b00b28cfc6e7ae54e6b0419d9d8a6f022a9852bf1a32d9f"
+            "sha256": "3f5b478f49f25b11a563cd59e4da20d92e8df5302239831aba9079c38e545ecc"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_CHARACTERS_SITH",
             "source_path": "src/core/animation/skinning_profiles/types/characters/sith.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/characters/sith.py",
-            "sha256": "baeb22eca7c58e6c4ef00ad20b741b44b1056036b2363b59736c03e983869b21"
+            "sha256": "a77b6081c48c74a3f27a91b30617ad31eb54d7aa9359c59f64a564697bfd809d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_CHARACTERS_WOOKIE",
             "source_path": "src/core/animation/skinning_profiles/types/characters/wookie.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/characters/wookie.py",
-            "sha256": "ffb5461352f847ead2bad03999859b2c86293eb1a8ac83c2ce629edc0cbc855a"
+            "sha256": "4c9da55d0267c4d71ced2da0c87161fef69bc188d5e12ab99424f3c75cf805d4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_CREATURES_INIT",
             "source_path": "src/core/animation/skinning_profiles/types/creatures/__init__.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/creatures/__init__.py",
-            "sha256": "ee072c62f22cbefd469e91b33272223f6bbb9960b309a91d59c7c65ad7f93c16"
+            "sha256": "a01c5aa8811f534756408b67ec577be357d367657b1bd3e6873db69ac3937b72"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_CREATURES_SELKATH",
             "source_path": "src/core/animation/skinning_profiles/types/creatures/selkath.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/creatures/selkath.py",
-            "sha256": "3b1a654a15076c484a18ff564059a6eb2e5bb80fcab2fde88573c6d7d372fc4e"
+            "sha256": "21286eb09040455185be0465fdf72b742c81a597c2a0dab768d4235740615d2c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_DROIDS_INIT",
             "source_path": "src/core/animation/skinning_profiles/types/droids/__init__.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/droids/__init__.py",
-            "sha256": "df2dd12c85a7fe00345af410e1deec5c216aeb0ebbc32e2cd0eb6955744f5b31"
+            "sha256": "59ba5e661e062018e407ed19082cca5c0057df11e19f7f93c68103941edb6e2b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_DROIDS_BATTLEDROID",
             "source_path": "src/core/animation/skinning_profiles/types/droids/battledroid.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/droids/battledroid.py",
-            "sha256": "d803fb924b37d4617944641fa5372be735b46f166338c38482673159aaf7df54"
+            "sha256": "1751cd134a6e411170c9071e109368b30293723b9fc5c6befc964ca3e5996976"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_DROIDS_T3M3",
             "source_path": "src/core/animation/skinning_profiles/types/droids/t3m3.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/droids/t3m3.py",
-            "sha256": "1a542fcc8d71cd93be2d3426f486d8b8923b90ebaea29ea6bf9e3eb31213c6f3"
+            "sha256": "6edeb156bd93deb3e4a8219a853bd74e895ff2de7c3432097faaece269fdd69e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_DROIDS_T3M4",
             "source_path": "src/core/animation/skinning_profiles/types/droids/t3m4.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/droids/t3m4.py",
-            "sha256": "2947a7936150c8d849ced471ed4e00a907cdde0bd0ff2607d3888b9546e1210e"
+            "sha256": "163a49fc08747aee19764bf87b717e7388c410095f2c3b0ce1f6bebaea29fdad"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_DROIDS_UTILITYDROID",
             "source_path": "src/core/animation/skinning_profiles/types/droids/utilitydroid.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/droids/utilitydroid.py",
-            "sha256": "571c8a8b2d3e1fc1c41ed663c9a744b913b88e6ef2d8e7e67779ba71cfe7d5d1"
+            "sha256": "85bc0154c0de5d0b339c09983c4be1d0ba5b56503770277fa7d58016dc837b22"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_GENERATED_CHARACTER_SKINNING",
             "source_path": "src/core/animation/skinning_profiles/types/generated_character_skinning.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/generated_character_skinning.py",
-            "sha256": "f2ac25160025e9a1246b0b85caf45ca58275b54b0c7e90a68aa8b6251e50d122"
+            "sha256": "29a14340ceb070df222be2bff2bcc7138155c2a3684d87dd781af617a9936aad"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_SPECIALCASE_INIT",
             "source_path": "src/core/animation/skinning_profiles/types/specialcase/__init__.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/specialcase/__init__.py",
-            "sha256": "93a8a543572e4594422b263881ab598658dbe4764822bd3380f67d62a4198b2c"
+            "sha256": "629e6add646efc2f9ecc9c596994919f5630560a7c97ed0492aeeab1c2580664"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_SPECIALCASE_BASTILA",
             "source_path": "src/core/animation/skinning_profiles/types/specialcase/bastila.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/specialcase/bastila.py",
-            "sha256": "552f8436f5ecc28abd1e00eb3e7060f16d150da51140787548e1450acf894fc2"
+            "sha256": "104781740d7e78faf12fbe4a6586708f9acbdb28eb32c70785860d807339976e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_SPECIALCASE_KREIA",
             "source_path": "src/core/animation/skinning_profiles/types/specialcase/kreia.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/specialcase/kreia.py",
-            "sha256": "ed1643628a1942f29562af7d4bf8c60d40f63eb88369db8b8c76df1f23b58653"
+            "sha256": "96fcd6249af4d9029f7e9900c8c26a12dd69304c74d7f56ba33ef5d034126316"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_SPECIALCASE_MALAK",
             "source_path": "src/core/animation/skinning_profiles/types/specialcase/malak.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/specialcase/malak.py",
-            "sha256": "45e6da50547c55f162e4f5b4f599ec467f1eaed559c929029c65332fb5044de2"
+            "sha256": "8acc0c4a2b5053c5bc952eb1edfaae41a7b09bddb5b9b599bb3334d777435e1e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_SPECIALCASE_NIHLUS",
             "source_path": "src/core/animation/skinning_profiles/types/specialcase/nihlus.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/specialcase/nihlus.py",
-            "sha256": "274acc670639301f43bfb64280aff1b313a2326f6a530633bc2fb62c8d0a5dbb"
+            "sha256": "cfd46a1fd1c3d642a8b2f72c8bd4d8ea0384edc32b826b9f9e9e59c4e9f094f5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_SPECIALCASE_REVAN",
             "source_path": "src/core/animation/skinning_profiles/types/specialcase/revan.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/specialcase/revan.py",
-            "sha256": "20b8379dbc35c3800acfb8adb56648996f84519162322b74d22359f3b2845409"
+            "sha256": "b24e2150b9886ae733b4798a2a6460868aeb7c1fc7704b49e38d2b67c2577fa2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_SPECIALCASE_SION",
             "source_path": "src/core/animation/skinning_profiles/types/specialcase/sion.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/specialcase/sion.py",
-            "sha256": "4f35a74c67bd26ec98a80ab829006b3a3038abe94fb476c76a63ec4b3e5d20fc"
+            "sha256": "a26853af796902568f72a7954d35248b080aa64a6057e568bd766b06093e142f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_SUPERMODELS_INIT",
             "source_path": "src/core/animation/skinning_profiles/types/supermodels/__init__.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/supermodels/__init__.py",
-            "sha256": "80818426c1c3a1adf52a025055a4203f7d835b9701af7838507f5a01f8df6ebb"
+            "sha256": "6fffd05dfce3a2ecce04c178cea62eefbeec3198db7503c307615852b6311a04"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_SUPERMODELS_SUPERMODEL_FEMALE",
             "source_path": "src/core/animation/skinning_profiles/types/supermodels/supermodel_female.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/supermodels/supermodel_female.py",
-            "sha256": "7709a915d2cd9884ae04da86906d35eae1633fe512a62c41777834c55755ed44"
+            "sha256": "1c7ba3e0ddf266c28a6ccec1b4dc941d697ffe9550a89bbf6c24d4a6299aa370"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_SUPERMODELS_SUPERMODEL_MALE",
             "source_path": "src/core/animation/skinning_profiles/types/supermodels/supermodel_male.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/supermodels/supermodel_male.py",
-            "sha256": "1815b7d361cc1f90766793beef37a6ce230cff2b907b19791ada593fb4970a2b"
+            "sha256": "5b19c2613de0b90fab8dc662c8820d203edbe289d011583c197f549ae64761e9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_TURRETS_INIT",
             "source_path": "src/core/animation/skinning_profiles/types/turrets/__init__.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/turrets/__init__.py",
-            "sha256": "7c176e328b45b57fc6119c5adbb30273093ff22434c66a2000651f25bb4a9bed"
+            "sha256": "758cbba7ea414aeaa74ad8c4d2ab3446ab0655f44a342dbb801af4b0b95efb7e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_TYPES_TURRETS_TURRET_01",
             "source_path": "src/core/animation/skinning_profiles/types/turrets/turret_01.py",
             "packaged_path": "Python/src/core/animation/skinning_profiles/types/turrets/turret_01.py",
-            "sha256": "5cac4cddb173bce965439efe8b59991c4d3da8addc2d9444c3012aae32268355"
+            "sha256": "79b87096ada9a2930630ae3c364c6c8240056034c973f5f469fe9cac3a68a49d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_RETARGETING_INIT",
             "source_path": "src/core/animation_retargeting/__init__.py",
             "packaged_path": "Python/src/core/animation_retargeting/__init__.py",
-            "sha256": "4a16d151b2a3e90e565efc2ff3a8f6a2b3bd24056b3c8bd58595e0ddcde823a4"
+            "sha256": "ec03c12bad98b9082e88f0c8a5d1c958156be76272b91b10a00b9ce15742419c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_RETARGETING_RETARGETER",
             "source_path": "src/core/animation_retargeting/retargeter.py",
             "packaged_path": "Python/src/core/animation_retargeting/retargeter.py",
-            "sha256": "8a8cfac4c8f22fb15bda92d2e80eae86380199257dd9cea8387dd2912555d228"
+            "sha256": "3ef8a91f23f94ee57b454699da1d80e91a053ad23dd452995a4e50d81e1a16b4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_RETARGETING_SKELETON_TEMPLATE_PICKER",
             "source_path": "src/core/animation_retargeting/skeleton_template_picker.py",
             "packaged_path": "Python/src/core/animation_retargeting/skeleton_template_picker.py",
-            "sha256": "8bd219ad7e1c1cb7f24d56e76f9dd4ad8d6d519a67947e2a86e7a03ea0d4f510"
+            "sha256": "620ef2e0f1f5828b2cb14a9e567cbd2b47fae64f08b9bfa1aa6e57652454f0f3"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_INIT",
             "source_path": "src/core/characters/__init__.py",
             "packaged_path": "Python/src/core/characters/__init__.py",
-            "sha256": "ff138053bab9fee263434ab4f7d8e4506323306c87c04c86bc5bf20929d6be5b"
+            "sha256": "122672f4503d40a6506514d97ccb6ccd609de08640de93337a803885408c46c5"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_ANIMATION_DEFORMATION_VALIDATOR",
+            "source_path": "src/core/characters/animation_deformation_validator.py",
+            "packaged_path": "Python/src/core/characters/animation_deformation_validator.py",
+            "sha256": "8f07fdcece85ee50db242c8c03868a09b93f37c09491e8e9e227d49d7efaacf1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_AUTOFIT_REPORT",
             "source_path": "src/core/characters/character_autofit_report.py",
             "packaged_path": "Python/src/core/characters/character_autofit_report.py",
-            "sha256": "801dbe702f5b112963274cbfc5f15adf43e0f1123b9c2ce41a5416eb6135a4fa"
+            "sha256": "ef6dcb557312d6d14f5db9d926805e64abdaedde9ce3b409a557613acb2a38fb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_BUILDER",
             "source_path": "src/core/characters/character_builder.py",
             "packaged_path": "Python/src/core/characters/character_builder.py",
-            "sha256": "db3d12cb45765e296c948da250b0e9b69b96bbaeb5ec501e7119e9811c395615"
+            "sha256": "b420c9c11b54862159a64dc12bdbda9e2e811e5512e318b7fe444d753455c6ed"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_EXPORT_PREFLIGHT",
             "source_path": "src/core/characters/character_export_preflight.py",
             "packaged_path": "Python/src/core/characters/character_export_preflight.py",
-            "sha256": "a7a3cea42dcfd5162b4b23f9863461ed0c9041448c49415767e5fb6f619e3c4d"
+            "sha256": "cc565ab4fe48e3ae8db019c99cbaee5547e42ac53eb598bce3d7608e6922da5f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_EXPORT_TRANSACTION",
             "source_path": "src/core/characters/character_export_transaction.py",
             "packaged_path": "Python/src/core/characters/character_export_transaction.py",
-            "sha256": "3c1f34e80c82113c181ee16e13f256cd3f96c60d9ee232d22540a64bca68fac9"
+            "sha256": "7b2682e6e240983a00b5ab8c6067f07dc9787bd97f2864d7e2e72a3306d06a57"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_OVERRIDE_PACKAGE",
             "source_path": "src/core/characters/character_override_package.py",
             "packaged_path": "Python/src/core/characters/character_override_package.py",
-            "sha256": "2dae3d04476f2fb52d8033fbb53484e421f5a21561d871ce1999a3da2de9cfdf"
+            "sha256": "2e458c5ebca8739447c010cadf5015d38bfa3c37b8aeb00f6c34353fc0f53a56"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_RIG_STATE",
             "source_path": "src/core/characters/character_rig_state.py",
             "packaged_path": "Python/src/core/characters/character_rig_state.py",
-            "sha256": "28188503c5381adac97c4048925f789c708c1f16a98ca12aaa9716b7f425aced"
+            "sha256": "b3a906b83021688c1b6413dbcb5dde0636a9304a8302970cfb36be0543426cee"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CHARACTER_VALIDATION_REPORT",
             "source_path": "src/core/characters/character_validation_report.py",
             "packaged_path": "Python/src/core/characters/character_validation_report.py",
-            "sha256": "f89a207cc5f98e6dc659fd729eb6903d1a5ff4e8c25a20a6945aabd690939823"
+            "sha256": "8607fa9398abcdf74749e558c3d41ed9518b4e7e5acc3df367ea9571849b1651"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CREATURE_APPEARANCE",
             "source_path": "src/core/characters/creature_appearance.py",
             "packaged_path": "Python/src/core/characters/creature_appearance.py",
-            "sha256": "8137d103959ff1b2a704dfe41d2d312640ebf103cf316c537680d5531608ea27"
+            "sha256": "f2b3914755624a80226dbb38721a92d1ec82b16e6a86887b729ff153efb76aed"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CREATURE_PACKAGE_BUILDER",
@@ -393,319 +399,343 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEAD_WORKFLOW",
             "source_path": "src/core/characters/head_workflow.py",
             "packaged_path": "Python/src/core/characters/head_workflow.py",
-            "sha256": "fb4d3a7bcad822cadcfaa790403b33fd472e099bed848d7bafc3e719ed278a5c"
+            "sha256": "78ab242ab8cc6d399a32eda9b64cb062c0e37574341a475d98b28350c1b24eac"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEADLESS_BODY_WORKFLOW",
             "source_path": "src/core/characters/headless_body_workflow.py",
             "packaged_path": "Python/src/core/characters/headless_body_workflow.py",
-            "sha256": "c3772b88c709c06b0fbdaea2db11ecf6132e829759ff5c8968a6f9e5b7fbaca8"
+            "sha256": "b47bc648b54e8e3f6443c55d4a1e2fcb75d28316f018bfb0744d442f50a95815"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_KOTOR_CONSTANTS",
             "source_path": "src/core/characters/kotor_constants.py",
             "packaged_path": "Python/src/core/characters/kotor_constants.py",
-            "sha256": "3cb71a09e164da0a08eb8366ad085083c5637c2ffac08f3ac0b3ee9fe5195484"
+            "sha256": "3f6125bc036fedb51cdd99c00eabd127d7c88606bdfbec141ce3319bdea9b08a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_NATIVE_SKELETON",
             "source_path": "src/core/characters/native_skeleton.py",
             "packaged_path": "Python/src/core/characters/native_skeleton.py",
-            "sha256": "8fa6b8fb4afb13a9b0927e4ab16b731c6afe57f55fa3142f0a3ca24f2d80ef2d"
+            "sha256": "ea5b9fdf8e47bd926e9746bece0b92405c2ef0baccdcdd099ca89aaf7481fbe2"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_RIG_SESSION",
+            "source_path": "src/core/characters/rig_session.py",
+            "packaged_path": "Python/src/core/characters/rig_session.py",
+            "sha256": "edf8d66de5847dd97fe2900fe2522ee4c2a959d03ac115596004ac96bc83b3f9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_INIT",
             "source_path": "src/core/retargeting/__init__.py",
             "packaged_path": "Python/src/core/retargeting/__init__.py",
-            "sha256": "0d0c991cdd69afdbfbe88a285c4d6b2bb32e99fb468dfc1af202c67e79bf657f"
+            "sha256": "37bd741389584fb8e2b66d5f6a3f09c48d18baba7f93a58ef66064ae7c3962c6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_ANIMATION_INJECTOR",
             "source_path": "src/core/retargeting/animation_injector.py",
             "packaged_path": "Python/src/core/retargeting/animation_injector.py",
-            "sha256": "facc62b4fe53ff993d99fbfb1ae1485ccb628893c1cb99190e75aafe309099a8"
+            "sha256": "0c908bc3c051ce3feb3a495dd2176d3e33f48d422f06e31377a1f866f16de102"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_APOSE_COMPATIBILITY",
             "source_path": "src/core/retargeting/apose_compatibility.py",
             "packaged_path": "Python/src/core/retargeting/apose_compatibility.py",
-            "sha256": "d539728d20f140b2a08a5b2bb64400048b6b844ec026db7505db4cd05bb7892a"
+            "sha256": "c5861c127d7585d98bc735898ad559fbd648219a6640ef6ef08282f260cc0964"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_AURORA_ANIMATION_WRITER",
             "source_path": "src/core/retargeting/aurora_animation_writer.py",
             "packaged_path": "Python/src/core/retargeting/aurora_animation_writer.py",
-            "sha256": "0d57449158d1e427d0d2437c2d749cfb1168cf34a473cc78d1102031c83ee585"
+            "sha256": "477a638d2366031a715b51b25ff616709b2e7f3417284ccacaa73bda05300cb7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_BAKER",
             "source_path": "src/core/retargeting/baker.py",
             "packaged_path": "Python/src/core/retargeting/baker.py",
-            "sha256": "43851c9f56e43d4eea42e9a3dfde82b2300b4b6b1d0ca156e14749358d67d212"
+            "sha256": "5c27f2164f21f2487839f9e4c4000b9147c7e3924c7ad49a221bff34eef5f471"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_BLENDER_ANIMATION_INJECTION",
             "source_path": "src/core/retargeting/blender_animation_injection.py",
             "packaged_path": "Python/src/core/retargeting/blender_animation_injection.py",
-            "sha256": "c173db8a065ff23bfb36231be0087815841cde3193264c5dd90fd4e7e7bee3c4"
+            "sha256": "c67fe574dff03aa731ca428c549cee2dc6f14d85bbe3df2fb23c51eba304f2a4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_COORDINATE",
             "source_path": "src/core/retargeting/coordinate.py",
             "packaged_path": "Python/src/core/retargeting/coordinate.py",
-            "sha256": "04824cf032a697c2688d6abcb0b3a06947b1a8a2cc598470b8367c52648437df"
+            "sha256": "e964e2d8a2c1a4206977e45072b874f2e99a5f5a87f706280fc773d06a6c0809"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_COORDINATE_CONVERTER",
             "source_path": "src/core/retargeting/coordinate_converter.py",
             "packaged_path": "Python/src/core/retargeting/coordinate_converter.py",
-            "sha256": "de33d9ab3e7b2b54cc0683f95b1f00d18000fffb8a7ea03aeae3c0d9b9c1ba77"
+            "sha256": "4b79ffc53ad22d1a99399d17ffa6928051c19463b9f4607c77975566d74d6499"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_COORDINATE_NORMALIZER",
             "source_path": "src/core/retargeting/coordinate_normalizer.py",
             "packaged_path": "Python/src/core/retargeting/coordinate_normalizer.py",
-            "sha256": "aefac23630c1fd930c7b0398646191f0a037659a54db761d40080e9e5d62f3c6"
+            "sha256": "88c564de5aa20ce4d16c80e34c36320c791e618f1767f6aed6165d4b5a2c4e05"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_FBX_BACKEND",
             "source_path": "src/core/retargeting/fbx_backend.py",
             "packaged_path": "Python/src/core/retargeting/fbx_backend.py",
-            "sha256": "c5346d371f9eaa8472f11d971872b487b74fb3f76d5f6eecac440104b4823c1c"
+            "sha256": "b93e2c1b5771e91662683798e0a9c2509134b4ea7780f7965b3559a9ec711a42"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_FBX_EXPORTER",
             "source_path": "src/core/retargeting/fbx_exporter.py",
             "packaged_path": "Python/src/core/retargeting/fbx_exporter.py",
-            "sha256": "46837d6788a6b2e81f2a7c3bee3e1e521497db85d4ec9503a33e3017a1a1631f"
+            "sha256": "ce8005d7161e9b1fff83e957a94cbed80d90ae06ef4959f5b5a1dbb18b3136fc"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_FBX_IMPORTER",
             "source_path": "src/core/retargeting/fbx_importer.py",
             "packaged_path": "Python/src/core/retargeting/fbx_importer.py",
-            "sha256": "09348fbb868ba47ec7cde5a655ec52a642ee359d5cab8daadfc81b3335999b64"
+            "sha256": "b6c98561b09ec6b234392f12bd6417d3fb6cc483c468860e8a4aea231421c4d8"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_KOTOR_SOURCE_ANIMATION",
             "source_path": "src/core/retargeting/kotor_source_animation.py",
             "packaged_path": "Python/src/core/retargeting/kotor_source_animation.py",
-            "sha256": "fbf81e8a74ffda3312532493dd9ab009d484013a17e9c350fb9fe46dadef6548"
+            "sha256": "e49bbdf7b283cdb57c5e0ef98da50e9a72d745778602622024b78994429d694d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_KOTOR_TO_KOTOR_PREVIEW",
             "source_path": "src/core/retargeting/kotor_to_kotor_preview.py",
             "packaged_path": "Python/src/core/retargeting/kotor_to_kotor_preview.py",
-            "sha256": "ec1bf9caeea8e85657361130af64d4499242acf2192e82fbacba8600a5e03f0d"
+            "sha256": "9bdb33b62eda950751c017b603d2ff2a49ad9a28ac94a5c0e1574ad482b4f2be"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_KOTOR_TO_UNREAL_PREVIEW",
             "source_path": "src/core/retargeting/kotor_to_unreal_preview.py",
             "packaged_path": "Python/src/core/retargeting/kotor_to_unreal_preview.py",
-            "sha256": "2c92c9a0fe1becf2d5c8810b51b181dfbc31287deddd09d8db9a86aa0b2fc8dc"
+            "sha256": "3e3a7816535fb7c560b709446ade2d9473c3e719d1956a9ce8e827314c473996"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_KOTOR_TO_UNREAL_SOLVER",
             "source_path": "src/core/retargeting/kotor_to_unreal_solver.py",
             "packaged_path": "Python/src/core/retargeting/kotor_to_unreal_solver.py",
-            "sha256": "77e59bc3844327d29d311253fae1da3938eea7cf6811b6a5ec24f9a70ef2d0a4"
+            "sha256": "be7ce567709b3e28a71e6a478c4e5110ed68e50834baf911ad4e93a3240257e1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_MESH_LOADER",
             "source_path": "src/core/retargeting/mesh_loader.py",
             "packaged_path": "Python/src/core/retargeting/mesh_loader.py",
-            "sha256": "05c3559b48e1c9e88e86b97ff4f35ef7936eef6c0d578865d0fd839018dbf27b"
+            "sha256": "9b6805c7fb53a3b8494b37a1231e02e3b27a77e82823779e0779d5e19f5296a4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_MESH_REBINDER",
             "source_path": "src/core/retargeting/mesh_rebinder.py",
             "packaged_path": "Python/src/core/retargeting/mesh_rebinder.py",
-            "sha256": "58fecc4f5c16191d9d13670ae688be5945ab0b57089c3f7f0705a4af7d6aea33"
+            "sha256": "90817a931abf203aeec0a1e20c16db36e16b2f32e8161a0c9761452e7866994d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_MIXAMO_COMPANION_MESH",
             "source_path": "src/core/retargeting/mixamo_companion_mesh.py",
             "packaged_path": "Python/src/core/retargeting/mixamo_companion_mesh.py",
-            "sha256": "03e3fbf7935a06157bd5ee05ba5e346150ac9b8291dd8be07c05ab8ba74c7165"
+            "sha256": "060941a1b686c68b52bdef95e45cad11d8ade0d6c38df1b710e31a4dc623ab75"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_MIXAMO_SOURCE_ADAPTER",
             "source_path": "src/core/retargeting/mixamo_source_adapter.py",
             "packaged_path": "Python/src/core/retargeting/mixamo_source_adapter.py",
-            "sha256": "3b60573b36df53582fa9e5f57392416d7ae2fc7193c8a9fe8152030bd49979fc"
+            "sha256": "f586985fe89f6490364be5fa0f8acf44b7b5efea030b85828e556bbd0e5cf9f8"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_REFERENCE_POSE",
             "source_path": "src/core/retargeting/reference_pose.py",
             "packaged_path": "Python/src/core/retargeting/reference_pose.py",
-            "sha256": "252dda43a29cf927e01543fced0360c13762e176b3ecbbaf37d7c26b11240d63"
+            "sha256": "e50c44d14db563a49c13d715b375a5c5a6c81a892b8950dcdef2f11cf4be0629"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_RETARGET_CALIBRATION",
             "source_path": "src/core/retargeting/retarget_calibration.py",
             "packaged_path": "Python/src/core/retargeting/retarget_calibration.py",
-            "sha256": "1ff4ee216ef670df60a7dd57325a93de0d081f08dd8762c2027661d78c987a6c"
+            "sha256": "a264e848cce6be563d519eab1207bdb73b096887067243add43e2b417fd60b25"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_RETARGET_FRAME_AUDIT",
             "source_path": "src/core/retargeting/retarget_frame_audit.py",
             "packaged_path": "Python/src/core/retargeting/retarget_frame_audit.py",
-            "sha256": "a35d6ff6ca8415bd73ce03b41736fc2ca1993f2063482f5a0bcbe26c88b1a9e8"
+            "sha256": "3474dc085cef67c92a860ddba1a4a1a3d2262ba71a34246468fa4783a37683ae"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_RETARGET_FRAMES",
             "source_path": "src/core/retargeting/retarget_frames.py",
             "packaged_path": "Python/src/core/retargeting/retarget_frames.py",
-            "sha256": "647c53633160e432eaef4b2e619822902ad16a9fb6ce2503888b21492f4c6192"
+            "sha256": "adb6b6224da2f21fe5b14cec14677d3810cc3594071ae679e37f157875981148"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_RETARGET_MAPPING",
             "source_path": "src/core/retargeting/retarget_mapping.py",
             "packaged_path": "Python/src/core/retargeting/retarget_mapping.py",
-            "sha256": "d9112f45b00db68b71e9f6895f9db211e16c5830570f996417656535bd7eb486"
+            "sha256": "916ac2eea549eaa87b79937d9500e5e34153850202097bcc77611d0d3d83cf72"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_RETARGET_MODES",
             "source_path": "src/core/retargeting/retarget_modes.py",
             "packaged_path": "Python/src/core/retargeting/retarget_modes.py",
-            "sha256": "3ecba3f1d86981f670b4f88731ae3679c7a182d326adb86a82673bd1adf42afe"
+            "sha256": "5dc4db351a5566f425cf26e0246a6b968bab3c6839abfc033dfa616b9400e325"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_RETARGET_OUTPUT_NAMING",
             "source_path": "src/core/retargeting/retarget_output_naming.py",
             "packaged_path": "Python/src/core/retargeting/retarget_output_naming.py",
-            "sha256": "09ae6e4b97008f3e0f6b965e34057c8125cf9ab12c33cfc92b69bcbf2ba8a70e"
+            "sha256": "d2a1974833f9489efc09780a6be7db427948e22a5e717256d89433309590260b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_RETARGET_PREVIEW",
             "source_path": "src/core/retargeting/retarget_preview.py",
             "packaged_path": "Python/src/core/retargeting/retarget_preview.py",
-            "sha256": "896995665ad523d3aa3f8203ad05f97897654a7cf42b05e00910a5ff2169f1b1"
+            "sha256": "d836a0c6de46eae9d2f5803385cd7f338b78e0613a34bd1184daac8896b1ae7d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_RETARGET_PREVIEW_EXPORT",
             "source_path": "src/core/retargeting/retarget_preview_export.py",
             "packaged_path": "Python/src/core/retargeting/retarget_preview_export.py",
-            "sha256": "11f17ce866178069bad99be35b7d0020ca4bc5e2d2d7503b005e2ee80b7a9fa8"
+            "sha256": "1c0f8c43e71c8a39932a26a5ec0f392d2ab53c0698da42a274b4dca2a46248de"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_RETARGET_PROFILE",
             "source_path": "src/core/retargeting/retarget_profile.py",
             "packaged_path": "Python/src/core/retargeting/retarget_profile.py",
-            "sha256": "f1d275875f7d62a61c4fadc4591da4ef3f426a92bd80b595406f3e61ee9543c2"
+            "sha256": "4670ae4cda8fa89435a3175b61e7483228faf211e62015535be034d9525904d2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_RETARGET_SOLVE_AUDIT",
             "source_path": "src/core/retargeting/retarget_solve_audit.py",
             "packaged_path": "Python/src/core/retargeting/retarget_solve_audit.py",
-            "sha256": "faf1309d7a00c8d96caab8c869c1479940f0796c7ab08480624f87fc3cfd88a7"
+            "sha256": "a52322686b710d1e96df4c9607583bca53a08109b2bc048cd43d6e6bad3d1d25"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_RETARGET_SOLVER",
             "source_path": "src/core/retargeting/retarget_solver.py",
             "packaged_path": "Python/src/core/retargeting/retarget_solver.py",
-            "sha256": "a67a76dbb3d928d742e8ed0fbe74de8f55f54c5448334019a0f59d0b531c677f"
+            "sha256": "4ae1b423f80a39a5bfd0c43c92fef767e090f2855db14c685b9f8b721cdf967d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_RETARGET_WORKBENCH_READINESS",
             "source_path": "src/core/retargeting/retarget_workbench_readiness.py",
             "packaged_path": "Python/src/core/retargeting/retarget_workbench_readiness.py",
-            "sha256": "f7be1a58a70c5bf273d21512924b3c36215a059d391563a4cb36d438558ca28e"
+            "sha256": "6c0bfed3453368242631473c8ffee570ebb9604e002b926b73654540ddbf8643"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_REVERSE_RENAMER",
             "source_path": "src/core/retargeting/reverse_renamer.py",
             "packaged_path": "Python/src/core/retargeting/reverse_renamer.py",
-            "sha256": "91e3bc1070b17f8368f2cb629a8e0fb882938bf2e52a96eda38acc0448c6814f"
+            "sha256": "6257706f25dd8956470a9d3c18ed7157358d4196a70cee6b299a73fccc87e5de"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_ROOT_MOTION",
             "source_path": "src/core/retargeting/root_motion.py",
             "packaged_path": "Python/src/core/retargeting/root_motion.py",
-            "sha256": "3be252b17a9e9cd8cd7037a50ab065e532a036a04937e21d3693a2949c733ddc"
+            "sha256": "871df6ba4f2250eccc23802fc11ab0c5ae476ad251770aad747d5fd2ee2e420f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_SAMPLER",
             "source_path": "src/core/retargeting/sampler.py",
             "packaged_path": "Python/src/core/retargeting/sampler.py",
-            "sha256": "f925ad2881a6ab0798071a8d822308f3d4a9c7b20efeb8d04d9bd115da7e18ca"
+            "sha256": "7074ff846d12a7243d9b63f97c01f50d6c249eafd1903ec77de16a7d9cc570cb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_SKELETON_ALIGNER",
             "source_path": "src/core/retargeting/skeleton_aligner.py",
             "packaged_path": "Python/src/core/retargeting/skeleton_aligner.py",
-            "sha256": "f5daf7dde3e2ad1c1e27c92569d463ea33bde774feec0bab77abde9f76f2c334"
+            "sha256": "1f831ae20a1da7913105f28734d88cab24e301d586e1b1fa06ed85df202efdb2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_SKELETON_RENAMER",
             "source_path": "src/core/retargeting/skeleton_renamer.py",
             "packaged_path": "Python/src/core/retargeting/skeleton_renamer.py",
-            "sha256": "49258a9053dc260a2750dbf3f3f4adc1b4e5144773d596e23e9c49f54be9a3aa"
+            "sha256": "c4a15c70d7ea93f422ca7304409854e03be57642c84bca6061554e559658f2ad"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_SOURCE_ANIMATION",
             "source_path": "src/core/retargeting/source_animation.py",
             "packaged_path": "Python/src/core/retargeting/source_animation.py",
-            "sha256": "8bc39a6a4bf1b6ba56202105e3475bafa78103b9079c34b4ea7a27eb2420a5a7"
+            "sha256": "151d344ecfed56d4384e56e09ac4159b5cf9f068ed5ac15d0fb9a65d93fd4045"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_SOURCE_SKELETON_AUDIT",
             "source_path": "src/core/retargeting/source_skeleton_audit.py",
             "packaged_path": "Python/src/core/retargeting/source_skeleton_audit.py",
-            "sha256": "a7526c9ccf016194cf1a43b24fe6b075006a0a1e2b55af7aa39fff20f6264f65"
+            "sha256": "5b59fa1f7170705cf2b2fa66b8a292bf5b56f46c2e1337736d5e791f91308d91"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_TARGET_SKELETON_AUDIT",
             "source_path": "src/core/retargeting/target_skeleton_audit.py",
             "packaged_path": "Python/src/core/retargeting/target_skeleton_audit.py",
-            "sha256": "7882c3d428e73ff08e482114d1b8ace602aad95ba51b65f7f8d75ae5be0732ad"
+            "sha256": "e5bd2b52652b97255b1faa5ae13f2ca24f806781814ad2d16e33a2a3e3019b25"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_TEST_UTILS",
             "source_path": "src/core/retargeting/test_utils.py",
             "packaged_path": "Python/src/core/retargeting/test_utils.py",
-            "sha256": "700c43aaf99c1686d6282ce31fe69e3e0687b8b576fae7b9d3205dacb322038c"
+            "sha256": "aaff50230752137ba86ff4ecde2be8fa33ea9521dfedcc7dd45e528d8303bafd"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_UE5_SOURCE_ADAPTER",
             "source_path": "src/core/retargeting/ue5_source_adapter.py",
             "packaged_path": "Python/src/core/retargeting/ue5_source_adapter.py",
-            "sha256": "d07141ee6746bdfc2793627606270010be2ffcea8b4dfc0229d4c28fb30e1e55"
+            "sha256": "0777805468f1841285afcb4fb8b379373996282492c724c02a0a58163cd9e58a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_UE5_TO_AURORA_R3B_PREVIEW",
             "source_path": "src/core/retargeting/ue5_to_aurora_r3b_preview.py",
             "packaged_path": "Python/src/core/retargeting/ue5_to_aurora_r3b_preview.py",
-            "sha256": "80d6f4eadfcd52d960ff537ce88b57556470897e4f28d59a7dbe0325edd853af"
+            "sha256": "dcd3ae4127e4207969007cb2a3edcda88fcba14261972cd721581c52cd4eabf1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_UE_FBX_EXPORTER",
             "source_path": "src/core/retargeting/ue_fbx_exporter.py",
             "packaged_path": "Python/src/core/retargeting/ue_fbx_exporter.py",
-            "sha256": "f4e303740915076b61974fc3a247e9c4337537b6a5b77c76e62954a632baf318"
+            "sha256": "ef2d64087462f6d616225d5eb62888e350f2ffa9cc08189ba67e074edd866b5c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_UNREAL_TARGET_SKELETON",
             "source_path": "src/core/retargeting/unreal_target_skeleton.py",
             "packaged_path": "Python/src/core/retargeting/unreal_target_skeleton.py",
-            "sha256": "cfad7db5cc441228b49de8a40717d9040cf10382ec6970a11adb21810896d863"
+            "sha256": "52a3e5e0a80db00c0c3a1ffbc8ab826506bc0bf7768d5090142ba8690f28b7c1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_INIT",
             "source_path": "src/core/workflow/__init__.py",
             "packaged_path": "Python/src/core/workflow/__init__.py",
-            "sha256": "205bb145f562f93f1cc8e1edce79a67ccaa94f21562cdc75a0b53e9d4860d557"
+            "sha256": "c72aeff3abb8525f67252a28fc5844a52b17c6d331eb536c6332fa62eca17044"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_WORKFLOW_BASE",
             "source_path": "src/core/workflow/_workflow_base.py",
             "packaged_path": "Python/src/core/workflow/_workflow_base.py",
-            "sha256": "65a4308b17b0912e822453939b19661711f6c140b18d821553bcc64861b0139c"
+            "sha256": "8ac4cf56ffb84a249b0d6245b25d5b4c2fd348f94567a6f9d8995cdb8abf7dbb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_COMPOSITE_WORKFLOW",
             "source_path": "src/core/workflow/composite_workflow.py",
             "packaged_path": "Python/src/core/workflow/composite_workflow.py",
-            "sha256": "e5a2afb2383233eb69e52ba9b4402462856b26c402c542e296838b63bf538399"
+            "sha256": "ef6701b0664a835ab8467e04552e776f84fc049ba3a32e1eb75ea25f7801270a"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_MAP_STUDIO_LIGHTMAP_APPLY",
+            "source_path": "src/core/workflow/map_studio_lightmap_apply.py",
+            "packaged_path": "Python/src/core/workflow/map_studio_lightmap_apply.py",
+            "sha256": "23e10ea08d43e9a0d76bff9cb57f02612ec2eec4f072d525c90a2f75275b054a"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_PLACEABLE_BUILDER_SERVICE",
+            "source_path": "src/core/workflow/placeable_builder_service.py",
+            "packaged_path": "Python/src/core/workflow/placeable_builder_service.py",
+            "sha256": "38f6490a20f67d42bd7e9706351ea3df8828611ad962626817b61c358e670600"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_PLCAA_MANUAL_PROOF_KIT",
+            "source_path": "src/core/workflow/plcaa_manual_proof_kit.py",
+            "packaged_path": "Python/src/core/workflow/plcaa_manual_proof_kit.py",
+            "sha256": "4ac7f128be2d7b7b429fde687c8c96a97ad7bdbeaba786eb6801f6e3738db5b2"
         }
     ]
 }

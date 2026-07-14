@@ -201,7 +201,7 @@ def test_orientation_controller_survives_writer_boundary(monkeypatch, tmp_path: 
     _assert_quat_close(pose_end.local_transforms_by_node["root"].rotation, _quat_axis("Y", 90.0))
 
 
-def test_position_controller_survives_writer_boundary_as_absolute_local(monkeypatch, tmp_path: Path) -> None:
+def test_position_controller_survives_writer_boundary_as_rest_local_delta(monkeypatch, tmp_path: Path) -> None:
     animation = Animation(
         name="UE_Position",
         length=1.0,
@@ -214,7 +214,12 @@ def test_position_controller_survives_writer_boundary_as_absolute_local(monkeypa
 
     assert result.success is True, result.errors
     pose = evaluate_aurora_animation_pose(model, readback, 0.5)
-    assert pose.local_transforms_by_node["child"].position == pytest.approx((2.0, 3.0, 4.0))
+    readback_child = next(node for node in readback.nodes if node.name == "child")
+    position_controller = next(controller for controller in readback_child.controllers if controller["name"] == "position")
+    assert position_controller["values"] == [[2.0, 3.0, 4.0]]
+    # Child bind position is (1, 0, 0), so Odyssey evaluates the raw key as a
+    # delta and produces (3, 3, 4) in parent-local space.
+    assert pose.local_transforms_by_node["child"].position == pytest.approx((3.0, 3.0, 4.0))
 
 
 def test_parent_child_fk_evaluates_after_readback(monkeypatch, tmp_path: Path) -> None:

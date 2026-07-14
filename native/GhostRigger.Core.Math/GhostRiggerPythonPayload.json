@@ -2,194 +2,206 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Math",
-    "file_count": 54,
+    "file_count": 58,
     "originals_remain_in_src": true,
     "files": [
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_INIT",
             "source_path": "src/core/camera/__init__.py",
             "packaged_path": "Python/src/core/camera/__init__.py",
-            "sha256": "547e032e7416f10ece568552bf1a7d9ffef02011f0e7321a918996d081c7f49a"
+            "sha256": "df26844eacd2528ae11c04b84542374425248519c347e02145451289a04d7d45"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_ARCBALL_CAMERA",
             "source_path": "src/core/camera/arcball_camera.py",
             "packaged_path": "Python/src/core/camera/arcball_camera.py",
-            "sha256": "b6fc91ba942f5fa92762dc62b91b02b042cf2dbb45a4ae4c35b548fcebf08195"
+            "sha256": "1ce73815b1ad52a76039897703360f3295ac1a7fe1234f11fdc6878640210eaa"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_CONTROLLER",
             "source_path": "src/core/camera/camera_controller.py",
             "packaged_path": "Python/src/core/camera/camera_controller.py",
-            "sha256": "d7cc7c7c36597b93e921a46620e23d61fabb3ca8d8be674a5a9dcdfeb0ef0da2"
+            "sha256": "0fc443aab329531bc85113f74329109122b1fe7a93c5b8d2d4e414b0c395be28"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_MANAGER",
             "source_path": "src/core/camera/camera_manager.py",
             "packaged_path": "Python/src/core/camera/camera_manager.py",
-            "sha256": "2625d84e9551ce3440c7465abffee8ebcf34f1db04a881ebef0855028404f8d6"
+            "sha256": "30bbe5adabad2b293a1c0ad4680b1a4b8bbaf2ebfc06199d711c4d44304e6f23"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_MODEL",
             "source_path": "src/core/camera/camera_model.py",
             "packaged_path": "Python/src/core/camera/camera_model.py",
-            "sha256": "81306d87832072b6d6c35d8dd8493bb74f059808a118897fbff00a629ed76508"
+            "sha256": "4e63348187afac5286808c085c39f0b97db5c950ca081a69f888ebc9ac4ea528"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_PICKER",
             "source_path": "src/core/camera/camera_picker.py",
             "packaged_path": "Python/src/core/camera/camera_picker.py",
-            "sha256": "a16c34d1f557aa2b3e70a04208053689155845bb06b11ec484f6a6dfb99997d6"
+            "sha256": "6528a55f88371e3ff61b70893983d27ca76fc61913a0eaff63c0f77a2551cc4a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_PRESETS",
             "source_path": "src/core/camera/camera_presets.py",
             "packaged_path": "Python/src/core/camera/camera_presets.py",
-            "sha256": "885e3f7ccf0679097e371ad63feb45ebeb8ade7da08fe3b5d26a938b81767e48"
+            "sha256": "4e127d2a286b42c5a895f1272d5229af4217497ea2e2d5758f8702a74d05bd21"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_RENDER_SETTINGS",
             "source_path": "src/core/camera/camera_render_settings.py",
             "packaged_path": "Python/src/core/camera/camera_render_settings.py",
-            "sha256": "eb47bfff2c51999d541c6537e6270ca70e58b7e753231dcdb610dd90814f8ec2"
+            "sha256": "f7d8e1f3cfc54906f9b04f94145a847939508fe25daf77cc597c30bd637cd0e1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_RIG",
             "source_path": "src/core/camera/camera_rig.py",
             "packaged_path": "Python/src/core/camera/camera_rig.py",
-            "sha256": "d5149a1e1d3ae97bc0bcc8aa4d2fdda755ac0a7e2b2f018464b7b325fc9e7aa2"
+            "sha256": "485fd5afd6d2eebd943bb2145f78e35e214d6d1bb1668ed29a8533ff1bcb65a2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_SELECTION",
             "source_path": "src/core/camera/camera_selection.py",
             "packaged_path": "Python/src/core/camera/camera_selection.py",
-            "sha256": "1bac72106ec595ac9b227ae1c34cd01b3a5f4adc3551ab0f3d2f99d247658748"
+            "sha256": "1e9ac28e35322af3e41f245812bdc64a81dddff93af990d47f5d8eb6093d0b95"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_TARGET",
             "source_path": "src/core/camera/camera_target.py",
             "packaged_path": "Python/src/core/camera/camera_target.py",
-            "sha256": "ed9fbfbc4d9affb1525870ebbf54bf88d39e12c23f8c34be5b85512d0d164875"
+            "sha256": "d86d7b5ad48382b5e1f629cb43941db8972848f66e13ddf2acf4cdc1ef434b7a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_CAMERA_VIEWPORT_ADAPTER",
             "source_path": "src/core/camera/camera_viewport_adapter.py",
             "packaged_path": "Python/src/core/camera/camera_viewport_adapter.py",
-            "sha256": "4678dede1cd04fb23a22019f7fc689d7f18b391e7c187cbbce220b97594cba88"
+            "sha256": "88d86c6bbb065572759d6097981f27613a2fdc88de623d3205b8d0310622e9a7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_RENDER_MANIFEST",
             "source_path": "src/core/camera/render_manifest.py",
             "packaged_path": "Python/src/core/camera/render_manifest.py",
-            "sha256": "10b40ab4c1a582352a665473edc2306b6e8f0853060330c3d67a0a5427a1e017"
+            "sha256": "be095aa4eabac5a89027e6dbac6e4b21559bccd11525f19e875b449d3735a90b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CAMERA_RENDER_OUTPUT",
             "source_path": "src/core/camera/render_output.py",
             "packaged_path": "Python/src/core/camera/render_output.py",
-            "sha256": "ad2805cc7eacb629101999b92a08c7277e1cde0819e583091ec0f301fc36286b"
+            "sha256": "500b33b6f4098c8d5358749ea87ee35aa0b2ac4f7bee76d2665b087bc25fb7e8"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_INIT",
             "source_path": "src/core/geometry/__init__.py",
             "packaged_path": "Python/src/core/geometry/__init__.py",
-            "sha256": "ca06e2942e5480eafe8fe3d0721d3f606c733877fe8cd8b64e2f9b82cd88596e"
+            "sha256": "4236a209ae791c378ed28516abc73c49a113ac07f1c9f46370871162fbfa1fae"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_COMPONENT_EDITING",
             "source_path": "src/core/geometry/component_editing.py",
             "packaged_path": "Python/src/core/geometry/component_editing.py",
-            "sha256": "3b29cee870ec1c271257ce16ef0cb2c5510242d24b3303adebf4fea57aaf407f"
+            "sha256": "025039dac06b9a05383dcd1cc85a20a5c986532c432ac4774b215cbc9e7aa52f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_LIGHTSABER",
             "source_path": "src/core/geometry/lightsaber.py",
             "packaged_path": "Python/src/core/geometry/lightsaber.py",
-            "sha256": "e746b3a9a119df9934ab83a05d6733533f120837a551750fc242ed3cc05d8252"
+            "sha256": "d902346f39290997a00cb0e1b9af8c9a225f759c563b37a821ec18561b5c9838"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_MAP_SNAP_TOOLS",
             "source_path": "src/core/geometry/map_snap_tools.py",
             "packaged_path": "Python/src/core/geometry/map_snap_tools.py",
-            "sha256": "080f3ed3b05762c4b7e98f53da08591675e947be6d50afbb007e80cc025dbf0f"
+            "sha256": "54bfcc6235927e2e44c7171b12563636238fab5a6c92ef54f2a33cc2c4014fb3"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_MESH_TOPOLOGY",
+            "source_path": "src/core/geometry/mesh_topology.py",
+            "packaged_path": "Python/src/core/geometry/mesh_topology.py",
+            "sha256": "069eedf7260c3313bd41e36b09752a22ac39a154f7282fc376e3baba82ffc3ca"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_MODEL_DATA",
             "source_path": "src/core/geometry/model_data.py",
             "packaged_path": "Python/src/core/geometry/model_data.py",
-            "sha256": "aa12bc22123f64c8627d4a8d987b0bf2e6ff7311023baf7fc3397d547bafc57e"
+            "sha256": "fc0d91c982b3b19b5b1e283a6726eda503435fd90f097390f49bbf97691f7dbd"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_POLYGON_MESH_OPERATIONS",
+            "source_path": "src/core/geometry/polygon_mesh_operations.py",
+            "packaged_path": "Python/src/core/geometry/polygon_mesh_operations.py",
+            "sha256": "2ddb82fafa2801bb528805ec42528b7712c66e86f48eb02a3d60d476e9db410c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_VERTEX_SPACE",
             "source_path": "src/core/geometry/vertex_space.py",
             "packaged_path": "Python/src/core/geometry/vertex_space.py",
-            "sha256": "3cd45cf2850af8d64339855857635c5df95b29b6dc4be4e1d27809486d115275"
+            "sha256": "622111e9d507fbef80f3bcea98803a2807aa7050d1fe7d2efd4d2a4284252d08"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_MATH_HELPERS",
             "source_path": "src/core/rendering/frame_core/math_helpers.py",
             "packaged_path": "Python/src/core/rendering/frame_core/math_helpers.py",
-            "sha256": "afcb76a4be5f355d938a251b036d23a49c7abb84bbaf5451c87f44cdcd38699e"
+            "sha256": "eae12895f6a1fe277a2c39a893822d8d9e63a81dbe5bcf01bef3f0edc78de0f1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_ARCBALL_CAMERA",
             "source_path": "src/gui/camera/arcball_camera.py",
             "packaged_path": "Python/src/gui/camera/arcball_camera.py",
-            "sha256": "92af210f4b2fb9b920d8f2aba937df79de0f01b59c0d88af9c06db2464c77ba7"
+            "sha256": "de98a32ba4c451be4137db8e7e66cbb2cf76af5b47c8f56eb793c425f2ae5116"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_CONTROLLER",
             "source_path": "src/gui/camera/camera_controller.py",
             "packaged_path": "Python/src/gui/camera/camera_controller.py",
-            "sha256": "4324fdf578e1f58a7733355ce057e4dc40830855711801fa5701fe01dbf740da"
+            "sha256": "d55043727db1f1fcad18ed039794c9be162ff77a8866a7892ee72686b86fd2bb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_MANAGER",
             "source_path": "src/gui/camera/camera_manager.py",
             "packaged_path": "Python/src/gui/camera/camera_manager.py",
-            "sha256": "4d45a39c19be258bc52edb8ee0d7142e9cf547fd2cf33ee7e5897250f65574de"
+            "sha256": "40b65c07b2c4de6eb1947d2fdca955c4bb42cf27464e24b820b059dad5ab7c78"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_MATH",
             "source_path": "src/gui/camera/camera_math.py",
             "packaged_path": "Python/src/gui/camera/camera_math.py",
-            "sha256": "7d54879cf4c89324d145ae209af390a68297d5fe62d61d9cd4dc2012a38db2e7"
+            "sha256": "6a4d72d8b90e74fea13e4a3907f7e2db4688fdb727fc97215291cad090302b09"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_MODEL",
             "source_path": "src/gui/camera/camera_model.py",
             "packaged_path": "Python/src/gui/camera/camera_model.py",
-            "sha256": "300e1efd0e49078f6264e3699e82fc1b843de0f137f9c4cc0d1282abeecc8ad4"
+            "sha256": "56b8adc0758054ae889028e9a48131ecaa6e7b33364c6ae8c3f71f3120581e8c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_PRESETS",
             "source_path": "src/gui/camera/camera_presets.py",
             "packaged_path": "Python/src/gui/camera/camera_presets.py",
-            "sha256": "09ff55541029cf1114cd21452ca91c73d2273be50a2ac445408915e1aafeaf0f"
+            "sha256": "b663b15595cef2f93c10e95a46664894beb29af633037f13495fc6b75766a17d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_RENDER_SETTINGS",
             "source_path": "src/gui/camera/camera_render_settings.py",
             "packaged_path": "Python/src/gui/camera/camera_render_settings.py",
-            "sha256": "d733e0bfbd26896eba9907a608ab73638a1f6111ed317abb6c70fc488bc663f3"
+            "sha256": "c19eb719465caecac70ec884f72d69ff0f3f6155b4d9b8651f8b2dbc3911497a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_RIG",
             "source_path": "src/gui/camera/camera_rig.py",
             "packaged_path": "Python/src/gui/camera/camera_rig.py",
-            "sha256": "fea252e061e1b34dcdd258731cc850ae583ccb345a9809b385b6ff169b9c8078"
+            "sha256": "c1211933873f4d2c956a3a281ecf0406a20c48235a1face176ef5c190f94560e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_TARGET",
             "source_path": "src/gui/camera/camera_target.py",
             "packaged_path": "Python/src/gui/camera/camera_target.py",
-            "sha256": "9fc7565a85e0c68a436cefd65d7db495f3440a3d0330e16d306e3068198aac9c"
+            "sha256": "cb5044d0b1bce79c0b76c99ed796ed83c7f16cc009a6e0294d18ac8df1038858"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_GIZMO_TRANSFORM_MATH",
             "source_path": "src/gui/gizmo/transform_math.py",
             "packaged_path": "Python/src/gui/gizmo/transform_math.py",
-            "sha256": "875c6f53db68dc536a08114a5fceb14693b90e2940482c18e5394904326eb3a8"
+            "sha256": "06ab6c0f2c8290f4f11eaa558da873f82c7b8edce824dbb774ced4cdeab768c6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_HD_INTEGRATION_TEST",
@@ -207,13 +219,13 @@
             "resource_name": "PYTHON_PAYLOAD_MATH_ANATOMICAL_PARTITION",
             "source_path": "src/math/anatomical_partition.py",
             "packaged_path": "Python/src/math/anatomical_partition.py",
-            "sha256": "cded8b75e846d317fb047e7906dda2b4301ddc48daa2fbadd7ceb5575390a500"
+            "sha256": "65219b517d2d2478c3dfe459a4ed04ae17852a9ae603df3f8b2f558b860504cb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_CAMERA_MATH",
             "source_path": "src/math/camera_math.py",
             "packaged_path": "Python/src/math/camera_math.py",
-            "sha256": "ca0dd8f763af5cafbcf96ba194d523ad3671951c140bf387f7d958dad8ce6f71"
+            "sha256": "f6229a96c012864aead9e49d814975019625b83424f3d3ba6008dc4b216eaeee"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_CONTAINMENT_FIT",
@@ -225,19 +237,19 @@
             "resource_name": "PYTHON_PAYLOAD_MATH_CORRESPONDENCE_FIT",
             "source_path": "src/math/correspondence_fit.py",
             "packaged_path": "Python/src/math/correspondence_fit.py",
-            "sha256": "7a353113e9f0a31bda234b812b1739fac1eab74445a9ecec3063f9872bbd1d7e"
+            "sha256": "85b17cb8b6c7770e57518deec32b9ce3c4a86320c0cd0ba5a3f78dd1e72a5426"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_FRAME_MATH",
             "source_path": "src/math/frame_math.py",
             "packaged_path": "Python/src/math/frame_math.py",
-            "sha256": "a9b0c7427bd9e78cf54803d5607eaa3726a5e64706c5e9696ca817587348439b"
+            "sha256": "d5df4c02ed09434870b41ae62498fe6e5f909dbc77a32c6e3674955ff927986b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_GPU_MATH",
             "source_path": "src/math/gpu_math.py",
             "packaged_path": "Python/src/math/gpu_math.py",
-            "sha256": "078e91f3b54234848f319afa2943a3e7dbe2b38768063e29ef3eca8eb6a951e7"
+            "sha256": "99a867d656dd9a6c8071bbf64f220ab8e8344953658aaedc7309782c5d1f3a78"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_HEAT_DIFFUSION_SKINNING",
@@ -249,85 +261,97 @@
             "resource_name": "PYTHON_PAYLOAD_MATH_LANDMARK_ALIGNMENT",
             "source_path": "src/math/landmark_alignment.py",
             "packaged_path": "Python/src/math/landmark_alignment.py",
-            "sha256": "49526666869f9f219802715014ef6eb3502d0595acdb8e58cee315a71a9980a3"
+            "sha256": "1c1f80080ae7dfd12c600c1a1b6c58bf22e9ef6bfd0f7635066d8fcb82a0aa4a"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_MATH_LIMB_IK",
+            "source_path": "src/math/limb_ik.py",
+            "packaged_path": "Python/src/math/limb_ik.py",
+            "sha256": "3d351051c134474ea17165080eb037272a6c08e4a41fb3e975d5d9f0afc813d4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_MODULE_LAYOUT_MATH",
             "source_path": "src/math/module_layout_math.py",
             "packaged_path": "Python/src/math/module_layout_math.py",
-            "sha256": "679566808f1e5b76377ad3d92abe7ab20d6e83bf34218c117e3927836bae7566"
+            "sha256": "c6db1005ad0b32d306b66d291032d9d54ec20578903fe15dca319428578edc10"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_TRANSFORM_MATH",
             "source_path": "src/math/transform_math.py",
             "packaged_path": "Python/src/math/transform_math.py",
-            "sha256": "0ca4d4c0d28b8e764509be3d0d1ed9ac871d3bdaf89d3d8deb23b0acfae587a7"
+            "sha256": "8955b589e685a5ef5510a9981b43feadbdf0ad56f7971d7af2e5ba3f13102190"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_VIEWCUBE_MATH",
             "source_path": "src/math/viewcube_math.py",
             "packaged_path": "Python/src/math/viewcube_math.py",
-            "sha256": "64b19ca3f3ef2a72c4daaa33cb877147dcf1b0883fda8530ae7a978eb5e46ad3"
+            "sha256": "09808cd6be4ad101453e40418e21736ef1122ae107cdfc82d56d73fe5910df79"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_MATH_WALKMESH_RUNTIME",
+            "source_path": "src/math/walkmesh_runtime.py",
+            "packaged_path": "Python/src/math/walkmesh_runtime.py",
+            "sha256": "cc41c6d4e54d4ddfb0d2bf3be2bee307bea532768bf1fab83b56f03dad0cc803"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MATH_WINDING_NUMBER",
             "source_path": "src/math/winding_number.py",
             "packaged_path": "Python/src/math/winding_number.py",
-            "sha256": "f718d45ffed3d41eb3241b60f9063508f4224a3e7e56048405e59b1a3e20276a"
+            "sha256": "6978a48f6531f2b562108f7709fa635a9da73f6462eac13710df4eccdc34a615"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_INIT",
             "source_path": "src/measurement/__init__.py",
             "packaged_path": "Python/src/measurement/__init__.py",
-            "sha256": "b1010b1266cd9698b3dd41ef419559b2d341ef9c9a2b337df46a838fd86e384b"
+            "sha256": "d00e2b0e1fa55b6313d73c9bc29ae268f64606e9d20a57896c291d8ebc8126d8"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_ANGLE_SNAP",
             "source_path": "src/measurement/angle_snap.py",
             "packaged_path": "Python/src/measurement/angle_snap.py",
-            "sha256": "32a1ba982623a9b33853a18738edc74d5fa91e9aa27dfd138a02e716c946b478"
+            "sha256": "5c770144d7c7b01e5960010d6f842c68851fed349aa6b47fa3a75cf8d7b5db6c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_DIMENSION_CALCULATOR",
             "source_path": "src/measurement/dimension_calculator.py",
             "packaged_path": "Python/src/measurement/dimension_calculator.py",
-            "sha256": "e7815bdc593a7ffc5068a9917cd49063576074de9a5c8e6ea8a934ee26aba0c5"
+            "sha256": "931423e5dec268576e5ee848ce1b673b6daf5438ef975131dd884205699b60cb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_GRID_MEASUREMENT",
             "source_path": "src/measurement/grid_measurement.py",
             "packaged_path": "Python/src/measurement/grid_measurement.py",
-            "sha256": "d24dc0b201d7d65adad88dbc0e7c5f55a3ad6d37e3cfd334fc11f4fc1c9ba305"
+            "sha256": "598faf4fe776168f369c50ff168fc8f2766b27f4ef2f27ab1deccc2a98739db7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_MEASUREMENT_CONTROLLER",
             "source_path": "src/measurement/measurement_controller.py",
             "packaged_path": "Python/src/measurement/measurement_controller.py",
-            "sha256": "51678dc84c62649be8fd42c6ba6f4cdc83e10b7c899b1d054a34a62502dc7ff2"
+            "sha256": "9ffaab7cf09a9e789d0703de3cf2ec863a35d5a13f737a891aed23bf6fa1b292"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_MEASUREMENT_FORMATTER",
             "source_path": "src/measurement/measurement_formatter.py",
             "packaged_path": "Python/src/measurement/measurement_formatter.py",
-            "sha256": "8195bfae71923559e5f0cd16a6d3d1800a856041b65c419844523c623a0a6d54"
+            "sha256": "20e4c04baf1efb66af1166f0e5d629fd6100b5a5599c16d2ada1f8965fb19942"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_PERCENT_SNAP",
             "source_path": "src/measurement/percent_snap.py",
             "packaged_path": "Python/src/measurement/percent_snap.py",
-            "sha256": "435aa64b670ab4c81d06bcae94e6d917e23754505ee50fb379f9974a79dfc094"
+            "sha256": "08b2aeb560d69f87e0ebe748d696a704e8b646a688aab302f62007bd5a0c2dc0"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_UNIT_SETTINGS",
             "source_path": "src/measurement/unit_settings.py",
             "packaged_path": "Python/src/measurement/unit_settings.py",
-            "sha256": "3bad24f75ff3bab5bcac5ff9f6ad056c8da13cdf5307c6ec2241b7dfdf8c8a37"
+            "sha256": "816950b1a9fe0e80159b2e68140841b1f85cc3a2c4a4259ae595e45128c5f17e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_MEASUREMENT_UNIT_SYSTEM",
             "source_path": "src/measurement/unit_system.py",
             "packaged_path": "Python/src/measurement/unit_system.py",
-            "sha256": "08c7d1bb16e43f1614711df63cb8d37778badf6b5540b3d3045ea2a1442d17bc"
+            "sha256": "410af45b77d43694fef1d342b5963e3047eb14e84490d54a9723e7bca88049ea"
         }
     ]
 }

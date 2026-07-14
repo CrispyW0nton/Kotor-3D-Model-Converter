@@ -905,6 +905,18 @@ class OBJExporter:
                 out_path = out_dir / f"{tex_name}.tga"
                 if not out_path.exists():
                     img_rgb = img.convert('RGB') if img.mode not in ('RGB', 'RGBA') else img
+                    # T2554: decoded KOTOR textures are in game/D3D row order
+                    # (the viewport compensates in-shader with 1-v).  The OBJ
+                    # exporter writes DCC-convention vt (1-v), so the sidecar
+                    # image must be row-flipped for Blender/Maya — same parity
+                    # rule as the FBX sidecar path below and the game-import
+                    # direction (T2552).  Without this the texture reads
+                    # coherently-but-misplaced (V-mirrored atlas islands).
+                    try:
+                        from PIL import Image as _PILImage
+                        img_rgb = img_rgb.transpose(_PILImage.FLIP_TOP_BOTTOM)
+                    except Exception:
+                        pass
                     img_rgb.save(str(out_path))
                     log.debug(f"Saved texture: {out_path.name}")
                     saved += 1

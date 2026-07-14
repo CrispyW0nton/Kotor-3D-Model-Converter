@@ -215,7 +215,23 @@ def retarget_source_clip_to_aurora_animation(
             if local_translation_result.wrote_controller:
                 times, values = position_tracks.setdefault(target_name, ([], []))
                 times.append(float(source_pose.time_seconds))
-                values.append(tuple(float(value) for value in local_translation_result.position))
+                # Odyssey POSITION controllers are rest-local DELTA offsets,
+                # not absolute parent-local positions.  Keep
+                # ``local_translation_result.position`` absolute for the FK
+                # solve below, but serialize only the displacement from the
+                # target's fixed reference DAG.  Otherwise the engine adds the
+                # target bind position a second time and root motion drifts by
+                # the bind offset.
+                reference_position = reference_pair.target_local_transforms[target_name].position
+                values.append(
+                    tuple(
+                        float(current) - float(reference)
+                        for current, reference in zip(
+                            local_translation_result.position,
+                            reference_position,
+                        )
+                    )
+                )
 
             if source_name is not None:
                 desired_world_rotation = _desired_target_world_rotation(

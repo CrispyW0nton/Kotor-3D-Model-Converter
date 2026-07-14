@@ -20,7 +20,7 @@ from src.core.lighting.lightmap_padding import LightmapPadding
 from src.core.lighting.lightmap_rasterizer import LightmapRasterizer
 from src.core.lighting.lightmap_uv_validator import LightmapUVValidator
 from src.core.lighting.uv_atlas_generator import UVAtlasGenerator
-from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+from src.core.geometry.model_data import BoneWeight, KotorModel, ModelNode, NodeFlags, VertexSkinData
 
 
 def _model_with_lightmapped_triangle() -> tuple[KotorModel, ModelNode]:
@@ -120,7 +120,126 @@ def test_xatlas_generator_preserves_uv1_and_creates_uv2_faces() -> None:
     assert mesh.uvs == original_uv1
     assert getattr(mesh, "uvs_lm")
     assert getattr(mesh, "face_uvs_lm")
+    assert result.vertex_mapping == getattr(mesh, "_gr_generated_lightmap_vertex_mapping")
+    assert result.atlas_faces == getattr(mesh, "_gr_generated_lightmap_faces")
+    assert [
+        tuple(result.vertex_mapping[index] for index in atlas_face)
+        for atlas_face in result.atlas_faces
+    ] == mesh.faces
     assert all(0.0 <= uv[0] <= 1.0 and 0.0 <= uv[1] <= 1.0 for uv in mesh.uvs_lm)
+
+
+def test_lightmap_vertex_stream_remap_preserves_all_mesh_streams_across_uv_seam() -> None:
+    mesh = ModelNode(
+        name="seamed_floor",
+        flags=int(NodeFlags.HEADER | NodeFlags.SKIN | NodeFlags.MESH),
+        vertices=[
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ],
+        normals=[(0.0, 0.0, 1.0)] * 4,
+        tangents=[(1.0, 0.0, 0.0)] * 4,
+        uvs=[
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (1.0, 1.0),
+            (0.0, 1.0),
+            (0.25, 0.25),
+        ],
+        uvs_lm=[
+            (0.05, 0.05),
+            (0.45, 0.05),
+            (0.45, 0.45),
+            (0.55, 0.55),
+            (0.95, 0.95),
+            (0.55, 0.95),
+        ],
+        uvs_2=[(0.1, 0.1), (0.2, 0.1), (0.2, 0.2), (0.1, 0.2)],
+        faces=[(0, 1, 2), (0, 2, 3)],
+        face_mats=[2, 4],
+        face_uvs=[(0, 1, 2), (4, 2, 3)],
+        skin_data=[
+            VertexSkinData([BoneWeight(index, 1.0)])
+            for index in range(4)
+        ],
+    )
+    mesh.face_uvs_lm = [(0, 1, 2), (3, 4, 5)]
+    mesh._gr_generated_lightmap_uv_channel = 1
+    mesh._gr_generated_lightmap_vertex_mapping = [0, 1, 2, 0, 2, 3]
+    mesh._gr_generated_lightmap_faces = [(0, 1, 2), (3, 4, 5)]
+    mesh._gr_generated_lightmap_source_vertex_count = 4
+
+    result = UVAtlasGenerator().remap_vertex_stream_for_lightmap(mesh, target_channel=1)
+
+    assert result.success
+    assert result.changed
+    assert result.source_vertex_count == 4
+    assert result.vertex_count == 6
+    assert result.duplicated_vertex_count == 2
+    assert mesh.faces == [(0, 1, 2), (3, 4, 5)]
+    assert mesh.vertices == [
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (1.0, 1.0, 0.0),
+        (0.0, 0.0, 0.0),
+        (1.0, 1.0, 0.0),
+        (0.0, 1.0, 0.0),
+    ]
+    assert len(mesh.normals) == len(mesh.tangents) == len(mesh.vertices)
+    assert mesh.uvs == [
+        (0.0, 0.0),
+        (1.0, 0.0),
+        (1.0, 1.0),
+        (0.25, 0.25),
+        (1.0, 1.0),
+        (0.0, 1.0),
+    ]
+    assert mesh.uvs_lm == [
+        (0.05, 0.05),
+        (0.45, 0.05),
+        (0.45, 0.45),
+        (0.55, 0.55),
+        (0.95, 0.95),
+        (0.55, 0.95),
+    ]
+    assert mesh.uvs_2 == [
+        (0.1, 0.1),
+        (0.2, 0.1),
+        (0.2, 0.2),
+        (0.1, 0.1),
+        (0.2, 0.2),
+        (0.1, 0.2),
+    ]
+    assert mesh.face_uvs == []
+    assert mesh.face_uvs_lm == []
+    assert mesh.face_uvs_2 == []
+    assert mesh.face_mats == [2, 4]
+    assert [skin.influences[0].bone_index for skin in mesh.skin_data] == [0, 1, 2, 0, 2, 3]
+    assert mesh.skin_data[0] is not mesh.skin_data[3]
+    assert mesh.skin_data[0].influences[0] is not mesh.skin_data[3].influences[0]
+    assert mesh._gr_lightmap_vertex_source_mapping == [0, 1, 2, 0, 2, 3]
+
+
+def test_lightmap_vertex_stream_remap_is_noop_for_existing_per_vertex_uv2() -> None:
+    _model, mesh = _model_with_lightmapped_triangle()
+    original_vertices = mesh.vertices
+    original_faces = mesh.faces
+    original_uv1 = mesh.uvs
+    original_uv2 = mesh.uvs_lm
+    original_normals = mesh.normals
+
+    result = UVAtlasGenerator().remap_vertex_stream_for_lightmap(mesh, target_channel=1)
+
+    assert result.success
+    assert not result.changed
+    assert result.source_vertex_count == result.vertex_count == 3
+    assert mesh.vertices is original_vertices
+    assert mesh.faces is original_faces
+    assert mesh.uvs is original_uv1
+    assert mesh.uvs_lm is original_uv2
+    assert mesh.normals is original_normals
 
 
 def test_baker_does_not_fallback_to_diffuse_uvs_unless_selected() -> None:

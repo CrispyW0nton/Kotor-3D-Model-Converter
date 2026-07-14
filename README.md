@@ -16,13 +16,13 @@ from reusable core systems.
 
 The active development branch is `ghost-studio`.
 
-> **Naming note:** the product is **Ghost-Studio** (formerly GhostRigger).
+> **Naming note:** the product is **GhostStudio** (formerly GhostRigger).
 > Internal build identifiers still carry the original name for stability —
 > the solution is `GhostRigger.sln`, native packages live under
 > `native/GhostRigger.*`, environment variables use the `GHOSTRIGGER_` prefix,
-> and the PyInstaller output is `GhostRigger-K1-K2.exe`. These are structural
-> identifiers, not the product name; renaming them would break the build and
-> orphan user settings, so they are intentionally left as-is.
+> while both supported Windows build paths output `GhostStudio.exe`. The
+> remaining GhostRigger identifiers are architectural identities; renaming
+> them would break the build and orphan user settings, so they remain stable.
 
 Ghost-Studio is not affiliated with LucasArts, BioWare, Obsidian, Disney,
 Aspyr, or Autodesk. KOTOR game assets and Autodesk FBX SDK binaries are not
@@ -145,7 +145,7 @@ python -m PyInstaller GhostRigger-K1-K2.spec --clean --noconfirm
 Successful output:
 
 ```text
-dist\GhostRigger-K1-K2.exe
+dist\GhostStudio.exe
 ```
 
 Build output is written to `build_log.txt`.
@@ -153,6 +153,12 @@ Build output is written to `build_log.txt`.
 ### Native Solution
 
 Native work lives in `GhostRigger.sln` and `native/GhostRigger.*`.
+
+The payload-backed Debug application is
+`build\vs\x64\Debug\GhostStudio.exe`. The repository-root copy is a
+source-backed developer convenience launcher; it is runnable inside this
+checkout, but it is not a portable standalone distribution without the native
+payload DLLs and runtime assets from the build directory.
 
 - Use Visual Studio for normal Debug/Release native package work.
 - Keep package ownership aligned with

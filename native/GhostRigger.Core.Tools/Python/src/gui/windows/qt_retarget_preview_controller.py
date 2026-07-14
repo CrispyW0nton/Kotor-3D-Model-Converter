@@ -156,6 +156,7 @@ class RetargetPreviewUiController:
         preview_action: Any | None = None,
         export_action: Any | None = None,
         target_model_provider: Callable[[], Any | None] | None = None,
+        resource_manager_provider: Callable[[], Any | None] | None = None,
         log_callback: Callable[[str, str], None] | None = None,
         status_callback: Callable[[str], None] | None = None,
         build_preview: Callable[[RetargetPreviewRequest], RetargetPreviewResult] = build_retarget_preview,
@@ -167,6 +168,7 @@ class RetargetPreviewUiController:
         self.preview_action = preview_action
         self.export_action = export_action
         self.target_model_provider = target_model_provider
+        self.resource_manager_provider = resource_manager_provider
         self.log_callback = log_callback
         self.status_callback = status_callback
         self._build_preview = build_preview
@@ -224,6 +226,11 @@ class RetargetPreviewUiController:
             if provided is not None:
                 return provided
         return self.state.target_model
+
+    def current_resource_manager(self):
+        if self.resource_manager_provider is not None:
+            return self.resource_manager_provider()
+        return None
 
     def can_preview(self) -> bool:
         profile = self.state.retarget_profile
@@ -346,6 +353,7 @@ class RetargetPreviewUiController:
                     original_target_model=self.current_target_model(),
                     output_mdl_path=mdl_path,
                     output_mdx_path=mdl_path.with_suffix(".mdx"),
+                    resource_manager=self.current_resource_manager(),
                     overwrite=overwrite,
                     verify_roundtrip=True,
                     write_manifest=write_manifest,

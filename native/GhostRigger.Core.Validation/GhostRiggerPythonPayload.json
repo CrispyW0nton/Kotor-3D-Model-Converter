@@ -2,56 +2,62 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Validation",
-    "file_count": 8,
+    "file_count": 9,
     "originals_remain_in_src": true,
     "files": [
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_INIT",
             "source_path": "src/core/validation/__init__.py",
             "packaged_path": "Python/src/core/validation/__init__.py",
-            "sha256": "f15413c969631800b5105bb26384ee7d3432b86ea1116eb5ddaa5c499eb1b862"
+            "sha256": "0d7118a4ffa1a578e2c8e7128e5ac1322fa76f186538b4832dceb2472bee55e1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_NATIVE",
             "source_path": "src/core/validation/_native.py",
             "packaged_path": "Python/src/core/validation/_native.py",
-            "sha256": "89b8940fdc817cd2a7580aa2744dda8146ec76275e723914676e64535822e6e5"
+            "sha256": "8deb6127fdc66522caae7a922cf7ad283101aaf50e2cdf89dca23259ffa518d6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_ANIMATION_BLOCK_VALIDATOR",
             "source_path": "src/core/validation/animation_block_validator.py",
             "packaged_path": "Python/src/core/validation/animation_block_validator.py",
-            "sha256": "8ccd1e69f0c5cddd2a922dfc0c631b0f2a95eb9e7405b4216e2315ee20daedd9"
+            "sha256": "10739dd411618057dd201ad18f402ea9f8f54edb842653f3b4b56d5ddf54bfff"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_ANIMATION_ROUNDTRIP_VALIDATOR",
             "source_path": "src/core/validation/animation_roundtrip_validator.py",
             "packaged_path": "Python/src/core/validation/animation_roundtrip_validator.py",
-            "sha256": "d72c42a33408c333012e253d5a1cbe1cc481a0dbbb59f5735a8e08cdce496dbf"
+            "sha256": "bb39f452f4612e24397b88353875b5706afaecddcb71943d7fbc32a529aca3e9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_CAPTURE_SPECS",
             "source_path": "src/core/validation/capture_specs.py",
             "packaged_path": "Python/src/core/validation/capture_specs.py",
-            "sha256": "a5d05008156f4c96bec8bcd342d902fb9f4d679f373a1963b4dd5f23aac0fe4c"
+            "sha256": "3c333a82d7c40a9b50534bb0f53993bd5fd74e4ed42798f7221dcd1aa6ff3a81"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_KOTOR_MODULE_ENGINE_CONTRACT",
+            "source_path": "src/core/validation/kotor_module_engine_contract.py",
+            "packaged_path": "Python/src/core/validation/kotor_module_engine_contract.py",
+            "sha256": "b1ad2bf5607ab2e183f7c0a23926a28bef40520dd7a8f3d5591f3a24fea36738"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_VALIDATION_ADAPTERS",
             "source_path": "src/core/validation/validation_adapters.py",
             "packaged_path": "Python/src/core/validation/validation_adapters.py",
-            "sha256": "759bf93a81b2ee309cd4c92ed3559e00059663a904fa512fe8e3fca86d8f8fed"
+            "sha256": "e01d2fcebdf428a411917b620153be6d88b998342ed1be6ed57cb0910a2ab895"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_VALIDATION_BUS",
             "source_path": "src/core/validation/validation_bus.py",
             "packaged_path": "Python/src/core/validation/validation_bus.py",
-            "sha256": "e1b3fae5ba97f85ff70ed05535f0dc44006ab40204fb21c4f07df32d2df585e6"
+            "sha256": "cc0fa852b78a624e1d64394d7bcf16fd7a19451a34d0fcc4862fabff828c567b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_VIEWPORT_VALIDATOR",
             "source_path": "src/core/validation/viewport_validator.py",
             "packaged_path": "Python/src/core/validation/viewport_validator.py",
-            "sha256": "a7ded18ac94fc5a8ad9976d2a8658da3d6931dc03bf32fa0455402190fa49398"
+            "sha256": "732cc4723f67238335129488678ab4e61535885dd988d4b8cf612bb57edafab7"
         }
     ]
 }

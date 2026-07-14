@@ -103,6 +103,45 @@ def _weight_multiset(node, vertex_index):
     return sorted(out)
 
 
+def _assert_inverse_bind_collapse(model, skin_node, *, node_indexed: bool) -> None:
+    """Prove qBone/tBone yields bone_world * inverse_bind == skin_world."""
+
+    from src.core.animation.gpu_skinning import MatrixPaletteUploader
+    from src.math.gpu_math import _matrix_from_pos_quat_np
+
+    nodes = list(model.all_nodes())
+    by_name = {
+        str(getattr(node, "name", "") or "").strip().lower(): node
+        for node in nodes
+        if str(getattr(node, "name", "") or "").strip()
+    }
+    skin_pos, skin_rot = wf._node_world_transform_or_local(skin_node)
+    skin_world = _matrix_from_pos_quat_np(skin_pos, skin_rot)
+    qbones = list(getattr(skin_node, "qbone_list", []) or [])
+    tbones = list(getattr(skin_node, "tbone_list", []) or [])
+    for slot, raw_name in enumerate(list(getattr(skin_node, "bone_map", []) or [])):
+        key = str(raw_name or "").strip().lower()
+        if not key:
+            continue
+        bone = by_name[key]
+        bind_index = int(getattr(bone, "index", -1)) if node_indexed else slot
+        assert 0 <= bind_index < len(qbones)
+        assert 0 <= bind_index < len(tbones)
+        bone_pos, bone_rot = wf._node_world_transform_or_local(bone)
+        bone_world = _matrix_from_pos_quat_np(bone_pos, bone_rot)
+        inverse_bind = np.asarray(
+            MatrixPaletteUploader.qbone_inverse_bind_matrix_g5(
+                qbones[bind_index], tbones[bind_index]
+            ),
+            dtype=np.float64,
+        )
+        assert np.allclose(
+            bone_world @ inverse_bind,
+            skin_world,
+            atol=1.0e-4 if node_indexed else 1.0e-6,
+        ), (skin_node.name, raw_name, bind_index)
+
+
 def _consolidate_skin_nodes_to_unified(model) -> "object":
     """Replace the model's 7 skin nodes with ONE unified 55-bone skin node.
 
@@ -202,12 +241,13 @@ def test_full_pipeline_split_export_reload_audit(capsys) -> None:
     mgr = ResourceManager()
     if not mgr.set_k2_dir(k2_dir):
         pytest.skip("could not index K2")
-    model = mgr.load_model("c_drexlf", "K2")
-    reference = ResourceManager().load_model("c_drexlf", "K2") if False else None
+    # prefer_base_archive: the user's Override may shadow c_drexlf with their
+    # own export — this test needs the true vanilla model on both sides.
+    model = mgr.load_model("c_drexlf", "K2", prefer_base_archive=True)
     # Fresh, unmutated donor reference (separate manager keeps caches apart).
     mgr2 = ResourceManager()
     mgr2.set_k2_dir(k2_dir)
-    reference = mgr2.load_model("c_drexlf", "K2")
+    reference = mgr2.load_model("c_drexlf", "K2", prefer_base_archive=True)
     if model is None or reference is None:
         pytest.skip("c_drexlf not found")
 
@@ -227,9 +267,10 @@ def test_full_pipeline_split_export_reload_audit(capsys) -> None:
     assert len(parts) == split["split_nodes"] >= 4
     for part in parts:
         assert len(part.bone_map) <= 16
-        # qBone/tBone bind data subset alongside the palette (T2513 fix).
+        # Compact inverse-bind rows align with the palette before write.
         assert len(part.qbone_list) == len(part.bone_map)
         assert len(part.tbone_list) == len(part.bone_map)
+        _assert_inverse_bind_collapse(model, part, node_indexed=False)
 
     try:
         model.compute_bounds()
@@ -269,11 +310,31 @@ def test_full_pipeline_split_export_reload_audit(capsys) -> None:
         n for n in reloaded_nodes if getattr(n, "is_skin", False) and n.vertices
     ]
     assert len(reloaded_skins) == len(parts)
+    # T2521/T2522: the splitter prefers the donor's authored skin-node names
+    # (headGeo, larmGeo, ...) over the synthetic bodygeo_anatNN fallback, so
+    # the contract is "reloaded names == split part names", not a prefix.
+    expected_names = {str(p.name).lower() for p in parts}
+    # Round-trip texture contract: the reloaded node carries whatever texture
+    # its part had at write time.  (A hard-coded vanilla name broke whenever a
+    # modded c_drexlf in the K2 override shadowed the BIF original.)
+    expected_texture_by_name = {
+        str(p.name).lower(): str(getattr(p, "texture", "") or "").lower()
+        for p in parts
+    }
     for node in reloaded_skins:
-        assert str(node.name).lower().startswith("bodygeo_anat")
+        assert str(node.name).lower() in expected_names, (
+            node.name,
+            sorted(expected_names),
+        )
         assert 0 < len(node.bone_map) <= 16, (node.name, len(node.bone_map))
         texture = str(getattr(node, "texture", "") or "").lower()
-        assert texture == _EXPECTED_TEXTURE, (node.name, texture)
+        assert texture == expected_texture_by_name[str(node.name).lower()], (
+            node.name,
+            texture,
+        )
+        # Writer expands compact rows into global node-indexed q/t arrays;
+        # engine semantics must survive float32 MDL round-trip.
+        _assert_inverse_bind_collapse(reloaded, node, node_indexed=True)
 
     assert sum(len(n.faces) for n in reloaded_skins) == 1526
 
@@ -304,10 +365,15 @@ def test_full_pipeline_split_export_reload_audit(capsys) -> None:
     audit_mod = _load_audit_tool()
     import asyncio
 
+    # Audit the true BIF bytes as the baseline: resolving "c_drexlf" through
+    # the install would hit the user's Override shadow first and compare the
+    # export against their previous custom export instead of vanilla.
+    vanilla_mdl_path = _EXPORT_DIR / "c_drexlf_vanilla_baseline.mdl"
+    vanilla_mdx_path = _EXPORT_DIR / "c_drexlf_vanilla_baseline.mdx"
+    vanilla_mdl_path.write_bytes(reference._gr_source_mdl_bytes)
+    vanilla_mdx_path.write_bytes(reference._gr_source_mdx_bytes or b"")
     vanilla_raw = asyncio.run(
-        audit_mod.handle_audit(
-            {"resref": "c_drexlf", "game": "k2", "game_path": str(k2_dir)}
-        )
+        audit_mod.handle_audit({"resref": str(vanilla_mdl_path)})
     )
     vanilla = json.loads(vanilla_raw["text"])
     assert "error" not in vanilla, vanilla

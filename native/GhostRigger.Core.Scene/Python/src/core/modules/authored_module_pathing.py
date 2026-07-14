@@ -125,8 +125,11 @@ def _face_indices(face: Any) -> tuple[int, int, int]:
 
 
 def _face_centroid(wok: Any, face_index: int) -> tuple[float, float] | None:
-    faces = list(getattr(wok, "faces", ()) or ())
-    verts = list(getattr(wok, "verts", ()) or ())
+    # WOKData exposes indexable lists.  Copying both complete arrays for every
+    # centroid made this helper quadratic (32,768 copies of a 32,768-face list
+    # for a 129x129 terrain) and dominated terrain readiness on stroke release.
+    faces = getattr(wok, "faces", ()) or ()
+    verts = getattr(wok, "verts", ()) or ()
     if face_index < 0 or face_index >= len(faces):
         return None
     indices = _face_indices(faces[face_index])
@@ -203,10 +206,15 @@ def build_authored_path_graph_from_walkmesh(
         valid_centers = [center for center in centers if center is not None]
         if not valid_centers:
             continue
-        center = (
+        avg = (
             sum(item[0] for item in valid_centers) / len(valid_centers),
             sum(item[1] for item in valid_centers) / len(valid_centers),
         )
+        # The mean of face centroids can land in a concavity OUTSIDE the
+        # walkable region (curved canyons, L-shaped rooms), which then fails
+        # the "path point is outside the walkmesh" check. Snap to the real
+        # face centroid nearest the mean -- guaranteed to be on a walkable face.
+        center = min(valid_centers, key=lambda c: (c[0] - avg[0]) ** 2 + (c[1] - avg[1]) ** 2)
         key = _xy_key(center[0], center[1])
         if key in seen:
             continue

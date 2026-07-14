@@ -3,7 +3,10 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
 import re
+import subprocess
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -51,7 +54,9 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     }
 
     assert len(entries) == 18
-    assert len(payload_files) == 1186
+    # 2026-07-13: Map Studio PIE adds the bounded creature runtime in Scene and
+    # Tools on top of the prior session/audio payload additions.
+    assert len(payload_files) == 1260
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 
@@ -163,6 +168,18 @@ def test_reusable_workflow_payloads_are_owned_by_workflow_not_tools() -> None:
         assert path.replace("/", "\\") not in tools_project_text
 
 
+def test_duplicate_renderer_contract_payloads_are_byte_identical() -> None:
+    """Duplicate import names cannot depend on unsorted DLL discovery order."""
+
+    packaged_path = Path("Python/src/core/rendering/mesh_render_data.py")
+    rendering_copy = ROOT / "native" / "GhostRigger.Core.Rendering" / packaged_path
+    runtime_shared_copy = ROOT / "native" / "GhostRigger.Runtime.Shared" / packaged_path
+
+    assert rendering_copy.is_file()
+    assert runtime_shared_copy.is_file()
+    assert runtime_shared_copy.read_bytes() == rendering_copy.read_bytes()
+
+
 def test_python_payload_copies_are_byte_identical_and_manifested() -> None:
     for entry in _payload_entries():
         project = str(entry["project"])
@@ -188,6 +205,68 @@ def test_python_payload_copies_are_byte_identical_and_manifested() -> None:
                 assert packaged.read_bytes() == source.read_bytes()
             assert hashlib.sha256(packaged.read_bytes()).hexdigest() == row["sha256"]
             assert f'{row["resource_name"]} RCDATA' in rc_text
+
+
+def test_shared_geometry_imports_use_embedded_src_namespace() -> None:
+    """Payload manifests register Python/src modules below the ``src`` package."""
+
+    runtime_import_paths = (
+        ROOT / "native/GhostRigger.Core.Scene/Python/src/core/modules/authored_imported_mesh.py",
+        ROOT / "native/GhostRigger.Core.Scene/Python/src/core/modules/authored_room_composition.py",
+        ROOT / "native/GhostRigger.Core.Scene/Python/src/core/modules/authored_room_operations.py",
+        ROOT / "native/GhostRigger.Core.Tools/Python/src/core/modules/authored_imported_mesh.py",
+        ROOT / "native/GhostRigger.Core.Tools/Python/src/core/modules/authored_room_composition.py",
+        ROOT / "native/GhostRigger.Core.Tools/Python/src/core/modules/authored_room_operations.py",
+        ROOT / "native/GhostRigger.Core.Tools/Python/src/mesh_tools/mesh_topology.py",
+    )
+    offenders: list[str] = []
+    for path in runtime_import_paths:
+        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            if re.match(r"(?:from|import)\s+core\.geometry(?:\.|\s|$)", line):
+                offenders.append(f"{path.relative_to(ROOT)}:{line_number}: {line.strip()}")
+
+    assert offenders == [], "Bare core.geometry imports bypass the embedded src namespace:\n" + "\n".join(offenders)
+
+
+def test_native_source_fallback_imports_qt_main_window() -> None:
+    """Reproduce the root executable's source fallback without adding Python/src."""
+
+    script = r"""
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1]).resolve()
+sys.path[:] = [
+    item
+    for item in sys.path
+    if not ((Path(item or '.').resolve() == root) or (root in Path(item or '.').resolve().parents))
+]
+source_roots = [root]
+for project_dir in sorted((root / 'native').glob('GhostRigger*')):
+    python_root = project_dir / 'Python'
+    if (python_root / 'src').is_dir():
+        source_roots.append(python_root)
+for source_root in reversed(source_roots):
+    sys.path.insert(0, str(source_root))
+
+from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow, run
+
+assert QtGhostRiggerMainWindow is not None
+assert callable(run)
+"""
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(ROOT)],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_python_payload_resource_names_are_path_named() -> None:
@@ -269,6 +348,18 @@ def test_native_host_depends_on_every_payload_dll_project_without_linking_libs()
         link_node = node.find("msb:LinkLibraryDependencies", ns)
         assert link_node is not None
         assert link_node.text == "false"
+
+
+def test_native_host_stages_every_built_payload_dll_beside_both_developer_launchers() -> None:
+    host_project = ROOT / "native" / "GhostRigger.Native.Core.Host" / "GhostRigger.Native.Core.Host.vcxproj"
+    project_text = host_project.read_text(encoding="utf-8")
+    staging_script = ROOT / "scripts" / "stage_native_payload_dlls.ps1"
+
+    assert staging_script.is_file()
+    assert project_text.count("stage_native_payload_dlls.ps1") == 2
+    assert '-RepoRoot "$(GhostRiggerRepoRoot)."' in project_text
+    assert '-HostOutDir "$(OutDir)."' in project_text
+    assert "Get-ChildItem -LiteralPath '$(GhostRiggerRepoRoot)native'" not in project_text
 
 
 def test_native_host_dependency_table_covers_every_payload_project() -> None:

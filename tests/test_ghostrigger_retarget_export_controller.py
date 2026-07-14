@@ -45,7 +45,7 @@ def _export_result(path: Path):
     )
 
 
-def _ready_controller(*, build_preview=None, export_preview=None):
+def _ready_controller(*, build_preview=None, export_preview=None, resource_manager_provider=None):
     preview_action = FakeAction()
     export_action = FakeAction()
     controller = RetargetPreviewUiController(
@@ -54,6 +54,7 @@ def _ready_controller(*, build_preview=None, export_preview=None):
         build_preview=build_preview or (lambda _request: _preview()),
         apply_preview=lambda *_args, **_kwargs: None,
         export_preview=export_preview or (lambda request: _export_result(request.output_mdl_path)),
+        resource_manager_provider=resource_manager_provider,
     )
     controller.set_target_model(SimpleNamespace(name="pmbam"))
     controller.set_source_clip(SimpleNamespace(clip_name="UE_Idle"))
@@ -93,12 +94,16 @@ def test_export_action_disabled_until_successful_current_preview() -> None:
 def test_export_action_calls_core_helper(tmp_path: Path) -> None:
     logs: list[tuple[str, str]] = []
     exports = []
+    resource_manager = object()
 
     def export_preview(request):
         exports.append(request)
         return _export_result(request.output_mdl_path)
 
-    controller, _preview_action, export_action = _ready_controller(export_preview=export_preview)
+    controller, _preview_action, export_action = _ready_controller(
+        export_preview=export_preview,
+        resource_manager_provider=lambda: resource_manager,
+    )
     controller.log_callback = lambda message, level="info": logs.append((message, level))
 
     preview = controller.preview_retarget()
@@ -108,6 +113,7 @@ def test_export_action_calls_core_helper(tmp_path: Path) -> None:
     assert exports[0].preview_result is preview
     assert exports[0].verify_roundtrip is True
     assert exports[0].output_mdx_path == tmp_path / "pmbam.mdx"
+    assert exports[0].resource_manager is resource_manager
     assert any("Retarget preview exported successfully" in message for message, _level in logs)
     assert any("writer warning" in message for message, _level in logs)
     assert export_action.isEnabled() is True

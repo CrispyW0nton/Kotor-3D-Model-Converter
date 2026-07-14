@@ -9,6 +9,7 @@ from src.core.level import KMapProject
 
 class ModuleEditorOutliner(QtWidgets.QTreeWidget):
     itemSelected = QtCore.Signal(str)
+    itemsSelected = QtCore.Signal(object)
     actionRequested = QtCore.Signal(str, str)
     itemRenamed = QtCore.Signal(str, str)
 
@@ -38,8 +39,15 @@ class ModuleEditorOutliner(QtWidgets.QTreeWidget):
         )
         self.setColumnCount(2)
         self.setHeaderLabels(["Scene Object", "Type"])
+        # Stretch the name column and pin Type to its contents so neither
+        # ellipsizes into "Scen..." / "Auth..." in a narrow dock.
+        header = self.header()
+        header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeToContents)
+        header.setStretchLastSection(False)
         self.setUniformRowHeights(True)
         self.setAlternatingRowColors(True)
+        self.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self._context_menu)
         self.itemSelectionChanged.connect(self._selection_changed)
@@ -170,13 +178,45 @@ class ModuleEditorOutliner(QtWidgets.QTreeWidget):
         self.blockSignals(False)
 
     def select_id(self, item_id: str) -> None:
+        self.select_ids((item_id,))
+
+    def update_item_text(self, item_id: str, text: str) -> bool:
+        """Rename one tree row in place without rebuilding the outliner."""
+
+        wanted = str(item_id or "")
+        label = str(text or "").strip()
+        if not wanted or not label:
+            return False
+        blocked = self.blockSignals(True)
+        try:
+            for item in self.findItems("*", QtCore.Qt.MatchWildcard | QtCore.Qt.MatchRecursive):
+                if str(item.data(0, QtCore.Qt.UserRole) or "") != wanted:
+                    continue
+                item.setText(0, label)
+                item.setData(0, QtCore.Qt.UserRole + 4, label)
+                kind = str(item.data(0, QtCore.Qt.UserRole + 1) or "")
+                item.setToolTip(0, f"{kind}: {label}\nRight-click for Rename, Duplicate, Delete, Focus, and Validate actions.")
+                return True
+        finally:
+            self.blockSignals(blocked)
+        return False
+
+    def select_ids(self, item_ids) -> None:
+        wanted = {str(value or "") for value in tuple(item_ids or ()) if str(value or "")}
         matches = self.findItems("*", QtCore.Qt.MatchWildcard | QtCore.Qt.MatchRecursive)
-        for item in matches:
-            if item.data(0, QtCore.Qt.UserRole) == item_id:
-                blocked = self.blockSignals(True)
-                self.setCurrentItem(item)
-                self.blockSignals(blocked)
-                break
+        blocked = self.blockSignals(True)
+        try:
+            self.clearSelection()
+            current = None
+            for item in matches:
+                if str(item.data(0, QtCore.Qt.UserRole) or "") not in wanted:
+                    continue
+                item.setSelected(True)
+                current = item
+            if current is not None:
+                self.setCurrentItem(current, 0, QtCore.QItemSelectionModel.NoUpdate)
+        finally:
+            self.blockSignals(blocked)
 
     def _item(
         self,
@@ -210,12 +250,18 @@ class ModuleEditorOutliner(QtWidgets.QTreeWidget):
         return item
 
     def _selection_changed(self) -> None:
-        item = self.currentItem()
-        if item is None:
+        selected_ids = [
+            str(item.data(0, QtCore.Qt.UserRole) or "")
+            for item in self.selectedItems()
+            if str(item.data(0, QtCore.Qt.UserRole) or "")
+        ]
+        if not selected_ids:
             return
-        item_id = str(item.data(0, QtCore.Qt.UserRole) or "")
-        if item_id:
-            self.itemSelected.emit(item_id)
+        self.itemsSelected.emit(selected_ids)
+        current = self.currentItem()
+        item_id = str(current.data(0, QtCore.Qt.UserRole) or "") if current is not None else selected_ids[-1]
+        if len(selected_ids) == 1:
+            self.itemSelected.emit(item_id or selected_ids[-1])
 
     def _item_changed(self, item: QtWidgets.QTreeWidgetItem, _column: int) -> None:
         item_id = str(item.data(0, QtCore.Qt.UserRole) or "")

@@ -2,5 +2,6 @@
 PYTHON_PAYLOAD_MANIFEST RCDATA "GhostRiggerPythonPayload.json"
 PYTHON_PAYLOAD_CORE_PROJECT_INIT RCDATA "Python/src/core/project/__init__.py"
 PYTHON_PAYLOAD_CORE_PROJECT_GHOSTRIGGER_PROJECT RCDATA "Python/src/core/project/ghostrigger_project.py"
+PYTHON_PAYLOAD_CORE_PROJECT_PLACEABLE_ASSET RCDATA "Python/src/core/project/placeable_asset.py"
 PYTHON_PAYLOAD_CORE_PROJECT_PROJECT_VALIDATION RCDATA "Python/src/core/project/project_validation.py"
 PYTHON_PAYLOAD_CORE_PROJECT_RESOURCE_ADDRESS RCDATA "Python/src/core/project/resource_address.py"

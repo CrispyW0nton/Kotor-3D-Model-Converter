@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <path fill="none" stroke="#384b5e" stroke-linecap="round" stroke-linejoin="round" stroke-width="3.4" d="M12 5v7m0-4L7 11m5-3 5 3m-5 1-3 6m3-6 3 6"/>
+  <g fill="none" stroke="#f4f7fb" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+    <path d="M12 5v7m0-4L7 11m5-3 5 3m-5 1-3 6m3-6 3 6"/>
+    <circle cx="12" cy="3" r="2" fill="#ffba66" stroke="#ffba66"/>
+  </g>
+  <g fill="#ffd84d">
+    <circle cx="12" cy="8" r="1.6"/><circle cx="7" cy="11" r="1.6"/><circle cx="17" cy="11" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/>
+  </g>
+  <ellipse cx="12" cy="12" rx="9" ry="4" fill="none" stroke="#38d9ff" stroke-width="1.6"/>
+  <path fill="#ff2f45" d="m20 10 3 2-3 2z"/>
+</svg>

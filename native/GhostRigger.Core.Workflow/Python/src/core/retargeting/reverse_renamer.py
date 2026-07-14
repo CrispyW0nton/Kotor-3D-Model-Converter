@@ -12,10 +12,9 @@ import json
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-from .skeleton_renamer import DEFAULT_RENAME_MAP, SkeletonRenameError
+from .skeleton_renamer import DEFAULT_RENAME_MAP, REPO_ROOT, SkeletonRenameError
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_REVERSE_RENAME_MAP = REPO_ROOT / "knowledge_base" / "retargeting" / "ue5_to_aurora_rename_map.json"
 REVERSE_SCOPE = "BONE_NAMING_ONLY"
 REVERSE_DIRECTION = "REVERSE"

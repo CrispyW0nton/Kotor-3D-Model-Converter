@@ -169,9 +169,14 @@ class SuperModelResolver:
             return None
 
         try:
-            super_model = cls._resource_manager.load_model(
-                resref, game_tag,
-            )
+            # Animation inheritance is part of the target game's model
+            # contract.  Prefer the strict loader when the configured resource
+            # provider exposes it so a K2 preview cannot inherit a K1-only
+            # supermodel.  Lightweight/legacy providers retain compatibility.
+            loader = getattr(cls._resource_manager, "load_model_strict", None)
+            if not callable(loader):
+                loader = cls._resource_manager.load_model
+            super_model = loader(resref, game_tag)
         except Exception as exc:  # pragma: no cover - defensive
             log.debug(
                 "SuperModelResolver: load_model(%r) raised %s",
@@ -569,6 +574,35 @@ def _controller_matches(ctrl: Dict[str, Any], controller_type: int, controller_n
     return str(ctrl.get("name", "")).lower() == controller_name
 
 
+_SORTED_SAMPLING_TIMES_KEY = "_gr_sorted_sampling_times"
+
+
+def mark_controller_times_sorted_for_sampling(controller: Dict[str, Any]) -> bool:
+    """Mark one immutable-in-time-order list channel for zero-copy sampling.
+
+    The marker stores the exact list object, so replacing ``times``
+    automatically invalidates it. Callers retaining the list must keep its
+    order unchanged; controller values may still be replaced in place.
+    """
+
+    raw_times = controller.get("times", [])
+    raw_values = controller.get("values", [])
+    safe = (
+        isinstance(raw_times, list)
+        and isinstance(raw_values, list)
+        and bool(raw_times)
+        and len(raw_times) == len(raw_values)
+        and all(type(value) is float and math.isfinite(value) for value in raw_times)
+        and all(isinstance(value, list) for value in raw_values)
+        and all(raw_times[index - 1] <= raw_times[index] for index in range(1, len(raw_times)))
+    )
+    if safe:
+        controller[_SORTED_SAMPLING_TIMES_KEY] = raw_times
+        return True
+    controller.pop(_SORTED_SAMPLING_TIMES_KEY, None)
+    return False
+
+
 def _sample_controller_absolute(
     controllers: List[Dict[str, Any]],
     controller_type: int,
@@ -582,13 +616,26 @@ def _sample_controller_absolute(
     for ctrl in controllers:
         if not _controller_matches(ctrl, controller_type, controller_name):
             continue
-        times = [float(value) for value in ctrl.get("times", [])]
-        values = [list(value) for value in ctrl.get("values", [])]
-        if not times or not values:
+        raw_times = ctrl.get("times", [])
+        raw_values = ctrl.get("values", [])
+        if not raw_times or not raw_values:
             return None
-        rows = sorted(zip(times, values), key=lambda item: item[0])
-        times = [row[0] for row in rows]
-        values = [row[1] for row in rows]
+
+        # Dense validation clips can contain thousands of keys and are sampled
+        # thousands of times. Explicitly marked float/list channels have
+        # already paid the order-validation cost once and can be sampled
+        # without repeatedly copying and sorting every row. All unmarked
+        # inputs keep the exact historical normalization/stable-sort path.
+        direct_channel = ctrl.get(_SORTED_SAMPLING_TIMES_KEY) is raw_times
+        if direct_channel:
+            times = raw_times
+            values = raw_values
+        else:
+            times = [float(value) for value in raw_times]
+            values = [list(value) for value in raw_values]
+            rows = sorted(zip(times, values), key=lambda item: item[0])
+            times = [row[0] for row in rows]
+            values = [row[1] for row in rows]
         sample_time = time_seconds
         if clamp:
             sample_time = max(times[0], min(times[-1], sample_time))
@@ -621,12 +668,17 @@ def evaluate_aurora_animation_pose(
     *,
     clamp: bool = True,
 ) -> EvaluatedAuroraPose:
-    """Evaluate one Aurora animation block as absolute parent-local controllers.
+    """Evaluate one Aurora animation block with engine-verified key semantics.
 
     This helper is intentionally independent from viewport playback. It exists
     as a deterministic validation oracle for export/retargeting gates:
-    orientation and position keys replace the corresponding rest-local component,
-    unkeyed components stay at rest, and parent transforms propagate by FK.
+    POSITION keys are DELTA offsets ADDED to the rest-local position (matching
+    AnimationEngine._eval_node, xoreos ``arePositionFramesRelative()==true``
+    and KotorBlender ``p1 = restloc + animscale*val``; T2558 — this oracle
+    used to REPLACE positions, which offset every position-keyed bone by its
+    rest position and made audit poses disagree with the viewport), ORIENTATION
+    keys replace the rest-local rotation, unkeyed components stay at rest,
+    and parent transforms propagate by FK.
     """
 
     anim_nodes = {
@@ -651,9 +703,9 @@ def evaluate_aurora_animation_pose(
             )
             if sampled_position is not None and len(sampled_position) >= 3:
                 local_position = (
-                    float(sampled_position[0]),
-                    float(sampled_position[1]),
-                    float(sampled_position[2]),
+                    float(node.position[0]) + float(sampled_position[0]),
+                    float(node.position[1]) + float(sampled_position[1]),
+                    float(node.position[2]) + float(sampled_position[2]),
                 )
 
             sampled_rotation = _sample_controller_absolute(
@@ -720,6 +772,22 @@ class AnimationEngine:
         if model.root_node:
             for n in model.all_nodes():
                 name_key = n.name.lower()
+                # BAS preview models retain complete attachment DAGs beneath
+                # body sockets.  Those DAGs intentionally repeat ordinary
+                # Odyssey names such as ``rootdummy`` and ``torso_g``.  A
+                # single body animation pose must use the primary body node's
+                # bind transform for its rest-local position delta; allowing a
+                # later head attachment node to overwrite it collapses the
+                # body by roughly the body's rootdummy height.  Head-local
+                # animation remains independent through the attachment-source
+                # AnimationEngine in mesh_render_data.
+                existing = self._base_nodes.get(name_key)
+                if (
+                    existing is not None
+                    and not bool(getattr(existing, "_gr_bas_attachment_layer", False))
+                    and bool(getattr(n, "_gr_bas_attachment_layer", False))
+                ):
+                    continue
                 self._base_nodes[name_key] = n
                 self._node_kinds_by_name[name_key] = str(
                     getattr(n, "_gr_scene_node_kind", "") or classify_scene_node(n, self._scene_identity)

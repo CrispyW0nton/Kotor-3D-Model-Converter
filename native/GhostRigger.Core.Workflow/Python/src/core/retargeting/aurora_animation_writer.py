@@ -375,6 +375,7 @@ class AuroraAnimationInjectionRequest:
     verify_roundtrip: bool = False
     roundtrip_tolerance: float = 1e-4
     target_model_override: Optional[KotorModel] = None
+    resource_manager: object | None = field(default=None, repr=False, compare=False)
     source_reference_mode: str = "hybrid_limb_source_rest"
     hybrid_limb_source_rest_weight: float = 0.35
     kotor_output_name_mode: KotorOutputAnimationNameMode = KotorOutputAnimationNameMode.VANILLA_SLOT
@@ -635,6 +636,7 @@ class AuroraAnimationWriter:
                 animation,
                 request.animation_slot,
                 game=request.game,
+                resource_manager=request.resource_manager,
                 require_valid_slot=True,
                 replace_existing=request.overwrite_existing,
                 kotor_output_name_mode=request.kotor_output_name_mode,

@@ -1195,7 +1195,8 @@ class MDLBinaryWriter:
         # ── Animation model header (88 bytes) ────────────────────────────────
         anim_hdr = bytearray(88)
         struct.pack_into('<f', anim_hdr, 0, float(anim.length or 0.0))
-        struct.pack_into('<f', anim_hdr, 4, float(anim.transition_time or 0.25))
+        transition_time = getattr(anim, 'transition_time', None)
+        struct.pack_into('<f', anim_hdr, 4, float(0.25 if transition_time is None else transition_time))
         root_name = getattr(anim_nodes[0], 'name', '') if anim_nodes else (anim.anim_root or "")
         nm2 = (anim.anim_root or root_name or "").encode('ascii', 'replace')[:32].ljust(32, b'\x00')
         anim_hdr[8:40] = nm2

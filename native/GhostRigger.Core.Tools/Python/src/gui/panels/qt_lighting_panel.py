@@ -419,9 +419,56 @@ class QtLightingPanel(QtWidgets.QWidget):
 
     def set_model(self, model) -> None:
         self._model = model
+        self._discard_preview_rig_nodes(model)
         self.manager.set_model(model)
+        for light in LightingRigPresets.create(self._settings.selected_lighting_rig_preset):
+            self.manager.add_light(light)
         self._lights = [light.original_ref for light in self.manager.all_lights()]
         self.refresh()
+
+    @staticmethod
+    def _discard_preview_rig_nodes(model) -> None:
+        """Remove stale preview-only rig nodes before a saved rig is rebuilt.
+
+        ``LightManager.add_light`` attaches generated preview nodes to the
+        runtime model so every renderer backend sees the same light records.
+        Loading the same model again must not stack another copy of that rig.
+        User-created/editable lights are retained; only GeneratedRig nodes are
+        transient viewport state.
+        """
+        if model is None:
+            return
+        generated = list(getattr(model, "_gr_generated_lights", []) or [])
+        if not generated:
+            return
+        retained = []
+        for node in generated:
+            source_type = str(getattr(node, "source_type", "") or "").strip().lower()
+            metadata = dict(getattr(node, "_gr_light_metadata", {}) or {})
+            if source_type == "generatedrig" or bool(metadata.get("preview_generated", False)):
+                try:
+                    setattr(node, "light_enabled", False)
+                    setattr(node, "_gr_light_hidden", True)
+                    setattr(node, "_gr_light_deleted", True)
+                except Exception:
+                    pass
+                continue
+            retained.append(node)
+        try:
+            setattr(model, "_gr_generated_lights", retained)
+        except Exception:
+            pass
+
+    def apply_preview_settings_to_viewport(self, viewport) -> None:
+        """Make the renderer match the persisted controls shown in this panel."""
+        if viewport is None:
+            return
+        settings = self._settings
+        viewport.set_lighting_mode(settings.scene_lighting_mode)
+        for map_name in ("diffuse", "normal", "environment", "specular", "lightmap"):
+            viewport.set_texture_map_enabled(map_name, bool(getattr(settings, f"{map_name}_map", True)))
+        viewport.set_lightmap_settings(settings.lightmap_intensity, settings.lightmap_mode)
+        viewport.set_shader_complexity_mode(settings.shader_complexity_mode)
 
     def refresh(self) -> None:
         previous = self._selected

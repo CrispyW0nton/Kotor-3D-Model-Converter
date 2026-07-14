@@ -6,6 +6,51 @@ from .mixin_imports import Image, ModelNode, Optional, _PIL, _clean_tex_name, os
 
 
 class RendererTextureMixin:
+    def is_texture_resident(self, raw_name: str) -> bool:
+        """Return whether a texture image is already decoded without loading it.
+
+        HUD/statistics and other paint-path diagnostics must never turn a cache
+        query into archive I/O or DXT decompression.  ``TextureCache.get`` is a
+        resolving API; this is the non-blocking residency API for frame code.
+        CPython dictionary reads are atomic, matching ``TextureCache.get``'s
+        existing lock-free fast path while a background prewarm thread writes.
+        """
+
+        clean = _clean_tex_name(raw_name or "")
+        if not clean or clean.upper() in {"NULL", "NONE", "****"}:
+            return False
+        key = clean.lower()
+        if self.textures.get(key) is not None:
+            return True
+        cache = getattr(getattr(self, "tex_cache", None), "_cache", None)
+        return bool(isinstance(cache, dict) and cache.get(key) is not None)
+
+    def update_texture_regions(self, name: str, image, regions=None):
+        """Patch one live texture without rebuilding the software renderer.
+
+        Returns ``(cached_image, clipped_regions)``.  The image stays in the
+        existing named cache slot, while only derived mip and NumPy conversions
+        for that image are evicted.  World transforms, models, framebuffers and
+        unrelated textures remain resident.
+        """
+        key = _clean_tex_name(name or "").lower()
+        stem, extension = os.path.splitext(key)
+        if extension in {
+            ".tga", ".tpc", ".png", ".dds", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff",
+        }:
+            key = stem
+        if not key:
+            raise ValueError("texture name is required")
+        previous = self.textures.get(key)
+        cached, clipped = self.tex_cache.update_image_regions(key, image, regions)
+        self.textures[key] = cached
+        invalidate_array = getattr(self._tex_arr_cache, "invalidate", None)
+        if callable(invalidate_array):
+            invalidate_array(cached)
+            if previous is not None and previous is not cached:
+                invalidate_array(previous)
+        return cached, clipped
+
     def _get_tex(self, node: ModelNode) -> Optional['Image.Image']:
         """Resolve texture image for a node. Returns PIL.Image (RGBA) or None.
 

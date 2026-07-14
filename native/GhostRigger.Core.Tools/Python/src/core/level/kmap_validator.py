@@ -94,6 +94,7 @@ class KMapValidator:
         issues.extend(self._validate_walkmesh_faces(project))
         issues.extend(self._validate_transition_targets(project))
         issues.extend(self._validate_texture_formats(project))
+        issues.extend(self.validate_authored_project_textures(project))
         return issues
 
     def validate_file_version(self, version: int) -> list[KMapValidationIssue]:
@@ -277,4 +278,269 @@ class KMapValidator:
                         f'Texture resref "{resref}" includes a file extension; KOTOR resrefs omit extensions.',
                         texture.texture_id, f'Remove the "{ext}" suffix from the resref.'))
                     break
+        return issues
+
+    def validate_authored_project_textures(self, project: KMapProject) -> list[KMapValidationIssue]:
+        """Validate external project textures that authored rooms actually use.
+
+        KMAP remains reference-heavy: this checks stable texture metadata and
+        opens only the first byte of each external payload/optional TXI.  Game
+        textures that are not present in ``project.textures`` remain external
+        KOTOR resources and are intentionally outside this rule.
+        """
+
+        textures = tuple(getattr(project, "textures", ()) or ())
+        if not textures:
+            return []
+        by_id = {str(texture.texture_id): texture for texture in textures if str(texture.texture_id)}
+        by_resref: dict[str, list[object]] = {}
+        for texture in textures:
+            key = str(texture.resref or "").strip().casefold()
+            if key:
+                by_resref.setdefault(key, []).append(texture)
+
+        used_ids: set[str] = set()
+        for room in tuple(getattr(project, "rooms", ()) or ()):
+            for raw in tuple(getattr(room, "texture_refs", ()) or ()):
+                value = str(raw or "").strip()
+                texture = by_id.get(value)
+                if texture is not None:
+                    used_ids.add(str(texture.texture_id))
+                for candidate in by_resref.get(value.casefold(), ()):
+                    used_ids.add(str(candidate.texture_id))
+
+        authored_payload = (getattr(project, "extra_sections", {}) or {}).get("authored_module")
+        if isinstance(authored_payload, dict):
+            for room in tuple(authored_payload.get("rooms") or ()):
+                primitive = room.get("primitive") if isinstance(room, dict) else None
+                for value in self._authored_primitive_texture_values(primitive):
+                    for texture in by_resref.get(value.casefold(), ()):
+                        used_ids.add(str(texture.texture_id))
+
+        issues: list[KMapValidationIssue] = []
+        for resref_key, candidates in sorted(by_resref.items()):
+            if len(candidates) < 2:
+                continue
+            candidate_ids = tuple(str(candidate.texture_id or "") for candidate in candidates)
+            used_candidate_ids = tuple(texture_id for texture_id in candidate_ids if texture_id in used_ids)
+            if not used_candidate_ids:
+                continue
+            display_resref = str(candidates[0].resref or resref_key).strip()
+            issues.append(
+                KMapValidationIssue(
+                    "Error",
+                    "MAP_STUDIO_PROJECT_TEXTURE_RESREF_DUPLICATE",
+                    (
+                        f'Authored room project texture resref "{display_resref}" is declared '
+                        f"{len(candidates)} times; export cannot choose one payload safely."
+                    ),
+                    used_candidate_ids[0],
+                    "Rename or remove duplicate project texture entries so every used texture resref is unique.",
+                )
+            )
+        for texture in textures:
+            texture_id = str(texture.texture_id or "")
+            if texture_id not in used_ids:
+                continue
+            resref = str(texture.resref or "").strip()
+            label = resref or texture_id or "project texture"
+            if not self._engine_valid_texture_resref(resref):
+                issues.append(
+                    KMapValidationIssue(
+                        "Error",
+                        "MAP_STUDIO_PROJECT_TEXTURE_RESREF_INVALID",
+                        f'Authored room project texture resref "{resref}" is not engine-safe.',
+                        texture_id,
+                        "Rename it to 1-16 lowercase ASCII letters, digits, or underscores, then update the room material reference.",
+                    )
+                )
+
+            path_value = str(texture.path or "").strip()
+            if not path_value:
+                issues.append(
+                    KMapValidationIssue(
+                        "Error",
+                        "MAP_STUDIO_PROJECT_TEXTURE_PATH_MISSING",
+                        f'Authored room project texture "{label}" has no external image sidecar path.',
+                        texture_id,
+                        "Re-import the texture into this saved KMAP project or relink its project-relative TGA/TPC path.",
+                    )
+                )
+            else:
+                resolved, resolution_issue = self._resolve_project_asset_path(project, path_value)
+                if resolution_issue:
+                    issues.append(
+                        KMapValidationIssue(
+                            "Error",
+                            "MAP_STUDIO_PROJECT_TEXTURE_PATH_UNRESOLVED",
+                            f'Authored room project texture "{label}" cannot resolve its sidecar: {resolution_issue}',
+                            texture_id,
+                            "Save the KMAP, then relink or re-import the texture so its path is project-relative.",
+                        )
+                    )
+                elif resolved is not None:
+                    issues.extend(
+                        self._validate_project_texture_file(
+                            resolved,
+                            label=label,
+                            item_id=texture_id,
+                            kind="image",
+                            allow_empty=False,
+                        )
+                    )
+
+            txi_value = str(dict(texture.metadata or {}).get("txi_path") or "").strip()
+            if txi_value:
+                resolved_txi, resolution_issue = self._resolve_project_asset_path(project, txi_value)
+                if resolution_issue:
+                    issues.append(
+                        KMapValidationIssue(
+                            "Error",
+                            "MAP_STUDIO_PROJECT_TEXTURE_TXI_PATH_UNRESOLVED",
+                            f'Authored room project texture "{label}" cannot resolve its TXI sidecar: {resolution_issue}',
+                            texture_id,
+                            "Save the KMAP, then relink the project-relative TXI sidecar or clear the stale TXI reference.",
+                        )
+                    )
+                elif resolved_txi is not None:
+                    issues.extend(
+                        self._validate_project_texture_file(
+                            resolved_txi,
+                            label=label,
+                            item_id=texture_id,
+                            kind="TXI",
+                            allow_empty=True,
+                        )
+                    )
+
+            issues.extend(self._validate_project_texture_dimensions(texture, label=label))
+        return issues
+
+    @classmethod
+    def _authored_primitive_texture_values(cls, value: object) -> tuple[str, ...]:
+        found: list[str] = []
+
+        def visit(current: object, key: str = "") -> None:
+            if isinstance(current, dict):
+                for child_key, child in current.items():
+                    lowered = str(child_key or "").strip().lower()
+                    if lowered == "texture" and isinstance(child, str) and child.strip():
+                        found.append(child.strip())
+                    elif lowered == "texture_names" and isinstance(child, (list, tuple)):
+                        found.extend(str(item).strip() for item in child if str(item or "").strip())
+                    else:
+                        visit(child, lowered)
+            elif isinstance(current, (list, tuple)):
+                for child in current:
+                    visit(child, key)
+
+        visit(value)
+        return tuple(dict.fromkeys(found))
+
+    @staticmethod
+    def _engine_valid_texture_resref(value: str) -> bool:
+        text = str(value or "").strip()
+        return bool(1 <= len(text) <= 16 and text.isascii() and re.fullmatch(r"[a-z0-9_]+", text))
+
+    @staticmethod
+    def _resolve_project_asset_path(project: KMapProject, value: str) -> tuple[Path | None, str]:
+        path = Path(str(value or ""))
+        if path.is_absolute():
+            return path, ""
+        project_path = str(getattr(project, "path", "") or "").strip()
+        if not project_path:
+            # Serializer-backed read-only snapshots intentionally omit the
+            # process-local KMAP path.  Do not turn that absence into a false
+            # missing-file blocker; normal loaded/saved projects retain the
+            # path and receive the filesystem check.
+            return None, ""
+        return Path(project_path).resolve().parent / path, ""
+
+    @staticmethod
+    def _validate_project_texture_file(
+        path: Path,
+        *,
+        label: str,
+        item_id: str,
+        kind: str,
+        allow_empty: bool,
+    ) -> list[KMapValidationIssue]:
+        code_kind = "TXI" if kind == "TXI" else "FILE"
+        if not path.is_file():
+            return [
+                KMapValidationIssue(
+                    "Error",
+                    f"MAP_STUDIO_PROJECT_TEXTURE_{code_kind}_MISSING",
+                    f'Authored room project texture "{label}" {kind} sidecar is missing: {path}',
+                    item_id,
+                    "Relink or re-import the missing project texture sidecar before export.",
+                )
+            ]
+        try:
+            with path.open("rb") as stream:
+                first = stream.read(1)
+        except OSError as exc:
+            return [
+                KMapValidationIssue(
+                    "Error",
+                    f"MAP_STUDIO_PROJECT_TEXTURE_{code_kind}_UNREADABLE",
+                    f'Authored room project texture "{label}" {kind} sidecar is unreadable: {path} ({exc})',
+                    item_id,
+                    "Restore read permission or relink/re-import a readable project texture sidecar.",
+                )
+            ]
+        if not first and not allow_empty:
+            return [
+                KMapValidationIssue(
+                    "Error",
+                    "MAP_STUDIO_PROJECT_TEXTURE_FILE_EMPTY",
+                    f'Authored room project texture "{label}" image sidecar is empty: {path}',
+                    item_id,
+                    "Re-import or repaint the texture to write a valid TGA/TPC payload.",
+                )
+            ]
+        return []
+
+    @staticmethod
+    def _validate_project_texture_dimensions(texture: object, *, label: str) -> list[KMapValidationIssue]:
+        metadata = dict(getattr(texture, "metadata", {}) or {})
+        if "width" not in metadata and "height" not in metadata:
+            return []
+        try:
+            width = int(metadata.get("width", 0) or 0)
+            height = int(metadata.get("height", 0) or 0)
+        except (TypeError, ValueError):
+            width = height = 0
+        item_id = str(getattr(texture, "texture_id", "") or "")
+        if width <= 0 or height <= 0:
+            return [
+                KMapValidationIssue(
+                    "Warning",
+                    "MAP_STUDIO_PROJECT_TEXTURE_DIMENSIONS_INVALID",
+                    f'Authored room project texture "{label}" has invalid dimension metadata ({width}x{height}).',
+                    item_id,
+                    "Re-import the image so Map Studio can record valid width and height metadata.",
+                )
+            ]
+        issues: list[KMapValidationIssue] = []
+        if (width & (width - 1)) != 0 or (height & (height - 1)) != 0:
+            issues.append(
+                KMapValidationIssue(
+                    "Warning",
+                    "MAP_STUDIO_PROJECT_TEXTURE_NON_POWER_OF_TWO",
+                    f'Authored room project texture "{label}" is {width}x{height}; KOTOR-friendly map textures should use power-of-two dimensions.',
+                    item_id,
+                    "Resize to power-of-two dimensions before final game testing.",
+                )
+            )
+        if width > 4096 or height > 4096:
+            issues.append(
+                KMapValidationIssue(
+                    "Warning",
+                    "MAP_STUDIO_PROJECT_TEXTURE_DIMENSIONS_HIGH",
+                    f'Authored room project texture "{label}" is {width}x{height}, which is impractical for a KOTOR map resource.',
+                    item_id,
+                    "Downscale to 4096x4096 or smaller and confirm memory use in KOTOR.",
+                )
+            )
         return issues

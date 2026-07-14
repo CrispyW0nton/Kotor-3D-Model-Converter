@@ -45,6 +45,22 @@ def authored_module_readiness_validation_issues(
         return _dedupe(issues)
 
     metadata = dict(getattr(readiness, "metadata", {}) or {})
+    project_texture_validation = dict(metadata.get("project_texture_validation", {}) or {})
+    project_texture_rows = tuple(
+        dict(row)
+        for row in tuple(project_texture_validation.get("issues") or ())
+        if isinstance(row, dict)
+    )
+    project_texture_blocking_tails = {
+        _message_tail(str(row.get("message") or ""))
+        for row in project_texture_rows
+        if str(row.get("severity") or "").lower() == "error"
+    }
+    project_texture_warning_tails = {
+        _message_tail(str(row.get("message") or ""))
+        for row in project_texture_rows
+        if str(row.get("severity") or "").lower() == "warning"
+    }
     geometry_validation = dict(metadata.get("geometry_validation", {}) or {})
     geometry_blocking_messages = tuple(
         str(message) for message in tuple(geometry_validation.get("blocking_messages") or ()) if str(message).strip()
@@ -417,6 +433,8 @@ def authored_module_readiness_validation_issues(
         )
 
     for index, message in enumerate(tuple(getattr(readiness, "blocking_messages", ()) or ())):
+        if _message_tail(str(message)) in project_texture_blocking_tails:
+            continue
         if _message_tail(str(message)) in geometry_blocking_tails:
             continue
         if _message_tail(str(message)) in pathing_blocking_tails:
@@ -541,6 +559,8 @@ def authored_module_readiness_validation_issues(
         )
 
     for index, message in enumerate(tuple(getattr(readiness, "warnings", ()) or ())):
+        if _message_tail(str(message)) in project_texture_warning_tails:
+            continue
         if _message_tail(str(message)) in geometry_warning_tails:
             continue
         if _message_tail(str(message)) in pathing_warning_tails:

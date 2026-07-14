@@ -2,14 +2,22 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
+from dataclasses import replace
+import json
+import math
 from pathlib import Path
+from threading import Event
+from time import perf_counter
 from typing import Any
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from src.core.level import KMapProject, LevelScene, LevelTransform
+from src.core.level import KMapProject, KMapSerializer, LevelScene, LevelTransform, resolve_project_texture_path
 from src.core.modules.authored_module_export import authored_module_smoke_summary_lines
 from src.core.modules.module_editor_controller import ModuleEditorController
+from src.core.modules.module_editor_model import ModuleEditorModel
 from src.core.modules.map_studio_tool_action_dispatch import (
     MapStudioToolActionContext,
     execute_map_studio_tool_belt_action,
@@ -17,13 +25,33 @@ from src.core.modules.map_studio_tool_action_dispatch import (
 )
 from src.gui.panels.module_editor.blueprints_tab import BlueprintsTab
 from src.gui.panels.module_editor.builder_tab import BuilderTab
+from src.gui.panels.module_editor.environment_tab import MapStudioEnvironmentTab
 from src.gui.panels.module_editor.export_panel import ModuleExportPanel
+from src.core.modules.map_studio_hover_context import map_studio_hover_context_summary
+from src.core.modules.map_studio_texture_paint import TexturePaintSession, decode_image_rgba
+from src.core.modules.map_studio_marking_menu_registry import (
+    map_studio_marking_menu_action,
+    map_studio_marking_menu_tree_for_hover,
+)
+from src.gui.panels.module_editor.gmodeler_marking_menu import MapStudioGModelerMarkingMenu
+from src.gui.panels.module_editor.texture_browser_dialog import MapStudioTextureBrowserDialog
+from src.gui.panels.module_editor.texture_paint_tab import MapStudioTexturePaintTab
+from src.core.modules.authored_imported_mesh import (
+    ImportedMeshRoomPrimitive,
+    ImportedMeshSurface,
+    bevel_imported_mesh_edge,
+    extrude_imported_mesh_edge,
+    extrude_imported_mesh_faces,
+    imported_mesh_surface_index_for_role,
+    imported_mesh_surface_role,
+)
 from src.gui.panels.module_editor.module_editor_asset_browser import ModuleEditorAssetBrowser
 from src.gui.panels.module_editor.module_editor_outliner import ModuleEditorOutliner, authored_primitive_item_id
 from src.gui.panels.module_editor.module_editor_properties import ModuleEditorPropertiesPanel
 from src.gui.panels.module_editor.module_editor_toolbar import ModuleEditorToolbar
 from src.gui.panels.module_editor.module_editor_viewport_panel import ModuleEditorViewportPanel
 from src.gui.panels.module_editor.porter_tab import PorterTab
+from src.gui.panels.module_editor.placement_tab import PlacementTab
 from src.gui.panels.module_editor.readiness_panel import ModuleReadinessPanel
 from src.gui.panels.module_editor.rooms_tab import RoomsTab
 from src.gui.panels.module_editor.validation_panel import ModuleValidationPanel
@@ -32,6 +60,55 @@ from src.gui.panels.module_editor.workflow_panel import MapStudioWorkflowPanel
 from src.gui.qt_lib.assets.qt_theme import make_horizontal_overflow_area, make_scrollable_panel
 from src.core.rendering.renderer_settings import RendererSettings
 from src.core.rendering.viewport_navigation import DEFAULT_VIEWPORT_NAVIGATION_PROFILE
+
+
+_MAP_STUDIO_VALIDATION_EXECUTOR = ThreadPoolExecutor(
+    max_workers=1,
+    thread_name_prefix="map-studio-validation",
+)
+
+_MAP_STUDIO_PIE_ACTOR_EXECUTOR = ThreadPoolExecutor(
+    max_workers=1,
+    thread_name_prefix="map-studio-pie-actors",
+)
+
+# NPC idle poses are intentionally sampled below the player/render cadence.
+# A stock area such as 207TEL can retain 32 animated creatures (roughly 2,800
+# DAG nodes); evaluating every skeleton in one 30 Hz burst consumed about
+# 17 ms on the reference fixture before the renderer did any work.  Twelve
+# samples per second remains smooth at the viewport's practical frame rate,
+# while round-robin cohorts distribute that work instead of producing a large
+# every-other-frame hitch.
+_MAP_STUDIO_PIE_CREATURE_POSE_HZ = 12.0
+# The PIE timer targets 60 Hz.  Pose work may make a real frame longer than
+# that, but feeding the longer frame time back into the pose quota creates a
+# self-paced catch-up spiral (more poses -> slower frame -> still more poses).
+# Keep the quota tied to one intended timer slice; each actor separately keeps
+# its real elapsed time until its round-robin turn.
+_MAP_STUDIO_PIE_CREATURE_SCHEDULER_HZ = 60.0
+
+
+def _build_map_studio_geometry_validation_snapshot(project_data: dict[str, Any]) -> dict[str, Any]:
+    """Run expensive, read-only readiness checks away from the Qt thread."""
+
+    started = perf_counter()
+    project = KMapSerializer.from_dict(project_data)
+    controller = ModuleEditorController(ModuleEditorModel(project=project))
+    readiness_result = controller.authored_module_readiness()
+    # Terrain overlay validation serializes the generated WOK so it can audit
+    # the raw perimeter records.  Keep that work in this existing validation
+    # worker; doing it directly from mouse release caused a visible hitch even
+    # for the default 17x17 terrain patch.
+    terrain_walkability_overlay = controller.authored_terrain_walkability_overlay()
+    return {
+        "readiness": readiness_result.readiness,
+        "issues": controller.validate(readiness_result=readiness_result),
+        "walkmesh_status": controller.authored_walkmesh_status(),
+        "walkmesh_room_surfaces": controller.authored_walkmesh_room_surface_choices(),
+        "terrain_walkability_overlay": terrain_walkability_overlay,
+        "terrain_room_choices": controller.authored_terrain_room_choices(),
+        "elapsed_ms": (perf_counter() - started) * 1000.0,
+    }
 
 
 class _MapStudioGameProofDialog(QtWidgets.QDialog):
@@ -119,6 +196,29 @@ class _MapStudioGameProofDialog(QtWidgets.QDialog):
             checks_layout.addWidget(widget)
         layout.addWidget(checks_box)
 
+        self.plcaa_checks_box = QtWidgets.QGroupBox("Custom plcaa end-to-end checks")
+        self.plcaa_checks_box.setObjectName("mapStudioPlcaaProofChecksGroupBox")
+        plcaa_layout = QtWidgets.QVBoxLayout(self.plcaa_checks_box)
+        plcaa_check_specs = (
+            ("texture_paint_box", "Painted textures are visible on the staged surfaces in KOTOR", "mapStudioProofTexturePaintCheckBox"),
+            ("terrain_walkmesh_box", "Sculpted terrain and its generated WOK work in KOTOR", "mapStudioProofTerrainWalkmeshCheckBox"),
+            ("staged_assets_box", "Placed assets match their Map Studio position and orientation", "mapStudioProofStagedAssetsCheckBox"),
+            ("enemy_hostile_box", "Placed enemy spawns and attacks the player", "mapStudioProofEnemyHostileCheckBox"),
+            ("npc_roam_box", "Placed friendly NPC spawns and free-roams", "mapStudioProofNpcRoamCheckBox"),
+            ("terminal_box", "Placed terminal can be used and performs its configured action", "mapStudioProofTerminalCheckBox"),
+            ("container_box", "Placed container opens and contains its configured inventory", "mapStudioProofContainerCheckBox"),
+            ("puzzle_box", "The staged 1-2-3 puzzle unlocks its reward door", "mapStudioProofPuzzleCheckBox"),
+            ("animated_door_box", "Placed animated door opens and closes correctly", "mapStudioProofAnimatedDoorCheckBox"),
+            ("configured_transition_box", "Configured door/trigger transition reaches its destination", "mapStudioProofConfiguredTransitionCheckBox"),
+            ("player_start_match_box", "Player start position and facing match Map Studio", "mapStudioProofPlayerStartMatchCheckBox"),
+        )
+        for attribute, label, object_name in plcaa_check_specs:
+            widget = QtWidgets.QCheckBox(label)
+            widget.setObjectName(object_name)
+            setattr(self, attribute, widget)
+            plcaa_layout.addWidget(widget)
+        layout.addWidget(self.plcaa_checks_box)
+
         buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
         buttons.setObjectName("mapStudioProofButtons")
         buttons.accepted.connect(self.accept)
@@ -127,6 +227,8 @@ class _MapStudioGameProofDialog(QtWidgets.QDialog):
 
         proof_browse.clicked.connect(self._browse_proof_manifest)
         evidence_browse.clicked.connect(self._browse_evidence)
+        self.proof_manifest_edit.textChanged.connect(self._sync_plcaa_check_visibility)
+        self._sync_plcaa_check_visibility()
 
     def values(self) -> dict[str, Any]:
         return {
@@ -141,8 +243,33 @@ class _MapStudioGameProofDialog(QtWidgets.QDialog):
             "player_can_walk_on_floor": self.walkable_floor_box.isChecked(),
             "transition_pathing_sanity_confirmed": self.transition_pathing_box.isChecked(),
             "no_inherited_base_game_geometry_or_scripted_movers": self.no_inherited_box.isChecked(),
+            "texture_paint_visible_in_game": self.texture_paint_box.isChecked(),
+            "terrain_sculpt_and_generated_walkmesh_work_in_game": self.terrain_walkmesh_box.isChecked(),
+            "placed_assets_match_editor_staging": self.staged_assets_box.isChecked(),
+            "enemy_spawns_hostile": self.enemy_hostile_box.isChecked(),
+            "npc_spawns_and_free_roams": self.npc_roam_box.isChecked(),
+            "terminal_operates": self.terminal_box.isChecked(),
+            "container_opens_with_inventory": self.container_box.isChecked(),
+            "puzzle_sequence_unlocks_door": self.puzzle_box.isChecked(),
+            "animated_door_operates": self.animated_door_box.isChecked(),
+            "configured_transition_operates": self.configured_transition_box.isChecked(),
+            "player_start_position_and_facing_match": self.player_start_match_box.isChecked(),
             "allow_missing_evidence": self.allow_missing_evidence_box.isChecked(),
         }
+
+    def _sync_plcaa_check_visibility(self, _text: str = "") -> None:
+        """Show the detailed gate only for the custom plcaa proof manifest."""
+
+        module_root = ""
+        path = self.proof_manifest_edit.text().strip()
+        if path:
+            try:
+                payload = json.loads(Path(path).read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    module_root = str(payload.get("module_root") or "").strip().lower()
+            except Exception:
+                module_root = ""
+        self.plcaa_checks_box.setVisible(module_root == "plcaa")
 
     def _browse_proof_manifest(self) -> None:
         path, _selected = QtWidgets.QFileDialog.getOpenFileName(
@@ -166,11 +293,11 @@ class _MapStudioGameProofDialog(QtWidgets.QDialog):
 
 
 class _MapStudioLytResourceDialog(QtWidgets.QDialog):
-    """Choose an indexed LYT resource from configured KOTOR game installs."""
+    """Choose an indexed area layout, preferring its complete stock module."""
 
     def __init__(self, parent: QtWidgets.QWidget | None = None, *, rows: list[dict[str, Any]] | tuple[dict[str, Any], ...] = ()) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Load Indexed LYT")
+        self.setWindowTitle("Load Stock Module / LYT")
         self.setModal(True)
         self.setObjectName("mapStudioLytResourceDialog")
         self.resize(620, 460)
@@ -200,6 +327,15 @@ class _MapStudioLytResourceDialog(QtWidgets.QDialog):
         self.detail_label.setWordWrap(True)
         root.addWidget(self.detail_label)
 
+        self.hydration_label = QtWidgets.QLabel(
+            "When a matching module capsule is installed, Map Studio loads the complete area: "
+            "ARE/GIT/IFO, player start, gameplay objects, room models, textures, and lightmaps. "
+            "If no capsule can be matched, it will say explicitly that only the LYT layout was loaded."
+        )
+        self.hydration_label.setObjectName("mapStudioLytResourceHydrationLabel")
+        self.hydration_label.setWordWrap(True)
+        root.addWidget(self.hydration_label)
+
         buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self)
         buttons.setObjectName("mapStudioLytResourceButtons")
         buttons.accepted.connect(self.accept)
@@ -221,7 +357,7 @@ class _MapStudioLytResourceDialog(QtWidgets.QDialog):
 
     def accept(self) -> None:
         if self.selected_row() is None:
-            QtWidgets.QMessageBox.information(self, "Load Indexed LYT", "Select a LYT resource to load.")
+            QtWidgets.QMessageBox.information(self, "Load Stock Module / LYT", "Select an area resource to load.")
             return
         super().accept()
 
@@ -580,6 +716,17 @@ class _MapStudioPackageWizardDialog(QtWidgets.QDialog):
             "transition_pathing_sanity_confirmed": "Transitions and PTH pathing behave sanely",
             "no_inherited_base_game_geometry_or_scripted_movers": "No inherited vanilla geometry or scripted movers appear",
             "screenshot_or_video_captured": "Screenshot or video evidence is attached",
+            "texture_paint_visible_in_game": "Painted textures are visible on the staged surfaces in KOTOR",
+            "terrain_sculpt_and_generated_walkmesh_work_in_game": "Sculpted terrain and its generated WOK work in KOTOR",
+            "placed_assets_match_editor_staging": "Placed assets match their Map Studio position and orientation",
+            "enemy_spawns_hostile": "Placed enemy spawns and attacks the player",
+            "npc_spawns_and_free_roams": "Placed friendly NPC spawns and free-roams",
+            "terminal_operates": "Placed terminal can be used and performs its configured action",
+            "container_opens_with_inventory": "Placed container opens and contains its configured inventory",
+            "puzzle_sequence_unlocks_door": "The staged 1-2-3 puzzle unlocks its reward door",
+            "animated_door_operates": "Placed animated door opens and closes correctly",
+            "configured_transition_operates": "Configured door/trigger transition reaches its destination",
+            "player_start_position_and_facing_match": "Player start position and facing match Map Studio",
         }.get(check, check.replace("_", " "))
 
     @staticmethod
@@ -881,7 +1028,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     ) -> None:
         super().__init__(parent)
         self.setAttribute(QtCore.Qt.WA_DeleteOnClose, False)
-        self.setWindowTitle("GhostRigger Map Studio - Level Editor")
+        self.setWindowTitle("Ghost-Studio Map Studio - Level Editor")
         self.controller = ModuleEditorController()
         self.theme_manager = theme_manager or getattr(parent, "theme_manager", None)
         self.layout_manager = layout_manager or getattr(parent, "layout_manager", None)
@@ -889,10 +1036,60 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._last_game_modules_dir = ""
         self._last_map_studio_install_overwrite = False
         self._library_rows: list[dict[str, Any]] = []
+        self._base_library_rows: list[dict[str, Any]] = []
+        self._placeable_library_rows: list[dict[str, Any]] = []
+        self._placeable_library_root = ""
+        self._placeable_game_resource_provider: Any = None
+        self._placeable_library_game = ""
+        self._placeable_library_module_root = ""
+        self._plcaa_manual_proof_rows: list[dict[str, Any]] = []
+        self._plcaa_manual_proof_build: Any = None
+        self._plcaa_manual_proof_cache_key: tuple[str, int] | None = None
         self._map_studio_workspace_modes: dict[str, Any] = {}
         self._map_studio_custom_belt_keys: tuple[str, ...] = ()
         self._map_studio_tool_action_index: dict[str, Any] = {}
         self._syncing_map_studio_tool_belt_preferences = False
+        # Loaded modules should open as a complete world. Backdrop surfaces
+        # remain non-pickable, and the toolbar checkbox can hide them when a
+        # modder needs an uncluttered blockout view.
+        self._map_studio_show_skybox = True
+        self._texture_paint_session: TexturePaintSession | None = None
+        self._texture_paint_texture_id = ""
+        self._texture_paint_resref = ""
+        self._texture_paint_view_image: Any = None
+        self._texture_paint_accepting_stroke = False
+        self._texture_paint_stamp_name = ""
+        self._texture_paint_stamp_size: tuple[int, int] = (0, 0)
+        self._texture_paint_stamp_rgba = b""
+        self._map_studio_pie_session: Any = None
+        self._map_studio_pie_last_time = 0.0
+        self._map_studio_pie_camera_snapshot: tuple[Any, ...] | None = None
+        self._map_studio_pie_desired_camera_distance = 3.2
+        self._map_studio_pie_last_resolved_camera_distance: float | None = None
+        self._map_studio_pie_status_bucket = -1
+        self._map_studio_pie_scope_text = ""
+        self._map_studio_pie_control_states: list[tuple[Any, bool]] = []
+        self._map_studio_pie_actor: Any = None
+        self._map_studio_pie_animation_engine: Any = None
+        self._map_studio_pie_animation_name = ""
+        self._map_studio_pie_animation_run = False
+        self._map_studio_pie_actor_warning = ""
+        self._map_studio_pie_camera_turn_input = 0.0
+        self._map_studio_pie_camera_turn_velocity = 0.0
+        self._map_studio_pie_creature_entries: list[dict[str, Any]] = []
+        self._map_studio_pie_hidden_creature_groups: list[tuple[int, Any]] = []
+        self._map_studio_pie_creature_summary = "creatures 0"
+        self._map_studio_pie_creature_animation_budget = 0.0
+        self._map_studio_pie_creature_animation_cursor = 0
+        self._map_studio_pie_creature_prepare_generation = 0
+        self._map_studio_pie_creature_prepare_future: Any = None
+        self._map_studio_pie_creature_prepare_cancel: Event | None = None
+        self._map_studio_pie_creature_prepare_preview_id = 0
+        self._map_studio_pie_creature_model_cache: dict[tuple[Any, ...], Any] = {}
+        self._map_studio_pie_creature_model_cache_context: tuple[Any, ...] | None = None
+        self._map_studio_pie_audio_runtime: Any = None
+        self._map_studio_pie_audio_summary = "audio unavailable"
+        self._map_studio_pie_audio_update_bucket = -1
         self.resource_manager: Any = None
         self._build_actions()
         self._build_menus()
@@ -920,7 +1117,14 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.save_action = QtGui.QAction("Save KMAP", self)
         self.save_as_action = QtGui.QAction("Save KMAP As...", self)
         self.import_module_action = QtGui.QAction("Import Module...", self)
+        self.import_mod_file_action = QtGui.QAction("Import Module File (.mod / .rim)...", self)
+        self.import_mod_file_action.setObjectName("mapStudioImportModFileAction")
+        self.import_stock_module_action = QtGui.QAction("Import Stock Module (RIM)...", self)
+        self.convert_all_stock_rooms_action = QtGui.QAction("Make All Stock Rooms Editable", self)
+        self.convert_all_stock_rooms_action.setObjectName("mapStudioConvertAllStockRoomsAction")
         self.import_library_asset_action = QtGui.QAction("Import Selected Library Asset", self)
+        self.import_texture_action = QtGui.QAction("Import Texture to Project...", self)
+        self.import_texture_action.setObjectName("mapStudioImportTextureAction")
         self.export_fbx_action = QtGui.QAction("Export FBX...", self)
         self.export_package_action = QtGui.QAction("Export Scene Package...", self)
         self.close_action = QtGui.QAction("Close", self)
@@ -930,12 +1134,22 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.undo_action.setShortcutContext(QtCore.Qt.WindowShortcut)
         self.redo_action = QtGui.QAction("Redo", self)
         self.redo_action.setObjectName("mapStudioRedoAction")
-        self.redo_action.setShortcut(QtGui.QKeySequence("Ctrl+R"))
+        self.redo_action.setShortcuts([QtGui.QKeySequence("Ctrl+R"), QtGui.QKeySequence("Ctrl+Y")])
         self.redo_action.setShortcutContext(QtCore.Qt.WindowShortcut)
         self.delete_action = QtGui.QAction("Delete Selected", self)
         self.duplicate_action = QtGui.QAction("Duplicate Selected", self)
         self.rename_action = QtGui.QAction("Rename Selected", self)
         self.validate_action = QtGui.QAction("Validate KMAP", self)
+        self.simulate_action = QtGui.QAction("Play in Editor", self)
+        self.simulate_action.setObjectName("mapStudioSimulateAction")
+        self.simulate_action.setCheckable(True)
+        self.simulate_action.setShortcut(QtGui.QKeySequence("Alt+P"))
+        self.simulate_action.setToolTip(
+            "Play in Editor (Alt+P) using the current walkmesh, player camera, creatures, and ambient sound. "
+            "This is a GhostStudio simulation, not KOTOR engine proof."
+        )
+        self.simulate_action.setStatusTip(self.simulate_action.toolTip())
+        self.simulate_action.setProperty("mapStudioPIEState", "editing")
         self.build_action = QtGui.QAction("Build Module Files", self)
         self.generate_walls_action = QtGui.QAction("Generate Walls", self)
         self.paint_walkmesh_action = QtGui.QAction("Paint Walkmesh Faces", self)
@@ -948,8 +1162,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         for action in (self.new_action, self.open_action, self.save_action, self.save_as_action):
             file_menu.addAction(action)
         file_menu.addSeparator()
+        file_menu.addAction(self.import_mod_file_action)
         file_menu.addAction(self.import_module_action)
+        file_menu.addAction(self.import_stock_module_action)
+        file_menu.addAction(self.convert_all_stock_rooms_action)
         file_menu.addAction(self.import_library_asset_action)
+        file_menu.addAction(self.import_texture_action)
         file_menu.addSeparator()
         file_menu.addAction(self.export_fbx_action)
         file_menu.addAction(self.export_package_action)
@@ -959,6 +1177,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         edit_menu = self.menuBar().addMenu("Edit")
         for action in (self.undo_action, self.redo_action, self.delete_action, self.duplicate_action, self.rename_action):
             edit_menu.addAction(action)
+        edit_menu.addSeparator()
+        self.center_pivot_action = edit_menu.addAction("Center Pivot")
+        self.center_pivot_action.setObjectName("mapStudioCenterPivotAction")
+        self.center_pivot_action.triggered.connect(lambda: self._run_map_studio_tool_belt_key("center_pivot"))
+        self.freeze_transform_action = edit_menu.addAction("Freeze Transforms")
+        self.freeze_transform_action.setObjectName("mapStudioFreezeTransformAction")
+        self.freeze_transform_action.triggered.connect(lambda: self._run_map_studio_tool_belt_key("freeze_transform"))
 
         view_menu = self.menuBar().addMenu("View")
         self.outliner_action = view_menu.addAction("Show Outliner")
@@ -976,7 +1201,14 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         view_menu.addAction("Reset Layout").triggered.connect(self._reset_layout)
 
         tools_menu = self.menuBar().addMenu("Tools")
-        for action in (self.validate_action, self.build_action, self.generate_walls_action, self.paint_walkmesh_action, self.open_output_action):
+        for action in (
+            self.validate_action,
+            self.simulate_action,
+            self.build_action,
+            self.generate_walls_action,
+            self.paint_walkmesh_action,
+            self.open_output_action,
+        ):
             tools_menu.addAction(action)
 
         help_menu = self.menuBar().addMenu("Help")
@@ -1033,7 +1265,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         belt_row = QtWidgets.QHBoxLayout(self.map_studio_tool_belt_default_tab)
         belt_row.setContentsMargins(0, 0, 0, 0)
         belt_row.setSpacing(6)
-        self.map_studio_tool_belt_label = QtWidgets.QLabel("Default Tool Belt")
+        self.map_studio_tool_belt_label = QtWidgets.QLabel("Belt")
         self.map_studio_tool_belt_label.setObjectName("mapStudioToolBeltLabel")
         self.map_studio_tool_belt_preset_combo = QtWidgets.QComboBox()
         self.map_studio_tool_belt_preset_combo.setObjectName("mapStudioToolBeltPresetComboBox")
@@ -1116,7 +1348,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         root.addWidget(self.main_splitter, 1)
 
         left = QtWidgets.QWidget()
-        left.setMinimumWidth(240)
+        left.setMinimumWidth(300)
         left.setMaximumWidth(380)
         left_layout = QtWidgets.QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
@@ -1126,8 +1358,16 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.left_tabs.addTab(self.outliner, "Outliner")
         self.left_tabs.addTab(self.asset_browser, "Assets")
         self.workflow_tabs = QtWidgets.QTabWidget()
+        # Elide tab labels instead of forcing scroll arrows, and let tabs
+        # expand to fill the dock width so the workflow row reads cleanly.
+        self.workflow_tabs.setElideMode(QtCore.Qt.ElideRight)
+        self.workflow_tabs.setUsesScrollButtons(False)
+        self.workflow_tabs.tabBar().setExpanding(True)
         self.rooms_tab = RoomsTab()
+        self.placement_tab = PlacementTab()
         self.walkmesh_tab = WalkmeshTab()
+        self.texture_paint_tab = MapStudioTexturePaintTab()
+        self.environment_tab = MapStudioEnvironmentTab()
         self.porter_tab = PorterTab()
         self.builder_tab = BuilderTab()
         self.builder_tab.set_primitive_presets(self.controller.available_authored_room_presets())
@@ -1136,6 +1376,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.walkmesh_tab.set_walkmesh_surfaces(self.controller.available_authored_walkmesh_surfaces())
         self.builder_tab.set_composition_primitive_kinds(self.controller.available_authored_composition_primitive_kinds())
         self.builder_tab.set_gameplay_placement_kinds(self.controller.available_authored_gameplay_placement_kinds())
+        self.placement_tab.set_placement_kinds(self.controller.available_authored_gameplay_placement_kinds())
         self.builder_tab.set_script_hook_fields(self.controller.authored_script_hook_field_choices())
         self.builder_tab.set_modeling_component_modes(self.controller.available_map_studio_component_modes())
         self.builder_tab.set_modeling_tools(self.controller.available_map_studio_modeling_tools())
@@ -1145,12 +1386,19 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.blueprints_tab = BlueprintsTab()
         for label, widget in (
             ("Rooms", self.rooms_tab),
-            ("Walkmesh", self.walkmesh_tab),
+            ("Place", self.placement_tab),
+            ("WOK", self.walkmesh_tab),
+            ("Paint", self.texture_paint_tab),
+            ("Environment", self.environment_tab),
             ("Porter", self.porter_tab),
-            ("Builder", self.builder_tab),
-            ("Blueprints", self.blueprints_tab),
+            ("Build", self.builder_tab),
+            ("Data", self.blueprints_tab),
         ):
             self.workflow_tabs.addTab(widget, label)
+        self.workflow_tabs.setTabToolTip(
+            self.workflow_tabs.indexOf(self.environment_tab),
+            "Environment: ARE world lighting/fog, baked lightmap display, loaded sky rendering, and five-face sky authoring.",
+        )
         self.left_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.left_splitter.setChildrenCollapsible(False)
         self.left_splitter.addWidget(self.left_tabs)
@@ -1219,6 +1467,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.main_splitter.setSizes([260, 1380, 300])
         self._update_map_studio_workspace_guide()
         self._refresh_map_studio_tool_belt()
+        self._apply_map_studio_minimal_layout()
 
     def _connect(self) -> None:
         self.new_action.triggered.connect(self.new_kmap)
@@ -1226,7 +1475,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.save_action.triggered.connect(self.save_kmap)
         self.save_as_action.triggered.connect(self.save_kmap_as)
         self.import_module_action.triggered.connect(self.import_module)
+        self.import_mod_file_action.triggered.connect(self.import_module_file)
+        self.import_stock_module_action.triggered.connect(self._import_stock_module)
+        self.convert_all_stock_rooms_action.triggered.connect(self._convert_all_stock_rooms)
         self.import_library_asset_action.triggered.connect(self.import_selected_library_asset)
+        self.import_texture_action.triggered.connect(self.import_project_texture)
         self.export_fbx_action.triggered.connect(lambda: self.export_fbx(False))
         self.export_package_action.triggered.connect(lambda: self.build_module_files())
         self.close_action.triggered.connect(self.close)
@@ -1236,6 +1489,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.duplicate_action.triggered.connect(self.duplicate_selected)
         self.rename_action.triggered.connect(self.rename_selected)
         self.validate_action.triggered.connect(self.validate_kmap)
+        self.simulate_action.triggered.connect(self.toggle_map_studio_pie)
         self.build_action.triggered.connect(self.build_module_files)
         self.generate_walls_action.triggered.connect(lambda: self._handle_tab_action("Generate Walls"))
         self.paint_walkmesh_action.triggered.connect(lambda: self._handle_tab_action("Paint Face"))
@@ -1294,6 +1548,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.map_studio_delete_selection_shortcut.setObjectName("mapStudioDeleteSelectionShortcut")
         self.map_studio_delete_selection_shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
         self.map_studio_delete_selection_shortcut.activated.connect(self.delete_map_studio_current_selection)
+        self.map_studio_ground_snap_shortcut = QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key_End), self.viewport_panel)
+        self.map_studio_ground_snap_shortcut.setObjectName("mapStudioGroundSnapShortcut")
+        self.map_studio_ground_snap_shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        self.map_studio_ground_snap_shortcut.activated.connect(self.snap_map_studio_selected_placement_to_ground)
         self.map_studio_vertex_snap_shortcut = QtGui.QShortcut(QtGui.QKeySequence("V"), self.viewport_panel)
         self.map_studio_vertex_snap_shortcut.setObjectName("mapStudioVertexSnapShortcut")
         self.map_studio_vertex_snap_shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
@@ -1309,29 +1567,52 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.toolbar.actionRequested.connect(self._toolbar_action)
         self.toolbar.viewModeChanged.connect(self.viewport_panel.set_view_mode)
         self.toolbar.selectionModeChanged.connect(self._handle_map_studio_edit_mode_changed)
+        self.toolbar.skyboxVisibilityChanged.connect(self._set_map_studio_skybox_visible)
         self.asset_browser.importRequested.connect(self.import_library_asset)
-        self.outliner.itemSelected.connect(self.select_item)
+        self.outliner.itemsSelected.connect(self._select_map_studio_items)
         self.outliner.actionRequested.connect(self._outliner_action)
         self.outliner.itemRenamed.connect(self._rename_outliner_item_inline)
         self.viewport_panel.itemSelected.connect(self.select_item)
         self.viewport_panel.transformEdited.connect(self._set_transform)
+        self.viewport_panel.placementRequested.connect(self._place_authored_gameplay_from_viewport)
+        self.viewport_panel.placementModeExited.connect(self.placement_tab.stop_placement_mode)
         self.viewport_panel.roomOutlinePointEdited.connect(self._set_authored_room_outline_point)
         self.viewport_panel.roomOutlinePointSnapPreviewRequested.connect(self.preview_authored_floor_plan_vertex_snap_candidates)
         self.viewport_panel.roomOutlinePointSnapped.connect(self.snap_authored_floor_plan_vertex)
         self.viewport_panel.roomOutlineEdgeSelected.connect(self._select_authored_room_outline_edge)
         self.viewport_panel.roomPrimitiveSelected.connect(self._select_authored_room_primitive)
+        self.viewport_panel.roomPrimitivesSelected.connect(self._select_authored_room_primitives)
         self.viewport_panel.roomPrimitiveMoved.connect(self._move_authored_room_primitive)
         self.viewport_panel.roomPrimitiveRotated.connect(self._rotate_authored_room_primitive)
         self.viewport_panel.roomPrimitiveScaled.connect(self._scale_authored_room_primitive)
+        self.viewport_panel.roomPrimitivesTransformCommitted.connect(self._transform_authored_room_primitives)
         self.viewport_panel.terrainBrushFrameRequested.connect(self.apply_map_studio_viewport_terrain_brush_frame)
         self.viewport_panel.terrainBrushStrokeCommitted.connect(self.commit_map_studio_viewport_terrain_brush_stroke)
         self.viewport_panel.terrainBrushOptionsChanged.connect(self._set_map_studio_terrain_brush_options)
         self.viewport_panel.modeMarkingMenuRequested.connect(self._open_map_studio_mode_marking_menu)
         self.viewport_panel.toolMarkingMenuRequested.connect(self._open_map_studio_tool_marking_menu)
+        self.viewport_panel.hoverContextChanged.connect(self._handle_map_studio_hover_context_changed)
+        self.viewport_panel.mapStudioRoomClicked.connect(self._handle_map_studio_room_clicked)
+        self.viewport_panel.mapStudioRoomsRectSelected.connect(self._handle_map_studio_rooms_rect_selected)
         self.viewport_panel.transformGizmoModeChanged.connect(self._handle_map_studio_transform_gizmo_mode_changed)
         self.viewport_panel.undoShortcutRequested.connect(self.undo_map_studio_command)
         self.viewport_panel.redoShortcutRequested.connect(self.redo_map_studio_command)
         self.viewport_panel.deleteShortcutRequested.connect(self.delete_map_studio_current_selection)
+        self.viewport_panel.groundSnapShortcutRequested.connect(self.snap_map_studio_selected_placement_to_ground)
+        self.viewport_panel.pieMoveInputChanged.connect(self._handle_map_studio_pie_move_input)
+        self.viewport_panel.pieDestinationRequested.connect(self._set_map_studio_pie_destination)
+        self.viewport_panel.pieCameraInputChanged.connect(self._handle_map_studio_pie_camera_input)
+        self.viewport_panel.pieStopRequested.connect(self._stop_map_studio_pie)
+        self.viewport_panel.componentExtrudeCommitted.connect(self._commit_map_studio_component_extrude)
+        self.viewport_panel.componentExtrudePreviewRequested.connect(self._preview_map_studio_component_extrude)
+        self.viewport_panel.componentExtrudePreviewCancelled.connect(self._cancel_map_studio_component_preview)
+        self.viewport_panel.componentBevelCommitted.connect(self._commit_map_studio_component_bevel)
+        self.viewport_panel.componentBevelPreviewRequested.connect(self._preview_map_studio_component_bevel)
+        self.viewport_panel.componentBevelPreviewCancelled.connect(self._cancel_map_studio_component_preview)
+        self.viewport_panel.texturePaintStrokeBegan.connect(self._begin_map_studio_texture_paint_stroke)
+        self.viewport_panel.texturePaintSampleRequested.connect(self._append_map_studio_texture_paint_sample)
+        self.viewport_panel.texturePaintStrokeCommitted.connect(self._commit_map_studio_texture_paint_stroke)
+        self.viewport_panel.texturePaintStrokeCancelled.connect(self._cancel_map_studio_texture_paint_stroke)
         self.validation_panel.issueActivated.connect(self.select_item)
         self.readiness_panel.gameTestRequested.connect(self.record_game_smoke_proof)
         self.readiness_panel.launchHandoffRequested.connect(self.open_map_studio_launch_handoff)
@@ -1367,6 +1648,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.properties.cameraChanged.connect(self._set_authored_gameplay_camera_properties)
         self.properties.roomLightChanged.connect(self._set_authored_room_light_properties)
         self.export_panel.exportRequested.connect(self.export_fbx)
+        self.export_panel.targetGameRequested.connect(self._retarget_map_studio_export_game)
         self.export_panel.devTestModuleRequested.connect(self.stage_dev_test_module)
         self.export_panel.authoredModuleRequested.connect(self.export_authored_module)
         self.export_panel.authoredModuleStageRequested.connect(self.stage_authored_module)
@@ -1376,6 +1658,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.export_panel.placementFixRequested.connect(self.show_map_studio_placement_tools)
         self.export_panel.validateRequested.connect(self.validate_kmap)
         self.export_panel.selectFixTargetRequested.connect(self._select_map_studio_export_fix_target)
+        self.workflow_tabs.currentChanged.connect(self._reset_map_studio_workflow_scroll)
         for tab in (self.rooms_tab, self.walkmesh_tab, self.porter_tab, self.builder_tab, self.blueprints_tab):
             tab.actionRequested.connect(self._handle_tab_action)
         self.builder_tab.primitivePresetRequested.connect(self.create_authored_room_preset)
@@ -1419,28 +1702,196 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.moduleEntryPointRequested.connect(self.set_authored_module_entry_point)
         self.builder_tab.gameplayPlacementRequested.connect(self.add_authored_gameplay_placement)
         self.builder_tab.gameplayPlacementStatusChanged.connect(self.workflow_panel.set_active_authoring_context)
+        self.placement_tab.placementModeChanged.connect(self._set_map_studio_placement_mode)
+        self.placement_tab.placementRequested.connect(self.add_authored_gameplay_placement)
+        self.placement_tab.selectionRequested.connect(self.select_item)
+        self.placement_tab.transformRequested.connect(self._apply_placement_tab_transform)
+        self.placement_tab.creatureBehaviorRequested.connect(self._apply_placement_tab_creature_behavior)
+        self.placement_tab.actionRequested.connect(self._handle_placement_tab_action)
+        self.placement_tab.statusChanged.connect(self.workflow_panel.set_active_authoring_context)
+        self.texture_paint_tab.importRequested.connect(self.import_project_texture)
+        self.texture_paint_tab.assignRequested.connect(self._assign_map_studio_texture_paint_target)
+        self.texture_paint_tab.paintEnabledChanged.connect(self._set_map_studio_texture_paint_enabled)
+        self.texture_paint_tab.targetChanged.connect(self._reset_map_studio_texture_paint_session)
+        self.texture_paint_tab.brushSourceRequested.connect(self._choose_map_studio_texture_paint_brush_source)
+        self.texture_paint_tab.brushSourceCleared.connect(self._clear_map_studio_texture_paint_brush_source)
+        self.texture_paint_tab.applyRequested.connect(self._apply_map_studio_texture_changes)
+        self.environment_tab.worldSettingsRequested.connect(self._apply_map_studio_world_settings)
+        self.environment_tab.lightmapApplyRequested.connect(self._apply_map_studio_surface_lightmap)
+        self.environment_tab.skyboxCreateRequested.connect(self._create_map_studio_five_face_skybox)
+        self.environment_tab.skyTrafficCreateRequested.connect(self._create_map_studio_sky_traffic)
         self.builder_tab.modelingContextChanged.connect(self.workflow_panel.set_active_authoring_context)
         self.builder_tab.scriptHookRequested.connect(self.set_authored_script_hook)
         self.outliner_action.toggled.connect(lambda visible: self.outliner.setVisible(visible))
         self.properties_action.toggled.connect(lambda visible: self.properties.setVisible(visible))
         self.viewport_action.toggled.connect(lambda visible: self.viewport_panel.setVisible(visible))
         self.validation_action.toggled.connect(lambda visible: self.bottom_tabs.setVisible(visible))
+        self._map_studio_pie_timer = QtCore.QTimer(self)
+        self._map_studio_pie_timer.setObjectName("mapStudioPIETimer")
+        self._map_studio_pie_timer.setTimerType(QtCore.Qt.TimerType.PreciseTimer)
+        self._map_studio_pie_timer.setInterval(16)
+        self._map_studio_pie_timer.timeout.connect(self._tick_map_studio_pie)
+
+    # Property/transform-scoped commands whose undo/redo can repaint just the
+    # touched placement or light instead of reloading the whole map.
+    _TARGETED_HISTORY_PLACEMENT_ACTIONS = frozenset({
+        "map_studio.gameplay.move_placement",
+        "map_studio.gameplay.rename_placement",
+        "map_studio.gameplay.edit_creature_behavior",
+        "map_studio.gameplay.edit_camera",
+        "map_studio.gameplay.set_transition",
+        "map_studio.gameplay.snap_placement_to_walkmesh",
+    })
+    _TARGETED_HISTORY_LIGHT_ACTIONS = frozenset({
+        "map_studio.lighting.move_room_light",
+        "map_studio.lighting.edit_room_light",
+        "map_studio.lighting.rename_room_light",
+    })
+
+    def _refresh_after_map_studio_history(self, result) -> None:
+        """Repaint only what the undone/redone command could have touched.
+
+        History restores replace the whole KMAP snapshot, but a placement or
+        light property command only changes that one object: promote its
+        reverted values onto the live preview instead of reloading the map.
+        Membership, topology, texture, and unknown commands keep the broad
+        ``_refresh_all`` correctness fallback.
+        """
+
+        record = getattr(result, "record", None)
+        action_key = str(getattr(record, "action_key", "") or "")
+        metadata = dict(getattr(record, "metadata", {}) or {})
+        if not tuple(getattr(record, "sidecar_patches", ()) or ()):
+            if action_key in self._TARGETED_HISTORY_PLACEMENT_ACTIONS:
+                placement_id = str(metadata.get("placement_id", "") or "")
+                if placement_id:
+                    self._refresh_map_studio_gameplay_change(
+                        result.message,
+                        placement_ids=(placement_id,),
+                        refresh_outliner_labels=True,
+                    )
+                    return
+            if action_key in self._TARGETED_HISTORY_LIGHT_ACTIONS:
+                light_id = str(metadata.get("light_id", "") or "")
+                if light_id:
+                    self._refresh_map_studio_gameplay_change(
+                        result.message,
+                        light_ids=(light_id,),
+                        refresh_markers=False,
+                        refresh_placement_rows=False,
+                        refresh_outliner_labels=True,
+                    )
+                    return
+        self._refresh_all(result.message)
 
     def undo_map_studio_command(self) -> None:
-        result = self.controller.undo_map_studio_command()
+        try:
+            result = self.controller.undo_map_studio_command()
+        except Exception as exc:
+            message = f"Undo blocked: {exc}"
+            self.statusBar().showMessage(message, 7000)
+            self._log(message)
+            QtWidgets.QMessageBox.warning(self, "Undo Texture Change", message)
+            self._update_map_studio_undo_redo_actions()
+            return
         if result is None:
             self._update_map_studio_undo_redo_actions()
             self._log("Nothing to undo.")
             return
-        self._refresh_all(result.message)
+        if tuple(getattr(result.record, "sidecar_patches", ()) or ()):
+            self._reset_map_studio_texture_paint_session()
+        self._refresh_after_map_studio_history(result)
+        self._reload_map_studio_texture_paint_after_history(result)
 
     def redo_map_studio_command(self) -> None:
-        result = self.controller.redo_map_studio_command()
+        try:
+            result = self.controller.redo_map_studio_command()
+        except Exception as exc:
+            message = f"Redo blocked: {exc}"
+            self.statusBar().showMessage(message, 7000)
+            self._log(message)
+            QtWidgets.QMessageBox.warning(self, "Redo Texture Change", message)
+            self._update_map_studio_undo_redo_actions()
+            return
         if result is None:
             self._update_map_studio_undo_redo_actions()
             self._log("Nothing to redo.")
             return
-        self._refresh_all(result.message)
+        if tuple(getattr(result.record, "sidecar_patches", ()) or ()):
+            self._reset_map_studio_texture_paint_session()
+        self._refresh_after_map_studio_history(result)
+        self._reload_map_studio_texture_paint_after_history(result)
+
+    def _reload_map_studio_texture_paint_after_history(self, result: object) -> None:
+        """Refresh every file-backed texture touched by global Undo/Redo.
+
+        The renderer refresh is independent of Paint mode.  Leaving Paint must
+        not leave the software/GPU cache showing pixels that global Undo has
+        already restored on disk.  Recreating the editable paint session is the
+        only part gated on Paint mode.
+        """
+
+        record = getattr(result, "record", None)
+        patches = tuple(getattr(record, "sidecar_patches", ()) or ())
+        if not patches:
+            return
+        metadata = dict(getattr(record, "metadata", {}) or {})
+        texture_id = str(metadata.get("texture_id") or "")
+        metadata_resref = str(metadata.get("resref") or "").strip().lower()
+        patched_paths = {Path(str(patch.path)).resolve() for patch in patches}
+        patched_resrefs = {
+            path.stem.lower()
+            for path in patched_paths
+            if path.suffix.lower() in {".tga", ".tpc", ".txi"}
+        }
+        if metadata_resref:
+            patched_resrefs.add(metadata_resref)
+
+        affected: dict[str, object] = {}
+        for texture in tuple(getattr(self.project, "textures", ()) or ()):
+            resref = str(getattr(texture, "resref", "") or "").strip().lower()
+            candidate_id = str(getattr(texture, "texture_id", "") or "")
+            source_value = str(getattr(texture, "path", "") or "").strip()
+            source = resolve_project_texture_path(self.project, source_value) if source_value else None
+            txi_value = str(dict(getattr(texture, "metadata", {}) or {}).get("txi_path") or "").strip()
+            txi = resolve_project_texture_path(self.project, txi_value) if txi_value else None
+            path_hit = any(
+                path is not None and path.resolve() in patched_paths
+                for path in (source, txi)
+            )
+            if candidate_id == texture_id or resref in patched_resrefs or path_hit:
+                if resref:
+                    affected[resref] = texture
+
+        viewport = getattr(self.viewport_panel, "viewport", None)
+        updater = getattr(viewport, "update_texture_regions", None)
+        invalidator = getattr(viewport, "invalidate_texture", None)
+        for resref in sorted(patched_resrefs | set(affected)):
+            texture = affected.get(resref)
+            source_value = str(getattr(texture, "path", "") or "").strip() if texture is not None else ""
+            source = resolve_project_texture_path(self.project, source_value) if source_value else None
+            if source is not None and source.is_file() and callable(updater):
+                try:
+                    updater(resref, self._map_studio_texture_view_image(source), None)
+                except Exception as exc:
+                    self._log(f"Texture history renderer refresh failed for {resref}: {exc}")
+            elif callable(invalidator):
+                try:
+                    invalidator(resref)
+                except Exception as exc:
+                    self._log(f"Texture history renderer invalidation failed for {resref}: {exc}")
+
+        paint_tab = getattr(self, "texture_paint_tab", None)
+        if paint_tab is None or not paint_tab.paint_button.isChecked():
+            return
+        selected = paint_tab.selected_texture_id()
+        wanted = texture_id if self._project_texture_for_id(texture_id) is not None else selected
+        if not wanted or self._project_texture_for_id(wanted) is None:
+            return
+        try:
+            self._load_map_studio_texture_paint_session(wanted)
+        except Exception as exc:
+            paint_tab.set_status(f"Texture history applied, but live preview reload failed: {exc}")
 
     def _update_map_studio_undo_redo_actions(self) -> None:
         undo_label = self.controller.command_history.undo_label
@@ -1466,6 +1917,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "New Map Studio KMAP", str(exc))
             return
+        self._reset_map_studio_texture_paint_session()
         self._refresh_all(f"Created Map Studio KMAP {project.name} for {project.game}.")
 
     def open_kmap(self) -> None:
@@ -1476,6 +1928,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         try:
             self.controller.open_project(path)
+            self._reset_map_studio_texture_paint_session()
             self._refresh_all(f"Opened {Path(path).name}.")
         except Exception as exc:
             QtWidgets.QMessageBox.critical(self, "Open KMAP", str(exc))
@@ -1484,7 +1937,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if not self.project.path:
             self.save_kmap_as()
             return
-        self.controller.save_project()
+        try:
+            self.controller.save_project()
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Save Map Studio KMAP", str(exc))
+            self.statusBar().showMessage(f"Save failed: {exc}", 7000)
+            return
         self._refresh_all(f"Saved {Path(self.project.path).name}.")
 
     def save_kmap_as(self) -> None:
@@ -1493,8 +1951,339 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         if not path.lower().endswith(".kmap"):
             path += ".kmap"
-        self.controller.save_project(path)
+        try:
+            self.controller.save_project(path)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Save Map Studio KMAP As", str(exc))
+            self.statusBar().showMessage(f"Save As failed: {exc}", 7000)
+            return
         self._refresh_all(f"Saved {Path(path).name}.")
+
+    def import_project_texture(self) -> None:
+        """Import a unique, editable texture without rebuilding the viewport."""
+
+        if not self.project.path:
+            self.save_kmap_as()
+            if not self.project.path:
+                return
+        path, _selected = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Import Texture to Map Studio Project",
+            "",
+            "Texture images (*.png *.tga *.dds *.jpg *.jpeg *.bmp *.webp *.tif *.tiff);;All files (*.*)",
+        )
+        if not path:
+            return
+        try:
+            asset = self.controller.import_project_texture(path)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Import Texture", str(exc))
+            return
+        message = (
+            f"Imported {asset.resref} ({asset.width}x{asset.height}) as a unique project TGA; "
+            "it will be bundled with the next module export."
+        )
+        self.statusBar().showMessage(message, 7000)
+        self.texture_paint_tab.set_project(self.project)
+        self.viewport_panel.set_project_texture_paths(self.project)
+        self._refresh_map_studio_geometry_change(
+            message,
+            rebuild_viewport_model=False,
+            refresh_scene_tree=True,
+        )
+
+    def _project_texture_for_id(self, texture_id: str):
+        wanted = str(texture_id or "")
+        return next(
+            (texture for texture in tuple(self.project.textures or ()) if str(texture.texture_id) == wanted),
+            None,
+        )
+
+    def _reset_map_studio_texture_paint_session(self, _texture_id: str = "") -> None:
+        session = self._texture_paint_session
+        if session is not None and session.stroke_active:
+            session.cancel_stroke()
+        self._texture_paint_session = None
+        self._texture_paint_texture_id = ""
+        self._texture_paint_resref = ""
+        self._texture_paint_view_image = None
+        self._texture_paint_accepting_stroke = False
+        self._update_map_studio_undo_redo_actions()
+
+    @staticmethod
+    def _map_studio_texture_view_image(source: Path):
+        """Decode one authored texture into the renderer's bottom-up image."""
+
+        width, height, rgba = decode_image_rgba(source.read_bytes())
+        from PIL import Image
+
+        top_down = Image.frombytes("RGBA", (width, height), rgba)
+        bottom_up = top_down.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+        # This image is already converted to the renderer's upload orientation.
+        # Keep this explicit for both paint sessions and history refreshes.
+        bottom_up._gr_gpu_uv_v_flip = False
+        return bottom_up
+
+    def _load_map_studio_texture_paint_session(self, texture_id: str) -> TexturePaintSession:
+        texture = self._project_texture_for_id(texture_id)
+        if texture is None:
+            raise ValueError("Choose a project texture before painting.")
+        source = resolve_project_texture_path(self.project, texture.path)
+        if not source.is_file():
+            raise FileNotFoundError(f"Project texture payload is missing: {source}")
+        width, height, rgba = decode_image_rgba(source.read_bytes())
+        session = TexturePaintSession(width, height, rgba, tile_size=64, max_history=64)
+        bottom_up = self._map_studio_texture_view_image(source)
+        self._texture_paint_session = session
+        self._texture_paint_texture_id = str(texture.texture_id)
+        self._texture_paint_resref = str(texture.resref or "").lower()
+        self._texture_paint_view_image = bottom_up
+        updater = getattr(getattr(self.viewport_panel, "viewport", None), "update_texture_regions", None)
+        if callable(updater):
+            updater(self._texture_paint_resref, bottom_up, None)
+        return session
+
+    def _set_map_studio_texture_paint_enabled(self, enabled: bool) -> None:
+        wanted = bool(enabled)
+        if wanted:
+            texture_id = self.texture_paint_tab.selected_texture_id()
+            try:
+                if self._texture_paint_session is None or self._texture_paint_texture_id != texture_id:
+                    self._load_map_studio_texture_paint_session(texture_id)
+            except Exception as exc:
+                self.texture_paint_tab.set_status(str(exc))
+                QtWidgets.QMessageBox.warning(self, "Texture Paint", str(exc))
+                self.texture_paint_tab.stop_painting()
+                return
+            self.workflow_tabs.setCurrentWidget(self.texture_paint_tab)
+            self._set_map_studio_toolbar_edit_mode("Texture Paint")
+            albedo_index = self.toolbar.view_mode.findText("Albedo")
+            if albedo_index >= 0:
+                self.toolbar.view_mode.setCurrentIndex(albedo_index)
+            self.workflow_panel.set_active_authoring_context(
+                "Texture Paint: nearest-visible face, diffuse UV0, dirty-tile live feedback, one undo item per drag"
+            )
+        self.viewport_panel.set_texture_paint_interaction(wanted)
+        if not wanted:
+            self._texture_paint_accepting_stroke = False
+        self._update_map_studio_undo_redo_actions()
+
+    def _clear_map_studio_texture_paint_brush_source(self) -> None:
+        self._texture_paint_stamp_name = ""
+        self._texture_paint_stamp_size = (0, 0)
+        self._texture_paint_stamp_rgba = b""
+        self.texture_paint_tab.set_brush_source("")
+        self.texture_paint_tab.set_status("Solid-color brush selected.")
+
+    def _choose_map_studio_texture_paint_brush_source(self) -> None:
+        name = MapStudioTextureBrowserDialog.pick_texture(
+            getattr(self, "resource_manager", None),
+            self,
+            project=self.project,
+            game=str(getattr(self.project, "game", "") or ""),
+        )
+        if not name:
+            return
+        project_texture = next(
+            (texture for texture in tuple(self.project.textures or ()) if str(texture.resref).lower() == name.lower()),
+            None,
+        )
+        try:
+            if project_texture is not None and str(project_texture.path or "").strip():
+                source = resolve_project_texture_path(self.project, project_texture.path)
+                width, height, rgba = decode_image_rgba(source.read_bytes())
+            else:
+                manager = getattr(self, "resource_manager", None)
+                if manager is None:
+                    raise ValueError("Connect a KOTOR resource manager before choosing a game texture brush.")
+                image = manager.load_texture_image(name, str(getattr(self.project, "game", "K1") or "K1"))
+                if image is None:
+                    raise ValueError(f"Could not decode game texture {name}.")
+                from PIL import Image
+
+                image = image.convert("RGBA").transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+                width, height = image.size
+                rgba = image.tobytes()
+            if width > 256 or height > 256:
+                from PIL import Image
+
+                stamp = Image.frombytes("RGBA", (width, height), rgba)
+                stamp.thumbnail((256, 256), Image.Resampling.LANCZOS)
+                width, height = stamp.size
+                rgba = stamp.tobytes()
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Texture Paint Brush", str(exc))
+            return
+        self._texture_paint_stamp_name = name
+        self._texture_paint_stamp_size = (int(width), int(height))
+        self._texture_paint_stamp_rgba = bytes(rgba)
+        self.texture_paint_tab.set_brush_source(name)
+        self.texture_paint_tab.set_status(f"Brush source {name} ready ({width}x{height} stamp).")
+
+    def _assign_map_studio_texture_paint_target(self, texture_id: str) -> None:
+        texture = self._project_texture_for_id(texture_id)
+        if texture is None:
+            self.texture_paint_tab.set_status("Choose or import a project texture first.")
+            return
+        context = self.viewport_panel.current_map_studio_hover_context()
+        if context is None or str(getattr(context, "component_type", "") or "") != "face":
+            self.texture_paint_tab.set_status("Hover the visible face that should receive this unique texture, then assign again.")
+            return
+        room_resref = str(getattr(context, "room_resref", "") or "").strip().lower()
+        mesh_role = str(getattr(context, "mesh_role", "") or "")
+        face_index = int(getattr(context, "face_index", -1))
+        if mesh_role.startswith("stock_room"):
+            ok, message = self.controller.convert_stock_room_to_imported_mesh(
+                room_resref=room_resref,
+                resource_manager=getattr(self, "resource_manager", None),
+            )
+            if not ok:
+                self.texture_paint_tab.set_status(message)
+                return
+            suffix = mesh_role.rsplit("_", 1)[-1]
+            mesh_role = imported_mesh_surface_role(int(suffix) if suffix.isdigit() else 0)
+        ok, message = self.controller.set_imported_mesh_room_face_texture(
+            room_resref=room_resref,
+            mesh_role=mesh_role,
+            face_indices=(face_index,),
+            texture=str(texture.resref or ""),
+        )
+        self.texture_paint_tab.set_status(message)
+        self.statusBar().showMessage(message, 6000)
+        if ok:
+            self._refresh_map_studio_geometry_change(message)
+
+    def _begin_map_studio_texture_paint_stroke(self, payload: object) -> None:
+        values = dict(payload) if isinstance(payload, dict) else {}
+        context = values.get("context")
+        material = str(getattr(context, "material", "") or "").strip().lower()
+        if material != self._texture_paint_resref:
+            self._texture_paint_accepting_stroke = False
+            self.texture_paint_tab.set_status(
+                f"Hovered face uses {material or 'no diffuse texture'}; assign {self._texture_paint_resref} to it before painting."
+            )
+            return
+        session = self._texture_paint_session
+        if session is None:
+            return
+        if session.stroke_active:
+            session.cancel_stroke()
+        brush = replace(
+            self.texture_paint_tab.current_brush(),
+            stamp_name=self._texture_paint_stamp_name,
+            stamp_size=self._texture_paint_stamp_size,
+            stamp_rgba=self._texture_paint_stamp_rgba,
+        )
+        session.begin_stroke(brush)
+        self._texture_paint_accepting_stroke = True
+
+    def _append_map_studio_texture_paint_sample(self, payload: object) -> None:
+        session = self._texture_paint_session
+        if session is None or not session.stroke_active or not self._texture_paint_accepting_stroke:
+            return
+        values = dict(payload) if isinstance(payload, dict) else {}
+        context = values.get("context")
+        if str(getattr(context, "material", "") or "").strip().lower() != self._texture_paint_resref:
+            return
+        uv = tuple(values.get("uv") or ())
+        if len(uv) < 2:
+            return
+        session.append_sample((float(uv[0]), float(uv[1])), pressure=float(values.get("pressure", 1.0) or 1.0))
+        self._apply_map_studio_texture_paint_tiles(session.pending_tile_payloads())
+
+    def _apply_map_studio_texture_paint_tiles(self, tiles) -> None:
+        image = self._texture_paint_view_image
+        session = self._texture_paint_session
+        if image is None or session is None:
+            return
+        from PIL import Image
+
+        regions: list[tuple[int, int, int, int]] = []
+        for tile in tuple(tiles or ()):
+            tile_image = Image.frombytes("RGBA", (int(tile.width), int(tile.height)), bytes(tile.rgba))
+            tile_image = tile_image.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+            bottom_y = int(session.height) - (int(tile.y) + int(tile.height))
+            image.paste(tile_image, (int(tile.x), bottom_y))
+            regions.append((int(tile.x), bottom_y, int(tile.width), int(tile.height)))
+        if not regions:
+            return
+        updater = getattr(getattr(self.viewport_panel, "viewport", None), "update_texture_regions", None)
+        if callable(updater):
+            updater(self._texture_paint_resref, image, regions)
+
+    def _commit_map_studio_texture_paint_stroke(self) -> None:
+        session = self._texture_paint_session
+        accepting = self._texture_paint_accepting_stroke
+        self._texture_paint_accepting_stroke = False
+        if session is None or not session.stroke_active:
+            return
+        if not accepting:
+            session.cancel_stroke()
+            return
+        result = session.end_stroke()
+        if not result.changed:
+            return
+        texture_id = self._texture_paint_texture_id
+        try:
+            asset = self.controller.commit_project_texture_paint(
+                texture_id,
+                session,
+                stroke_result=result,
+            )
+        except Exception as exc:
+            self._reset_map_studio_texture_paint_session()
+            try:
+                if texture_id and self._project_texture_for_id(texture_id) is not None:
+                    self._load_map_studio_texture_paint_session(texture_id)
+            except Exception as reload_exc:
+                self._log(f"Texture Paint rollback preview reload failed: {reload_exc}")
+            message = f"Texture-paint stroke was rolled back: {exc}"
+            self.texture_paint_tab.set_status(message)
+            self.statusBar().showMessage(message, 7000)
+            self._log(message)
+            return
+        message = (
+            f"Painted {asset.resref}: {result.pixels_changed} texel(s), "
+            f"{len(result.dirty_tiles)} dirty tile(s), one undoable stroke. "
+            "Apply Texture Changes before export."
+        )
+        self.texture_paint_tab.set_unapplied_changes(True)
+        self.texture_paint_tab.set_status(message)
+        self.statusBar().showMessage(message, 6000)
+        self.setWindowTitle(f"Ghost-Studio Map Studio - Level Editor - {self.project.name} *")
+        self._update_map_studio_undo_redo_actions()
+
+    def _apply_map_studio_texture_changes(self) -> None:
+        """Accept the live-painted sidecars and refresh the export/readiness gate."""
+
+        session = self._texture_paint_session
+        if session is not None and bool(getattr(session, "stroke_active", False)):
+            message = "Finish or cancel the active paint stroke before applying texture changes."
+            self.texture_paint_tab.set_status(message)
+            return
+        try:
+            result = self.controller.apply_project_texture_changes()
+        except Exception as exc:
+            message = f"Texture changes were not applied: {exc}"
+            self.texture_paint_tab.set_status(message)
+            self.statusBar().showMessage(message, 8000)
+            self._log(message)
+            QtWidgets.QMessageBox.warning(self, "Apply Texture Changes", message)
+            return
+        message = str(result.get("message") or "Texture changes applied.")
+        self._refresh_all(message)
+        self.texture_paint_tab.set_status(message)
+        self.statusBar().showMessage(message, 7000)
+
+    def _cancel_map_studio_texture_paint_stroke(self) -> None:
+        session = self._texture_paint_session
+        self._texture_paint_accepting_stroke = False
+        if session is None or not session.stroke_active:
+            return
+        dirty = session.active_dirty_tiles()
+        session.cancel_stroke()
+        self._apply_map_studio_texture_paint_tiles(session.dirty_tile_payloads(dirty))
+        self.texture_paint_tab.set_status("Texture-paint stroke cancelled.")
 
     def import_module(self) -> None:
         path = QtWidgets.QFileDialog.getExistingDirectory(self, "Import module folder", "")
@@ -1503,10 +2292,426 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         module = self.controller.add_module(Path(path).name, source_path=path)
         self._refresh_all(f"Imported module reference {module.module_name}.")
 
+    def _convert_all_stock_rooms(self) -> None:
+        """Bake every stock room to editable geometry so export covers the whole map."""
+
+        ok, message = self.controller.convert_all_stock_rooms_to_imported_mesh(
+            resource_manager=getattr(self, "resource_manager", None),
+        )
+        self.statusBar().showMessage(message, 8000)
+        self._log(f"Map Studio: {message}")
+        if not ok:
+            # A silent status-bar failure here cost a whole manual test run;
+            # conversion problems must be impossible to miss.
+            QtWidgets.QMessageBox.warning(self, "Make All Stock Rooms Editable", message)
+        self._refresh_all(message)
+
+    def _import_stock_module(self) -> None:
+        """Import a complete stock KOTOR module (RIM) into an editable project.
+
+        Reads ARE/GIT/IFO/LYT/VIS + room MDL geometry from the module RIM and
+        populates the authored module project with all placements, rooms, lights,
+        and metadata — everything needed to edit and re-export the module.
+        """
+
+        # Step 1: modules directory
+        modules_dir = str(getattr(self, "_last_game_modules_dir", "") or "").strip()
+        if not modules_dir:
+            modules_dir = QtWidgets.QFileDialog.getExistingDirectory(
+                self, "Select KOTOR Modules folder (contains .rim / .mod files)", "")
+            if not modules_dir:
+                return
+            self._last_game_modules_dir = modules_dir
+
+        # Step 2: module resref
+        resref, ok = QtWidgets.QInputDialog.getText(
+            self, "Import Stock Module", "Module resref (e.g. plcaa, 001ebo1, tad_m12aa):")
+        if not ok or not resref.strip():
+            return
+        resref = resref.strip().lower()
+
+        # Step 3: game tag
+        game = str(getattr(self.project, "game", "") or "").upper()
+        if game not in ("K1", "K2"):
+            items = ("K1", "K2")
+            choice, ok2 = QtWidgets.QInputDialog.getItem(
+                self, "Select Game", "Target game:", items, 0, False)
+            if not ok2:
+                return
+            game = str(choice).upper()
+
+        # Step 4: call the controller
+        ok3, message = self.controller.import_stock_module_from_rim(
+            module_resref=resref,
+            modules_dir=modules_dir,
+            game=game,
+            resource_manager=self.resource_manager,
+        )
+
+        if ok3:
+            conversion_ok, conversion_message = self.controller.convert_all_stock_rooms_to_imported_mesh(
+                resource_manager=self.resource_manager,
+            )
+            combined_message = f"{message} {conversion_message}"
+            self._log(f"Map Studio: {conversion_message}")
+            self.statusBar().showMessage(combined_message, 10000)
+            if not conversion_ok:
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Stock Room Conversion",
+                    conversion_message,
+                )
+            self._refresh_map_studio_geometry_change(combined_message)
+            # Switch to geometry workspace so the user sees the imported rooms.
+            try:
+                self.map_studio_workspace_combo.setCurrentIndex(
+                    max(0, self.map_studio_workspace_combo.findData("geometry")))
+            except Exception:
+                pass
+        else:
+            QtWidgets.QMessageBox.warning(self, "Import Stock Module", message)
+
+    def import_module_file(self) -> None:
+        """Import a KOTOR module capsule (.mod / .rim / .erf) directly by file.
+
+        The friendly path for custom community modules: pick the file, and the
+        game (K1/K2) is auto-detected from a bundled room model.  Bundled room
+        models/WOKs/textures resolve via the ResourceManager overlay, then every
+        stock room is baked to editable geometry in one step.
+        """
+
+        start_dir = str(getattr(self, "_last_game_modules_dir", "") or "")
+        path, _selected = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Import KOTOR module",
+            start_dir,
+            "KOTOR modules (*.mod *.rim *.erf);;All files (*)",
+        )
+        if not path:
+            return
+        capsule = Path(path)
+        self._last_game_modules_dir = str(capsule.parent)
+        resref = capsule.stem.lower()
+
+        game = self._detect_module_game(capsule) or str(getattr(self.project, "game", "") or "").upper()
+        if game not in ("K1", "K2"):
+            choice, ok = QtWidgets.QInputDialog.getItem(
+                self,
+                "Select Game",
+                f"Could not auto-detect the game for {capsule.name}.\nTarget game:",
+                ("K1", "K2"),
+                0,
+                False,
+            )
+            if not ok:
+                return
+            game = str(choice).upper()
+
+        resource_manager = getattr(self, "resource_manager", None)
+        ok, message = self.controller.import_stock_module_from_rim(
+            module_resref=resref,
+            modules_dir=str(capsule.parent),
+            game=game,
+            resource_manager=resource_manager,
+        )
+        if not ok:
+            QtWidgets.QMessageBox.warning(self, "Import Module", message)
+            return
+        self._log(f"Map Studio: {message}")
+        # Bake stock rooms to editable geometry so they can be edited + exported.
+        conv_ok, conv_message = self.controller.convert_all_stock_rooms_to_imported_mesh(
+            resource_manager=resource_manager,
+        )
+        self._log(f"Map Studio: {conv_message}")
+        self.statusBar().showMessage(f"{message}  {conv_message}", 10000)
+        try:
+            self.map_studio_workspace_combo.setCurrentIndex(
+                max(0, self.map_studio_workspace_combo.findData("geometry")))
+        except Exception:
+            pass
+        self._refresh_all(f"Imported module {resref} ({game}).")
+
+    def _detect_module_game(self, capsule: Path) -> str:
+        """Return 'K1'/'K2' from a bundled room MDL function pointer, or ''."""
+
+        try:
+            import struct as _struct
+
+            from pykotor.extract.capsule import LazyCapsule
+            from pykotor.resource.type import ResourceType as _RT
+
+            for item in LazyCapsule(str(capsule)):
+                if item.restype() != _RT.MDL:
+                    continue
+                data = bytes(item.data() or b"")
+                if len(data) >= 16:
+                    fp1 = _struct.unpack_from("<I", data, 12)[0]
+                    if fp1 == 4285200:
+                        return "K2"
+                    if fp1 == 4273776:
+                        return "K1"
+        except Exception:
+            return ""
+        return ""
+
     def set_library_rows(self, rows: list[dict[str, Any]]) -> None:
-        self._library_rows = [dict(row) for row in rows]
+        self._base_library_rows = [dict(row) for row in rows]
+        self.refresh_placeable_library()
+
+    def _apply_combined_library_rows(self) -> None:
+        combined: dict[tuple[str, str, str], dict[str, Any]] = {}
+        for row in (*self._base_library_rows, *self._placeable_library_rows, *self._plcaa_manual_proof_rows):
+            value = dict(row)
+            key = (
+                str(value.get("game") or "").upper(),
+                str(value.get("resref") or value.get("template_resref") or "").lower(),
+                str(value.get("restype") or value.get("resource_type") or value.get("type") or "").lower().lstrip("."),
+            )
+            combined[key] = value
+        self._library_rows = list(combined.values())
         self.asset_browser.set_rows(self._library_rows)
-        self.builder_tab.set_gameplay_palette_entries(self.controller.authored_gameplay_palette_entries(self._library_rows))
+        palette = self.controller.authored_gameplay_palette_entries(self._library_rows)
+        self.builder_tab.set_gameplay_palette_entries(palette)
+        self.placement_tab.set_palette_entries(palette)
+
+    def set_placeable_library_root(self, root: str | Path, *, provider: Any = None) -> None:
+        """Attach the reusable Placeable Builder library to this Map Studio."""
+
+        self._placeable_library_root = str(Path(root).resolve()) if str(root or "").strip() else ""
+        self._placeable_game_resource_provider = provider
+        self.refresh_placeable_library()
+
+    def _placeable_provider(self) -> Any:
+        if self._placeable_game_resource_provider is not None:
+            return self._placeable_game_resource_provider
+        if self.resource_manager is None:
+            return None
+        try:
+            from src.core.resources.game_resource_provider import ResourceManagerGameResourceProvider
+
+            return ResourceManagerGameResourceProvider(self.resource_manager)
+        except Exception:
+            return None
+
+    def _authored_module_root(self) -> str:
+        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
+        return str(payload.get("module_root") or getattr(self.project, "name", "") or "").strip().lower()
+
+    def _plcaa_proof_build(self, base_provider: Any) -> Any:
+        """Build/cache target-game plcaa proof resources without replacing the base library."""
+
+        if self._authored_module_root() != "plcaa":
+            self._plcaa_manual_proof_build = None
+            self._plcaa_manual_proof_cache_key = None
+            self._plcaa_manual_proof_rows = []
+            return None
+        game = str(getattr(self.project, "game", "") or "K1").strip().upper()
+        provider_owner = self._placeable_game_resource_provider or self.resource_manager or base_provider
+        cache_key = (game, id(provider_owner))
+        if self._plcaa_manual_proof_build is not None and self._plcaa_manual_proof_cache_key == cache_key:
+            return self._plcaa_manual_proof_build
+        from src.core.workflow.plcaa_manual_proof_kit import (
+            build_plcaa_manual_proof_kit_from_provider,
+            plcaa_manual_proof_palette_rows,
+        )
+
+        build = build_plcaa_manual_proof_kit_from_provider(game, base_provider)
+        self._plcaa_manual_proof_build = build
+        self._plcaa_manual_proof_cache_key = cache_key
+        self._plcaa_manual_proof_rows = [dict(row) for row in plcaa_manual_proof_palette_rows(game)]
+        for issue in tuple(getattr(build, "issues", ()) or ()):
+            severity = str(getattr(issue, "severity", "warning") or "warning").title()
+            self._log(f"PLCaa proof kit {severity}: {getattr(issue, 'message', issue)}")
+        return build
+
+    def _map_studio_gameplay_provider(self) -> Any:
+        """Return base content plus generated plcaa proof candidates when applicable."""
+
+        base_provider = self._placeable_provider()
+        build = self._plcaa_proof_build(base_provider)
+        if build is None or not bool(getattr(build, "ok", False)):
+            return base_provider
+        from src.core.resources.game_resource_provider import CompositeGameResourceProvider
+        from src.core.workflow.plcaa_manual_proof_kit import plcaa_manual_proof_in_memory_provider
+
+        generated = plcaa_manual_proof_in_memory_provider(build)
+        return CompositeGameResourceProvider(
+            provider for provider in (generated, base_provider) if provider is not None
+        )
+
+    def refresh_placeable_library(self) -> tuple[dict[str, Any], ...]:
+        """Refresh target-game UTP templates and authored placeable assets."""
+
+        rows: tuple[dict[str, Any], ...] = ()
+        provider = self._map_studio_gameplay_provider()
+        if self._placeable_library_root or provider is not None:
+            try:
+                from src.core.workflow.placeable_builder_service import placeable_library_rows
+
+                # The startup Content Browser is model-oriented; it is not a
+                # trustworthy GIT template browser. Discover real UTP records
+                # from the selected game provider and merge project-authored
+                # Placeable Builder assets over them by typed identity.
+                rows = placeable_library_rows(
+                    self._placeable_library_root,
+                    game=str(getattr(self.project, "game", "") or ""),
+                    provider=provider,
+                )
+            except Exception as exc:
+                self._log(f"Placeable Library refresh warning: {exc}")
+        self._placeable_library_rows = [dict(row) for row in rows]
+        self._placeable_library_game = str(getattr(self.project, "game", "") or "").upper()
+        self._placeable_library_module_root = self._authored_module_root()
+        proof_build = self._plcaa_manual_proof_build
+        if proof_build is not None and bool(getattr(proof_build, "ok", False)):
+            self.controller.set_authored_placeable_resources(tuple(getattr(proof_build, "resources", ()) or ()))
+        elif self._placeable_library_module_root != "plcaa":
+            self.controller.set_authored_placeable_resources(())
+        self.controller.set_authored_placeable_preview_rows(self._placeable_library_rows)
+        self._apply_combined_library_rows()
+        return tuple(self._placeable_library_rows)
+
+    def _authored_placeable_template_resrefs(self) -> tuple[str, ...]:
+        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
+        placements = dict(payload.get("placements") or {})
+        result: list[str] = []
+        for item in tuple(placements.get("placeables") or ()):
+            value = dict(item or {}) if isinstance(item, dict) else {}
+            resref = str(value.get("template_resref") or value.get("resref") or "").strip().lower()
+            if resref and resref not in result:
+                result.append(resref)
+        return tuple(result)
+
+    def _authored_interactive_template_requests(self) -> tuple[tuple[str, str], ...]:
+        """Return typed templates manually placed into the authored GIT."""
+
+        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
+        placements = dict(payload.get("placements") or {})
+        result: list[tuple[str, str]] = []
+        for field_name, restype in (("placeables", "UTP"), ("doors", "UTD")):
+            for item in tuple(placements.get(field_name) or ()):
+                value = dict(item or {}) if isinstance(item, dict) else {}
+                resref = str(value.get("template_resref") or value.get("resref") or "").strip().lower()
+                key = (resref, restype)
+                if resref and key not in result:
+                    result.append(key)
+        return tuple(result)
+
+    def _sync_placeable_library_resources_for_export(self) -> None:
+        """Resolve non-core placed UTP/UTD graphs into the final MOD."""
+
+        self.refresh_placeable_library()
+        provider = self._map_studio_gameplay_provider()
+        proof_build = self._plcaa_manual_proof_build
+        selected = self._authored_interactive_template_requests()
+        resources: list[tuple[str, str, bytes]] = list(tuple(getattr(proof_build, "resources", ()) or ()))
+        issues: list[Any] = list(tuple(getattr(proof_build, "issues", ()) or ()))
+        report = None
+        if selected:
+            from src.core.workflow.placeable_builder_service import referenced_interactive_resource_report
+
+            report = referenced_interactive_resource_report(
+                self._placeable_library_root,
+                selected,
+                game=str(getattr(self.project, "game", "") or ""),
+                provider=provider,
+            )
+            resources.extend(tuple(report.resources or ()))
+            issues.extend(tuple(report.issues or ()))
+
+        merged: dict[tuple[str, str], bytes] = {}
+        for resref, restype, data in resources:
+            key = (str(resref or "").strip().lower(), str(restype or "").strip().lower().lstrip("."))
+            payload = bytes(data or b"")
+            if not key[0] or not key[1] or not payload:
+                continue
+            prior = merged.get(key)
+            if prior is not None and prior != payload:
+                raise ValueError(f"PLCaa/placeable export collision for {key[0]}.{key[1]}.")
+            merged[key] = payload
+        merged_resources = tuple((resref, restype, data) for (resref, restype), data in sorted(merged.items()))
+        self.controller.set_authored_placeable_resources(merged_resources, issues=issues)
+        for issue in issues:
+            severity = str(getattr(issue, "severity", "warning") or "warning").title()
+            self._log(f"Placeable Library {severity}: {getattr(issue, 'message', issue)}")
+        blocking = [
+            str(getattr(issue, "message", issue))
+            for issue in issues
+            if str(getattr(issue, "severity", "") or "").strip().lower() in {"blocking", "error"}
+        ]
+        if blocking or (report is not None and bool(getattr(report, "has_blocking", False))):
+            messages = blocking or ["One or more referenced resources could not be resolved."]
+            raise ValueError("Placeable Library export is blocked: " + " ".join(messages))
+
+    def _sync_authored_creature_behavior_resources_for_export(self) -> None:
+        """Resolve donor UTCs and compile target-game creature behavior resources."""
+
+        rows = [
+            row
+            for row in self.controller.authored_gameplay_placements()
+            if str(getattr(row, "kind", "") or "").strip().lower() == "creature"
+            and str(getattr(row, "creature_behavior_role", "template") or "template").strip().lower() != "template"
+        ]
+        if not rows:
+            self.controller.set_authored_creature_resources(())
+            return
+        provider = self._map_studio_gameplay_provider()
+        reader = getattr(provider, "read_resource", None)
+        if provider is None or not callable(reader):
+            self.controller.set_authored_creature_resources(())
+            raise ValueError(
+                "Creature behavior export requires the target KOTOR installation/resource provider to resolve source UTC templates."
+            )
+        from src.core.modules.authored_creature_behavior import build_authored_creature_behavior_resources
+
+        game = str(getattr(self.project, "game", "") or "K1").strip().upper()
+        merged: dict[tuple[str, str], bytes] = {}
+
+        def add_resource(resref: str, restype: str, data: bytes) -> None:
+            key = (str(resref or "").strip().lower(), str(restype or "").strip().lower().lstrip("."))
+            payload = bytes(data or b"")
+            if not key[0] or not key[1] or not payload:
+                return
+            prior = merged.get(key)
+            if prior is not None and prior != payload:
+                raise ValueError(f"Creature behavior resource collision for {key[0]}.{key[1]}.")
+            merged[key] = payload
+
+        for row in rows:
+            source_template = str(getattr(row, "creature_source_template_resref", "") or "").strip().lower()
+            generated_template = str(getattr(row, "creature_generated_template_resref", "") or "").strip().lower()
+            if not source_template or not generated_template:
+                raise ValueError(f"Creature {getattr(row, 'tag', row.placement_id)} has incomplete behavior metadata.")
+            try:
+                source_utc = bytes(reader(source_template, "UTC", game=game))
+            except Exception as exc:
+                self.controller.set_authored_creature_resources(())
+                raise ValueError(
+                    f"Could not resolve target-game source UTC {source_template}.utc for creature {getattr(row, 'tag', row.placement_id)}: {exc}"
+                ) from exc
+            build = build_authored_creature_behavior_resources(
+                source_utc,
+                game=game,
+                template_resref=generated_template,
+                instance_tag=str(getattr(row, "tag", "") or generated_template),
+                faction_role=str(getattr(row, "creature_behavior_role", "neutral") or "neutral"),
+                conversation_resref=str(getattr(row, "creature_conversation_resref", "") or ""),
+                movement_mode=str(getattr(row, "creature_movement_mode", "stationary") or "stationary"),
+            )
+            for resource in build.resources:
+                add_resource(*resource)
+            conversation = str(getattr(row, "creature_conversation_resref", "") or "").strip().lower()
+            if conversation:
+                try:
+                    add_resource(conversation, "dlg", bytes(reader(conversation, "DLG", game=game)))
+                except Exception as exc:
+                    self.controller.set_authored_creature_resources(())
+                    raise ValueError(
+                        f"Creature conversation {conversation}.dlg could not be resolved for target game {game}: {exc}"
+                    ) from exc
+        resources = tuple((resref, restype, data) for (resref, restype), data in sorted(merged.items()))
+        self.controller.set_authored_creature_resources(resources)
+        self._log(f"Creature behavior export resolved {len(rows)} authored creature(s) into {len(resources)} UTC/script/dialog resource(s).")
 
     def set_renderer_settings(self, settings: RendererSettings | dict | None) -> None:
         renderer_settings = settings if isinstance(settings, RendererSettings) else RendererSettings.from_settings(settings or {})
@@ -1606,7 +2811,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
         self.controller.model.select("")
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(
+            message,
+            primitive_selection=((room_resref, primitive_name),),
+            refresh_outlines=True,
+        )
         return True
 
     def delete_map_studio_authored_primitive_selection(self) -> bool:
@@ -1629,15 +2838,209 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Deleted room primitive {primitive_name}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
+        self._refresh_map_studio_geometry_change(message, refresh_outlines=True)
+        return True
+
+    def _run_map_studio_tool_belt_key(self, key: str) -> None:
+        """Execute a tool-belt action by its stable key (Edit menu entries)."""
+
+        action = self._map_studio_tool_action_for_key(key)
+        if action is None:
+            self.statusBar().showMessage(f"Map Studio tool {key} is not available.", 4000)
+            return
+        self._handle_map_studio_tool_belt_action(action)
+
+    def _handle_map_studio_room_clicked(self, room_resref: str, additive: bool) -> None:
+        """Viewport click selection: click a room to select it (Ctrl/Shift adds)."""
+
+        clicked_id = str(room_resref or "").strip()
+        known_placements = {
+            str(getattr(row, "placement_id", "") or "").strip().lower():
+            str(getattr(row, "placement_id", "") or "").strip()
+            for row in (self.controller.authored_gameplay_placements() or ())
+            if str(getattr(row, "placement_id", "") or "").strip()
+        }
+        placement_id = known_placements.get(clicked_id.lower())
+        if placement_id:
+            self._map_studio_selected_rooms = []
+            self.select_item(placement_id)
+            return
+        resref = clicked_id.lower()
+        selected = list(getattr(self, "_map_studio_selected_rooms", []) or [])
+        if not resref:
+            if not additive and selected:
+                self._map_studio_selected_rooms = []
+                self.statusBar().showMessage("Map Studio selection cleared.", 2500)
+            return
+        if additive:
+            if resref in selected:
+                selected.remove(resref)
+            else:
+                selected.append(resref)
+        else:
+            selected = [resref]
+        self._map_studio_selected_rooms = selected
+        summary = ", ".join(selected) if selected else "(none)"
+        self.statusBar().showMessage(f"Selected room(s): {summary} — press Delete to remove.", 5000)
+        self._log(f"Map Studio room selection: {summary}")
+
+    def _handle_map_studio_rooms_rect_selected(self, room_resrefs, additive: bool) -> None:
+        """Drag-marquee selection over the viewport (plain or Ctrl LMB drag)."""
+
+        incoming = [str(value or "").strip().lower() for value in tuple(room_resrefs or ()) if str(value or "").strip()]
+        selected = list(getattr(self, "_map_studio_selected_rooms", []) or []) if additive else []
+        for resref in incoming:
+            if resref not in selected:
+                selected.append(resref)
+        self._map_studio_selected_rooms = selected
+        placements = [value for value in selected if value.startswith("authored:")]
+        if placements:
+            self.controller.model.select_many(placements)
+            self.outliner.select_ids(placements)
+        summary = ", ".join(selected) if selected else "(none)"
+        self.statusBar().showMessage(
+            f"Marquee selected {len(incoming)} object(s); selection: {summary} — press Delete to remove.", 6000
+        )
+
+    def _delete_map_studio_placement_ids(self, candidate_ids: list[str]) -> bool:
+        """Remove authored gameplay placements matched by hover/selection ids.
+
+        Stock preview instance groups carry their placement_id as the hover
+        room_resref, so clicking a crate and pressing Delete lands here.
+        """
+
+        known = {
+            str(getattr(row, "placement_id", "") or "")
+            for row in (self.controller.authored_gameplay_placements() or ())
+        }
+        known.discard("")
+        matched = [pid for pid in candidate_ids if pid in known]
+        if not matched:
+            return False
+        try:
+            # One undoable command for the whole marquee/multi delete.
+            removed = list(self.controller.remove_authored_gameplay_placements(matched))
+        except Exception as exc:
+            self._log(f"Map Studio: placements could not be removed: {exc}")
+            return False
+        if not removed:
+            return False
+        message = f"Removed {len(removed)} placement(s): {', '.join(removed[:4])}{' ...' if len(removed) > 4 else ''}"
+        self.statusBar().showMessage(message, 6000)
+        self._map_studio_selected_rooms = [
+            r for r in getattr(self, "_map_studio_selected_rooms", []) if r not in set(removed)
+        ]
         self._refresh_all(message)
         return True
 
-    def delete_map_studio_current_selection(self) -> None:
-        """Delete the active Map Studio selection from the viewport shortcut route."""
+    def _delete_selected_map_studio_rooms(self) -> bool:
+        selected = list(getattr(self, "_map_studio_selected_rooms", []) or [])
+        if not selected:
+            return False
+        if self._delete_map_studio_placement_ids(selected):
+            return True
+        ok, message = self.controller.delete_map_studio_rooms(selected)
+        self.statusBar().showMessage(message, 6000)
+        self._log(f"Map Studio: {message}")
+        if ok:
+            self._map_studio_selected_rooms = []
+            self._refresh_map_studio_geometry_change(
+                message,
+                refresh_outlines=True,
+                refresh_terrain=True,
+                refresh_room_choices=True,
+                refresh_connections=True,
+            )
+        return True
 
+    def delete_map_studio_current_selection(self) -> None:
+        """Delete key: hovered component, then selected rooms, then selection.
+
+        Hovering a face/edge/vertex (stock rooms auto-convert to editable
+        geometry) deletes that component; otherwise the click/marquee room
+        selection deletes as one undoable batch; then the selected authored
+        primitive; then the selected scene object.
+        """
+
+        if self._delete_map_studio_component_selection():
+            return
+        if self._delete_map_studio_hovered_component():
+            return
+        # An explicit marquee/multi selection outranks the hovered object:
+        # deleting five selected desks must not collapse to the one under
+        # the cursor.
+        if self._delete_selected_map_studio_rooms():
+            return
+        context = self.viewport_panel.current_map_studio_hover_context()
+        hovered_id = str(getattr(context, "room_resref", "") or "") if context is not None else ""
+        if hovered_id and self._delete_map_studio_placement_ids([hovered_id]):
+            return
         if self.delete_map_studio_authored_primitive_selection():
             return
         self.delete_selected()
+
+    def _delete_map_studio_component_selection(self) -> bool:
+        """Delete every yellow-selected component (Shift multi-select) at once."""
+
+        panel = self.viewport_panel
+        selection = panel.map_studio_component_selection()
+        if not selection:
+            return False
+        faces: dict[tuple[str, str], list[int]] = {}
+        others: list[dict] = []
+        for entry in selection:
+            if str(entry.get("component_type")) == "face" and int(entry.get("face_index", -1)) >= 0:
+                faces.setdefault((str(entry.get("room_resref")), str(entry.get("mesh_role"))), []).append(int(entry["face_index"]))
+            else:
+                others.append(entry)
+        handled = False
+        for (room_resref, mesh_role), indices in faces.items():
+            ok, message = self.controller.delete_imported_mesh_room_faces(
+                room_resref=room_resref, mesh_role=mesh_role, face_indices=sorted(set(indices))
+            )
+            self.statusBar().showMessage(message, 6000)
+            self._log(f"Map Studio: {message}")
+            handled = handled or ok
+        for entry in others:
+            op = {"edge": "edge_delete", "vertex": "vertex_delete"}.get(str(entry.get("component_type")))
+            if not op:
+                continue
+            kwargs = {
+                "room_resref": str(entry.get("room_resref")),
+                "op": op,
+                "mesh_role": str(entry.get("mesh_role")),
+                "face_index": int(entry.get("face_index", -1)),
+            }
+            if op == "vertex_delete":
+                kwargs["vertex_corner"] = int(entry.get("vertex_index", 0))
+            else:
+                kwargs["edge_corners"] = tuple(entry.get("edge_indices") or (0, 1))
+            ok, message = self.controller.apply_imported_mesh_room_component_op(**kwargs)
+            self.statusBar().showMessage(message, 6000)
+            handled = handled or ok
+        if handled:
+            panel.clear_map_studio_component_selection()
+            self._refresh_map_studio_geometry_change("Deleted selected components.")
+        # When nothing was deletable (e.g. selection on a non-imported room),
+        # fall through so object/room/placement deletion still gets a chance.
+        return handled
+
+    def _delete_map_studio_hovered_component(self) -> bool:
+        # Object mode deletes whole objects (rooms/placements), never a
+        # single hovered face — that surprised the user badly.
+        if str(getattr(self.viewport_panel, "_hover_component_mode", "")) == "object":
+            return False
+        context = self.viewport_panel.current_map_studio_hover_context()
+        component = str(getattr(context, "component_type", "") or "") if context is not None else ""
+        routes = {
+            "face": ("face_delete", "Single Face"),
+            "edge": ("edge_delete", "Single Edge"),
+            "vertex": ("vertex_delete", "Single Vertex"),
+        }
+        route = routes.get(component)
+        if route is None:
+            return False
+        return self._apply_gmodeler_imported_face_action(route[0], route[1])
 
     def _parse_map_studio_primitive_outliner_id(self, item_id: str) -> tuple[str, str] | None:
         parts = str(item_id or "").split(":", 2)
@@ -1672,11 +3075,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             )
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Rename Map Studio Primitive", str(exc))
-            self._refresh_all()
             return False
         message = f"Renamed room primitive {primitive_name} to {updated_name}; previous exports/proofs are now stale."
-        self._refresh_all(message)
-        self._select_authored_room_primitive(room_resref, updated_name)
+        self._refresh_map_studio_geometry_change(
+            message,
+            primitive_selection=((room_resref, updated_name),),
+            refresh_outlines=True,
+        )
         return True
 
     def rename_selected(self) -> None:
@@ -1686,6 +3091,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         primitive_identity = self._parse_map_studio_primitive_outliner_id(item_id)
         if primitive_identity is not None:
             room_resref, primitive_name = primitive_identity
+            self.placement_tab.set_selected_placement("")
             name, ok = QtWidgets.QInputDialog.getText(self, "Rename Authored Primitive", "Name:", text=primitive_name)
             if ok and name.strip():
                 self.rename_map_studio_authored_primitive(room_resref, primitive_name, name.strip())
@@ -1702,7 +3108,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 except Exception as exc:
                     QtWidgets.QMessageBox.warning(self, "Rename Authored Placement", str(exc))
                     return
-                self._refresh_all("Renamed authored gameplay placement.")
+                self._refresh_map_studio_gameplay_change(
+                    "Renamed authored gameplay placement.",
+                    placement_ids=(item_id,),
+                    refresh_outliner_labels=True,
+                )
             return
         if item_id.startswith("authored_light:"):
             light = next((row for row in self.controller.authored_room_lights() if getattr(row, "light_id", "") == item_id), None)
@@ -1716,7 +3126,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 except Exception as exc:
                     QtWidgets.QMessageBox.warning(self, "Rename Authored Room Light", str(exc))
                     return
-                self._refresh_all("Renamed authored room light.")
+                self._refresh_map_studio_gameplay_change(
+                    "Renamed authored room light.",
+                    light_ids=(item_id,),
+                    refresh_markers=False,
+                    refresh_placement_rows=False,
+                    refresh_outliner_labels=True,
+                )
             return
         item = self.project.find_room(item_id) or self.project.find_module(item_id) or self.project.find_blueprint(item_id)
         if item is None:
@@ -1740,7 +3156,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 QtWidgets.QMessageBox.warning(self, "Rename Authored Placement", str(exc))
                 self._refresh_all()
                 return
-            self._refresh_all("Renamed authored gameplay placement.")
+            self._refresh_map_studio_gameplay_change(
+                "Renamed authored gameplay placement.",
+                placement_ids=(item_id,),
+                refresh_outliner_labels=True,
+            )
             return
         if item_id.startswith("authored_light:"):
             try:
@@ -1749,7 +3169,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 QtWidgets.QMessageBox.warning(self, "Rename Authored Room Light", str(exc))
                 self._refresh_all()
                 return
-            self._refresh_all("Renamed authored room light.")
+            self._refresh_map_studio_gameplay_change(
+                "Renamed authored room light.",
+                light_ids=(item_id,),
+                refresh_markers=False,
+                refresh_placement_rows=False,
+                refresh_outliner_labels=True,
+            )
             return
         item = self.project.find_room(item_id) or self.project.find_module(item_id) or self.project.find_blueprint(item_id)
         if item is not None and str(new_name or "").strip():
@@ -1797,6 +3223,22 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         finally:
             combo.blockSignals(previous)
         self._sync_map_studio_edit_mode_context(wanted)
+
+    def _set_map_studio_skybox_visible(self, visible: bool) -> None:
+        """Toggle non-selectable authored backdrop rooms in the live preview."""
+
+        wanted = bool(visible)
+        if wanted == bool(getattr(self, "_map_studio_show_skybox", False)):
+            return
+        self._map_studio_show_skybox = wanted
+        preview = self.controller.map_studio_viewport_preview_model(
+            resource_manager=getattr(self, "resource_manager", None),
+            include_backdrops=wanted,
+        )
+        self.viewport_panel.set_authored_room_preview_model(preview)
+        message = "Skybox/backdrop preview enabled." if wanted else "Skybox/backdrop preview hidden."
+        self.statusBar().showMessage(message, 4000)
+        self._log(message)
 
     def _sync_map_studio_edit_mode_context(self, label: str) -> None:
         """Refresh workflow-panel mode context from headless Map Studio mode policy."""
@@ -2201,20 +3643,91 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         )
         return qaction
 
-    def _populate_map_studio_tool_belt_layout(self, layout: QtWidgets.QHBoxLayout, actions: tuple[Any, ...] | list[Any]) -> None:
-        """Draw one Maya-style shelf row of Map Studio tool-belt actions."""
+    #: Belt actions that stay visible as top-level buttons; everything else
+    #: folds into grouped dropdowns so the shelf stays one clean row.
+    _BELT_PINNED_KEYS = ("select", "move", "duplicate_selected", "delete_selected", "texture_paint", "paint_wok")
+    _BELT_MODE_KEYS = ("object", "vertex", "edge", "face", "walkmesh", "terrain")
+    _BELT_CREATE_KEYS = (
+        "blockout_room",
+        "create_room",
+        "corridor",
+        "floor",
+        "plane",
+        "wall",
+        "cube",
+        "cylinder",
+        "ramp",
+        "stairs",
+        "door_frame",
+        "arch",
+        "terrain_patch",
+        "primitive",
+    )
 
+    def _make_map_studio_belt_tool_button(self, action: Any) -> QtWidgets.QToolButton:
+        key = str(getattr(action, "key", "") or "")
+        qaction = self._build_map_studio_tool_qaction(action)
+        button = QtWidgets.QToolButton()
+        button.setDefaultAction(qaction)
+        button.setObjectName(f"mapStudioToolBeltButton_{key}")
+        button.setToolButtonStyle(QtCore.Qt.ToolButtonTextOnly)
+        button.setEnabled(bool(getattr(action, "implemented", False)))
+        return button
+
+    def _make_map_studio_belt_group(self, title: str, group_key: str, actions: list[Any]) -> QtWidgets.QToolButton:
+        """One dropdown holding a group of belt tools (buttons stay findable)."""
+
+        dropdown = QtWidgets.QToolButton()
+        dropdown.setObjectName(f"mapStudioToolBeltGroup_{group_key}")
+        dropdown.setText(f"{title} ▾")
+        dropdown.setToolButtonStyle(QtCore.Qt.ToolButtonTextOnly)
+        dropdown.setPopupMode(QtWidgets.QToolButton.InstantPopup)
+        menu = QtWidgets.QMenu(dropdown)
+        menu.setObjectName(f"mapStudioToolBeltGroupMenu_{group_key}")
+        container = QtWidgets.QWidget(menu)
+        grid = QtWidgets.QGridLayout(container)
+        grid.setContentsMargins(6, 6, 6, 6)
+        grid.setSpacing(4)
+        columns = 4
+        for index, action in enumerate(actions):
+            button = self._make_map_studio_belt_tool_button(action)
+            button.clicked.connect(menu.close)
+            grid.addWidget(button, index // columns, index % columns)
+        widget_action = QtWidgets.QWidgetAction(menu)
+        widget_action.setDefaultWidget(container)
+        menu.addAction(widget_action)
+        dropdown.setMenu(menu)
+        return dropdown
+
+    def _populate_map_studio_tool_belt_layout(self, layout: QtWidgets.QHBoxLayout, actions: tuple[Any, ...] | list[Any]) -> None:
+        """Draw the belt: pinned essentials + Mode/Create/Tools dropdowns."""
+
+        pinned: list[Any] = []
+        modes: list[Any] = []
+        creators: list[Any] = []
+        extras: list[Any] = []
         for action in actions:
             key = str(getattr(action, "key", "") or "")
             if not key:
                 continue
-            qaction = self._build_map_studio_tool_qaction(action)
-            button = QtWidgets.QToolButton()
-            button.setDefaultAction(qaction)
-            button.setObjectName(f"mapStudioToolBeltButton_{key}")
-            button.setToolButtonStyle(QtCore.Qt.ToolButtonTextOnly)
-            button.setEnabled(bool(getattr(action, "implemented", False)))
-            layout.addWidget(button)
+            if key in self._BELT_PINNED_KEYS:
+                pinned.append(action)
+            elif key in self._BELT_MODE_KEYS:
+                modes.append(action)
+            elif key in self._BELT_CREATE_KEYS:
+                creators.append(action)
+            else:
+                extras.append(action)
+        for action in pinned:
+            layout.addWidget(self._make_map_studio_belt_tool_button(action))
+        if creators:
+            layout.addWidget(self._make_map_studio_belt_group("Create", "create", creators))
+        if extras:
+            layout.addWidget(self._make_map_studio_belt_group("Tools", "tools", extras))
+        if modes:
+            # Modes live in the toolbar's Edit Mode combo; the belt keeps them
+            # reachable (and test-clickable) without eating shelf width.
+            layout.addWidget(self._make_map_studio_belt_group("Mode", "mode", modes))
         layout.addStretch(1)
 
     def _add_map_studio_context_menu_action(self, menu: QtWidgets.QMenu, action: Any) -> None:
@@ -2280,12 +3793,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setHorizontalSpacing(6)
         layout.setVerticalSpacing(6)
+        # Two-mode design (user direction 2026-07-07): GModeler already picks
+        # faces, edges, and vertices by hover, so per-component modes are
+        # redundant here. Edit Mode activates GModeler; Object Mode is
+        # select/transform/delete; Terrain and Placement stay as workflows.
         entries = (
-            ("object", "Object", "Object", 0, 1, "mapStudioModeMarkingAction_object", "mapStudioModeMarkingButton_object"),
-            ("vertex", "Vertex", "Vertex", 1, 0, "mapStudioModeMarkingAction_vertex", "mapStudioModeMarkingButton_vertex"),
-            ("select", "Select", "Select", 1, 1, "mapStudioModeMarkingAction_select", "mapStudioModeMarkingButton_select"),
-            ("edge", "Edge", "Edge", 1, 2, "mapStudioModeMarkingAction_edge", "mapStudioModeMarkingButton_edge"),
-            ("face", "Face", "Face", 2, 1, "mapStudioModeMarkingAction_face", "mapStudioModeMarkingButton_face"),
+            ("edit", "Edit Mode (GModeler)", "Edit (GModeler)", 0, 0, "mapStudioModeMarkingAction_edit", "mapStudioModeMarkingButton_edit"),
+            ("object", "Object Mode", "Object", 0, 1, "mapStudioModeMarkingAction_object", "mapStudioModeMarkingButton_object"),
+            ("terrain", "Terrain", "Terrain", 1, 0, "mapStudioModeMarkingAction_terrain", "mapStudioModeMarkingButton_terrain"),
+            ("placement", "Placement", "Placement", 1, 1, "mapStudioModeMarkingAction_placement", "mapStudioModeMarkingButton_placement"),
         )
         for key, label, mode_label, row, column, action_name, button_name in entries:
             action = QtGui.QAction(label, menu)
@@ -2299,8 +3815,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             button.setToolButtonStyle(QtCore.Qt.ToolButtonTextOnly)
             button.setMinimumWidth(82)
             button.setToolTip(
-                "Return to selectable authored objects." if key == "select"
-                else f"Switch Map Studio to {mode_label} component mode."
+                "Activate GModeler: hover faces/edges/vertices and use RMB tools." if key == "edit"
+                else f"Switch Map Studio to {mode_label} mode."
             )
             layout.addWidget(button, row, column)
             menu.addAction(action)
@@ -2312,8 +3828,538 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         return menu
 
     def _open_map_studio_mode_marking_menu(self, global_pos: QtCore.QPoint) -> None:
+        if self._open_map_studio_gmodeler_marking_menu(global_pos):
+            return
         menu = self._build_map_studio_mode_marking_menu(self.viewport_panel)
         menu.exec(global_pos)
+
+    def _handle_map_studio_hover_context_changed(self, context) -> None:
+        """Echo the hovered component in the status bar without stealing focus."""
+
+        summary = map_studio_hover_context_summary(context) if context is not None else ""
+        if summary:
+            self.statusBar().showMessage(f"Map Studio hover: {summary}", 2500)
+
+    def _open_map_studio_gmodeler_marking_menu(self, global_pos: QtCore.QPoint) -> bool:
+        """Open the GModeler compact text popup for the hovered component."""
+
+        context = self.viewport_panel.current_map_studio_hover_context()
+        tree = map_studio_marking_menu_tree_for_hover(context)
+        if tree is None:
+            return False
+        menu = MapStudioGModelerMarkingMenu(tree, context, self.viewport_panel)
+        menu.actionSelected.connect(self._handle_map_studio_gmodeler_action)
+        menu.open_at(global_pos)
+        return True
+
+    def _handle_map_studio_gmodeler_action(self, action_key: str, target: str) -> None:
+        action = map_studio_marking_menu_action(action_key)
+        if action is None:
+            return
+        if action_key in {"face_extrude", "edge_extrude"} and self.viewport_panel.arm_component_extrude():
+            # Maya-style: the menu arms the interactive pull; drag positions it.
+            return
+        if action_key == "edge_bevel" and self.viewport_panel.arm_component_bevel():
+            # The bevel remains a preview until the user releases the drag or
+            # presses Apply in the persistent operator strip.
+            return
+        if action_key in {
+            "face_delete",
+            "face_set_texture",
+            "face_extrude",
+            "face_inset",
+            "face_move",
+            "face_flat",
+            "face_flip",
+            "face_split",
+            "vertex_move",
+            "vertex_weld",
+            "vertex_delete",
+            "edge_move",
+            "edge_bevel",
+            "edge_split",
+            "edge_collapse",
+            "edge_delete",
+        } and self._apply_gmodeler_imported_face_action(action_key, target):
+            return
+        if not action.implemented:
+            impacts = ", ".join(action.resource_impacts) or "editor state only"
+            self.statusBar().showMessage(
+                f"Map Studio {action.label} -> {target}: registered but not wired to geometry yet"
+                f" (affects {impacts}). {action.kotor_guardrail}",
+                6000,
+            )
+            self._log(f"Map Studio GModeler action (read-only): {action.key} target={target}")
+            return
+        belt = self._map_studio_tool_action_for_key(action.tool_belt_key) if action.tool_belt_key else None
+        if belt is not None:
+            self._handle_map_studio_tool_belt_action(belt)
+
+    def _map_studio_live_topology_source(self, payload: dict) -> ImportedMeshRoomPrimitive | None:
+        """Capture one immutable preview source; repeated drags never accumulate."""
+
+        room_resref = str(payload.get("room_resref", "") or "")
+        mesh_role = str(payload.get("mesh_role", "") or "")
+        key = (room_resref, mesh_role, str(payload.get("kind", "") or ""))
+        cached = getattr(self, "_map_studio_topology_preview_source", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        self._cancel_map_studio_component_preview()
+        rows = self.viewport_panel.preview_room_mesh_payloads(room_resref)
+        surfaces: list[ImportedMeshSurface] = []
+        for index, row in enumerate(rows):
+            vertices = tuple(row.get("vertices", ()) or ())
+            faces = tuple(row.get("faces", ()) or ())
+            if not vertices or not faces:
+                continue
+            surfaces.append(
+                ImportedMeshSurface(
+                    name=str(row.get("name") or f"{room_resref}_preview_{index}"),
+                    texture=str(row.get("texture") or ""),
+                    vertices=vertices,
+                    faces=faces,
+                    uvs=tuple(row.get("uvs", ()) or ()),
+                    normals=tuple(row.get("normals", ()) or ()),
+                    lightmap=str(row.get("lightmap") or ""),
+                    texture_names=tuple(row.get("texture_names", ()) or ()),
+                    tex_count=int(row.get("tex_count", 1) or 1),
+                    uvs_lm=tuple(row.get("uvs_lm", ()) or ()),
+                )
+            )
+        if not surfaces:
+            return None
+        primitive = ImportedMeshRoomPrimitive(room_resref=room_resref, surfaces=tuple(surfaces))
+        self._map_studio_topology_preview_source = (key, primitive)
+        return primitive
+
+    def _show_live_imported_surface(self, primitive: ImportedMeshRoomPrimitive, room_resref: str, mesh_role: str) -> bool:
+        surface_index = imported_mesh_surface_index_for_role(primitive, mesh_role)
+        if surface_index < 0:
+            return False
+        surface = primitive.surfaces[surface_index]
+        return self.viewport_panel.apply_component_mesh_preview(
+            room_resref,
+            mesh_role,
+            vertices=surface.vertices,
+            faces=surface.faces,
+            normals=surface.normals,
+            uvs=surface.uvs,
+            uvs_lm=surface.uvs_lm,
+        )
+
+    def _refresh_map_studio_imported_mesh_change(
+        self,
+        message: str,
+        room_resref: str,
+        mesh_role: str,
+    ) -> bool:
+        """Patch one committed mesh while preserving all other GPU residency.
+
+        Component operators mutate exactly one imported-mesh surface.  The
+        prior path rebuilt the combined authored + stock preview and routed it
+        through ``load_model()``, which cleared every renderer cache and reset
+        the framebuffers.  Reusing the already-resident preview (or patching
+        the committed surface for immediate actions) keeps camera, texture,
+        stock-room, and unrelated mesh resources alive.
+
+        Returns ``True`` when the scoped path was available.  Missing/stale
+        preview identity falls back to the full model replacement so undo and
+        export truth remain controller-owned.
+        """
+
+        cached_reader = getattr(self.controller, "last_committed_imported_mesh_room", None)
+        room_spec = cached_reader(room_resref) if callable(cached_reader) else None
+        if room_spec is None:
+            room_spec = self.controller.imported_mesh_room(room_resref)
+        live_surface_count = sum(
+            1 for _room_node, _mesh_node in self.viewport_panel._iter_room_preview_mesh_nodes(room_resref)
+        )
+        committed_surface_count = len(tuple(getattr(getattr(room_spec, "primitive", None), "surfaces", ()) or ()))
+        patched = bool(
+            room_spec is not None
+            and committed_surface_count == live_surface_count
+            and self._show_live_imported_surface(room_spec.primitive, room_resref, mesh_role)
+        )
+        promoted = bool(
+            patched
+            and self.viewport_panel.promote_component_mesh_preview(room_resref, mesh_role)
+        )
+        if promoted:
+            self._map_studio_topology_preview_source = None
+        self._refresh_map_studio_geometry_change(
+            message,
+            rebuild_viewport_model=not promoted,
+            refresh_scene_tree=not promoted,
+        )
+        return promoted
+
+    def _preview_map_studio_component_extrude(self, payload: dict) -> None:
+        source = self._map_studio_live_topology_source(payload)
+        if source is None:
+            return
+        room_resref = str(payload.get("room_resref", "") or "")
+        mesh_role = str(payload.get("mesh_role", "") or "")
+        distance = float(payload.get("distance", 0.0) or 0.0)
+        try:
+            if str(payload.get("kind", "") or "") == "edge":
+                axis = tuple(float(value) for value in tuple(payload.get("axis", (0.0, 0.0, 1.0)))[:3])
+                updated = extrude_imported_mesh_edge(
+                    source,
+                    mesh_role,
+                    int(payload.get("face_index", -1)),
+                    tuple(int(value) for value in tuple(payload.get("edge_corners", (0, 1)))[:2]),
+                    tuple(axis[index] * distance for index in range(3)),
+                )
+            else:
+                world_mode = str(payload.get("axis_mode", "normal") or "normal") == "world"
+                axis = tuple(float(value) for value in tuple(payload.get("axis", (0.0, 0.0, 1.0)))[:3])
+                updated = extrude_imported_mesh_faces(
+                    source,
+                    mesh_role,
+                    tuple(int(value) for value in tuple(payload.get("face_indices", ()) or ())),
+                    distance,
+                    direction=axis if world_mode else None,
+                )
+            self._show_live_imported_surface(updated, room_resref, mesh_role)
+        except ValueError as exc:
+            self.statusBar().showMessage(f"Extrude preview: {exc}", 2500)
+
+    def _preview_map_studio_component_bevel(self, payload: dict) -> None:
+        source = self._map_studio_live_topology_source(payload)
+        if source is None:
+            return
+        room_resref = str(payload.get("room_resref", "") or "")
+        mesh_role = str(payload.get("mesh_role", "") or "")
+        try:
+            updated = bevel_imported_mesh_edge(
+                source,
+                mesh_role,
+                int(payload.get("face_index", -1)),
+                tuple(int(value) for value in tuple(payload.get("edge_corners", (0, 1)))[:2]),
+                float(payload.get("amount", 0.25) or 0.25),
+                segments=int(payload.get("segments", 1) or 1),
+                profile=float(payload.get("profile", 0.5) or 0.0),
+                miter=str(payload.get("miter", "auto") or "auto"),
+                smoothing_angle_degrees=float(payload.get("smoothing_angle_degrees", 180.0) or 0.0),
+                uv_mode=str(payload.get("uv_mode", "preserve") or "preserve"),
+                clamp_overlap=bool(payload.get("clamp_overlap", True)),
+            )
+            self._show_live_imported_surface(updated, room_resref, mesh_role)
+        except ValueError as exc:
+            self.statusBar().showMessage(f"Bevel preview: {exc}", 2500)
+
+    def _cancel_map_studio_component_preview(self) -> None:
+        self.viewport_panel.clear_component_mesh_preview()
+        self._map_studio_topology_preview_source = None
+
+    def _commit_map_studio_component_bevel(self, payload: dict) -> None:
+        ok, message = self.controller.apply_imported_mesh_room_component_op(
+            room_resref=str(payload.get("room_resref", "") or ""),
+            op="edge_bevel",
+            mesh_role=str(payload.get("mesh_role", "") or ""),
+            face_index=int(payload.get("face_index", -1)),
+            edge_corners=tuple(int(value) for value in tuple(payload.get("edge_corners", (0, 1)))[:2]),
+            amount=float(payload.get("amount", 0.25) or 0.25),
+            segments=int(payload.get("segments", 1) or 1),
+            profile=float(payload.get("profile", 0.5) or 0.0),
+            miter=str(payload.get("miter", "auto") or "auto"),
+            smoothing_angle_degrees=float(payload.get("smoothing_angle_degrees", 180.0) or 0.0),
+            uv_mode=str(payload.get("uv_mode", "preserve") or "preserve"),
+            clamp_overlap=bool(payload.get("clamp_overlap", True)),
+        )
+        self.statusBar().showMessage(message, 6000)
+        self._log(f"Map Studio: {message}")
+        if ok:
+            self._refresh_map_studio_imported_mesh_change(
+                message,
+                str(payload.get("room_resref", "") or ""),
+                str(payload.get("mesh_role", "") or ""),
+            )
+        else:
+            self._cancel_map_studio_component_preview()
+
+    def _commit_map_studio_component_extrude(self, payload: dict) -> None:
+        """Land one interactive Ctrl+E extrude (single undo entry).
+
+        Faces: extrude along the region normal, then select the new caps so
+        the user can immediately pull again.  Edges: append the outward quad.
+        """
+
+        kind = str(payload.get("kind", "") or "")
+        room_resref = str(payload.get("room_resref", "") or "")
+        mesh_role = str(payload.get("mesh_role", "") or "")
+        distance = float(payload.get("distance", 0.0) or 0.0)
+        if abs(distance) <= 1.0e-4:
+            self._cancel_map_studio_component_preview()
+            self.statusBar().showMessage("Extrude cancelled (no drag distance).", 3000)
+            return
+        if kind == "face":
+            face_indices = tuple(int(v) for v in tuple(payload.get("face_indices", ()) or ()))
+            if not face_indices:
+                self._cancel_map_studio_component_preview()
+                return
+            preview_source = getattr(self, "_map_studio_topology_preview_source", None)
+            primitive_before = None
+            if preview_source is not None:
+                source_key, source_primitive = preview_source
+                if tuple(source_key[:2]) == (room_resref, mesh_role):
+                    primitive_before = source_primitive
+            if primitive_before is None:
+                room_spec = self.controller.imported_mesh_room(room_resref)
+                primitive_before = getattr(room_spec, "primitive", None)
+            before_count = -1
+            if primitive_before is not None:
+                surface_index = imported_mesh_surface_index_for_role(primitive_before, mesh_role)
+                if surface_index >= 0:
+                    before_count = len(primitive_before.surfaces[surface_index].faces)
+            world_mode = str(payload.get("axis_mode", "normal")) == "world"
+            axis = tuple(float(v) for v in tuple(payload.get("axis", (0.0, 0.0, 1.0)))[:3])
+            ok, message = self.controller.extrude_imported_mesh_room_faces(
+                room_resref=room_resref,
+                mesh_role=mesh_role,
+                face_indices=face_indices,
+                distance=distance,
+                direction=axis if world_mode else None,
+            )
+            self.statusBar().showMessage(message, 6000)
+            self._log(f"Map Studio: {message}")
+            if not ok:
+                self._cancel_map_studio_component_preview()
+                return
+            self._refresh_map_studio_imported_mesh_change(message, room_resref, mesh_role)
+            if before_count >= 0:
+                # extrude rebuilds faces as kept + caps + sides; caps start at
+                # (before - len(region)) in the rebuilt list.
+                cap_start = before_count - len(face_indices)
+                caps = tuple(range(cap_start, cap_start + len(face_indices)))
+                selected = self.viewport_panel.select_map_studio_faces(room_resref, mesh_role, caps)
+                if selected:
+                    self.statusBar().showMessage(
+                        f"{message} New cap selected — Ctrl+E pulls again.", 6000
+                    )
+            return
+        if kind == "edge":
+            axis = tuple(float(v) for v in tuple(payload.get("axis", (0.0, 0.0, 1.0)))[:3])
+            delta = (axis[0] * distance, axis[1] * distance, axis[2] * distance)
+            ok, message = self.controller.apply_imported_mesh_room_component_op(
+                room_resref=room_resref,
+                op="edge_extrude",
+                mesh_role=mesh_role,
+                face_index=int(payload.get("face_index", -1)),
+                edge_corners=tuple(int(v) for v in tuple(payload.get("edge_corners", (0, 1)))[:2]),
+                delta=delta,
+            )
+            self.statusBar().showMessage(message, 6000)
+            self._log(f"Map Studio: {message}")
+            if ok:
+                self._refresh_map_studio_imported_mesh_change(message, room_resref, mesh_role)
+            else:
+                self._cancel_map_studio_component_preview()
+
+    def _gmodeler_amount(
+        self,
+        action_key: str,
+        title: str,
+        label: str,
+        default: float,
+        minimum: float,
+        maximum: float,
+    ) -> tuple[float, bool]:
+        """ZModeler-style amount flow: apply immediately with the remembered
+        per-action amount; hold Ctrl while picking the action to type a value."""
+        amounts = getattr(self, "_gmodeler_last_amounts", None)
+        if amounts is None:
+            amounts = {}
+            self._gmodeler_last_amounts = amounts
+        remembered = float(amounts.get(action_key, default))
+        ctrl_held = bool(QtWidgets.QApplication.keyboardModifiers() & QtCore.Qt.ControlModifier)
+        if not ctrl_held:
+            return remembered, True
+        value, accepted = QtWidgets.QInputDialog.getDouble(
+            self, title, label, remembered, minimum, maximum, 2
+        )
+        if accepted:
+            amounts[action_key] = float(value)
+        return float(value), accepted
+
+    def _apply_gmodeler_imported_face_action(self, action_key: str, target: str) -> bool:
+        """Route Delete / Set Texture on a hovered face to imported-mesh geometry.
+
+        Hovering a read-only stock room converts it to editable imported
+        geometry first (one undoable command each), so any loaded game map
+        can be customized directly.  Returns False when the hover target is
+        not face geometry this path owns (parametric rooms keep their
+        tool-belt routing).
+        """
+
+        context = self.viewport_panel.current_map_studio_hover_context()
+        component_type = str(getattr(context, "component_type", "") or "") if context is not None else ""
+        wanted_component = action_key.split("_", 1)[0]
+        if component_type != wanted_component or component_type not in {"face", "edge", "vertex"}:
+            return False
+        room_resref = str(getattr(context, "room_resref", "") or "").strip().lower()
+        mesh_role = str(getattr(context, "mesh_role", "") or "")
+        face_index = int(getattr(context, "face_index", -1))
+        if not room_resref or face_index < 0:
+            return False
+
+        if mesh_role.startswith("stock_room"):
+            ok, message = self.controller.convert_stock_room_to_imported_mesh(
+                room_resref=room_resref,
+                resource_manager=getattr(self, "resource_manager", None),
+            )
+            self.statusBar().showMessage(message, 6000)
+            self._log(f"Map Studio: {message}")
+            if not ok:
+                return True
+            suffix = mesh_role.rsplit("_", 1)[-1]
+            surface_index = int(suffix) if suffix.isdigit() else 0
+            mesh_role = imported_mesh_surface_role(surface_index)
+        elif self.controller.imported_mesh_room(room_resref) is None:
+            return False
+
+        face_indices: list[int] = [face_index]
+        if target in {"Same Texture Faces", "Material Region", "Room Island"}:
+            room_spec = self.controller.imported_mesh_room(room_resref)
+            if room_spec is not None:
+                surface_index = imported_mesh_surface_index_for_role(room_spec.primitive, mesh_role)
+                if surface_index >= 0:
+                    face_indices = list(range(len(room_spec.primitive.surfaces[surface_index].faces)))
+
+        shift_held = bool(QtWidgets.QApplication.keyboardModifiers() & QtCore.Qt.ShiftModifier)
+        if wanted_component in {"vertex", "edge"} or action_key in {"face_flat", "face_flip", "face_split"}:
+            component_kwargs: dict = {
+                "room_resref": room_resref,
+                "op": action_key,
+                "mesh_role": mesh_role,
+                "face_index": face_index,
+            }
+            if wanted_component == "vertex":
+                component_kwargs["vertex_corner"] = int(getattr(context, "vertex_index", 0))
+            elif wanted_component == "edge":
+                component_kwargs["edge_corners"] = tuple(getattr(context, "edge_indices", (0, 1)))
+            if action_key in {"vertex_move", "edge_move"}:
+                distance, accepted = self._gmodeler_amount(
+                    action_key,
+                    "Move Along Face Normal",
+                    "Distance (meters, negative = inward):",
+                    0.5,
+                    -100.0,
+                    100.0,
+                )
+                if not accepted:
+                    self.statusBar().showMessage("Move cancelled.", 3000)
+                    return True
+                normal = tuple(float(v) for v in tuple(getattr(context, "face_normal", (0.0, 0.0, 1.0)))[:3])
+                component_kwargs["delta"] = (
+                    normal[0] * float(distance),
+                    normal[1] * float(distance),
+                    normal[2] * float(distance),
+                )
+            elif action_key == "vertex_weld":
+                max_distance, accepted = self._gmodeler_amount(
+                    action_key, "Weld Vertex", "Maximum snap distance (meters):", 0.5, 0.01, 25.0
+                )
+                if not accepted:
+                    self.statusBar().showMessage("Weld cancelled.", 3000)
+                    return True
+                component_kwargs["max_distance"] = float(max_distance)
+            elif action_key == "edge_bevel":
+                amount, accepted = self._gmodeler_amount(
+                    action_key,
+                    "Bevel Edge",
+                    "Chamfer width (meters):",
+                    0.25,
+                    0.001,
+                    25.0,
+                )
+                if not accepted:
+                    self.statusBar().showMessage("Bevel cancelled.", 3000)
+                    return True
+                component_kwargs["amount"] = float(amount)
+            elif action_key in {"face_flat", "face_flip"}:
+                component_kwargs["face_indices"] = tuple(face_indices)
+            ok, message = self.controller.apply_imported_mesh_room_component_op(**component_kwargs)
+            self.statusBar().showMessage(message, 6000)
+            self._log(f"Map Studio: {message}")
+            if ok:
+                self._refresh_map_studio_imported_mesh_change(message, room_resref, mesh_role)
+            return True
+        if action_key == "face_delete":
+            ok, message = self.controller.delete_imported_mesh_room_faces(
+                room_resref=room_resref,
+                mesh_role=mesh_role,
+                face_indices=face_indices,
+            )
+        elif action_key == "face_extrude":
+            distance, accepted = self._gmodeler_amount(
+                action_key, "Extrude Faces", "Extrude distance (meters, negative = inward):", 2.0, -100.0, 100.0
+            )
+            if not accepted:
+                self.statusBar().showMessage("Extrude cancelled.", 3000)
+                return True
+            ok, message = self.controller.extrude_imported_mesh_room_faces(
+                room_resref=room_resref,
+                mesh_role=mesh_role,
+                face_indices=face_indices,
+                distance=float(distance),
+                point_normal=shift_held,
+            )
+        elif action_key == "face_inset":
+            inset, accepted = self._gmodeler_amount(
+                action_key, "Inset Faces", "Inset amount (meters):", 0.5, 0.01, 50.0
+            )
+            if not accepted:
+                self.statusBar().showMessage("Inset cancelled.", 3000)
+                return True
+            ok, message = self.controller.inset_imported_mesh_room_faces(
+                room_resref=room_resref,
+                mesh_role=mesh_role,
+                face_indices=face_indices,
+                inset=float(inset),
+            )
+        elif action_key == "face_move":
+            distance, accepted = self._gmodeler_amount(
+                action_key, "Move Faces", "Move along face normal (meters, negative = inward):", 0.5, -100.0, 100.0
+            )
+            if not accepted:
+                self.statusBar().showMessage("Move cancelled.", 3000)
+                return True
+            normal = tuple(float(v) for v in tuple(getattr(context, "face_normal", (0.0, 0.0, 1.0)))[:3])
+            delta = (normal[0] * float(distance), normal[1] * float(distance), normal[2] * float(distance))
+            ok, message = self.controller.move_imported_mesh_room_faces(
+                room_resref=room_resref,
+                mesh_role=mesh_role,
+                face_indices=face_indices,
+                delta=delta,
+            )
+        else:
+            texture = MapStudioTextureBrowserDialog.pick_texture(
+                getattr(self, "resource_manager", None),
+                self,
+                project=self.project,
+                game=str(getattr(self.project, "game", "") or ""),
+            )
+            if not texture:
+                self.statusBar().showMessage("Set Texture cancelled.", 3000)
+                return True
+            ok, message = self.controller.set_imported_mesh_room_face_texture(
+                room_resref=room_resref,
+                mesh_role=mesh_role,
+                face_indices=face_indices,
+                texture=texture,
+            )
+        self.statusBar().showMessage(message, 6000)
+        self._log(f"Map Studio: {message}")
+        if ok:
+            if action_key == "face_set_texture":
+                # Material-region edits may split one surface into several;
+                # that changes render-node ownership and requires the safe
+                # full preview composition path.
+                self._refresh_map_studio_geometry_change(message)
+            else:
+                self._refresh_map_studio_imported_mesh_change(message, room_resref, mesh_role)
+        return True
 
     def _run_map_studio_mode_marking_action(self, mode_key: str) -> None:
         key = str(mode_key or "object").strip().lower()
@@ -2324,7 +4370,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             else:
                 self.select_map_studio_authored_context()
             return
-        label_by_key = {"object": "Object", "vertex": "Vertex", "edge": "Edge", "face": "Face"}
+        label_by_key = {
+            "object": "Object",
+            "edit": "Edit (GModeler)",
+            "terrain": "Terrain",
+            "placement": "Placement",
+            "vertex": "Vertex",
+            "edge": "Edge",
+            "face": "Face",
+        }
         label = label_by_key.get(key, "Object")
         self._set_map_studio_toolbar_edit_mode(label)
         self._handle_map_studio_edit_mode_changed(label)
@@ -2431,9 +4485,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             ("harden_edges", "Harden Edges"),
             ("reverse_normals", "Reverse Normals"),
             ("mirror", "Mirror"),
-            ("separate", "Separate"),
-            ("combine", "Combine"),
-            ("paint_material", "Paint Material"),
+            ("separate", "Separate Shells"),
+            ("combine", "Combine Meshes"),
+            ("texture_paint", "Texture Paint"),
+            ("paint_material", "Assign Material Intent"),
             ("paint_wok", "Paint WOK Surface"),
             ("validate", "Validate Selection"),
         ):
@@ -2465,20 +4520,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._add_map_studio_marking_tool_action(terrain_menu, key, label=label)
         uv_menu = menu.addMenu("UV / Mapping")
         uv_menu.setObjectName("mapStudioToolMarkingUvMappingMenu")
+        self._add_map_studio_marking_tool_action(uv_menu, "texture_paint", label="Texture Paint / Assign Target")
         self._add_map_studio_marking_tool_action(uv_menu, "paint_material", label="Assign Material Intent")
-        self._add_map_studio_planned_marking_action(uv_menu, "uv_project", "UV Project / Planar Map (planned)")
-        self._add_map_studio_planned_marking_action(uv_menu, "box_map", "Box Map (planned)")
-        planned_menu = menu.addMenu("Planned / Missing")
-        planned_menu.setObjectName("mapStudioToolMarkingPlannedMenu")
-        for key, label in (
-            ("append_polygon", "Append Polygon / Draw Face"),
-            ("offset_edge_loop", "Offset Edge Loop"),
-            ("loop_select", "Loop Select"),
-            ("ring_select", "Ring Select"),
-            ("terrain_mask_surface_paint", "Terrain Mask / Surface Paint"),
-            ("flatten_to_selection", "Flatten to Selection / Align to Plane"),
-        ):
-            self._add_map_studio_planned_marking_action(planned_menu, key, label)
+        # Roadmap items live in the audit brief and the GModeler panel's
+        # dimmed actions — a "Planned / Missing" menu is UI noise, not a tool.
         return menu
 
     def _open_map_studio_tool_marking_menu(self, global_pos: QtCore.QPoint) -> None:
@@ -2789,6 +4834,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         opening_marker_tag = str(getattr(getattr(self.builder_tab, "floorPlanOpeningMarkerTagLineEdit", None), "text", lambda: "")()).strip()
         opening_marker_linked_to = str(getattr(getattr(self.builder_tab, "floorPlanOpeningMarkerLinkedToLineEdit", None), "text", lambda: "")()).strip()
         opening_marker_linked_module = str(getattr(getattr(self.builder_tab, "floorPlanOpeningMarkerLinkedModuleLineEdit", None), "text", lambda: "")()).strip()
+        opening_marker_target_type = getattr(self.builder_tab, "floorPlanOpeningMarkerTargetTypeComboBox", None)
         opening_marker_transition = getattr(self.builder_tab, "floorPlanOpeningMarkerTransitionDestSpinBox", None)
         terrain_context_getter = getattr(self.builder_tab, "current_terrain_brush_context", None)
         terrain_context = terrain_context_getter() if callable(terrain_context_getter) else {}
@@ -2917,14 +4963,22 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 float(placement_y.value()) if placement_y is not None else 0.0,
                 float(placement_z.value()) if placement_z is not None else 0.0,
             ),
-            placement_bearing=float(placement_bearing.value()) if placement_bearing is not None else 0.0,
+            placement_bearing=(
+                math.radians(float(placement_bearing.value()))
+                if placement_bearing is not None
+                else 0.0
+            ),
             entry_area_resref=entry_area,
             entry_position=(
                 float(entry_x.value()) if entry_x is not None else 0.0,
                 float(entry_y.value()) if entry_y is not None else 0.0,
                 float(entry_z.value()) if entry_z is not None else 0.0,
             ),
-            entry_facing=float(entry_facing.value()) if entry_facing is not None else 0.0,
+            entry_facing=(
+                math.radians(float(entry_facing.value()))
+                if entry_facing is not None
+                else 0.0
+            ),
             light_room_resref=light_room,
             light_name=light_name,
             light_position=(
@@ -2973,6 +5027,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             opening_marker_tag=opening_marker_tag,
             opening_marker_linked_to=opening_marker_linked_to,
             opening_marker_linked_to_module=opening_marker_linked_module,
+            opening_marker_linked_to_flags=(
+                int(opening_marker_target_type.currentData() or 0)
+                if opening_marker_target_type is not None and opening_marker_linked_to
+                else 0
+            ),
             opening_marker_transition_destination=int(opening_marker_transition.value()) if opening_marker_transition is not None else 0,
             point_index=int(source_point.value()) if source_point is not None else None,
             point_indices=selected_points,
@@ -3092,6 +5151,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def _execute_map_studio_tool_belt_command(self, action_key: str) -> bool:
         """Execute a tool-belt action when the core dispatcher has a command."""
 
+        if action_key == "texture_paint":
+            self._show_map_studio_texture_paint_workflow()
+            return True
         if action_key in {"stage_module", "install_module"}:
             values = self._open_map_studio_package_wizard(
                 mode="install" if action_key == "install_module" else "stage",
@@ -3250,7 +5312,81 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     str(getattr(selected, "room_resref", "") or ""),
                     str(getattr(selected, "primitive_name", "") or ""),
                 )
-        self._refresh_all(status_message)
+        command_method = str(getattr(route, "command_method", "") or "")
+        geometry_commands = {
+            "move_authored_room_primitive",
+            "add_authored_room_primitive",
+            "apply_authored_terrain_brush_stroke",
+            "center_authored_room_primitive_pivot",
+            "freeze_authored_room_primitive_transform",
+            "grid_snap_authored_room_primitive",
+            "shrink_wrap_authored_room_primitive_to_terrain",
+            "set_authored_room_primitive_style",
+            "set_authored_room_walkmesh_surface",
+            "apply_authored_room_style",
+            "set_authored_floor_plan_wall_opening",
+            "snap_authored_floor_plan_vertex",
+            "grid_snap_authored_floor_plan_vertices",
+            "weld_authored_floor_plan_vertices",
+            "flatten_authored_floor_plan_vertices",
+            "transform_snap_authored_room_primitive_level",
+            "transform_snap_authored_floor_plan_vertices",
+            "cleanup_authored_floor_plan_vertices",
+            "mirror_authored_room_primitive_transform",
+            "mirror_z_authored_terrain_heightfield",
+            "bend_authored_terrain_heightfield",
+            "lattice_authored_terrain_heightfield",
+            "add_authored_curve_guide",
+            "mirror_authored_floor_plan_vertices",
+            "cleanup_authored_floor_plan_normals",
+            "set_authored_room_edge_normal_policy",
+            "edge_extrude_authored_floor_plan_room",
+            "bevel_authored_floor_plan_room",
+            "inset_authored_floor_plan_room",
+            "rectangular_cut_authored_floor_plan_room",
+            "axis_split_authored_floor_plan_room",
+            "boolean_difference_authored_floor_plan_rooms",
+            "triangulate_authored_floor_plan_face",
+            "fill_authored_floor_plan_face",
+            "bridge_authored_floor_plan_edges",
+            "combine_authored_room_primitives",
+            "merge_authored_floor_plan_rooms",
+            "separate_authored_room_primitive_shells",
+            "duplicate_authored_room_primitive",
+            "remove_authored_room_primitive",
+            "snap_authored_room_primitive_pivot_to_vertex",
+        }
+        no_rebuild_commands = {
+            "set_map_studio_active_selection",
+            "authored_terrain_status",
+            "authored_walkmesh_status",
+            "map_studio_universal_transform_overlay",
+        }
+        if command_method in geometry_commands:
+            selection = (select_primitive_after_refresh,) if select_primitive_after_refresh is not None else ()
+            changes_room_set = command_method in {
+                "boolean_difference_authored_floor_plan_rooms",
+                "bridge_authored_floor_plan_edges",
+                "merge_authored_floor_plan_rooms",
+            }
+            refresh_room_choices = changes_room_set or command_method == "set_authored_floor_plan_wall_opening"
+            self._refresh_map_studio_geometry_change(
+                status_message,
+                primitive_selection=selection,
+                refresh_outlines=True,
+                refresh_terrain=(
+                    "terrain" in command_method
+                    or "walkmesh" in command_method
+                    or command_method == "apply_authored_room_style"
+                ),
+                refresh_room_choices=refresh_room_choices,
+                refresh_connections=("floor_plan" in command_method or changes_room_set),
+            )
+        elif command_method in no_rebuild_commands:
+            self._update_map_studio_undo_redo_actions()
+            self._log(status_message)
+        else:
+            self._refresh_all(status_message)
         if select_primitive_after_refresh is not None:
             self._select_map_studio_room_primitive(*select_primitive_after_refresh)
         self.workflow_panel.set_active_authoring_context(
@@ -3500,7 +5636,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if marker_room is not None:
             marker_room.setFocus()
         self.workflow_panel.set_active_authoring_context(
-            "Opening marker: create a KOTOR door, trigger, or waypoint from an authored wall opening and set LinkedTo/TransitionDestin."
+            "Opening marker: create a door/trigger transition source or waypoint destination. Set Linked To, target type, and module on sources."
         )
         self._log(
             "Map Studio opening transition marker controls focused. Choose an authored opening, marker kind, template/tag, and transition destination."
@@ -3572,10 +5708,66 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.select_item(target)
         self._log(f"Selected export blocker target {target}.")
 
+    def _retarget_map_studio_export_game(self, target_game: str) -> None:
+        """Run the project port transaction from the Export workspace."""
+
+        target = str(target_game or "").strip().upper()
+        source = str(getattr(self.project, "game", "K1") or "K1").strip().upper()
+        original_source = str(getattr(self.project, "source_game", source) or source).strip().upper()
+        if target not in {"K1", "K2"}:
+            self.export_panel.set_target_game(source, source_game=original_source)
+            return
+        if target == source:
+            self.export_panel.set_target_game(target, source_game=original_source)
+            return
+        report = self.controller.record_port(source, target)
+        if not bool(getattr(report, "ok", False)):
+            self.export_panel.set_target_game(source, source_game=original_source)
+            message = str(getattr(report, "message", "") or f"Could not retarget the authored KMAP to {target}.")
+            QtWidgets.QMessageBox.warning(self, "Change KOTOR Target Game", message)
+            self._log(message)
+            return
+        self._reset_map_studio_texture_paint_session()
+        message = str(getattr(report, "message", "") or f"Retargeted the authored KMAP to {target}.")
+        risks = tuple(str(item) for item in tuple(getattr(report, "unsupported", ()) or ()) if str(item).strip())
+        self._refresh_all(message)
+        self.statusBar().showMessage(message, 9000)
+        for risk in risks:
+            self._log(f"Target-game dependency risk: {risk}")
+
+    def _show_map_studio_texture_paint_workflow(self) -> None:
+        """Focus the paint workflow without treating it as a geometry command."""
+
+        self.workflow_tabs.setCurrentWidget(self.texture_paint_tab)
+        self.texture_paint_tab.set_project(self.project)
+        self._set_map_studio_toolbar_edit_mode("Texture Paint")
+        self.viewport_panel.set_map_studio_hover_probe(True, "object")
+        self.texture_paint_tab.set_status(
+            "Choose/import a unique project texture, hover a visible face, assign it, then start painting."
+        )
+
     def _handle_map_studio_tool_belt_action(self, action: Any) -> None:
         key = str(getattr(action, "key", "") or "")
         workspace_key = str(getattr(action, "workspace_key", "") or "")
         tool_key = str(getattr(action, "tool_key", "") or "")
+        if key == "texture_paint":
+            self._show_map_studio_texture_paint_workflow()
+            return
+        if key == "combine" and self._combine_selected_authored_room_primitives():
+            return
+        if key == "separate" and self._separate_selected_authored_room_primitive():
+            return
+        if key == "plane" and str(self.map_studio_workspace_combo.currentData() or "") == "terrain":
+            # In Terrain, Plane means a subdivided sculptable heightfield,
+            # not the four-vertex platform used by Geometry blockout.
+            self._create_and_focus_map_studio_terrain_patch()
+            self.statusBar().showMessage(
+                "Created a sculptable terrain plane. Drag in the viewport, then Generate Walkmesh.", 6000
+            )
+            return
+        if key == "terrain_patch":
+            self._create_and_focus_map_studio_terrain_patch()
+            return
         route_context = self._map_studio_tool_action_context(key)
         route = resolve_map_studio_tool_belt_action(key, route_context)
         direct_command_actions = {
@@ -3777,25 +5969,22 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             if key == "combine":
                 tool = getattr(self.builder_tab, "floorPlanUnionFirstRoomComboBox", None)
                 self.workflow_panel.set_active_authoring_context(
-                    "Combine: merge compatible rectangular floor-plan rooms into one explicit "
-                    "export boundary. Select two rooms, set a result resref, then Apply Union."
+                    "Combine Meshes: select at least two authored objects in one room. Their transforms are baked into "
+                    "one polygon object while materials, UVs, normals, provenance, and disconnected shells remain intact."
                 )
                 self._log(
-                    "Map Studio Combine focused. Current implementation unions compatible "
-                    "rectangular floor-plan rooms; arbitrary mesh-object combine remains a later "
-                    "mesh-editing slice."
+                    "Map Studio Combine Meshes is active. For rectangular room-footprint union, use the Floor Plan Union controls."
                 )
                 if tool is not None:
                     tool.setFocus()
             if key == "separate":
-                tool = getattr(self.builder_tab, "roomPrimitiveSeparateResultLineEdit", None)
+                tool = getattr(self.builder_tab, "roomPrimitiveTransformComboBox", None)
                 self.workflow_panel.set_active_authoring_context(
-                    "Separate: split a selected authored composition primitive into its own "
-                    "exportable room/object boundary for UV and texturing handoff."
+                    "Separate Shells: select one Combined Mesh. Every disconnected polygon shell becomes an independently "
+                    "selectable object in the same KOTOR room. Use Extract to Export Room only when you need a new room boundary."
                 )
                 self._log(
-                    "Map Studio Separate focused. Choose a primitive, optionally set a result "
-                    "resref, then Separate to create a distinct export boundary."
+                    "Map Studio Separate Shells is active; this is polygon separation, not room extraction."
                 )
                 if tool is not None:
                     tool.setFocus()
@@ -3830,6 +6019,35 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.workflow_panel.set_active_authoring_context("Builder: room, terrain, placement, lighting, and script authoring")
         self._log("Map Studio Builder focused.")
 
+    def _open_map_studio_mode_from_viewport(self, mode_label: str) -> None:
+        """Route the Map Studio viewport's mode belt into the owning workspace."""
+
+        label = str(mode_label or "Object").strip() or "Object"
+        self._set_map_studio_toolbar_edit_mode(label)
+        self._handle_map_studio_edit_mode_changed(label)
+
+    def _run_map_studio_viewport_modeling_command(self, action_key: str) -> None:
+        """Route the Map Studio-only viewport belt into the real tool dispatcher."""
+
+        key = str(action_key or "").strip()
+        if key == "select":
+            if not self.select_map_studio_authored_context():
+                self._open_map_studio_mode_from_viewport("Object")
+            return
+        if key == "move":
+            if not self.move_map_studio_authored_primitive_selection():
+                self._open_map_studio_mode_from_viewport("Object")
+            return
+        if key == "duplicate_selected":
+            if not self._execute_map_studio_tool_belt_command(key):
+                self.duplicate_selected()
+            return
+        if key == "delete_selected":
+            if not self._execute_map_studio_tool_belt_command(key):
+                self.delete_selected()
+            return
+        self._execute_map_studio_tool_belt_command(key)
+
     def focus_map_studio_modeling_workspace(self) -> None:
         """Open the Map Studio modeling controls from the main viewport affordance."""
 
@@ -3845,6 +6063,30 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             5000,
         )
         self._log("Map Studio Modeling workspace focused from the main viewport toolbar.")
+
+    def focus_map_studio_tutorial_workspace(self, route: str) -> None:
+        """Focus a stable Map Studio workflow requested by the tutorial window."""
+
+        key = str(route or "map_studio").strip().lower()
+        if key == "gmodeler":
+            self.show_map_studio_geometry_tools()
+            self._set_map_studio_toolbar_edit_mode("Edit (GModeler)")
+            self._handle_map_studio_edit_mode_changed("Edit (GModeler)")
+        elif key == "terrain":
+            self._set_map_studio_toolbar_edit_mode("Terrain")
+            self._handle_map_studio_edit_mode_changed("Terrain")
+        elif key == "texture_paint":
+            self._show_map_studio_texture_paint_workflow()
+            self._handle_map_studio_edit_mode_changed("Texture Paint")
+        elif key == "game_proof":
+            self._focus_map_studio_export_proof_workspace()
+            self._set_map_studio_toolbar_edit_mode("Export")
+        else:
+            self.focus_map_studio_modeling_workspace()
+        self.statusBar().showMessage(
+            f"Tutorial workspace ready: {key.replace('_', ' ').title()}.",
+            5000,
+        )
 
     def _focus_map_studio_edit_mode_workspace(self, label: str) -> None:
         """Route the toolbar edit mode to the closest usable Map Studio workspace."""
@@ -3880,6 +6122,14 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             if tool is not None:
                 tool.setFocus()
             return
+        if mode_key == "texture paint":
+            self.workflow_tabs.setCurrentWidget(self.texture_paint_tab)
+            self.texture_paint_tab.set_project(self.project)
+            if self.texture_paint_tab.selected_texture_id():
+                self.texture_paint_tab.paint_button.setChecked(True)
+            else:
+                self.texture_paint_tab.set_status("Import a project texture to begin Texture Paint mode.")
+            return
         if mode_key == "walkmesh":
             self._select_map_studio_component_mode("walkmesh")
             self._select_map_studio_modeling_tool("paint_wok")
@@ -3901,11 +6151,26 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         """Reflect the toolbar edit mode in the Map Studio workflow/readiness panel."""
 
         label = str(mode or "Object").strip() or "Object"
+        if label != "Texture Paint" and self.texture_paint_tab.paint_button.isChecked():
+            self.texture_paint_tab.stop_painting()
         self._sync_map_studio_tool_belt_preset_for_edit_mode(label)
         self._focus_map_studio_edit_mode_workspace(label)
         self._sync_map_studio_edit_mode_context(label)
+        hover_modes = {
+            "Object": "object",
+            "Edit (GModeler)": "",
+            "Texture Paint": "object",
+            "Vertex": "vertex",
+            "Edge": "edge",
+            "Face": "face",
+            "Walkmesh": "walkmesh",
+            "Terrain": "terrain",
+        }
+        self.viewport_panel.set_map_studio_hover_probe(label in hover_modes, hover_modes.get(label, ""))
         descriptions = {
             "Object": "select, move, duplicate, and organize rooms, placements, lights, and module objects",
+            "Edit (GModeler)": "GModeler edit mode: hover any face, edge, or vertex and use RMB tools (no component switching)",
+            "Texture Paint": "paint a unique project texture on the nearest visible face through diffuse UV0",
             "Vertex": "edit room and walkmesh vertices with snap, weld, flatten, mirror, and cleanup tools",
             "Edge": "edit seams, door or corridor borders, bridge edges, bevels, and rectangular cuts",
             "Face": "edit room faces, material intent, WOK surface intent, triangulation, and cleanup",
@@ -3931,6 +6196,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "Geometry: primitive rooms, extrusion, bevel/inset, rectangular cuts, boolean union, and modular room pieces"
         )
         self._log("Map Studio geometry tools focused. Use Builder to create rooms, edit primitives, apply bevels/cuts, and compose modular pieces.")
+
+    def _reset_map_studio_workflow_scroll(self, _index: int = -1) -> None:
+        """Show the top of each workflow instead of inheriting another tab's deep scroll."""
+
+        scroll = getattr(self, "workflow_tabs_scroll", None)
+        if scroll is None:
+            return
+        for bar in (scroll.horizontalScrollBar(), scroll.verticalScrollBar()):
+            QtCore.QTimer.singleShot(0, lambda target=bar: target.setValue(target.minimum()))
 
     def show_map_studio_walkmesh_tools(self) -> None:
         """Focus the existing Walkmesh tab inside the Map Studio Level Editor."""
@@ -3966,16 +6240,16 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._log("Map Studio lighting tools focused. Add authored room lights before staging lightmap-ready test builds.")
 
     def show_map_studio_placement_tools(self) -> None:
-        """Focus Builder's authored gameplay placement controls."""
+        """Focus the direct-placement workspace."""
 
         self._set_map_studio_workspace_combo_key("placements")
-        self.workflow_tabs.setCurrentWidget(self.builder_tab)
-        search = getattr(self.builder_tab, "gameplayPaletteSearchLineEdit", None)
-        if search is not None:
-            search.setFocus()
-            search.selectAll()
-        self.workflow_panel.set_active_authoring_context("Placement: choose a KOTOR resource template and place it in the module")
-        self._log("Map Studio placement tools focused. Search the game-library palette or type a template resref.")
+        self.workflow_tabs.setCurrentWidget(self.placement_tab)
+        self.placement_tab.search_edit.setFocus()
+        self.placement_tab.search_edit.selectAll()
+        self.workflow_panel.set_active_authoring_context(
+            "Placement: choose a KOTOR asset, arm Place in Viewport, click the level, then use W/E to adjust."
+        )
+        self._log("Map Studio placement workspace focused. Choose an asset, click Place in Viewport, then click the level.")
 
     def show_map_studio_script_tools(self) -> None:
         """Focus Builder's authored module/area script-hook controls."""
@@ -4113,10 +6387,20 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.create_authored_room_preset(preset_id, module_root)
 
     def build_module_files(self) -> None:
+        if self._map_studio_pie_session is not None:
+            self._stop_map_studio_pie()
         path = QtWidgets.QFileDialog.getExistingDirectory(self, "Select output folder", self._last_output_dir or "")
         if not path:
             return
-        result = self.controller.generate_module_files(path)
+        try:
+            result = self.controller.generate_module_files(path)
+        except Exception as exc:
+            message = f"Module build blocked: {exc}"
+            self.texture_paint_tab.set_status(message)
+            self.statusBar().showMessage(message, 8000)
+            self._log(message)
+            QtWidgets.QMessageBox.warning(self, "Build Module", message)
+            return
         self._last_output_dir = str(getattr(result, "output_dir", "") or path)
         self._log(result.message)
         if getattr(result, "module_path", ""):
@@ -4136,7 +6420,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         path = QtWidgets.QFileDialog.getExistingDirectory(self, "Stage grdev01 dev test module", self._last_output_dir or "")
         if not path:
             return
-        result = self.controller.stage_dev_test_module(path, dry_run=dry_run)
+        try:
+            result = self.controller.stage_dev_test_module(path, dry_run=dry_run)
+        except Exception as exc:
+            message = f"Dev-test staging blocked: {exc}"
+            self.texture_paint_tab.set_status(message)
+            self.statusBar().showMessage(message, 8000)
+            self._log(message)
+            QtWidgets.QMessageBox.warning(self, "Stage Dev Test Module", message)
+            return
         self._last_output_dir = path
         self._log(result.message)
         export_result = result.export_result
@@ -4166,6 +6458,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         path = str(values.get("output_dir") or "")
         try:
+            self._sync_placeable_library_resources_for_export()
+            self._sync_authored_creature_behavior_resources_for_export()
             result = self.controller.export_authored_module(path, dry_run=bool(values.get("dry_run")))
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Export Authored Module", str(exc))
@@ -4190,6 +6484,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         path = str(values.get("output_dir") or "")
         try:
+            self._sync_placeable_library_resources_for_export()
+            self._sync_authored_creature_behavior_resources_for_export()
             result = self.controller.stage_authored_module(path, dry_run=bool(values.get("dry_run")))
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Stage Authored Module", str(exc))
@@ -4232,6 +6528,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         modules_path = str(values.get("game_modules_dir") or "")
         overwrite = bool(values.get("overwrite"))
         try:
+            self._sync_placeable_library_resources_for_export()
+            self._sync_authored_creature_behavior_resources_for_export()
             result = self.controller.stage_authored_module(
                 path,
                 dry_run=bool(values.get("dry_run")),
@@ -4390,7 +6688,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Applied room operation {operation}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(
+            message,
+            refresh_outlines=True,
+            refresh_terrain=True,
+            refresh_room_choices=True,
+            refresh_connections=True,
+        )
 
     def apply_authored_floor_plan_extrusion(
         self,
@@ -4415,7 +6719,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Updated floor-plan extrusion for {room_resref}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(message, refresh_outlines=True)
 
     def set_authored_floor_plan_wall_opening(
         self,
@@ -4446,7 +6750,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Updated wall opening {opening_label} in {room_resref}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(message, refresh_outlines=True)
 
     def create_authored_opening_transition_marker(
         self,
@@ -4457,6 +6761,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         tag: str,
         linked_to: str,
         linked_to_module: str,
+        linked_to_flags: int,
         transition_destination: int,
     ) -> None:
         try:
@@ -4469,6 +6774,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 tag=tag,
                 linked_to=linked_to,
                 linked_to_module=linked_to_module,
+                linked_to_flags=linked_to_flags,
                 transition_destination=transition_destination,
             )
         except Exception as exc:
@@ -4507,7 +6813,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         )
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(
+            message,
+            refresh_outlines=True,
+            refresh_room_choices=True,
+            refresh_connections=True,
+        )
 
     def snap_authored_floor_plan_vertex(
         self,
@@ -4534,7 +6845,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         )
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(message, refresh_outlines=True, refresh_connections=True)
 
     def preview_authored_floor_plan_vertex_snap_candidates(self, room_resref: str, point_index: int) -> None:
         """Show nearest non-mutating floor-plan vertex snap candidates."""
@@ -4577,7 +6888,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Welded floor-plan vertices in {room_resref}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(message, refresh_outlines=True, refresh_connections=True)
 
     def flatten_authored_floor_plan_vertices(
         self,
@@ -4601,7 +6912,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Flattened floor-plan vertices in {room_resref} on {axis}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(message, refresh_outlines=True, refresh_connections=True)
 
     def cleanup_authored_floor_plan_vertices(
         self,
@@ -4620,7 +6931,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Cleaned redundant floor-plan vertices in {room_resref}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(message, refresh_outlines=True, refresh_connections=True)
 
     def mirror_authored_floor_plan_vertices(
         self,
@@ -4639,7 +6950,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Mirrored floor-plan footprint in {room_resref} across local {axis}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(message, refresh_outlines=True, refresh_connections=True)
 
     def fill_authored_floor_plan_face(
         self,
@@ -4658,7 +6969,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Filled floor-plan face loop in {room_resref}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(message, refresh_outlines=True, refresh_connections=True)
 
     def split_authored_floor_plan_face(
         self,
@@ -4677,7 +6988,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Split floor-plan face in {room_resref}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(message, refresh_outlines=True, refresh_connections=True)
 
     def triangulate_authored_floor_plan_face(
         self,
@@ -4694,7 +7005,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Triangulated floor-plan face in {room_resref}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(message, refresh_outlines=True, refresh_connections=True)
 
     def cleanup_authored_floor_plan_normals(
         self,
@@ -4712,7 +7023,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Cleaned floor-plan normals in {room_resref}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(message, refresh_outlines=True, refresh_connections=True)
 
     def apply_authored_terrain_operation(
         self,
@@ -4745,7 +7056,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Applied terrain operation {operation} to {room_resref}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(
+            message,
+            refresh_outlines=True,
+            refresh_terrain=True,
+        )
 
     def preview_map_studio_terrain_sculpt_frame(
         self,
@@ -4760,6 +7075,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         strength: float,
     ) -> None:
         try:
+            context_getter = getattr(self.builder_tab, "current_terrain_brush_context", None)
+            brush_context = context_getter() if callable(context_getter) else {}
+            if not isinstance(brush_context, dict):
+                brush_context = {}
             performance_policy = self.controller.map_studio_viewport_performance_policy()
             frame = self.controller.prepare_map_studio_terrain_sculpt_frame(
                 room_resref=room_resref,
@@ -4770,6 +7089,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 height=height,
                 iterations=iterations,
                 strength=strength,
+                falloff_hardness=float(brush_context.get("hardness", 0.5) or 0.5),
                 budget_ms=float(getattr(performance_policy, "terrain_brush_budget_ms", 4.0) or 4.0),
             )
         except Exception as exc:
@@ -4786,6 +7106,38 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if label is not None:
             label.setText(status)
         self._log(status)
+
+    def _create_and_focus_map_studio_terrain_patch(self) -> None:
+        """Create a terrain patch and drop straight into terrain painting."""
+
+        try:
+            resref = self.controller.create_terrain_patch()
+        except Exception as exc:
+            self.statusBar().showMessage(f"Terrain patch could not be created: {exc}", 6000)
+            self._log(f"Map Studio terrain patch failed: {exc}")
+            return
+        self._refresh_map_studio_geometry_change(
+            f"Created terrain patch {resref}.",
+            refresh_outlines=True,
+            refresh_terrain=True,
+            refresh_room_choices=True,
+            refresh_connections=True,
+        )
+        self.show_map_studio_terrain_tools()
+        combo = getattr(self.builder_tab, "terrainRoomComboBox", None)
+        if combo is not None:
+            index = combo.findData(resref)
+            if index < 0:
+                index = combo.findText(resref, QtCore.Qt.MatchContains)
+            if index >= 0:
+                combo.setCurrentIndex(index)
+        self._select_map_studio_terrain_brush("raise")
+        self._sync_map_studio_terrain_brush_context(force_enabled=True)
+        self.toolbar.selection_mode.setCurrentText("Terrain")
+        self.statusBar().showMessage(
+            f"Terrain patch {resref} ready — drag in the viewport to paint. Pick a brush (raise/lower/smooth/flatten).",
+            8000,
+        )
 
     def _sync_map_studio_terrain_brush_context(self, *, force_enabled: bool | None = None) -> None:
         """Keep the viewport terrain brush state aligned with Builder controls."""
@@ -4813,15 +7165,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         """Apply viewport Alt+right-drag brush option edits to the visible Builder controls."""
 
         radius_spin = getattr(self.builder_tab, "terrainRadiusSpinBox", None)
-        strength_spin = getattr(self.builder_tab, "terrainSmoothStrengthSpinBox", None)
+        hardness_spin = getattr(self.builder_tab, "terrainHardnessSpinBox", None)
         if radius_spin is not None:
             blocked = radius_spin.blockSignals(True)
             radius_spin.setValue(max(radius_spin.minimum(), min(radius_spin.maximum(), int(radius))))
             radius_spin.blockSignals(blocked)
-        if strength_spin is not None:
-            blocked = strength_spin.blockSignals(True)
-            strength_spin.setValue(max(strength_spin.minimum(), min(strength_spin.maximum(), float(hardness))))
-            strength_spin.blockSignals(blocked)
+        if hardness_spin is not None:
+            blocked = hardness_spin.blockSignals(True)
+            hardness_spin.setValue(max(hardness_spin.minimum(), min(hardness_spin.maximum(), float(hardness))))
+            hardness_spin.blockSignals(blocked)
         label = getattr(self.builder_tab, "terrainBrushStatusLabel", None)
         if label is not None:
             label.setText(f"Brush options: size {int(radius)}, hardness {float(hardness):.2f}.")
@@ -4845,6 +7197,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 height=float(context.get("height", 0.0) or 0.0),
                 iterations=int(context.get("iterations", 1) or 1),
                 strength=float(context.get("strength", 0.5) or 0.5),
+                falloff_hardness=float(context.get("hardness", 0.5) or 0.5),
                 budget_ms=float(getattr(performance_policy, "terrain_brush_budget_ms", 4.0) or 4.0),
             )
         except Exception as exc:
@@ -4855,14 +7208,17 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._log(status)
             return
         if result.applied:
-            overlay = self.controller.authored_terrain_walkability_overlay()
-            overlay_setter = getattr(self.viewport_panel, "set_terrain_walkability_overlay", None)
-            if callable(overlay_setter):
-                overlay_setter(overlay)
+            self.viewport_panel.apply_terrain_height_patch(
+                room_resref,
+                result.dirty_region_with_halo,
+                result.dirty_height_patch,
+                row_count=int(result.row_count),
+                column_count=int(result.column_count),
+            )
         frame = result.frame
         status = (
-            f"Live terrain brush: {frame.performance.estimated_apply_ms:.3f} ms, "
-            f"{frame.performance.affected_sample_count} dirty sample(s); full rebuild deferred."
+            f"Live terrain brush: {float(result.elapsed_ms):.3f} ms actual, "
+            f"{frame.performance.affected_sample_count} dirty sample(s); KMAP encode and full walkability rebuild deferred."
         )
         if not result.applied:
             status = result.message
@@ -4871,17 +7227,37 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             label.setText(status)
 
     def commit_map_studio_viewport_terrain_brush_stroke(self, brush: str, room_resref: str) -> None:
-        """Refresh Map Studio once after a live terrain brush stroke is released."""
+        """Commit a live terrain stroke without replacing its resident mesh."""
 
+        started = perf_counter()
         try:
-            self.controller.commit_map_studio_terrain_sculpt_stroke(brush=brush, room_resref=room_resref)
+            commit = self.controller.commit_map_studio_terrain_sculpt_stroke(
+                brush=brush,
+                room_resref=room_resref,
+            )
         except Exception as exc:
             self._log(f"Terrain brush commit failed: {exc}")
+            return
+        if commit is None:
+            return
         message = (
-            f"Committed terrain brush {brush} on {room_resref}; refreshed terrain walkability, readiness, and export state."
+            f"Committed terrain brush {brush} on {room_resref}; validating WOK/readiness in the background."
         )
-        self._refresh_all(message)
+        # The terrain node already contains the final dirty height/normal
+        # patch.  Rebuilding the combined preview here evicts resident meshes
+        # and textures, while synchronously rebuilding this overlay serializes
+        # the complete WOK.  Hide the now-stale validation overlay and let the
+        # existing validation worker replace it with a fresh perimeter-aware
+        # result after the viewport has painted.
+        self.viewport_panel.set_terrain_walkability_overlay(None)
+        self._refresh_map_studio_geometry_change(
+            message,
+            rebuild_viewport_model=False,
+            refresh_scene_tree=False,
+            validation_delay_ms=250,
+        )
         self._sync_map_studio_terrain_brush_context()
+        self._last_map_studio_terrain_release_ms = (perf_counter() - started) * 1000.0
 
     def merge_authored_floor_plan_rooms(self, first_room_resref: str, second_room_resref: str, result_room_resref: str) -> None:
         try:
@@ -4898,7 +7274,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Merged floor-plan rooms {first_room_resref} and {second_room_resref} into {label}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(
+            message,
+            refresh_outlines=True,
+            refresh_terrain=True,
+            refresh_room_choices=True,
+            refresh_connections=True,
+        )
 
     def add_authored_room_primitive(self, primitive_kind: str, primitive_name: str) -> None:
         try:
@@ -4914,7 +7296,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Added room primitive {label}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(message, refresh_outlines=True)
 
     def apply_authored_room_primitive_transform(
         self,
@@ -4947,7 +7329,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Transformed room primitive {primitive_name}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(
+            message,
+            primitive_selection=((room_resref, primitive_name),),
+            refresh_outlines=True,
+        )
 
     def apply_authored_room_primitive_dimensions(self, room_resref: str, primitive_name: str, dimensions: object) -> None:
         try:
@@ -4963,7 +7349,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Edited room primitive dimensions for {primitive_name}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(
+            message,
+            primitive_selection=((room_resref, primitive_name),),
+            refresh_outlines=True,
+        )
 
     def apply_authored_room_primitive_style(self, room_resref: str, primitive_name: str, texture: str, surface_id: str) -> None:
         try:
@@ -4980,7 +7370,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Styled room primitive {primitive_name}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(
+            message,
+            primitive_selection=((room_resref, primitive_name),),
+        )
 
     def remove_authored_room_primitive(self, room_resref: str, primitive_name: str) -> None:
         try:
@@ -4995,9 +7388,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Removed room primitive {primitive_name}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(message, refresh_outlines=True)
 
     def separate_authored_room_primitive(self, room_resref: str, primitive_name: str, result_room_resref: str) -> None:
+        """Legacy room-boundary workflow, now labeled honestly as Extract."""
+
         try:
             result = self.controller.separate_authored_room_primitive(
                 room_resref=room_resref,
@@ -5005,13 +7400,19 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 result_room_resref=result_room_resref,
             )
         except Exception as exc:
-            QtWidgets.QMessageBox.warning(self, "Separate Room Primitive", str(exc))
+            QtWidgets.QMessageBox.warning(self, "Extract Primitive to Export Room", str(exc))
             return
         readiness = result.readiness
-        message = f"Separated room primitive {primitive_name}; previous exports/proofs are now stale."
+        message = f"Extracted room primitive {primitive_name} to its own KOTOR export room; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(
+            message,
+            refresh_outlines=True,
+            refresh_terrain=True,
+            refresh_room_choices=True,
+            refresh_connections=True,
+        )
 
     def apply_authored_room_style(self, texture: str, floor_surface: str) -> None:
         try:
@@ -5023,7 +7424,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = "Applied room material and walkmesh surface; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(message)
 
     def apply_authored_walkmesh_surface(self, room_resref: str, floor_surface: str) -> None:
         try:
@@ -5035,7 +7436,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Applied WOK surface {floor_surface} to room {room_resref}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(message, refresh_terrain=True)
 
     def add_authored_room_light(
         self,
@@ -5087,6 +7488,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 tag=tag,
                 position=(x, y, z),
                 bearing=bearing,
+                snap_to_walkmesh=(
+                    self.workflow_tabs.currentWidget() is self.placement_tab
+                    and bool(self.placement_tab.snap_wok_box.isChecked())
+                ),
             )
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Add Gameplay Placement", str(exc))
@@ -5095,7 +7500,185 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Added authored {kind} placement; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_all(message)
+        self._refresh_map_studio_geometry_change(
+            message,
+            refresh_outlines=True,
+            refresh_room_choices=True,
+            refresh_connections=True,
+        )
+        matching = [
+            row
+            for row in self.controller.authored_gameplay_placements()
+            if str(getattr(row, "kind", "") or "") == str(kind)
+        ]
+        placement_id = str(getattr(matching[-1], "placement_id", "") or "") if matching else ""
+        if placement_id:
+            self.select_item(placement_id)
+
+    def _set_map_studio_placement_mode(self, context: object) -> None:
+        values = dict(context) if isinstance(context, dict) else {"enabled": False}
+        source_game = str(values.get("game") or "").strip().upper()
+        target_game = str(getattr(self.project, "game", "") or "").strip().upper()
+        if bool(values.get("enabled", False)) and source_game and target_game and source_game != target_game:
+            values["enabled"] = False
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Wrong Game Resource",
+                f"{source_game} content cannot be placed in a {target_game} map. Choose a {target_game} template.",
+            )
+        self.viewport_panel.set_placement_tool_context(values)
+        if bool(values.get("enabled", False)):
+            self.workflow_panel.set_active_authoring_context(
+                "Placement armed: click a visible level surface; Esc exits. WOK snapping keeps gameplay anchors on valid floor."
+            )
+
+    def _place_authored_gameplay_from_viewport(self, payload: object) -> None:
+        values = dict(payload) if isinstance(payload, dict) else {}
+        position = tuple(values.get("position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
+        if len(position) < 3:
+            return
+        kind = str(values.get("kind", "placeable") or "placeable")
+        source_game = str(values.get("game") or "").strip().upper()
+        target_game = str(getattr(self.project, "game", "") or "").strip().upper()
+        if source_game and target_game and source_game != target_game:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Wrong Game Resource",
+                f"{source_game} content cannot be placed in a {target_game} map.",
+            )
+            return
+        provenance = {
+            key: str(values.get(key) or "").strip()
+            for key in ("game", "library_source", "asset_id", "asset_path")
+            if str(values.get(key) or "").strip()
+        }
+        try:
+            self.controller.add_authored_gameplay_placement(
+                kind=kind,
+                template_resref=str(values.get("template_resref", "") or ""),
+                tag=str(values.get("tag", "") or ""),
+                position=position[:3],
+                bearing=float(values.get("bearing", 0.0) or 0.0),
+                snap_to_walkmesh=bool(values.get("snap_to_walkmesh", True)),
+                provenance=provenance,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Place Gameplay Object", str(exc))
+            return
+        if kind in {"placeable", "door"}:
+            try:
+                # Resolve the exact UTP/UTD provenance now so module-local
+                # terminals, containers, and doors preview/package from their
+                # source graph instead of an unrelated duplicate resref.
+                self._sync_placeable_library_resources_for_export()
+            except Exception as exc:
+                self._log(f"Placeable preview resource warning: {exc}")
+        rows = [
+            row for row in self.controller.authored_gameplay_placements()
+            if str(getattr(row, "kind", "") or "") == kind
+        ]
+        placement_id = str(getattr(rows[-1], "placement_id", "") or "") if rows else ""
+        self._refresh_all(f"Placed authored {kind} from the viewport; previous exports/proofs are now stale.")
+        if placement_id:
+            self.select_item(placement_id)
+        if bool(values.get("keep_placing", True)):
+            self.viewport_panel.set_placement_tool_context(self.placement_tab.placement_context())
+
+    def _apply_placement_tab_transform(self, placement_id: str, position: object, bearing: float) -> None:
+        try:
+            self.controller.set_authored_gameplay_placement_transform(
+                placement_id,
+                position=tuple(position or (0.0, 0.0, 0.0)),
+                bearing=float(bearing),
+                snap_to_walkmesh=bool(self.placement_tab.snap_wok_box.isChecked()),
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Transform Gameplay Object", str(exc))
+            return
+        self._refresh_map_studio_gameplay_change(
+            "Updated authored gameplay transform; previous exports/proofs are now stale.",
+            placement_ids=(placement_id,),
+        )
+        self.select_item(placement_id)
+
+    def _apply_placement_tab_creature_behavior(
+        self,
+        placement_id: str,
+        faction_role: str,
+        conversation_resref: str,
+        movement_mode: str,
+    ) -> None:
+        try:
+            self.controller.set_authored_creature_behavior(
+                placement_id,
+                faction_role=faction_role,
+                conversation_resref=conversation_resref,
+                movement_mode=movement_mode,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Creature Behavior", str(exc))
+            return
+        self._refresh_map_studio_gameplay_change(
+            "Applied selected-creature behavior intent; target-game UTC/scripts will compile during export and plcaa manual proof is stale.",
+            placement_ids=(placement_id,),
+        )
+        self.select_item(placement_id)
+
+    def _handle_placement_tab_action(self, action: str, placement_id: str) -> None:
+        try:
+            if action == "snap_to_walkmesh":
+                self.controller.snap_authored_gameplay_placement_to_walkmesh(placement_id)
+                message = "Snapped gameplay placement to generated walkable WOK."
+                selected_id = placement_id
+            elif action == "duplicate":
+                update = self.controller.duplicate_authored_gameplay_placement(placement_id)
+                message = "Duplicated gameplay placement."
+                selected_id = update.placement_id
+            elif action == "delete":
+                self.controller.remove_authored_gameplay_placement(placement_id)
+                message = "Deleted gameplay placement."
+                selected_id = ""
+            elif action == "focus":
+                self.select_item(placement_id)
+                self.viewport_panel.focus_selected()
+                return
+            else:
+                return
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Gameplay Placement", str(exc))
+            return
+        if action == "snap_to_walkmesh":
+            # Transform-only commit: promote the moved proxy in place instead
+            # of rebuilding the combined preview model.
+            self._refresh_map_studio_gameplay_change(
+                f"{message} Previous exports/proofs are now stale.",
+                placement_ids=(placement_id,),
+            )
+        else:
+            self._refresh_all(f"{message} Previous exports/proofs are now stale.")
+        if selected_id:
+            self.select_item(selected_id)
+
+    def snap_map_studio_selected_placement_to_ground(self) -> None:
+        """Unreal-style End key: drop the selected GIT instance straight down."""
+
+        placement_id = self.viewport_panel.selected_gameplay_placement_id()
+        if not placement_id:
+            self.statusBar().showMessage("End: select a placed map object or animated door first.", 5000)
+            return
+        try:
+            _update, snap = self.controller.snap_authored_gameplay_placement_to_walkmesh(
+                placement_id,
+                downward_only=True,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Snap Placement to Ground", str(exc))
+            return
+        self._refresh_map_studio_gameplay_change(
+            f"Snapped selected placement down to walkable ground face {snap.face_index}; previous exports/proofs are now stale.",
+            placement_ids=(placement_id,),
+        )
+        self.select_item(placement_id)
 
     def set_authored_script_hook(self, scope: str, field_name: str, script_resref: str) -> None:
         try:
@@ -5116,6 +7699,73 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(self, "Script Hook", str(exc))
             return
         self._refresh_all(f"{message} Previous exports/proofs are now stale.")
+
+    def _apply_map_studio_world_settings(self, values: object) -> None:
+        settings = dict(values) if isinstance(values, dict) else {}
+        try:
+            update = self.controller.set_authored_world_lighting_settings(settings)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Apply World Settings", str(exc))
+            return
+        self._refresh_all(f"{update.summary} Previous ARE export/game proof is now stale.")
+
+    def _apply_map_studio_surface_lightmap(self, values: object) -> None:
+        settings = dict(values) if isinstance(values, dict) else {}
+        resref = str(settings.get("lightmap_resref") or "").strip().lower()
+        self.environment_tab.set_lightmap_status(
+            f"Baking {resref or 'selected surface'} from ARE ambient and enabled room lights..."
+        )
+        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
+        try:
+            QtWidgets.QApplication.processEvents()
+            result = self.controller.apply_authored_surface_lightmap(**settings)
+        except Exception as exc:
+            self.environment_tab.set_lightmap_status(f"Lightmap apply failed: {exc}")
+            QtWidgets.QMessageBox.warning(self, "Bake & Apply Lightmap", str(exc))
+            return
+        finally:
+            QtWidgets.QApplication.restoreOverrideCursor()
+        viewport = getattr(self.viewport_panel, "viewport", None)
+        invalidator = getattr(viewport, "invalidate_texture", None)
+        if callable(invalidator) and resref:
+            try:
+                invalidator(resref)
+            except Exception as exc:
+                self._log(f"Lightmap renderer invalidation failed for {resref}: {exc}")
+        for warning in tuple(getattr(result, "warnings", ()) or ()):
+            self._log(f"Lightmap: {warning}")
+        sidecar = getattr(result, "sidecar", None)
+        resolution = int(getattr(sidecar, "width", 0) or 0)
+        self._refresh_all(
+            f"Applied {resref}.tpc ({resolution}x{resolution}) to the selected room surface; "
+            "module packaging and manual KOTOR lighting proof are now stale."
+        )
+
+    def _create_map_studio_five_face_skybox(self, values: object) -> None:
+        settings = dict(values) if isinstance(values, dict) else {}
+        try:
+            _room, message = self.controller.create_authored_five_face_skybox(**settings)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Create Five-Face Skybox", str(exc))
+            return
+        self._map_studio_show_skybox = True
+        previous = self.toolbar.show_skybox.blockSignals(True)
+        try:
+            self.toolbar.show_skybox.setChecked(True)
+        finally:
+            self.toolbar.show_skybox.blockSignals(previous)
+        self._refresh_all(message)
+
+    def _create_map_studio_sky_traffic(self, values: object) -> None:
+        settings = dict(values) if isinstance(values, dict) else {}
+        try:
+            _traffic, message, validation = self.controller.create_authored_sky_traffic(**settings)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Create Sky Traffic", str(exc))
+            return
+        for warning in tuple(getattr(validation, "warnings", ()) or ()):
+            self._log(f"Sky traffic: {warning}")
+        self._refresh_all(message)
 
     def export_fbx(self, dry_run: bool = False) -> None:
         path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Export KMAP Scene", f"{self.project.name}.fbx", "FBX files (*.fbx)")
@@ -5150,9 +7800,39 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.controller.model.select(item_id)
         self.outliner.select_id(item_id)
         self.viewport_panel.select_id(item_id)
+        self.placement_tab.set_selected_placement(item_id if str(item_id).startswith("authored:") else "")
         self.properties.set_selection(item_id)
         self.workflow_panel.set_selection_context(self._selected_item_label(item_id))
         self.statusBar().showMessage(f"Selected {item_id}")
+
+    def _select_map_studio_items(self, item_ids: object) -> None:
+        """Accept Maya-style extended selection from the scene outliner."""
+
+        selected = [str(value or "") for value in tuple(item_ids or ()) if str(value or "")]
+        if not selected:
+            return
+        if len(selected) == 1:
+            self.select_item(selected[0])
+            return
+        self.controller.model.select_many(selected)
+        self.placement_tab.set_selected_placement("")
+        self.outliner.select_ids(selected)
+        primitive_entries = [
+            identity
+            for identity in (self._parse_map_studio_primitive_outliner_id(item_id) for item_id in selected)
+            if identity is not None
+        ]
+        self.viewport_panel.set_selected_room_primitives(primitive_entries)
+        active = selected[-1]
+        self.properties.set_selection(active)
+        if primitive_entries:
+            room_resref, primitive_name = primitive_entries[-1]
+            self.builder_tab.select_room_primitive(room_resref, primitive_name)
+            self._refresh_map_studio_selected_primitive_transform_overlay()
+        self.workflow_panel.set_selection_context(f"{len(selected)} scene objects selected")
+        self.statusBar().showMessage(
+            f"Selected {len(selected)} scene objects; transform, Combine Meshes, or Separate Shells is ready."
+        )
 
     def _selected_item_label(self, item_id: str) -> str:
         if not item_id:
@@ -5182,8 +7862,1056 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return f"room: {getattr(item, 'name', item_id)}"
         return f"blueprint: {getattr(item, 'name', item_id)}"
 
+    def _set_map_studio_pie_authoring_enabled(self, enabled: bool) -> None:
+        """Suspend authoring controls while the read-only simulation owns input."""
+
+        if enabled:
+            for control, was_enabled in reversed(self._map_studio_pie_control_states):
+                try:
+                    control.setEnabled(bool(was_enabled))
+                except RuntimeError:
+                    continue
+            self._map_studio_pie_control_states = []
+            return
+        if self._map_studio_pie_control_states:
+            return
+        controls = [
+            self.new_action,
+            self.open_action,
+            self.save_action,
+            self.save_as_action,
+            self.import_module_action,
+            self.import_mod_file_action,
+            self.import_stock_module_action,
+            self.convert_all_stock_rooms_action,
+            self.import_library_asset_action,
+            self.import_texture_action,
+            self.export_fbx_action,
+            self.export_package_action,
+            self.undo_action,
+            self.redo_action,
+            self.delete_action,
+            self.duplicate_action,
+            self.rename_action,
+            self.build_action,
+            self.generate_walls_action,
+            self.paint_walkmesh_action,
+            self.map_studio_workspace_combo,
+            self.map_studio_open_workspace_button,
+            self.map_studio_tool_belt_preset_combo,
+            self.map_studio_customize_tool_belt_button,
+            self.map_studio_custom_tool_add_button,
+            self.map_studio_command_run_button,
+            self.outliner,
+            self.asset_browser,
+            self.workflow_tabs,
+            self.properties,
+            getattr(self.viewport_panel, "scene_table", None),
+            getattr(self.viewport_panel, "translate_gizmo_button", None),
+            getattr(self.viewport_panel, "rotate_gizmo_button", None),
+            getattr(self.viewport_panel, "scale_gizmo_button", None),
+            getattr(self.viewport_panel, "terrain_brush_box", None),
+            getattr(self.toolbar, "selection_mode", None),
+            self.map_studio_universal_transform_shortcut,
+            self.map_studio_translate_gizmo_shortcut,
+            self.map_studio_rotate_gizmo_shortcut,
+            self.map_studio_scale_gizmo_shortcut,
+            self.map_studio_delete_selection_shortcut,
+            self.map_studio_ground_snap_shortcut,
+            self.map_studio_vertex_snap_shortcut,
+            self.map_studio_transform_level_snap_shortcut,
+        ]
+        controls.extend(
+            button
+            for key, button in getattr(self.toolbar, "buttons", {}).items()
+            if key not in {"simulate", "validate"}
+        )
+        controls.extend(getattr(self.toolbar, "tool_belt_buttons", {}).values())
+        seen: set[int] = set()
+        for control in controls:
+            if control is None or id(control) in seen:
+                continue
+            seen.add(id(control))
+            try:
+                was_enabled = bool(control.isEnabled())
+                self._map_studio_pie_control_states.append((control, was_enabled))
+                control.setEnabled(False)
+            except RuntimeError:
+                continue
+
+    def _set_map_studio_pie_command_active(self, active: bool) -> None:
+        """Keep the menu command and the prominent toolbar control in one PIE state."""
+
+        active = bool(active)
+        action = self.simulate_action
+        tooltip = (
+            "Stop Play in Editor (Alt+P) and restore the authoring camera and tools."
+            if active
+            else (
+                "Play in Editor (Alt+P) using the current walkmesh, player camera, creatures, and ambient sound. "
+                "This is a GhostStudio simulation, not KOTOR engine proof."
+            )
+        )
+        blocked = action.blockSignals(True)
+        try:
+            action.setChecked(active)
+            action.setText("Stop Play in Editor" if active else "Play in Editor")
+            action.setIconText("Stop" if active else "Play")
+            action.setProperty("mapStudioPIEState", "playing" if active else "editing")
+            action.setToolTip(tooltip)
+            action.setStatusTip(tooltip)
+        finally:
+            action.blockSignals(blocked)
+        self.toolbar.set_simulation_active(active)
+
+    def toggle_map_studio_pie(self, _checked: bool = False) -> None:
+        """Start or stop the persistent Map Studio simulation mode."""
+
+        if self._map_studio_pie_session is not None:
+            self._stop_map_studio_pie()
+        else:
+            self._start_map_studio_pie()
+
+    def _create_map_studio_pie_player_actor(self, session: Any, preview_model: Any, game: str) -> str:
+        """Attach a runtime-only PMBAM/PMHC01 player with inherited clips."""
+
+        self._map_studio_pie_actor = None
+        self._map_studio_pie_animation_engine = None
+        self._map_studio_pie_animation_name = ""
+        manager = getattr(self, "resource_manager", None)
+        if manager is None or preview_model is None:
+            return "Animated player preview is unavailable because the game resource library or resident map model is missing."
+        extra = dict(getattr(self.project, "extra", {}) or {})
+        player_settings = dict(extra.get("pie_player") or {})
+        body_resref = str(player_settings.get("body_resref") or "pmbam").strip().lower()
+        head_resref = str(player_settings.get("head_resref") or "pmhc01").strip().lower()
+        strict_loader = getattr(manager, "load_model_strict", None)
+        if not callable(strict_loader):
+            return "Animated player preview requires target-game-strict model loading."
+        try:
+            body_model = strict_loader(body_resref, game)
+        except Exception as exc:
+            return f"Animated player body could not be loaded: {exc}"
+        if body_model is None:
+            return f"Animated player body {body_resref}.mdl was not found in the {game} resource library."
+        warning = ""
+        head_model = None
+        if head_resref:
+            try:
+                head_model = strict_loader(head_resref, game)
+            except Exception as exc:
+                warning = f"The player head could not be loaded; PIE is using the body model only ({exc})."
+        actor_model = body_model
+        if head_model is not None:
+            try:
+                # Use the same BAS composition contract as Character Studio.
+                # Heads are socket-following attachment layers and must not be
+                # merged into the body skin palette as ordinary hierarchy.
+                from src.systems.bas.preview_composer import build_bas_preview_model
+
+                actor_model = build_bas_preview_model(
+                    body_model=body_model,
+                    attachment_models={"head": head_model},
+                    name=f"{body_resref}_{head_resref}_pie_player",
+                )
+            except Exception as exc:
+                actor_model = body_model
+                warning = f"The player head could not be attached; PIE is using the body model only ({exc})."
+        actor = None
+        try:
+            from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
+            from src.core.modules.map_studio_pie import attach_map_studio_pie_actor
+
+            SuperModelResolver.configure(manager)
+            actor = attach_map_studio_pie_actor(
+                preview_model,
+                actor_model,
+                position=tuple(session.state.position),
+                facing_radians=float(session.state.facing_radians),
+                recompute_bounds=False,
+            )
+            if actor is None:
+                return "The player MDL loaded, but its Odyssey hierarchy could not be attached to the map preview."
+            engine = AnimationEngine(actor_model)
+            if not engine.play("pause1", loop=True, blend=False):
+                engine.play("idlepose", loop=True, blend=False)
+            self._map_studio_pie_actor = actor
+            self._map_studio_pie_animation_engine = engine
+            self._map_studio_pie_animation_name = str(
+                getattr(getattr(engine, "current_animation", None), "name", "") or ""
+            ).lower()
+            self._map_studio_pie_animation_run = False
+        except Exception as exc:
+            if actor is not None:
+                try:
+                    actor.detach(recompute_bounds=False)
+                except Exception:
+                    pass
+            self._map_studio_pie_actor = None
+            self._map_studio_pie_animation_engine = None
+            return f"Animated player setup failed: {exc}"
+        return warning
+
+    def _update_map_studio_pie_player_actor(self, frame: Any, delta_time: float) -> tuple[Any, ...] | None:
+        """Advance locomotion and return one deferred retained-renderer row."""
+
+        actor = self._map_studio_pie_actor
+        engine = self._map_studio_pie_animation_engine
+        if actor is None or engine is None:
+            return None
+        speed = math.sqrt(sum(float(value) * float(value) for value in tuple(frame.velocity)[:2]))
+        running = bool(frame.moving and speed > 3.25)
+        wanted = "run" if running else ("walk" if frame.moving else "pause1")
+        current = str(getattr(getattr(engine, "current_animation", None), "name", "") or "").lower()
+        if wanted != current:
+            played = engine.play(
+                wanted,
+                loop=True,
+                blend=True,
+                sync_phase=bool(current in {"walk", "run"} and wanted in {"walk", "run"}),
+            )
+            if not played and wanted == "pause1":
+                engine.play("idlepose", loop=True, blend=True)
+            current = str(getattr(getattr(engine, "current_animation", None), "name", "") or "").lower()
+        engine.advance(max(0.0, min(float(delta_time), 0.25)))
+        pose = engine.evaluate()
+        setattr(pose, "_gr_animation_scene_object_id", actor.actor_id)
+        setattr(pose, "_gr_animation_source_model_id", id(actor.source_model))
+        actor.set_transform(tuple(frame.position), float(frame.facing_radians))
+        self._map_studio_pie_animation_name = current
+        self._map_studio_pie_animation_run = running
+        return (
+            actor.root_node,
+            actor.actor_id,
+            pose,
+            current,
+            float(getattr(engine, "current_time", 0.0) or 0.0),
+            float(getattr(getattr(engine, "current_animation", None), "length", 0.0) or 0.0),
+        )
+
+    def _create_map_studio_pie_creature_actors(self, preview_model: Any, game: str) -> str:
+        """Prepare retained idle actors asynchronously, then publish atomically."""
+
+        self._cancel_map_studio_pie_creature_preparation(reset_summary=False)
+        self._map_studio_pie_creature_entries = []
+        self._map_studio_pie_hidden_creature_groups = []
+        self._map_studio_pie_creature_summary = "creatures 0"
+        self._map_studio_pie_creature_animation_budget = 0.0
+        self._map_studio_pie_creature_animation_cursor = 0
+        manager = getattr(self, "resource_manager", None)
+        root = getattr(preview_model, "root_node", None)
+        if manager is None or root is None:
+            return "Creature animation preview is unavailable because the resource library or resident map model is missing."
+        try:
+            from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
+            from src.core.modules.map_studio_pie import prepare_map_studio_pie_actor_hierarchy
+            from src.core.modules.map_studio_pie_creatures import (
+                build_map_studio_pie_creature_plan,
+                prepare_map_studio_pie_creature_actor_artifacts,
+            )
+            from src.core.modules.map_studio_stock_content_preview import (
+                RES_UTC,
+                TemplateModelResolver,
+                load_kotor_model_from_bytes,
+            )
+            from src.systems.bas.preview_composer import build_bas_preview_model
+
+            controller = self.controller
+            placements = controller.map_studio_authored_placements_snapshot()
+            if placements is None:
+                return "Creature animation preview is unavailable because this KMAP has no authored module snapshot."
+            template_resources = tuple(getattr(controller, "_authored_creature_resources", ()) or ())
+            resolver = getattr(controller, "_map_studio_stock_template_resolver", None)
+            if (
+                resolver is None
+                or getattr(resolver, "_game", "") != game
+                or getattr(resolver, "_manager", None) is not manager
+            ):
+                resolver = TemplateModelResolver(
+                    manager,
+                    game,
+                    template_resources=template_resources,
+                )
+            plan = build_map_studio_pie_creature_plan(
+                placements,
+                resolver,
+                game=game,
+                utc_reader=lambda resref, _game: resolver._template_bytes(resref, RES_UTC),
+                template_resources=template_resources,
+            )
+            for warning in tuple(plan.warnings):
+                self._log(f"Simulation creatures: {warning}")
+            if not tuple(plan.specs):
+                return ""
+
+            generation = self._map_studio_pie_creature_prepare_generation
+            source_cache_owner = getattr(controller, "_map_studio_stock_model_cache", None)
+            cache_context = (
+                id(manager),
+                int(getattr(manager, "revision", 0) or 0),
+                str(game or "K1").upper(),
+                id(source_cache_owner),
+                int(getattr(controller, "_authored_placeable_preview_revision", 0) or 0),
+            )
+            if self._map_studio_pie_creature_model_cache_context != cache_context:
+                self._map_studio_pie_creature_model_cache.clear()
+                self._map_studio_pie_creature_model_cache_context = cache_context
+            source_cache = dict(source_cache_owner or {})
+            cancel_event = Event()
+            self._map_studio_pie_creature_prepare_cancel = cancel_event
+            future = _MAP_STUDIO_PIE_ACTOR_EXECUTOR.submit(
+                prepare_map_studio_pie_creature_actor_artifacts,
+                plan,
+                manager,
+                resolver,
+                game,
+                source_cache,
+                dict(self._map_studio_pie_creature_model_cache),
+                model_bytes_loader=load_kotor_model_from_bytes,
+                model_composer=build_bas_preview_model,
+                animation_engine_factory=AnimationEngine,
+                hierarchy_preparer=prepare_map_studio_pie_actor_hierarchy,
+                supermodel_configurer=SuperModelResolver.configure,
+                cancel_requested=cancel_event.is_set,
+            )
+            self._map_studio_pie_creature_prepare_future = future
+            self._map_studio_pie_creature_prepare_preview_id = id(preview_model)
+            self._map_studio_pie_creature_summary = (
+                f"creatures preparing 0/{len(plan.specs)}; "
+                f"scripts {plan.suppressed_script_creature_count} deferred"
+            )
+            QtCore.QTimer.singleShot(
+                25,
+                lambda value=generation, model=preview_model: (
+                    self._poll_map_studio_pie_creature_preparation(value, model)
+                ),
+            )
+            return ""
+        except Exception as exc:
+            return f"Creature animation preview could not start: {exc}"
+
+    def _cancel_map_studio_pie_creature_preparation(self, *, reset_summary: bool = True) -> None:
+        """Invalidate a worker generation so Stop/reload cannot publish stale DAGs."""
+
+        self._map_studio_pie_creature_prepare_generation = int(
+            getattr(self, "_map_studio_pie_creature_prepare_generation", 0) or 0
+        ) + 1
+        future = getattr(self, "_map_studio_pie_creature_prepare_future", None)
+        cancel_event = getattr(self, "_map_studio_pie_creature_prepare_cancel", None)
+        self._map_studio_pie_creature_prepare_future = None
+        self._map_studio_pie_creature_prepare_cancel = None
+        self._map_studio_pie_creature_prepare_preview_id = 0
+        if cancel_event is not None:
+            cancel_event.set()
+        if future is not None:
+            try:
+                future.cancel()
+            except Exception:
+                pass
+        if reset_summary:
+            self._map_studio_pie_creature_summary = "creatures 0"
+
+    def _poll_map_studio_pie_creature_preparation(self, generation: int, preview_model: Any) -> None:
+        """Promote only the current worker result on the Qt thread."""
+
+        if generation != int(getattr(self, "_map_studio_pie_creature_prepare_generation", -1)):
+            return
+        if self._map_studio_pie_session is None:
+            return
+        if id(preview_model) != int(getattr(self, "_map_studio_pie_creature_prepare_preview_id", 0)):
+            return
+        future = getattr(self, "_map_studio_pie_creature_prepare_future", None)
+        if future is None:
+            return
+        if not future.done():
+            QtCore.QTimer.singleShot(
+                25,
+                lambda value=generation, model=preview_model: (
+                    self._poll_map_studio_pie_creature_preparation(value, model)
+                ),
+            )
+            return
+        self._map_studio_pie_creature_prepare_future = None
+        self._map_studio_pie_creature_prepare_cancel = None
+        try:
+            result = future.result()
+        except Exception as exc:
+            self._map_studio_pie_creature_summary = "creatures static; preparation failed"
+            self._log(f"Simulation creature preparation failed: {exc}")
+            return
+        # Re-check after Future.result(): Stop/reload may have invalidated the
+        # generation while the worker was finishing.
+        if (
+            generation != int(getattr(self, "_map_studio_pie_creature_prepare_generation", -1))
+            or self._map_studio_pie_session is None
+            or id(preview_model) != int(getattr(self, "_map_studio_pie_creature_prepare_preview_id", 0))
+        ):
+            return
+        for cache_key, actor_model in tuple(result.prototype_models):
+            self._map_studio_pie_creature_model_cache[cache_key] = actor_model
+        while len(self._map_studio_pie_creature_model_cache) > 128:
+            self._map_studio_pie_creature_model_cache.pop(next(iter(self._map_studio_pie_creature_model_cache)))
+        self._promote_map_studio_pie_creature_actors(preview_model, result)
+
+    def _promote_map_studio_pie_creature_actors(
+        self,
+        preview_model: Any,
+        result: Any,
+    ) -> None:
+        """Swap flattened creatures for a complete retained batch in one publication."""
+
+        root = getattr(preview_model, "root_node", None)
+        if root is None:
+            return
+        from src.core.modules.map_studio_pie import (
+            attach_map_studio_pie_actor,
+            resolve_map_studio_pie_actor_grounding,
+        )
+
+        original_children = tuple(getattr(root, "children", ()) or ())
+        creature_groups = {
+            str(getattr(node, "_gr_map_studio_placement_id", "") or ""): (index, node)
+            for index, node in enumerate(original_children)
+            if str(getattr(node, "_gr_map_studio_placement_kind", "") or "").lower() == "creature"
+        }
+        pending_entries: list[dict[str, Any]] = []
+        pending_wrappers: list[Any] = []
+        hidden: list[tuple[int, Any]] = []
+        failures = list(result.failures)
+        session = self._map_studio_pie_session
+        walkmesh = getattr(session, "walkmesh", None)
+        config = getattr(session, "config", None)
+        for prepared in tuple(result.entries):
+            spec = prepared.spec
+            grounding = resolve_map_studio_pie_actor_grounding(
+                walkmesh,
+                prepared.actor_model,
+                spec.position,
+                radius=0.0,
+                max_step_up=float(getattr(config, "max_step_up", 0.45) or 0.45),
+                max_step_down=float(getattr(config, "max_step_down", 0.75) or 0.75),
+            )
+            actor = attach_map_studio_pie_actor(
+                preview_model,
+                prepared.actor_model,
+                position=grounding.surface_position,
+                facing_radians=spec.facing_radians,
+                actor_id=spec.render.actor_id,
+                recompute_bounds=False,
+                prepared_root=prepared.prepared_root,
+                append_to_preview=False,
+                support_plane_z=grounding.support_plane_z,
+            )
+            if actor is None:
+                failures.append(f"{spec.tag}: prepared hierarchy could not be attached")
+                continue
+            pending_wrappers.append(actor.root_node)
+            pending_entries.append(
+                {
+                    "actor": actor,
+                    "engine": prepared.animation_engine,
+                    "spec": spec,
+                    "initial_pose": prepared.initial_pose,
+                    "grounding": grounding,
+                }
+            )
+            group = creature_groups.get(spec.placement_id)
+            if group is not None and not any(group[1] is item[1] for item in hidden):
+                hidden.append(group)
+
+        hidden_nodes = {id(node) for _index, node in hidden}
+        # This is the only live-scene mutation: the renderer sees either all
+        # flattened actors or the complete prepared retained batch, never a
+        # half-built mixture.
+        root.children = [
+            node for node in original_children if id(node) not in hidden_nodes
+        ] + pending_wrappers
+        for wrapper in pending_wrappers:
+            wrapper.parent = root
+        self._map_studio_pie_creature_entries = pending_entries
+        self._map_studio_pie_hidden_creature_groups = sorted(hidden, key=lambda item: item[0])
+        self._map_studio_pie_creature_summary = (
+            f"creatures {len(pending_entries)}/{result.total_spec_count} idle; "
+            f"scripts {result.suppressed_script_creature_count} deferred"
+        )
+        warning = self._activate_map_studio_pie_runtime_actors(
+            preview_model,
+            recompute_bounds=False,
+            reload_model=False,
+        )
+        if warning:
+            self._log(f"Simulation creature promotion warning: {warning}")
+        self._log(
+            "Simulation creatures prepared off-thread in "
+            f"{result.elapsed_ms:.1f} ms (compose {result.composition_ms:.1f}, "
+            f"DAG copies {result.hierarchy_copy_ms:.1f}, idle poses {result.animation_ms:.1f}; "
+            f"prototype cache hits {result.prototype_cache_hits})."
+        )
+        if failures:
+            detail = "; ".join(failures[:6])
+            more = len(failures) - 6
+            if more > 0:
+                detail += f"; {more} more"
+            self._log(
+                f"Simulation creatures: {len(failures)} actor(s) kept their static authoring preview ({detail})."
+            )
+
+    def _activate_map_studio_pie_runtime_actors(
+        self,
+        preview_model: Any,
+        *,
+        recompute_bounds: bool = True,
+        reload_model: bool = True,
+    ) -> str:
+        """Upload the map plus all transient actors once and publish initial poses."""
+
+        viewport = getattr(self.viewport_panel, "viewport", None)
+        if viewport is None or preview_model is None:
+            return "The viewport could not activate retained PIE actors."
+        if recompute_bounds:
+            try:
+                preview_model.compute_bounds()
+            except Exception:
+                pass
+        try:
+            if reload_model:
+                texture_dirs = list(getattr(self.viewport_panel, "_project_texture_dirs", ()) or ())
+                viewport.load_model(preview_model, extra_texture_dirs=texture_dirs)
+            runtime_rows: list[tuple[Any, ...]] = []
+            actor = self._map_studio_pie_actor
+            engine = self._map_studio_pie_animation_engine
+            if actor is not None and engine is not None:
+                pose = engine.evaluate()
+                setattr(pose, "_gr_animation_scene_object_id", actor.actor_id)
+                setattr(pose, "_gr_animation_source_model_id", id(actor.source_model))
+                runtime_rows.append(
+                    (
+                        actor.root_node,
+                        actor.actor_id,
+                        pose,
+                        self._map_studio_pie_animation_name,
+                        float(getattr(engine, "current_time", 0.0) or 0.0),
+                        float(getattr(getattr(engine, "current_animation", None), "length", 0.0) or 0.0),
+                    )
+                )
+            for entry in self._map_studio_pie_creature_entries:
+                creature_actor = entry["actor"]
+                creature_engine = entry["engine"]
+                pose = entry.pop("initial_pose", None) or creature_engine.evaluate()
+                setattr(pose, "_gr_animation_scene_object_id", creature_actor.actor_id)
+                setattr(pose, "_gr_animation_source_model_id", id(creature_actor.source_model))
+                runtime_rows.append(
+                    (
+                        creature_actor.root_node,
+                        creature_actor.actor_id,
+                        pose,
+                        str(getattr(getattr(creature_engine, "current_animation", None), "name", "") or ""),
+                        float(getattr(creature_engine, "current_time", 0.0) or 0.0),
+                        float(getattr(getattr(creature_engine, "current_animation", None), "length", 0.0) or 0.0),
+                    )
+                )
+            if runtime_rows:
+                viewport.set_animation_playback_active(True, "Map Studio PIE retained actors")
+                viewport.update_runtime_character_frames(
+                    runtime_rows,
+                    camera_changed=True,
+                    scene_changed=not reload_model,
+                )
+            elif not reload_model:
+                request = getattr(viewport, "_request_render", None)
+                if callable(request):
+                    request(
+                        fast=True,
+                        reason="Map Studio PIE runtime actor structure",
+                        scene=True,
+                        resources=True,
+                    )
+            return ""
+        except Exception as exc:
+            return f"Retained PIE actor upload failed: {exc}"
+
+    def _update_map_studio_pie_creature_actors(self, delta_time: float) -> tuple[tuple[Any, ...], ...]:
+        """Advance staggered idle-pose cohorts, never fake NCS AI.
+
+        Every creature keeps its own elapsed animation time, but only a
+        round-robin cohort is evaluated on a given viewport tick.  The
+        fractional budget targets twelve samples per actor per second when the
+        viewport sustains its intended 60 Hz timer: 32 actors produce cohorts
+        of six or seven.  A slow frame never expands that cohort.  Instead,
+        visual NPC sampling degrades gracefully while every entry retains its
+        real elapsed animation time until its round-robin turn.  This prevents
+        pose work from feeding its own frame time back into a catch-up spiral.
+        """
+
+        if not self._map_studio_pie_creature_entries:
+            return ()
+        entries = self._map_studio_pie_creature_entries
+        elapsed = max(0.0, min(float(delta_time), 0.25))
+        if elapsed <= 0.0:
+            return ()
+        for entry in entries:
+            entry["pie_animation_elapsed"] = min(
+                0.25,
+                float(entry.get("pie_animation_elapsed", 0.0) or 0.0) + elapsed,
+            )
+
+        actor_count = len(entries)
+        scheduler_step = min(elapsed, 1.0 / _MAP_STUDIO_PIE_CREATURE_SCHEDULER_HZ)
+        budget = max(
+            0.0,
+            float(getattr(self, "_map_studio_pie_creature_animation_budget", 0.0) or 0.0),
+        ) + actor_count * scheduler_step * _MAP_STUDIO_PIE_CREATURE_POSE_HZ
+        requested_count = int(budget)
+        cohort_cap = max(
+            1,
+            math.ceil(
+                actor_count
+                * _MAP_STUDIO_PIE_CREATURE_POSE_HZ
+                / _MAP_STUDIO_PIE_CREATURE_SCHEDULER_HZ
+            ),
+        )
+        update_count = min(actor_count, cohort_cap, requested_count)
+        # Keep only the fractional token.  Whole overdue tokens represent UI
+        # time already lost and replaying them would immediately recreate the
+        # feedback loop this scheduler exists to avoid.  Per-entry elapsed
+        # values above remain untouched, so phase time is not tied to quota.
+        self._map_studio_pie_creature_animation_budget = budget - math.floor(budget)
+        if update_count <= 0:
+            return ()
+
+        cursor = int(getattr(self, "_map_studio_pie_creature_animation_cursor", 0) or 0) % actor_count
+        rows: list[tuple[Any, ...]] = []
+        for offset in range(update_count):
+            entry = entries[(cursor + offset) % actor_count]
+            actor = entry["actor"]
+            engine = entry["engine"]
+            step = min(0.25, float(entry.get("pie_animation_elapsed", elapsed) or elapsed))
+            entry["pie_animation_elapsed"] = 0.0
+            engine.advance(step)
+            pose = engine.evaluate()
+            setattr(pose, "_gr_animation_scene_object_id", actor.actor_id)
+            setattr(pose, "_gr_animation_source_model_id", id(actor.source_model))
+            rows.append(
+                (
+                    actor.root_node,
+                    actor.actor_id,
+                    pose,
+                    str(getattr(getattr(engine, "current_animation", None), "name", "") or ""),
+                    float(getattr(engine, "current_time", 0.0) or 0.0),
+                    float(getattr(getattr(engine, "current_animation", None), "length", 0.0) or 0.0),
+                )
+            )
+        self._map_studio_pie_creature_animation_cursor = (cursor + update_count) % actor_count
+        return tuple(rows)
+
+    def _remove_map_studio_pie_runtime_actors(self) -> None:
+        """Detach all runtime DAGs, restore flattened authoring actors, reload once."""
+
+        self._cancel_map_studio_pie_creature_preparation()
+        player = self._map_studio_pie_actor
+        creature_entries = tuple(self._map_studio_pie_creature_entries)
+        actors = ([player] if player is not None else []) + [entry["actor"] for entry in creature_entries]
+        preview_model = next((actor.preview_model for actor in actors if actor is not None), None)
+        viewport = getattr(self.viewport_panel, "viewport", None)
+        if viewport is not None:
+            try:
+                viewport.set_animation_playback_active(False, "Map Studio PIE stopped")
+            except Exception:
+                pass
+        for actor in actors:
+            try:
+                actor.detach(recompute_bounds=False)
+            except Exception:
+                pass
+        root = getattr(preview_model, "root_node", None)
+        if root is not None:
+            for original_index, group in self._map_studio_pie_hidden_creature_groups:
+                if any(group is child for child in tuple(root.children or ())):
+                    continue
+                group.parent = root
+                root.children.insert(min(max(0, int(original_index)), len(root.children)), group)
+        if preview_model is not None:
+            try:
+                preview_model.compute_bounds()
+            except Exception:
+                pass
+            if viewport is not None:
+                try:
+                    texture_dirs = list(getattr(self.viewport_panel, "_project_texture_dirs", ()) or ())
+                    viewport.load_model(preview_model, extra_texture_dirs=texture_dirs)
+                except Exception:
+                    pass
+        self._map_studio_pie_actor = None
+        self._map_studio_pie_animation_engine = None
+        self._map_studio_pie_animation_name = ""
+        self._map_studio_pie_animation_run = False
+        self._map_studio_pie_creature_entries = []
+        self._map_studio_pie_hidden_creature_groups = []
+        self._map_studio_pie_creature_summary = "creatures 0"
+        self._map_studio_pie_creature_animation_budget = 0.0
+        self._map_studio_pie_creature_animation_cursor = 0
+
+    def _handle_map_studio_pie_camera_input(self, payload: object) -> None:
+        """Apply DEFAULT camerastyle free-look limits."""
+
+        session = self._map_studio_pie_session
+        camera = getattr(getattr(self.viewport_panel, "viewport", None), "camera", None)
+        if session is None or camera is None:
+            return
+        values = dict(payload or {}) if isinstance(payload, dict) else {}
+        dx = float(values.get("orbit_x", 0.0) or 0.0)
+        dy = float(values.get("orbit_y", 0.0) or 0.0)
+        if dx or dy:
+            camera.azimuth = (float(camera.azimuth) - (dx * 0.25)) % 360.0
+            # Retail DEFAULT free-look rows allow roughly 15 degrees up and
+            # 20 degrees down around the 83-degree camera pitch.
+            camera.elevation = max(-13.0, min(22.0, float(camera.elevation) - (dy * 0.20)))
+            set_azimuth = getattr(session, "set_camera_azimuth", None)
+            if callable(set_azimuth):
+                set_azimuth(float(camera.azimuth))
+
+    def _start_map_studio_pie_ambient_audio(self, session: Any, game: str) -> str:
+        """Start the bounded UTS ambient preview without claiming engine parity."""
+
+        self._stop_map_studio_pie_ambient_audio()
+        manager = getattr(self, "resource_manager", None)
+        placements = self.controller.map_studio_authored_placements_snapshot()
+        if manager is None or placements is None:
+            self._map_studio_pie_audio_summary = "audio unavailable"
+            return "Ambient UTS preview is unavailable because the resource library or authored placements are missing."
+        audio = None
+        try:
+            from src.adapters.qt_audio.map_studio_pie_audio import MapStudioPIEAmbientAudio
+            from src.core.modules.map_studio_pie_audio import build_map_studio_pie_ambient_sound_plan
+
+            # WAV existence is checked lazily by the playback adapter.  Doing
+            # a second eager pass over every clip here causes a noticeable PIE
+            # startup stall on stock modules while providing no extra truth.
+            plan = build_map_studio_pie_ambient_sound_plan(
+                placements,
+                manager,
+                game,
+                check_clip_resources=False,
+            )
+            audio = MapStudioPIEAmbientAudio(
+                manager,
+                game,
+                self,
+                seed=0,
+                max_voices=32,
+            )
+            audio.warningRaised.connect(
+                lambda message: self._log(f"Simulation ambient audio: {message}")
+            )
+            audio.start(plan, listener_position=session.player_eye_target())
+            self._map_studio_pie_audio_runtime = audio
+            self._map_studio_pie_audio_update_bucket = -1
+            active_count = len(plan.active_specs)
+            self._map_studio_pie_audio_summary = f"audio {min(active_count, 32)}/{len(plan.specs)} UTS"
+            for warning in tuple(plan.warnings)[:12]:
+                self._log(f"Simulation ambient audio: {warning.message}")
+            remaining = max(0, len(plan.warnings) - 12)
+            if remaining:
+                self._log(f"Simulation ambient audio: {remaining} additional plan warning(s) omitted from the live log.")
+            self._log(f"Simulation ambient audio: {audio.approximation_note}")
+            return ""
+        except Exception as exc:
+            if audio is not None:
+                try:
+                    audio.close()
+                    audio.deleteLater()
+                except Exception:
+                    pass
+            self._map_studio_pie_audio_runtime = None
+            self._map_studio_pie_audio_summary = "audio unavailable"
+            return f"Ambient UTS preview could not start: {exc}"
+
+    def _update_map_studio_pie_ambient_audio(self, session: Any, frame: Any) -> None:
+        """Move the editor listener at 5 Hz so audio cannot consume the render budget."""
+
+        audio = self._map_studio_pie_audio_runtime
+        if audio is None:
+            return
+        bucket = int(float(frame.simulation_time) * 5.0)
+        if bucket == self._map_studio_pie_audio_update_bucket:
+            return
+        self._map_studio_pie_audio_update_bucket = bucket
+        try:
+            audio.set_listener_position(session.player_eye_target())
+        except Exception as exc:
+            self._log(f"Simulation ambient audio listener update stopped: {exc}")
+            self._stop_map_studio_pie_ambient_audio()
+            self._map_studio_pie_audio_summary = "audio stopped"
+
+    def _stop_map_studio_pie_ambient_audio(self) -> None:
+        """Release every transient QtMultimedia voice owned by the PIE run."""
+
+        audio = self._map_studio_pie_audio_runtime
+        self._map_studio_pie_audio_runtime = None
+        self._map_studio_pie_audio_update_bucket = -1
+        if audio is None:
+            return
+        try:
+            audio.close()
+        except Exception as exc:
+            self._log(f"Simulation ambient audio cleanup warning: {exc}")
+        try:
+            audio.deleteLater()
+        except RuntimeError:
+            pass
+
+    def _start_map_studio_pie(self) -> None:
+        """Build a runtime-only WOK/camera preflight from the current KMAP."""
+
+        self._cancel_map_studio_component_preview()
+        self._cancel_map_studio_texture_paint_stroke()
+        preview_model = getattr(self.viewport_panel, "_room_preview_model", None)
+        if preview_model is None:
+            preview_model = getattr(getattr(self.viewport_panel, "viewport", None), "model", None)
+        try:
+            build = self.controller.create_map_studio_pie_session(preview_model=preview_model)
+        except Exception as exc:
+            self._set_map_studio_pie_command_active(False)
+            QtWidgets.QMessageBox.warning(self, "Simulation Blocked", f"Map Studio could not start simulation:\n{exc}")
+            return
+        session = getattr(build, "session", None)
+        validation = getattr(build, "validation", None)
+        if session is None or not bool(getattr(validation, "ok", False)):
+            issues = tuple(getattr(validation, "blocking_issues", ()) or ())
+            detail = "\n".join(f"• {issue}" for issue in issues[:8]) or "The current map is not simulation-ready."
+            self._set_map_studio_pie_command_active(False)
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Simulation Blocked",
+                "Fix these Map Studio readiness issues before simulating:\n\n" + detail,
+            )
+            return
+        camera = getattr(getattr(self.viewport_panel, "viewport", None), "camera", None)
+        if camera is None:
+            self._set_map_studio_pie_command_active(False)
+            QtWidgets.QMessageBox.warning(self, "Simulation Blocked", "The Map Studio viewport camera is not available.")
+            return
+        self._map_studio_pie_camera_snapshot = (
+            float(camera.azimuth),
+            float(camera.elevation),
+            float(camera.distance),
+            tuple(float(value) for value in tuple(camera.target)[:3]),
+            float(getattr(camera, "fov", 45.0)),
+            float(getattr(camera, "_near", 0.01)),
+            float(getattr(camera, "_far", 1000.0)),
+        )
+        game = str(getattr(self.project, "game", "K1") or "K1").strip().upper()
+        # K1 and K2 share the retail DEFAULT camerastyle distance/FOV.
+        self._map_studio_pie_desired_camera_distance = 3.2
+        camera.fov = 55.0
+        self._map_studio_pie_session = session
+        self._map_studio_pie_last_time = perf_counter()
+        self._map_studio_pie_last_resolved_camera_distance = None
+        self._map_studio_pie_status_bucket = -1
+        self._map_studio_pie_camera_turn_input = 0.0
+        self._map_studio_pie_camera_turn_velocity = 0.0
+        self._map_studio_pie_scope_text = self.map_studio_scope_label.text()
+        self._set_map_studio_pie_authoring_enabled(False)
+        self._set_map_studio_pie_command_active(True)
+        self.viewport_panel.set_map_studio_pie_active(True)
+        self._map_studio_pie_actor_warning = self._create_map_studio_pie_player_actor(session, preview_model, game)
+        creature_warning = self._create_map_studio_pie_creature_actors(preview_model, game)
+        runtime_actor_warning = self._activate_map_studio_pie_runtime_actors(preview_model)
+        audio_warning = self._start_map_studio_pie_ambient_audio(session, game)
+        camera.target = list(session.player_eye_target())
+        camera.azimuth = (math.degrees(float(session.state.facing_radians)) + 180.0) % 360.0
+        camera.elevation = 7.0
+        camera.distance = self._map_studio_pie_desired_camera_distance
+        session.set_camera_azimuth(float(camera.azimuth))
+        session.reset_camera_collision()
+        self.map_studio_scope_label.setText(
+            "Simulation — not KOTOR proof: W/S moves, Z/C strafes, A/D turns the camera, Ctrl or MMB "
+            "looks about, Caps Lock toggles free-look, and a floor click routes the player. Shift-to-run is "
+            "an editor convenience. Ambient UTS audio is approximated; NCS, dialogue, and creature AI still "
+            "require export and a manual warp to plcaa."
+        )
+        self._map_studio_pie_timer.start()
+        self.viewport_panel.viewport.setFocus(QtCore.Qt.FocusReason.OtherFocusReason)
+        self.statusBar().showMessage(
+            f"Simulation started: {getattr(build, 'walkable_face_count', 0)} walkable WOK faces; "
+            f"{getattr(build, 'collision_triangle_count', 0)} camera-collision triangles."
+        )
+        for warning in tuple(getattr(validation, "warnings", ()) or ()):
+            self._log(f"Simulation warning: {warning}")
+        if self._map_studio_pie_actor_warning:
+            self._log(f"Simulation player warning: {self._map_studio_pie_actor_warning}")
+        if creature_warning:
+            self._log(f"Simulation creature warning: {creature_warning}")
+        if runtime_actor_warning:
+            self._log(f"Simulation retained actor warning: {runtime_actor_warning}")
+        if audio_warning:
+            self._log(f"Simulation ambient audio warning: {audio_warning}")
+
+    def _stop_map_studio_pie(self) -> None:
+        """Stop simulation and restore the exact authoring camera and controls."""
+
+        if self._map_studio_pie_session is None:
+            self._stop_map_studio_pie_ambient_audio()
+            self._set_map_studio_pie_command_active(False)
+            return
+        self._map_studio_pie_timer.stop()
+        self._stop_map_studio_pie_ambient_audio()
+        self._remove_map_studio_pie_runtime_actors()
+        self.viewport_panel.set_map_studio_pie_active(False)
+        self.viewport_panel.set_map_studio_pie_overlay(None)
+        camera = getattr(getattr(self.viewport_panel, "viewport", None), "camera", None)
+        snapshot = self._map_studio_pie_camera_snapshot
+        if camera is not None and snapshot is not None:
+            camera.azimuth = snapshot[0]
+            camera.elevation = snapshot[1]
+            camera.distance = snapshot[2]
+            camera.target = list(snapshot[3])
+            camera.fov = snapshot[4]
+            camera._near = snapshot[5]
+            camera._far = snapshot[6]
+        self._map_studio_pie_session = None
+        self._map_studio_pie_camera_snapshot = None
+        self._map_studio_pie_last_resolved_camera_distance = None
+        self._map_studio_pie_actor_warning = ""
+        self._map_studio_pie_camera_turn_input = 0.0
+        self._map_studio_pie_camera_turn_velocity = 0.0
+        self._set_map_studio_pie_authoring_enabled(True)
+        self._set_map_studio_pie_command_active(False)
+        if self._map_studio_pie_scope_text:
+            self.map_studio_scope_label.setText(self._map_studio_pie_scope_text)
+        request = getattr(getattr(self.viewport_panel, "viewport", None), "_request_render", None)
+        if callable(request):
+            request(fast=True, reason="Map Studio PIE stopped", camera=True, overlay=True, hud=True)
+        self.statusBar().showMessage("Simulation stopped; authoring camera and tools restored.")
+
+    def _handle_map_studio_pie_move_input(self, payload: object) -> None:
+        session = self._map_studio_pie_session
+        if session is None:
+            return
+        values = dict(payload or {}) if isinstance(payload, dict) else {}
+        camera = getattr(getattr(self.viewport_panel, "viewport", None), "camera", None)
+        self._map_studio_pie_camera_turn_input = max(
+            -1.0,
+            min(1.0, float(values.get("camera_turn", 0.0) or 0.0)),
+        )
+        session.set_move_input(
+            float(values.get("forward", 0.0) or 0.0),
+            float(values.get("strafe", 0.0) or 0.0),
+            camera_azimuth_degrees=float(getattr(camera, "azimuth", 90.0)),
+            run=bool(values.get("run", False)),
+        )
+
+    def _set_map_studio_pie_destination(self, position: object) -> None:
+        session = self._map_studio_pie_session
+        if session is None:
+            return
+        try:
+            point = tuple(float(value) for value in tuple(position)[:3])
+        except (TypeError, ValueError):
+            return
+        if len(point) < 3:
+            return
+        if session.set_destination(point, run=True):
+            self.statusBar().showMessage("Simulation route accepted; click-to-move is following connected WOK faces.")
+        else:
+            self.statusBar().showMessage("Simulation route rejected: destination is outside clearance or disconnected.", 5000)
+
+    def _tick_map_studio_pie(self) -> None:
+        """Advance fixed-step simulation without rebuilding or reloading the renderer."""
+
+        session = self._map_studio_pie_session
+        if session is None:
+            return
+        now = perf_counter()
+        delta_time = max(0.0, now - self._map_studio_pie_last_time)
+        self._map_studio_pie_last_time = now
+        frame = session.advance(delta_time)
+        camera = getattr(getattr(self.viewport_panel, "viewport", None), "camera", None)
+        camera_blocked = False
+        if camera is not None:
+            camera_turn = float(self._map_studio_pie_camera_turn_input)
+            turn_delta = min(max(delta_time, 0.0), 0.05)
+            target_turn_velocity = camera_turn * 200.0
+            current_turn_velocity = float(self._map_studio_pie_camera_turn_velocity)
+            # Installed K1/K2 INIs expose a 200 deg/s target, 500 deg/s^2
+            # acceleration, and 2000 deg/s^2 deceleration.  Ghidra has not
+            # recovered the exact Odyssey integrator, so this is an explicit
+            # clean-room approach-to-target using those retail constants.
+            slowing_or_reversing = (
+                abs(target_turn_velocity) <= 1.0e-7
+                or current_turn_velocity * target_turn_velocity < 0.0
+            )
+            turn_acceleration = 2000.0 if slowing_or_reversing else 500.0
+            max_velocity_change = turn_acceleration * turn_delta
+            velocity_error = target_turn_velocity - current_turn_velocity
+            velocity_change = max(-max_velocity_change, min(max_velocity_change, velocity_error))
+            current_turn_velocity += velocity_change
+            if abs(current_turn_velocity) <= 1.0e-7 and abs(target_turn_velocity) <= 1.0e-7:
+                current_turn_velocity = 0.0
+            self._map_studio_pie_camera_turn_velocity = current_turn_velocity
+            if abs(current_turn_velocity) > 1.0e-7:
+                camera.azimuth = (
+                    float(camera.azimuth) - (current_turn_velocity * turn_delta)
+                ) % 360.0
+            target = session.player_eye_target()
+            camera.target = list(target)
+            session.set_camera_azimuth(float(camera.azimuth))
+            desired_distance = max(session.config.minimum_camera_distance, self._map_studio_pie_desired_camera_distance)
+            azimuth = math.radians(float(camera.azimuth))
+            elevation = math.radians(float(camera.elevation))
+            cosine_elevation = math.cos(elevation)
+            desired_eye = (
+                target[0] + desired_distance * cosine_elevation * math.cos(azimuth),
+                target[1] + desired_distance * cosine_elevation * math.sin(azimuth),
+                target[2] + desired_distance * math.sin(elevation),
+            )
+            resolved = session.resolve_camera_distance(target, desired_eye, delta_time=delta_time)
+            camera.distance = resolved
+            self._map_studio_pie_last_resolved_camera_distance = resolved
+            camera_blocked = resolved + 0.02 < desired_distance
+        player_runtime_row = self._update_map_studio_pie_player_actor(frame, delta_time)
+        runtime_rows = list(self._update_map_studio_pie_creature_actors(delta_time))
+        if player_runtime_row is not None:
+            runtime_rows.insert(0, player_runtime_row)
+        if runtime_rows:
+            self.viewport_panel.viewport.update_runtime_character_frames(
+                runtime_rows,
+                camera_changed=True,
+            )
+        # Any retained actor batch already requested the frame.  This includes
+        # NPC-only PIE when the player model is unavailable; requesting a
+        # second camera-only repaint caused a duplicate present/flicker.
+        actor_rendered = bool(runtime_rows)
+        self._update_map_studio_pie_ambient_audio(session, frame)
+        status_bucket = int(frame.simulation_time * 10.0)
+        if status_bucket != self._map_studio_pie_status_bucket:
+            self._map_studio_pie_status_bucket = status_bucket
+            motion = "BLOCKED" if frame.blocked else ("moving" if frame.moving else "idle")
+            route = f" | route {len(frame.path)}" if frame.destination is not None else ""
+            camera_state = " | camera blocked" if camera_blocked else ""
+            animation_state = f" | anim {self._map_studio_pie_animation_name or 'unavailable'}"
+            audio_state = f" | {self._map_studio_pie_audio_summary}"
+            creature_state = f" | {self._map_studio_pie_creature_summary}"
+            self.viewport_panel.marker_summary_label.setText(
+                "Simulation — not KOTOR proof | "
+                f"Player {frame.position[0]:.2f}, {frame.position[1]:.2f}, {frame.position[2]:.2f} "
+                f"| WOK face {frame.face_index} | {motion}{route}{camera_state}{animation_state}"
+                f"{creature_state}{audio_state} | Esc stops"
+            )
+        for event in frame.events:
+            self._log(f"Simulation: {event.message}")
+        if not actor_rendered:
+            request = getattr(getattr(self.viewport_panel, "viewport", None), "_request_render", None)
+            if callable(request):
+                # The resident map scene is unchanged.  A scene-dirty request
+                # forces pygfx to rebuild every room/resource bridge on each
+                # 16 ms tick, which is catastrophic on stock modules such as
+                # 207TEL when the optional player actor cannot be resolved.
+                request(fast=True, reason="Map Studio PIE camera frame", camera=True)
+
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
-        if self._confirm_discard_or_save():
+        if self._confirm_discard_or_save(restore_discarded_sidecars=True):
+            self._stop_map_studio_pie()
             event.accept()
         else:
             event.ignore()
@@ -5212,6 +8940,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "add_room": lambda: self._handle_tab_action("Add Room"),
             "add_module": lambda: self._handle_tab_action("Add Module"),
             "validate": self.validate_kmap,
+            "simulate": self.toggle_map_studio_pie,
             "build": self.build_module_files,
             "generate_module_files": self.build_module_files,
             "export_fbx": lambda: self.export_fbx(False),
@@ -5321,6 +9050,131 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if not data:
             QtWidgets.QMessageBox.warning(self, "Load Indexed LYT", f"{game}:{resref}.lyt could not be read.")
             return
+
+        # The indexed picker historically stopped at LYT.  That explains the
+        # deceptive state where a stock map displayed its two room models but
+        # had no GIT creatures/placeables/doors/sounds, no transition metadata,
+        # and no IFO player start.  Prefer the complete installed module when
+        # its area resref maps directly to a capsule; retain an explicit
+        # layout-only fallback for standalone LYT resources and K1 areas whose
+        # module filename differs from their ARE/LYT resref.
+        game_root = ""
+        game_dir_getter = getattr(manager, "game_dir", None)
+        if callable(game_dir_getter):
+            try:
+                game_root = str(game_dir_getter(game) or "").strip()
+            except Exception:
+                game_root = ""
+        if not game_root:
+            game_root = str(row.get("source", "") or "").strip()
+        modules_dir = Path(game_root) / "Modules" if game_root else Path()
+        module_container: Path | None = None
+        if game_root and modules_dir.is_dir():
+            wanted = {f"{resref}.rim", f"{resref}.mod"}
+            for candidate in (modules_dir / f"{resref}.rim", modules_dir / f"{resref}.mod"):
+                if candidate.is_file():
+                    module_container = candidate
+                    break
+            if module_container is None:
+                # Keep discovery correct on case-sensitive test/dev volumes;
+                # the shipped Windows install is naturally case-insensitive.
+                try:
+                    module_container = next(
+                        (candidate for candidate in modules_dir.iterdir() if candidate.name.lower() in wanted),
+                        None,
+                    )
+                except OSError:
+                    module_container = None
+
+        if module_container is not None:
+            existing_authored = bool(
+                dict(getattr(self.project, "extra_sections", {}) or {}).get("authored_module")
+            )
+            existing_scene = bool(
+                tuple(getattr(self.project, "rooms", ()) or ())
+                or tuple(getattr(self.project, "modules", ()) or ())
+                or tuple(getattr(self.project, "blueprints", ()) or ())
+            )
+            if existing_authored or existing_scene:
+                answer = QtWidgets.QMessageBox.question(
+                    self,
+                    "Replace Current Map Studio Scene",
+                    f"Load the complete {game}:{resref} module and replace the current Map Studio scene?\n\n"
+                    "Save the current KMAP first if you need to keep it.",
+                    QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.Cancel,
+                    QtWidgets.QMessageBox.Cancel,
+                )
+                if answer != QtWidgets.QMessageBox.Yes:
+                    return
+
+            before_project = deepcopy(self.project)
+            started = perf_counter()
+            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+            try:
+                self.statusBar().showMessage(
+                    f"Loading complete {game}:{resref}: ARE/GIT/IFO gameplay, player start, and module resources..."
+                )
+                QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
+                self.controller.new_project(
+                    name=resref,
+                    game=game,
+                    author=str(getattr(before_project, "author", "") or ""),
+                )
+                ok, import_message = self.controller.import_stock_module_from_rim(
+                    module_resref=resref,
+                    modules_dir=str(modules_dir),
+                    game=game,
+                    resource_manager=manager,
+                )
+                if not ok:
+                    self.controller.model.set_project(before_project)
+                    QtWidgets.QMessageBox.warning(self, "Load Stock Module", import_message)
+                    self._refresh_all(f"Full module load failed; restored the previous Map Studio scene. {import_message}")
+                    return
+
+                placement_count = len(tuple(self.controller.authored_gameplay_placements() or ()))
+                self.statusBar().showMessage(
+                    f"Hydrated {placement_count} gameplay object(s) and the IFO player start; "
+                    "converting room geometry for editing..."
+                )
+                QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
+                conversion_ok, conversion_message = self.controller.convert_all_stock_rooms_to_imported_mesh(
+                    resource_manager=manager,
+                )
+                self.statusBar().showMessage(
+                    "Preparing viewport object models. Diffuse textures and baked lightmaps continue streaming after the first frame..."
+                )
+                QtWidgets.QApplication.processEvents(QtCore.QEventLoop.ExcludeUserInputEvents)
+                self._last_game_modules_dir = str(modules_dir)
+                elapsed_ms = (perf_counter() - started) * 1000.0
+                message = (
+                    f"Loaded complete {game}:{resref} in {elapsed_ms / 1000.0:.2f}s: "
+                    f"{placement_count} gameplay object(s), IFO player start, and editable room geometry. "
+                    f"{conversion_message} Textures/lightmaps may stream for a few seconds on the first view."
+                )
+                if not conversion_ok:
+                    QtWidgets.QMessageBox.warning(self, "Stock Room Conversion", conversion_message)
+                self._refresh_all(message)
+                resolved = len(tuple(self.controller.last_map_studio_resolved_placement_ids or ()))
+                unresolved = len(tuple(self.controller.last_map_studio_unresolved_placement_ids or ()))
+                self.statusBar().showMessage(
+                    f"{message} Resolved {resolved} placed object model(s); "
+                    f"{unresolved} model-bearing placement(s) use honest marker fallbacks.",
+                    15000,
+                )
+                return
+            except Exception as exc:
+                self.controller.model.set_project(before_project)
+                failure = f"Full module load failed; restored the previous Map Studio scene. {exc}"
+                self._refresh_all(failure)
+                QtWidgets.QMessageBox.warning(self, "Load Stock Module", failure)
+                return
+            finally:
+                QtWidgets.QApplication.restoreOverrideCursor()
+
+        if game and str(getattr(self.project, "game", "") or "").upper() != game:
+            self.project.game = game
+            self.controller.model.game = game
         result = self.controller.layout_service.load_lyt_bytes(
             self.project,
             bytes(data),
@@ -5328,7 +9182,143 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             source_module=resref,
             source_path=f"game_resource://{game}/{resref}.lyt",
         )
-        self._refresh_all(f"{result.message} ({game}:{resref}.lyt)")
+        self._refresh_all(
+            f"{result.message} ({game}:{resref}.lyt). Layout only: no matching installed "
+            "module capsule was found, so GIT gameplay objects, door transitions, sounds, and the IFO player start "
+            "were not hydrated. Use File -> Import Module File for a capsule whose filename differs from its LYT resref."
+        )
+
+    @staticmethod
+    def _room_connection_hook_choice_label(hook: object) -> str:
+        label = str(getattr(hook, "label", "") or getattr(hook, "hook_id", "") or "Room opening")
+        kind = str(getattr(hook, "opening_kind", "door") or "door")
+        width = float(getattr(hook, "width", 0.0) or 0.0)
+        height = float(getattr(hook, "height", 0.0) or 0.0)
+        return f"{label} — {kind} {width:g}m x {height:g}m"
+
+    def _connect_authored_room_openings(self) -> None:
+        audit = self.controller.authored_room_connection_audit()
+        hooks = [hook for hook in tuple(getattr(audit, "hooks", ()) or ()) if bool(getattr(hook, "passable", False))]
+        rooms = {str(getattr(hook, "room_resref", "") or "") for hook in hooks}
+        if len(hooks) < 2 or len(rooms) < 2:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Connect Room Openings",
+                "Create floor-level doorway openings on at least two authored floor-plan rooms first. "
+                "Use Builder → Floor-plan wall opening, then return here to connect them.",
+            )
+            return
+        source_labels = [self._room_connection_hook_choice_label(hook) for hook in hooks]
+        source_label, accepted = QtWidgets.QInputDialog.getItem(
+            self,
+            "Connect Room Openings",
+            "Opening on the room to move and align:",
+            source_labels,
+            0,
+            False,
+        )
+        if not accepted:
+            return
+        source = hooks[source_labels.index(str(source_label))]
+        targets = [
+            hook
+            for hook in hooks
+            if str(getattr(hook, "room_resref", "") or "") != str(getattr(source, "room_resref", "") or "")
+        ]
+        target_labels = [self._room_connection_hook_choice_label(hook) for hook in targets]
+        target_label, accepted = QtWidgets.QInputDialog.getItem(
+            self,
+            "Connect Room Openings",
+            "Opening on the room that stays in place:",
+            target_labels,
+            0,
+            False,
+        )
+        if not accepted:
+            return
+        target = targets[target_labels.index(str(target_label))]
+        try:
+            update = self.controller.connect_authored_room_openings(
+                source_hook_id=str(getattr(source, "hook_id", "") or ""),
+                target_hook_id=str(getattr(target, "hook_id", "") or ""),
+                align_source=True,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Connect Room Openings", str(exc))
+            return
+        self._refresh_all(update.summary)
+
+    def _show_authored_room_connection_audit(self) -> None:
+        audit = self.controller.authored_room_connection_audit()
+        summary = str(getattr(audit, "summary", "") or "Room connection audit is unavailable.")
+        warnings = tuple(getattr(audit, "warnings", ()) or ())
+        details = "\n".join(f"• {warning}" for warning in warnings[:10])
+        if not details:
+            details = "No opening-alignment warnings."
+        QtWidgets.QMessageBox.information(
+            self,
+            "Room Connection Audit",
+            f"{summary}\n\n{details}\n\n"
+            "This proves KMAP opening alignment and symmetric VIS intent only. "
+            "Export validation must still prove WOK transition structure, and KOTOR traversal requires a live warp test.",
+        )
+
+    def _snap_selected_authored_rooms_to_grid(self) -> None:
+        selected = tuple(getattr(self, "_map_studio_selected_rooms", ()) or ())
+        if not selected:
+            QtWidgets.QMessageBox.information(
+                self,
+                "Snap Rooms to Grid",
+                "Select one or more authored rooms in the viewport first. Ctrl/Shift-click adds rooms to the selection.",
+            )
+            return
+        grid_size, accepted = QtWidgets.QInputDialog.getDouble(
+            self,
+            "Snap Rooms to Grid",
+            "XY grid size in meters:",
+            1.0,
+            0.01,
+            1000.0,
+            2,
+        )
+        if not accepted:
+            return
+        try:
+            message = self.controller.snap_authored_rooms_to_grid(selected, grid_size=float(grid_size))
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Snap Rooms to Grid", str(exc))
+            return
+        self._refresh_all(message)
+
+    def _auto_arrange_authored_rooms(self) -> None:
+        selected = tuple(getattr(self, "_map_studio_selected_rooms", ()) or ())
+        if not selected:
+            answer = QtWidgets.QMessageBox.question(
+                self,
+                "Auto Arrange Rooms",
+                "No rooms are selected. Auto-arrange every authored room in the module?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.Cancel,
+                QtWidgets.QMessageBox.Cancel,
+            )
+            if answer != QtWidgets.QMessageBox.Yes:
+                return
+        spacing, accepted = QtWidgets.QInputDialog.getDouble(
+            self,
+            "Auto Arrange Rooms",
+            "Clear spacing between room geometry in meters:",
+            1.0,
+            0.0,
+            1000.0,
+            2,
+        )
+        if not accepted:
+            return
+        try:
+            message = self.controller.auto_arrange_authored_rooms(selected, spacing=float(spacing))
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Auto Arrange Rooms", str(exc))
+            return
+        self._refresh_all(message)
 
     def _handle_tab_action(self, action: str) -> None:
         if action == "Create grdev01 Dev Room":
@@ -5359,6 +9349,67 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 result = self.controller.load_wok(path)
                 self._refresh_all(result.message)
             return
+        if action == "Save WOK":
+            room = str(self.walkmesh_tab._current_room_resref() or "").strip()
+            if not room:
+                QtWidgets.QMessageBox.information(
+                    self, "Save WOK", "Pick a room in the Walkmesh tab's Room dropdown first.")
+                return
+            data = self.controller.map_studio_room_walkmesh_bytes(room)
+            if not data:
+                QtWidgets.QMessageBox.warning(
+                    self, "Save WOK", f"Room {room} has no walkmesh geometry to save.")
+                return
+            path, _ = QtWidgets.QFileDialog.getSaveFileName(
+                self, "Save WOK", f"{room}.wok", "Walkmesh files (*.wok)")
+            if path:
+                Path(path).write_bytes(data)
+                message = f"Saved {room}.wok ({len(data)} bytes)."
+                self._log(f"Map Studio: {message} -> {path}")
+                self.statusBar().showMessage(message, 6000)
+            return
+        if action in {"Generate Walkmesh", "Validate Walkmesh"}:
+            try:
+                # Authored WOK is a deterministic derivative of the current
+                # room/terrain intent.  This call recompiles every room and
+                # audits the resulting faces without duplicating a binary WOK
+                # blob in the human-readable KMAP or adding a fake undo item.
+                status = self.controller.authored_walkmesh_status()
+                room_surfaces = self.controller.authored_walkmesh_room_surface_choices()
+            except Exception as exc:
+                QtWidgets.QMessageBox.warning(self, action, str(exc))
+                return
+
+            self.walkmesh_tab.set_walkmesh_status(status)
+            self.walkmesh_tab.set_room_surface_choices(room_surfaces)
+            if int(getattr(status, "terrain_room_count", 0) or 0) > 0:
+                self.viewport_panel.set_terrain_walkability_overlay(
+                    self.controller.authored_terrain_walkability_overlay()
+                )
+            self._select_map_studio_component_mode("walkmesh")
+            self.workflow_panel.set_active_authoring_context(
+                "Walkmesh: current authored geometry compiled and audited; export will materialize the engine WOK"
+            )
+
+            if action == "Generate Walkmesh":
+                prefix = "Regenerated derived WOK from current authored geometry"
+            else:
+                prefix = "Walkmesh validation passed" if status.ready else "Walkmesh validation blocked"
+            message = (
+                f"{prefix}: {int(getattr(status, 'room_count', 0) or 0)} room(s), "
+                f"{int(getattr(status, 'walkable_triangle_count', 0) or 0)} walkable triangle(s), "
+                f"{int(getattr(status, 'non_walk_triangle_count', 0) or 0)} blocked triangle(s), "
+                f"max slope {float(getattr(status, 'max_slope_degrees', 0.0) or 0.0):.1f} deg."
+            )
+            self.statusBar().showMessage(message, 8000)
+            self._log(f"Map Studio: {message}")
+            if not status.ready:
+                detail = "\n".join(
+                    tuple(getattr(status, "blocking_messages", ()) or ())
+                    or (str(getattr(status, "next_action", "Fix the reported WOK issues before export.")),)
+                )
+                QtWidgets.QMessageBox.warning(self, action, f"{message}\n\n{detail}")
+            return
         if action in {"Add Room", "Add Module"}:
             if action == "Add Module":
                 module = self.controller.add_module(f"Module{len(self.project.modules) + 1:03d}")
@@ -5373,6 +9424,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         if action == "Duplicate Room":
             self.duplicate_selected()
+            return
+        if action == "Connect Room Openings":
+            self._connect_authored_room_openings()
+            return
+        if action == "Audit Room Connections":
+            self._show_authored_room_connection_audit()
+            return
+        if action == "Auto Arrange":
+            self._auto_arrange_authored_rooms()
+            return
+        if action == "Snap Room to Grid":
+            self._snap_selected_authored_rooms_to_grid()
             return
         if action == "Save Layout":
             path, _ = QtWidgets.QFileDialog.getSaveFileName(self, "Save LYT", f"{self.project.name}.lyt", "LYT files (*.lyt)")
@@ -5455,7 +9518,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             except Exception as exc:
                 QtWidgets.QMessageBox.warning(self, "Move Authored Room Light", str(exc))
                 return
-            self._refresh_all()
+            self._refresh_map_studio_gameplay_change(
+                light_ids=(item_id,),
+                refresh_markers=False,
+                refresh_placement_rows=False,
+            )
             return
         if item_id.startswith("authored:"):
             try:
@@ -5463,11 +9530,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     item_id,
                     position=transform.position,
                     bearing=float(transform.rotation[2]) if len(transform.rotation) >= 3 else None,
+                    snap_to_walkmesh=bool(self.placement_tab.snap_wok_box.isChecked()),
                 )
             except Exception as exc:
                 QtWidgets.QMessageBox.warning(self, "Move Authored Gameplay Placement", str(exc))
                 return
-            self._refresh_all()
+            self._refresh_map_studio_gameplay_change(placement_ids=(item_id,))
             return
         if LevelScene(self.project).set_transform(item_id, transform):
             self._refresh_all()
@@ -5485,17 +9553,121 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._refresh_all()
 
     def _select_authored_room_primitive(self, room_resref: str, primitive_name: str) -> None:
-        selected = self.builder_tab.select_room_primitive(room_resref, primitive_name)
-        if selected:
-            item_id = self._map_studio_primitive_outliner_id(room_resref, primitive_name)
-            self.controller.model.select(item_id)
-            self.outliner.select_id(item_id)
-            self.properties.set_selection(item_id)
-            self.workflow_tabs.setCurrentWidget(self.builder_tab)
-            self._refresh_map_studio_selected_primitive_transform_overlay()
-            mode = self.viewport_panel.transform_gizmo_mode()
-            self.workflow_panel.set_selection_context(self._selected_item_label(item_id))
-            self.statusBar().showMessage(f"Selected room primitive {primitive_name}; {mode.title()} gimbal ready.")
+        self._select_authored_room_primitives(((room_resref, primitive_name),))
+
+    def _selected_authored_room_primitives(self) -> list[tuple[str, str]]:
+        return [
+            identity
+            for identity in (
+                self._parse_map_studio_primitive_outliner_id(item_id)
+                for item_id in tuple(self.controller.model.selected_ids or ())
+            )
+            if identity is not None
+        ]
+
+    def _combine_selected_authored_room_primitives(self) -> bool:
+        selected = self._selected_authored_room_primitives()
+        if len(selected) < 2:
+            return False
+        rooms = {room for room, _name in selected}
+        if len(rooms) != 1:
+            self.statusBar().showMessage(
+                "Combine needs objects in the same authored room. Separate or move them into one room first.", 6000
+            )
+            return True
+        room_resref = selected[0][0]
+        names = [name for _room, name in selected]
+        try:
+            self.controller.combine_authored_room_primitives(
+                room_resref=room_resref,
+                primitive_names=names,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Combine Meshes", str(exc))
+            return True
+        combined_rows = [
+            row
+            for row in self.controller.authored_room_primitive_transforms()
+            if str(getattr(row, "room_resref", "") or "") == room_resref
+            and str(getattr(row, "primitive_type", "") or "") == "combined_mesh"
+        ]
+        combined_selection = (
+            ((room_resref, str(combined_rows[-1].primitive_name)),)
+            if combined_rows
+            else ()
+        )
+        self._refresh_map_studio_geometry_change(
+            f"Combined {len(names)} objects into one real polygon mesh; materials, UVs, normals, and disconnected shells were preserved.",
+            primitive_selection=combined_selection,
+        )
+        return True
+
+    def _separate_selected_authored_room_primitive(self) -> bool:
+        selected = self._selected_authored_room_primitives()
+        if len(selected) != 1:
+            return False
+        room_resref, primitive_name = selected[0]
+        before_names = {
+            str(getattr(row, "primitive_name", "") or "")
+            for row in self.controller.authored_room_primitive_transforms()
+            if str(getattr(row, "room_resref", "") or "") == room_resref
+        }
+        try:
+            self.controller.separate_authored_room_primitive_shells(
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+                name_prefix="",
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Separate Polygon Shells", str(exc))
+            return True
+        shell_rows = [
+            row
+            for row in self.controller.authored_room_primitive_transforms()
+            if str(getattr(row, "room_resref", "") or "") == room_resref
+            and str(getattr(row, "primitive_name", "") or "") not in before_names
+        ]
+        shell_selection = tuple((room_resref, str(row.primitive_name)) for row in shell_rows)
+        self._refresh_map_studio_geometry_change(
+            f"Separated {primitive_name} into {len(shell_rows)} connected polygon shell object(s) in the same room.",
+            primitive_selection=shell_selection,
+        )
+        return True
+
+    def _select_authored_room_primitives(self, entries: object) -> None:
+        """Select one or more authored objects from viewport Shift-clicks."""
+
+        selected: list[tuple[str, str]] = []
+        for room_resref, primitive_name in tuple(entries or ()):
+            key = (str(room_resref or "").strip(), str(primitive_name or "").strip())
+            if key[0] and key[1] and key not in selected:
+                selected.append(key)
+        if not selected:
+            self.controller.model.select_many(())
+            self.outliner.select_ids(())
+            self.viewport_panel.set_selected_room_primitives(())
+            return
+        room_resref, primitive_name = selected[-1]
+        if not self.builder_tab.select_room_primitive(room_resref, primitive_name):
+            return
+        item_ids = [self._map_studio_primitive_outliner_id(room, name) for room, name in selected]
+        self.controller.model.select_many(item_ids)
+        self.outliner.select_ids(item_ids)
+        self.viewport_panel.set_selected_room_primitives(selected)
+        self.properties.set_selection(item_ids[-1])
+        self.workflow_tabs.setCurrentWidget(self.builder_tab)
+        self._refresh_map_studio_selected_primitive_transform_overlay()
+        mode = self.viewport_panel.transform_gizmo_mode()
+        if len(selected) == 1:
+            context = self._selected_item_label(item_ids[-1])
+            message = f"Selected room primitive {primitive_name}; {mode.title()} gimbal ready."
+        else:
+            context = f"{len(selected)} authored objects selected"
+            message = (
+                f"Selected {len(selected)} authored objects; {mode.title()}, Combine Meshes, and Separate Shells are ready."
+            )
+        self.workflow_panel.set_selection_context(context)
+        self.statusBar().showMessage(message)
 
     def _move_authored_room_primitive(self, room_resref: str, primitive_name: str, world_delta: object) -> None:
         try:
@@ -5507,8 +9679,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Move Authored Room Primitive", str(exc))
             return
-        self._refresh_all(f"Moved room primitive {primitive_name}; previous exports/proofs are now stale.")
-        self._select_authored_room_primitive(room_resref, primitive_name)
+        self._refresh_map_studio_geometry_change(
+            f"Moved room primitive {primitive_name}; previous exports/proofs are now stale.",
+            primitive_selection=((room_resref, primitive_name),),
+        )
 
     def _authored_room_primitive_row(self, room_resref: str, primitive_name: str):
         room = str(room_resref or "").strip()
@@ -5535,8 +9709,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Rotate Authored Room Primitive", str(exc))
             return
-        self._refresh_all(f"Rotated room primitive {primitive_name}; previous exports/proofs are now stale.")
-        self._select_authored_room_primitive(room_resref, primitive_name)
+        self._refresh_map_studio_geometry_change(
+            f"Rotated room primitive {primitive_name}; previous exports/proofs are now stale.",
+            primitive_selection=((room_resref, primitive_name),),
+        )
 
     def _scale_authored_room_primitive(self, room_resref: str, primitive_name: str, scale_multiplier: object) -> None:
         row = self._authored_room_primitive_row(room_resref, primitive_name)
@@ -5558,8 +9734,36 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Scale Authored Room Primitive", str(exc))
             return
-        self._refresh_all(f"Scaled room primitive {primitive_name}; previous exports/proofs are now stale.")
-        self._select_authored_room_primitive(room_resref, primitive_name)
+        self._refresh_map_studio_geometry_change(
+            f"Scaled room primitive {primitive_name}; previous exports/proofs are now stale.",
+            primitive_selection=((room_resref, primitive_name),),
+        )
+
+    def _transform_authored_room_primitives(self, payload: object) -> None:
+        data = dict(payload or {})
+        selection = tuple(
+            (str(room or "").strip(), str(name or "").strip())
+            for room, name in tuple(data.get("selection", ()) or ())
+            if str(room or "").strip() and str(name or "").strip()
+        )
+        if not selection:
+            return
+        mode = str(data.get("mode") or "translate").strip().lower()
+        try:
+            self.controller.transform_authored_room_primitives(
+                selections=selection,
+                mode=mode,
+                world_delta=tuple(data.get("world_delta", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)),
+                rotation_delta_degrees_z=float(data.get("rotation_delta_degrees", 0.0) or 0.0),
+                scale_multiplier=tuple(data.get("scale_multiplier", (1.0, 1.0, 1.0)) or (1.0, 1.0, 1.0)),
+                world_pivot=tuple(data.get("world_pivot", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)),
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Transform Authored Room Primitives", str(exc))
+            return
+        verb = {"translate": "Moved", "rotate": "Rotated", "scale": "Scaled"}.get(mode, "Transformed")
+        message = f"{verb} {len(selection)} room primitives as one selection; previous exports/proofs are now stale."
+        self._refresh_map_studio_geometry_change(message, primitive_selection=selection)
 
     def _current_map_studio_room_primitive_identity(self) -> tuple[str, str] | None:
         data = self._map_studio_combo_data("roomPrimitiveTransformComboBox")
@@ -5619,7 +9823,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 except Exception as exc:
                     QtWidgets.QMessageBox.warning(self, "Rename Authored Placement", str(exc))
                     return
-                self._refresh_all("Renamed authored gameplay placement.")
+                self._refresh_map_studio_gameplay_change(
+                    "Renamed authored gameplay placement.",
+                    placement_ids=(item_id,),
+                    refresh_outliner_labels=True,
+                )
             return
         if item_id.startswith("authored_light:"):
             if key == "name":
@@ -5628,7 +9836,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 except Exception as exc:
                     QtWidgets.QMessageBox.warning(self, "Rename Authored Room Light", str(exc))
                     return
-                self._refresh_all("Renamed authored room light.")
+                self._refresh_map_studio_gameplay_change(
+                    "Renamed authored room light.",
+                    light_ids=(item_id,),
+                    refresh_markers=False,
+                    refresh_placement_rows=False,
+                    refresh_outliner_labels=True,
+                )
             return
         item = self.project.find_room(item_id) or self.project.find_module(item_id) or self.project.find_blueprint(item_id)
         if item is None:
@@ -5640,7 +9854,14 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.project.mark_dirty()
         self._refresh_all()
 
-    def _set_authored_gameplay_transition(self, item_id: str, linked_to: str, linked_to_module: str, transition_destination: int) -> None:
+    def _set_authored_gameplay_transition(
+        self,
+        item_id: str,
+        linked_to: str,
+        linked_to_module: str,
+        linked_to_flags: int,
+        transition_destination: int,
+    ) -> None:
         if not item_id.startswith("authored:"):
             return
         try:
@@ -5648,12 +9869,16 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 item_id,
                 linked_to=linked_to,
                 linked_to_module=linked_to_module,
+                linked_to_flags=linked_to_flags,
                 transition_destination=transition_destination,
             )
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Edit Authored Transition", str(exc))
             return
-        self._refresh_all("Updated authored transition destination.")
+        self._refresh_map_studio_gameplay_change(
+            "Updated authored transition destination.",
+            placement_ids=(item_id,),
+        )
 
     def _set_authored_gameplay_camera_properties(
         self,
@@ -5678,41 +9903,394 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Edit Authored Camera", str(exc))
             return
-        self._refresh_all("Updated authored camera properties.")
+        self._refresh_map_studio_gameplay_change(
+            "Updated authored camera properties.",
+            placement_ids=(item_id,),
+        )
 
-    def _set_authored_room_light_properties(self, item_id: str, light_type: str, color: object, radius: float, intensity: float) -> None:
+    def _set_authored_room_light_properties(self, item_id: str, settings: object) -> None:
         if not item_id.startswith("authored_light:"):
             return
         try:
+            values = dict(settings) if isinstance(settings, dict) else {}
             self.controller.set_authored_room_light_properties(
                 item_id,
-                light_type=light_type,
-                color=color,
-                radius=radius,
-                intensity=intensity,
+                light_type=values.get("light_type"),
+                color=values.get("color"),
+                radius=values.get("radius"),
+                intensity=values.get("intensity"),
+                enabled=values.get("enabled"),
+                casts_shadows=values.get("casts_shadows"),
+                affects_diffuse=values.get("affects_diffuse"),
+                affects_lightmap=values.get("affects_lightmap"),
+                direction=values.get("direction"),
+                cone_angle_degrees=values.get("cone_angle_degrees"),
+                bake_group=values.get("bake_group"),
             )
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Edit Authored Room Light", str(exc))
             return
-        self._refresh_all("Updated authored room light properties.")
+        self._refresh_map_studio_gameplay_change(
+            "Updated authored room light properties.",
+            light_ids=(item_id,),
+            refresh_markers=False,
+            refresh_placement_rows=False,
+        )
+
+    def _sync_map_studio_viewport_resource_manager(self) -> None:
+        """Push the game resource manager into the viewport texture cache once."""
+
+        manager = getattr(self, "resource_manager", None)
+        if manager is None:
+            return
+        game = str(getattr(self.project, "game", "K1") or "K1").upper()
+        key = (id(manager), game)
+        if getattr(self, "_map_studio_viewport_resource_key", None) == key:
+            return
+        viewport = getattr(self.viewport_panel, "viewport", None)
+        set_resource_manager = getattr(viewport, "set_resource_manager", None)
+        if callable(set_resource_manager):
+            try:
+                set_resource_manager(manager, game)
+                self._map_studio_viewport_resource_key = key
+            except Exception:
+                pass
+
+    def _log_map_studio_stock_preview_warnings(self) -> None:
+        warnings = tuple(getattr(self.controller, "last_map_studio_stock_preview_warnings", ()) or ())
+        if warnings and warnings != getattr(self, "_map_studio_last_stock_warnings", ()):
+            self._map_studio_last_stock_warnings = warnings
+            for warning in warnings[:8]:
+                self._log(f"Map Studio stock preview: {warning}")
+
+    def _apply_map_studio_minimal_layout(self) -> None:
+        """T3001 UI cleanup: keep only map-building essentials visible.
+
+        Duplicated or verbose strips stay constructed (automation, tests, and
+        dispatch contracts depend on them) but are hidden: the scope banner,
+        the Workspace row, the command-readiness banner, and the tool-belt
+        tab chrome.  The toolbar edit-mode combo remains the single visible
+        workspace switcher; hidden controls keep working programmatically.
+        """
+
+        for widget in (
+            self.map_studio_scope_label,
+            self.map_studio_workspace_label,
+            self.map_studio_workspace_combo,
+            self.map_studio_workspace_guide_label,
+            self.map_studio_open_workspace_button,
+            self.map_studio_command_search_readiness_label,
+        ):
+            widget.setVisible(False)
+        tab_bar = self.map_studio_tool_belt_tabs.tabBar()
+        if tab_bar is not None:
+            tab_bar.setVisible(False)
+        try:
+            self.map_studio_tool_belt_tabs.setTabVisible(1, False)
+        except Exception:
+            pass
+
+    def _refresh_map_studio_geometry_validation(self, generation: int) -> None:
+        """Refresh export gates after the viewport has had a chance to paint."""
+
+        if generation != int(getattr(self, "_map_studio_geometry_refresh_generation", 0) or 0):
+            return
+        panel = getattr(self, "viewport_panel", None)
+        interaction_fields = (
+            "_component_extrude_drag",
+            "_component_bevel_drag",
+            "_terrain_brush_drag",
+            "_terrain_brush_option_drag",
+            "_room_primitive_drag",
+            "_room_outline_point_drag",
+            "_marker_drag",
+        )
+        if panel is not None and any(getattr(panel, field, None) is not None for field in interaction_fields):
+            # Never let full readiness/WOK validation interrupt a live pointer
+            # gesture.  The same generation retries after the interaction;
+            # a newer commit supersedes this one through the guard above.
+            QtCore.QTimer.singleShot(
+                100,
+                lambda value=generation: self._refresh_map_studio_geometry_validation(value),
+            )
+            return
+        self._map_studio_geometry_validation_requested_generation = generation
+        running = getattr(self, "_map_studio_geometry_validation_future", None)
+        if running is not None and not running.done():
+            # One worker is enough.  Its poller discards the stale result and
+            # immediately starts the newest requested generation.
+            return
+        try:
+            project_data = deepcopy(KMapSerializer.to_dict(self.project))
+            future = _MAP_STUDIO_VALIDATION_EXECUTOR.submit(
+                _build_map_studio_geometry_validation_snapshot,
+                project_data,
+            )
+            self._map_studio_geometry_validation_future = future
+            self._map_studio_geometry_validation_future_generation = generation
+            QtCore.QTimer.singleShot(
+                25,
+                lambda value=generation: self._poll_map_studio_geometry_validation(value),
+            )
+        except Exception as exc:
+            self._log(f"Map Studio readiness worker could not start: {exc}")
+
+    def _poll_map_studio_geometry_validation(self, generation: int) -> None:
+        """Apply a validation worker result on Qt's thread, or coalesce it."""
+
+        if generation != int(getattr(self, "_map_studio_geometry_validation_future_generation", -1)):
+            return
+        future = getattr(self, "_map_studio_geometry_validation_future", None)
+        if future is None:
+            return
+        if not future.done():
+            QtCore.QTimer.singleShot(
+                25,
+                lambda value=generation: self._poll_map_studio_geometry_validation(value),
+            )
+            return
+
+        self._map_studio_geometry_validation_future = None
+        current_generation = int(getattr(self, "_map_studio_geometry_refresh_generation", 0) or 0)
+        if generation != current_generation:
+            requested_generation = int(
+                getattr(self, "_map_studio_geometry_validation_requested_generation", -1)
+            )
+            if requested_generation == current_generation:
+                self._refresh_map_studio_geometry_validation(current_generation)
+            return
+        try:
+            result = dict(future.result() or {})
+            readiness = result["readiness"]
+            self.workflow_panel.set_state(self.project, readiness)
+            self.readiness_panel.set_readiness(readiness)
+            self.export_panel.set_readiness(readiness)
+            self.validation_panel.set_issues(result["issues"])
+            self.walkmesh_tab.set_walkmesh_status(result["walkmesh_status"])
+            self.walkmesh_tab.set_room_surface_choices(result["walkmesh_room_surfaces"])
+            terrain_overlay = result.get("terrain_walkability_overlay")
+            self.viewport_panel.set_terrain_walkability_overlay(terrain_overlay)
+            terrain_room_choices = result.get("terrain_room_choices")
+            if terrain_room_choices is not None:
+                self.builder_tab.set_terrain_room_choices(terrain_room_choices)
+                self._sync_map_studio_terrain_brush_context()
+            self._last_map_studio_geometry_validation_ms = float(result.get("elapsed_ms", 0.0) or 0.0)
+        except Exception as exc:
+            self._log(f"Map Studio deferred readiness refresh failed: {exc}")
+
+    def _refresh_map_studio_geometry_change(
+        self,
+        message: str = "",
+        *,
+        primitive_selection=(),
+        refresh_outlines: bool = False,
+        refresh_terrain: bool = False,
+        refresh_room_choices: bool = False,
+        refresh_connections: bool = False,
+        rebuild_viewport_model: bool = True,
+        refresh_scene_tree: bool = True,
+        validation_delay_ms: int = 75,
+    ) -> None:
+        """Refresh only the editor surfaces made stale by a geometry commit.
+
+        ``rebuild_viewport_model=False`` is the topology hot path: the final
+        live preview was already promoted in-place, so replacing the combined
+        model would only evict unrelated resident resources.  The full path is
+        retained as a correctness fallback for structural room/node changes.
+        """
+
+        started = perf_counter()
+        self.setWindowTitle(f"Ghost-Studio Map Studio - Level Editor - {self.project.name}{' *' if self.project.dirty else ''}")
+        self._update_map_studio_undo_redo_actions()
+        if rebuild_viewport_model:
+            self._cancel_map_studio_component_preview()
+            preview = self.controller.map_studio_viewport_preview_model(
+                resource_manager=getattr(self, "resource_manager", None),
+                include_backdrops=bool(getattr(self, "_map_studio_show_skybox", False)),
+            )
+            self.viewport_panel.set_authored_room_preview_model(preview)
+        else:
+            self._map_studio_topology_preview_source = None
+        if refresh_outlines:
+            room_outlines = self.controller.authored_room_outline_geometry()
+            self.viewport_panel.set_authored_room_outline_geometry(room_outlines)
+        if refresh_terrain:
+            self.viewport_panel.set_terrain_walkability_overlay(
+                self.controller.authored_terrain_walkability_overlay()
+            )
+        if refresh_scene_tree:
+            primitive_rows = self.controller.authored_room_primitive_transforms()
+            self.builder_tab.set_room_primitives(primitive_rows)
+            if refresh_room_choices:
+                self.builder_tab.set_floor_plan_room_choices(self.controller.authored_floor_plan_room_choices())
+                self.builder_tab.set_terrain_room_choices(self.controller.authored_terrain_room_choices())
+            if refresh_connections:
+                self.rooms_tab.set_connection_audit(self.controller.authored_room_connection_audit())
+            self.outliner.set_project(
+                self.project,
+                self.controller.authored_gameplay_placements(),
+                self.controller.authored_room_lights(),
+                primitive_rows,
+            )
+            selection = tuple(primitive_selection or self.viewport_panel.selected_room_primitives())
+            if selection:
+                self._select_authored_room_primitives(selection)
+            else:
+                self._refresh_map_studio_selected_primitive_transform_overlay()
+        generation = int(getattr(self, "_map_studio_geometry_refresh_generation", 0) or 0) + 1
+        self._map_studio_geometry_refresh_generation = generation
+        self._map_studio_geometry_validation_requested_generation = generation
+        # Coalesce readiness work behind the first committed render.  A zero
+        # delay competed with the renderer for the same event-loop turn and
+        # made the final mouse release feel like another drag hitch.
+        QtCore.QTimer.singleShot(
+            max(0, int(validation_delay_ms)),
+            lambda value=generation: self._refresh_map_studio_geometry_validation(value),
+        )
+        self._last_map_studio_geometry_refresh_ms = (perf_counter() - started) * 1000.0
+        if message:
+            self._log(message)
+
+    def _refresh_map_studio_gameplay_change(
+        self,
+        message: str = "",
+        *,
+        placement_ids=(),
+        light_ids=(),
+        refresh_markers: bool = True,
+        refresh_placement_rows: bool = True,
+        refresh_outliner_labels: bool = False,
+        validation_delay_ms: int = 75,
+    ) -> None:
+        """Refresh only the surfaces made stale by a GIT placement/light commit.
+
+        The rendered proxy is promoted in place instead of rebuilding the
+        combined preview model, mirroring the topology hot path in
+        ``_refresh_map_studio_geometry_change``.  Export readiness and
+        validation reuse the deferred geometry generation contract.  Scene
+        selection (including multi-selection) is intentionally left
+        untouched; placement add/remove and undo/redo still route through
+        the broad ``_refresh_all`` correctness fallback.
+        """
+
+        started = perf_counter()
+        self.setWindowTitle(f"Ghost-Studio Map Studio - Level Editor - {self.project.name}{' *' if self.project.dirty else ''}")
+        self._update_map_studio_undo_redo_actions()
+        placements = tuple(self.controller.authored_gameplay_placements() or ())
+        lights = tuple(self.controller.authored_room_lights() or ())
+        placement_rows = {str(getattr(row, "placement_id", "") or ""): row for row in placements}
+        edited_placements = tuple(str(value or "") for value in tuple(placement_ids or ()) if str(value or ""))
+        edited_lights = tuple(str(value or "") for value in tuple(light_ids or ()) if str(value or ""))
+        # Promote committed transforms onto live preview nodes before the
+        # marker table refresh so the one-time baked-bearing capture still
+        # sees the pre-commit marker state.
+        for placement_id in edited_placements:
+            row = placement_rows.get(placement_id)
+            if row is None or not bool(getattr(row, "is_spatial", True)):
+                continue
+            self.viewport_panel.update_authored_placement_preview_transform(
+                placement_id,
+                position=getattr(row, "position", None),
+                bearing=getattr(row, "bearing", None),
+            )
+        if refresh_markers:
+            self.viewport_panel.set_authored_gameplay_markers(
+                placements,
+                self.controller.authored_gameplay_fallback_preview_markers(),
+                self.controller.authored_gameplay_fallback_marker_geometry(),
+            )
+        self.viewport_panel.update_authored_scene_rows(
+            placements,
+            lights,
+            item_ids=edited_placements + edited_lights,
+        )
+        if refresh_placement_rows:
+            self.placement_tab.set_placements(placements)
+        self.properties.set_project(self.project, placements, lights)
+        shown = self.properties.current_item_id()
+        if shown and (shown in edited_placements or shown in edited_lights):
+            self.properties.set_selection(shown)
+        if refresh_outliner_labels:
+            for item_id in (*edited_placements, *edited_lights):
+                row = placement_rows.get(item_id)
+                if row is not None:
+                    label = str(getattr(row, "tag", "") or getattr(row, "template_resref", "") or item_id)
+                else:
+                    light = next((value for value in lights if str(getattr(value, "light_id", "") or "") == item_id), None)
+                    if light is None:
+                        continue
+                    label = str(getattr(light, "name", "") or item_id)
+                self.outliner.update_item_text(item_id, label)
+        generation = int(getattr(self, "_map_studio_geometry_refresh_generation", 0) or 0) + 1
+        self._map_studio_geometry_refresh_generation = generation
+        self._map_studio_geometry_validation_requested_generation = generation
+        QtCore.QTimer.singleShot(
+            max(0, int(validation_delay_ms)),
+            lambda value=generation: self._refresh_map_studio_geometry_validation(value),
+        )
+        self._last_map_studio_gameplay_refresh_ms = (perf_counter() - started) * 1000.0
+        if message:
+            self._log(message)
 
     def _refresh_all(self, message: str = "") -> None:
-        self.setWindowTitle(f"GhostRigger Map Studio - Level Editor - {self.project.name}{' *' if self.project.dirty else ''}")
+        if self._map_studio_pie_session is not None:
+            self._stop_map_studio_pie()
+        # A broad synchronous refresh supersedes any older background
+        # geometry-readiness snapshot (for example when Undo replaces KMAP).
+        self._map_studio_geometry_refresh_generation = int(
+            getattr(self, "_map_studio_geometry_refresh_generation", 0) or 0
+        ) + 1
+        self._map_studio_geometry_validation_requested_generation = -1
+        project_game = str(getattr(self.project, "game", "") or "").upper()
+        project_root = self._authored_module_root()
+        if (
+            project_game != str(getattr(self, "_placeable_library_game", "") or "").upper()
+            or project_root != str(getattr(self, "_placeable_library_module_root", "") or "").lower()
+        ):
+            self.refresh_placeable_library()
+        primitive_selection = tuple(self.viewport_panel.selected_room_primitives())
+        self.setWindowTitle(f"Ghost-Studio Map Studio - Level Editor - {self.project.name}{' *' if self.project.dirty else ''}")
+        self._sync_map_studio_viewport_resource_manager()
         self._update_map_studio_undo_redo_actions()
         self._apply_map_studio_tool_belt_preferences_from_project()
         self._refresh_map_studio_tool_belt()
         authored_placements = self.controller.authored_gameplay_placements()
         authored_room_lights = self.controller.authored_room_lights()
-        authored_markers = self.controller.authored_gameplay_preview_markers()
-        authored_marker_geometry = self.controller.authored_gameplay_marker_geometry()
+        authored_room_preview_model = self.controller.map_studio_viewport_preview_model(
+            resource_manager=getattr(self, "resource_manager", None),
+            include_backdrops=bool(getattr(self, "_map_studio_show_skybox", False)),
+        )
+        authored_markers = self.controller.authored_gameplay_fallback_preview_markers()
+        authored_marker_geometry = self.controller.authored_gameplay_fallback_marker_geometry()
         authored_room_outline_geometry = self.controller.authored_room_outline_geometry()
-        authored_room_preview_model = self.controller.authored_room_preview_model()
+        self._log_map_studio_stock_preview_warnings()
         authored_terrain_walkability_overlay = self.controller.authored_terrain_walkability_overlay()
         authored_walkmesh_status = self.controller.authored_walkmesh_status()
         authored_walkmesh_room_surfaces = self.controller.authored_walkmesh_room_surface_choices()
         authored_room_primitives = self.controller.authored_room_primitive_transforms()
         authored_floor_plan_rooms = self.controller.authored_floor_plan_room_choices()
         authored_terrain_rooms = self.controller.authored_terrain_room_choices()
+        authored_room_connection_audit = self.controller.authored_room_connection_audit()
+        self.rooms_tab.set_connection_audit(authored_room_connection_audit)
+        self.placement_tab.set_placements(authored_placements)
+        self.texture_paint_tab.set_project(self.project)
+        self.environment_tab.set_world_settings(self.controller.authored_world_lighting_settings())
+        self.environment_tab.set_lightmap_context(
+            self.controller.authored_lightmap_surface_rows(),
+            project_saved=bool(str(getattr(self.project, "path", "") or "").strip()),
+            light_count=len(tuple(authored_room_lights or ())),
+        )
+        self.environment_tab.set_skybox_context(
+            module_root=str(getattr(self.project, "name", "") or ""),
+            game=str(getattr(self.project, "game", "") or "K1"),
+            room_resrefs=self.controller.authored_room_resrefs(),
+        )
+        self.environment_tab.set_sky_traffic_context(
+            room_resrefs=self.controller.authored_room_resrefs(),
+            traffic_count=len(tuple(self.controller.authored_sky_traffic() or ())),
+        )
+        if self._texture_paint_texture_id and self._project_texture_for_id(self._texture_paint_texture_id) is None:
+            self._reset_map_studio_texture_paint_session()
         self.builder_tab.set_module_entry_point(self.controller.authored_module_entry_point())
         self.builder_tab.set_room_primitives(authored_room_primitives)
         self.builder_tab.set_floor_plan_room_choices(authored_floor_plan_rooms)
@@ -5735,12 +10313,23 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._sync_map_studio_terrain_brush_context()
         self._refresh_map_studio_selected_primitive_transform_overlay()
         readiness_result = self.controller.authored_module_readiness()
+        self.export_panel.set_target_game(
+            str(getattr(self.project, "game", "K1") or "K1"),
+            source_game=str(getattr(self.project, "source_game", "") or ""),
+        )
         self.workflow_panel.set_state(self.project, readiness_result.readiness)
         self.readiness_panel.set_readiness(readiness_result.readiness)
         self.export_panel.set_readiness(readiness_result.readiness)
-        self.validation_panel.set_issues(self.controller.validate())
-        if self.controller.model.selected_ids:
-            self.select_item(self.controller.model.selected_ids[0])
+        self.validation_panel.set_issues(
+            self.controller.validate(readiness_result=readiness_result)
+        )
+        if primitive_selection:
+            self._select_authored_room_primitives(primitive_selection)
+        elif self.controller.model.selected_ids:
+            # A general single selection can still use the normal inspector
+            # route; authored multi-object selections are restored above and
+            # are never collapsed to selected_ids[0].
+            self.select_item(self.controller.model.selected_ids[-1])
         else:
             self.workflow_panel.set_selection_context("")
         if message:
@@ -5752,7 +10341,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.output_log.appendPlainText(message)
         self.statusBar().showMessage(message)
 
-    def _confirm_discard_or_save(self) -> bool:
+    def _confirm_discard_or_save(self, *, restore_discarded_sidecars: bool = False) -> bool:
         if not self.project.dirty:
             return True
         result = QtWidgets.QMessageBox.question(
@@ -5766,6 +10355,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if result == QtWidgets.QMessageBox.Save:
             self.save_kmap()
             return not self.project.dirty
+        if restore_discarded_sidecars:
+            try:
+                self.controller.discard_project_texture_sidecar_changes()
+                self._reset_map_studio_texture_paint_session()
+            except Exception as exc:
+                QtWidgets.QMessageBox.critical(self, "Discard Texture Changes", str(exc))
+                return False
         return True
 
     def _reset_layout(self) -> None:

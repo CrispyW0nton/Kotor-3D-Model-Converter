@@ -615,6 +615,7 @@ class RetargetWorkbenchController:
                     original_target_model=self.current_target_model(),
                     output_mdl_path=mdl_path,
                     output_mdx_path=mdl_path.with_suffix(".mdx"),
+                    resource_manager=self.current_resource_manager(),
                     overwrite=overwrite,
                     verify_roundtrip=True,
                     write_manifest=write_manifest,
@@ -639,6 +640,12 @@ class RetargetWorkbenchController:
             self._status("KOTOR → KOTOR export failed")
             self.update_enabled()
             return None
+
+    def current_resource_manager(self):
+        provider = getattr(self.ue_to_kotor_controller, "current_resource_manager", None)
+        if callable(provider):
+            return provider()
+        return None
 
     def _preview_kotor_to_unreal(self) -> Any | None:
         if not self._can_preview_kotor_to_unreal():

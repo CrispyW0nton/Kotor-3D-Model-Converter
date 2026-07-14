@@ -8,22 +8,40 @@ LYT/VIS, WOK, or room MDL/MDX resources themselves.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import importlib.util
 import json
 import shutil
+import struct
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.core.validation.kotor_module_engine_contract import (
+    KotorModuleEngineContractRequest,
+    validate_kotor_module_engine_contract,
+)
+
+from .authored_imported_mesh import (
+    ImportedMeshRoomPrimitive,
+    authored_room_uses_unresolved_stock_geometry,
+    imported_mesh_has_explicit_static_runtime_rebuild,
+    imported_mesh_room_is_backdrop,
+)
 from .authored_module_layout import compile_authored_module_layout
 from .authored_module_lighting import authored_room_light_payload
 from .authored_module_metadata import (
     AuthoredAreaMetadata,
+    FULLBRIGHT_LIGHTING_PROFILE,
     authored_area_script_hooks,
+    authored_lighting_is_fullbright,
+    authored_lighting_profile,
     authored_module_script_hooks,
     compile_authored_module_metadata,
+    patch_preserved_stock_are_bytes,
 )
 from .authored_module_objects import (
     AuthoredGameplayPlacement,
@@ -35,6 +53,11 @@ from .authored_module_pathing import AuthoredPathAnchor, compile_authored_pathin
 from .authored_module_project import AuthoredModuleProject, compile_authored_room_spec, normalise_resref, validate_authored_module_project
 from .authored_room_geometry import AuthoredRoomGeometry, PrimitiveMesh
 from .authored_room_materials import compile_authored_room_material_preflight
+from .authored_sky_traffic import (
+    authored_sky_traffic_list_to_kmap,
+    read_authored_project_sky_traffic,
+    validate_authored_sky_traffic_collection,
+)
 from .authored_walkmesh_audit import DOOR_TRANSITION_SURFACE_ID, AuthoredWalkmeshAudit, audit_authored_wok
 from .authored_walkmesh_boundaries import apply_authored_walkmesh_boundary_policy_to_geometry
 from .custom_module_packager import CustomModulePackRequest, CustomModulePackResult, PackagedModuleResource, package_custom_module
@@ -47,6 +70,17 @@ from .module_format import LYTLayout, VISData, WOKData
 
 
 ENGINE_MODULE_IFO_RESREF = "module"
+_MDL_BINARY_PREFIX_SIZE = 12
+_MDL_NODE_HEADER_SIZE = 80
+_MDL_LIGHT_FLAG = 0x0002
+_MDL_LIGHT_HEADER_SIZE = 92
+_LIGHT_RUNTIME_FIELD_OFFSETS: tuple[tuple[str, int], ...] = (
+    ("dynamic_type", 72),
+    ("affect_dynamic", 76),
+    ("shadow", 80),
+    ("flare", 84),
+    ("fading_light", 88),
+)
 
 
 @dataclass(frozen=True)
@@ -73,6 +107,9 @@ class AuthoredModuleExportRequest:
     dry_run: bool = False
     create_backups: bool = True
     write_loose_resources: bool = True
+    #: Extra (resref, restype, data) payloads bundled into the module: custom
+    #: UTC/UTP/UTM/UTD templates, compiled NCS scripts, ported TPC textures.
+    extra_resources: tuple[tuple[str, str, bytes], ...] = ()
 
 
 @dataclass
@@ -161,6 +198,17 @@ class AuthoredModuleGameProofRequest:
     player_can_walk_on_floor: bool = False
     transition_pathing_sanity_confirmed: bool = False
     no_inherited_base_game_geometry_or_scripted_movers: bool = False
+    texture_paint_visible_in_game: bool = False
+    terrain_sculpt_and_generated_walkmesh_work_in_game: bool = False
+    placed_assets_match_editor_staging: bool = False
+    enemy_spawns_hostile: bool = False
+    npc_spawns_and_free_roams: bool = False
+    terminal_operates: bool = False
+    container_opens_with_inventory: bool = False
+    puzzle_sequence_unlocks_door: bool = False
+    animated_door_operates: bool = False
+    configured_transition_operates: bool = False
+    player_start_position_and_facing_match: bool = False
     allow_missing_evidence: bool = False
 
 
@@ -210,6 +258,38 @@ def _repo_root_from_here() -> Path:
     return path.parents[6]
 
 
+def _preserved_stock_resource(project: AuthoredModuleProject, restype: str) -> bytes | None:
+    """Return a byte-exact imported stock resource stored in the KMAP.
+
+    PTH is small enough to preserve in the human-readable KMAP payload as a
+    base64 record. Keeping the original graph is safer than rebuilding it from
+    room-local WOK coordinates until a pathing-affecting authoring operation
+    explicitly invalidates the source graph.
+    """
+
+    extra = dict(getattr(project, "extra", {}) or {})
+    if str(restype or "").lower() == "pth" and extra.get("stock_pth_dirty"):
+        return None
+    record = dict((extra.get("stock_resources") or {}).get(str(restype or "").lower()) or {})
+    if not record:
+        return None
+    if str(record.get("encoding") or "").lower() != "base64":
+        raise ValueError(f"Preserved stock {restype.upper()} resource uses an unsupported encoding.")
+    raw = base64.b64decode(str(record.get("data") or ""), validate=True)
+    expected_size = int(record.get("size") or 0)
+    expected_sha = str(record.get("sha256") or "").lower()
+    if expected_size and len(raw) != expected_size:
+        raise ValueError(
+            f"Preserved stock {restype.upper()} resource size changed: {len(raw)} != {expected_size}."
+        )
+    actual_sha = hashlib.sha256(raw).hexdigest()
+    if expected_sha and actual_sha != expected_sha:
+        raise ValueError(
+            f"Preserved stock {restype.upper()} resource hash changed: {actual_sha} != {expected_sha}."
+        )
+    return raw or None
+
+
 def _load_module(module_name: str, path: Path) -> Any:
     module = sys.modules.get(module_name)
     if module is not None:
@@ -242,7 +322,32 @@ def _import_mdl_runtime() -> tuple[Any, Any]:
         return md, writer_module.MDLBinaryWriter
 
 
-def _primitive_mesh_to_node(md: Any, mesh: PrimitiveMesh, parent: Any) -> Any:
+def _primitive_mesh_to_node(md: Any, mesh: PrimitiveMesh, parent: Any, *, fullbright: bool = False) -> Any:
+    diffuse = (1.0, 1.0, 1.0) if fullbright else mesh.diffuse
+    ambient = (1.0, 1.0, 1.0) if fullbright else mesh.ambient
+    # Imported stock surfaces carry their full render recipe in metadata.
+    # Re-emitting the ORIGINAL lightmap name + lightmap UVs means an edited
+    # vanilla room keeps vanilla in-game lighting (the lightmap TPCs still
+    # ship in the game files); without this, replaced rooms render dark.
+    metadata = dict(getattr(mesh, "metadata", {}) or {})
+    texture = str(mesh.texture or "")
+    texture_names = [str(name) for name in tuple(metadata.get("texture_names") or ()) if str(name).strip()]
+    if not texture_names:
+        texture_names = [
+            str(row.get("texture") or "")
+            for row in tuple(metadata.get("material_table") or ())
+            if isinstance(row, dict) and str(row.get("texture") or "").strip()
+        ]
+    if not texture_names and texture:
+        texture_names = [texture]
+    lightmap = str(metadata.get("lightmap") or "")
+    uvs_lm = [tuple(float(v) for v in uv[:2]) for uv in tuple(metadata.get("uvs_lm") or ())]
+    face_mats = [
+        int(value)
+        for value in tuple(metadata.get("face_mats") or metadata.get("face_material_ids") or ())
+    ]
+    if len(face_mats) != len(mesh.faces):
+        face_mats = [0] * len(mesh.faces)
     node = md.ModelNode(
         name=mesh.name,
         flags=int(md.NodeFlags.MESH),
@@ -250,23 +355,183 @@ def _primitive_mesh_to_node(md: Any, mesh: PrimitiveMesh, parent: Any) -> Any:
         normals=list(mesh.normals or ((0.0, 0.0, 1.0),) * len(mesh.vertices)),
         uvs=list(mesh.uvs or ((0.0, 0.0),) * len(mesh.vertices)),
         faces=list(mesh.faces),
-        face_mats=[0] * len(mesh.faces),
-        texture=str(mesh.texture or ""),
-        diffuse=mesh.diffuse,
-        ambient=mesh.ambient,
+        face_mats=face_mats,
+        texture=texture,
+        texture_names=texture_names,
+        tex_count=max(1, int(metadata.get("tex_count") or len(texture_names) or 1)),
+        lightmap=lightmap,
+        has_lightmap=bool(lightmap) and len(uvs_lm) == len(mesh.vertices),
+        diffuse=diffuse,
+        ambient=ambient,
         vertex_space=0,
     )
+    if len(uvs_lm) == len(mesh.vertices):
+        node.uvs_lm = uvs_lm
+    node.specular = tuple(float(v) for v in tuple(metadata.get("specular") or (0.0, 0.0, 0.0))[:3])
+    node.shininess = float(metadata.get("shininess") or 0.0)
+    node.alpha = float(metadata.get("alpha", 1.0) if metadata.get("alpha") is not None else 1.0)
+    node.has_shadow = False if fullbright else bool(metadata.get("has_shadow", True))
+    node.render = bool(metadata.get("render", True))
+    node.selfillum = tuple(float(v) for v in tuple(metadata.get("selfillum") or (0.0, 0.0, 0.0))[:3])
+    node.transparency_hint = int(metadata.get("transparency_hint") or 0)
+    node.beaming = bool(metadata.get("beaming", False))
+    node.background_geometry = bool(metadata.get("background_geometry", False))
+    node.rotate_texture = bool(metadata.get("rotate_texture", False))
+    node.animate_uv = bool(metadata.get("animate_uv", False))
+    node.uv_dir_x = float(metadata.get("uv_dir_x") or 0.0)
+    node.uv_dir_y = float(metadata.get("uv_dir_y") or 0.0)
+    node.uv_jitter = float(metadata.get("uv_jitter") or 0.0)
+    node.uv_jitter_speed = float(metadata.get("uv_jitter_speed") or 0.0)
+    node.dirt_enabled = bool(metadata.get("dirt_enabled", False))
+    node.dirt_texture = int(metadata.get("dirt_texture") or 0)
+    node.dirt_coord_space = int(metadata.get("dirt_coord_space") or 0)
+    node.hide_in_holograms = bool(metadata.get("hide_in_holograms", False))
+    node.mesh_average_point = tuple(
+        float(v) for v in tuple(metadata.get("mesh_average_point") or (0.0, 0.0, 0.0))[:3]
+    )
+    node.mesh_unknown0 = bytes(metadata.get("mesh_unknown0") or b"")[:24].ljust(24, b"\x00")
     node.parent = parent
     node.compute_bounds()
     return node
 
 
-def _make_room_model_bytes(game: str, geometry: AuthoredRoomGeometry) -> tuple[bytes, bytes]:
+def _make_walkmesh_node(md: Any, geometry: AuthoredRoomGeometry, parent: Any) -> Any | None:
+    """Build the AABB walkmesh node the engine binds the room .wok to.
+
+    Every valid KOTOR room MDL embeds an AABB node (vanilla 001ebo1: WALK1,
+    tst_light: walk_a). Its absence made the K2 area loader hit a type-guarded
+    NULL dereference at swkotor2+0x4b3a8 on warp. Geometry comes from the
+    compiled room WOK so the render mesh and walkmesh agree.
+    """
+
+    wok = getattr(geometry, "wok", None)
+    verts = [tuple(float(c) for c in v[:3]) for v in tuple(getattr(wok, "verts", ()) or ())]
+    faces = [
+        (int(f.v1), int(f.v2), int(f.v3))
+        for f in tuple(getattr(wok, "faces", ()) or ())
+    ]
+    if not verts or not faces:
+        return None
+    node = md.ModelNode(
+        name=f"{geometry.room_resref}_wg",
+        flags=int(md.NodeFlags.MESH) | int(md.NodeFlags.AABB),
+        vertices=verts,
+        faces=faces,
+        normals=[(0.0, 0.0, 1.0)] * len(verts),
+        uvs=[(0.0, 0.0)] * len(verts),
+        face_mats=[int(getattr(f, "surface", 1)) for f in tuple(getattr(wok, "faces", ()) or ())],
+        texture="NULL",
+        diffuse=(1.0, 1.0, 1.0),
+        ambient=(1.0, 1.0, 1.0),
+        vertex_space=2,  # AABB_WALK: skip rendering
+    )
+    node.render = False
+    node.walkmesh = True
+    node.parent = parent
+    node.compute_bounds()
+    return node
+
+
+def _walkmesh_walkable_only(wok: Any) -> Any:
+    """Reduce the room walkmesh to its walkable floor faces.
+
+    A regenerated room WOK carried the whole room (floor + ceiling + walls):
+    18 up-facing floor faces (walkable) plus ~108 NON_WALK wall/ceiling faces.
+    The ceiling is a full horizontal cover, so the walkable floor was fully
+    enclosed by NON_WALK geometry and PyKotor derived NO perimeter loop
+    (perim=0) -- the player could not move.  Vanilla flat rooms ship a
+    floor-only WOK (plcaa: 18 faces, all walkable, perim=1).  PyKotor
+    re-derives adjacency + perimeter from whatever faces remain, so keeping
+    only WALKABLE_IDS faces yields a clean, walkable floor mesh for both the
+    .wok file and the model's embedded AABB node.
+    """
+
+    from .module_format import WALKABLE_IDS as _WALK, WOKData as _WOKData, WOKFace as _WOKFace
+
+    faces = list(getattr(wok, "faces", ()) or ())
+    kept = [f for f in faces if int(getattr(f, "surface", 1)) in _WALK]
+    if not kept or len(kept) == len(faces):
+        return wok  # already floor-only, or filtering would empty it
+    verts = list(getattr(wok, "verts", ()) or ())
+    remap: dict[int, int] = {}
+    new_verts: list = []
+
+    def _rm(index: int) -> int:
+        index = int(index)
+        if index not in remap:
+            remap[index] = len(new_verts)
+            new_verts.append(verts[index])
+        return remap[index]
+
+    new_faces = [
+        _WOKFace(
+            _rm(f.v1),
+            _rm(f.v2),
+            _rm(f.v3),
+            int(getattr(f, "surface", 1)),
+            -1,
+            -1,
+            -1,
+            int(getattr(f, "trans1", -1)),
+            int(getattr(f, "trans2", -1)),
+            int(getattr(f, "trans3", -1)),
+        )
+        for f in kept
+    ]
+    return _WOKData(name=getattr(wok, "name", "") or "", verts=new_verts, faces=new_faces)
+
+
+def _apply_default_transform_controllers(node: Any) -> None:
+    """Give a node the position + orientation controllers every KOTOR node
+    needs. Room MDLs authored from scratch had none, so the engine could not
+    establish node transforms and crashed placing them (swkotor2+0x4b3a8
+    NULL deref). Values are one keyframe at t=0: node position and identity
+    (or the node's own) orientation, W-first to match the on-disk layout.
+    """
+
+    controllers = list(getattr(node, "controllers", None) or [])
+    have = {int(c.get("type", 0) or 0) for c in controllers}
+    pos = tuple(float(v) for v in (node.position or (0.0, 0.0, 0.0))[:3])
+    rot = tuple(float(v) for v in (getattr(node, "orientation", None) or (0.0, 0.0, 0.0, 1.0))[:4])
+    if 8 not in have:  # CTRL_POSITION
+        controllers.append({"type": 8, "times": [0.0], "values": [[pos[0], pos[1], pos[2]]], "columns": 3})
+    if 20 not in have:  # CTRL_ORIENTATION (on-disk W-first)
+        controllers.append({"type": 20, "times": [0.0], "values": [[rot[3], rot[0], rot[1], rot[2]]], "columns": 4})
+    node.controllers = controllers
+
+
+def _make_room_model_bytes(game: str, geometry: AuthoredRoomGeometry, *, lighting_profile: str = "") -> tuple[bytes, bytes]:
     md, Writer = _import_mdl_runtime()
+    fullbright = str(lighting_profile or "").strip().lower() == FULLBRIGHT_LIGHTING_PROFILE
+    # Room geometry (meshes + walkmesh) are direct children of the root dummy.
     root = md.ModelNode(name=geometry.room_resref, flags=int(md.NodeFlags.HEADER))
-    root.children.append(_primitive_mesh_to_node(md, geometry.room_mesh, root))
+    root.children.append(_primitive_mesh_to_node(md, geometry.room_mesh, root, fullbright=fullbright))
     for helper_mesh in geometry.helper_meshes:
-        root.children.append(_primitive_mesh_to_node(md, helper_mesh, root))
+        root.children.append(_primitive_mesh_to_node(md, helper_mesh, root, fullbright=fullbright))
+    walk_node = _make_walkmesh_node(md, geometry, root)
+    if walk_node is not None:
+        root.children.append(walk_node)
+    # The engine's area-room loader constructs "<roomname>a" and looks it up as
+    # a node in the loaded model; a missing node NULL-derefs at swkotor2+0x4b3a8.
+    # Vanilla plcaa has a "PLCaaa" dummy (it parented the demo objects, which we
+    # strip). Emit an empty "<roomname>a" dummy so the lookup resolves. Captured
+    # live: the 0x4b3a8 crash frames held the string "plcaaa". See CHANGES.
+    # Playable rooms need the engine's <room>a lookup target. Vanilla pure
+    # visual sky rooms (m02aa_sky/m13aa_99z/352narsb) intentionally omit both
+    # this synthetic detail dummy and the embedded AABB/WOK node.
+    if not bool(dict(getattr(geometry, "metadata", {}) or {}).get("backdrop_only", False)):
+        detail_root = md.ModelNode(name=f"{geometry.room_resref}a", flags=int(md.NodeFlags.HEADER))
+        detail_root.parent = root
+        root.children.append(detail_root)
+    # NO synthetic transform controllers.  Empirically, stock K2 room 001ebo1
+    # (model_type=0, identical to ours) loads with ZERO controllers on every
+    # node -- placement comes purely from each node header's position/rotation.
+    # Our earlier synthetic position/orientation controllers were the ONLY
+    # trait our crashing plcaa room had that neither loadable room (001ebo1,
+    # tst_light) shared: unknown0=0 instead of 0xFFFF, and controllers on the
+    # root node (both vanilla roots have none).  The MDLBinaryWriter falls back
+    # to node-header transforms when node.controllers is empty, so omitting
+    # them matches 001ebo1 exactly.  See CHANGES 2026-07-08.
     model = md.KotorModel(
         name=geometry.room_resref,
         supermodel="NULL",
@@ -275,9 +540,122 @@ def _make_room_model_bytes(game: str, geometry: AuthoredRoomGeometry) -> tuple[b
         model_type=int(md.ModelClassification.EFFECT),
         root_node=root,
     )
-    model.disable_fog = True
+    # NOTE: model.disable_fog=True produced an MDL the engine (and PyKotor's
+    # strict reader) could not parse — it overran the buffer during node
+    # traversal. Leaving fog at the default keeps the model structurally valid.
+    # See CHANGES 2026-07-08: this was the final plcaa room-load crash.
+    model.disable_fog = False
     model.compute_bounds()
     return Writer().write(model)
+
+
+def _neutralize_mdl_light_header_fields(mdl_bytes: bytes, logical_node_offsets: tuple[int, ...]) -> tuple[bytes, list[dict[str, Any]]]:
+    """Zero runtime light fields for binary MDL light nodes."""
+
+    if not logical_node_offsets:
+        return bytes(mdl_bytes), []
+    patched = bytearray(mdl_bytes)
+    patches: list[dict[str, Any]] = []
+    for logical_offset in logical_node_offsets:
+        actual_offset = int(logical_offset) + _MDL_BINARY_PREFIX_SIZE
+        light_header_offset = actual_offset + _MDL_NODE_HEADER_SIZE
+        row: dict[str, Any] = {
+            "logical_node_offset": int(logical_offset),
+            "actual_node_offset": actual_offset,
+            "light_header_offset": light_header_offset,
+            "neutralized": False,
+            "before": {},
+            "after": {},
+        }
+        if light_header_offset < 0 or light_header_offset + _MDL_LIGHT_HEADER_SIZE > len(patched):
+            row["warning"] = "light header is outside the MDL byte range"
+            patches.append(row)
+            continue
+
+        changed = False
+        before: dict[str, int] = {}
+        after: dict[str, int] = {}
+        for field_name, field_offset in _LIGHT_RUNTIME_FIELD_OFFSETS:
+            absolute = light_header_offset + field_offset
+            value = int(struct.unpack_from("<I", patched, absolute)[0])
+            before[field_name] = value
+            if value != 0:
+                struct.pack_into("<I", patched, absolute, 0)
+                changed = True
+            after[field_name] = int(struct.unpack_from("<I", patched, absolute)[0])
+        row["before"] = before
+        row["after"] = after
+        row["neutralized"] = changed
+        patches.append(row)
+    return bytes(patched), patches
+
+
+def neutralize_fullbright_room_mdl_lights(mdl_bytes: bytes, mdx_bytes: bytes = b"", *, game: str = "K1") -> tuple[bytes, dict[str, Any]]:
+    """Make imported/generated room MDL light nodes inert for fullbright packages."""
+
+    del game  # The binary node layout is shared for the runtime fields we patch.
+    metadata: dict[str, Any] = {
+        "source": "map_studio:fullbright_mdl_light_sanitizer",
+        "enabled": True,
+        "light_node_count": 0,
+        "patched_light_node_count": 0,
+        "changed_light_node_count": 0,
+        "runtime_light_nodes_neutralized": False,
+        "neutralized_fields": [name for name, _offset in _LIGHT_RUNTIME_FIELD_OFFSETS],
+        "patches": [],
+        "warnings": [],
+    }
+    if not mdl_bytes:
+        metadata["warnings"].append("room MDL bytes were empty; no light headers were inspected")
+        return bytes(mdl_bytes), metadata
+
+    try:
+        from src.core.mdl.ghostrigger_mdl_reader import GhostRiggerMDLBinaryReader  # type: ignore
+
+        reader = GhostRiggerMDLBinaryReader(mdl_bytes, 0, len(mdl_bytes), mdx_bytes or b"", 0, len(mdx_bytes or b""))
+        reader.load()
+        light_offsets = tuple(
+            int(offset)
+            for offset, node in sorted(getattr(reader, "_gr_bin_nodes", {}).items())
+            if int(getattr(getattr(node, "header", None), "type_id", 0) or 0) & _MDL_LIGHT_FLAG
+        )
+    except Exception as exc:
+        metadata["warnings"].append(f"room MDL light headers could not be inspected: {exc}")
+        return bytes(mdl_bytes), metadata
+
+    patched_bytes, patches = _neutralize_mdl_light_header_fields(mdl_bytes, light_offsets)
+    valid_patches = [row for row in patches if "warning" not in row]
+    metadata["light_node_count"] = len(light_offsets)
+    metadata["patched_light_node_count"] = len(valid_patches)
+    metadata["changed_light_node_count"] = sum(1 for row in valid_patches if bool(row.get("neutralized")))
+    metadata["runtime_light_nodes_neutralized"] = bool(metadata["patched_light_node_count"])
+    metadata["patches"] = patches
+    warnings = [str(row["warning"]) for row in patches if row.get("warning")]
+    if warnings:
+        metadata["warnings"].extend(warnings)
+    return patched_bytes, metadata
+
+
+def _mdl_light_sanitizer_to_manifest(enabled: bool, rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return fullbright MDL light-node policy evidence for export manifests."""
+
+    return {
+        "source": "map_studio:fullbright_mdl_light_sanitizer",
+        "enabled": bool(enabled),
+        "policy": "Fullbright authored modules neutralize runtime MDL light nodes so lighting stays ARE/material driven.",
+        "neutralized_fields": [name for name, _offset in _LIGHT_RUNTIME_FIELD_OFFSETS],
+        "room_count": len(rows),
+        "light_node_count": sum(int(row.get("light_node_count", 0) or 0) for row in rows),
+        "patched_light_node_count": sum(int(row.get("patched_light_node_count", 0) or 0) for row in rows),
+        "changed_light_node_count": sum(int(row.get("changed_light_node_count", 0) or 0) for row in rows),
+        "runtime_light_nodes_neutralized": any(bool(row.get("runtime_light_nodes_neutralized")) for row in rows),
+        "warnings": [
+            str(warning)
+            for row in rows
+            for warning in list(row.get("warnings", []) or [])
+        ],
+        "rooms": rows,
+    }
 
 
 def _make_packaged(resref: str, restype: str, data: bytes, source: str) -> PackagedModuleResource:
@@ -289,6 +667,160 @@ def _resource_summary(resources: dict[tuple[str, str], _HydratedResource]) -> li
         AuthoredModuleResourceSummary(resref=resref, restype=restype, size=len(resource.data), source=resource.record.source)
         for (resref, restype), resource in sorted(resources.items())
     ]
+
+
+def _merge_authored_extra_resources(
+    build: AuthoredModuleBuild,
+    extra_resources: tuple[tuple[str, str, bytes], ...],
+) -> dict[str, Any]:
+    """Merge extras without ever replacing an existing final module key."""
+
+    generated_keys = set(build.resources)
+    collisions: list[dict[str, Any]] = []
+    requested_count = 0
+    accepted_count = 0
+    skipped_count = 0
+    for index, (resref, restype, data) in enumerate(tuple(extra_resources or ()), start=1):
+        requested_count += 1
+        clean_ref = str(resref or "").strip().lower()
+        clean_type = str(restype or "").strip().lower()
+        if not clean_ref or not clean_type or not data:
+            skipped_count += 1
+            continue
+        record = _make_packaged(clean_ref, clean_type, bytes(data), "map_studio:authored:extra_resource")
+        key = record.key
+        existing = build.resources.get(key)
+        if existing is not None:
+            collision_kind = "generated_resource" if key in generated_keys else "duplicate_extra_resource"
+            existing_source = str(existing.record.source or "unknown")
+            message = (
+                f"Authored resource collision for {key[0]}.{key[1]}: extra resource #{index} conflicts with "
+                f"{'generated resource' if collision_kind == 'generated_resource' else 'an earlier extra resource'} "
+                f"from {existing_source}; final module resource keys must be unique."
+            )
+            collisions.append(
+                {
+                    "code": "MAP_STUDIO_RESOURCE_COLLISION",
+                    "resref": key[0],
+                    "restype": key[1],
+                    "kind": collision_kind,
+                    "incoming_index": index,
+                    "incoming_source": record.source,
+                    "existing_source": existing_source,
+                    "message": message,
+                }
+            )
+            if message not in build.blocking_issues:
+                build.blocking_issues.append(message)
+            continue
+        build.packaged_resources.append(record)
+        build.resources[key] = _HydratedResource(
+            _ResourceRecord(key[0], key[1], record.source), bytes(data)
+        )
+        accepted_count += 1
+
+    build.resource_summaries = _resource_summary(build.resources)
+    gate = {
+        "schema": "ghostrigger.map_studio_resource_collision_gate.v1",
+        "game": str(build.game or "").upper(),
+        "ready": not collisions,
+        "generated_resource_count": len(generated_keys),
+        "requested_extra_resource_count": requested_count,
+        "accepted_extra_resource_count": accepted_count,
+        "skipped_extra_resource_count": skipped_count,
+        "collision_count": len(collisions),
+        "collisions": collisions,
+        "final_resource_count": len(build.resources),
+    }
+    build.metadata["resource_collision_gate"] = gate
+    build.metadata["resource_count"] = len(build.resources)
+    return gate
+
+
+def _validate_final_authored_resource_map(
+    build: AuthoredModuleBuild,
+    collision_gate: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate the authoritative merged resource map used for K1/K2 export."""
+
+    game = str(build.game or "").upper()
+    game_supported = game in {"K1", "K2"}
+    if not game_supported:
+        message = f"Final authored resource-map validation does not support game {game or '(missing)'}; expected K1 or K2."
+        if message not in build.blocking_issues:
+            build.blocking_issues.append(message)
+
+    engine_contract_metadata: dict[str, Any] = {
+        "schema": "ghostrigger.map_studio_engine_contract.v1",
+        "export_ready": False,
+        "blocking_issues": ["Final merged engine-contract validation did not run."],
+    }
+    try:
+        engine_contract = validate_kotor_module_engine_contract(
+            KotorModuleEngineContractRequest(
+                game=build.game,
+                module_resref=build.module_root,
+                resources={key: value.data for key, value in build.resources.items()},
+                expected_room_resrefs=tuple(sorted(build.module.room_geometry)),
+                visual_only_room_resrefs=tuple(build.metadata.get("backdrop_room_resrefs", ()) or ()),
+            )
+        )
+        engine_contract_metadata = engine_contract.to_dict()
+        for warning in engine_contract.warnings:
+            if warning not in build.warnings:
+                build.warnings.append(warning)
+        for issue in engine_contract.blocking_issues:
+            if issue not in build.blocking_issues:
+                build.blocking_issues.append(issue)
+    except Exception as exc:
+        message = f"Final merged engine-contract validation could not run: {exc}"
+        if message not in build.blocking_issues:
+            build.blocking_issues.append(message)
+        engine_contract_metadata["blocking_issues"] = [message]
+
+    build.metadata["engine_contract"] = engine_contract_metadata
+    audit = {
+        "schema": "ghostrigger.map_studio_final_resource_map.v1",
+        "game": game,
+        "game_supported": game_supported,
+        "resource_count": len(build.resources),
+        "unique_resource_count": len(set(build.resources)),
+        "collision_count": int(collision_gate.get("collision_count", 0) or 0),
+        "collisions": list(collision_gate.get("collisions", []) or []),
+        "engine_contract": engine_contract_metadata,
+        "ready": bool(
+            game_supported
+            and not collision_gate.get("collisions")
+            and engine_contract_metadata.get("export_ready", False)
+        ),
+    }
+    build.metadata["final_resource_map_validation"] = audit
+    return audit
+
+
+def _merged_validation_wok(room_woks: dict[str, "WOKData"]) -> "WOKData | None":
+    """Concatenate every room WOK into one walkability-validation mesh.
+
+    Adjacency is not rebuilt — this mesh exists only for point-on-walkable
+    checks, never for export.
+    """
+
+    from .module_format import WOKFace as _WOKFace
+
+    verts: list[tuple[float, float, float]] = []
+    faces: list[Any] = []
+    for wok in room_woks.values():
+        if wok is None or not getattr(wok, "faces", None):
+            continue
+        base = len(verts)
+        verts.extend(tuple(v) for v in wok.verts)
+        for face in wok.faces:
+            faces.append(
+                _WOKFace(face.v1 + base, face.v2 + base, face.v3 + base, surface=face.surface, adj1=-1, adj2=-1, adj3=-1)
+            )
+    if not faces:
+        return None
+    return WOKData(name="validation_merged.wok", verts=verts, faces=faces)
 
 
 def _entry_room_wok(project: AuthoredModuleProject, room_geometries: dict[str, AuthoredRoomGeometry]) -> tuple[str, WOKData | None]:
@@ -418,6 +950,7 @@ def _transition_link_rows(placements: AuthoredGameplayPlacement) -> list[dict[st
                     "template_resref": normalise_resource_resref(getattr(item, "template_resref", "")),
                     "linked_to": linked_to,
                     "linked_to_module": linked_module,
+                    "linked_to_flags": int(getattr(item, "linked_to_flags", 0) or 0),
                     "transition_destination": int(getattr(item, "transition_destination", 0) or 0),
                     "requires_wok_transition_surface": True,
                 }
@@ -434,9 +967,13 @@ def _transition_surface_gate_to_manifest(
     warnings: list[str] = []
     blocking: list[str] = []
     if rows and transition_surface_face_count <= 0:
-        blocking.append(
+        # Vanilla WOKs (e.g. plcaa) ship linked transitions without any
+        # surface-18 faces and load fine in game, so a stock round-trip must
+        # not be blocked; from-scratch authors still get the nudge.
+        warnings.append(
             f"Authored module has {len(rows)} linked door/trigger transition(s) but no WOK DOOR/transition surface "
-            f"face(s). Paint at least one doorway walkmesh face as surface {DOOR_TRANSITION_SURFACE_ID} before export."
+            f"face(s). Paint at least one doorway walkmesh face as surface {DOOR_TRANSITION_SURFACE_ID} if the "
+            "transition should trigger from the floor."
         )
     if not rows and transition_surface_face_count > 0:
         warnings.append(
@@ -616,6 +1153,8 @@ def _lightmap_rooms(value: Any) -> tuple[str, ...]:
 def _lighting_to_manifest(project: AuthoredModuleProject, room_lights: list[dict[str, Any]]) -> dict[str, Any]:
     """Return explicit lighting/lightmap proof state for export manifests."""
 
+    lighting_profile = authored_lighting_profile(project.metadata)
+    fullbright = authored_lighting_is_fullbright(project.metadata)
     room_resrefs = tuple(
         normalise_resref(getattr(room, "room_resref", ""))
         for room in tuple(project.rooms or ())
@@ -661,6 +1200,11 @@ def _lighting_to_manifest(project: AuthoredModuleProject, room_lights: list[dict
         status = "Lightmap export candidate"
         lightmap_status = "export_candidate"
         fix_hint = "Install the module and verify lighting/lightmap appearance in-game before calling it game-tested."
+    elif fullbright:
+        ready = True
+        status = "Fullbright export candidate"
+        lightmap_status = "fullbright_export_candidate"
+        fix_hint = "Install the module and verify fullbright actor/room visibility in-game before calling it game-tested."
     elif room_lights:
         ready = False
         status = "Viewport lit only"
@@ -680,6 +1224,7 @@ def _lighting_to_manifest(project: AuthoredModuleProject, room_lights: list[dict
         "source": "map_studio:authored:lighting",
         "ready": ready,
         "status": status,
+        "lighting_profile": lighting_profile or "standard",
         "light_count": len(room_lights),
         "room_count": len(room_resrefs),
         "rooms_with_lights": list(rooms_with_lights),
@@ -715,26 +1260,44 @@ def _positioned_expectations(kind: str, items: Any) -> list[dict[str, Any]]:
     return rows
 
 
-def _mesh_material_uv_record(mesh: Any, *, role: str, floor_surface_id: int = -1, floor_surface_name: str = "") -> dict[str, Any]:
+def _mesh_material_uv_record(
+    mesh: Any,
+    *,
+    role: str,
+    floor_surface_id: int = -1,
+    floor_surface_name: str = "",
+    lighting_profile: str = "",
+) -> dict[str, Any]:
     vertices = tuple(getattr(mesh, "vertices", ()) or ())
     uvs = tuple(getattr(mesh, "uvs", ()) or ())
+    mesh_metadata = dict(getattr(mesh, "metadata", {}) or {})
+    uvs_lm = tuple(getattr(mesh, "uvs_lm", ()) or mesh_metadata.get("uvs_lm") or ())
+    lightmap = str(getattr(mesh, "lightmap", "") or mesh_metadata.get("lightmap") or "")
+    fullbright = str(lighting_profile or "").strip().lower() == FULLBRIGHT_LIGHTING_PROFILE
+    diffuse = (1.0, 1.0, 1.0) if fullbright else getattr(mesh, "diffuse", (0.8, 0.8, 0.8))
+    ambient = (1.0, 1.0, 1.0) if fullbright else getattr(mesh, "ambient", (0.35, 0.35, 0.35))
     return {
         "role": role,
         "mesh_name": str(getattr(mesh, "name", "") or ""),
         "texture": str(getattr(mesh, "texture", "") or ""),
-        "diffuse": _vec3_to_manifest(getattr(mesh, "diffuse", (0.8, 0.8, 0.8))),
-        "ambient": _vec3_to_manifest(getattr(mesh, "ambient", (0.35, 0.35, 0.35))),
+        "lighting_profile": lighting_profile or "standard",
+        "diffuse": _vec3_to_manifest(diffuse),
+        "ambient": _vec3_to_manifest(ambient),
         "vertex_count": len(vertices),
         "face_count": len(tuple(getattr(mesh, "faces", ()) or ())),
         "uv_count": len(uvs),
         "uv_complete": bool(vertices) and len(uvs) == len(vertices),
         "uv_coordinate_space": "mesh_uv0",
+        "lightmap": lightmap,
+        "lightmap_uv_count": len(uvs_lm),
+        "lightmap_uv_complete": bool(vertices) and len(uvs_lm) == len(vertices),
+        "has_lightmap": bool(lightmap) and bool(vertices) and len(uvs_lm) == len(vertices),
         "wok_surface_id": int(floor_surface_id),
         "wok_surface_name": str(floor_surface_name or ""),
     }
 
 
-def _room_material_uv_manifest(room_geometry: dict[str, Any]) -> list[dict[str, Any]]:
+def _room_material_uv_manifest(room_geometry: dict[str, Any], *, lighting_profile: str = "") -> list[dict[str, Any]]:
     """Summarize authored material/UV intent paired with generated MDL/WOK."""
 
     rows: list[dict[str, Any]] = []
@@ -748,6 +1311,7 @@ def _room_material_uv_manifest(room_geometry: dict[str, Any]) -> list[dict[str, 
                 role="room_mesh",
                 floor_surface_id=floor_surface_id,
                 floor_surface_name=floor_surface_name,
+                lighting_profile=lighting_profile,
             )
         ]
         for index, helper in enumerate(tuple(getattr(geometry, "helper_meshes", ()) or ())):
@@ -757,12 +1321,14 @@ def _room_material_uv_manifest(room_geometry: dict[str, Any]) -> list[dict[str, 
                     role=f"helper_mesh_{index + 1}",
                     floor_surface_id=floor_surface_id,
                     floor_surface_name=floor_surface_name,
+                    lighting_profile=lighting_profile,
                 )
             )
         rows.append(
             {
                 "room_resref": room_resref,
                 "texture": meshes[0]["texture"] if meshes else "",
+                "lighting_profile": lighting_profile or "standard",
                 "floor_surface_id": floor_surface_id,
                 "floor_surface_name": floor_surface_name,
                 "mesh_count": len(meshes),
@@ -936,6 +1502,43 @@ def _resource_reference_gate_to_manifest(
     }
 
 
+def _refresh_final_resource_reference_metadata(build: AuthoredModuleBuild) -> None:
+    """Re-evaluate gameplay references after authored extras are merged.
+
+    Placeable Builder UTPs and their dependent resources enter through
+    ``extra_resources``.  Computing this gate only before that merge made a
+    genuinely bundled project template look external in readiness and export
+    manifests even though the final MOD contained it.
+    """
+
+    packaged_keys = set(build.resources)
+    template_dependencies = _template_dependency_rows(build.project.placements, packaged_keys=packaged_keys)
+    script_references = _script_reference_rows(build.project, packaged_keys=packaged_keys)
+    dialog_references = _dialog_reference_rows(build.project, packaged_keys=packaged_keys)
+    gate = _resource_reference_gate_to_manifest(
+        template_dependencies=template_dependencies,
+        script_references=script_references,
+        dialog_references=dialog_references,
+    )
+    build.metadata.update(
+        {
+            "gameplay_template_dependencies": template_dependencies,
+            "gameplay_template_dependency_count": len(template_dependencies),
+            "gameplay_packaged_template_dependency_count": sum(
+                1 for row in template_dependencies if bool(row.get("packaged"))
+            ),
+            "gameplay_external_template_dependency_count": sum(
+                1 for row in template_dependencies if not bool(row.get("packaged"))
+            ),
+            "script_references": script_references,
+            "script_reference_count": len(script_references),
+            "dialog_references": dialog_references,
+            "dialog_reference_count": len(dialog_references),
+            "resource_reference_gate": gate,
+        }
+    )
+
+
 def _smoke_expectations_from_build_parts(
     project: AuthoredModuleProject,
     *,
@@ -1023,6 +1626,7 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
     root = project.module_root
     room_geometries: dict[str, AuthoredRoomGeometry] = {}
     room_woks: dict[str, WOKData] = {}
+    backdrop_rooms: set[str] = set()
     walkmesh_audits: list[AuthoredWalkmeshAudit] = []
     warnings: list[str] = []
     blocking: list[str] = []
@@ -1030,11 +1634,38 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
     validation = validate_authored_module_project(project)
     warnings.extend(validation.warnings)
     blocking.extend(validation.blocking_issues)
+    sky_traffic = read_authored_project_sky_traffic(project)
+    sky_traffic_validation = validate_authored_sky_traffic_collection(
+        sky_traffic,
+        room_resrefs={room.normalised_resref() for room in project.rooms},
+    )
+    enabled_sky_traffic = tuple(track for track in sky_traffic if bool(getattr(track, "enabled", True)))
+    warnings.extend(sky_traffic_validation.warnings)
+    blocking.extend(sky_traffic_validation.blocking_issues)
+    if enabled_sky_traffic:
+        blocking.append(
+            "Authored sky traffic is stored and previewable, but room-MDL animation export is not yet "
+            "vanilla-structurally or in-game verified. Remove/disable the traffic tracks or complete the "
+            "animloop controller compiler before packaging."
+        )
     layout = None
     metadata = None
     pathing = None
     packaged: list[PackagedModuleResource] = []
     resources: dict[tuple[str, str], _HydratedResource] = {}
+    lighting_profile = authored_lighting_profile(project.metadata)
+    fullbright_lighting = authored_lighting_is_fullbright(project.metadata)
+    mdl_light_sanitizer_rows: list[dict[str, Any]] = []
+    preserved_stock_pth: bytes | None = None
+    preserved_stock_are: bytes | None = None
+    try:
+        preserved_stock_pth = _preserved_stock_resource(project, "pth")
+    except Exception as exc:
+        blocking.append(f"Imported stock PTH could not be preserved safely: {exc}")
+    try:
+        preserved_stock_are = _preserved_stock_resource(project, "are")
+    except Exception as exc:
+        blocking.append(f"Imported stock ARE could not be preserved safely: {exc}")
 
     try:
         layout = compile_authored_module_layout(project)
@@ -1044,48 +1675,158 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
 
     for room in project.rooms:
         room_resref = room.normalised_resref()
+        room_metadata = dict(getattr(room, "metadata", {}) or {})
+        if authored_room_uses_unresolved_stock_geometry(room):
+            issue = str(room_metadata.get("stock_geometry_issue") or "stock room model is unavailable").strip()
+            blocking.append(
+                f"Room {room_resref or '(unnamed)'} has no resolved stock geometry ({issue}). "
+                "PIE may omit this source placeholder, but module export is blocked until the missing MDL/MDX/WOK "
+                "is supplied or the unresolved room reference is removed deliberately."
+            )
+            continue
+        if isinstance(getattr(room, "primitive", None), ImportedMeshRoomPrimitive):
+            backdrop_only = imported_mesh_room_is_backdrop(room.primitive)
+        else:
+            backdrop_only = bool(room_metadata.get("backdrop_only", room_metadata.get("is_backdrop", False)))
+        if backdrop_only:
+            backdrop_rooms.add(room_resref)
+        primitive_metadata = dict(getattr(getattr(room, "primitive", None), "metadata", {}) or {})
+        runtime_graph = dict(primitive_metadata.get("source_runtime_graph") or {})
+        lost_runtime = {
+            label: int(runtime_graph.get(label, 0) or 0)
+            for label in ("animation_count", "light_count", "emitter_count", "reference_count")
+            if int(runtime_graph.get(label, 0) or 0) > 0
+        }
+        if lost_runtime and not bool(runtime_graph.get("preserved", False)):
+            summary = ", ".join(f"{key.replace('_count', '')}={value}" for key, value in lost_runtime.items())
+            if (
+                isinstance(getattr(room, "primitive", None), ImportedMeshRoomPrimitive)
+                and imported_mesh_has_explicit_static_runtime_rebuild(room.primitive)
+            ):
+                warnings.append(
+                    f"Room {room_resref} explicitly replaces its stock runtime graph ({summary}) with a new static "
+                    "room MDL. Source animations/model lights/emitters/references will not be retained."
+                )
+            else:
+                blocking.append(
+                    f"Room {room_resref} was flattened from a stock runtime graph ({summary}). "
+                    "Export is blocked until its original animations/lights/emitters/references are retained or "
+                    "an explicit static-rebuild policy acknowledges their removal."
+                )
         try:
             geometry = compile_authored_room_spec(room)
-            geometry = apply_authored_walkmesh_boundary_policy_to_geometry(geometry)
+            # A preserved/imported stock WOK already carries correct materials,
+            # including legitimate NON_WALK wall/blocker faces and its own
+            # perimeter, so it passes through untouched.  Only WOKs regenerated
+            # from render geometry (from-scratch rooms) need boundary walls
+            # generated and the enclosing ceiling/wall slab reduced to the
+            # walkable surface (the slab otherwise kills the perimeter loop and
+            # freezes the player -- see _walkmesh_walkable_only).
+            imported_wok = bool(dict(getattr(geometry, "metadata", {}) or {}).get("imported_wok"))
+            if not imported_wok:
+                geometry = apply_authored_walkmesh_boundary_policy_to_geometry(geometry)
+                geometry = replace(geometry, wok=_walkmesh_walkable_only(geometry.wok))
         except Exception as exc:
             blocking.append(f"Room {room_resref or '(unnamed)'} geometry could not be compiled: {exc}")
             continue
         room_geometries[room_resref] = geometry
         room_woks[room_resref] = geometry.wok
         audit = audit_authored_wok(room_resref, geometry.wok)
+        if backdrop_only and audit.face_count == 0:
+            audit = replace(
+                audit,
+                ready=True,
+                warnings=tuple(audit.warnings) + (
+                    f"Room {room_resref} is a visual-only backdrop preserving a vanilla-style empty WOK.",
+                ),
+                blocking_messages=(),
+            )
         walkmesh_audits.append(audit)
         warnings.extend(audit.warnings)
         blocking.extend(audit.blocking_messages)
 
     entry_room, entry_wok = _entry_room_wok(project, room_geometries)
+    # Placements live anywhere in the module, so walkability validates
+    # against every room's WOK merged — checking only the entry room flagged
+    # every multi-room module (the spawn may be in room 3, a waypoint in 7).
+    # Backdrop/skybox rooms are excluded: their thousand-unit WOK would blow up
+    # the merged mesh bounds and false-flag every real placement as off-mesh.
+    playable_woks = {resref: wok for resref, wok in room_woks.items() if resref not in backdrop_rooms}
+    validation_wok = _merged_validation_wok(playable_woks) or entry_wok
     walkability = None
-    if entry_wok is not None:
-        walkability = validate_authored_gameplay_placement_against_walkmesh(project.placements, entry_wok)
+    if validation_wok is not None:
+        # 2.0m Z tolerance: the engine snaps the player/creatures to the floor
+        # on load, and an imported module's placements came from the original
+        # walkmesh which we regenerate at a slightly different Z. The tight 0.05m
+        # default false-flagged every imported spawn as "not on the floor".
+        walkability = validate_authored_gameplay_placement_against_walkmesh(
+            project.placements, validation_wok, z_tolerance=2.0)
         warnings.extend(walkability.warnings)
         blocking.extend(walkability.blocking_issues)
     elif project.rooms:
         blocking.append("Authored module export could not find a room WOK for gameplay walkability checks.")
 
     try:
+        project_are_rooms = tuple(
+            room.normalised_resref()
+            for room in project.rooms
+            if bool(dict(getattr(room, "metadata", {}) or {}).get("are_listed", True))
+        )
+        source_are_order = tuple(
+            normalise_resref(value)
+            for value in tuple(dict(getattr(project, "extra", {}) or {}).get("source_are_room_resrefs", ()) or ())
+            if normalise_resref(value)
+        )
+        project_are_set = set(project_are_rooms)
+        are_room_resrefs = tuple(room for room in source_are_order if room in project_are_set) + tuple(
+            room for room in project_are_rooms if room not in source_are_order
+        )
+        compiled_area = AuthoredAreaMetadata(
+            name=project.metadata.display_name,
+            tag=project.metadata.tag or root,
+            comments="Generated by GhostRigger Map Studio authored module export.",
+        )
         metadata = compile_authored_module_metadata(
             project.metadata,
             project.placements.entry_point,
-            area=AuthoredAreaMetadata(
-                name=project.metadata.display_name,
-                tag=project.metadata.tag or root,
-                comments="Generated by GhostRigger Map Studio authored module export.",
-            ),
-            room_resrefs=tuple(getattr(layout, "room_resrefs", ()) or tuple(room_geometries)),
+            area=compiled_area,
+            room_resrefs=are_room_resrefs or tuple(getattr(layout, "room_resrefs", ()) or tuple(room_geometries)),
             area_resrefs=(root,),
         )
+        if preserved_stock_are is not None:
+            lighting_source = str(
+                dict(dict(getattr(project.metadata, "metadata", {}) or {}).get("lighting") or {}).get("source") or ""
+            ).strip().lower()
+            patched_are = patch_preserved_stock_are_bytes(
+                preserved_stock_are,
+                project.metadata,
+                compiled_area,
+                room_resrefs=are_room_resrefs,
+                update_world_lighting=lighting_source == "map_studio:world_settings",
+            )
+            metadata = replace(
+                metadata,
+                are_bytes=patched_are,
+                metadata={
+                    **dict(metadata.metadata),
+                    "preserved_stock_are": True,
+                    "world_lighting_patched": lighting_source == "map_studio:world_settings",
+                },
+            )
         warnings.extend(metadata.validation.warnings)
         blocking.extend(metadata.validation.blocking_issues)
     except Exception as exc:
         blocking.append(f"Authored module metadata could not be compiled: {exc}")
 
-    if entry_wok is not None:
+    if validation_wok is not None and preserved_stock_pth is None:
         try:
-            pathing = compile_authored_pathing_for_module(entry_wok, anchors=_path_anchors_from_walkability(project.placements, walkability))
+            # Pathing anchors span every room, so the graph builds on the
+            # merged walkmesh just like the walkability checks above.
+            # Skipped when we emit a preserved stock PTH (below): the original
+            # graph spans the full module -- including reference/skybox rooms
+            # not editable here -- so a regenerated graph over the editable
+            # subset would false-positive "point outside the walkmesh".
+            pathing = compile_authored_pathing_for_module(validation_wok, anchors=_path_anchors_from_walkability(project.placements, walkability))
             warnings.extend(pathing.validation.warnings)
             blocking.extend(pathing.validation.blocking_issues)
         except Exception as exc:
@@ -1106,14 +1847,35 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
         packaged.append(_make_packaged(root, "are", metadata.are_bytes, "map_studio:authored:are"))
         packaged.append(_make_packaged(ENGINE_MODULE_IFO_RESREF, "ifo", metadata.ifo_bytes, "map_studio:authored:ifo"))
     try:
-        packaged.append(_make_packaged(root, "git", build_git_bytes(project.placements), "map_studio:authored:git"))
+        packaged.append(
+            _make_packaged(
+                root,
+                "git",
+                build_git_bytes(project.placements, game=project.game),
+                "map_studio:authored:git",
+            )
+        )
     except Exception as exc:
         blocking.append(f"Authored gameplay placements could not be compiled into GIT: {exc}")
-    if pathing is not None:
+    if preserved_stock_pth is not None:
+        packaged.append(_make_packaged(root, "pth", preserved_stock_pth, "map_studio:stock:pth_preserved"))
+    elif pathing is not None:
         packaged.append(_make_packaged(root, "pth", pathing.pth_bytes, "map_studio:authored:pth"))
     for room_resref, geometry in room_geometries.items():
         try:
-            mdl_bytes, mdx_bytes = _make_room_model_bytes(project.game, geometry)
+            mdl_bytes, mdx_bytes = _make_room_model_bytes(
+                project.game,
+                geometry,
+                lighting_profile=lighting_profile,
+            )
+            if fullbright_lighting:
+                mdl_bytes, sanitizer_row = neutralize_fullbright_room_mdl_lights(
+                    mdl_bytes,
+                    mdx_bytes,
+                    game=project.game,
+                )
+                sanitizer_row["room_resref"] = room_resref
+                mdl_light_sanitizer_rows.append(sanitizer_row)
         except Exception as exc:
             blocking.append(f"Room {room_resref}.mdl/.mdx could not be compiled: {exc}")
             continue
@@ -1128,6 +1890,29 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
     for item in packaged:
         resources[item.key] = _HydratedResource(_ResourceRecord(item.key[0], item.key[1], item.source), bytes(item.data))
 
+    engine_contract_metadata: dict[str, Any] = {
+        "schema": "ghostrigger.map_studio_engine_contract.v1",
+        "export_ready": False,
+        "blocking_issues": ["Serialized engine-contract validation did not run."],
+    }
+    try:
+        engine_contract = validate_kotor_module_engine_contract(
+            KotorModuleEngineContractRequest(
+                game=project.game,
+                module_resref=root,
+                resources={key: value.data for key, value in resources.items()},
+                expected_room_resrefs=tuple(sorted(room_geometries)),
+                visual_only_room_resrefs=tuple(sorted(backdrop_rooms)),
+            )
+        )
+        engine_contract_metadata = engine_contract.to_dict()
+        warnings.extend(engine_contract.warnings)
+        blocking.extend(engine_contract.blocking_issues)
+    except Exception as exc:
+        message = f"Serialized engine-contract validation could not run: {exc}"
+        blocking.append(message)
+        engine_contract_metadata["blocking_issues"] = [message]
+
     module_state = _ModuleState(
         name=root,
         lyt=layout.lyt if layout is not None else LYTLayout(),
@@ -1138,6 +1923,15 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
     )
     walkability_metadata = _walkability_to_manifest(walkability)
     pathing_metadata = dict(pathing.metadata) if pathing is not None else {}
+    if preserved_stock_pth is not None:
+        pathing_metadata.update(
+            {
+                "source": "map_studio:stock:pth_preserved",
+                "preserved_stock_pth": True,
+                "preserved_stock_pth_size": len(preserved_stock_pth),
+                "preserved_stock_pth_sha256": hashlib.sha256(preserved_stock_pth).hexdigest(),
+            }
+        )
     transition_surface_gate = _transition_surface_gate_to_manifest(project.placements, tuple(walkmesh_audits))
     warnings.extend(str(warning) for warning in transition_surface_gate.get("warnings", []) or [])
     blocking.extend(str(message) for message in transition_surface_gate.get("blocking_messages", []) or [])
@@ -1155,7 +1949,19 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
     )
     room_lights = [authored_room_light_payload(light) for light in tuple(getattr(project, "lights", ()) or ())]
     lighting_metadata = _lighting_to_manifest(project, room_lights)
-    material_uv = _room_material_uv_manifest(module_state.room_geometry)
+    sky_traffic_metadata = {
+        "count": len(sky_traffic),
+        "enabled_count": len(enabled_sky_traffic),
+        "compiler_target": "room_mdl_animation",
+        "export_ready": not enabled_sky_traffic,
+        "tracks": authored_sky_traffic_list_to_kmap(sky_traffic),
+        "warnings": list(sky_traffic_validation.warnings),
+        "blocking_issues": list(sky_traffic_validation.blocking_issues),
+    }
+    material_uv = _room_material_uv_manifest(
+        module_state.room_geometry,
+        lighting_profile=lighting_profile,
+    )
     packaged_keys = set(resources)
     template_dependencies = _template_dependency_rows(project.placements, packaged_keys=packaged_keys)
     script_references = _script_reference_rows(project, packaged_keys=packaged_keys)
@@ -1181,6 +1987,7 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
             "source": "src.core.modules.authored_module_export",
             "entry_room": entry_room,
             "room_count": len(room_geometries),
+            "backdrop_room_resrefs": tuple(sorted(backdrop_rooms)),
             "resource_count": len(resources),
             "gameplay_counts": _placement_counts(project.placements),
             "gameplay_template_dependencies": template_dependencies,
@@ -1195,11 +2002,14 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
             "lighting_count": len(room_lights),
             "room_lights": room_lights,
             "lighting": lighting_metadata,
+            "sky_traffic": sky_traffic_metadata,
+            "mdl_light_sanitizer": _mdl_light_sanitizer_to_manifest(fullbright_lighting, mdl_light_sanitizer_rows),
             "material_uv": material_uv,
             "visibility": visibility_metadata,
             "walkability": walkability_metadata,
             "pathing": pathing_metadata,
             "walkmesh_gate": walkmesh_gate,
+            "engine_contract": engine_contract_metadata,
             "smoke_expectations": smoke_expectations,
         },
     )
@@ -1276,11 +2086,14 @@ def _augment_authored_manifest(
         "lighting_count": int(build.metadata.get("lighting_count", 0) or 0),
         "room_lights": list(build.metadata.get("room_lights", []) or []),
         "lighting": dict(build.metadata.get("lighting", {}) or {}),
+        "sky_traffic": dict(build.metadata.get("sky_traffic", {}) or {}),
+        "mdl_light_sanitizer": dict(build.metadata.get("mdl_light_sanitizer", {}) or {}),
         "material_uv": list(build.metadata.get("material_uv", []) or []),
         "visibility": dict(build.metadata.get("visibility", {}) or {}),
         "walkability": dict(build.metadata.get("walkability", {})),
         "pathing": dict(build.metadata.get("pathing", {})),
         "walkmesh_gate": dict(build.metadata.get("walkmesh_gate", {}) or {}),
+        "engine_contract": dict(build.metadata.get("engine_contract", {}) or {}),
         "smoke_expectations": dict(build.metadata.get("smoke_expectations", {})),
         "resources": [summary.__dict__ for summary in build.resource_summaries],
         "package_ok": bool(package_result.ok),
@@ -1324,8 +2137,11 @@ def export_authored_module_project(request: AuthoredModuleExportRequest) -> Auth
     """Export the current authored Map Studio project through the MOD packager."""
 
     build = build_authored_module(request.project, game_root_dir=request.game_root_dir)
+    collision_gate = _merge_authored_extra_resources(build, tuple(request.extra_resources or ()))
+    _refresh_final_resource_reference_metadata(build)
+    _validate_final_authored_resource_map(build, collision_gate)
     room_resrefs = tuple(sorted(build.module.room_geometry))
-    if build.blocking_issues and request.strict:
+    if collision_gate["collision_count"] or (build.blocking_issues and request.strict):
         metadata = dict(build.metadata)
         metadata["export_job"] = _authored_export_job_record(build)
         return AuthoredModuleExportResult(
@@ -1381,6 +2197,7 @@ def export_authored_module_project(request: AuthoredModuleExportRequest) -> Auth
             package_result.module_path,
             expected_module_root=build.module_root,
             expected_room_resref=room_resrefs[0],
+            expected_room_resrefs=room_resrefs,
             game=build.game,
         )
     export_job = _augment_authored_manifest(package_result.manifest_path, build, package_result, verification)
@@ -1517,6 +2334,7 @@ def _authored_export_job_record(
     resource_gate = dict(build.metadata.get("resource_reference_gate", {}) or {})
     pathing = dict(build.metadata.get("pathing", {}) or {})
     visibility = dict(build.metadata.get("visibility", {}) or {})
+    engine_contract = dict(build.metadata.get("engine_contract", {}) or {})
     smoke_expectations = dict(build.metadata.get("smoke_expectations", {}) or {})
     expected_placeables = smoke_expectations.get("expected_placeables")
     include_test_placeable = (
@@ -1545,6 +2363,8 @@ def _authored_export_job_record(
             "resource_reference_gate_ready": bool(resource_gate.get("ready")),
             "pathing_ready": bool(pathing.get("ready", pathing.get("ok", False))),
             "visibility_ready": bool(visibility.get("ready")),
+            "engine_contract_ready": bool(engine_contract.get("export_ready")),
+            "engine_contract": engine_contract,
             "blocking_issues": list(build.blocking_issues),
             "warnings": list(build.warnings),
         },
@@ -1566,7 +2386,10 @@ def _authored_export_job_record(
             "installed": bool(installed),
             "installed_module_path": install_path,
             "proof_manifest_path": proof_manifest_path,
-            "acceptance_required": _authored_acceptance_checks(include_test_placeable=include_test_placeable),
+            "acceptance_required": _authored_acceptance_checks(
+                include_test_placeable=include_test_placeable,
+                module_root=build.module_root,
+            ),
         },
     }
 
@@ -1672,7 +2495,7 @@ def _authored_smoke_contract_from_parts(
         "all_required_resources_present": not missing,
         "missing_required_resources": missing,
         "pre_game_package_readback_ok": bool(verification.ok) if verification is not None else False,
-        "in_game_acceptance_checks": _authored_acceptance_checks(),
+        "in_game_acceptance_checks": _authored_acceptance_checks(module_root=module_root),
         "proof_required": not game_tested,
         "game_tested": game_tested,
     }
@@ -1689,7 +2512,8 @@ def _authored_smoke_contract(build: AuthoredModuleBuild, verification: DevModule
     if isinstance(expectations, dict):
         contract.update(expectations)
     contract["in_game_acceptance_checks"] = _authored_acceptance_checks(
-        include_test_placeable=bool(contract.get("expected_placeables"))
+        include_test_placeable=bool(contract.get("expected_placeables")),
+        module_root=build.module_root,
     )
     contract["resource_reference_gate"] = dict(build.metadata.get("resource_reference_gate", {}) or {})
     return contract
@@ -1708,7 +2532,8 @@ def _authored_smoke_contract_from_export_result(export_result: AuthoredModuleExp
     if isinstance(expectations, dict):
         contract.update(expectations)
     contract["in_game_acceptance_checks"] = _authored_acceptance_checks(
-        include_test_placeable=bool(contract.get("expected_placeables"))
+        include_test_placeable=bool(contract.get("expected_placeables")),
+        module_root=module_root,
     )
     contract["resource_reference_gate"] = dict(export_result.metadata.get("resource_reference_gate", {}) or {})
     return contract
@@ -1778,7 +2603,11 @@ def _authored_game_test_steps(module_root: str, *, include_test_placeable: bool 
     return steps
 
 
-def _authored_acceptance_checks(*, include_test_placeable: bool = True) -> list[str]:
+def _authored_acceptance_checks(
+    *,
+    include_test_placeable: bool = True,
+    module_root: str = "",
+) -> list[str]:
     checks = [
         "module_loads_in_game",
         "module_identity_matches_authored_resref",
@@ -1794,6 +2623,25 @@ def _authored_acceptance_checks(*, include_test_placeable: bool = True) -> list[
             "screenshot_or_video_captured",
         ]
     )
+    if str(module_root or "").strip().lower() == "plcaa":
+        # PLCaa is GhostStudio's user-driven acceptance fixture.  A successful
+        # warp is necessary but insufficient: this gate records the exact
+        # editor -> package -> KOTOR interactions the user must perform.
+        checks.extend(
+            [
+                "texture_paint_visible_in_game",
+                "terrain_sculpt_and_generated_walkmesh_work_in_game",
+                "placed_assets_match_editor_staging",
+                "enemy_spawns_hostile",
+                "npc_spawns_and_free_roams",
+                "terminal_operates",
+                "container_opens_with_inventory",
+                "puzzle_sequence_unlocks_door",
+                "animated_door_operates",
+                "configured_transition_operates",
+                "player_start_position_and_facing_match",
+            ]
+        )
     return checks
 
 
@@ -2321,6 +3169,7 @@ def _install_prep_export_request(request: AuthoredModuleInstallPrepRequest) -> A
             dry_run=False,
             create_backups=request.export_request.create_backups,
             write_loose_resources=request.export_request.write_loose_resources,
+            extra_resources=request.export_request.extra_resources,
         )
     return AuthoredModuleExportRequest(
         project=request.project,
@@ -2456,6 +3305,19 @@ def _proof_request_checks(request: AuthoredModuleGameProofRequest) -> dict[str, 
         "no_inherited_base_game_geometry_or_scripted_movers": bool(
             request.no_inherited_base_game_geometry_or_scripted_movers
         ),
+        "texture_paint_visible_in_game": bool(request.texture_paint_visible_in_game),
+        "terrain_sculpt_and_generated_walkmesh_work_in_game": bool(
+            request.terrain_sculpt_and_generated_walkmesh_work_in_game
+        ),
+        "placed_assets_match_editor_staging": bool(request.placed_assets_match_editor_staging),
+        "enemy_spawns_hostile": bool(request.enemy_spawns_hostile),
+        "npc_spawns_and_free_roams": bool(request.npc_spawns_and_free_roams),
+        "terminal_operates": bool(request.terminal_operates),
+        "container_opens_with_inventory": bool(request.container_opens_with_inventory),
+        "puzzle_sequence_unlocks_door": bool(request.puzzle_sequence_unlocks_door),
+        "animated_door_operates": bool(request.animated_door_operates),
+        "configured_transition_operates": bool(request.configured_transition_operates),
+        "player_start_position_and_facing_match": bool(request.player_start_position_and_facing_match),
         "screenshot_or_video_captured": _valid_proof_evidence_path(request.evidence_path),
     }
 
@@ -2684,6 +3546,7 @@ __all__ = [
     "authored_module_smoke_summary_lines",
     "build_authored_module",
     "export_authored_module_project",
+    "neutralize_fullbright_room_mdl_lights",
     "prepare_authored_module_install",
     "record_authored_module_game_proof",
 ]

@@ -23,6 +23,7 @@ _EXPORT_MODULES: tuple[str, ...] = (
 _EXPORTS: dict[str, str] = {
     "QtViewportWidget": "src.gui.viewports.viewport_core.widget",
     "QtMainViewportWidget": "src.gui.viewports.viewport_core.widget",
+    "QtMapStudioViewportWidget": "src.gui.viewports.viewport_core.widget",
     "QtCharacterBuilderViewportWidget": "src.gui.viewports.viewport_core.widget",
     "QtRetargetViewportWidget": "src.gui.viewports.viewport_core.widget",
     "QtUnrealAnimatorViewportWidget": "src.gui.viewports.viewport_core.widget",

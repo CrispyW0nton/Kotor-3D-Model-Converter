@@ -376,6 +376,30 @@ def _rigged_character(template: KotorModel | None = None, *, game: str = "K1") -
     )
 
 
+def _fallback_weight_rigged_character(monkeypatch) -> dict:
+    """Build a deterministic fallback-weight fixture without game lookup.
+
+    Production Character Builder now reloads the selected vanilla model when
+    a skeleton-only template has no usable donor skin.  On a machine with a
+    KOTOR installation that correctly upgrades ``_rigged_character()`` to
+    donor-transfer weights, so tests of the fallback warning/report contract
+    must explicitly disable that optional donor-resource lookup.
+    """
+
+    # Keep the synthetic template's source game/resref facts intact because
+    # those are independently required by export preflight.  Disable only the
+    # optional donor reload boundary, which is the dependency this fixture is
+    # meant to exercise without.
+    import src.core.characters.character_builder as character_builder
+
+    monkeypatch.setattr(
+        character_builder,
+        "load_game_skeleton_source",
+        lambda *_args, **_kwargs: None,
+    )
+    return _rigged_character()
+
+
 def _donor_weight_rigged_character() -> dict:
     root = _node("import_root")
     mesh = _node("custom_body", flags=int(NodeFlags.HEADER | NodeFlags.MESH), parent=root)
@@ -1026,8 +1050,8 @@ def test_character_export_preflight_accepts_small_source_without_toe_guides() ->
     assert preflight.export_allowed is True
 
 
-def test_character_export_preflight_warns_on_fallback_skin_binding() -> None:
-    result = _rigged_character()
+def test_character_export_preflight_warns_on_fallback_skin_binding(monkeypatch) -> None:
+    result = _fallback_weight_rigged_character(monkeypatch)
 
     preflight = preflight_character_mdl_export(
         result["model"],
@@ -2629,9 +2653,9 @@ class _FakeCharacterWriter:
         path.with_suffix(".mdx").write_bytes(b"mdx")
 
 
-def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_path) -> None:
+def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_path, monkeypatch) -> None:
     _FakeCharacterWriter.calls = []
-    result = _rigged_character()
+    result = _fallback_weight_rigged_character(monkeypatch)
     result["model"].metadata["kotor_fit_report"] = _valid_fit_report()
     result["model"].metadata["kotor_normalization"] = {
         "fit_policy": "bone_landmark_basis",
@@ -2797,7 +2821,9 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert reload_payload["details"]["payloads"][0]["vertices"] == 3
     assert reload_payload["details"]["payloads"][0]["skin_rows"] == 3
     reload_summary = reload_issues["character.export.reload_verified"]["details"]["reloaded_model"]
-    assert reload_summary["model_name"] == "grbody"
+    # The selected native KOTOR DAG owns the exported model identity; the
+    # imported model name remains recorded separately as payload provenance.
+    assert reload_summary["model_name"] == "PMBAM"
     assert reload_summary["supermodel"] == "S_KPMF0200"
     assert reload_summary["node_count"] >= result["native_skeleton_snapshot"].node_count
     assert reload_summary["skin_node_count"] >= 1
@@ -2814,7 +2840,7 @@ def test_character_export_transaction_stages_verifies_and_writes_reports(tmp_pat
     assert "Rig state: native_template_final" in text
     assert "Auto-fit policy: bone_landmark_basis" in text
     assert "Animation library: 267 clip(s)" in text
-    assert "reloaded_model={model_name: grbody" in text
+    assert "reloaded_model={model_name: PMBAM" in text
     assert "Manual in-game checklist" in text
     assert "12. Loading in both KOTOR 1 and KOTOR 2" in text
 

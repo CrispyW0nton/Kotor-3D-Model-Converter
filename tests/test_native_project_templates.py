@@ -136,3 +136,43 @@ def test_native_docs_describe_final_collapsed_architecture() -> None:
     assert "GhostRigger.Core.Unreal" in docs
     assert "GhostRigger.Core.Bridge" not in docs
     assert "Do not recreate split DLLs" in docs
+
+
+def test_native_host_builds_ghoststudio_with_windows_branding_resources() -> None:
+    host_dir = ROOT / "native" / "GhostRigger.Native.Core.Host"
+    project = (host_dir / "GhostRigger.Native.Core.Host.vcxproj").read_text(encoding="utf-8")
+    resource = (host_dir / "GhostRiggerNativeSplash.rc").read_text(encoding="utf-8")
+    main_cpp = (host_dir / "Private" / "main.cpp").read_text(encoding="utf-8")
+    app_runner = (
+        ROOT
+        / "native"
+        / "GhostRigger.Core.GUI.Display"
+        / "Python"
+        / "src"
+        / "gui"
+        / "windows"
+        / "application_core"
+        / "functions"
+        / "app_runner.py"
+    ).read_text(encoding="utf-8")
+    spec = (ROOT / "GhostRigger-K1-K2.spec").read_text(encoding="utf-8")
+    build_script = (ROOT / "build.bat").read_text(encoding="utf-8")
+    version_info = (ROOT / "assets" / "windows_version_info.txt").read_text(encoding="utf-8")
+    icon = ROOT / "assets" / "icons" / "ghostrigger.ico"
+
+    assert "<TargetName>GhostStudio</TargetName>" in project
+    assert 'IDI_GHOSTSTUDIO_APP_ICON ICON "../../assets/icons/ghostrigger.ico"' in resource
+    assert "VS_VERSION_INFO VERSIONINFO" in resource
+    assert 'VALUE "ProductName", "GhostStudio\\0"' in resource
+    assert 'VALUE "OriginalFilename", "GhostStudio.exe\\0"' in resource
+    assert "executable_path()" in main_cpp
+    assert 'L"GhostRigger.exe"' not in main_cpp
+    assert 'app.setApplicationName("GhostStudio")' in app_runner
+    assert 'app.setApplicationDisplayName("GhostStudio")' in app_runner
+
+    assert "name='GhostStudio'" in spec
+    assert "version='assets/windows_version_info.txt'" in spec
+    assert "icon='assets/icons/ghostrigger.ico'" in spec
+    assert "dist\\GhostStudio.exe" in build_script
+    assert "StringStruct('ProductName', 'GhostStudio')" in version_info
+    assert icon.read_bytes()[:4] == b"\x00\x00\x01\x00"

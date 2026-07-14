@@ -2,7 +2,7 @@
 """Native Visual Studio entrypoint for GhostRigger.
 
 This file is owned by `GhostRigger.Native.Core.Host` and is copied beside
-`GhostRigger.exe` during the Visual Studio build. It intentionally does not
+`GhostStudio.exe` during the Visual Studio build. It intentionally does not
 import or execute the repository-root `main.py`.
 """
 
@@ -333,7 +333,7 @@ def _install_exception_hooks(logfile: str | None) -> None:
         message = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
         crash_log.critical("UNHANDLED EXCEPTION:\n%s", message)
         _flush_all_handlers()
-        print(f"\n{'=' * 60}\nGhostRigger CRASH - see Logs/ for full trace\n{'=' * 60}\n{message}", file=sys.stderr)
+        print(f"\n{'=' * 60}\nGhostStudio CRASH - see Logs/ for full trace\n{'=' * 60}\n{message}", file=sys.stderr)
 
     sys.excepthook = _handle_uncaught
 
@@ -349,7 +349,7 @@ def _install_atexit_flush() -> None:
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="GhostRigger native host")
+    parser = argparse.ArgumentParser(description="GhostStudio native host")
     parser.add_argument("--gui", default="qt")
     parser.add_argument("model", nargs="?", help="Optional startup model path.")
     parser.add_argument("--tga", action="append", default=[])
@@ -386,7 +386,7 @@ def main(argv: list[str] | None = None):
     log = logging.getLogger("ghostrigger.native_main")
 
     log.info("=" * 60)
-    log.info("GhostRigger Native Host starting - Python %s", sys.version.split()[0])
+    log.info("GhostStudio Native Host starting - Python %s", sys.version.split()[0])
     log.info("Native host entrypoint: %s", Path(__file__).resolve())
     log.info("Visual Studio build output: %s", os.environ.get("GHOSTRIGGER_NATIVE_BUILD_OUTPUT_DIR", ""))
     log.info("Repository root: %s", _REPO_ROOT)

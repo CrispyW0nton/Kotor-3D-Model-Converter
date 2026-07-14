@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import sys
 from pathlib import Path
 
@@ -26,6 +27,35 @@ def _placements():
     from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
 
     return AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref="grdev01"))
+
+
+def _terrain_stroke_project(resolution: int = 9, *, patterned: bool = False):
+    from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+    from src.core.modules.authored_module_project import create_terrain_room_project
+    from src.core.modules.authored_terrain_builder import TerrainHeightfieldPrimitive
+
+    heights = tuple(
+        tuple(
+            float(((row * 7) + (column * 3)) % 11) * 0.05 if patterned else 0.0
+            for column in range(resolution)
+        )
+        for row in range(resolution)
+    )
+    room_resref = "grstroke_room01"
+    terrain = TerrainHeightfieldPrimitive(
+        room_resref=room_resref,
+        heights=heights,
+        width=float(resolution - 1),
+        depth=float(resolution - 1),
+    )
+    placements = AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref=room_resref))
+    return create_terrain_room_project(
+        module_root="grstroke",
+        game="K2",
+        display_name="Terrain Stroke Fixture",
+        terrain=terrain,
+        placements=placements,
+    )
 
 
 def test_t2907_flat_terrain_heightfield_builds_mesh_and_walkable_wok() -> None:
@@ -198,6 +228,39 @@ def test_t2603_terrain_erase_brush_resets_local_dirty_region() -> None:
     assert erased.metadata["defer_full_rebuild_until_stroke_end"] is True
 
 
+def test_t2907_terrain_brush_hardness_controls_smooth_falloff() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_terrain_builder import TerrainHeightfieldPrimitive, apply_terrain_brush_stroke
+
+    terrain = TerrainHeightfieldPrimitive(
+        room_resref="grfalloff_room01",
+        heights=tuple(tuple(0.0 for _column in range(7)) for _row in range(7)),
+    )
+    soft = apply_terrain_brush_stroke(
+        terrain,
+        brush="raise",
+        points=((3, 3, 1.0),),
+        radius=2,
+        delta=1.0,
+        falloff_hardness=0.0,
+    )
+    hard = apply_terrain_brush_stroke(
+        terrain,
+        brush="raise",
+        points=((3, 3, 1.0),),
+        radius=2,
+        delta=1.0,
+        falloff_hardness=1.0,
+    )
+
+    assert soft.heights[3][3] == 1.0
+    assert 0.0 < soft.heights[3][5] < hard.heights[3][5]
+    assert hard.heights[3][5] == 1.0
+    assert soft.metadata["last_brush_falloff_hardness"] == 0.0
+    assert hard.metadata["last_brush_falloff_hardness"] == 1.0
+
+
 def test_t2603_terrain_slope_brush_creates_controlled_local_grade() -> None:
     _install_native_payload_paths()
 
@@ -300,3 +363,134 @@ def test_t2907_terrain_shape_presets_create_readable_heightfields() -> None:
     assert ramp.heights[0][0] < ramp.heights[-1][0]
     assert len({round(value, 3) for row in terraces.heights for value in row}) >= 3
     assert geometry.wok.walkable_face_count() > 0
+
+
+def test_t2907_terrain_stroke_session_decodes_once_and_serializes_once_at_commit() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        authored_project_to_kmap_payload,
+    )
+    from src.core.modules.map_studio_terrain_sculpt_session import begin_terrain_sculpt_stroke
+
+    payload = authored_project_to_kmap_payload(_terrain_stroke_project(65))
+    source_payload = copy.deepcopy(payload)
+    session = begin_terrain_sculpt_stroke(payload, room_resref="grstroke_room01")
+    assert session.decode_count == 1
+
+    for column in (28, 30, 32, 34, 36):
+        frame = session.apply_frame(
+            brush="raise",
+            points=((32, column, 1.0),),
+            delta=0.2,
+            radius=2,
+            falloff_hardness=0.65,
+        )
+        assert frame.applied is True
+        assert frame.project_serialized is False
+    assert session.frame_count == 5
+    assert session.serialization_count == 0
+    assert payload == source_payload
+
+    committed = session.commit()
+    assert committed.decode_count == 1
+    assert committed.serialization_count == 1
+    decoded = authored_project_from_kmap_payload(committed.payload)
+    assert decoded.rooms[0].primitive.heights[32][32] > 0.0
+    assert decoded.rooms[0].primitive.metadata["terrain_stroke_committed"] is True
+    assert session.commit() is committed
+    assert session.serialization_count == 1
+
+
+def test_t2907_terrain_stroke_session_tracks_dirty_rectangle_and_dependency_halo() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.map_studio_terrain_sculpt_session import MapStudioTerrainSculptStrokeSession
+
+    session = MapStudioTerrainSculptStrokeSession.from_project(
+        _terrain_stroke_project(9),
+        room_resref="grstroke_room01",
+    )
+    result = session.apply_frame(
+        brush="raise",
+        points=((4, 4, 1.0),),
+        delta=0.5,
+        radius=1,
+        falloff_hardness=1.0,
+    )
+    assert result.dirty_region.to_metadata() == {
+        "min_row": 3,
+        "max_row": 5,
+        "min_column": 3,
+        "max_column": 5,
+        "changed_sample_count": 5,
+        "covered_sample_count": 9,
+        "empty": False,
+    }
+    assert result.dirty_region_with_halo.to_metadata() == {
+        "min_row": 2,
+        "max_row": 6,
+        "min_column": 2,
+        "max_column": 6,
+        "changed_sample_count": 5,
+        "covered_sample_count": 25,
+        "empty": False,
+    }
+    patch = session.dirty_height_patch(result.dirty_region_with_halo)
+    assert len(patch) == 5
+    assert all(len(row) == 5 for row in patch)
+
+
+def test_t2907_terrain_stroke_session_matches_brush_math_and_stays_resolution_local() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.authored_terrain_builder import apply_terrain_brush_stroke
+    from src.core.modules.map_studio_terrain_sculpt_session import MapStudioTerrainSculptStrokeSession
+
+    for brush, kwargs in (
+        ("raise", {"delta": 0.2, "radius": 2, "strength": 0.7}),
+        ("smooth", {"delta": 0.1, "radius": 2, "strength": 0.65, "iterations": 2}),
+        ("erode", {"delta": 0.04, "radius": 2, "strength": 0.8, "iterations": 2}),
+    ):
+        project = _terrain_stroke_project(13, patterned=True)
+        expected = apply_terrain_brush_stroke(
+            project.rooms[0].primitive,
+            brush=brush,
+            points=((6, 6, 1.0), (6, 7, 0.8)),
+            falloff_hardness=0.55,
+            **kwargs,
+        )
+        session = MapStudioTerrainSculptStrokeSession.from_project(
+            project,
+            room_resref="grstroke_room01",
+        )
+        session.apply_frame(
+            brush=brush,
+            points=((6, 6, 1.0), (6, 7, 0.8)),
+            falloff_hardness=0.55,
+            **kwargs,
+        )
+        assert session.commit().primitive.heights == expected.heights
+
+    timings: dict[int, float] = {}
+    changed_counts: dict[int, int] = {}
+    for resolution in (17, 65, 129):
+        session = MapStudioTerrainSculptStrokeSession.from_project(
+            _terrain_stroke_project(resolution),
+            room_resref="grstroke_room01",
+        )
+        center = resolution // 2
+        session.apply_frame(brush="raise", points=((center, center),), delta=0.1, radius=2, force=True)
+        result = session.apply_frame(
+            brush="raise",
+            points=((center, center + 1),),
+            delta=0.1,
+            radius=2,
+            force=True,
+        )
+        timings[resolution] = result.elapsed_ms
+        changed_counts[resolution] = len(result.changed_flat_indices)
+        assert session.serialization_count == 0
+
+    assert changed_counts == {17: 13, 65: 13, 129: 13}
+    # The live brush contract is a 4 ms dirty-buffer budget.  Resolution must
+    # not push a fixed-radius local stroke back onto the old whole-grid path.
+    assert max(timings.values()) < 4.0

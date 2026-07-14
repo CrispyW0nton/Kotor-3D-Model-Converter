@@ -1904,6 +1904,102 @@ def test_resource_manager_indexes_override_without_preloading(tmp_path) -> None:
     assert inst.get("sample", RES_TPC) == b"texture-bytes"
 
 
+def test_resource_manager_indexes_streamsounds_lazily_with_engine_priority(tmp_path) -> None:
+    from src.core.assets.resource_manager import RES_WAV, ResourceManager, _GameInstall, _key
+
+    stream_dir = tmp_path / "sTrEaMsOuNdS"
+    stream_dir.mkdir()
+    streamed = stream_dir / "MiXeD_Ambient.WAV"
+    streamed.write_bytes(b"stream-v1")
+    (stream_dir / "MiXeD_Ambient.mp3").write_bytes(b"raw-mp3-must-not-shadow-wav")
+    (stream_dir / "ignore.txt").write_bytes(b"not-a-sound")
+
+    inst = _GameInstall.__new__(_GameInstall)
+    inst.game_dir = str(tmp_path)
+    inst.tag = "K2"
+    inst._key_map = {}
+    inst._bif_index = {}
+    inst._tex_erfs = []
+    inst._mod_erfs = []
+    inst._override = {}
+    inst._stream_sounds = {}
+    inst._index_stream_sounds()
+
+    key = _key("mixed_ambient", RES_WAV)
+    assert os.path.samefile(inst._stream_sounds[key], streamed)
+    assert _key("ignore", RES_WAV) not in inst._stream_sounds
+    assert inst.has("MIXED_AMBIENT", RES_WAV)
+    assert "mixed_ambient" in inst.list_resrefs(RES_WAV)
+
+    # Only the path is indexed. Reading after a file change observes the new
+    # bytes instead of retaining a startup-time payload copy.
+    streamed.write_bytes(b"stream-v2")
+
+    class FakeBif:
+        def read(self, _index: int) -> bytes:
+            return b"bif"
+
+    inst._key_map[key] = (0, 7)
+    inst._bif_index[0] = FakeBif()
+    assert inst.get("mixed_ambient", RES_WAV) == b"stream-v2"
+
+    class FakeModule:
+        def has(self, name: str, res_type: int) -> bool:
+            return _key(name, res_type) == key
+
+        def read(self, name: str, res_type: int) -> bytes | None:
+            return b"module" if self.has(name, res_type) else None
+
+        def list_type(self, res_type: int) -> list[str]:
+            return ["mixed_ambient"] if res_type == RES_WAV else []
+
+    inst._mod_erfs = [FakeModule()]
+    assert inst.get("mixed_ambient", RES_WAV) == b"module"
+
+    override = tmp_path / "override.wav"
+    override.write_bytes(b"override")
+    inst._override[key] = str(override)
+    assert inst.get("mixed_ambient", RES_WAV) == b"override"
+
+    manager = ResourceManager()
+    manager._k1 = None
+    manager._k2 = inst
+    manager._overlay[("mixed_ambient", RES_WAV)] = b"authored-module"
+    assert manager.get("MIXED_AMBIENT", RES_WAV, "K2") == b"authored-module"
+    assert manager.get_strict("MIXED_AMBIENT", RES_WAV, "K2") == b"authored-module"
+
+
+def test_resource_manager_strict_model_loader_never_crosses_game(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from src.core.assets.resource_manager import RES_MDL, RES_MDX, ResourceManager
+    from src.core.game import kotor_loader
+
+    class Install:
+        def __init__(self, resources):
+            self.resources = dict(resources)
+
+        def get(self, name, res_type):
+            return self.resources.get((str(name).lower(), res_type))
+
+    manager = ResourceManager()
+    manager._k1 = Install({("k1_only", RES_MDL): b"k1-mdl", ("k1_only", RES_MDX): b"k1-mdx"})
+    manager._k2 = Install({("k2_only", RES_MDL): b"k2-mdl", ("k2_only", RES_MDX): b"k2-mdx"})
+    monkeypatch.setattr(
+        kotor_loader,
+        "load_model_from_bytes",
+        lambda mdl, mdx: SimpleNamespace(mdl=mdl, mdx=mdx),
+    )
+
+    assert manager.load_model_strict("k1_only", "K2") is None
+    model = manager.load_model_strict("k2_only", "K2")
+    assert model is not None
+    assert model.mdl == b"k2-mdl"
+    assert model.mdx == b"k2-mdx"
+    assert model._gr_source_game == "K2"
+    assert model._gr_source_layer == "target_game_library"
+
+
 @pytest.mark.skipif(not K2_PATH.exists(), reason="K2 install not available")
 def test_k2_rgba_lightmap_decode_is_not_dxt_noise() -> None:
     from PIL import ImageStat
@@ -2281,3 +2377,136 @@ def test_k1_aurora_light_controllers_populate_runtime_light_fields() -> None:
     assert light.light_color == pytest.approx((0.921571, 0.964708, 1.0))
     assert light.light_kind == "point"
     assert light.light_enabled is True
+
+
+def test_moderngl_exact_uniform_submission_skips_only_identical_payloads() -> None:
+    from src.adapters.rendering.moderngl_renderer_impl import _ExactUniformSubmission
+
+    class FakeUniform:
+        def __init__(self):
+            self._value = None
+            self.value_writes = []
+            self.byte_writes = []
+
+        @property
+        def value(self):
+            return self._value
+
+        @value.setter
+        def value(self, value):
+            self._value = value
+            self.value_writes.append(value)
+
+        def write(self, data):
+            self.byte_writes.append(bytes(data))
+
+    stats = {
+        "uniform_writes": 0,
+        "uniform_skips": 0,
+        "blend_state_writes": 0,
+        "blend_state_skips": 0,
+    }
+    raw = FakeUniform()
+    uniform = _ExactUniformSubmission(raw, stats)
+    uniform.value = (1.0, 2.0, 3.0)
+    uniform.value = (1.0, 2.0, 3.0)
+    uniform.value = (1.0, 2.0, 4.0)
+    uniform.write(b"matrix-a")
+    uniform.write(b"matrix-a")
+    uniform.write(b"matrix-b")
+
+    assert raw.value_writes == [(1.0, 2.0, 3.0), (1.0, 2.0, 4.0)]
+    assert raw.byte_writes == [b"matrix-a", b"matrix-b"]
+    assert stats["uniform_writes"] == 4
+    assert stats["uniform_skips"] == 2
+
+    uniform.reset_submission_cache()
+    uniform.write(b"matrix-b")
+    assert raw.byte_writes == [b"matrix-a", b"matrix-b", b"matrix-b"]
+
+
+def test_moderngl_skin_palette_bypasses_generic_uniform_cache() -> None:
+    from src.adapters.rendering.moderngl_renderer_impl import _ExactUniformSubmission
+
+    class FakeUniform:
+        value = None
+
+        def __init__(self):
+            self.byte_writes = []
+
+        def write(self, data):
+            self.byte_writes.append(bytes(data))
+
+    stats = {
+        "uniform_writes": 0,
+        "uniform_skips": 0,
+        "blend_state_writes": 0,
+        "blend_state_skips": 0,
+    }
+    raw = FakeUniform()
+    uniform = _ExactUniformSubmission(raw, stats, cache_writes=False)
+    uniform.write(b"same-palette")
+    uniform.write(b"same-palette")
+
+    assert raw.byte_writes == [b"same-palette", b"same-palette"]
+    assert stats["uniform_writes"] == 2
+    assert stats["uniform_skips"] == 0
+
+
+def test_moderngl_exact_blend_submission_resets_at_pass_boundary() -> None:
+    from src.adapters.rendering import moderngl_renderer_impl as implementation
+
+    class FakeContext:
+        def __init__(self):
+            self.enabled = []
+            self.disabled = []
+            self.equations = []
+            self.funcs = []
+
+        def enable(self, capability):
+            self.enabled.append(capability)
+
+        def disable(self, capability):
+            self.disabled.append(capability)
+
+        @property
+        def blend_equation(self):
+            return self.equations[-1] if self.equations else None
+
+        @blend_equation.setter
+        def blend_equation(self, value):
+            self.equations.append(value)
+
+        @property
+        def blend_func(self):
+            return self.funcs[-1] if self.funcs else None
+
+        @blend_func.setter
+        def blend_func(self, value):
+            self.funcs.append(tuple(value))
+
+    stats = {
+        "uniform_writes": 0,
+        "uniform_skips": 0,
+        "blend_state_writes": 0,
+        "blend_state_skips": 0,
+    }
+    ctx = FakeContext()
+    blend = implementation._ExactBlendSubmission(stats)
+    equation = implementation.moderngl.FUNC_ADD
+    func = (implementation.moderngl.ONE, implementation.moderngl.ONE)
+    blend.apply(ctx, enabled=False)
+    blend.apply(ctx, enabled=False)
+    blend.apply(ctx, enabled=True, equation=equation, func=func)
+    blend.apply(ctx, enabled=True, equation=equation, func=func)
+
+    assert len(ctx.disabled) == 1
+    assert len(ctx.enabled) == 1
+    assert ctx.equations == [equation]
+    assert ctx.funcs == [func]
+    assert stats["blend_state_writes"] == 4
+    assert stats["blend_state_skips"] == 4
+
+    blend.reset()
+    blend.apply(ctx, enabled=False)
+    assert len(ctx.disabled) == 2

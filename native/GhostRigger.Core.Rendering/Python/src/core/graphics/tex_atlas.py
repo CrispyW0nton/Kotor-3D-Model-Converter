@@ -106,6 +106,11 @@ class TexArrayCache:
         """Evict all cached entries."""
         self._lru.clear()
 
+    def invalidate(self, img: Optional['_PILImage.Image']) -> None:
+        """Evict only the array derived from *img* after an in-place edit."""
+        if img is not None:
+            self._lru.pop(id(img), None)
+
     def __len__(self) -> int:
         return len(self._lru)
 

@@ -13,7 +13,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.core.level import KMapProject, KMapSerializer
+from src.core.level import KMapProject, KMapSerializer, MapStudioTextureSidecarPatch
 
 
 @dataclass(frozen=True)
@@ -40,6 +40,7 @@ class MapStudioCommandRecord:
     readiness_impact: str = ""
     summary: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
+    sidecar_patches: tuple[MapStudioTextureSidecarPatch, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -58,10 +59,19 @@ class MapStudioCommandRestoreResult:
 class MapStudioCommandHistory:
     """Bounded undo/redo stack for authored Map Studio project commands."""
 
-    def __init__(self, max_depth: int = 100) -> None:
+    def __init__(self, max_depth: int = 100, max_sidecar_history_bytes: int = 640 * 1024 * 1024) -> None:
         self.max_depth = max(1, int(max_depth))
+        self.max_sidecar_history_bytes = max(1, int(max_sidecar_history_bytes))
         self.undo_stack: list[MapStudioCommandRecord] = []
         self.redo_stack: list[MapStudioCommandRecord] = []
+
+    @property
+    def sidecar_history_bytes(self) -> int:
+        return sum(
+            patch.stored_byte_count
+            for record in (*self.undo_stack, *self.redo_stack)
+            for patch in record.sidecar_patches
+        )
 
     @property
     def can_undo(self) -> bool:
@@ -113,10 +123,12 @@ class MapStudioCommandHistory:
         readiness_impact: str = "",
         summary: str = "",
         metadata: dict[str, Any] | None = None,
+        sidecar_patches: tuple[MapStudioTextureSidecarPatch, ...] = (),
     ) -> MapStudioCommandRecord | None:
         """Record one command unless the captured state is unchanged."""
 
-        if before == after:
+        patches = tuple(sidecar_patches or ())
+        if before == after and not patches:
             return None
         record = MapStudioCommandRecord(
             action_key=str(action_key or "map_studio.command"),
@@ -127,11 +139,14 @@ class MapStudioCommandHistory:
             readiness_impact=str(readiness_impact or ""),
             summary=str(summary or ""),
             metadata=dict(metadata or {}),
+            sidecar_patches=patches,
         )
         self.undo_stack.append(record)
         if len(self.undo_stack) > self.max_depth:
             del self.undo_stack[0 : len(self.undo_stack) - self.max_depth]
         self.redo_stack.clear()
+        while len(self.undo_stack) > 1 and self.sidecar_history_bytes > self.max_sidecar_history_bytes:
+            del self.undo_stack[0]
         return record
 
     def undo(self) -> MapStudioCommandRestoreResult | None:

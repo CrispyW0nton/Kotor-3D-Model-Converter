@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import os
+import weakref
 from types import SimpleNamespace
 
 import numpy as np
@@ -14,17 +15,46 @@ import src.core.animation.gpu_skinning as gpu_skinning_module
 import src.core.rendering.mesh_render_data as mesh_render_data_module
 import src.core.rendering.skeleton_render_data as skeleton_render_data_module
 from src.adapters.rendering.native_core.renderer import NativeViewportRenderer
+from src.adapters.rendering.moderngl_resources import _GlTexCache
 from src.adapters.rendering.pygfx_core.scene_bridge import PygfxSceneBridge
 from src.adapters.rendering.pygfx_core.mesh_cache import PygfxMeshCache
 from src.adapters.rendering.pygfx_core.renderer import PygfxViewportRenderer
+from src.adapters.rendering.wgpu_core.resources import WgpuResourceCache
 from src.adapters.rendering.wgpu_core.renderer import WgpuRenderer
-from src.adapters.rendering.renderer_factory import fallback_order, renderer_capabilities_snapshot
+from src.adapters.rendering.renderer_factory import (
+    FallbackViewportRenderer,
+    fallback_order,
+    renderer_capabilities_snapshot,
+)
+from src.core.graphics.tex_atlas import TexArrayCache
 from src.core.rendering.renderer_performance import ViewportFrameGovernor
 from src.core.rendering.renderer_backend import RendererBackend, normalize_renderer_backend, renderer_backend_label
 from src.core.rendering.renderer_settings import RendererSettings
+from src.core.rendering.frame_core.renderer_textures import RendererTextureMixin
+from src.core.rendering.frame_core.texture_cache import TextureCache
+from src.gui.viewports.viewport_core.widgets.resource_cache import ViewportResourceCacheMixin
 from src.gui.viewports.viewport_core.widgets.picking_hover import ViewportPickingHoverMixin
 from src.gui.viewports.viewport_core.widgets.selection_mesh import ViewportSelectionMeshMixin
 from src.gui.viewports.viewport_core.widgets.state_helpers import ViewportStateMixin
+
+
+def test_frame_renderer_texture_residency_query_never_resolves_missing_texture() -> None:
+    calls: list[str] = []
+
+    class Cache:
+        _cache = {"resident": object()}
+
+        def get(self, name):
+            calls.append(name)
+            raise AssertionError("residency query must not resolve/decode a texture")
+
+    owner = SimpleNamespace(textures={"local": object()}, tex_cache=Cache())
+
+    assert RendererTextureMixin.is_texture_resident(owner, "LOCAL") is True
+    assert RendererTextureMixin.is_texture_resident(owner, "resident") is True
+    assert RendererTextureMixin.is_texture_resident(owner, "missing") is False
+    assert RendererTextureMixin.is_texture_resident(owner, "NULL") is False
+    assert calls == []
 
 
 class _FakeGeometry:
@@ -2772,6 +2802,57 @@ def test_pygfx_skin_palette_uses_bas_attachment_local_model(monkeypatch) -> None
     assert skeleton_buffer.data[0]["bone_matrices"][2, 3] == pytest.approx(0.0)
 
 
+def test_pygfx_skin_palette_uses_runtime_actor_source_model(monkeypatch) -> None:
+    calls = {"build_models": []}
+
+    class FakeUploader:
+        def __init__(self, max_bones):
+            self.max_bones = max_bones
+
+        def build_inverse_bind_pose(self, model):
+            calls["build_models"].append(model)
+            return len(list(model.all_nodes()))
+
+        def compute_skin_node_palette(self, _node, _anim_pose, anim_base_pose=None):
+            pass
+
+        def as_numpy_array(self):
+            return np.asarray([np.eye(4, dtype=np.float32)], dtype=np.float32)
+
+    monkeypatch.setattr(gpu_skinning_module, "MatrixPaletteUploader", FakeUploader)
+
+    actor_model = SimpleNamespace(name="PMBAM")
+    wrapper = SimpleNamespace(
+        name="map_studio_pie_player",
+        parent=None,
+        _gr_runtime_source_model_ref=actor_model,
+    )
+    skin = SimpleNamespace(
+        name="Torso",
+        parent=wrapper,
+        children=[],
+        is_skin=True,
+        _gr_runtime_source_model_id=id(actor_model),
+    )
+    actor_model.all_nodes = lambda: [skin]
+    map_model = SimpleNamespace(name="207TEL", all_nodes=lambda: [wrapper, skin])
+    skeleton_buffer = SimpleNamespace(
+        data=np.zeros(1, dtype=[("bone_matrices", np.float32, (4, 4))]),
+        update_range=lambda *_args, **_kwargs: None,
+    )
+    record = SimpleNamespace(source=skin, skeleton=SimpleNamespace(bone_matrices_buffer=skeleton_buffer))
+
+    PygfxMeshCache().update_skin_palette(
+        record,
+        SimpleNamespace(time=0.1, nodes={}),
+        model=map_model,
+    )
+
+    assert calls["build_models"] == [actor_model]
+    assert mesh_render_data_module.runtime_source_model_for_node(skin) is actor_model
+    assert skeleton_render_data_module._skinning_palette_model_for_node(skin, map_model) is actor_model
+
+
 def test_bas_attachment_skin_palette_is_attachment_root_local() -> None:
     root = SimpleNamespace(
         name="head_root",
@@ -3615,3 +3696,221 @@ def test_renderer_surface_host_keeps_live_surface_visible() -> None:
     assert host.is_live_surface() is True
     assert surface.isVisible() is True
     assert host.overlay_layer_active() is False
+
+
+class _TextureUpdateSoftwareRenderer(RendererTextureMixin):
+    def __init__(self) -> None:
+        self.textures = {}
+        self.tex_cache = TextureCache()
+        self._tex_arr_cache = TexArrayCache(max_entries=8)
+
+
+class _TextureUpdateFakeGlTexture:
+    def __init__(self, size: tuple[int, int]) -> None:
+        self.size = size
+        self.writes: list[dict] = []
+        self.mipmap_levels: list[int] = []
+        self.release_count = 0
+
+    def write(self, data, *, viewport, alignment) -> None:
+        self.writes.append(
+            {
+                "data": bytes(data),
+                "viewport": tuple(viewport),
+                "alignment": int(alignment),
+            }
+        )
+
+    def build_mipmaps(self, *, max_level) -> None:
+        self.mipmap_levels.append(int(max_level))
+
+    def release(self) -> None:
+        self.release_count += 1
+
+
+def test_texture_cache_patches_clipped_region_without_flipping_or_replacing_image() -> None:
+    cache = TextureCache()
+    original = Image.new("RGBA", (4, 4), (10, 20, 30, 255))
+    cached, initial_regions = cache.update_image_regions("paint_live", original)
+    assert cached is original
+    assert initial_regions == ((0, 0, 4, 4),)
+
+    assert cache.get_mip1(cached) is not None
+    assert id(cached) in cache._mip_bias_cache
+
+    incoming = Image.new("RGBA", (4, 4), (200, 5, 6, 255))
+    updated, regions = cache.update_image_regions(
+        "paint_live.tga",
+        incoming,
+        [(-1, 0, 3, 1), (99, 99, 4, 4)],
+    )
+
+    assert updated is cached
+    assert regions == ((0, 0, 2, 1),)
+    # Cached KOTOR images are bottom-up: y=0 remains y=0 through the API.
+    assert updated.getpixel((0, 0)) == (200, 5, 6, 255)
+    assert updated.getpixel((1, 0)) == (200, 5, 6, 255)
+    assert updated.getpixel((0, 3)) == (10, 20, 30, 255)
+    assert id(updated) not in cache._mip_bias_cache
+
+
+def test_software_texture_update_evicts_only_edited_numpy_array() -> None:
+    renderer = _TextureUpdateSoftwareRenderer()
+    painted = Image.new("RGBA", (8, 8), (1, 2, 3, 255))
+    unrelated = Image.new("RGBA", (8, 8), (4, 5, 6, 255))
+    renderer.update_texture_regions("painted", painted)
+    painted_array_before = renderer._tex_arr_cache.get(painted)
+    unrelated_array_before = renderer._tex_arr_cache.get(unrelated)
+
+    painted.putpixel((2, 0), (90, 80, 70, 255))
+    updated, regions = renderer.update_texture_regions("painted", painted, [(2, 0, 1, 1)])
+
+    assert updated is painted
+    assert regions == ((2, 0, 1, 1),)
+    assert renderer._tex_arr_cache.get(painted) is not painted_array_before
+    assert renderer._tex_arr_cache.get(unrelated) is unrelated_array_before
+
+
+def test_moderngl_region_upload_writes_only_dirty_bytes_and_never_clears_cache() -> None:
+    image = Image.new("RGBA", (512, 512), (15, 25, 35, 255))
+    image.paste((200, 100, 50, 255), (10, 20, 14, 24))
+    cache = _GlTexCache(SimpleNamespace())
+    texture = _TextureUpdateFakeGlTexture(image.size)
+    cache._cache[id(image)] = (weakref.ref(image), texture)
+    cache.clear = lambda: (_ for _ in ()).throw(AssertionError("full cache clear invoked"))
+
+    assert cache.update_regions(image, [(10, 20, 4, 4)]) is True
+
+    assert texture.writes == [
+        {
+            "data": bytes((200, 100, 50, 255)) * 16,
+            "viewport": (10, 20, 4, 4),
+            "alignment": 1,
+        }
+    ]
+    assert texture.mipmap_levels == [6]
+    assert texture.release_count == 0
+    assert cache.region_update_count == 1
+    assert cache.region_update_bytes == 4 * 4 * 4
+    assert cache.region_update_bytes < 512 * 512 * 4
+
+
+def test_moderngl_reports_live_texture_streaming_capability() -> None:
+    from src.adapters.rendering.moderngl_renderer import ModernGLRenderer
+
+    assert ModernGLRenderer().get_capabilities().supports_texture_streaming is True
+
+
+def test_renderer_factory_delegates_region_update_without_cache_clear() -> None:
+    class Backend:
+        def __init__(self) -> None:
+            self.updated = []
+            self.clear_count = 0
+
+        def update_texture_regions(self, texture_name, image, regions) -> bool:
+            self.updated.append((texture_name, image, tuple(regions)))
+            return True
+
+        def clear_caches(self) -> None:
+            self.clear_count += 1
+
+    backend = Backend()
+    renderer = FallbackViewportRenderer()
+    object.__setattr__(renderer, "_active", backend)
+    image = Image.new("RGBA", (4, 4))
+
+    assert renderer.update_texture_regions("live", image, ((0, 0, 1, 1),)) is True
+    assert backend.updated == [("live", image, ((0, 0, 1, 1),))]
+    assert backend.clear_count == 0
+
+
+def test_wgpu_texture_update_fallback_invalidates_only_named_texture_and_materials() -> None:
+    cache = WgpuResourceCache(SimpleNamespace())
+    painted_image = Image.new("RGBA", (4, 4))
+    painted = SimpleNamespace(byte_size=64, fallback=False, lightmap=False)
+    other = SimpleNamespace(byte_size=64, fallback=False, lightmap=False)
+    cache.textures = {
+        f"painted:{id(painted_image)}": painted,
+        "other:22": other,
+    }
+    cache.materials = {
+        "uses-painted": SimpleNamespace(diffuse_texture_resource=painted, lightmap_texture_resource=None),
+        "uses-other": SimpleNamespace(diffuse_texture_resource=other, lightmap_texture_resource=None),
+    }
+
+    assert cache.invalidate_texture_source("painted", image=painted_image) is True
+    assert cache.textures == {"other:22": other}
+    assert tuple(cache.materials) == ("uses-other",)
+
+
+def test_pygfx_texture_update_fallback_dirties_only_records_using_named_texture() -> None:
+    cache = PygfxMeshCache()
+    painted_image = Image.new("RGBA", (4, 4))
+    painted_map = SimpleNamespace()
+    other_map = SimpleNamespace()
+    cache.texture_maps = {
+        (f"painted:{id(painted_image)}", (), 0, False, 0): painted_map,
+        ("other:22", (), 0, False, 0): other_map,
+    }
+    painted_record = SimpleNamespace(
+        diffuse_map=painted_map,
+        lightmap_map=None,
+        material_dirty=False,
+        view_style_key=(1,),
+    )
+    other_record = SimpleNamespace(
+        diffuse_map=other_map,
+        lightmap_map=None,
+        material_dirty=False,
+        view_style_key=(1,),
+    )
+    cache.records = {1: painted_record, 2: other_record}
+
+    assert cache.invalidate_texture("painted", image=painted_image) is True
+    assert tuple(cache.texture_maps) == (("other:22", (), 0, False, 0),)
+    assert painted_record.material_dirty is True
+    assert painted_record.view_style_key == ()
+    assert other_record.material_dirty is False
+
+
+def test_qt_viewport_texture_update_requests_redraw_without_scene_invalidation() -> None:
+    class Software:
+        def update_texture_regions(self, name, image, regions):
+            return image, tuple(regions)
+
+    class Gpu:
+        def __init__(self) -> None:
+            self.clear_count = 0
+            self.calls = []
+
+        def update_texture_regions(self, name, image, regions) -> bool:
+            self.calls.append((name, image, tuple(regions)))
+            return True
+
+        def clear_caches(self) -> None:
+            self.clear_count += 1
+
+    class Viewport(ViewportResourceCacheMixin):
+        def __init__(self) -> None:
+            self._renderer = Software()
+            self._gpu_renderer = Gpu()
+            self.redraws = []
+
+        def _request_render(self, **kwargs) -> None:
+            self.redraws.append(kwargs)
+
+    viewport = Viewport()
+    image = Image.new("RGBA", (8, 8))
+
+    cached, regions = viewport.update_texture_regions("painted", image, [(1, 2, 3, 4)])
+
+    assert cached is image
+    assert regions == ((1, 2, 3, 4),)
+    assert viewport._gpu_renderer.clear_count == 0
+    assert viewport.redraws == [
+        {
+            "fast": True,
+            "reason": "texture pixels changed: painted",
+            "materials": True,
+        }
+    ]

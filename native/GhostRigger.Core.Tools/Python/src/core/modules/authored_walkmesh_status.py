@@ -138,13 +138,18 @@ def authored_walkmesh_status_for_project(project: AuthoredModuleProject) -> Auth
     audit_warnings = tuple(warning for audit in audits for warning in audit.warnings)
     audit_blocking = tuple(message for audit in audits for message in audit.blocking_messages)
     overlay = authored_terrain_walkability_overlay_for_project(project)
+    overlay_blocking = tuple(
+        validation.message
+        for validation in tuple(getattr(overlay, "room_validations", ()) or ())
+        if str(getattr(validation, "state", "") or "") == "invalid"
+    )
     if terrain_room_count > 0:
         total = walkable + non_walk
-        ready = total > 0 and walkable > 0 and not audit_blocking
+        ready = total > 0 and walkable > 0 and not audit_blocking and not overlay_blocking
         if ready:
-            next_action = "Inspect green/orange terrain overlay, fix steep samples if needed, then validate before staging."
+            next_action = "Inspect the green validated WOK overlay, fix steep samples if needed, then stage for game proof."
         else:
-            next_action = "Fix terrain WOK blockers, disconnected islands, invalid faces, or terrain samples before staging."
+            next_action = "Fix the red WOK overlay blockers, disconnected islands, invalid faces, missing perimeter, or terrain samples before staging."
         return AuthoredWalkmeshStatus(
             ready=ready,
             room_count=room_count,
@@ -166,7 +171,7 @@ def authored_walkmesh_status_for_project(project: AuthoredModuleProject) -> Auth
             ),
             next_action=next_action,
             warnings=tuple(overlay.warnings) + audit_warnings,
-            blocking_messages=audit_blocking,
+            blocking_messages=audit_blocking + overlay_blocking,
         )
 
     ready = walkable > 0 and not audit_blocking

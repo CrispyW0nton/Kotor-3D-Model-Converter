@@ -38,12 +38,26 @@ class AuthoredGameplayMarkerFootprint:
 
 
 @dataclass(frozen=True)
+class AuthoredGameplayMarkerIcon:
+    """One screen-facing editor icon for a non-model gameplay placement."""
+
+    placement_id: str
+    kind: str
+    label: str
+    position: Vec3
+    icon: str
+    color: str
+    color_role: str = ""
+
+
+@dataclass(frozen=True)
 class AuthoredGameplayMarkerGeometry:
     """UI/renderer-ready authored placement marker geometry."""
 
     marker_count: int = 0
     lines: tuple[AuthoredGameplayMarkerLine, ...] = ()
     footprints: tuple[AuthoredGameplayMarkerFootprint, ...] = ()
+    icons: tuple[AuthoredGameplayMarkerIcon, ...] = ()
     warnings: tuple[str, ...] = ()
 
 
@@ -77,8 +91,27 @@ def authored_gameplay_marker_geometry(
     marker_tuple = tuple(markers or ())
     lines: list[AuthoredGameplayMarkerLine] = []
     footprints: list[AuthoredGameplayMarkerFootprint] = []
+    icons: list[AuthoredGameplayMarkerIcon] = []
     warnings: list[str] = []
     for marker in marker_tuple:
+        if marker.warning:
+            warnings.append(f"{marker.label}: {marker.warning}")
+        icon = str(getattr(marker, "shape", "") or "").strip().lower()
+        if icon == "speaker":
+            icons.append(
+                AuthoredGameplayMarkerIcon(
+                    placement_id=marker.placement_id,
+                    kind=marker.kind,
+                    label=marker.label,
+                    position=marker.position,
+                    icon="speaker",
+                    color=marker.color,
+                    color_role=str(getattr(marker, "color_role", "") or "info"),
+                )
+            )
+            # A sound source has no KOTOR render model.  Keep it as a clear,
+            # selectable billboard instead of inventing cube/sphere geometry.
+            continue
         footprints.append(
             AuthoredGameplayMarkerFootprint(
                 placement_id=marker.placement_id,
@@ -112,12 +145,11 @@ def authored_gameplay_marker_geometry(
                     role="height",
                 )
             )
-        if marker.warning:
-            warnings.append(f"{marker.label}: {marker.warning}")
     return AuthoredGameplayMarkerGeometry(
         marker_count=len(marker_tuple),
         lines=tuple(lines),
         footprints=tuple(footprints),
+        icons=tuple(icons),
         warnings=tuple(warnings),
     )
 
@@ -131,6 +163,7 @@ def authored_gameplay_marker_geometry_for_project(project: AuthoredModuleProject
 __all__ = [
     "AuthoredGameplayMarkerFootprint",
     "AuthoredGameplayMarkerGeometry",
+    "AuthoredGameplayMarkerIcon",
     "AuthoredGameplayMarkerLine",
     "authored_gameplay_marker_geometry",
     "authored_gameplay_marker_geometry_for_project",

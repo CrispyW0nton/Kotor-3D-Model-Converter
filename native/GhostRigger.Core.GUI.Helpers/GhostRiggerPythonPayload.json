@@ -9,61 +9,61 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_GIZMO_INIT",
             "source_path": "src/core/gizmo/__init__.py",
             "packaged_path": "Python/src/core/gizmo/__init__.py",
-            "sha256": "9941176a06cc8539e08405fa26d29ddd688d4f4607625a5c50bec9af7f789afc"
+            "sha256": "efc6e986fefd06012a56592da627584d576f8ccdb5ab614a119fae1655885e4d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GIZMO_GIZMO_DRAW_DATA",
             "source_path": "src/core/gizmo/gizmo_draw_data.py",
             "packaged_path": "Python/src/core/gizmo/gizmo_draw_data.py",
-            "sha256": "2ad0e0b9af3b5ccc1ea551d5e9d0dc87b3cb2cac41f0cd76124785d094f6e095"
+            "sha256": "2823996e547d607b76cd46f1890708c846fd73bf9badba79af120eeb2adef7e9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GIZMO_GIZMO_MODE",
             "source_path": "src/core/gizmo/gizmo_mode.py",
             "packaged_path": "Python/src/core/gizmo/gizmo_mode.py",
-            "sha256": "1a831d5d626a1358532abcadf07f3ce42bc7830a67fd2f3008c25e914c5dda0b"
+            "sha256": "0381721ba5d79fcb6d4d2f1493f89192a3c5ead052e6e84dd46a7a3a1d72a38f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GIZMO_GIZMO_PICKER",
             "source_path": "src/core/gizmo/gizmo_picker.py",
             "packaged_path": "Python/src/core/gizmo/gizmo_picker.py",
-            "sha256": "47acf33c4f6dfcd9019f102b5e8958770583ebe778f26622a806d1ed221c216a"
+            "sha256": "67bf93a100fa994fdbf852b34ee1d8dafcd019b360d9ea41376a143a37705334"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GIZMO_GIZMO_RENDERER",
             "source_path": "src/core/gizmo/gizmo_renderer.py",
             "packaged_path": "Python/src/core/gizmo/gizmo_renderer.py",
-            "sha256": "acca41a6134516af190560207725f62a7bee39dd3a9eda5557bda2c455e5e36c"
+            "sha256": "63073fbf896fd8f253d1639b4bdb9df84f3efdab5bb3ca90c136235ab79b652e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GIZMO_TRANSFORM_CONTROLLER",
             "source_path": "src/core/gizmo/transform_controller.py",
             "packaged_path": "Python/src/core/gizmo/transform_controller.py",
-            "sha256": "39d7ad7c97dcc3fbd0d7a13835b4397f65da7090ba33b6cb42bf6bbe4938ca3b"
+            "sha256": "e260c4ce7ee45972564b51463c7626496df9a60bd61ca37332b90f7b8f1b3f67"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GIZMO_TRANSFORM_GIZMO",
             "source_path": "src/core/gizmo/transform_gizmo.py",
             "packaged_path": "Python/src/core/gizmo/transform_gizmo.py",
-            "sha256": "bf0b2bc24d82b5c5dde1950060e77fbcb9a643974255f25577de0cf66e265555"
+            "sha256": "6771cc4cb4d7fd487230282a6f0af960728dd9b1e076df0be8b08b649254af55"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_GIZMO_RENDERER",
             "source_path": "src/gui/camera/camera_gizmo_renderer.py",
             "packaged_path": "Python/src/gui/camera/camera_gizmo_renderer.py",
-            "sha256": "d18d2b91dbe2c0a32890a333d9ce4ea5846f899dd0ed6e55ff6f254f17d61292"
+            "sha256": "a9a1a0e80f539a6a2c65460defb84f55dc5065780274a9410f426abd6d183b2a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_PICKER",
             "source_path": "src/gui/camera/camera_picker.py",
             "packaged_path": "Python/src/gui/camera/camera_picker.py",
-            "sha256": "9a8b33e78bbee3d9e7d541eadb81e233dc5dbc50dcac91315008a99a5cfae224"
+            "sha256": "6c1b4a7201f914b1e986e047c4e79a08b70257e323afe2221006695fa2b1d84c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_CAMERA_CAMERA_SELECTION",
             "source_path": "src/gui/camera/camera_selection.py",
             "packaged_path": "Python/src/gui/camera/camera_selection.py",
-            "sha256": "c7b9a483d48950afcd1854d42bdc5d8ee5f396435c4da0c9a6f980a96f7eef9f"
+            "sha256": "bfac4fe63edd51ff776977070b0421427f8216acb1b44c6aca11f866494be1c1"
         }
     ]
 }

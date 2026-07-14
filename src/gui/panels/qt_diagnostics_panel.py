@@ -260,7 +260,7 @@ class QtDiagnosticsWindow(QtWidgets.QMainWindow):
         parent: Optional[QtWidgets.QWidget] = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("GhostRigger Diagnostics")
+        self.setWindowTitle("Ghost-Studio Diagnostics")
         self.setWindowFlag(QtCore.Qt.Window, True)
         self.resize(760, 560)
         self.panel = QtDiagnosticsPanel(model_getter, self)

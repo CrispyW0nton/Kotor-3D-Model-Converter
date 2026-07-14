@@ -11,11 +11,40 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+import os
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+def _resolve_repo_root() -> Path:
+    """Locate repository-owned retarget data from source or DLL payload paths.
+
+    Workflow modules have no root ``src`` mirror: in source checkouts their
+    file path lives below ``native/GhostRigger.Core.Workflow/Python``, while
+    the native host assigns embedded modules a synthetic
+    ``GhostRiggerPythonPayload/src`` path.  A fixed ``parents[3]`` therefore
+    pointed at ``.../Python`` or the payload directory and silently disabled
+    the verified UE5 mapping.  The host already publishes the authoritative
+    repository root; the ancestor scan keeps direct pytest/import use working.
+    """
+
+    candidates: list[Path] = []
+    configured = os.environ.get("GHOSTRIGGER_NATIVE_REPO_ROOT", "").strip()
+    if configured:
+        candidates.append(Path(configured))
+    module_path = Path(__file__).resolve()
+    candidates.extend([module_path.parent, *module_path.parents])
+    cwd = Path.cwd().resolve()
+    candidates.extend([cwd, *cwd.parents])
+    for candidate in candidates:
+        if (candidate / "knowledge_base" / "retargeting").is_dir():
+            return candidate
+    # Preserve a deterministic diagnostic path when the checkout is
+    # incomplete; the eventual read error names the missing asset.
+    return module_path.parents[3]
+
+
+REPO_ROOT = _resolve_repo_root()
 DEFAULT_RENAME_MAP = REPO_ROOT / "knowledge_base" / "retargeting" / "aurora_to_ue5_rename_map.json"
 FORBIDDEN_SCHEMA_FIELDS = {
     "rest_pose_override",

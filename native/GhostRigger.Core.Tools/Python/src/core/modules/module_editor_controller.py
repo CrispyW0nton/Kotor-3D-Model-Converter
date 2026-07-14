@@ -2,12 +2,33 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
-from src.core.level import KMapProject, KMapSerializer, KMapValidator, LevelExportBridge, LevelExportOptions, LevelScene, LevelTransform, new_kmap_project
+from src.core.level import (
+    KMapProject,
+    KMapSerializer,
+    KMapValidator,
+    LevelExportBridge,
+    LevelExportOptions,
+    LevelScene,
+    LevelTransform,
+    MapStudioTextureSidecarJournal,
+    MapStudioTextureSidecarPatch,
+    create_project_tpc_texture_asset,
+    import_project_texture_asset,
+    managed_project_texture_sidecars,
+    new_kmap_project,
+    project_texture_directory,
+    project_texture_export_resources,
+    save_texture_paint_session,
+    tga_dirty_tile_byte_ranges,
+)
 from src.core.scene.module_scene_import import resolve_module_room_placement
 
 from .module_blueprint_service import ModuleBlueprintService
@@ -23,14 +44,57 @@ from .authored_module_export import (
     record_authored_module_game_proof,
 )
 from .authored_module_kmap_bridge import (
+    TEXTURE_PAINT_UNAPPLIED_BLOCKER,
     authored_project_from_kmap_payload,
     authored_project_to_kmap_payload,
     build_kmap_authored_module_readiness,
     create_dev_test_authored_module_payload,
     create_golden_test_authored_module_payload,
+    texture_paint_has_unapplied_changes,
+    texture_paint_pending_resrefs,
 )
 from .authored_module_preview_model import build_authored_module_preview_model
-from .authored_module_project import authored_resref_blocking_issue, normalise_resref
+from .map_studio_pie import build_map_studio_pie_session
+from .map_studio_stock_content_preview import (
+    TemplateModelResolver,
+    build_map_studio_combined_preview_model,
+    load_kotor_model_from_bytes,
+    load_stock_kotor_model,
+)
+from .stock_module_importer import import_stock_module
+from .authored_imported_mesh import (
+    ImportedMeshRoomPrimitive,
+    ImportedMeshSurface,
+    imported_mesh_surface_role,
+    bevel_imported_mesh_edge,
+    build_imported_mesh_primitive_from_stock_model,
+    imported_mesh_room_is_backdrop,
+    prepare_imported_mesh_for_static_runtime_rebuild,
+    collapse_imported_mesh_edge,
+    delete_imported_mesh_edge_faces,
+    delete_imported_mesh_faces,
+    delete_imported_mesh_vertex_faces,
+    extrude_imported_mesh_faces,
+    flatten_imported_mesh_faces,
+    flip_imported_mesh_faces,
+    inset_imported_mesh_faces,
+    extrude_imported_mesh_edge,
+    move_imported_mesh_edge,
+    move_imported_mesh_faces,
+    move_imported_mesh_vertex,
+    set_imported_mesh_face_texture,
+    split_imported_mesh_edge,
+    split_imported_mesh_face,
+    weld_imported_mesh_vertex,
+)
+from .authored_module_project import AuthoredRoomSpec, authored_resref_blocking_issue, compile_authored_room_spec, normalise_resref
+from .authored_module_layout import (
+    AuthoredRoomConnectionAudit,
+    audit_authored_room_connections,
+    auto_arrange_authored_rooms as auto_arrange_authored_rooms_in_project,
+    connect_authored_room_openings as connect_authored_room_openings_in_project,
+    snap_authored_rooms_to_grid as snap_authored_rooms_to_grid_in_project,
+)
 from .authored_module_validation_projection import authored_module_readiness_validation_issues
 from .authored_gameplay_palette import authored_gameplay_palette_from_library_rows
 from .map_studio_modeling_tools import (
@@ -50,8 +114,10 @@ from .map_studio_modeling_tools import (
 from .map_studio_export_objects import map_studio_export_object_boundaries
 from .map_studio_terrain_sculpt_session import (
     MapStudioTerrainSculptApplyResult,
+    begin_terrain_sculpt_stroke,
     prepare_terrain_sculpt_frame_for_project,
 )
+from .map_studio_texture_paint import suggest_kotor_texture_resref, validate_kotor_texture_resref
 from .map_studio_tool_belt_preferences import (
     MAP_STUDIO_TOOL_BELT_SECTION,
     normalise_map_studio_tool_belt_preferences,
@@ -63,9 +129,13 @@ from .map_studio_curve_guides import authored_curve_guides
 from .map_studio_universal_transform_overlay import build_map_studio_universal_transform_overlay
 from .authored_gameplay_marker_geometry import (
     AuthoredGameplayMarkerGeometry,
+    authored_gameplay_marker_geometry,
     authored_gameplay_marker_geometry_for_project,
 )
-from .authored_gameplay_preview import authored_gameplay_preview_markers
+from .authored_gameplay_preview import (
+    authored_gameplay_preview_markers,
+    authored_module_entry_point_preview_marker,
+)
 from .authored_module_lighting import (
     add_authored_room_light as add_authored_room_light_to_project,
     authored_room_light_rows,
@@ -75,6 +145,24 @@ from .authored_module_lighting import (
     rename_authored_room_light,
     update_authored_room_light_properties,
     update_authored_room_light_transform,
+)
+from .authored_module_world_lighting import (
+    authored_world_lighting_settings as read_authored_world_lighting_settings,
+    default_authored_world_lighting_settings,
+    update_authored_world_lighting_settings,
+)
+from .authored_skybox import (
+    FiveFaceSkyboxSpec,
+    FiveFaceSkyboxTextures,
+    build_five_face_skybox_room,
+)
+from .authored_sky_traffic import (
+    build_sky_traffic_preview,
+    create_authored_sky_traffic as create_sky_traffic_actor,
+    read_authored_project_sky_traffic,
+    sample_sky_traffic,
+    validate_authored_sky_traffic_collection,
+    write_authored_project_sky_traffic,
 )
 from .authored_module_scripts import (
     authored_script_hook_field_choices,
@@ -90,7 +178,9 @@ from .authored_module_placements import (
     parse_authored_gameplay_placement_id,
     remove_authored_gameplay_placement,
     rename_authored_gameplay_placement,
+    snap_authored_gameplay_placement_to_walkmesh,
     update_authored_module_entry_point,
+    update_authored_creature_behavior,
     update_authored_gameplay_camera_properties,
     update_authored_gameplay_placement_transform,
     update_authored_gameplay_transition,
@@ -119,7 +209,8 @@ from .authored_room_operations import (
     claim_authored_room_composition_floor,
     cleanup_authored_floor_plan_normals,
     cleanup_authored_floor_plan_vertices,
-    combine_authored_room_composition_primitives,
+    combine_authored_room_composition_meshes,
+    group_authored_room_composition_primitives,
     duplicate_authored_room_composition_primitive,
     fill_authored_floor_plan_face,
     freeze_authored_room_composition_primitive_transform,
@@ -130,9 +221,11 @@ from .authored_room_operations import (
     mirror_authored_floor_plan_vertices,
     move_authored_floor_plan_point,
     move_authored_room_composition_primitive,
+    transform_authored_room_composition_primitives,
     rename_authored_room_composition_primitive,
     remove_authored_room_composition_primitive,
     separate_authored_room_composition_primitive,
+    separate_authored_room_combined_primitive_shells,
     set_authored_floor_plan_extrusion_settings,
     set_authored_floor_plan_wall_opening,
     set_authored_room_edge_normal_policy,
@@ -151,7 +244,11 @@ from .authored_room_operations import (
 from .authored_room_outline_geometry import AuthoredRoomOutlineGeometry, authored_room_outline_geometry_for_project
 from .authored_room_presets import available_authored_room_primitive_presets, create_authored_module_from_room_preset
 from .authored_room_style import update_authored_room_style
-from .authored_terrain_builder import available_terrain_shape_presets
+from .authored_terrain_builder import (
+    TerrainHeightfieldPrimitive,
+    apply_terrain_shape_preset,
+    available_terrain_shape_presets,
+)
 from .authored_terrain_walkability_overlay import (
     AuthoredTerrainWalkabilityOverlay,
     authored_terrain_walkability_overlay_for_project,
@@ -182,6 +279,17 @@ _MAP_STUDIO_PROOF_CHECK_LABELS = {
     "transition_pathing_sanity_confirmed": "Transitions and pathing behave sanely in the loaded module",
     "no_inherited_base_game_geometry_or_scripted_movers": "No inherited vanilla geometry or scripted movers appear",
     "screenshot_or_video_captured": "Screenshot or video evidence is attached",
+    "texture_paint_visible_in_game": "Painted textures are visible on the staged surfaces in KOTOR",
+    "terrain_sculpt_and_generated_walkmesh_work_in_game": "Sculpted terrain and its generated WOK work in KOTOR",
+    "placed_assets_match_editor_staging": "Placed assets match their Map Studio position and orientation",
+    "enemy_spawns_hostile": "Placed enemy spawns and attacks the player",
+    "npc_spawns_and_free_roams": "Placed friendly NPC spawns and free-roams",
+    "terminal_operates": "Placed terminal can be used and performs its configured action",
+    "container_opens_with_inventory": "Placed container opens and contains its configured inventory",
+    "puzzle_sequence_unlocks_door": "The staged 1-2-3 puzzle unlocks its reward door",
+    "animated_door_operates": "Placed animated door opens and closes correctly",
+    "configured_transition_operates": "Configured door/trigger transition reaches its destination",
+    "player_start_position_and_facing_match": "Player start position and facing match Map Studio",
 }
 
 
@@ -258,6 +366,10 @@ def _map_studio_package_resource_summary(inventory: dict[str, Any]) -> str:
 
 MAP_STUDIO_MODELING_STALE_OUTPUTS = ("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod")
 MAP_STUDIO_MODELING_READINESS_IMPACT = "Map Studio validation, export, install handoff, and game proof are stale."
+MAP_STUDIO_WORLD_LIGHTING_STALE_OUTPUTS = ("ARE", ".mod")
+MAP_STUDIO_WORLD_LIGHTING_READINESS_IMPACT = (
+    "World lighting and fog changed; ARE export, install handoff, and game proof are stale."
+)
 MAP_STUDIO_ACTIVE_SELECTION_SECTION = "map_studio_active_selection"
 MAP_STUDIO_SELECTION_READINESS_IMPACT = "Map Studio selection target changed; generated resources are unchanged."
 
@@ -308,6 +420,33 @@ class MapStudioGameProofRecordingSummary:
     capability_stage: str = "installed_for_game_test_recording_handoff"
 
 
+class DeferredAuthoredModuleReadiness:
+    """Compute the authored-module readiness projection on first access.
+
+    Pointer-release placement/light commits ignore the readiness return
+    entirely, and the Map Studio window refreshes export gates through its
+    deferred background validation worker.  Computing the ~50 ms readiness
+    projection synchronously inside every commit made dragging hitch, so
+    the hot-path setters hand back this lazy view instead.  Attribute
+    access resolves against the authored state at access time; the
+    controller already caches the projection per authored revision.
+    """
+
+    __slots__ = ("_controller", "_result")
+
+    def __init__(self, controller) -> None:
+        self._controller = controller
+        self._result = None
+
+    def _resolve(self):
+        if self._result is None:
+            self._result = self._controller.authored_module_readiness()
+        return self._result
+
+    def __getattr__(self, name: str):
+        return getattr(self._resolve(), name)
+
+
 class ModuleEditorController:
     def __init__(self, model: ModuleEditorModel | None = None) -> None:
         self.model = model or ModuleEditorModel()
@@ -319,11 +458,117 @@ class ModuleEditorController:
         self.validator = KMapValidator()
         self.export_bridge = LevelExportBridge(self.validator)
         self.command_history = MapStudioCommandHistory()
+        self.texture_sidecar_journal = MapStudioTextureSidecarJournal()
+        self._authored_placeable_resources: tuple[tuple[str, str, bytes], ...] = ()
+        self._authored_placeable_resource_issues: tuple[Any, ...] = ()
+        self._authored_creature_resources: tuple[tuple[str, str, bytes], ...] = ()
+        self._authored_placeable_preview_rows: tuple[dict[str, Any], ...] = ()
+        self._authored_placeable_preview_revision = 0
+        self.last_map_studio_resolved_placement_ids: tuple[str, ...] = ()
+        self.last_map_studio_unresolved_placement_ids: tuple[str, ...] = ()
+        self.last_map_studio_preview_cache_hit = False
+        self.last_map_studio_preview_elapsed_ms = 0.0
+        self._map_studio_combined_preview_cache: tuple[Any, Any, Any] | None = None
+        self._map_studio_authored_state_revision = 0
+        self._map_studio_cached_authored_project: tuple[tuple[Any, ...], Any] | None = None
+        self._map_studio_cached_query_token: tuple[Any, ...] | None = None
+        self._map_studio_cached_queries: dict[tuple[Any, ...], Any] = {}
         self._terrain_sculpt_command_before = None
+        self._terrain_sculpt_session = None
+        self._last_committed_imported_mesh_room = None
 
     @property
     def project(self) -> KMapProject:
         return self.model.project
+
+    def _map_studio_authored_state_token(self) -> tuple[Any, ...]:
+        """Return an O(1) identity/revision token for authored KMAP state."""
+
+        payload = (getattr(self.project, "extra_sections", {}) or {}).get("authored_module")
+        return (
+            id(payload),
+            int(self._map_studio_authored_state_revision),
+            id(self.project),
+            str(getattr(self.project, "name", "") or ""),
+            str(getattr(self.project, "game", "") or ""),
+        )
+
+    def _invalidate_map_studio_authored_state(self, _reason: str = "") -> None:
+        """Invalidate parsed/derived preview state after an in-place mutation.
+
+        Most authored edits replace the payload dictionary and therefore miss
+        by identity automatically.  Command recording calls this method as the
+        explicit guard for nested proof/PTH/texture metadata edits that retain
+        the same dictionary object.  No KMAP serialization or deep traversal
+        occurs on the interaction path.
+        """
+
+        self._map_studio_authored_state_revision += 1
+        self._map_studio_cached_authored_project = None
+        self._map_studio_cached_query_token = None
+        self._map_studio_cached_queries.clear()
+        self._map_studio_combined_preview_cache = None
+
+    def _map_studio_authored_project_snapshot(self):
+        """Decode the current authored payload once per identity/revision."""
+
+        payload = (getattr(self.project, "extra_sections", {}) or {}).get("authored_module")
+        if payload is None:
+            return None
+        token = self._map_studio_authored_state_token()
+        cached = self._map_studio_cached_authored_project
+        if cached is not None and cached[0] == token:
+            return cached[1]
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        self._map_studio_cached_authored_project = (token, authored)
+        if self._map_studio_cached_query_token != token:
+            self._map_studio_cached_query_token = token
+            self._map_studio_cached_queries.clear()
+        return authored
+
+    def map_studio_authored_placements_snapshot(self):
+        """Return an isolated copy of the current authored placements.
+
+        PIE needs only placement rows, not the full mutable authored project.
+        Copying this focused surface prevents a background preview workflow
+        from mutating Scene's decoded-project cache while avoiding an expensive
+        copy of room geometry and texture-paint payloads.
+        """
+
+        authored = self._map_studio_authored_project_snapshot()
+        placements = getattr(authored, "placements", None) if authored is not None else None
+        return deepcopy(placements) if placements is not None else None
+
+    def _map_studio_cached_authored_query(self, key: tuple[Any, ...], builder):
+        """Reuse an immutable/read-only projection for the current revision."""
+
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP.")
+        token = self._map_studio_authored_state_token()
+        if self._map_studio_cached_query_token != token:
+            self._map_studio_cached_query_token = token
+            self._map_studio_cached_queries.clear()
+        cache_key = tuple(key)
+        if cache_key not in self._map_studio_cached_queries:
+            self._map_studio_cached_queries[cache_key] = builder(authored)
+        return self._map_studio_cached_queries[cache_key]
+
+    def _map_studio_cached_project_query(self, key: tuple[Any, ...], builder):
+        """Cache a read-only whole-KMAP projection for the authored revision."""
+
+        token = self._map_studio_authored_state_token()
+        if self._map_studio_cached_query_token != token:
+            self._map_studio_cached_query_token = token
+            self._map_studio_cached_queries.clear()
+        cache_key = tuple(key)
+        if cache_key not in self._map_studio_cached_queries:
+            self._map_studio_cached_queries[cache_key] = builder(self.project)
+        return self._map_studio_cached_queries[cache_key]
 
     def _capture_map_studio_command_state(self):
         return self.command_history.capture(
@@ -332,6 +577,18 @@ class ModuleEditorController:
             active_module_id=self.model.active_module_id,
             active_room_id=self.model.active_room_id,
         )
+
+    def _restore_map_studio_command_state_without_history(self, snapshot) -> None:
+        """Restore a failed file-backed transaction without moving Undo/Redo."""
+
+        restored = KMapSerializer.from_dict(dict(getattr(snapshot, "data", {}) or {}))
+        restored.path = str(getattr(snapshot, "path", "") or "")
+        restored.dirty = bool(getattr(snapshot, "dirty", False))
+        self.model.set_project(restored)
+        self.model.selected_ids = list(getattr(snapshot, "selected_ids", ()) or ())
+        self.model.active_module_id = str(getattr(snapshot, "active_module_id", "") or "")
+        self.model.active_room_id = str(getattr(snapshot, "active_room_id", "") or "")
+        self._invalidate_map_studio_authored_state("transaction restore")
 
     def _record_map_studio_command(
         self,
@@ -343,7 +600,10 @@ class ModuleEditorController:
         readiness_impact: str = MAP_STUDIO_MODELING_READINESS_IMPACT,
         summary: str = "",
         metadata: dict[str, Any] | None = None,
+        sidecar_patches: tuple[MapStudioTextureSidecarPatch, ...] = (),
     ):
+        if {str(value).upper() for value in tuple(stale_outputs or ())} & {"MDL", "MDX", "WOK", "LYT", "VIS", "PTH"}:
+            self._mark_stock_pth_dirty(label)
         record = self.command_history.record(
             action_key=action_key,
             label=label,
@@ -353,6 +613,7 @@ class ModuleEditorController:
             readiness_impact=readiness_impact,
             summary=summary,
             metadata=metadata,
+            sidecar_patches=tuple(sidecar_patches or ()),
         )
         if record is not None:
             self._mark_map_studio_export_proof_stale(
@@ -362,7 +623,32 @@ class ModuleEditorController:
                 readiness_impact=readiness_impact,
             )
             self.model.log(f"Undo checkpoint recorded: {record.label}.")
+        # Selection context lives outside the authored module and does not
+        # change geometry/readiness. Rebuilding a 352-node stock preview on
+        # every click would defeat the cache and recreate the renderer-reset
+        # behavior this revision model is designed to remove.
+        if str(action_key or "") != "map_studio.selection.select":
+            self._invalidate_map_studio_authored_state(label)
         return record
+
+    def _mark_stock_pth_dirty(self, reason: str) -> None:
+        """Invalidate an imported byte-exact PTH after an authored edit."""
+
+        payload = (getattr(self.project, "extra_sections", {}) or {}).get("authored_module")
+        if not isinstance(payload, dict):
+            return
+        authored_extra = payload.get("extra")
+        if not isinstance(authored_extra, dict):
+            return
+        stock_resources = authored_extra.get("stock_resources")
+        if not isinstance(stock_resources, dict) or not stock_resources.get("pth"):
+            return
+        if authored_extra.get("stock_pth_dirty"):
+            return
+        authored_extra["stock_pth_dirty"] = True
+        authored_extra["stock_pth_preserved"] = False
+        authored_extra["stock_pth_dirty_reason"] = str(reason or "Map Studio authored state changed.")
+        self.project.dirty = True
 
     def _mark_map_studio_export_proof_stale(
         self,
@@ -390,6 +676,9 @@ class ModuleEditorController:
         ) or bool(payload.get("package_resource_inventory") or previous_payload.get("package_resource_inventory"))
         if not has_export_or_proof:
             return
+        # Stale stage/proof artifacts are removed, not carried forward: an
+        # edit after staging means the packaged module no longer matches the
+        # KMAP, so pointing at it would be dishonest readiness reporting.
         for key in (
             "pack_manifest_path",
             "proof_manifest_path",
@@ -403,17 +692,27 @@ class ModuleEditorController:
             "proof_recording_script_path",
             "package_resource_inventory",
             "export_job",
+            "in_game_proof",
+            "in_game_proof_evidence_path",
+            "evidence_path",
+            "game_test",
         ):
-            if key not in payload and key in previous_payload:
-                payload[key] = previous_payload[key]
-        payload["export_proof_invalidation"] = {
-            "invalidates_previous_export": True,
-            "invalidates_game_proof": True,
-            "latest_summary": str(latest_summary or "").strip(),
-            "stale_outputs": [str(output) for output in tuple(stale_outputs or ()) if str(output).strip()],
-            "readiness_impact": str(readiness_impact or "").strip(),
-            "next_action": "Regenerate the authored module package, reinstall it if needed, and record fresh in-game proof.",
-        }
+            payload.pop(key, None)
+        payload["runtime_resources"] = []
+        payload["game_tested"] = False
+        payload["manual_proof_required"] = True
+        # The bridge's payload invalidation (edited_rooms/latest_operation,
+        # per-edit stale outputs) is authoritative when present; only fill a
+        # generic record when the bridge produced none.
+        if not isinstance(payload.get("export_proof_invalidation"), dict):
+            payload["export_proof_invalidation"] = {
+                "invalidates_previous_export": True,
+                "invalidates_game_proof": True,
+                "latest_summary": str(latest_summary or "").strip(),
+                "stale_outputs": [str(output) for output in tuple(stale_outputs or ()) if str(output).strip()],
+                "readiness_impact": str(readiness_impact or "").strip(),
+                "next_action": "Regenerate the authored module package, reinstall it if needed, and record fresh in-game proof.",
+            }
         self.project.dirty = True
 
     @staticmethod
@@ -472,11 +771,29 @@ class ModuleEditorController:
         result = self.command_history.undo()
         if result is None:
             return None
-        self.model.set_project(result.project)
+        sidecar_patches = tuple(getattr(result.record, "sidecar_patches", ()) or ())
+        sidecars_applied = False
+        try:
+            if sidecar_patches:
+                self.texture_sidecar_journal.capture(
+                    self.project,
+                    paths=tuple(patch.path for patch in sidecar_patches),
+                )
+                self.texture_sidecar_journal.apply(self.project, sidecar_patches, use_after=False)
+                sidecars_applied = True
+            self.model.set_project(result.project)
+        except Exception:
+            if sidecars_applied:
+                self.texture_sidecar_journal.apply(self.project, sidecar_patches, use_after=True)
+            self.command_history.redo()
+            raise
         self.model.selected_ids = list(result.selected_ids)
         self.model.active_module_id = result.active_module_id
         self.model.active_room_id = result.active_room_id
         self._terrain_sculpt_command_before = None
+        self._terrain_sculpt_session = None
+        self._authored_creature_resources = ()
+        self._invalidate_map_studio_authored_state("undo")
         self.model.log(result.message)
         return result
 
@@ -484,11 +801,29 @@ class ModuleEditorController:
         result = self.command_history.redo()
         if result is None:
             return None
-        self.model.set_project(result.project)
+        sidecar_patches = tuple(getattr(result.record, "sidecar_patches", ()) or ())
+        sidecars_applied = False
+        try:
+            if sidecar_patches:
+                self.texture_sidecar_journal.capture(
+                    self.project,
+                    paths=tuple(patch.path for patch in sidecar_patches),
+                )
+                self.texture_sidecar_journal.apply(self.project, sidecar_patches, use_after=True)
+                sidecars_applied = True
+            self.model.set_project(result.project)
+        except Exception:
+            if sidecars_applied:
+                self.texture_sidecar_journal.apply(self.project, sidecar_patches, use_after=False)
+            self.command_history.undo()
+            raise
         self.model.selected_ids = list(result.selected_ids)
         self.model.active_module_id = result.active_module_id
         self.model.active_room_id = result.active_room_id
         self._terrain_sculpt_command_before = None
+        self._terrain_sculpt_session = None
+        self._authored_creature_resources = ()
+        self._invalidate_map_studio_authored_state("redo")
         self.model.log(result.message)
         return result
 
@@ -500,24 +835,461 @@ class ModuleEditorController:
         if issue:
             raise ValueError(issue)
         project_name = normalise_resref(name) or "new_level"
+        self.discard_project_texture_sidecar_changes()
         self.model.set_project(new_kmap_project(name=project_name, game=game_key, author=str(author or "").strip()))
+        self._invalidate_map_studio_authored_state("new project")
+        self._invalidate_map_studio_stock_preview_resources()
+        self.texture_sidecar_journal.clear()
         self.command_history.clear()
         self._terrain_sculpt_command_before = None
+        self._terrain_sculpt_session = None
+        self._authored_creature_resources = ()
         self.model.project.dirty = True
         self.model.log(f"Created new Map Studio KMAP project {project_name} for {game_key}.")
         return self.model.project
 
     def open_project(self, path: str | Path) -> KMapProject:
         project = KMapSerializer.load(path)
+        self.discard_project_texture_sidecar_changes()
         self.model.set_project(project)
+        self._invalidate_map_studio_authored_state("open project")
+        self._invalidate_map_studio_stock_preview_resources()
+        self.texture_sidecar_journal.clear()
+        self.texture_sidecar_journal.promote(project)
         self.command_history.clear()
         self._terrain_sculpt_command_before = None
+        self._terrain_sculpt_session = None
+        self._authored_creature_resources = ()
         self.model.log(f"Opened KMAP {Path(path).name}.")
         return project
 
     def save_project(self, path: str | Path | None = None) -> None:
+        current_path = str(getattr(self.project, "path", "") or "").strip()
+        if path is not None and current_path:
+            current_parent = Path(current_path).resolve().parent
+            target_parent = Path(path).resolve().parent
+            if current_parent != target_parent and managed_project_texture_sidecars(self.project):
+                raise ValueError(
+                    "Save KMAP As cannot move a project with texture sidecars to another folder yet. "
+                    "Save beside the current KMAP, or use a future Move Project command that copies and rebases assets transactionally."
+                )
+        previous_resolved = Path(current_path).resolve() if current_path else None
         KMapSerializer.save(self.project, path)
+        path_changed = previous_resolved is not None and previous_resolved != Path(self.project.path).resolve()
+        if path_changed:
+            self.command_history.clear()
+            self.model.log("Cleared Map Studio Undo/Redo because Save As established a new project-file epoch.")
+        self.texture_sidecar_journal.clear()
+        self.texture_sidecar_journal.promote(self.project)
         self.model.log(f"Saved KMAP {Path(self.project.path).name}.")
+
+    def discard_project_texture_sidecar_changes(self) -> int:
+        """Restore project texture bytes to the last successful Save/Open."""
+
+        count = self.texture_sidecar_journal.restore_baseline(self.project)
+        if count:
+            self.model.log(f"Discarded unsaved changes to {count} project texture sidecar(s).")
+        return int(count)
+
+    def import_project_texture(self, path: str | Path, *, resref: str = ""):
+        """Import one unique editable texture beside the saved KMAP."""
+
+        source = Path(path)
+        existing = tuple(str(texture.resref or "") for texture in tuple(self.project.textures or ()))
+        clean_resref = (
+            validate_kotor_texture_resref(resref)
+            if str(resref or "").strip()
+            else suggest_kotor_texture_resref(source.name, existing)
+        )
+        target = project_texture_directory(self.project) / f"{clean_resref}.tga"
+        sidecar_paths = (target, target.with_suffix(".txi"))
+        before = self._capture_map_studio_command_state()
+        sidecar_before = self.texture_sidecar_journal.capture(self.project, paths=sidecar_paths)
+        created_paths = tuple(value for value, state in sidecar_before.states if state is None)
+        try:
+            asset = import_project_texture_asset(self.project, path, resref=clean_resref)
+        except Exception:
+            rollback = self.texture_sidecar_journal.finish(
+                self.project,
+                sidecar_before,
+                paths=sidecar_paths,
+                created_paths=created_paths,
+            )
+            self.texture_sidecar_journal.apply(self.project, rollback, use_after=False)
+            self._restore_map_studio_command_state_without_history(before)
+            raise
+        sidecar_patches = self.texture_sidecar_journal.finish(
+            self.project,
+            sidecar_before,
+            paths=sidecar_paths,
+            created_paths=created_paths,
+        )
+        self.model.log(
+            f"Imported project texture {asset.resref} ({asset.width}x{asset.height}); "
+            "it will be bundled on the next authored module export."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.texture.import",
+            label=f"Import texture {asset.resref}",
+            before=before,
+            metadata={
+                "texture_id": asset.texture_id,
+                "resref": asset.resref,
+                "width": asset.width,
+                "height": asset.height,
+            },
+            stale_outputs=("TGA", "TXI", ".mod"),
+            readiness_impact="Custom texture resources must be repackaged before game proof.",
+            sidecar_patches=sidecar_patches,
+        )
+        return asset
+
+    def authored_project_texture_resources(self) -> tuple[tuple[str, str, bytes], ...]:
+        """Return custom texture payloads that will be included in the MOD."""
+
+        return project_texture_export_resources(self.project)
+
+    def set_authored_placeable_resources(self, resources: Any, *, issues: Any = ()) -> None:
+        """Inject Placeable Library resources without coupling Scene to Workflow.
+
+        The Placeable Builder workflow owns UTP/dependency resolution.  Map
+        Studio owns the final module transaction, so the GUI hands the resolved
+        byte resources across this narrow boundary before validation/export.
+        """
+
+        normalized: list[tuple[str, str, bytes]] = []
+        for item in tuple(resources or ()):
+            try:
+                resref, restype, data = item
+            except (TypeError, ValueError):
+                continue
+            clean_ref = str(resref or "").strip().lower()[:16]
+            clean_type = str(restype or "").strip().lower().lstrip(".")
+            if clean_ref and clean_type and data:
+                normalized.append((clean_ref, clean_type, bytes(data)))
+        next_resources = tuple(normalized)
+        changed = next_resources != self._authored_placeable_resources
+        self._authored_placeable_resources = next_resources
+        self._authored_placeable_resource_issues = tuple(issues or ())
+        if changed:
+            self._invalidate_map_studio_stock_preview_resources()
+
+    def set_authored_placeable_preview_rows(self, rows: Any) -> None:
+        """Supply typed Placeable Library rows used before UTP export/injection.
+
+        This is a preview-only bridge.  The authored UTP remains the engine
+        source of truth at export; rows merely let a newly saved library asset
+        follow Appearance -> placeables.2da -> modelname immediately.
+        """
+
+        normalized: list[dict[str, Any]] = []
+        for row in tuple(rows or ()):
+            if isinstance(row, dict):
+                normalized.append(dict(row))
+        next_rows = tuple(normalized)
+        if next_rows != self._authored_placeable_preview_rows:
+            self._authored_placeable_preview_rows = next_rows
+            self._invalidate_map_studio_stock_preview_resources()
+
+    def set_authored_creature_resources(self, resources: Any) -> None:
+        """Inject generated per-instance UTC/NCS/DLG resources for final packaging."""
+
+        normalized: list[tuple[str, str, bytes]] = []
+        for item in tuple(resources or ()):
+            try:
+                resref, restype, data = item
+            except (TypeError, ValueError):
+                continue
+            clean_ref = str(resref or "").strip().lower()[:16]
+            clean_type = str(restype or "").strip().lower().lstrip(".")
+            if clean_ref and clean_type and data:
+                normalized.append((clean_ref, clean_type, bytes(data)))
+        if tuple(normalized) != self._authored_creature_resources:
+            self._authored_creature_resources = tuple(normalized)
+            self._invalidate_map_studio_stock_preview_resources()
+
+    def _invalidate_map_studio_stock_preview_resources(self) -> None:
+        """Drop only resource-derived preview caches after library changes."""
+
+        self._authored_placeable_preview_revision += 1
+        self._map_studio_combined_preview_cache = None
+        for name in ("_map_studio_stock_template_resolver", "_map_studio_stock_model_cache"):
+            if hasattr(self, name):
+                delattr(self, name)
+
+    def authored_project_extra_resources(self) -> tuple[tuple[str, str, bytes], ...]:
+        """Return all GUI-resolved authored resources for the final MOD."""
+
+        return (
+            tuple(self.authored_project_texture_resources())
+            + tuple(self._authored_placeable_resources)
+            + tuple(self._authored_creature_resources)
+        )
+
+    def _require_authored_creature_resources_ready(self) -> None:
+        """Block a package whose GIT points at a generated UTC that is absent."""
+
+        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
+        placements = dict(payload.get("placements") or {})
+        metadata = dict(placements.get("metadata") or {})
+        behaviors = dict(metadata.get("creature_behaviors") or {})
+        required = {
+            str(dict(value).get("generated_template_resref") or "").strip().lower()
+            for value in behaviors.values()
+            if isinstance(value, dict)
+            and str(dict(value).get("faction_role") or "template").strip().lower() != "template"
+        }
+        bundled = {
+            str(resref or "").strip().lower()
+            for resref, restype, _data in tuple(self._authored_creature_resources or ())
+            if str(restype or "").strip().lower().lstrip(".") == "utc"
+        }
+        missing = sorted(required - bundled)
+        if missing:
+            raise ValueError(
+                "Creature behavior export is blocked because generated UTC resources were not resolved: "
+                + ", ".join(missing)
+            )
+
+    def authored_placeable_resource_issues(self) -> tuple[Any, ...]:
+        return self._authored_placeable_resource_issues
+
+    def _require_authored_placeable_resources_ready(self) -> None:
+        """Keep headless exports from bypassing typed Placeable Library blockers."""
+
+        blocking = [
+            str(getattr(issue, "message", issue))
+            for issue in tuple(self._authored_placeable_resource_issues or ())
+            if str(getattr(issue, "severity", "") or "").strip().lower() in {"blocking", "error"}
+        ]
+        payload = dict((getattr(self.project, "extra_sections", {}) or {}).get("authored_module") or {})
+        placements = dict(payload.get("placements") or {})
+        referenced = {
+            str(dict(item or {}).get("template_resref") or dict(item or {}).get("resref") or "").strip().lower()
+            for item in tuple(placements.get("placeables") or ())
+            if isinstance(item, dict)
+        }
+        authored_rows = {
+            str(row.get("resref") or row.get("template_resref") or "").strip().lower()
+            for row in tuple(self._authored_placeable_preview_rows or ())
+            if str(row.get("source") or "").strip().lower() == "placeable_builder"
+        }
+        placement_metadata = dict(placements.get("metadata") or {})
+        provenance_rows = dict(placement_metadata.get("instance_provenance") or {})
+        provenance_authored = {
+            str(dict(value or {}).get("template_resref") or "").strip().lower()
+            for value in provenance_rows.values()
+            if isinstance(value, dict)
+            and str(value.get("library_source") or "").strip().lower() == "placeable_builder"
+        }
+        bundled_utps = {
+            str(resref or "").strip().lower()
+            for resref, restype, _data in tuple(self._authored_placeable_resources or ())
+            if str(restype or "").strip().lower().lstrip(".") == "utp"
+        }
+        missing = sorted(((referenced & authored_rows) | provenance_authored) - bundled_utps)
+        if missing:
+            blocking.append(
+                "Referenced Placeable Builder UTP resources were not resolved for export: " + ", ".join(missing)
+            )
+        if blocking:
+            raise ValueError("Placeable Library export is blocked: " + " ".join(blocking))
+
+    def commit_project_texture_paint(self, texture_id: str, session, *, stroke_result: Any = None):
+        """Persist one crash-safe draft stroke and mark it unapplied for export."""
+
+        sidecar_paths = managed_project_texture_sidecars(self.project, texture_id=str(texture_id))
+        if not sidecar_paths:
+            raise ValueError("Texture Paint target has no project sidecar path.")
+        before = self._capture_map_studio_command_state()
+        sidecar_before = self.texture_sidecar_journal.capture(self.project, paths=sidecar_paths)
+        try:
+            asset = save_texture_paint_session(self.project, texture_id, session)
+            payload = (getattr(self.project, "extra_sections", {}) or {}).get("authored_module")
+            if isinstance(payload, dict):
+                payload = dict(payload)
+                self._clear_authored_export_proof_invalidation(payload, clear_stage_metadata=True)
+                payload["texture_paint_dirty"] = True
+                payload["texture_paint_unapplied"] = True
+                payload["texture_paint_resref"] = asset.resref
+                payload["texture_paint_pending_resrefs"] = list(
+                    dict.fromkeys((*texture_paint_pending_resrefs(payload), asset.resref))
+                )
+                self.project.extra_sections["authored_module"] = payload
+            texture = next(
+                (
+                    item
+                    for item in tuple(getattr(self.project, "textures", ()) or ())
+                    if str(getattr(item, "texture_id", "") or "") == str(asset.texture_id)
+                ),
+                None,
+            )
+            if texture is not None:
+                texture.metadata = {
+                    **dict(getattr(texture, "metadata", {}) or {}),
+                    "paint_unapplied": True,
+                }
+            ranges_by_path: dict[str, tuple[tuple[int, int], ...]] = {}
+            dirty_tiles = tuple(getattr(stroke_result, "dirty_tiles", ()) or ())
+            if dirty_tiles:
+                tga_bytes = Path(asset.path).read_bytes()
+                ranges_by_path[str(Path(asset.path).resolve())] = tga_dirty_tile_byte_ranges(
+                    width=int(session.width),
+                    height=int(session.height),
+                    tile_size=int(session.tile_size),
+                    dirty_tiles=dirty_tiles,
+                    tga_bytes=tga_bytes,
+                )
+            sidecar_patches = self.texture_sidecar_journal.finish(
+                self.project,
+                sidecar_before,
+                paths=sidecar_paths,
+                ranges_by_path=ranges_by_path,
+            )
+        except Exception:
+            rollback = self.texture_sidecar_journal.finish(
+                self.project,
+                sidecar_before,
+                paths=sidecar_paths,
+            )
+            self.texture_sidecar_journal.apply(self.project, rollback, use_after=False)
+            self._restore_map_studio_command_state_without_history(before)
+            raise
+        delta_bytes = sum(patch.stored_byte_count for patch in sidecar_patches)
+        self._record_map_studio_command(
+            action_key="map_studio.texture.paint_stroke",
+            label=f"Texture Paint Stroke {asset.resref}",
+            before=before,
+            stale_outputs=("TGA", "TXI", ".mod"),
+            readiness_impact="Painted texture resources must be repackaged before game proof.",
+            metadata={
+                "texture_id": str(texture_id),
+                "resref": asset.resref,
+                "dirty_tile_count": len(tuple(getattr(stroke_result, "dirty_tiles", ()) or ())),
+                "sidecar_delta_bytes": int(delta_bytes),
+            },
+            sidecar_patches=sidecar_patches,
+        )
+        self.model.log(
+            f"Saved texture-paint draft stroke to {asset.resref}; click Apply Texture Changes before export."
+        )
+        return asset
+
+    def has_unapplied_project_texture_changes(self) -> bool:
+        """Return whether the KMAP contains live paint drafts not finalized by the user."""
+
+        payload = (getattr(self.project, "extra_sections", {}) or {}).get("authored_module")
+        return texture_paint_has_unapplied_changes(payload)
+
+    def _require_applied_project_texture_changes(self) -> None:
+        if self.has_unapplied_project_texture_changes():
+            raise ValueError(TEXTURE_PAINT_UNAPPLIED_BLOCKER)
+
+    def apply_project_texture_changes(self) -> dict[str, Any]:
+        """Finalize drafted TGA/TXI sidecars as the texture set eligible for export.
+
+        Paint strokes remain file-backed, crash-safe drafts so live preview and
+        global Undo can operate without embedding pixels in KMAP.  Apply is a
+        lightweight, explicit acceptance transaction: it validates/reads the
+        pending export resources, records deterministic hashes and revisions,
+        and clears the export-blocking draft state.  It never changes source
+        game textures, mesh UV0, or lightmap UV data.
+        """
+
+        payload = (getattr(self.project, "extra_sections", {}) or {}).get("authored_module")
+        if not isinstance(payload, dict):
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load one first.")
+        if not texture_paint_has_unapplied_changes(payload):
+            return {
+                "applied": False,
+                "resource_count": 0,
+                "resrefs": (),
+                "message": "No unapplied texture changes are waiting.",
+            }
+
+        before = self._capture_map_studio_command_state()
+        pending_resrefs = texture_paint_pending_resrefs(payload)
+        resources = tuple(self.authored_project_texture_resources())
+        pending_resources = tuple(
+            (resref, restype, data)
+            for resref, restype, data in resources
+            if not pending_resrefs or str(resref or "").strip().lower() in pending_resrefs
+        )
+        finalized_resrefs = tuple(
+            dict.fromkeys(str(resref or "").strip().lower() for resref, _restype, _data in pending_resources)
+        )
+        if not pending_resources:
+            raise ValueError(
+                "Cannot apply Texture Paint changes because no project-owned TGA/TPC sidecar is available."
+            )
+        if pending_resrefs:
+            missing = tuple(resref for resref in pending_resrefs if resref not in finalized_resrefs)
+            if missing:
+                raise ValueError(
+                    "Cannot apply Texture Paint changes because project sidecars are missing for: "
+                    + ", ".join(missing)
+                )
+
+        manifest = [
+            {
+                "resref": str(resref),
+                "restype": str(restype),
+                "byte_count": len(data),
+                "sha256": hashlib.sha256(data).hexdigest(),
+            }
+            for resref, restype, data in pending_resources
+        ]
+        hashes_by_resref = {
+            str(item["resref"]): str(item["sha256"])
+            for item in manifest
+            if str(item["restype"]).lower() in {"tga", "tpc"}
+        }
+        for texture in tuple(getattr(self.project, "textures", ()) or ()):
+            resref = str(getattr(texture, "resref", "") or "").strip().lower()
+            if resref not in finalized_resrefs:
+                continue
+            metadata = dict(getattr(texture, "metadata", {}) or {})
+            metadata["paint_unapplied"] = False
+            metadata["paint_applied_revision"] = int(metadata.get("paint_revision", 0) or 0)
+            if resref in hashes_by_resref:
+                metadata["paint_applied_sha256"] = hashes_by_resref[resref]
+            texture.metadata = metadata
+
+        updated_payload = dict(payload)
+        updated_payload["texture_paint_dirty"] = False
+        updated_payload["texture_paint_unapplied"] = False
+        updated_payload["texture_paint_pending_resrefs"] = []
+        updated_payload["texture_paint_applied_resources"] = manifest
+        updated_payload["texture_paint_applied_revision"] = int(
+            updated_payload.get("texture_paint_applied_revision", 0) or 0
+        ) + 1
+        self.project.extra_sections["authored_module"] = updated_payload
+        self.project.dirty = True
+
+        self._record_map_studio_command(
+            action_key="map_studio.texture.apply_changes",
+            label="Apply Texture Changes",
+            before=before,
+            stale_outputs=("TGA", "TXI", ".mod"),
+            readiness_impact="Texture paint drafts are finalized and eligible for the next module export.",
+            summary="Accepted the current project-owned texture sidecars without changing UV or lightmap data.",
+            metadata={
+                "resrefs": list(finalized_resrefs),
+                "resource_count": len(manifest),
+                "applied_revision": updated_payload["texture_paint_applied_revision"],
+            },
+        )
+        message = (
+            f"Applied texture changes for {len(finalized_resrefs)} texture(s); "
+            "the current sidecars are eligible for module export."
+        )
+        self.model.log(message)
+        return {
+            "applied": True,
+            "resource_count": len(manifest),
+            "resrefs": finalized_resrefs,
+            "message": message,
+        }
 
     def add_module(self, name: str, *, source_path: str = "", game: str | None = None):
         module = LevelScene(self.project).add_module(name, source_path=source_path, game=game)
@@ -568,6 +1340,773 @@ class ModuleEditorController:
     def load_lyt(self, path: str | Path):
         return self.layout_service.load_lyt_file(self.project, path, module_id=self.model.active_module_id)
 
+    def import_stock_module_from_rim(
+        self,
+        *,
+        module_resref: str,
+        modules_dir: str,
+        game: str = "",
+        resource_manager: Any = None,
+    ) -> tuple[bool, str]:
+        """Import a complete stock KOTOR module into an editable authored project.
+
+        Reads ARE/GIT/IFO/LYT/VIS from the module RIM, loads room MDL geometry,
+        and populates the authored module project with all placements, rooms,
+        lights, and metadata.
+
+        Returns ``(ok, message)``.
+        """
+
+        from pathlib import Path as _Path
+
+        resref = str(module_resref or "").strip().lower()
+        if not resref:
+            return False, "No module resref provided."
+
+        game_tag = str(game or self.project.game or "K1").upper()
+        modules_path = _Path(str(modules_dir or "").strip())
+        if not modules_path.exists():
+            return False, f"Modules directory not found: {modules_path}"
+
+        # KOTOR modules are .rim files; some are .mod (which is a RIM container).
+        rim_path = modules_path / f"{resref}.rim"
+        if not rim_path.exists():
+            rim_path = modules_path / f"{resref}.mod"
+        if not rim_path.exists():
+            return False, f"Module RIM not found: {rim_path}"
+
+        self.model.log(f"Importing stock module {resref} ({game_tag}) from {rim_path.name}...")
+
+        # Custom community modules bundle their own room MDL/MDX/WOK + textures
+        # inside the capsule rather than referencing base-game rooms. Overlay
+        # them so model resolution (import + convert-to-editable) finds them.
+        # RIM-based modules split gameplay templates (UTC/UTP/UTD/...) into an
+        # "_s.rim" companion, so overlay that too when it exists; without it,
+        # creatures/doors/placeables render as markers instead of real models.
+        if resource_manager is not None and hasattr(resource_manager, "add_module_overlay"):
+            overlay_paths = [rim_path]
+            if rim_path.suffix.lower() == ".rim":
+                companion = rim_path.with_name(f"{rim_path.stem}_s.rim")
+                if companion.exists():
+                    overlay_paths.append(companion)
+            for overlay_path in overlay_paths:
+                try:
+                    overlaid = resource_manager.add_module_overlay(str(overlay_path))
+                    if overlaid:
+                        self.model.log(f"Indexed {overlaid} bundled resource(s) from {overlay_path.name} for editing.")
+                except Exception as exc:
+                    self.model.log(f"Could not index bundled module resources from {overlay_path.name}: {exc}")
+            # The manager object is intentionally reused across imports, so
+            # object identity cannot reveal that its overlay bytes changed.
+            self._invalidate_map_studio_stock_preview_resources()
+
+        # Model loader closure.
+        _loader_cache: dict[str, Any] = {}
+
+        def _model_loader(resref_arg: str, game_arg: str):
+            cache_key = f"{resref_arg.lower()}|{game_arg}"
+            if cache_key in _loader_cache:
+                return _loader_cache[cache_key]
+            model = load_stock_kotor_model(resource_manager, resref_arg, game_arg)
+            _loader_cache[cache_key] = model
+            return model
+
+        result = import_stock_module(
+            module_resref=resref,
+            game=game_tag,
+            rim_path=rim_path,
+            resource_provider=resource_manager,
+            model_loader=_model_loader if resource_manager is not None else None,
+        )
+
+        if result.project is None:
+            errors = "; ".join(result.errors) if result.errors else "Unknown import error."
+            self.model.log(f"  Import FAILED: {errors}")
+            return False, errors
+
+        # Convert to KMAP payload and store.
+        payload = authored_project_to_kmap_payload(result.project)
+        self.project.extra_sections["authored_module"] = payload
+        self.project.name = result.project.metadata.module_root
+        self.project.game = game_tag
+        self.project.dirty = True
+        self._invalidate_map_studio_authored_state("stock module import")
+
+        # Log summary.
+        summary_parts = [f"{result.room_count} rooms"]
+        for kind, count in sorted(result.placement_counts.items()):
+            if count:
+                summary_parts.append(f"{count} {kind}")
+        self.model.log(f"  Imported: {', '.join(summary_parts)}.")
+        for warning in result.warnings:
+            self.model.log(f"  Warning: {warning}")
+
+        return True, f"Imported {resref}: {', '.join(summary_parts)}."
+
+    # ---------------------------------------------- GModeler map editing
+
+    def _load_authored_project_or_raise(self):
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None:
+            raise ValueError(
+                "No authored Map Studio module is stored in this KMAP. Import the stock module (File -> Import Stock Module) first."
+            )
+        return authored
+
+    def _store_authored_project(self, updated) -> None:
+        # Any authored mutation can invalidate the imported module's original
+        # path graph. Preserve the byte-exact PTH only while the stock import
+        # remains untouched; edited projects must regenerate pathing.
+        updated_extra = dict(getattr(updated, "extra", {}) or {})
+        stock_resources = dict(updated_extra.get("stock_resources") or {})
+        if stock_resources.get("pth") and not updated_extra.get("stock_pth_dirty"):
+            from dataclasses import replace as _replace
+
+            updated_extra["stock_pth_dirty"] = True
+            updated_extra["stock_pth_preserved"] = False
+            updated_extra["stock_pth_dirty_reason"] = (
+                "Map Studio authored state changed after stock import; regenerate PTH from current walkable geometry."
+            )
+            updated = _replace(updated, extra=updated_extra)
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self._invalidate_map_studio_authored_state("store authored project")
+
+    def imported_mesh_room(self, room_resref: str):
+        """Return the authored imported-mesh room spec for a resref, or None."""
+
+        try:
+            authored = self._load_authored_project_or_raise()
+        except ValueError:
+            return None
+        resref = normalise_resref(room_resref)
+        for room in authored.rooms:
+            if room.normalised_resref() == resref and isinstance(room.primitive, ImportedMeshRoomPrimitive):
+                return room
+        return None
+
+    def last_committed_imported_mesh_room(self, room_resref: str):
+        """Return the just-committed mesh room without decoding KMAP again.
+
+        The cache is scoped to the exact payload object produced by the edit.
+        Any project replacement, undo/redo, or structural mutation misses and
+        callers fall back to :meth:`imported_mesh_room`.
+        """
+
+        cached = getattr(self, "_last_committed_imported_mesh_room", None)
+        if not cached:
+            return None
+        payload, cached_resref, room = cached
+        current = (getattr(self.project, "extra_sections", {}) or {}).get("authored_module")
+        wanted = normalise_resref(room_resref)
+        if payload is not current or cached_resref != wanted:
+            return None
+        if not isinstance(getattr(room, "primitive", None), ImportedMeshRoomPrimitive):
+            return None
+        return room
+
+    def _stock_room_wok_bytes(self, resref: str, resource_manager: Any, authored: Any) -> bytes | None:
+        """Fetch the stock room's WOK bytes: Override/KEY-BIF, then the import RIM."""
+
+        getter = getattr(resource_manager, "get", None)
+        if callable(getter):
+            try:
+                data = getter(resref, 2016, str(getattr(authored, "game", "K1") or "K1").upper())
+                if data:
+                    return bytes(data)
+            except Exception:
+                pass
+        source = str((getattr(authored, "extra", {}) or {}).get("import_source") or "")
+        if source:
+            try:
+                from pathlib import Path as _Path
+
+                from pykotor.extract.capsule import LazyCapsule
+                from pykotor.resource.type import ResourceType as RT
+
+                rim = _Path(source)
+                if rim.exists():
+                    data = LazyCapsule(rim).resource(resref, RT.WOK)
+                    if data:
+                        return bytes(data)
+            except Exception:
+                pass
+        return None
+
+    def convert_stock_room_to_imported_mesh(
+        self,
+        *,
+        room_resref: str,
+        resource_manager: Any = None,
+    ) -> tuple[bool, str]:
+        """Bake one stock KOTOR room into editable imported-mesh authored geometry.
+
+        The room keeps its LYT position and original UVs; the stock KMAP room
+        row is retired so the authored copy renders instead of the read-only
+        preview.  Recorded as one undoable command.
+        """
+
+        from dataclasses import replace as _replace
+
+        resref = normalise_resref(room_resref)
+        if not resref:
+            return False, "No room resref provided."
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            # LYT-loaded loose rooms have no authored module yet; create a
+            # minimal one so "edit any loaded map" works without a full
+            # stock-module import first.
+            from .authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+            from .authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject
+
+            root = normalise_resref(str(getattr(self.project, "name", "") or "") ) or resref
+            authored = AuthoredModuleProject(
+                metadata=AuthoredModuleMetadata(
+                    module_root=root,
+                    game=str(self.project.game or "K1").upper(),
+                    display_name=f"{root} (edited stock map)",
+                    tag=root,
+                ),
+                rooms=(),
+                placements=AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref=root)),
+                lights=(),
+            )
+            self.model.log(
+                f"Created authored module {root} automatically so stock room {resref} can become editable."
+            )
+        else:
+            authored = self._load_authored_project_or_raise()
+        existing = next((room for room in authored.rooms if room.normalised_resref() == resref), None)
+        if existing is not None and isinstance(existing.primitive, ImportedMeshRoomPrimitive):
+            return True, f"Room {resref} is already editable."
+        if resource_manager is None:
+            return False, "Connect a KOTOR game directory first so the stock room model can be loaded."
+        before = self._capture_map_studio_command_state()
+        game = str(self.project.game or "K1").upper()
+        model = load_stock_kotor_model(resource_manager, resref, game)
+        if model is None:
+            return False, f"Stock room model {resref} could not be loaded from the {game} game resources."
+        wok_bytes = self._stock_room_wok_bytes(resref, resource_manager, authored)
+        primitive = build_imported_mesh_primitive_from_stock_model(
+            model,
+            room_resref=resref,
+            source_model=resref,
+            game=game,
+            wok_bytes=wok_bytes,
+        )
+        if not primitive.surfaces:
+            return False, f"Stock room model {resref} has no editable render surfaces."
+
+        position = (0.0, 0.0, 0.0)
+        stock_rows = [
+            room
+            for room in tuple(getattr(self.project, "rooms", ()) or ())
+            if str(getattr(room, "model_resref", "") or getattr(room, "name", "") or "").strip().lower() == resref
+        ]
+        metadata = {"source": "stock_room_conversion", "source_model": resref}
+        # Individual backdrop surfaces keep their stable surface indices and
+        # are filtered only by viewport visibility/picking. A whole room is a
+        # backdrop-only room only when every render surface is backdrop and its
+        # stock WOK contributes no walkable floor; mixed K2 rooms (231telsb,
+        # 151harsb) must keep their real geometry and pathing.
+        backdrop_only = imported_mesh_room_is_backdrop(primitive)
+        metadata["backdrop_only"] = backdrop_only
+        metadata["is_backdrop"] = backdrop_only  # legacy KMAP/readiness key
+        metadata["backdrop_surface_indices"] = [
+            index
+            for index, surface in enumerate(primitive.surfaces)
+            if bool(getattr(surface, "backdrop", False))
+        ]
+        if existing is not None:
+            position = tuple(float(v) for v in tuple(existing.position or (0.0, 0.0, 0.0))[:3])
+            metadata = {**dict(existing.metadata or {}), **metadata}
+            metadata.pop("pie_exclude_unresolved_stock_geometry", None)
+            metadata.pop("stock_geometry_issue", None)
+            metadata["stock_geometry_status"] = "resolved"
+            rooms = tuple(
+                room
+                if room.normalised_resref() != resref
+                else AuthoredRoomSpec(
+                    room_resref=resref,
+                    primitive=primitive,
+                    position=position,
+                    visible_rooms=room.visible_rooms,
+                    metadata=metadata,
+                )
+                for room in authored.rooms
+            )
+        else:
+            if stock_rows:
+                transform = getattr(stock_rows[0], "transform", None)
+                position = tuple(
+                    float(v) for v in tuple(getattr(transform, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))[:3]
+                )
+            rooms = tuple(authored.rooms) + (
+                AuthoredRoomSpec(room_resref=resref, primitive=primitive, position=position, metadata=metadata),
+            )
+        self._store_authored_project(_replace(authored, rooms=rooms))
+        if stock_rows:
+            keep = [
+                room
+                for room in tuple(getattr(self.project, "rooms", ()) or ())
+                if str(getattr(room, "model_resref", "") or getattr(room, "name", "") or "").strip().lower() != resref
+            ]
+            self.project.rooms = list(keep)
+        wok_note = "with its stock walkmesh" if primitive.wok is not None else "with a fallback floor walkmesh"
+        self.model.log(
+            f"Converted stock room {resref} into editable geometry ({len(primitive.surfaces)} surfaces, {wok_note})."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.imported_mesh.convert",
+            label=f"Make room {resref} editable",
+            before=before,
+            metadata={"room_resref": resref, "surface_count": len(primitive.surfaces)},
+        )
+        return True, f"Room {resref} is now editable ({len(primitive.surfaces)} surfaces, {wok_note})."
+
+    def _apply_imported_mesh_room_edit(self, *, room_resref: str, action_key: str, label: str, editor) -> tuple[bool, str]:
+        from dataclasses import replace as _replace
+
+        self._last_committed_imported_mesh_room = None
+        resref = normalise_resref(room_resref)
+        authored = self._load_authored_project_or_raise()
+        target = next(
+            (room for room in authored.rooms if room.normalised_resref() == resref),
+            None,
+        )
+        if target is None:
+            return False, f"Room {resref} is not an authored room."
+        before = self._capture_map_studio_command_state()
+        if not isinstance(target.primitive, ImportedMeshRoomPrimitive):
+            # GModeler is universal: primitive/floor-plan/terrain rooms bake
+            # to editable mesh on their first component edit, so a translated
+            # Create-menu cube can be edited just like a converted stock room.
+            from dataclasses import replace as _bake_replace
+
+            geometry = compile_authored_room_spec(target)
+            meshes = (geometry.room_mesh,) + tuple(geometry.helper_meshes or ())
+            surfaces = tuple(
+                ImportedMeshSurface(
+                    name=str(mesh.name or f"{resref}_srf{index}"),
+                    texture=str(mesh.texture or ""),
+                    vertices=tuple(mesh.vertices),
+                    faces=tuple(mesh.faces),
+                    uvs=tuple(mesh.uvs or ()),
+                    normals=tuple(mesh.normals or ()),
+                    diffuse=tuple(mesh.diffuse),
+                    ambient=tuple(mesh.ambient),
+                )
+                for index, mesh in enumerate(meshes)
+                if mesh.vertices and mesh.faces
+            )
+            if not surfaces:
+                return False, f"Room {resref} has no bakeable geometry."
+            baked = ImportedMeshRoomPrimitive(
+                room_resref=resref,
+                surfaces=surfaces,
+                source_model=resref,
+                game=str(self.project.game or "K1").upper(),
+                wok=geometry.wok,
+                metadata={"baked_from": type(target.primitive).__name__},
+            )
+            rooms = tuple(
+                room if room is not target else _bake_replace(room, primitive=baked) for room in authored.rooms
+            )
+            authored = _bake_replace(authored, rooms=rooms)
+            target = next(room for room in authored.rooms if room.normalised_resref() == resref)
+            self.model.log(f"Baked room {resref} to editable mesh for GModeler editing.")
+        try:
+            updated_primitive = editor(target.primitive)
+        except ValueError as exc:
+            return False, str(exc)
+        if updated_primitive is target.primitive:
+            return True, "No change."
+        rooms = tuple(
+            room if room is not target else _replace(room, primitive=updated_primitive) for room in authored.rooms
+        )
+        self._store_authored_project(_replace(authored, rooms=rooms))
+        updated_room = next(room for room in rooms if room.normalised_resref() == resref)
+        self._last_committed_imported_mesh_room = (
+            self.project.extra_sections.get("authored_module"),
+            resref,
+            updated_room,
+        )
+        self.model.log(label)
+        self._record_map_studio_command(
+            action_key=action_key,
+            label=label,
+            before=before,
+            metadata={"room_resref": resref},
+        )
+        return True, label
+
+    def prepare_imported_room_for_static_runtime_rebuild(
+        self,
+        *,
+        room_resref: str,
+        reason: str,
+    ) -> tuple[bool, str]:
+        """Acknowledge a deliberate, lossy stock-runtime-graph replacement.
+
+        Normal stock-room conversion remains export-blocked when flattening
+        drops animations, model lights, emitters, or references.  This named
+        operation is the explicit opt-in for a creator who is intentionally
+        authoring a new static shell; it records the discarded source counts
+        and reason in KMAP and lets export compile a fresh static room MDL.
+        """
+
+        resref = normalise_resref(room_resref)
+        clean_reason = str(reason or "").strip()
+        if not clean_reason:
+            return False, "Static runtime-graph rebuild requires a written reason."
+        return self._apply_imported_mesh_room_edit(
+            room_resref=resref,
+            action_key="map_studio.imported_mesh.static_runtime_rebuild",
+            label=f"Replace {resref} source runtime graph with a new static room graph",
+            editor=lambda primitive: prepare_imported_mesh_for_static_runtime_rebuild(
+                primitive,
+                reason=clean_reason,
+            ),
+        )
+
+    def delete_imported_mesh_room_faces(
+        self,
+        *,
+        room_resref: str,
+        mesh_role: str,
+        face_indices: tuple[int, ...] | list[int],
+    ) -> tuple[bool, str]:
+        indices = tuple(sorted({int(v) for v in face_indices}))
+        return self._apply_imported_mesh_room_edit(
+            room_resref=room_resref,
+            action_key="map_studio.imported_mesh.delete_faces",
+            label=f"Delete {len(indices)} face(s) from {normalise_resref(room_resref)}",
+            editor=lambda primitive: delete_imported_mesh_faces(primitive, mesh_role, indices),
+        )
+
+    def set_imported_mesh_room_face_texture(
+        self,
+        *,
+        room_resref: str,
+        mesh_role: str,
+        face_indices: tuple[int, ...] | list[int],
+        texture: str,
+    ) -> tuple[bool, str]:
+        indices = tuple(sorted({int(v) for v in face_indices}))
+        clean = str(texture or "").strip().lower()
+        return self._apply_imported_mesh_room_edit(
+            room_resref=room_resref,
+            action_key="map_studio.imported_mesh.set_face_texture",
+            label=f"Set texture {clean} on {len(indices)} face(s) of {normalise_resref(room_resref)}",
+            editor=lambda primitive: set_imported_mesh_face_texture(primitive, mesh_role, indices, clean),
+        )
+
+    def extrude_imported_mesh_room_faces(
+        self,
+        *,
+        room_resref: str,
+        mesh_role: str,
+        face_indices: tuple[int, ...] | list[int],
+        distance: float,
+        point_normal: bool = False,
+        direction: tuple[float, float, float] | None = None,
+    ) -> tuple[bool, str]:
+        indices = tuple(sorted({int(v) for v in face_indices}))
+        return self._apply_imported_mesh_room_edit(
+            room_resref=room_resref,
+            action_key="map_studio.imported_mesh.extrude_faces",
+            label=f"Extrude {len(indices)} face(s) of {normalise_resref(room_resref)} by {float(distance):.2f}m",
+            editor=lambda primitive: extrude_imported_mesh_faces(
+                primitive,
+                mesh_role,
+                indices,
+                float(distance),
+                point_normal=bool(point_normal),
+                direction=direction,
+            ),
+        )
+
+    def inset_imported_mesh_room_faces(
+        self,
+        *,
+        room_resref: str,
+        mesh_role: str,
+        face_indices: tuple[int, ...] | list[int],
+        inset: float,
+    ) -> tuple[bool, str]:
+        indices = tuple(sorted({int(v) for v in face_indices}))
+        return self._apply_imported_mesh_room_edit(
+            room_resref=room_resref,
+            action_key="map_studio.imported_mesh.inset_faces",
+            label=f"Inset {len(indices)} face(s) of {normalise_resref(room_resref)} by {float(inset):.2f}m",
+            editor=lambda primitive: inset_imported_mesh_faces(primitive, mesh_role, indices, float(inset)),
+        )
+
+    def move_imported_mesh_room_faces(
+        self,
+        *,
+        room_resref: str,
+        mesh_role: str,
+        face_indices: tuple[int, ...] | list[int],
+        delta: tuple[float, float, float],
+    ) -> tuple[bool, str]:
+        indices = tuple(sorted({int(v) for v in face_indices}))
+        offset = tuple(float(v) for v in tuple(delta)[:3])
+        return self._apply_imported_mesh_room_edit(
+            room_resref=room_resref,
+            action_key="map_studio.imported_mesh.move_faces",
+            label=f"Move {len(indices)} face(s) of {normalise_resref(room_resref)} by {offset}",
+            editor=lambda primitive: move_imported_mesh_faces(primitive, mesh_role, indices, offset),
+        )
+
+    def apply_imported_mesh_room_component_op(
+        self,
+        *,
+        room_resref: str,
+        op: str,
+        mesh_role: str,
+        face_index: int,
+        vertex_corner: int = -1,
+        edge_corners: tuple[int, int] = (-1, -1),
+        face_indices: tuple[int, ...] | list[int] = (),
+        delta: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        amount: float = 0.25,
+        segments: int = 1,
+        profile: float = 0.5,
+        miter: str = "auto",
+        smoothing_angle_degrees: float = 180.0,
+        uv_mode: str = "preserve",
+        clamp_overlap: bool = True,
+        max_distance: float = 0.5,
+    ) -> tuple[bool, str]:
+        """Apply one GModeler edge/vertex/face component op with undo.
+
+        Position-welded ops (move/weld/collapse/flatten) touch every seam
+        copy of the affected vertices across all imported surfaces.
+        """
+
+        resref = normalise_resref(room_resref)
+        face = int(face_index)
+        faces = tuple(sorted({int(v) for v in face_indices})) or (face,)
+        edge = tuple(int(v) for v in tuple(edge_corners)[:2])
+        offset = tuple(float(v) for v in tuple(delta)[:3])
+        editors = {
+            "vertex_move": lambda p: move_imported_mesh_vertex(p, mesh_role, face, int(vertex_corner), offset),
+            "vertex_weld": lambda p: weld_imported_mesh_vertex(
+                p, mesh_role, face, int(vertex_corner), max_distance=float(max_distance)
+            ),
+            "vertex_delete": lambda p: delete_imported_mesh_vertex_faces(p, mesh_role, face, int(vertex_corner)),
+            "edge_move": lambda p: move_imported_mesh_edge(p, mesh_role, face, edge, offset),
+            "edge_extrude": lambda p: extrude_imported_mesh_edge(p, mesh_role, face, edge, offset),
+            "edge_bevel": lambda p: bevel_imported_mesh_edge(
+                p,
+                mesh_role,
+                face,
+                edge,
+                float(amount),
+                segments=int(segments),
+                profile=float(profile),
+                miter=str(miter or "auto"),
+                smoothing_angle_degrees=float(smoothing_angle_degrees),
+                uv_mode=str(uv_mode or "preserve"),
+                clamp_overlap=bool(clamp_overlap),
+            ),
+            "edge_split": lambda p: split_imported_mesh_edge(p, mesh_role, face, edge),
+            "edge_collapse": lambda p: collapse_imported_mesh_edge(p, mesh_role, face, edge),
+            "edge_delete": lambda p: delete_imported_mesh_edge_faces(p, mesh_role, face, edge),
+            "face_flat": lambda p: flatten_imported_mesh_faces(p, mesh_role, faces),
+            "face_flip": lambda p: flip_imported_mesh_faces(p, mesh_role, faces),
+            "face_split": lambda p: split_imported_mesh_face(p, mesh_role, face),
+        }
+        editor = editors.get(str(op or ""))
+        if editor is None:
+            return False, f"Unknown imported-mesh component op: {op!r}"
+        labels = {
+            "vertex_move": f"Move vertex of {resref}",
+            "vertex_weld": f"Weld vertex of {resref} to nearest",
+            "vertex_delete": f"Delete vertex fan of {resref}",
+            "edge_move": f"Move edge of {resref}",
+            "edge_extrude": f"Extrude edge of {resref}",
+            "edge_bevel": (
+                f"Bevel edge of {resref} by {abs(float(amount)):.3f}m "
+                f"({max(1, int(segments))} segment(s), profile {float(profile):.2f})"
+            ),
+            "edge_split": f"Split edge of {resref}",
+            "edge_collapse": f"Collapse edge of {resref}",
+            "edge_delete": f"Delete edge faces of {resref}",
+            "face_flat": f"Flatten {len(faces)} face(s) of {resref}",
+            "face_flip": f"Flip {len(faces)} face(s) of {resref}",
+            "face_split": f"Split face of {resref} at centroid",
+        }
+        return self._apply_imported_mesh_room_edit(
+            room_resref=room_resref,
+            action_key=f"map_studio.imported_mesh.{op}",
+            label=labels[str(op)],
+            editor=editor,
+        )
+
+    def convert_all_stock_rooms_to_imported_mesh(self, *, resource_manager: Any = None) -> tuple[bool, str]:
+        """Bake every stock KMAP room into editable imported geometry.
+
+        Run before export so the packaged module contains real MDL/WOK for
+        every room instead of read-only stock references the export skips.
+        """
+
+        from dataclasses import replace as _replace
+
+        rows = tuple(getattr(self.project, "rooms", ()) or ())
+        resrefs: list[str] = []
+        for row in rows:
+            resref = str(getattr(row, "model_resref", "") or getattr(row, "name", "") or "").strip().lower()
+            if resref and resref != "null" and resref not in resrefs:
+                resrefs.append(resref)
+        # Rooms imported from a stock module carry a placeholder floor-plan
+        # primitive (real geometry lives in preview metadata) — without this
+        # conversion GModeler would edit, and export would ship, a 10x10
+        # placeholder square instead of the actual room.
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        if extra.get("authored_module") is not None:
+            authored = self._load_authored_project_or_raise()
+            for room in authored.rooms:
+                if isinstance(room.primitive, ImportedMeshRoomPrimitive):
+                    continue
+                if str(dict(room.metadata or {}).get("source", "")) != "stock_module_import":
+                    continue
+                resref = room.normalised_resref()
+                if resref and resref not in resrefs:
+                    resrefs.append(resref)
+        if not resrefs:
+            return True, "No stock rooms to convert."
+        converted: list[str] = []
+        skipped: list[str] = []
+        skipped_reasons: dict[str, str] = {}
+        failures: list[str] = []
+        for resref in resrefs:
+            ok, message = self.convert_stock_room_to_imported_mesh(
+                room_resref=resref,
+                resource_manager=resource_manager,
+            )
+            if ok:
+                converted.append(resref)
+            elif "no editable render surfaces" in message or "could not be loaded" in message:
+                # Dummy/reference rooms (emitters/hooks only, e.g. 001ebo17), or
+                # rooms an ARE lists with no model bundled anywhere (common in
+                # custom modules), have no geometry to edit; skipping them is
+                # normal, not a failure.
+                skipped.append(resref)
+                skipped_reasons[resref] = str(message)
+            else:
+                failures.append(f"{resref}: {message}")
+        if skipped_reasons and extra.get("authored_module") is not None:
+            # A stock LYT/ARE can legally mention dummy rooms, or a community
+            # module can omit optional room models supplied by another package.
+            # Keep those source rows for round-trip diagnostics, but label them
+            # explicitly so PIE never compiles the 10x10 import placeholder as
+            # real render/collision geometry.
+            authored = self._load_authored_project_or_raise()
+            updated_rooms = []
+            changed = False
+            for room in tuple(authored.rooms or ()):
+                resref = room.normalised_resref()
+                reason = skipped_reasons.get(resref)
+                if reason is None or isinstance(room.primitive, ImportedMeshRoomPrimitive):
+                    updated_rooms.append(room)
+                    continue
+                metadata = dict(room.metadata or {})
+                metadata.update(
+                    {
+                        "stock_geometry_status": "unresolved",
+                        "stock_geometry_issue": reason,
+                        "pie_exclude_unresolved_stock_geometry": True,
+                    }
+                )
+                updated_rooms.append(_replace(room, metadata=metadata))
+                changed = True
+            if changed:
+                self._store_authored_project(_replace(authored, rooms=tuple(updated_rooms)))
+        summary = f"Converted {len(converted)} of {len(resrefs)} stock room(s) to editable geometry."
+        if skipped:
+            summary += (
+                f" Skipped {len(skipped)} unresolved stock room reference(s) with no render geometry "
+                f"(excluded from PIE collision): {', '.join(skipped[:4])}."
+            )
+        if failures:
+            summary += f" Failures: {'; '.join(failures[:3])}" + (" ..." if len(failures) > 3 else "")
+        self.model.log(summary)
+        return not failures, summary
+
+    def delete_map_studio_rooms(self, room_resrefs) -> tuple[bool, str]:
+        """Delete whole rooms by resref: stock KMAP rows and authored rooms.
+
+        One undoable command covers everything removed so a marquee-selected
+        batch restores together.
+        """
+
+        from dataclasses import replace as _replace
+
+        wanted = {normalise_resref(value) for value in (room_resrefs or ()) if str(value or "").strip()}
+        wanted.discard("")
+        if not wanted:
+            return False, "No rooms selected."
+        before = self._capture_map_studio_command_state()
+        removed: set[str] = set()
+
+        rows = list(getattr(self.project, "rooms", ()) or ())
+        keep_rows = []
+        for row in rows:
+            key = str(getattr(row, "model_resref", "") or getattr(row, "name", "") or "").strip().lower()
+            if key in wanted:
+                removed.add(key)
+            else:
+                keep_rows.append(row)
+        if len(keep_rows) != len(rows):
+            self.project.rooms = keep_rows
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        if extra.get("authored_module") is not None:
+            authored = self._load_authored_project_or_raise()
+            retained_rooms = tuple(room for room in authored.rooms if room.normalised_resref() not in wanted)
+            kept = tuple(
+                _replace(
+                    room,
+                    visible_rooms=tuple(
+                        target
+                        for target in tuple(room.visible_rooms or ())
+                        if normalise_resref(target) not in wanted
+                    ),
+                )
+                for room in retained_rooms
+            )
+            if len(kept) != len(authored.rooms):
+                removed.update(
+                    room.normalised_resref() for room in authored.rooms if room.normalised_resref() in wanted
+                )
+                updated_extra = dict(getattr(authored, "extra", {}) or {})
+                updated_extra["vis_pairs"] = [
+                    pair
+                    for pair in list(updated_extra.get("vis_pairs") or ())
+                    if len(tuple(pair or ())) >= 2
+                    and normalise_resref(tuple(pair)[0]) not in wanted
+                    and normalise_resref(tuple(pair)[1]) not in wanted
+                ]
+                self._store_authored_project(_replace(authored, rooms=kept, extra=updated_extra))
+
+        if not removed:
+            return False, f"No rooms matched: {', '.join(sorted(wanted))}."
+        self.project.dirty = True
+        names = ", ".join(sorted(removed))
+        self.model.log(f"Deleted room(s) {names}; walkmesh, layout, and export proof are now stale.")
+        self._record_map_studio_command(
+            action_key="map_studio.rooms.delete",
+            label=f"Delete {len(removed)} room(s)",
+            before=before,
+            metadata={"room_resrefs": sorted(removed)},
+        )
+        return True, f"Deleted room(s): {names}"
+
     def load_wok(self, path: str | Path, room_id: str = ""):
         target_room = room_id or self.model.active_room_id
         result = self.walkmesh_service.load_wok_file(self.project, path, room_id=target_room)
@@ -575,9 +2114,9 @@ class ModuleEditorController:
             self.model.loaded_walkmeshes[target_room] = result.wok
         return result
 
-    def validate(self):
+    def validate(self, *, readiness_result=None):
         issues = list(self.validator.validate(self.project))
-        readiness_result = self.authored_module_readiness()
+        readiness_result = readiness_result or self.authored_module_readiness()
         issues.extend(
             authored_module_readiness_validation_issues(
                 readiness_result.readiness,
@@ -590,7 +2129,9 @@ class ModuleEditorController:
     def authored_module_readiness(self):
         """Return Map Studio authored-module readiness for the current KMAP."""
 
-        return build_kmap_authored_module_readiness(self.project)
+        return self._map_studio_cached_project_query(
+            ("authored_module_readiness",), build_kmap_authored_module_readiness
+        )
 
     def map_studio_workspace_modes(self) -> tuple[MapStudioWorkspaceMode, ...]:
         """Return the modder-facing Map Studio workspaces exposed by the Level Editor."""
@@ -658,6 +2199,49 @@ class ModuleEditorController:
         self.model.log(f"Created authored Map Studio module {self.project.name}.")
         return self.authored_module_readiness()
 
+    def snap_authored_gameplay_placement_to_walkmesh(self, placement_id: str, *, downward_only: bool = False):
+        """Move one authored placement onto generated WOK, optionally straight down like Unreal End."""
+
+        parse_authored_gameplay_placement_id(placement_id)
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        before = self._capture_map_studio_command_state()
+        update, snap = snap_authored_gameplay_placement_to_walkmesh(
+            authored,
+            placement_id,
+            downward_only=bool(downward_only),
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self.model.log(
+            f"Snapped Map Studio {update.kind} placement {update.tag} to walkable WOK face {snap.face_index}."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.gameplay.snap_placement_to_walkmesh",
+            label=f"Snap {update.kind} placement {update.tag} to WOK",
+            before=before,
+            metadata={
+                "placement_id": placement_id,
+                "kind": update.kind,
+                "tag": update.tag,
+                "position": update.position,
+                "face_index": snap.face_index,
+                "surface_id": snap.surface_id,
+                "horizontal_distance": snap.horizontal_distance,
+                "downward_only": bool(downward_only),
+            },
+        )
+        return update, snap
+
     def create_golden_test_authored_module(self, *, module_root: str = "grgold01"):
         """Store the canonical full Map Studio golden smoke module in the KMAP."""
 
@@ -674,6 +2258,90 @@ class ModuleEditorController:
         """Return named primitive room presets for the Map Studio Builder tab."""
 
         return available_authored_room_primitive_presets()
+
+    def authored_room_connection_audit(self) -> AuthoredRoomConnectionAudit:
+        """Return Holocron-inspired room-opening connection health for Rooms UI."""
+
+        if self._map_studio_authored_project_snapshot() is None:
+            return AuthoredRoomConnectionAudit()
+        return self._map_studio_cached_authored_query(
+            ("room_connection_audit",), audit_authored_room_connections
+        )
+
+    def connect_authored_room_openings(
+        self,
+        *,
+        source_hook_id: str,
+        target_hook_id: str,
+        align_source: bool = True,
+    ):
+        """Align two authored openings, persist their link, and record one undo step."""
+
+        before = self._capture_map_studio_command_state()
+        authored = self._load_authored_project_or_raise()
+        update = connect_authored_room_openings_in_project(
+            authored,
+            source_hook_id,
+            target_hook_id,
+            align_source=bool(align_source),
+        )
+        self._store_authored_project(update.project)
+        self.model.log(
+            f"{update.summary} Rotation {update.rotation_degrees:.1f} degrees; "
+            f"translation ({update.translation[0]:.3f}, {update.translation[1]:.3f}, {update.translation[2]:.3f})."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.rooms.connect_openings",
+            label=f"Connect {update.source_hook.room_resref} to {update.target_hook.room_resref}",
+            before=before,
+            metadata={
+                "source_hook_id": update.source_hook.hook_id,
+                "target_hook_id": update.target_hook.hook_id,
+                "rotation_degrees": update.rotation_degrees,
+                "translation": list(update.translation),
+                "vis_intent_updated": True,
+                "wok_transition_proof_required": True,
+            },
+        )
+        return update
+
+    def snap_authored_rooms_to_grid(self, room_resrefs, *, grid_size: float = 1.0) -> str:
+        """Snap selected authored room positions to the KMAP layout grid."""
+
+        selected = tuple(normalise_resref(value) for value in (room_resrefs or ()) if str(value or "").strip())
+        before = self._capture_map_studio_command_state()
+        authored = self._load_authored_project_or_raise()
+        updated = snap_authored_rooms_to_grid_in_project(authored, selected, grid_size=float(grid_size))
+        self._store_authored_project(updated)
+        self._record_map_studio_command(
+            action_key="map_studio.rooms.snap_grid",
+            label=f"Snap {len(selected)} room(s) to {float(grid_size):g}m grid",
+            before=before,
+            metadata={"room_resrefs": list(selected), "grid_size": float(grid_size)},
+        )
+        message = f"Snapped {len(selected)} authored room(s) to the {float(grid_size):g}m XY layout grid."
+        self.model.log(message)
+        return message
+
+    def auto_arrange_authored_rooms(self, room_resrefs=(), *, spacing: float = 1.0) -> str:
+        """Geometry-aware non-overlapping arrangement for selected/all authored rooms."""
+
+        selected = tuple(normalise_resref(value) for value in (room_resrefs or ()) if str(value or "").strip())
+        before = self._capture_map_studio_command_state()
+        authored = self._load_authored_project_or_raise()
+        affected = len(selected) if selected else len(authored.rooms)
+        updated = auto_arrange_authored_rooms_in_project(authored, selected, spacing=float(spacing))
+        self._store_authored_project(updated)
+        self._record_map_studio_command(
+            action_key="map_studio.rooms.auto_arrange",
+            label=f"Auto arrange {affected} room(s)",
+            before=before,
+            metadata={"room_resrefs": list(selected), "spacing": float(spacing), "geometry_aware": True},
+        )
+        scope = "selected" if selected else "all"
+        message = f"Auto-arranged {affected} {scope} authored room(s) with {float(spacing):g}m geometry-aware spacing."
+        self.model.log(message)
+        return message
 
     def available_authored_terrain_shape_presets(self):
         """Return named terrain shape presets for the Map Studio Builder tab."""
@@ -866,16 +2534,9 @@ class ModuleEditorController:
     def authored_curve_guides(self):
         """Return KMAP-authored curve guides for road, path, terrain, and PTH planning."""
 
-        extra = getattr(self.project, "extra_sections", {}) or {}
-        payload = extra.get("authored_module")
-        if payload is None:
+        if self._map_studio_authored_project_snapshot() is None:
             return ()
-        authored = authored_project_from_kmap_payload(
-            payload,
-            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
-            fallback_game=str(getattr(self.project, "game", "") or "K1"),
-        )
-        return authored_curve_guides(authored)
+        return self._map_studio_cached_authored_query(("curve_guides",), authored_curve_guides)
 
     def authored_gameplay_palette_entries(self, rows, *, query: str = "", kind: str = ""):
         """Return game-library-backed resources that can seed gameplay placements."""
@@ -890,44 +2551,448 @@ class ModuleEditorController:
     def authored_gameplay_placements(self):
         """Return selectable authored gameplay placements for the current KMAP."""
 
-        extra = getattr(self.project, "extra_sections", {}) or {}
-        payload = extra.get("authored_module")
-        if payload is None:
+        if self._map_studio_authored_project_snapshot() is None:
             return ()
-        authored = authored_project_from_kmap_payload(
-            payload,
-            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
-            fallback_game=str(getattr(self.project, "game", "") or "K1"),
-        )
-        return authored_gameplay_placement_rows(authored)
+        return self._map_studio_cached_authored_query(("gameplay_placements",), authored_gameplay_placement_rows)
 
     def authored_module_entry_point(self):
         """Return the authored IFO player start for the current KMAP."""
 
-        extra = getattr(self.project, "extra_sections", {}) or {}
-        payload = extra.get("authored_module")
-        if payload is None:
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None:
             return None
-        authored = authored_project_from_kmap_payload(
-            payload,
-            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
-            fallback_game=str(getattr(self.project, "game", "") or "K1"),
-        )
         return authored.placements.entry_point
 
     def authored_room_lights(self):
         """Return selectable authored room lights for the current KMAP."""
 
-        extra = getattr(self.project, "extra_sections", {}) or {}
-        payload = extra.get("authored_module")
-        if payload is None:
+        if self._map_studio_authored_project_snapshot() is None:
             return ()
-        authored = authored_project_from_kmap_payload(
-            payload,
-            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
-            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        return self._map_studio_cached_authored_query(("room_lights",), authored_room_light_rows)
+
+    def authored_world_lighting_settings(self) -> dict[str, Any]:
+        """Return normalized ARE world-lighting values for Map Studio controls."""
+
+        if self._map_studio_authored_project_snapshot() is None:
+            settings = default_authored_world_lighting_settings(
+                str(getattr(self.project, "game", "") or "K1")
+            )
+            settings["available"] = False
+            return settings
+        settings = dict(self._map_studio_cached_authored_query(
+            ("world_lighting",), read_authored_world_lighting_settings
+        ))
+        settings["available"] = True
+        return settings
+
+    def authored_lightmap_surface_rows(self) -> tuple[dict[str, Any], ...]:
+        """List imported room surfaces that can enter the lightmap workflow."""
+
+        try:
+            authored = self._load_authored_project_or_raise()
+        except ValueError:
+            return ()
+        rows: list[dict[str, Any]] = []
+        for room in tuple(authored.rooms or ()):
+            primitive = getattr(room, "primitive", None)
+            if not isinstance(primitive, ImportedMeshRoomPrimitive):
+                continue
+            bake_records = dict(getattr(primitive, "metadata", {}) or {}).get("lightmap_bakes")
+            bake_records = dict(bake_records) if isinstance(bake_records, dict) else {}
+            for index, surface in enumerate(tuple(primitive.surfaces or ())):
+                role = imported_mesh_surface_role(index)
+                proof = dict(bake_records.get(role) or {})
+                rows.append(
+                    {
+                        "room_resref": room.normalised_resref(),
+                        "surface_index": index,
+                        "surface_role": role,
+                        "surface_name": str(surface.name or role),
+                        "vertex_count": len(tuple(surface.vertices or ())),
+                        "face_count": len(tuple(surface.faces or ())),
+                        "has_uv2": len(tuple(surface.uvs_lm or ())) == len(tuple(surface.vertices or ()))
+                        and bool(surface.vertices),
+                        "lightmap_resref": str(surface.lightmap or ""),
+                        "backdrop": bool(getattr(surface, "backdrop", False)),
+                        "bake_status": str(proof.get("status") or ("original_preserved" if surface.lightmap else "not_baked")),
+                        "engine_game_proof": bool(proof.get("engine_game_proof", False)),
+                    }
+                )
+        return tuple(rows)
+
+    def apply_authored_surface_lightmap(
+        self,
+        *,
+        room_resref: str,
+        surface_role_or_index: str | int,
+        lightmap_resref: str,
+        resolution: int = 64,
+        include_world_ambient: bool = True,
+        use_shadows: bool = True,
+    ):
+        """Bake one imported surface and commit its vanilla-shaped TPC atomically."""
+
+        from dataclasses import replace as _replace
+
+        from src.core.lighting.lightmap_bake_settings import LightmapBakeSettings
+        from src.core.workflow.map_studio_lightmap_apply import apply_imported_surface_lightmap
+
+        authored = self._load_authored_project_or_raise()
+        clean_resref = validate_kotor_texture_resref(lightmap_resref)
+        target_dir = project_texture_directory(self.project)
+        sidecar_paths = tuple(target_dir / f"{clean_resref}{suffix}" for suffix in (".tpc", ".tga", ".txi"))
+        before = self._capture_map_studio_command_state()
+        sidecar_before = self.texture_sidecar_journal.capture(self.project, paths=sidecar_paths)
+        created_paths = tuple(value for value, state in sidecar_before.states if state is None)
+        world = read_authored_world_lighting_settings(authored)
+        sun_ambient = tuple(world.get("sun_ambient") or (64, 64, 64))
+        dynamic_ambient = tuple(world.get("dynamic_ambient") or sun_ambient)
+        background = tuple(
+            (float(sun_ambient[index]) + float(dynamic_ambient[index])) / (2.0 * 255.0)
+            for index in range(3)
         )
-        return authored_room_light_rows(authored)
+        settings = LightmapBakeSettings(
+            resolution=int(resolution),
+            bake_resolution=int(resolution),
+            include_ambient=bool(include_world_ambient),
+            background_color=background,
+            use_shadows=bool(use_shadows),
+            include_diffuse=True,
+            output_format="tga",
+            generate_manifest=False,
+            preview_after_bake=False,
+        )
+        try:
+            result = apply_imported_surface_lightmap(
+                authored,
+                room_resref=room_resref,
+                surface_role_or_index=surface_role_or_index,
+                lightmap_resref=clean_resref,
+                resolution=int(resolution),
+                settings=settings,
+            )
+            if not result.ok or result.sidecar is None:
+                raise ValueError("; ".join(result.errors or ("Lightmap bake/apply failed.",)))
+            sidecar = result.sidecar
+            asset = create_project_tpc_texture_asset(
+                self.project,
+                resref=clean_resref,
+                width=sidecar.width,
+                height=sidecar.height,
+                tpc_bytes=sidecar.tpc_bytes,
+                source="map_studio:applied_lightmap",
+                metadata={
+                    "room_resref": sidecar.room_resref,
+                    "surface_role": sidecar.surface_role,
+                    "surface_index": sidecar.surface_index,
+                    "tpc_sha256": sidecar.tpc_sha256,
+                    "engine_game_proof": False,
+                    "proof": dict(sidecar.proof),
+                },
+            )
+            updated_extra = dict(getattr(result.project, "extra", {}) or {})
+            registry = dict(updated_extra.get("applied_lightmaps") or {})
+            registry[f"{sidecar.room_resref}:{sidecar.surface_role}"] = {
+                **dict(sidecar.proof),
+                "texture_id": asset.texture_id,
+                "project_texture_resref": clean_resref,
+                "resource_type": "tpc",
+            }
+            updated_extra["applied_lightmaps"] = registry
+            updated_extra["last_lightmap_apply"] = registry[f"{sidecar.room_resref}:{sidecar.surface_role}"]
+            updated = _replace(result.project, extra=updated_extra)
+            self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+            self.project.name = updated.metadata.module_root
+            self.project.game = updated.game
+            self.project.dirty = True
+            sidecar_patches = self.texture_sidecar_journal.finish(
+                self.project,
+                sidecar_before,
+                paths=sidecar_paths,
+                created_paths=created_paths,
+            )
+        except Exception:
+            rollback = self.texture_sidecar_journal.finish(
+                self.project,
+                sidecar_before,
+                paths=sidecar_paths,
+                created_paths=created_paths,
+            )
+            self.texture_sidecar_journal.apply(self.project, rollback, use_after=False)
+            self._restore_map_studio_command_state_without_history(before)
+            raise
+        self.model.log(
+            f"Applied {clean_resref}.tpc to {sidecar.room_resref}/{sidecar.surface_role}; "
+            "the resource is vanilla-structural but still requires a manual KOTOR warp proof."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.lightmap.apply_surface",
+            label=f"Apply lightmap {clean_resref}",
+            before=before,
+            stale_outputs=("MDL", "MDX", "TPC", ".mod"),
+            readiness_impact="Repackage the edited room and record a fresh manual KOTOR lighting proof.",
+            metadata={
+                "room_resref": sidecar.room_resref,
+                "surface_role": sidecar.surface_role,
+                "lightmap_resref": clean_resref,
+                "resolution": sidecar.width,
+                "tpc_sha256": sidecar.tpc_sha256,
+                "engine_game_proof": False,
+            },
+            sidecar_patches=sidecar_patches,
+        )
+        return result
+
+    def set_authored_world_lighting_settings(self, values: dict[str, Any]):
+        """Apply one undoable ARE-only world-lighting edit to the KMAP."""
+
+        before = self._capture_map_studio_command_state()
+        authored = self._load_authored_project_or_raise()
+        update = update_authored_world_lighting_settings(authored, values)
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self._record_map_studio_command(
+            action_key="map_studio.environment.world_lighting",
+            label="Update World Lighting",
+            before=before,
+            stale_outputs=MAP_STUDIO_WORLD_LIGHTING_STALE_OUTPUTS,
+            readiness_impact=MAP_STUDIO_WORLD_LIGHTING_READINESS_IMPACT,
+            summary=update.summary,
+            metadata={
+                "profile": str(update.settings["profile"]),
+                "fog_enabled": bool(update.settings["fog_enabled"]),
+                "source": str(update.settings["source"]),
+            },
+        )
+        self.model.log(f"{update.summary} Previous ARE export/game proof is now stale.")
+        return update
+
+    def authored_room_resrefs(self) -> tuple[str, ...]:
+        """Return every authored LYT room resref, including visual backdrops."""
+
+        if self._map_studio_authored_project_snapshot() is None:
+            return ()
+        return self._map_studio_cached_authored_query(
+            ("room_resrefs",),
+            lambda authored: tuple(room.normalised_resref() for room in authored.rooms if room.normalised_resref()),
+        )
+
+    def create_authored_five_face_skybox(
+        self,
+        *,
+        room_resref: str,
+        north_texture: str,
+        east_texture: str,
+        south_texture: str,
+        west_texture: str,
+        top_texture: str,
+        half_extent: float = 500.0,
+        bottom_z: float = -500.0,
+        top_z: float = 500.0,
+        visible_rooms: tuple[str, ...] = (),
+    ):
+        """Append one undoable vanilla-style visual sky room to the KMAP."""
+
+        from dataclasses import replace as _replace
+
+        authored = self._load_authored_project_or_raise()
+        room_name = normalise_resref(room_resref)
+        if any(room.normalised_resref() == room_name for room in authored.rooms):
+            raise ValueError(f"Authored room {room_name or '(missing)'} already exists.")
+        targets = tuple(
+            dict.fromkeys(
+                normalise_resref(value)
+                for value in (visible_rooms or tuple(room.normalised_resref() for room in authored.rooms))
+                if normalise_resref(value)
+            )
+        )
+        before = self._capture_map_studio_command_state()
+        sky_room = build_five_face_skybox_room(
+            FiveFaceSkyboxSpec(
+                room_resref=room_name,
+                textures=FiveFaceSkyboxTextures(
+                    north=north_texture,
+                    east=east_texture,
+                    south=south_texture,
+                    west=west_texture,
+                    top=top_texture,
+                ),
+                half_extent=float(half_extent),
+                bottom_z=float(bottom_z),
+                top_z=float(top_z),
+                visible_rooms=targets,
+                game=authored.game,
+            )
+        )
+        updated = _replace(authored, rooms=tuple(authored.rooms) + (sky_room,))
+        self._store_authored_project(updated)
+        self._record_map_studio_command(
+            action_key="map_studio.environment.create_skybox",
+            label=f"Create skybox room {room_name}",
+            before=before,
+            metadata={
+                "room_resref": room_name,
+                "textures": [north_texture, east_texture, south_texture, west_texture, top_texture],
+                "visible_rooms": list(targets),
+                "projection": "five_face_box",
+            },
+        )
+        message = (
+            f"Created five-face skybox room {room_name}; MDL/MDX/LYT/VIS/export proof are now stale."
+        )
+        self.model.log(message)
+        return sky_room, message
+
+    def authored_sky_traffic(self):
+        """Return normalized room-animation traffic intent stored in KMAP."""
+
+        if self._map_studio_authored_project_snapshot() is None:
+            return ()
+        return self._map_studio_cached_authored_query(
+            ("sky_traffic",), read_authored_project_sky_traffic
+        )
+
+    def create_authored_sky_traffic(
+        self,
+        *,
+        room_resref: str,
+        model_resref: str,
+        start: Any,
+        end: Any,
+        name: str = "Sky Traffic",
+        animation_name: str = "animloop1",
+        duration_seconds: float | None = 30.0,
+        speed_units_per_second: float | None = None,
+        facing_mode: str = "path_tangent",
+        closed_path: bool = False,
+    ):
+        """Store one Unreal-like sky actor that targets a room MDL animation."""
+
+        from dataclasses import replace as _replace
+
+        authored = self._load_authored_project_or_raise()
+        before = self._capture_map_studio_command_state()
+        traffic = create_sky_traffic_actor(
+            room_resref=room_resref,
+            model_resref=model_resref,
+            control_points=(start, end),
+            name=name,
+            animation_name=animation_name,
+            duration_seconds=float(duration_seconds) if duration_seconds is not None else None,
+            speed_units_per_second=(
+                float(speed_units_per_second) if speed_units_per_second is not None else None
+            ),
+            facing_mode=facing_mode,
+            closed_path=bool(closed_path),
+        )
+        current = read_authored_project_sky_traffic(authored)
+        traffic_rows = tuple(current) + (traffic,)
+        validation = validate_authored_sky_traffic_collection(
+            traffic_rows,
+            room_resrefs={room.normalised_resref() for room in authored.rooms},
+        )
+        if not validation.ok:
+            raise ValueError("; ".join(validation.blocking_issues))
+        updated = write_authored_project_sky_traffic(authored, traffic_rows)
+        updated_extra = dict(getattr(updated, "extra", {}) or {})
+        updated_extra["sky_traffic_compiler_target"] = "room_mdl_animation"
+        updated = _replace(updated, extra=updated_extra)
+        self._store_authored_project(updated)
+        self._record_map_studio_command(
+            action_key="map_studio.environment.create_sky_traffic",
+            label=f"Create sky traffic {traffic.name}",
+            before=before,
+            metadata={
+                "traffic_id": traffic.traffic_id,
+                "room_resref": traffic.room_resref,
+                "model_resref": traffic.model_resref,
+                "animation_name": traffic.animation_name,
+                "duration_seconds": traffic.duration_seconds,
+                "speed_units_per_second": traffic.speed_units_per_second,
+                "compiler_target": traffic.compiler_target,
+            },
+        )
+        message = (
+            f"Created sky traffic {traffic.name} using {traffic.model_resref}; it previews as a model/path actor and "
+            f"targets {traffic.room_resref}.{traffic.animation_name} room animation export."
+        )
+        self.model.log(message)
+        return traffic, message, validation
+
+    def authored_sky_traffic_marker_geometry(self) -> AuthoredGameplayMarkerGeometry:
+        """Build cyan world-space paths and direction arrows for the viewport."""
+
+        from .authored_gameplay_marker_geometry import AuthoredGameplayMarkerLine
+
+        lines = []
+        warnings: list[str] = []
+        traffic_rows = tuple(self.authored_sky_traffic() or ())
+        for traffic in traffic_rows:
+            preview = build_sky_traffic_preview(traffic, path_sample_count=33, arrow_count=8)
+            marker_id = f"sky_traffic:{traffic.traffic_id}"
+            for index in range(max(0, len(preview.path_points) - 1)):
+                lines.append(
+                    AuthoredGameplayMarkerLine(
+                        placement_id=marker_id,
+                        kind="sky_traffic",
+                        label=traffic.name,
+                        start=preview.path_points[index],
+                        end=preview.path_points[index + 1],
+                        color="#55d8ff",
+                        role="sky_traffic_path",
+                    )
+                )
+            arrow_length = max(1.0, min(12.0, preview.path_length * 0.04))
+            for arrow in preview.arrows:
+                direction = arrow.facing_direction or arrow.travel_direction
+                lines.append(
+                    AuthoredGameplayMarkerLine(
+                        placement_id=marker_id,
+                        kind="sky_traffic",
+                        label=traffic.name,
+                        start=arrow.position,
+                        end=tuple(
+                            float(arrow.position[axis]) + (float(direction[axis]) * arrow_length)
+                            for axis in range(3)
+                        ),
+                        color="#55d8ff",
+                        role="sky_traffic_direction",
+                    )
+                )
+            if not traffic.enabled:
+                warnings.append(f"{traffic.name}: disabled sky traffic is shown for editing but will not compile.")
+        return AuthoredGameplayMarkerGeometry(
+            marker_count=len(traffic_rows),
+            lines=tuple(lines),
+            warnings=tuple(warnings),
+        )
+
+    def authored_sky_traffic_preview_rows(self):
+        """Return viewport-only direct-model rows; these never enter GIT."""
+
+        from types import SimpleNamespace
+        import math as _math
+
+        rows = []
+        for traffic in tuple(self.authored_sky_traffic() or ()):
+            if not traffic.enabled:
+                continue
+            sample = sample_sky_traffic(traffic, 0.0)
+            facing = sample.facing_direction or sample.travel_direction
+            rows.append(
+                SimpleNamespace(
+                    placement_id=f"sky_traffic:{traffic.traffic_id}",
+                    kind="sky_traffic",
+                    template_resref=traffic.model_resref,
+                    model_resref=traffic.model_resref,
+                    position=sample.position,
+                    bearing=_math.atan2(float(facing[1]), float(facing[0])),
+                    is_spatial=True,
+                )
+            )
+        return tuple(rows)
 
     def authored_script_hook_field_choices(self):
         """Return editable ARE/IFO script hook fields for Map Studio controls."""
@@ -937,86 +3002,215 @@ class ModuleEditorController:
     def authored_script_hooks(self):
         """Return current authored script hooks for the current KMAP."""
 
-        extra = getattr(self.project, "extra_sections", {}) or {}
-        payload = extra.get("authored_module")
-        if payload is None:
+        if self._map_studio_authored_project_snapshot() is None:
             return {"area": {}, "module": {}}
-        authored = authored_project_from_kmap_payload(
-            payload,
-            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
-            fallback_game=str(getattr(self.project, "game", "") or "K1"),
-        )
-        return authored_script_hooks(authored)
+        return self._map_studio_cached_authored_query(("script_hooks",), authored_script_hooks)
 
     def authored_gameplay_preview_markers(self):
         """Return UI-ready preview markers for authored gameplay placements."""
 
-        extra = getattr(self.project, "extra_sections", {}) or {}
-        payload = extra.get("authored_module")
-        if payload is None:
+        if self._map_studio_authored_project_snapshot() is None:
             return ()
-        authored = authored_project_from_kmap_payload(
-            payload,
-            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
-            fallback_game=str(getattr(self.project, "game", "") or "K1"),
-        )
-        return authored_gameplay_preview_markers(authored)
+        return self._map_studio_cached_authored_query(("gameplay_preview_markers",), authored_gameplay_preview_markers)
 
     def authored_gameplay_marker_geometry(self):
         """Return renderer-ready geometry for authored gameplay placement markers."""
 
-        extra = getattr(self.project, "extra_sections", {}) or {}
-        payload = extra.get("authored_module")
-        if payload is None:
+        if self._map_studio_authored_project_snapshot() is None:
             return AuthoredGameplayMarkerGeometry()
-        authored = authored_project_from_kmap_payload(
-            payload,
-            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
-            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        return self._map_studio_cached_authored_query(
+            ("gameplay_marker_geometry",), authored_gameplay_marker_geometry_for_project
         )
-        return authored_gameplay_marker_geometry_for_project(authored)
+
+    def authored_gameplay_fallback_preview_markers(self):
+        """Return the IFO player start plus unresolved GIT model fallbacks."""
+
+        resolved = set(tuple(self.last_map_studio_resolved_placement_ids or ()))
+        placement_markers = tuple(
+            marker
+            for marker in self.authored_gameplay_preview_markers()
+            if str(getattr(marker, "placement_id", "") or "") not in resolved
+        )
+        if getattr(self, "model", None) is None:
+            return placement_markers
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None:
+            return placement_markers
+        return (authored_module_entry_point_preview_marker(authored),) + placement_markers
+
+    def authored_gameplay_fallback_marker_geometry(self):
+        """Renderer geometry for honest unresolved-model marker fallbacks."""
+
+        gameplay = authored_gameplay_marker_geometry(self.authored_gameplay_fallback_preview_markers())
+        traffic = self.authored_sky_traffic_marker_geometry()
+        return AuthoredGameplayMarkerGeometry(
+            marker_count=int(gameplay.marker_count) + int(traffic.marker_count),
+            lines=tuple(gameplay.lines) + tuple(traffic.lines),
+            footprints=tuple(gameplay.footprints) + tuple(traffic.footprints),
+            icons=tuple(gameplay.icons) + tuple(traffic.icons),
+            warnings=tuple(gameplay.warnings) + tuple(traffic.warnings),
+        )
 
     def authored_room_outline_geometry(self):
         """Return renderer-ready outlines for authored Map Studio rooms."""
 
-        extra = getattr(self.project, "extra_sections", {}) or {}
-        payload = extra.get("authored_module")
-        if payload is None:
+        if self._map_studio_authored_project_snapshot() is None:
             return AuthoredRoomOutlineGeometry()
-        authored = authored_project_from_kmap_payload(
-            payload,
-            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
-            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        return self._map_studio_cached_authored_query(
+            ("room_outline_geometry",), authored_room_outline_geometry_for_project
         )
-        return authored_room_outline_geometry_for_project(authored)
 
-    def authored_room_preview_model(self):
+    def authored_room_preview_model(self, *, include_backdrops: bool = False):
         """Return a live KotorModel preview for authored Map Studio render geometry."""
 
-        extra = getattr(self.project, "extra_sections", {}) or {}
-        payload = extra.get("authored_module")
-        if payload is None:
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None:
             return None
-        authored = authored_project_from_kmap_payload(
-            payload,
-            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
-            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        # Combined preview composition appends stock groups to this model in
+        # place. Cache the final combined model, never this mutable base model,
+        # or a resource revision would append a second copy of every instance.
+        return build_authored_module_preview_model(
+            authored, include_backdrops=include_backdrops
+        ).model
+
+    def _map_studio_combined_preview_state_signature(self) -> tuple[Any, ...]:
+        """Return an O(room-count) preview key without serializing KMAP.
+
+        Payload identity covers normal immutable replacement edits; the
+        explicit authored-state revision covers nested in-place proof/PTH/
+        texture mutations.  Only lightweight legacy KMAP room transforms are
+        enumerated because those live outside the authored payload.
+        """
+
+        room_rows = []
+        for room in tuple(getattr(self.project, "rooms", ()) or ()):
+            transform = getattr(room, "transform", None)
+
+            def _components(name: str, default: tuple[float, float, float]) -> tuple[float, float, float]:
+                value = tuple(getattr(transform, name, default) or default)
+                try:
+                    return tuple(float(value[index]) for index in range(3))
+                except (IndexError, TypeError, ValueError):
+                    return default
+
+            room_rows.append(
+                (
+                    str(getattr(room, "room_id", "") or ""),
+                    str(getattr(room, "model_resref", "") or getattr(room, "name", "") or ""),
+                    bool(getattr(room, "visible", True)),
+                    _components("position", (0.0, 0.0, 0.0)),
+                    _components("rotation", (0.0, 0.0, 0.0)),
+                    _components("scale", (1.0, 1.0, 1.0)),
+                )
+            )
+        return (self._map_studio_authored_state_token(), tuple(room_rows))
+
+    def map_studio_viewport_preview_model(self, resource_manager=None, *, include_backdrops: bool = False):
+        """Return the merged viewport preview: authored rooms plus stock KOTOR content.
+
+        Stock LYT rooms (``project.rooms``) and spatial gameplay placements
+        (creature/placeable/door template resrefs) render real game geometry
+        when a game resource manager is available.  Without one, the authored
+        preview is returned unchanged so headless flows keep working.
+        """
+
+        started = perf_counter()
+        game = str(getattr(self.project, "game", "K1") or "K1").upper()
+        cache_key = (
+            id(resource_manager),
+            int(getattr(resource_manager, "revision", 0) or 0) if resource_manager is not None else 0,
+            game,
+            bool(include_backdrops),
+            int(self._authored_placeable_preview_revision),
+            self._map_studio_combined_preview_state_signature(),
         )
-        return build_authored_module_preview_model(authored).model
+        cached = self._map_studio_combined_preview_cache
+        if resource_manager is not None and cached is not None and cached[0] == cache_key:
+            model, stock_result = cached[1], cached[2]
+            self.last_map_studio_stock_preview_warnings = tuple(stock_result.warnings)
+            self.last_map_studio_resolved_placement_ids = tuple(stock_result.resolved_placement_ids)
+            self.last_map_studio_unresolved_placement_ids = tuple(stock_result.unresolved_placement_ids)
+            self.last_map_studio_preview_cache_hit = True
+            self.last_map_studio_preview_elapsed_ms = (perf_counter() - started) * 1000.0
+            return model
+
+        self.last_map_studio_preview_cache_hit = False
+        authored = self.authored_room_preview_model(include_backdrops=include_backdrops)
+        rooms = tuple(getattr(self.project, "rooms", ()) or ())
+        placements = tuple(self.authored_gameplay_placements() or ()) + tuple(
+            self.authored_sky_traffic_preview_rows() or ()
+        )
+        self.last_map_studio_stock_preview_warnings = ()
+        self.last_map_studio_resolved_placement_ids = ()
+        self.last_map_studio_unresolved_placement_ids = ()
+        if resource_manager is None or (not rooms and not placements):
+            self.last_map_studio_preview_elapsed_ms = (perf_counter() - started) * 1000.0
+            return authored
+        resolver = getattr(self, "_map_studio_stock_template_resolver", None)
+        if (
+            resolver is None
+            or getattr(resolver, "_game", "") != game
+            or getattr(resolver, "_manager", None) is not resource_manager
+        ):
+            resolver = TemplateModelResolver(
+                resource_manager,
+                game,
+                template_resources=(self._authored_placeable_resources + self._authored_creature_resources),
+                placeable_rows=self._authored_placeable_preview_rows,
+            )
+            self._map_studio_stock_template_resolver = resolver
+        cache = getattr(self, "_map_studio_stock_model_cache", None)
+        if cache is None:
+            cache = {}
+            self._map_studio_stock_model_cache = cache
+
+        def _loader(resref, _game=game, _manager=resource_manager, _cache=cache):
+            key = (_game, str(resref or "").strip().lower())
+            if key not in _cache:
+                override = resolver.model_resource_bytes(key[1])
+                if override is not None:
+                    _cache[key] = load_kotor_model_from_bytes(*override, resref=key[1])
+                else:
+                    _cache[key] = load_stock_kotor_model(_manager, key[1], _game)
+            return _cache[key]
+        model, stock_result = build_map_studio_combined_preview_model(
+            authored_model=authored,
+            project_name=str(getattr(self.project, "name", "") or "map_studio_preview"),
+            game=game,
+            rooms=rooms,
+            placements=placements,
+            resource_manager=resource_manager,
+            model_loader=_loader,
+            resolver=resolver,
+            resource_revision=self._authored_placeable_preview_revision,
+        )
+        self.last_map_studio_stock_preview_warnings = tuple(stock_result.warnings)
+        self.last_map_studio_resolved_placement_ids = tuple(stock_result.resolved_placement_ids)
+        self.last_map_studio_unresolved_placement_ids = tuple(stock_result.unresolved_placement_ids)
+        self._map_studio_combined_preview_cache = (cache_key, model, stock_result)
+        self.last_map_studio_preview_elapsed_ms = (perf_counter() - started) * 1000.0
+        return model
+
+    def create_map_studio_pie_session(self, *, preview_model=None):
+        """Build one read-only PIE session from the current authored snapshot.
+
+        Session construction is intentionally explicit and one-shot: the WOK
+        spatial index and room collision BVH are built once when Play starts,
+        never during a paint frame.  The returned validation keeps simulation
+        capability separate from KOTOR export/game-proof status.
+        """
+
+        authored = self._load_authored_project_or_raise()
+        return build_map_studio_pie_session(authored, preview_model=preview_model)
 
     def authored_room_primitive_transforms(self):
         """Return editable composition primitive transform rows for the current KMAP."""
 
-        extra = getattr(self.project, "extra_sections", {}) or {}
-        payload = extra.get("authored_module")
-        if payload is None:
+        if self._map_studio_authored_project_snapshot() is None:
             return ()
-        authored = authored_project_from_kmap_payload(
-            payload,
-            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
-            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        return self._map_studio_cached_authored_query(
+            ("room_primitive_transforms",), authored_room_composition_primitives
         )
-        return authored_room_composition_primitives(authored)
 
     def authored_room_primitive_universal_transform(self, *, room_resref: str, primitive_name: str):
         """Return exact selected primitive bounds for the Universal Manipulator."""
@@ -1063,44 +3257,29 @@ class ModuleEditorController:
     def authored_floor_plan_room_choices(self):
         """Return floor-plan rooms that can participate in Builder boolean operations."""
 
-        extra = getattr(self.project, "extra_sections", {}) or {}
-        payload = extra.get("authored_module")
-        if payload is None:
+        if self._map_studio_authored_project_snapshot() is None:
             return ()
-        authored = authored_project_from_kmap_payload(
-            payload,
-            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
-            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        return self._map_studio_cached_authored_query(
+            ("floor_plan_room_choices",), authored_floor_plan_room_choices
         )
-        return authored_floor_plan_room_choices(authored)
 
     def authored_terrain_room_choices(self):
         """Return terrain rooms that can participate in Builder heightfield operations."""
 
-        extra = getattr(self.project, "extra_sections", {}) or {}
-        payload = extra.get("authored_module")
-        if payload is None:
+        if self._map_studio_authored_project_snapshot() is None:
             return ()
-        authored = authored_project_from_kmap_payload(
-            payload,
-            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
-            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        return self._map_studio_cached_authored_query(
+            ("terrain_room_choices",), authored_terrain_room_choices
         )
-        return authored_terrain_room_choices(authored)
 
     def authored_terrain_walkability_overlay(self):
         """Return renderer-ready terrain WOK walkability feedback."""
 
-        extra = getattr(self.project, "extra_sections", {}) or {}
-        payload = extra.get("authored_module")
-        if payload is None:
+        if self._map_studio_authored_project_snapshot() is None:
             return AuthoredTerrainWalkabilityOverlay()
-        authored = authored_project_from_kmap_payload(
-            payload,
-            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
-            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        return self._map_studio_cached_authored_query(
+            ("terrain_walkability_overlay",), authored_terrain_walkability_overlay_for_project
         )
-        return authored_terrain_walkability_overlay_for_project(authored)
 
     def authored_terrain_status(self):
         """Return modder-facing terrain authoring status for the current KMAP."""
@@ -1152,34 +3331,24 @@ class ModuleEditorController:
     def authored_walkmesh_status(self):
         """Return modder-facing walkmesh status for the current KMAP."""
 
-        extra = getattr(self.project, "extra_sections", {}) or {}
-        payload = extra.get("authored_module")
-        if payload is None:
+        if self._map_studio_authored_project_snapshot() is None:
             return AuthoredWalkmeshStatus(
                 ready=False,
                 summary="Walkmesh: no authored Map Studio module is loaded.",
                 next_action="Create or open a KMAP with authored rooms before inspecting walkmesh.",
             )
-        authored = authored_project_from_kmap_payload(
-            payload,
-            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
-            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        return self._map_studio_cached_authored_query(
+            ("walkmesh_status",), authored_walkmesh_status_for_project
         )
-        return authored_walkmesh_status_for_project(authored)
 
     def authored_walkmesh_room_surface_choices(self):
         """Return authored rooms whose WOK floor surface can be edited in Walkmesh tools."""
 
-        extra = getattr(self.project, "extra_sections", {}) or {}
-        payload = extra.get("authored_module")
-        if payload is None:
+        if self._map_studio_authored_project_snapshot() is None:
             return ()
-        authored = authored_project_from_kmap_payload(
-            payload,
-            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
-            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        return self._map_studio_cached_authored_query(
+            ("walkmesh_room_surface_choices",), authored_walkmesh_room_surface_choices
         )
-        return authored_walkmesh_room_surface_choices(authored)
 
     def create_authored_room_preset_module(self, *, preset_id: str, module_root: str = "grdev01"):
         """Store an authored module created from a named primitive room preset."""
@@ -1574,6 +3743,7 @@ class ModuleEditorController:
         tag: str = "",
         linked_to: str = "",
         linked_to_module: str = "",
+        linked_to_flags: int = 0,
         transition_destination: int = 0,
     ):
         """Create KOTOR door/trigger/waypoint transition data from one authored wall opening."""
@@ -1599,6 +3769,7 @@ class ModuleEditorController:
             tag=tag,
             linked_to=linked_to,
             linked_to_module=linked_to_module,
+            linked_to_flags=int(linked_to_flags),
             transition_destination=int(transition_destination),
         )
         self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
@@ -1621,10 +3792,96 @@ class ModuleEditorController:
                 "tag": tag,
                 "linked_to": linked_to,
                 "linked_to_module": linked_to_module,
+                "linked_to_flags": int(linked_to_flags),
                 "transition_destination": int(transition_destination),
             },
         )
         return self.authored_module_readiness()
+
+    def create_terrain_patch(
+        self,
+        *,
+        room_resref: str = "",
+        shape_preset_id: str = "flat",
+        resolution: int = 17,
+        width: float = 20.0,
+        depth: float = 20.0,
+        module_root: str = "",
+    ):
+        """Add a sculptable terrain heightfield room to the authored module.
+
+        This is the entry point for terrain painting: it creates the room the
+        terrain brush/sculpt pipeline targets.  Auto-creates the authored
+        module if the KMAP has none yet.
+        """
+
+        grid = max(2, int(resolution))
+        root = str(module_root or getattr(self.project, "name", "") or "grterrain").strip() or "grterrain"
+        before = self._capture_map_studio_command_state()
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            authored = None
+        else:
+            authored = authored_project_from_kmap_payload(
+                payload,
+                fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+                fallback_game=str(getattr(self.project, "game", "") or "K1"),
+            )
+        base_resref = normalise_resref(room_resref) or f"{normalise_resref(root)}_terrain"
+        existing = {room.normalised_resref() for room in (authored.rooms if authored else ())}
+        resref = base_resref
+        suffix = 1
+        while resref in existing:
+            suffix += 1
+            resref = f"{base_resref}{suffix}"
+        flat_heights = tuple(tuple(0.0 for _ in range(grid)) for _ in range(grid))
+        terrain = TerrainHeightfieldPrimitive(
+            room_resref=resref,
+            heights=flat_heights,
+            width=float(width),
+            depth=float(depth),
+        )
+        preset = str(shape_preset_id or "flat").strip() or "flat"
+        if preset != "flat":
+            try:
+                terrain = apply_terrain_shape_preset(terrain, preset_id=preset)
+            except Exception as exc:
+                self.model.log(f"Terrain shape preset {preset} skipped: {exc}")
+        room = AuthoredRoomSpec(
+            room_resref=resref,
+            primitive=terrain,
+            visible_rooms=(resref,),
+            metadata={"primitive": "terrain_heightfield", "source": "terrain_patch_tool"},
+        )
+        if authored is None:
+            from .authored_module_project import create_terrain_room_project
+            from .authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+
+            authored = create_terrain_room_project(
+                module_root=root,
+                game=str(self.project.game or "K1").upper(),
+                display_name=f"{root} terrain",
+                terrain=terrain,
+                placements=AuthoredGameplayPlacement(
+                    entry_point=ModuleEntryPoint(area_resref=normalise_resref(root))
+                ),
+            )
+        else:
+            from dataclasses import replace as _replace
+
+            authored = _replace(authored, rooms=tuple(authored.rooms) + (room,))
+        self._store_authored_project(authored)
+        self.model.log(
+            f"Created terrain patch {resref} ({grid}x{grid} grid, {preset} shape). Enter Terrain mode and paint with the sculpt brushes."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.terrain.create_patch",
+            label=f"Create terrain patch {resref}",
+            before=before,
+            metadata={"room_resref": resref, "shape_preset_id": preset, "resolution": grid},
+        )
+        return resref
 
     def apply_authored_terrain_operation(self, *, operation: str, **kwargs: Any):
         """Apply a terrain heightfield operation to the current authored KMAP module."""
@@ -1666,6 +3923,7 @@ class ModuleEditorController:
         height: float = 0.0,
         iterations: int = 1,
         strength: float = 0.5,
+        falloff_hardness: float = 0.5,
         preserve_boundary: bool = True,
         symmetry_axis: str = "",
     ):
@@ -1693,6 +3951,7 @@ class ModuleEditorController:
             "height": float(height),
             "iterations": int(iterations),
             "strength": float(strength),
+            "falloff_hardness": float(falloff_hardness),
             "preserve_boundary": bool(preserve_boundary),
         }
         if str(symmetry_axis or "").strip():
@@ -1957,6 +4216,7 @@ class ModuleEditorController:
         height: float = 0.0,
         iterations: int = 1,
         strength: float = 0.5,
+        falloff_hardness: float = 0.5,
         preserve_boundary: bool = True,
         max_points_per_frame: int = 8,
         budget_ms: float = 8.0,
@@ -1982,24 +4242,51 @@ class ModuleEditorController:
             height=height,
             iterations=iterations,
             strength=strength,
+            falloff_hardness=falloff_hardness,
             preserve_boundary=preserve_boundary,
             max_points_per_frame=max_points_per_frame,
             budget_ms=budget_ms,
         )
 
     def commit_map_studio_terrain_sculpt_stroke(self, *, brush: str, room_resref: str):
-        """Record one undo command for all terrain frames applied during a released stroke."""
+        """Serialize and record one undo command for a released live stroke.
 
+        Return the stroke commit itself instead of running authored-module
+        readiness here.  The Map Studio refresh that follows release owns the
+        full geometry/walkability readiness pass; doing it in both places made
+        a 129x129 terrain release pay that whole-grid cost twice.
+        """
+
+        session = self._terrain_sculpt_session
         before = self._terrain_sculpt_command_before
         self._terrain_sculpt_command_before = None
+        self._terrain_sculpt_session = None
+        commit = None
+        if session is not None:
+            commit = session.commit()
+            updated = commit.project
+            self.project.extra_sections["authored_module"] = commit.payload
+            self.project.name = updated.metadata.module_root
+            self.project.game = updated.game
+            self.project.dirty = True
+            self.model.log(
+                f"Committed terrain sculpt {brush} on {room_resref}: {commit.frame_count} frame(s), "
+                f"{commit.dirty_region.changed_sample_count} changed sample(s), one KMAP serialization "
+                f"({commit.serialization_elapsed_ms:.3f} ms)."
+            )
         if before is not None:
             self._record_map_studio_command(
                 action_key="map_studio.terrain.sculpt_stroke",
                 label=f"Sculpt terrain {brush} on {room_resref}",
                 before=before,
-                metadata={"brush": brush, "room_resref": room_resref},
+                metadata={
+                    "brush": brush,
+                    "room_resref": room_resref,
+                    "frame_count": int(getattr(session, "frame_count", 0) or 0),
+                    "serialization_count": int(getattr(session, "serialization_count", 0) or 0),
+                },
             )
-        return self.authored_module_readiness()
+        return commit
 
     def apply_map_studio_terrain_sculpt_frame(
         self,
@@ -2012,26 +4299,32 @@ class ModuleEditorController:
         height: float = 0.0,
         iterations: int = 1,
         strength: float = 0.5,
+        falloff_hardness: float = 0.5,
         preserve_boundary: bool = True,
         max_points_per_frame: int = 8,
         budget_ms: float = 8.0,
         force: bool = False,
     ) -> MapStudioTerrainSculptApplyResult:
-        """Apply a coalesced live terrain sculpt frame while deferring full rebuild/validation."""
+        """Mutate one stroke-owned dirty height buffer; never serialize per frame."""
 
         extra = getattr(self.project, "extra_sections", {}) or {}
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
-        before = self._capture_map_studio_command_state()
-        authored = authored_project_from_kmap_payload(
-            payload,
-            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
-            fallback_game=str(getattr(self.project, "game", "") or "K1"),
-        )
-        frame = prepare_terrain_sculpt_frame_for_project(
-            authored,
-            room_resref=room_resref,
+        wanted_room = normalise_resref(room_resref)
+        session = self._terrain_sculpt_session
+        if session is None or normalise_resref(getattr(session, "room_resref", "")) != wanted_room:
+            if session is not None and not bool(getattr(session, "committed", False)):
+                session.cancel()
+            self._terrain_sculpt_command_before = self._capture_map_studio_command_state()
+            session = begin_terrain_sculpt_stroke(
+                payload,
+                room_resref=room_resref,
+                fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+                fallback_game=str(getattr(self.project, "game", "") or "K1"),
+            )
+            self._terrain_sculpt_session = session
+        result = session.apply_frame(
             brush=brush,
             points=points,
             delta=delta,
@@ -2039,30 +4332,26 @@ class ModuleEditorController:
             height=height,
             iterations=iterations,
             strength=strength,
+            falloff_hardness=falloff_hardness,
             preserve_boundary=preserve_boundary,
             max_points_per_frame=max_points_per_frame,
             budget_ms=budget_ms,
+            force=force,
         )
-        if not frame.should_apply_live and not force:
-            message = (
-                f"Skipped live terrain sculpt frame for {frame.room_resref}: estimated "
-                f"{frame.performance.estimated_apply_ms:.3f} ms exceeds {frame.performance.budget_ms:.3f} ms budget."
-            )
-            self.model.log(message)
-            return MapStudioTerrainSculptApplyResult(applied=False, frame=frame, message=message)
-        if self._terrain_sculpt_command_before is None:
-            self._terrain_sculpt_command_before = self._capture_map_studio_command_state()
-        updated = apply_authored_terrain_operation(authored, frame.operation, **frame.operation_kwargs)
-        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
-        self.project.name = updated.metadata.module_root
-        self.project.game = updated.game
-        self.project.dirty = True
-        message = (
-            f"Applied live terrain sculpt frame to {frame.room_resref}: "
-            f"{frame.applied_sample_count} point(s), dirty region only; full MDL/WOK rebuild deferred."
+        patch_region = result.dirty_region_with_halo
+        patch = session.dirty_height_patch(patch_region) if result.applied else ()
+        return MapStudioTerrainSculptApplyResult(
+            applied=bool(result.applied),
+            frame=result.frame,
+            message=result.message,
+            dirty_region=result.dirty_region,
+            dirty_region_with_halo=patch_region,
+            dirty_height_patch=patch,
+            row_count=int(session.row_count),
+            column_count=int(session.column_count),
+            elapsed_ms=float(result.elapsed_ms),
+            project_serialized=False,
         )
-        self.model.log(message)
-        return MapStudioTerrainSculptApplyResult(applied=True, frame=frame, message=message)
 
     def merge_authored_floor_plan_rooms(
         self,
@@ -2115,7 +4404,7 @@ class ModuleEditorController:
         primitive_names: Any,
         group_name: str = "",
     ):
-        """Combine selected authored composition primitives into a KMAP object group."""
+        """Combine selected objects into one genuine procedural polygon mesh."""
 
         extra = getattr(self.project, "extra_sections", {}) or {}
         payload = extra.get("authored_module")
@@ -2127,7 +4416,57 @@ class ModuleEditorController:
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
         before = self._capture_map_studio_command_state()
-        updated = combine_authored_room_composition_primitives(
+        updated = combine_authored_room_composition_meshes(
+            authored,
+            room_resref=room_resref,
+            primitive_names=primitive_names,
+            combined_name=group_name,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        if isinstance(primitive_names, (str, bytes)):
+            text = primitive_names.decode("utf-8", errors="ignore") if isinstance(primitive_names, bytes) else primitive_names
+            selected = tuple(part.strip() for part in text.split(",") if part.strip())
+        else:
+            selected = tuple(str(name or "").strip() for name in tuple(primitive_names or ()) if str(name or "").strip())
+        self.model.log(
+            f"Combined Map Studio primitives {', '.join(selected)} into one polygon mesh; "
+            "source recipes, materials, UVs, normals, and disconnected shells were preserved."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.combine_meshes",
+            label=f"Combine meshes {', '.join(selected)}",
+            before=before,
+            metadata={
+                "room_resref": room_resref,
+                "primitive_names": selected,
+                "combined_name": group_name,
+            },
+        )
+        return self.authored_module_readiness()
+
+    def group_authored_room_primitives(
+        self,
+        *,
+        room_resref: str,
+        primitive_names: Any,
+        group_name: str = "",
+    ):
+        """Create a scene group while keeping polygon objects independent."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        before = self._capture_map_studio_command_state()
+        updated = group_authored_room_composition_primitives(
             authored,
             room_resref=room_resref,
             primitive_names=primitive_names,
@@ -2142,18 +4481,63 @@ class ModuleEditorController:
             selected = tuple(part.strip() for part in text.split(",") if part.strip())
         else:
             selected = tuple(str(name or "").strip() for name in tuple(primitive_names or ()) if str(name or "").strip())
-        self.model.log(
-            f"Combined Map Studio primitives {', '.join(selected)} into an authored object group; previous exports/proofs are now stale."
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.group",
+            label=f"Group objects {', '.join(selected)}",
+            before=before,
+            metadata={"room_resref": room_resref, "primitive_names": selected, "group_name": group_name},
+        )
+        self.model.log(f"Grouped {len(selected)} Map Studio objects; polygon topology remains independent.")
+        return self.authored_module_readiness()
+
+    def separate_authored_room_primitive_shells(
+        self,
+        *,
+        room_resref: str,
+        primitive_name: str,
+        name_prefix: str = "",
+    ):
+        """Split one Combined Mesh into connected polygon-shell objects."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        before = self._capture_map_studio_command_state()
+        updated = separate_authored_room_combined_primitive_shells(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+            name_prefix=name_prefix,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        room = next((row for row in updated.rooms if row.normalised_resref() == normalise_resref(room_resref)), None)
+        shell_names = tuple(
+            str(value)
+            for value in tuple(dict(getattr(room, "metadata", {}) or {}).get("last_separated_shell_names") or ())
         )
         self._record_map_studio_command(
-            action_key="map_studio.primitive.combine",
-            label=f"Combine primitives {', '.join(selected)}",
+            action_key="map_studio.primitive.separate_shells",
+            label=f"Separate shells {primitive_name}",
             before=before,
             metadata={
                 "room_resref": room_resref,
-                "primitive_names": selected,
-                "group_name": group_name,
+                "primitive_name": primitive_name,
+                "name_prefix": name_prefix,
+                "shell_names": shell_names,
             },
+        )
+        self.model.log(
+            f"Separated {primitive_name} into {len(shell_names)} connected polygon shell object(s); "
+            "previous exports/proofs are now stale."
         )
         return self.authored_module_readiness()
 
@@ -2903,6 +5287,65 @@ class ModuleEditorController:
         )
         return self.authored_module_readiness()
 
+    def transform_authored_room_primitives(
+        self,
+        *,
+        selections: Any,
+        mode: str,
+        world_delta: Any = (0.0, 0.0, 0.0),
+        rotation_delta_degrees_z: float = 0.0,
+        scale_multiplier: Any = (1.0, 1.0, 1.0),
+        world_pivot: Any = (0.0, 0.0, 0.0),
+    ):
+        """Transform a multi-object selection in one KMAP and undo transaction."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        selection_values = tuple(selections or ())
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = transform_authored_room_composition_primitives(
+            authored,
+            selections=selection_values,
+            mode=mode,
+            world_delta=world_delta,
+            rotation_delta_degrees_z=rotation_delta_degrees_z,
+            scale_multiplier=scale_multiplier,
+            world_pivot=world_pivot,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        mode_key = str(updated.extra.get("batch_transform_mode") or mode or "translate").strip().lower()
+        selection_count = int(updated.extra.get("batch_transform_count") or len(selection_values))
+        label_verb = {"translate": "Move", "rotate": "Rotate", "scale": "Scale"}.get(mode_key, "Transform")
+        label = f"{label_verb} {selection_count} primitive{'s' if selection_count != 1 else ''}"
+        self.model.log(
+            f"{label} as one Map Studio selection; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.batch_transform",
+            label=label,
+            before=before,
+            metadata={
+                "mode": mode_key,
+                "selections": tuple(updated.extra.get("batch_transform_primitives") or ()),
+                "selection_count": selection_count,
+                "world_delta": world_delta,
+                "rotation_delta_degrees_z": float(rotation_delta_degrees_z),
+                "scale_multiplier": scale_multiplier,
+                "world_pivot": world_pivot,
+            },
+        )
+        return self.authored_module_readiness()
+
     def grid_snap_authored_room_primitive(
         self,
         *,
@@ -3643,6 +6086,30 @@ class ModuleEditorController:
                 break
         return self.apply_authored_room_style(texture=texture, floor_surface=floor_surface, room_resref=room_resref)
 
+    def map_studio_room_walkmesh_bytes(self, room_resref: str) -> bytes | None:
+        """Compile one authored room and return its .wok bytes (for Save WOK).
+
+        Uses the same geometry compile the exporter uses, so the saved file is
+        exactly what would ship in the module.
+        """
+
+        target = normalise_resref(room_resref)
+        if not target:
+            return None
+        authored = self._load_authored_project_or_raise()
+        room = next(
+            (r for r in authored.rooms if r.normalised_resref() == target),
+            None,
+        )
+        if room is None:
+            return None
+        geometry = compile_authored_room_spec(room)
+        wok = getattr(geometry, "wok", None)
+        if wok is None or not getattr(wok, "faces", None):
+            return None
+        to_bytes = getattr(wok, "to_bytes", None)
+        return to_bytes() if callable(to_bytes) else None
+
     def add_authored_gameplay_placement(
         self,
         *,
@@ -3651,6 +6118,8 @@ class ModuleEditorController:
         tag: str = "",
         position: Any = (0.0, 0.0, 0.0),
         bearing: float = 0.0,
+        snap_to_walkmesh: bool = False,
+        provenance: dict[str, Any] | None = None,
     ):
         """Append a gameplay object placement to the current authored KMAP module."""
 
@@ -3671,7 +6140,11 @@ class ModuleEditorController:
             tag=tag,
             position=position,
             bearing=bearing,
+            provenance=provenance,
         )
+        snap = None
+        if bool(snap_to_walkmesh) and update.kind != "store":
+            update, snap = snap_authored_gameplay_placement_to_walkmesh(update.project, update.placement_id)
         self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
         self.project.name = update.project.metadata.module_root
         self.project.game = update.project.game
@@ -3689,6 +6162,9 @@ class ModuleEditorController:
                 "tag": update.tag,
                 "position": update.position,
                 "placement_id": update.placement_id,
+                "provenance": dict(provenance or {}),
+                "snapped_to_walkmesh": snap is not None,
+                "walkmesh_face_index": snap.face_index if snap is not None else -1,
             },
         )
         return self.authored_module_readiness()
@@ -3794,7 +6270,14 @@ class ModuleEditorController:
         )
         return self.authored_module_readiness()
 
-    def set_authored_gameplay_placement_transform(self, placement_id: str, *, position: Any, bearing: float | None = None):
+    def set_authored_gameplay_placement_transform(
+        self,
+        placement_id: str,
+        *,
+        position: Any,
+        bearing: float | None = None,
+        snap_to_walkmesh: bool = False,
+    ):
         """Move one authored gameplay placement by virtual id."""
 
         parse_authored_gameplay_placement_id(placement_id)
@@ -3814,6 +6297,9 @@ class ModuleEditorController:
             position=position,
             bearing=bearing,
         )
+        snap = None
+        if bool(snap_to_walkmesh):
+            update, snap = snap_authored_gameplay_placement_to_walkmesh(update.project, placement_id)
         self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
         self.project.name = update.project.metadata.module_root
         self.project.game = update.project.game
@@ -3831,9 +6317,13 @@ class ModuleEditorController:
                 "tag": update.tag,
                 "position": update.position,
                 "bearing": bearing,
+                "snapped_to_walkmesh": snap is not None,
+                "walkmesh_face_index": snap.face_index if snap is not None else -1,
             },
         )
-        return self.authored_module_readiness()
+        # Lazy: drag/property commits ignore this and the window's deferred
+        # validation worker refreshes export gates off the Qt thread.
+        return DeferredAuthoredModuleReadiness(self)
 
     def rename_authored_gameplay_placement(self, placement_id: str, *, tag: Any):
         """Rename one authored gameplay placement by virtual id."""
@@ -3862,6 +6352,61 @@ class ModuleEditorController:
             label=f"Rename {update.kind} placement {update.tag}",
             before=before,
             metadata={"placement_id": placement_id, "kind": update.kind, "tag": update.tag},
+        )
+        return update
+
+    def set_authored_creature_behavior(
+        self,
+        placement_id: str,
+        *,
+        faction_role: Any,
+        conversation_resref: Any = "",
+        movement_mode: Any = "stationary",
+    ):
+        """Author selected-creature UTC behavior while keeping source resources immutable."""
+
+        parse_authored_gameplay_placement_id(placement_id)
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        before = self._capture_map_studio_command_state()
+        update = update_authored_creature_behavior(
+            authored,
+            placement_id,
+            faction_role=faction_role,
+            conversation_resref=conversation_resref,
+            movement_mode=movement_mode,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
+        self.project.name = update.project.metadata.module_root
+        self.project.game = update.project.game
+        self.project.dirty = True
+        self._authored_creature_resources = ()
+        role = str(faction_role or "template").strip().lower()
+        movement = str(movement_mode or "stationary").strip().lower()
+        self.model.log(
+            f"Updated Map Studio creature {update.tag}: {role}, {movement}; target-game UTC resources will be rebuilt at export."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.gameplay.edit_creature_behavior",
+            label=f"Edit creature behavior {update.tag}",
+            before=before,
+            stale_outputs=("GIT", "UTC", "NCS", ".mod"),
+            readiness_impact="Generated creature templates/scripts must be rebuilt and manually proven in plcaa.",
+            metadata={
+                "placement_id": placement_id,
+                "tag": update.tag,
+                "faction_role": role,
+                "conversation_resref": str(conversation_resref or "").strip().lower(),
+                "movement_mode": movement,
+                "template_resref": update.template_resref,
+            },
         )
         return update
 
@@ -3930,6 +6475,53 @@ class ModuleEditorController:
         )
         return update
 
+    def remove_authored_gameplay_placements(self, placement_ids) -> tuple[str, ...]:
+        """Remove several placements (marquee delete) as ONE undoable command."""
+
+        requested = [str(value or "").strip() for value in tuple(placement_ids or ()) if str(value or "").strip()]
+        if not requested:
+            return ()
+        for placement_id in requested:
+            parse_authored_gameplay_placement_id(placement_id)
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        before = self._capture_map_studio_command_state()
+        removed: list[str] = []
+        labels: list[str] = []
+        for placement_id in requested:
+            try:
+                update = remove_authored_gameplay_placement(authored, placement_id)
+            except Exception as exc:
+                self.model.log(f"Map Studio placement {placement_id} could not be removed: {exc}")
+                continue
+            authored = update.project
+            removed.append(placement_id)
+            labels.append(f"{update.kind} {update.tag}")
+        if not removed:
+            return ()
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(authored)
+        self.project.name = authored.metadata.module_root
+        self.project.game = authored.game
+        self.project.dirty = True
+        summary = ", ".join(labels[:4]) + (" ..." if len(labels) > 4 else "")
+        self.model.log(
+            f"Removed {len(removed)} Map Studio placement(s): {summary}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.gameplay.remove_placements",
+            label=f"Remove {len(removed)} placements",
+            before=before,
+            metadata={"placement_ids": list(removed), "labels": labels},
+        )
+        return tuple(removed)
+
     def set_authored_gameplay_camera_properties(
         self,
         placement_id: str,
@@ -3983,7 +6575,9 @@ class ModuleEditorController:
                 "pitch": pitch,
             },
         )
-        return self.authored_module_readiness()
+        # Lazy: drag/property commits ignore this and the window's deferred
+        # validation worker refreshes export gates off the Qt thread.
+        return DeferredAuthoredModuleReadiness(self)
 
     def set_authored_gameplay_transition(
         self,
@@ -3991,9 +6585,10 @@ class ModuleEditorController:
         *,
         linked_to: Any = "",
         linked_to_module: Any = "",
+        linked_to_flags: Any = 0,
         transition_destination: Any = 0,
     ):
-        """Set transition destination fields on a selected authored door/trigger/waypoint."""
+        """Set transition destination fields on a selected authored door or trigger."""
 
         parse_authored_gameplay_placement_id(placement_id)
         extra = getattr(self.project, "extra_sections", {}) or {}
@@ -4011,6 +6606,7 @@ class ModuleEditorController:
             placement_id,
             linked_to=linked_to,
             linked_to_module=linked_to_module,
+            linked_to_flags=linked_to_flags,
             transition_destination=transition_destination,
         )
         self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
@@ -4030,10 +6626,13 @@ class ModuleEditorController:
                 "tag": update.tag,
                 "linked_to": linked_to,
                 "linked_to_module": linked_to_module,
+                "linked_to_flags": linked_to_flags,
                 "transition_destination": transition_destination,
             },
         )
-        return self.authored_module_readiness()
+        # Lazy: drag/property commits ignore this and the window's deferred
+        # validation worker refreshes export gates off the Qt thread.
+        return DeferredAuthoredModuleReadiness(self)
 
     def set_authored_room_light_transform(self, light_id: str, *, position: Any):
         """Move one authored room light by virtual id."""
@@ -4063,7 +6662,9 @@ class ModuleEditorController:
             before=before,
             metadata={"light_id": light_id, "name": update.light.name, "position": update.light.position},
         )
-        return self.authored_module_readiness()
+        # Lazy: drag/property commits ignore this and the window's deferred
+        # validation worker refreshes export gates off the Qt thread.
+        return DeferredAuthoredModuleReadiness(self)
 
     def set_authored_room_light_properties(
         self,
@@ -4073,6 +6674,13 @@ class ModuleEditorController:
         radius: float | None = None,
         intensity: float | None = None,
         light_type: Any | None = None,
+        enabled: Any | None = None,
+        casts_shadows: Any | None = None,
+        affects_diffuse: Any | None = None,
+        affects_lightmap: Any | None = None,
+        direction: Any | None = None,
+        cone_angle_degrees: float | None = None,
+        bake_group: Any = ...,
     ):
         """Edit selected authored room-light settings from the properties panel."""
 
@@ -4087,13 +6695,24 @@ class ModuleEditorController:
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
         before = self._capture_map_studio_command_state()
+        room_light_updates = {
+            "color": color,
+            "radius": radius,
+            "intensity": intensity,
+            "light_type": light_type,
+            "enabled": enabled,
+            "casts_shadows": casts_shadows,
+            "affects_diffuse": affects_diffuse,
+            "affects_lightmap": affects_lightmap,
+            "direction": direction,
+            "cone_angle_degrees": cone_angle_degrees,
+        }
+        if bake_group is not ...:
+            room_light_updates["bake_group"] = bake_group
         update = update_authored_room_light_properties(
             authored,
             light_id,
-            color=color,
-            radius=radius,
-            intensity=intensity,
-            light_type=light_type,
+            **room_light_updates,
         )
         self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(update.project)
         self.project.name = update.project.metadata.module_root
@@ -4113,9 +6732,18 @@ class ModuleEditorController:
                 "radius": update.light.radius,
                 "intensity": update.light.intensity,
                 "light_type": update.light.light_type,
+                "enabled": update.light.enabled,
+                "casts_shadows": update.light.casts_shadows,
+                "affects_diffuse": update.light.affects_diffuse,
+                "affects_lightmap": update.light.affects_lightmap,
+                "direction": update.light.direction,
+                "cone_angle_degrees": update.light.cone_angle_degrees,
+                "bake_group": update.light.bake_group,
             },
         )
-        return self.authored_module_readiness()
+        # Lazy: drag/property commits ignore this and the window's deferred
+        # validation worker refreshes export gates off the Qt thread.
+        return DeferredAuthoredModuleReadiness(self)
 
     def rename_authored_room_light(self, light_id: str, *, name: Any):
         """Rename one authored room light by virtual id."""
@@ -4296,6 +6924,7 @@ class ModuleEditorController:
     def stage_dev_test_module(self, output_dir: str | Path, *, dry_run: bool = False, overwrite: bool = False):
         """Stage the first from-scratch Map Studio smoke module package."""
 
+        self._require_applied_project_texture_changes()
         output_path = Path(output_dir)
         game = str(self.project.game or "K1").upper()
         return prepare_dev_test_module_install(
@@ -4318,18 +6947,23 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        self._require_applied_project_texture_changes()
+        self._require_authored_placeable_resources_ready()
+        self._require_authored_creature_resources_ready()
         authored = authored_project_from_kmap_payload(
             payload,
             fallback_name=str(getattr(self.project, "name", "") or "new_level"),
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
         output_path = Path(output_dir)
+        extra_resources = self.authored_project_extra_resources()
         result = export_authored_module_project(
             AuthoredModuleExportRequest(
                 project=authored,
                 output_dir=str(output_path),
                 dry_run=dry_run,
                 strict=not dry_run,
+                extra_resources=extra_resources,
             )
         )
         if not dry_run and result.resources:
@@ -4370,6 +7004,9 @@ class ModuleEditorController:
         payload = extra.get("authored_module")
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        self._require_applied_project_texture_changes()
+        self._require_authored_placeable_resources_ready()
+        self._require_authored_creature_resources_ready()
         before = self._capture_map_studio_command_state()
         authored = authored_project_from_kmap_payload(
             payload,
@@ -4377,6 +7014,7 @@ class ModuleEditorController:
             fallback_game=str(getattr(self.project, "game", "") or "K1"),
         )
         output_path = Path(output_dir)
+        extra_resources = self.authored_project_extra_resources()
         result = prepare_authored_module_install(
             AuthoredModuleInstallPrepRequest(
                 project=authored,
@@ -4385,6 +7023,12 @@ class ModuleEditorController:
                 dry_run=dry_run,
                 overwrite=overwrite,
                 auto_detect_game_modules_dir=bool(auto_detect_game_modules_dir),
+                export_request=AuthoredModuleExportRequest(
+                    project=authored,
+                    output_dir=str(output_path),
+                    strict=True,
+                    extra_resources=extra_resources,
+                ),
             )
         )
         export_result = result.export_result
@@ -4581,6 +7225,17 @@ class ModuleEditorController:
         player_can_walk_on_floor: bool = False,
         transition_pathing_sanity_confirmed: bool = False,
         no_inherited_base_game_geometry_or_scripted_movers: bool = False,
+        texture_paint_visible_in_game: bool = False,
+        terrain_sculpt_and_generated_walkmesh_work_in_game: bool = False,
+        placed_assets_match_editor_staging: bool = False,
+        enemy_spawns_hostile: bool = False,
+        npc_spawns_and_free_roams: bool = False,
+        terminal_operates: bool = False,
+        container_opens_with_inventory: bool = False,
+        puzzle_sequence_unlocks_door: bool = False,
+        animated_door_operates: bool = False,
+        configured_transition_operates: bool = False,
+        player_start_position_and_facing_match: bool = False,
         allow_missing_evidence: bool = False,
     ):
         """Record in-game proof for a staged Map Studio module proof manifest."""
@@ -4665,6 +7320,19 @@ class ModuleEditorController:
                     no_inherited_base_game_geometry_or_scripted_movers=bool(
                         no_inherited_base_game_geometry_or_scripted_movers
                     ),
+                    texture_paint_visible_in_game=bool(texture_paint_visible_in_game),
+                    terrain_sculpt_and_generated_walkmesh_work_in_game=bool(
+                        terrain_sculpt_and_generated_walkmesh_work_in_game
+                    ),
+                    placed_assets_match_editor_staging=bool(placed_assets_match_editor_staging),
+                    enemy_spawns_hostile=bool(enemy_spawns_hostile),
+                    npc_spawns_and_free_roams=bool(npc_spawns_and_free_roams),
+                    terminal_operates=bool(terminal_operates),
+                    container_opens_with_inventory=bool(container_opens_with_inventory),
+                    puzzle_sequence_unlocks_door=bool(puzzle_sequence_unlocks_door),
+                    animated_door_operates=bool(animated_door_operates),
+                    configured_transition_operates=bool(configured_transition_operates),
+                    player_start_position_and_facing_match=bool(player_start_position_and_facing_match),
                 )
             )
             if getattr(result, "ok", False):
@@ -4803,4 +7471,21 @@ class ModuleEditorController:
         return "Custom"
 
     def record_port(self, source_game: str, target_game: str):
-        return self.porter_service.record_port_decision(self.project, source_game, target_game)
+        before = self._capture_map_studio_command_state()
+        report = self.porter_service.record_port_decision(self.project, source_game, target_game)
+        if bool(getattr(report, "ok", False)):
+            self._record_map_studio_command(
+                action_key="map_studio.project.retarget_game",
+                label=f"Retarget {str(source_game).upper()} to {str(target_game).upper()}",
+                before=before,
+                stale_outputs=("ARE", "GIT", "IFO", "PTH", "LYT", "VIS", "MDL", "MDX", "WOK", ".mod"),
+                readiness_impact=(
+                    "Validate all target-game texture/template dependencies, rebuild the module, and record fresh game proof."
+                ),
+                metadata={
+                    "source_game": str(getattr(report, "source_game", source_game) or source_game).upper(),
+                    "target_game": str(getattr(report, "target_game", target_game) or target_game).upper(),
+                    "dependency_risks": list(getattr(report, "unsupported", ()) or ()),
+                },
+            )
+        return report

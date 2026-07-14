@@ -204,25 +204,40 @@ class RetargetWindowWorkflowMixin:
         custom_edit = self._retarget_workbench_widget("custom_kotor_animation_name_edit")
         unreal_clip_edit = self._retarget_workbench_widget("output_unreal_clip_name_edit")
         label_edit = self._retarget_workbench_widget("retarget_output_display_label_edit")
+        mode_label = self._retarget_workbench_widget("kotor_output_name_mode_label")
+        slot_label = self._retarget_workbench_widget("target_kotor_animation_slot_label")
+        custom_label = self._retarget_workbench_widget("custom_kotor_animation_name_label")
+        unreal_clip_label = self._retarget_workbench_widget("output_unreal_clip_name_label")
+        notes_label = self._retarget_workbench_widget("retarget_output_display_label")
         selected = KotorOutputAnimationNameMode.VANILLA_SLOT.value
         if mode_combo is not None:
             data = mode_combo.currentData()
             selected = str(data or selected)
-            mode_combo.setVisible(is_kotor_output)
+            mode_combo.setVisible(True)
             mode_combo.setEnabled(is_kotor_output)
+        if mode_label is not None:
+            mode_label.setEnabled(is_kotor_output)
         custom = selected == KotorOutputAnimationNameMode.CUSTOM_PATCH.value
         if slot_combo is not None:
-            slot_combo.setVisible(is_kotor_output and not custom)
+            slot_combo.setVisible(True)
             slot_combo.setEnabled(is_kotor_output and not custom)
+        if slot_label is not None:
+            slot_label.setEnabled(is_kotor_output and not custom)
         if custom_edit is not None:
-            custom_edit.setVisible(is_kotor_output and custom)
+            custom_edit.setVisible(True)
             custom_edit.setEnabled(is_kotor_output and custom)
+        if custom_label is not None:
+            custom_label.setEnabled(is_kotor_output and custom)
         if unreal_clip_edit is not None:
-            unreal_clip_edit.setVisible(not is_kotor_output)
+            unreal_clip_edit.setVisible(True)
             unreal_clip_edit.setEnabled(not is_kotor_output)
+        if unreal_clip_label is not None:
+            unreal_clip_label.setEnabled(not is_kotor_output)
         if label_edit is not None:
             label_edit.setVisible(True)
             label_edit.setEnabled(True)
+        if notes_label is not None:
+            notes_label.setEnabled(True)
     def _refresh_target_kotor_animation_slots(self) -> None:
         controller = getattr(self, "retarget_workbench_controller", None)
         combo = self._retarget_workbench_widget("target_kotor_animation_slot_combo")

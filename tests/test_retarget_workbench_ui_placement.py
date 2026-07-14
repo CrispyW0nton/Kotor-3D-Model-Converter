@@ -67,6 +67,11 @@ def test_retarget_workbench_controls_live_in_retarget_window() -> None:
 
     window = QtAnimationRetargetWindow()
     try:
+        assert window.windowTitle() == "GhostStudio — Animation Retargeting Workbench"
+        assert not window.preview_action.icon().isNull()
+        assert not window.apply_action.icon().isNull()
+        assert window.preview_action.text() == "Preview Selected Animation"
+        assert window.apply_action.text() == "Apply Selected to Target"
         assert window.findChild(QtWidgets.QComboBox, "retargetModeComboBox") is not None
         assert window.findChild(QtWidgets.QLabel, "retargetWorkbenchStatusLabel") is not None
         assert window.findChild(QtWidgets.QLabel, "retargetWorkbenchInputsLabel") is not None
@@ -79,7 +84,16 @@ def test_retarget_workbench_controls_live_in_retarget_window() -> None:
         assert window.findChild(QtWidgets.QCheckBox, "retargetBonesToggle") is not None
         assert window.findChild(QtWidgets.QCheckBox, "retargetGizmoToggle") is not None
         assert window.findChild(QtWidgets.QCheckBox, "retargetRootMotionToggle") is not None
-        assert window.findChild(QtWidgets.QFrame, "retargetOutputGlobalControls").isVisible() is False
+        output_controls = window.findChild(QtWidgets.QFrame, "retargetOutputGlobalControls")
+        assert output_controls.isHidden() is False
+        output_labels = [
+            label.text()
+            for label in output_controls.findChildren(QtWidgets.QLabel)
+        ]
+        assert output_labels == ["Output policy", "KOTOR slot", "Custom name", "Unreal clip", "Notes"]
+        window.show()
+        QtWidgets.QApplication.processEvents()
+        assert output_controls.isVisible() is True
         assert not any(
             box.title() == "Source Bone / Target Bone"
             for box in window.findChildren(QtWidgets.QGroupBox)
@@ -142,6 +156,12 @@ def test_retarget_workbench_keeps_assignment_ui_and_quiet_viewports() -> None:
 
         for viewport in (window.source_viewport, window.target_viewport):
             assert viewport.viewport_role == "retarget"
+            assert viewport.map_studio_authoring_chrome_enabled is False
+            assert viewport.viewport_map_studio_modeling_tabs is None
+            assert viewport.findChild(
+                QtWidgets.QTabWidget,
+                "ViewportToolbarMapStudioModelingTabs",
+            ) is None
             toolbar = viewport.findChild(QtWidgets.QFrame, "ViewportToolbar")
             assert toolbar is not None
             assert viewport.viewport_toolbar_scroll.isVisible() is False
@@ -364,7 +384,7 @@ def test_main_viewport_header_does_not_construct_retarget_workbench_controls() -
 def test_main_window_routes_retarget_window_preview_to_workbench_controller() -> None:
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
-    source = inspect.getsource(QtGhostRiggerMainWindow._build_layout) + inspect.getsource(QtGhostRiggerMainWindow._retarget_workbench_preview_from_window)
+    source = inspect.getsource(QtGhostRiggerMainWindow._ensure_animation_retarget_window) + inspect.getsource(QtGhostRiggerMainWindow._retarget_workbench_preview_from_window)
 
     assert "previewRequested.connect(self._retarget_workbench_preview_from_window)" in source
     assert "controller.set_source_kotor_animation_slot(anim_name)" in source
@@ -381,7 +401,9 @@ def test_workbench_source_playback_auto_retargets_to_workbench_target_viewport()
     assert "self._apply_retarget_workbench_animation_assignment(anim_name)" in source
     assert "self._ensure_retarget_workbench_target_viewport_adapter()" in source
     assert "controller.preview(auto_play=False, show_node_overlay=show_nodes)" in source
-    assert "_retarget_workbench_sync_target_time_from_source" in inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    assert "_retarget_workbench_sync_target_time_from_source" in inspect.getsource(
+        QtGhostRiggerMainWindow._ensure_animation_retarget_window
+    )
     assert "adapter.set_time(float(time_seconds))" in inspect.getsource(
         QtGhostRiggerMainWindow._retarget_workbench_sync_target_time_from_source
     )
@@ -414,7 +436,7 @@ def test_workbench_assignment_helper_pushes_row_output_naming_to_controller() ->
 def test_workbench_apply_button_routes_to_verified_export_path() -> None:
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
-    build_layout_source = inspect.getsource(QtGhostRiggerMainWindow._build_layout)
+    build_layout_source = inspect.getsource(QtGhostRiggerMainWindow._ensure_animation_retarget_window)
     apply_source = inspect.getsource(QtGhostRiggerMainWindow._retarget_workbench_apply_from_window)
 
     assert "applyRequested.connect(self._retarget_workbench_apply_from_window)" in build_layout_source

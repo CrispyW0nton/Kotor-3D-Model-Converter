@@ -458,7 +458,9 @@ def test_t2911_readiness_metadata_reports_steep_walkable_wok_slope(monkeypatch) 
 
     assert readiness.metadata["steep_walkable_face_count"] == 1
     assert readiness.metadata["max_walkable_slope_degrees"] > readiness.metadata["max_allowed_walkable_slope_degrees"]
-    assert any("steeper than" in message for message in readiness.blocking_messages)
+    # Steep faces are advisory now (vanilla 001ebo ships one).
+    assert not any("steeper than" in message for message in readiness.blocking_messages)
+    assert any("steeper than" in message for message in readiness.warnings)
 
 
 def test_t2606_readiness_reports_multi_room_vis_visibility_gaps() -> None:
@@ -635,6 +637,40 @@ def test_t2600_readiness_reports_authored_room_light_coverage() -> None:
     assert readiness.metadata["lighting"]["game_tested_lighting"] is False
     assert any("viewport/editor intent" in warning for warning in readiness.warnings)
     assert readiness.metadata["room_lights"][0]["name"] == "key_light"
+
+
+def test_t3105_readiness_reports_fullbright_export_candidate() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_readiness import build_authored_module_readiness
+
+    project = _floor_plan_project()
+    project = replace(
+        project,
+        metadata=replace(
+            project.metadata,
+            metadata={
+                **dict(project.metadata.metadata),
+                "lighting": {
+                    "profile": "fullbright",
+                    "source": "map_studio:test_fullbright",
+                },
+            },
+        ),
+    )
+
+    readiness = build_authored_module_readiness(project)
+    lighting = {step.name: step for step in readiness.toolchain}["Lighting"]
+
+    assert lighting.ready is True
+    assert lighting.status == "Fullbright export candidate"
+    assert "profile: fullbright" in lighting.value_label
+    assert readiness.metadata["lighting_profile"] == "fullbright"
+    assert readiness.metadata["lightmap_planning_status"] == "fullbright_export_candidate"
+    assert readiness.metadata["lighting"]["lighting_profile"] == "fullbright"
+    assert readiness.metadata["lighting"]["lightmap_status"] == "fullbright_export_candidate"
+    assert readiness.metadata["lighting"]["game_tested_lighting"] is False
+    assert readiness.metadata["lighting"]["warnings"] == []
 
 
 def test_t2600_readiness_distinguishes_lightmap_export_candidate_and_game_tested_lighting() -> None:

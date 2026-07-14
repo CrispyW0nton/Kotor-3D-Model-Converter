@@ -100,6 +100,7 @@ except Exception as _accel_err:
     class _TexArrayCache:  # type: ignore[no-redef]
         def __init__(self, **kw): pass
         def get(self, img): return None
+        def invalidate(self, img): pass
         def clear(self): pass
 
 

@@ -1844,7 +1844,17 @@ def _validate_skin_payload(
         skin_data = list(getattr(node, "skin_data", []) or [])
         # Loader-padded qbone/tbone arrays (full 16) are as valid as
         # exact-count ones; both lengths are accepted by the checks below.
+        # T2526: the on-disk arrays are NODE-indexed (one entry per model
+        # node, non-palette slots filled with sentinel values), so a model
+        # reloaded from binary MDL legitimately carries node-count-length
+        # bind arrays.  Accept that length too.
         _valid_bind_lengths = {len(bone_map), len(bone_map_full)}
+        try:
+            _model_node_count = len(list(model.all_nodes()))
+        except Exception:
+            _model_node_count = 0
+        if _model_node_count:
+            _valid_bind_lengths.add(_model_node_count)
 
         if not vertices or not faces:
             report.add(_issue(

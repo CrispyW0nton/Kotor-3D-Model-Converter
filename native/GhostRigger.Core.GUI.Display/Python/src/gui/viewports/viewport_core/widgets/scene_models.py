@@ -633,6 +633,30 @@ class ViewportSceneModelMixin:
 
         self.set_map_studio_marker_geometry(None)
 
+    def set_live_surface_overlay_suppressed(self, suppressed: bool) -> None:
+        """Keep runtime animation off the QWidget overlay above native WGPU.
+
+        Windows does not reliably alpha-compose a Qt sibling over the native
+        child surface used by pygfx/WGPU.  The overlay remains correct for
+        static authoring feedback, but continuously replacing it can cover the
+        renderer for alternating frames.  Runtime-style modes call this once
+        on entry and render their moving content in the retained 3D scene.
+        """
+
+        wanted = bool(suppressed)
+        if wanted == bool(getattr(self, "_live_surface_overlay_suppressed", False)):
+            return
+        self._live_surface_overlay_suppressed = wanted
+        if wanted and self.canvas.is_live_surface():
+            self.canvas.clear_overlay()
+            self._pixmap = None
+        self._request_render(
+            fast=True,
+            reason="native live overlay suppressed" if wanted else "native live overlay restored",
+            scene=True,
+            camera=True,
+        )
+
     def set_map_studio_room_outline_geometry(self, geometry: object | None) -> None:
         """Display Map Studio authored room outline geometry."""
 
@@ -702,6 +726,35 @@ class ViewportSceneModelMixin:
         """Remove the live Map Studio terrain sculpt brush cursor."""
 
         self.set_map_studio_terrain_brush_cursor(None)
+
+    def set_map_studio_hover_highlight(self, payload: object | None) -> None:
+        """Display the read-only Map Studio hover-picker highlight."""
+
+        self._map_studio_hover_highlight = payload if isinstance(payload, dict) else None
+        self._request_render(fast=True, reason="map studio hover highlight changed", overlay=True)
+
+    def set_map_studio_component_selection(self, payload: object | None) -> None:
+        """Display the Maya-style yellow component selection set."""
+
+        self._map_studio_component_selection = list(payload) if isinstance(payload, (list, tuple)) else []
+        self._request_render(fast=True, reason="map studio component selection changed", overlay=True)
+
+    def set_map_studio_room_primitive_selection(self, payload: object | None) -> None:
+        """Display the Maya-style multi-object selection in Map Studio."""
+
+        self._map_studio_room_primitive_selection = list(payload) if isinstance(payload, (list, tuple)) else []
+        self._request_render(fast=True, reason="map studio primitive selection changed", overlay=True)
+
+    def set_map_studio_component_extrude(self, payload: object | None) -> None:
+        """Display the interactive extrude gizmo (anchor/axis arrow + distance)."""
+
+        self._map_studio_component_extrude = payload if isinstance(payload, dict) else None
+        self._request_render(fast=True, reason="map studio extrude gizmo changed", overlay=True)
+
+    def clear_map_studio_hover_highlight(self) -> None:
+        """Remove the Map Studio hover-picker highlight."""
+
+        self.set_map_studio_hover_highlight(None)
 
     def set_map_studio_viewport_presentation(self, presentation: object | None) -> None:
         """Apply Map Studio-specific clean viewport display preferences."""

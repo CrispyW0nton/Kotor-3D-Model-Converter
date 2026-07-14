@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -17,7 +18,10 @@ from src.core.retargeting.ue5_source_adapter import UE5SourceAdapter
 
 
 SOURCE_FBX = Path(
-    r"C:\Users\NewAdmin\Documents\KaiGenInteractive\AnimationLibrary\Exports\M_Neutral_Stand_Idle_Loop_export.fbx"
+    os.environ.get(
+        "GHOSTRIGGER_UE_ANIM_FBX",
+        r"C:\Users\NewAdmin\Documents\KaiGenInteractive\AnimationLibrary\Exports\M_Neutral_Stand_Idle_Loop_export.fbx",
+    )
 )
 TARGET_MDL = Path("tests/fixtures/kotor_stock/k1/pmbam.mdl")
 RENAME_MAP = Path("knowledge_base/retargeting/ue5_to_aurora_rename_map.json")

@@ -23,6 +23,7 @@ from .mixin_imports import (
     np,
 )
 from src.core.rendering.mesh_render_data import _pose_node_for_transform, animation_pose_for_node
+from src.core.rendering.skeleton_render_data import _skinning_palette_model_for_node
 from src.math.gpu_math import _scene_authored_world_transform, _scene_gpu_root_for_node
 
 
@@ -716,7 +717,8 @@ class RendererGeometryMixin:
         if node_anim_pose is None:
             return None
 
-        model_id = id(self.model)
+        palette_model = _skinning_palette_model_for_node(node, self.model)
+        model_id = id(palette_model)
         pose_id = id(node_anim_pose)
         node_id = id(node)
         if (
@@ -729,7 +731,7 @@ class RendererGeometryMixin:
         if self._gpu_parity_skin_model_id != model_id or self._gpu_parity_skin_uploader is None:
             try:
                 uploader = _MatrixPaletteUploader(max_bones=_SKIN_MAX_BONES)
-                uploader.build_inverse_bind_pose(self.model)
+                uploader.build_inverse_bind_pose(palette_model)
             except Exception as exc:
                 log.debug("GPU-parity overlay skin uploader build failed: %s", exc)
                 self._gpu_parity_skin_uploader = None

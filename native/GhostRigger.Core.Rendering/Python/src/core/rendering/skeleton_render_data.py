@@ -493,6 +493,14 @@ def _skinning_palette_model_for_node(node, model=None):
                 return palette_model
         except Exception:
             pass
+    try:
+        from src.core.rendering.mesh_render_data import runtime_source_model_for_node
+
+        source_model = runtime_source_model_for_node(node)
+        if source_model is not None:
+            return source_model
+    except Exception:
+        pass
     return model or _root_model_from_node(node)
 
 

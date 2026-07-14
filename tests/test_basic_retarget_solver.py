@@ -460,7 +460,10 @@ def test_root_motion_policy_emits_root_position_controller() -> None:
     root_node = next(node for node in result.animation_block.nodes if node.name == "root")
     position_controller = next(controller for controller in root_node.controllers if controller["name"] == "position")
 
-    assert position_controller["values"] == [[5.0, 6.0, 7.0], [7.0, 9.0, 11.0]]
+    # Odyssey position keys are offsets from the target node's fixed
+    # rest-local position.  The evaluated pose below must still land at the
+    # absolute target-local values (5, 6, 7) -> (7, 9, 11).
+    assert position_controller["values"] == [[0.0, 0.0, 0.0], [2.0, 3.0, 4.0]]
     assert pose.local_transforms_by_node["root"].position == pytest.approx((7.0, 9.0, 11.0))
     assert result.report.generated_position_track_count == 1
     assert result.report.stripped_root_translation is False

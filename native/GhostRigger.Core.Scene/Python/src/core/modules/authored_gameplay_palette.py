@@ -39,6 +39,7 @@ class AuthoredGameplayPaletteEntry:
     kind: str
     template_resref: str
     label: str
+    authoring_family: str = ""
     game: str = ""
     category: str = ""
     source: str = ""
@@ -97,13 +98,35 @@ def _kind_from_resref(resref: str) -> str:
     return ""
 
 
+def authored_gameplay_authoring_family(kind: str) -> str:
+    """Return the user-facing authoring family without changing engine kind.
+
+    Doors are animated placeable objects in the level-design workflow, while
+    remaining UTD/GIT Door List resources for KOTOR serialization.
+    """
+
+    clean = str(kind or "").strip().lower()
+    return "placeable" if clean in {"placeable", "door"} else clean
+
+
 def gameplay_palette_entry_from_library_row(row: Any) -> AuthoredGameplayPaletteEntry | None:
     """Convert one game-library row into a gameplay placement palette entry."""
 
-    resref = normalise_resource_resref(_row_value(row, "template_resref", "resref", "name"))
+    restype = _resource_type(row)
+    # The startup library is model-oriented.  Its enriched rows retain the
+    # true backing UTP/UTD resref; use that authority instead of accidentally
+    # placing a visual ``plc_*``/``dor_*`` model name as a GIT template.
+    typed_template = ""
+    if isinstance(row, dict):
+        if row.get("door_template_resref"):
+            typed_template = str(row.get("door_template_resref") or "")
+            restype = "utd"
+        elif row.get("placeable_template_resref"):
+            typed_template = str(row.get("placeable_template_resref") or "")
+            restype = "utp"
+    resref = normalise_resource_resref(typed_template or _row_value(row, "template_resref", "resref", "name"))
     if not resref:
         return None
-    restype = _resource_type(row)
     category = _row_value(row, "category")
     subcategory = _row_value(row, "subcategory")
     game = _row_value(row, "game")
@@ -112,6 +135,10 @@ def gameplay_palette_entry_from_library_row(row: Any) -> AuthoredGameplayPalette
     if not kind:
         return None
     confidence = "template" if restype in _RESTYPE_KIND else "model_or_resref"
+    if confidence != "template" and kind in {"placeable", "door"}:
+        # Geometry models remain useful in the asset browser, but cannot seed a
+        # runtime GIT row until a real UTP/UTD template identity is known.
+        return None
     warning = ""
     if confidence != "template":
         warning = (
@@ -119,6 +146,12 @@ def gameplay_palette_entry_from_library_row(row: Any) -> AuthoredGameplayPalette
             f"{kind} template before expecting it to resolve in-game."
         )
     category_label = f"{category} / {subcategory}" if category and subcategory else category or kind.title()
+    authoring_family = authored_gameplay_authoring_family(kind)
+    if kind == "door":
+        original_category = category_label.strip()
+        category_label = "Placeables / Animated Doors"
+        if original_category and original_category.lower() not in {"door", "doors", "animated doors"}:
+            category_label = f"{category_label} / {original_category}"
     label = f"{resref} ({kind})"
     if game:
         label = f"{game}: {label}"
@@ -128,6 +161,7 @@ def gameplay_palette_entry_from_library_row(row: Any) -> AuthoredGameplayPalette
         kind=kind,
         template_resref=resref,
         label=label,
+        authoring_family=authoring_family,
         game=game,
         category=category_label,
         source=source,
@@ -143,7 +177,7 @@ def authored_gameplay_palette_from_library_rows(
     game: str = "",
     kind: str = "",
     query: str = "",
-    limit: int = 500,
+    limit: int | None = None,
 ) -> tuple[AuthoredGameplayPaletteEntry, ...]:
     """Return sorted, filtered gameplay placement palette entries."""
 
@@ -157,19 +191,21 @@ def authored_gameplay_palette_from_library_rows(
             continue
         if wanted_game and entry.game and entry.game.upper() != wanted_game:
             continue
-        if wanted_kind and entry.kind != wanted_kind:
+        if wanted_kind and entry.kind != wanted_kind and entry.authoring_family != wanted_kind:
             continue
         haystack = " ".join((entry.template_resref, entry.label, entry.category, entry.source)).lower()
         if needle and needle not in haystack:
             continue
         entries[(entry.kind, entry.template_resref, entry.game)] = entry
-    return tuple(
-        sorted(entries.values(), key=lambda item: (item.kind, item.template_resref, item.game))[: max(1, int(limit))]
-    )
+    ordered = sorted(entries.values(), key=lambda item: (item.kind, item.template_resref, item.game))
+    if limit is not None and int(limit) > 0:
+        ordered = ordered[: int(limit)]
+    return tuple(ordered)
 
 
 __all__ = [
     "AuthoredGameplayPaletteEntry",
+    "authored_gameplay_authoring_family",
     "authored_gameplay_palette_from_library_rows",
     "gameplay_palette_entry_from_library_row",
 ]

@@ -101,6 +101,7 @@ def test_t2600_readiness_reports_authored_transitions() -> None:
         position=(2.0, 0.0, 0.0),
         linked_to="wp_grlink02_start",
         linked_to_module="grlink02",
+        linked_to_flags=2,
     ).project
     project = add_authored_gameplay_placement(
         project,
@@ -123,6 +124,7 @@ def test_t2600_readiness_reports_authored_transitions() -> None:
     assert "1/2 authored transition(s) linked" in transition_status.value_label
     assert transition_refs[0]["linked_to"] == "wp_grlink02_start"
     assert transition_refs[0]["linked_to_module"] == "grlink02"
+    assert transition_refs[0]["linked_to_flags"] == 2
     assert transition_refs[0]["status"] == "module_transition"
     assert any("missing a destination" in warning for warning in readiness.warnings)
 
@@ -316,38 +318,59 @@ def test_t2600_authored_transition_edit_updates_rows_and_payload() -> None:
         tag="bench",
         position=(0.0, 0.0, 0.0),
     ).project
+    project = add_authored_gameplay_placement(
+        project,
+        kind="waypoint",
+        template_resref="wp_test",
+        tag="wp_grtran02_start",
+        position=(3.0, 0.0, 0.0),
+    ).project
 
     updated = update_authored_gameplay_transition(
         project,
         "authored:door:0",
         linked_to="wp_grtran02_start",
         linked_to_module="grtran02",
+        linked_to_flags=2,
         transition_destination=1,
     )
     rows = authored_gameplay_placement_rows(updated.project)
-    door_row = next(row for row in rows if row.placement_id == "authored:door:0")
-    door_marker = next(marker for marker in authored_gameplay_preview_markers(updated.project) if marker.placement_id == "authored:door:0")
+    door_row = next(row for row in rows if row.kind == "door" and row.tag == "exit_door")
+    waypoint_row = next(row for row in rows if row.kind == "waypoint")
+    door_marker = next(
+        marker
+        for marker in authored_gameplay_preview_markers(updated.project)
+        if marker.placement_id == door_row.placement_id
+    )
     payload = authored_project_to_kmap_payload(updated.project)
 
     assert updated.project.placements.doors[0].linked_to == "wp_grtran02_start"
     assert updated.project.placements.doors[0].linked_to_module == "grtran02"
+    assert updated.project.placements.doors[0].linked_to_flags == 2
     assert updated.project.placements.doors[0].transition_destination == 1
     assert door_row.transition_capable is True
     assert door_row.linked_to == "wp_grtran02_start"
     assert door_row.linked_to_module == "grtran02"
+    assert door_row.linked_to_flags == 2
     assert door_row.transition_destination == 1
     assert door_row.transition_status == "module_transition"
-    assert door_row.transition_summary == "Links to wp_grtran02_start in grtran02"
+    assert waypoint_row.transition_capable is False
+    assert waypoint_row.transition_status == "not_applicable"
+    assert door_row.transition_summary == "Links to waypoint wp_grtran02_start in grtran02"
     assert door_marker.metadata["transition_status"] == "module_transition"
-    assert door_marker.metadata["transition_summary"] == "Links to wp_grtran02_start in grtran02"
+    assert door_marker.metadata["transition_summary"] == "Links to waypoint wp_grtran02_start in grtran02"
     assert door_marker.metadata["linked_to"] == "wp_grtran02_start"
     assert door_marker.metadata["linked_to_module"] == "grtran02"
+    assert door_marker.metadata["linked_to_flags"] == 2
     assert payload["placements"]["doors"][0]["linked_to"] == "wp_grtran02_start"
     assert payload["placements"]["doors"][0]["linked_to_module"] == "grtran02"
+    assert payload["placements"]["doors"][0]["linked_to_flags"] == 2
     assert payload["placements"]["doors"][0]["transition_destination"] == 1
 
     with pytest.raises(ValueError, match="do not support transition"):
         update_authored_gameplay_transition(updated.project, "authored:placeable:0", linked_to="wp_any")
+    with pytest.raises(ValueError, match="do not support transition"):
+        update_authored_gameplay_transition(updated.project, waypoint_row.placement_id, linked_to="wp_any")
 
 
 def test_t2653_controller_adds_placement_and_clears_runtime_state() -> None:
@@ -376,6 +399,274 @@ def test_t2653_controller_adds_placement_and_clears_runtime_state() -> None:
     assert updated["placements"]["placeables"][-1]["template_resref"] == "plc_torch"
     assert result.readiness is not None
     assert result.readiness.can_preview is True
+
+
+def test_t3002_walkmesh_snap_uses_module_space_room_offset() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_walkmesh import snap_position_to_authored_walkmesh
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grsnap01",
+        game="K2",
+    )
+    project = replace(project, rooms=(replace(project.rooms[0], position=(20.0, -5.0, 3.0)),))
+
+    snap = snap_position_to_authored_walkmesh(project, (20.0, -5.0, 99.0))
+
+    assert snap is not None
+    assert snap.inside_face is True
+    assert snap.horizontal_distance == 0.0
+    assert snap.position == (20.0, -5.0, 3.0)
+
+
+def test_end_key_ground_snap_ignores_stacked_walkmesh_above_object() -> None:
+    _install_native_payload_paths()
+
+    from dataclasses import replace
+
+    from src.core.modules.authored_module_walkmesh import snap_position_to_authored_walkmesh
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grend01",
+        game="K2",
+    )
+    lower = replace(project.rooms[0], position=(0.0, 0.0, 0.0))
+    upper = replace(project.rooms[0], room_resref="grend02", position=(0.0, 0.0, 5.0))
+    project = replace(project, rooms=(lower, upper))
+
+    nearest = snap_position_to_authored_walkmesh(project, (0.0, 0.0, 3.0))
+    grounded = snap_position_to_authored_walkmesh(project, (0.0, 0.0, 3.0), downward_only=True)
+
+    assert nearest is not None and nearest.position[2] == 5.0
+    assert grounded is not None and grounded.position[2] == 0.0
+
+
+def test_controller_end_key_ground_snap_is_one_durable_transform_command() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K2")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grendctl")
+    controller.add_authored_gameplay_placement(
+        kind="placeable",
+        template_resref="plc_bench",
+        tag="ground_me",
+        position=(0.0, 0.0, 3.0),
+        snap_to_walkmesh=False,
+    )
+    placement_id = next(
+        row.placement_id for row in controller.authored_gameplay_placements() if row.tag == "ground_me"
+    )
+    undo_count = len(controller.command_history.undo_stack)
+
+    update, snap = controller.snap_authored_gameplay_placement_to_walkmesh(
+        placement_id,
+        downward_only=True,
+    )
+
+    assert placement_id.startswith("authored:placeable:i_")
+    assert update.placement_id == placement_id
+    assert update.position[2] == 0.0
+    assert snap.position[2] == 0.0
+    assert len(controller.command_history.undo_stack) == undo_count + 1
+    assert controller.command_history.undo_stack[-1].metadata["downward_only"] is True
+
+
+def test_t3002_trigger_transform_moves_polygon_with_marker() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_placements import (
+        add_authored_gameplay_placement,
+        update_authored_gameplay_placement_transform,
+    )
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grtrigmv",
+        game="K1",
+    )
+    project = add_authored_gameplay_placement(
+        project,
+        kind="trigger",
+        template_resref="newgeneric001",
+        tag="moving_trigger",
+        position=(1.0, 2.0, 0.0),
+    ).project
+    before = project.placements.triggers[0].geometry
+
+    update = update_authored_gameplay_placement_transform(
+        project,
+        "authored:trigger:0",
+        position=(4.0, 1.0, 2.0),
+    )
+    after = update.project.placements.triggers[0].geometry
+
+    assert after == tuple((x + 3.0, y - 1.0, z + 2.0) for x, y, z in before)
+
+
+def test_t3002_controller_places_on_walkmesh_in_one_undoable_command() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="scratch", game="K2")
+    controller.create_authored_room_preset_module(preset_id="rectangular_dev_room", module_root="grsnap02")
+    before_undo_count = len(controller.command_history.undo_stack)
+
+    controller.add_authored_gameplay_placement(
+        kind="placeable",
+        template_resref="plc_bench",
+        tag="snapped_bench",
+        position=(1.0, 1.0, 18.0),
+        snap_to_walkmesh=True,
+    )
+
+    row = next(row for row in controller.authored_gameplay_placements() if row.tag == "snapped_bench")
+    assert row.position[2] == 0.0
+    assert len(controller.command_history.undo_stack) == before_undo_count + 1
+    assert "Add placeable placement" in controller.command_history.undo_label
+
+
+def test_authored_placement_identity_survives_delete_save_and_reopen(tmp_path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        authored_project_to_kmap_payload,
+    )
+    from src.core.modules.authored_module_placements import (
+        add_authored_gameplay_placement,
+        authored_gameplay_placement_rows,
+        remove_authored_gameplay_placement,
+        update_authored_gameplay_placement_transform,
+    )
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grid01",
+        game="K2",
+    )
+    first = add_authored_gameplay_placement(
+        project, kind="placeable", template_resref="plc_bench", tag="first", position=(0.0, 0.0, 0.0)
+    )
+    second = add_authored_gameplay_placement(
+        first.project, kind="placeable", template_resref="plc_bench", tag="second", position=(1.0, 0.0, 0.0)
+    )
+    second_id = second.placement_id
+
+    assert second_id.startswith("authored:placeable:i_")
+    assert second_id != "authored:placeable:1"
+
+    removed = remove_authored_gameplay_placement(second.project, first.placement_id)
+    rows = authored_gameplay_placement_rows(removed.project)
+    remaining_second = next(row for row in rows if row.tag == "second")
+    assert remaining_second.placement_id == second_id
+
+    moved = update_authored_gameplay_placement_transform(
+        removed.project,
+        second_id,
+        position=(4.0, 5.0, 0.0),
+    )
+    payload = authored_project_to_kmap_payload(moved.project)
+    instance_id = next(
+        row["instance_id"] for row in payload["placements"]["placeables"] if row.get("tag") == "second"
+    )
+    reopened = authored_project_from_kmap_payload(payload)
+    reopened_rows = authored_gameplay_placement_rows(reopened)
+    reopened_second = next(row for row in reopened_rows if row.tag == "second")
+
+    assert reopened_second.placement_id == second_id
+    assert reopened_second.position == (4.0, 5.0, 0.0)
+    assert second_id.endswith(instance_id)
+
+
+def test_placeable_builder_provenance_survives_kmap_and_blocks_unbundled_headless_export() -> None:
+    _install_native_payload_paths()
+
+    import pytest
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        authored_project_to_kmap_payload,
+    )
+    from src.core.modules.authored_module_placements import add_authored_gameplay_placement
+    from src.core.modules.authored_room_presets import create_authored_module_from_room_preset
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    project = create_authored_module_from_room_preset(
+        preset_id="rectangular_dev_room",
+        module_root="grcustom",
+        game="K2",
+    )
+    added = add_authored_gameplay_placement(
+        project,
+        kind="placeable",
+        template_resref="pb_custom",
+        tag="custom_prop",
+        provenance={
+            "game": "K2",
+            "library_source": "placeable_builder",
+            "asset_id": "asset-123",
+            "asset_path": "Placeable Library/pb_custom.ghostplaceable.json",
+        },
+    )
+    payload = authored_project_to_kmap_payload(added.project)
+    reopened = authored_project_from_kmap_payload(payload)
+    restored_payload = authored_project_to_kmap_payload(reopened)
+
+    provenance = restored_payload["placements"]["metadata"]["instance_provenance"]
+    assert provenance[added.placement_id]["template_resref"] == "pb_custom"
+    assert provenance[added.placement_id]["library_source"] == "placeable_builder"
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grcustom", game="K2")
+    controller.project.extra_sections["authored_module"] = restored_payload
+    with pytest.raises(ValueError, match="pb_custom"):
+        controller._require_authored_placeable_resources_ready()
+
+    controller._authored_placeable_resources = (("pb_custom", "utp", b"utp-bytes"),)
+    controller._require_authored_placeable_resources_ready()
+
+
+def test_legacy_indexed_placement_migrates_deterministically_without_entering_git() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import build_authored_module
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        authored_project_to_kmap_payload,
+        create_dev_test_authored_module_payload,
+    )
+    from src.core.modules.authored_module_placements import authored_gameplay_placement_rows
+
+    payload = create_dev_test_authored_module_payload(module_root="grlegacy", game="K1")
+    for values in payload["placements"].values():
+        if isinstance(values, list):
+            for row in values:
+                row.pop("instance_id", None)
+
+    first = authored_project_from_kmap_payload(payload)
+    second = authored_project_from_kmap_payload(payload)
+    first_id = authored_gameplay_placement_rows(first)[0].placement_id
+    second_id = authored_gameplay_placement_rows(second)[0].placement_id
+    saved = authored_project_to_kmap_payload(first)
+    build = build_authored_module(first)
+
+    assert first_id == second_id
+    assert first_id.startswith("authored:") and ":i_" in first_id
+    assert saved["placements"]["placeables"][0]["instance_id"] == first_id.rsplit(":", 1)[-1]
+    assert first_id.encode("ascii") not in build.resources[("grlegacy", "git")].data
 
 
 def test_t2653_invalid_placement_blocks_clearly() -> None:
