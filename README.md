@@ -38,7 +38,7 @@ resource, validation, export, scene, and native-runtime foundations.
 | Character Studio | Import custom FBX/OBJ/glTF meshes, fit them to native KOTOR model hierarchies, bind/skin, preview animations and attachments, and export MDL/MDX candidates. | Active development. The main launch risk is exact Odyssey node-DAG preservation and golden playable exports. |
 | Retarget Studio | Retarget animations between Unreal/Mixamo/FBX and KOTOR, KOTOR to KOTOR, and KOTOR to Unreal. | Advanced partial. Unreal/Mixamo to KOTOR is strongest; the other lanes are being brought up to the same preview/export/readback standard. |
 | Module Studio | Hydrate, inspect, edit, validate, and safely save existing KOTOR modules and resources. | Backend services exist for hydration, GFF object forms, WOK editing, save manifests, and reference checks; visible editing and undo remain active work. |
-| Map Studio | Author and edit KMAP-backed areas: import stock modules, edit room geometry (GModeler ZModeler-style tools), retexture faces, sculpt terrain, place gameplay objects, and package/export playable modules. | Geometry edit, stock-room import/convert, face tools (extrude/inset/move/delete/split/flip/flat/set-texture), edge/vertex tools, terrain patch create + paint, and module export are working; interactive drag, an object palette, and lightmap re-emit remain active work. |
+| Map Studio | Author and edit KMAP-backed areas: import stock modules, edit room geometry with the Maya-style modeling shelf, paint textures live, sculpt terrain, place and configure gameplay objects, author lighting/lightmaps/skyboxes, simulate with Play-in-Editor, and package/export playable modules. | The full authoring loop works: stock import with rendered creature/placeable previews (including grafted appearance.2da heads), interactive drag/marquee multi-select with single-command undo, live map-wide texture painting with background same-ResRef cloning and an `Apply Textures` export gate, terrain sculpting with carve/fill holes and multi-loop floor-only WOK output, placement/behavior/transition authoring, world lighting and per-surface lightmap bake, five-face skyboxes and sky traffic, plus a PIE walkmesh/gameplay simulator (entity registry landed; targeting, interaction, dialogue, and combat are in progress). The user-operated in-game `warp` acceptance test of a fully authored module is the remaining proof gate. |
 
 Shared foundations already in the repository include `GhostRiggerProject`,
 `ResourceAddress`, `GameResourceProvider`, `ValidationBus`, `ExportJob`,
@@ -58,14 +58,29 @@ payload generation.
   native skeleton build flow, supermodel assignment, BAS attachment preview,
   validation, and export preflight.
 - Body Attachment System for head, weapon, mask, goggle, belt, and equipment
-  socket preview recipes.
+  socket preview recipes, with a game-derived item catalog covering every
+  attachable model from both installed games and a lightsaber Color selector
+  spanning all K1/K2 blade colors (including the K2-only Viridian, Silver,
+  and Bronze). The same panel is embedded in the Character Builder preview
+  step.
 - Lightsaber preview support for powered blade animation, game-color blade
   textures, and preview-only color overrides.
-- Map Studio: import a stock KOTOR module, convert its rooms to editable
-  geometry, edit faces/edges/vertices with a ZModeler-inspired context menu
-  (GModeler), retexture faces from a game-directory texture browser, create and
-  paint terrain patches, place creatures/placeables/doors/waypoints/triggers,
-  and export a playable `.mod` with WOK/LYT/VIS/ARE/GIT/IFO/PTH.
+- Map Studio: import a stock KOTOR module with real rendered previews
+  (creatures receive their appearance.2da heads at the body headhook),
+  model rooms with the Maya-style shelf (live extrude/bevel previews, true
+  Combine/Separate, Multi-Cut), paint textures directly on rendered rooms
+  with Substance-informed brushes and one-transaction map-wide texture
+  cloning, sculpt terrain with carve/fill holes and adaptive floor-only WOK
+  output, place and configure creatures/placeables/doors/waypoints/triggers
+  and room lights, bake per-surface lightmaps, author five-face skyboxes and
+  animated sky traffic, and export a playable `.mod` with
+  WOK/LYT/VIS/ARE/GIT/IFO/PTH — gated by raw vanilla-derived engine-contract
+  validation and packaged-archive readback.
+- Play-in-Editor (PIE): a deterministic editor simulator with click-to-move
+  walkmesh navigation, camera and player animation, prepared creature actors,
+  ambient audio, and a gameplay entity registry. PIE reports every
+  unsupported behavior in its coverage warnings and is never presented as
+  KOTOR engine proof.
 - Native Visual Studio package tree with canonical owners under
   `native/GhostRigger.*`.
 
@@ -79,34 +94,67 @@ roadmap. A focused Map Studio audit lives at
 
 Near-term priorities:
 
-1. Build the unified `ValidationBus` issue panel and navigation hooks.
-2. Add shared undo-command and cancellable job/progress foundations.
-3. Document and test the KMAX/KMAP/LYT/MDL/WOK transform contract.
-4. Lock Character Studio native KOTOR DAG snapshot and clone-before-bind flow.
-5. Bring KOTOR-to-KOTOR and KOTOR-to-Unreal Retarget Studio lanes up to the
-   same preview/export/readback discipline as Unreal/Mixamo-to-KOTOR.
-6. Map Studio: interactive click-drag modeling (replace value dialogs), an
-   object/placeable palette, lightmap re-emit for converted rooms, and a real
-   in-game proof of the open -> edit -> export -> warp loop.
+1. Expand PIE into a gameplay simulator: target acquisition and the focus
+   circle HUD, a central interaction router (containers, terminals, doors,
+   creatures, triggers), dialogue traversal, deterministic combat rounds, and
+   cutscene sequencing — with every unsupported behavior reported honestly.
+2. The user-operated in-game acceptance test: author a custom module fully
+   through the Map Studio UI, export, install, and manually `warp` into it in
+   KOTOR 2 to confirm every system in the actual engine.
+3. A transactional Build & Test install workflow (hash-verified staging,
+   game-running gate, atomic replace, rollback) replacing the current plain
+   file copy.
+4. Typed template deep links (`Edit Template` / `Create Variant` for
+   UTC/UTD/UTT/UTE/UTS/UTM/UTW) and the Qt-free narrative core
+   (script compile, dialogue, quest services).
+5. Lock Character Studio native KOTOR DAG snapshot and clone-before-bind
+   flow; bring the remaining Retarget Studio lanes up to the
+   preview/export/readback discipline of Unreal/Mixamo-to-KOTOR.
 
 ## Requirements
 
 Recommended Windows development/runtime:
 
 - Windows 10 or newer.
-- Python 3.13 preferred; Python 3.12 is also supported for the Qt branch.
-- Visual Studio 2022 / MSBuild for native package work.
-- A legal local installation of KOTOR and/or TSL.
+- Python 3.13 or newer (development currently runs on 3.14; 3.12 remains
+  usable for the Qt source-run path).
+- Visual Studio 2022 or the VS 2022 Build Tools (MSBuild) for the native
+  Debug application build.
+- A legal local installation of KOTOR (K1) and/or KOTOR II: The Sith Lords
+  (K2). Game assets are read in place and never bundled or modified without
+  an explicit export.
 - Blender 4.2 LTS for the production Blender FBX backend.
 - Optional Autodesk FBX SDK installed manually for SDK-backed FBX workflows.
 
-Install Python dependencies:
+## Installation
+
+### Option A: Native application (recommended)
+
+The primary product is the payload-backed native application. It embeds the
+Python packages into 18 native DLLs and is what all visible testing runs
+against.
 
 ```bat
-pip install -r requirements.txt
+git clone https://github.com/CrispyW0nton/Ghost-Studio.git
+cd Ghost-Studio
+git switch ghost-studio
+py -3.14 -m pip install -r requirements.txt
+"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe" GhostRigger.sln /m /t:Build /p:Configuration=Debug /p:Platform=x64 /v:minimal
 ```
 
-## Quick Start
+(Adjust the MSBuild path for your VS 2022 edition, or build `GhostRigger.sln`
+as `Debug|x64` from Visual Studio.)
+
+Run the result:
+
+```bat
+build\vs\x64\Debug\GhostStudio.exe
+```
+
+The build regenerates the embedded Python payloads automatically and stages
+all 18 payload DLLs next to the executable.
+
+### Option B: Run from source
 
 ```bat
 git clone https://github.com/CrispyW0nton/Ghost-Studio.git
@@ -116,13 +164,17 @@ pip install -r requirements.txt
 python main.py
 ```
 
-On first launch:
+### First launch (either option)
 
 1. Open Settings / Game Paths.
-2. Configure K1 and/or K2 install paths.
+2. Configure K1 and/or K2 install paths (for Steam these are typically
+   `C:\Program Files (x86)\Steam\steamapps\common\swkotor` and
+   `...\Knights of the Old Republic II`).
 3. Scan or refresh the game library.
-4. Load a model from the Content Browser.
-5. Save multi-object editor scenes as `.kmax`.
+4. Load a model from the Content Browser, or open Map Studio from the
+   Module Editor icon to author a map.
+5. Save multi-object editor scenes as `.kmax`; Map Studio projects save as
+   `.kmap`.
 
 Ghost-Studio scene files store references and lightweight editor state. They
 should not embed large proprietary KOTOR asset bytes.
@@ -223,18 +275,39 @@ user explicitly chooses an export/write operation.
 
 Map Studio editing flow:
 
-1. **File -> Import Stock Module (RIM)** to load a vanilla module (rooms,
-   placements, LYT/VIS), or start a fresh authored module.
+1. **File -> Import Stock Module (RIM)** or **Rooms -> Load LYT** to hydrate a
+   vanilla module (rooms, placements, GIT/IFO entry data — creatures render
+   with their real bodies and heads), or start a fresh authored module from a
+   room preset or terrain patch.
 2. **File -> Make All Stock Rooms Editable** (or edit a hovered stock room,
    which auto-converts it) to turn read-only stock geometry into editable
    imported-mesh rooms.
-3. Hover a face/edge/vertex and use the GModeler context menu (RMB) for
-   Extrude, Inset, Move, Delete, Split, Flip, Flat, Set Texture, and the
-   edge/vertex tools. Click/marquee-select rooms; Delete removes them; Ctrl+Z /
-   Ctrl+R undo/redo.
-4. Create and paint terrain patches; place creatures, placeables, doors,
-   waypoints, triggers, and other gameplay objects.
-5. Validate, stage, and export a playable `.mod`, then `warp` into it in game.
+3. Model with the Maya-style shelf: Object/Vertex/Edge/Face/Terrain/Walkmesh
+   modes with Select, Move, Dupe, Delete, Snap, Weld, Cut, Split, Bridge,
+   Extrude, and Bevel. Extrude and Bevel preview live topology before commit;
+   Combine/Separate produce real polygon meshes. Plain click-drag marquee
+   (or Ctrl+drag) box-selects objects; Delete removes the whole selection as
+   one undoable command; End drops a placement to the walkable ground;
+   W/E/R switch gizmo modes; Ctrl+Z / Ctrl+R undo/redo, and undoing a
+   placement move repaints just that object.
+4. Paint: clone used room textures into project TGA/TXI overrides (map-wide,
+   background, cancellable, one undo transaction) and paint directly on the
+   rendered map with size/hardness/opacity/flow/spacing/jitter and
+   pressure-aware brushes; commit with the `Apply Textures` export gate.
+5. Sculpt terrain with raise/lower/smooth/flatten/ramp brushes, carve or fill
+   floor holes (the exported walkmesh gains real interior perimeter loops),
+   and validate the generated floor-only WOK with the live green/red
+   walkability overlay.
+6. Place creatures, placeables, doors, waypoints, triggers, sounds, and room
+   lights; author faction/roam behavior, conversations, locks, transitions,
+   world lighting, per-surface lightmaps, five-face skyboxes, and sky
+   traffic.
+7. Press Play for PIE simulation (click-to-move walkmesh navigation with
+   honest coverage reporting), then Validate, stage, and export a playable
+   `.mod` — every writer output passes raw vanilla-derived engine-contract
+   checks and archive readback before install.
+8. Install the exported module and manually `warp` into it in game. PIE and
+   editor validation are never a substitute for that in-game proof.
 
 New geometry is textured with world-space tiled UVs matched to the room's
 existing texture density so it blends with vanilla; polycount guardrails warn
