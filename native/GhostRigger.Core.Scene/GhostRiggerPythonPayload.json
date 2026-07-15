@@ -411,7 +411,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE",
             "source_path": "src/core/modules/map_studio_pie.py",
             "packaged_path": "Python/src/core/modules/map_studio_pie.py",
-            "sha256": "89002acfb64297f6f50849a553cf48d5e64bcc47a383955a232d7af9c132912c"
+            "sha256": "4345910b8ceb89815b333e4a5ea6620ac96d4e3607009a786702ed019a30c1da"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE_AUDIO",
@@ -495,7 +495,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "ae7d5a69be4b77754238da00cf23a9407ba2efa45d732e79d36c206458ccdd00"
+            "sha256": "08f6985515e516fab212d9b35b22b505b6749e56c05ee43a8fe347f1e9d6de34"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",

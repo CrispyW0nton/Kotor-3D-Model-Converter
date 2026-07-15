@@ -9981,6 +9981,87 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         else:
             self._start_map_studio_pie()
 
+    def _map_studio_pie_player_settings(self) -> tuple[str, str]:
+        extra = dict(getattr(self.project, "extra", {}) or {})
+        player_settings = dict(extra.get("pie_player") or {})
+        body_resref = str(player_settings.get("body_resref") or "pmbam").strip().lower()
+        head_resref = str(player_settings.get("head_resref") or "pmhc01").strip().lower()
+        return body_resref, head_resref
+
+    def _prewarm_map_studio_pie_player_model(self) -> None:
+        """Warm the composed PIE player and its supermodel chain off-thread.
+
+        First Play measured ~30-50 s on large modules because the player body,
+        head, and supermodel animation chains load through the MDL reader on
+        the Qt thread. Warm the same caches a background worker (mirroring the
+        creature-preparation worker) so the first Play press attaches a
+        ready-made actor.
+        """
+
+        manager = getattr(self, "resource_manager", None)
+        strict_loader = getattr(manager, "load_model_strict", None)
+        if manager is None or not callable(strict_loader):
+            return
+        game = str(getattr(self.project, "game", "K1") or "K1").strip().upper()
+        body_resref, head_resref = self._map_studio_pie_player_settings()
+        cache = getattr(self, "_map_studio_pie_player_model_cache", None)
+        if cache is None:
+            cache = {}
+            self._map_studio_pie_player_model_cache = cache
+        pending = getattr(self, "_map_studio_pie_player_prewarm_pending", None)
+        if pending is None:
+            pending = set()
+            self._map_studio_pie_player_prewarm_pending = pending
+        cache_key = (id(manager), game, body_resref, head_resref)
+        if cache_key in cache or cache_key in pending:
+            return
+        pending.add(cache_key)
+
+        def _worker() -> None:
+            warning = ""
+            actor_model = None
+            try:
+                body_model = strict_loader(body_resref, game)
+                if body_model is None:
+                    return
+                head_model = None
+                if head_resref:
+                    try:
+                        head_model = strict_loader(head_resref, game)
+                    except Exception as exc:
+                        warning = f"The player head could not be loaded; PIE is using the body model only ({exc})."
+                actor_model = body_model
+                if head_model is not None:
+                    try:
+                        from src.systems.bas.preview_composer import build_bas_preview_model
+
+                        actor_model = build_bas_preview_model(
+                            body_model=body_model,
+                            attachment_models={"head": head_model},
+                            name=f"{body_resref}_{head_resref}_pie_player",
+                        )
+                    except Exception as exc:
+                        actor_model = body_model
+                        warning = f"The player head could not be attached; PIE is using the body model only ({exc})."
+                try:
+                    # Resolving one clip loads the supermodel animation chain
+                    # into SuperModelResolver's process-wide cache.
+                    from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
+
+                    SuperModelResolver.configure(manager)
+                    AnimationEngine(actor_model).play("pause1", loop=True, blend=False)
+                except Exception:
+                    pass
+                cache[cache_key] = (actor_model, warning)
+            except Exception:
+                pass
+            finally:
+                pending.discard(cache_key)
+
+        import threading
+
+        threading.Thread(target=_worker, name="map_studio_pie_player_prewarm", daemon=True).start()
+
     def _create_map_studio_pie_player_actor(self, session: Any, preview_model: Any, game: str) -> str:
         """Attach a runtime-only PMBAM/PMHC01 player with inherited clips."""
 
@@ -9990,42 +10071,53 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         manager = getattr(self, "resource_manager", None)
         if manager is None or preview_model is None:
             return "Animated player preview is unavailable because the game resource library or resident map model is missing."
-        extra = dict(getattr(self.project, "extra", {}) or {})
-        player_settings = dict(extra.get("pie_player") or {})
-        body_resref = str(player_settings.get("body_resref") or "pmbam").strip().lower()
-        head_resref = str(player_settings.get("head_resref") or "pmhc01").strip().lower()
+        body_resref, head_resref = self._map_studio_pie_player_settings()
         strict_loader = getattr(manager, "load_model_strict", None)
         if not callable(strict_loader):
             return "Animated player preview requires target-game-strict model loading."
-        try:
-            body_model = strict_loader(body_resref, game)
-        except Exception as exc:
-            return f"Animated player body could not be loaded: {exc}"
-        if body_model is None:
-            return f"Animated player body {body_resref}.mdl was not found in the {game} resource library."
+        # Loading pmbam + pmhc01 and their supermodel animation chains through
+        # the MDL reader measured ~49 s per Play press on large-module
+        # sessions; the composed actor is immutable to PIE (attachment deep
+        # copies the DAG), so reuse it across Play presses.
+        cache = getattr(self, "_map_studio_pie_player_model_cache", None)
+        if cache is None:
+            cache = {}
+            self._map_studio_pie_player_model_cache = cache
+        cache_key = (id(manager), str(game or ""), body_resref, head_resref)
+        cached = cache.get(cache_key)
         warning = ""
-        head_model = None
-        if head_resref:
+        if cached is not None:
+            actor_model, warning = cached
+        else:
             try:
-                head_model = strict_loader(head_resref, game)
+                body_model = strict_loader(body_resref, game)
             except Exception as exc:
-                warning = f"The player head could not be loaded; PIE is using the body model only ({exc})."
-        actor_model = body_model
-        if head_model is not None:
-            try:
-                # Use the same BAS composition contract as Character Studio.
-                # Heads are socket-following attachment layers and must not be
-                # merged into the body skin palette as ordinary hierarchy.
-                from src.systems.bas.preview_composer import build_bas_preview_model
+                return f"Animated player body could not be loaded: {exc}"
+            if body_model is None:
+                return f"Animated player body {body_resref}.mdl was not found in the {game} resource library."
+            head_model = None
+            if head_resref:
+                try:
+                    head_model = strict_loader(head_resref, game)
+                except Exception as exc:
+                    warning = f"The player head could not be loaded; PIE is using the body model only ({exc})."
+            actor_model = body_model
+            if head_model is not None:
+                try:
+                    # Use the same BAS composition contract as Character Studio.
+                    # Heads are socket-following attachment layers and must not be
+                    # merged into the body skin palette as ordinary hierarchy.
+                    from src.systems.bas.preview_composer import build_bas_preview_model
 
-                actor_model = build_bas_preview_model(
-                    body_model=body_model,
-                    attachment_models={"head": head_model},
-                    name=f"{body_resref}_{head_resref}_pie_player",
-                )
-            except Exception as exc:
-                actor_model = body_model
-                warning = f"The player head could not be attached; PIE is using the body model only ({exc})."
+                    actor_model = build_bas_preview_model(
+                        body_model=body_model,
+                        attachment_models={"head": head_model},
+                        name=f"{body_resref}_{head_resref}_pie_player",
+                    )
+                except Exception as exc:
+                    actor_model = body_model
+                    warning = f"The player head could not be attached; PIE is using the body model only ({exc})."
+            cache[cache_key] = (actor_model, warning)
         actor = None
         try:
             from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
@@ -12293,6 +12385,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         primitive_selection = tuple(self.viewport_panel.selected_room_primitives())
         self.setWindowTitle(f"Ghost-Studio Map Studio - Level Editor - {self.project.name}{' *' if self.project.dirty else ''}")
         self._sync_map_studio_viewport_resource_manager()
+        # Warm the PIE player actor + supermodel caches in the background so
+        # the first Play press does not block on ~30-50 s of MDL loading.
+        # Deferred: the pure-Python MDL parse contends for the GIL, so it must
+        # not overlap this refresh's own scene load.
+        QtCore.QTimer.singleShot(1500, self._prewarm_map_studio_pie_player_model)
         self._update_map_studio_undo_redo_actions()
         self._apply_map_studio_tool_belt_preferences_from_project()
         self._refresh_map_studio_tool_belt()

@@ -912,8 +912,15 @@ def build_map_studio_pie_session(
     *,
     preview_model: Any = None,
     config: MapStudioPIEConfig | None = None,
+    combined_walkmesh: Any = None,
 ) -> MapStudioPIEBuildResult:
-    """Build one immutable-derived simulation session from an authored project."""
+    """Build one immutable-derived simulation session from an authored project.
+
+    ``combined_walkmesh`` may supply a precombined
+    ``combine_authored_module_walkmesh`` result (the controller caches it per
+    authored revision); recombining large converted modules costs seconds per
+    Play press otherwise.
+    """
 
     blocking: list[str] = []
     warnings: list[str] = []
@@ -930,7 +937,7 @@ def build_map_studio_pie_session(
                 f"Stock room {getattr(room, 'room_resref', '(unnamed)')} still uses placeholder geometry. "
                 "Convert stock rooms to editable imported meshes before simulation."
             )
-    combined = combine_authored_module_walkmesh(project)
+    combined = combined_walkmesh if combined_walkmesh is not None else combine_authored_module_walkmesh(project)
     blocking.extend(tuple(combined.blocking_issues or ()))
     warnings.extend(tuple(combined.warnings or ()))
     placements = getattr(project, "placements", None)

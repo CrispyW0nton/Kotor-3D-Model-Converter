@@ -11,6 +11,46 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-15
 
+### [2026-07-15] T3008: PIE start-time performance on large modules (koq201 62 s -> 3-7 s)
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio Play-in-Editor (Core.Scene/Core.Tools)
+
+Intersects: T2904 Map Studio refresh-performance work (reuses the
+authored-revision query cache introduced there) and the T3008 PIE
+gameplay-simulator milestone.
+
+- Profiled Play on the converted koq201 K2 module (9 imported rooms, ~48k
+  collision triangles): 62 s per Play press, of which ~49 s recomposed the
+  player actor (6x `load_model_strict` plus a 926-animation supermodel chain
+  through PyKotor) and ~9 s recombined the module walkmesh. Per-tick
+  simulation was already fine (2.8 ms full tick, 0.08 ms `session.advance`).
+- `create_map_studio_pie_session` (module_editor_controller.py, Scene+Tools
+  mirrors) now caches the combined WOK per authored revision via
+  `_map_studio_cached_authored_query(("pie_combined_walkmesh",), ...)` and
+  passes it through a new `combined_walkmesh` parameter on
+  `build_map_studio_pie_session` (map_studio_pie.py, root src + Scene/Tools
+  mirrors); the builder only recombines when no precombined mesh is supplied.
+- `_create_map_studio_pie_player_actor` (module_editor_window.py, Tools) now
+  keeps a composed-player cache keyed `(manager, game, body, head)` — safe
+  because `attach_map_studio_pie_actor` deep-copies the actor DAG on attach —
+  and a new `_prewarm_map_studio_pie_player_model` background thread primes
+  that cache plus `SuperModelResolver`'s supermodel cache during editor idle,
+  deferred 1.5 s after `_refresh_all` so the pure-Python MDL parse does not
+  contend with the scene load for the GIL.
+- Measured on koq201 offscreen: prewarm completes ~25 s after load in the
+  background; first Play press 62 s -> 7.0 s, repeat Play 2.9 s, Stop 0.9 s.
+- Verification: new `tests/test_map_studio_pie_performance.py` (walkmesh
+  combine not re-run on session rebuild; player actor cached across Play
+  presses with per-body cache keys; prewarm deferred off the refresh path);
+  `tests/test_map_studio_pie.py`, `tests/test_map_studio_pie_entities.py`,
+  and `tests/test_native_python_payloads.py` all green (57 passed); payload
+  manifests regenerated for Core.Scene and Core.Tools. Editor-side
+  measurement only — no in-game claim.
+
 ### [2026-07-15] T3008: PIE gameplay simulator step 1 — deterministic entity registry
 
 Owner: LordVaderCW

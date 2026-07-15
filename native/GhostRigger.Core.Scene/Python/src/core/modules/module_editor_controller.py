@@ -288,6 +288,7 @@ from .authored_terrain_walkability_overlay import (
     AuthoredTerrainWalkabilityOverlay,
     authored_terrain_walkability_overlay_for_project,
 )
+from .authored_module_walkmesh import combine_authored_module_walkmesh
 from .authored_walkmesh_status import AuthoredWalkmeshStatus, authored_walkmesh_status_for_project
 from .authored_walkmesh_status import authored_walkmesh_room_surface_choices
 from .authored_walkmesh_surfaces import authored_walkmesh_surface_palette
@@ -3860,7 +3861,17 @@ class ModuleEditorController:
         """
 
         authored = self._load_authored_project_or_raise()
-        return build_map_studio_pie_session(authored, preview_model=preview_model)
+        # The combined WOK is a pure projection of the authored state; on
+        # large converted modules recombining it measured ~9 s per Play press
+        # (koq201, 9 imported rooms), so reuse the authored-revision cache.
+        combined_walkmesh = self._map_studio_cached_authored_query(
+            ("pie_combined_walkmesh",), combine_authored_module_walkmesh
+        )
+        return build_map_studio_pie_session(
+            authored,
+            preview_model=preview_model,
+            combined_walkmesh=combined_walkmesh,
+        )
 
     def authored_room_primitive_transforms(self):
         """Return editable composition primitive transform rows for the current KMAP."""
