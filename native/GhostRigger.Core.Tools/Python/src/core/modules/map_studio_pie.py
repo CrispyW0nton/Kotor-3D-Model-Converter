@@ -129,6 +129,7 @@ class MapStudioPIEBuildResult:
     validation: MapStudioPIEValidation
     walkable_face_count: int = 0
     collision_triangle_count: int = 0
+    entity_registry: Any = None
 
 
 @dataclass
@@ -957,17 +958,23 @@ def build_map_studio_pie_session(
     )
     blocking.extend(session.validation.blocking_issues)
     warnings.extend(session.validation.warnings)
+    from .map_studio_pie_entities import build_pie_entity_registry
+
+    entity_registry = build_pie_entity_registry(project)
+    warnings.extend(entity_registry.coverage_warnings)
     validation = MapStudioPIEValidation(
         ok=not blocking,
         blocking_issues=tuple(dict.fromkeys(blocking)),
         warnings=tuple(dict.fromkeys(warnings)),
     )
     session.validation = validation
+    session.entity_registry = entity_registry
     return MapStudioPIEBuildResult(
         session=session if validation.ok else None,
         validation=validation,
         walkable_face_count=len(session.walkmesh.walkable_faces),
         collision_triangle_count=len(collision_triangles),
+        entity_registry=entity_registry,
     )
 
 

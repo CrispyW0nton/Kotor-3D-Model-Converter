@@ -373,6 +373,7 @@ knowledge_base/test_artifacts/*.zip
 !/tests/test_placeable_builder_ui.py
 !/tests/test_map_studio_lightmap_apply_workflow.py
 !/tests/test_sith_ithorian_visual_capture_harness.py
+!/tests/test_map_studio_pie_entities.py
 /knowledge_base/books
 /docs/architecture
 /docs

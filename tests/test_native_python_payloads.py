@@ -64,7 +64,9 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     # non-mutating Multi-Cut session add eight owner/consumer payload rows.
     # Retained primitive construction now packages the connected logical cage
     # and topology-budget policy through both Scene and Tools.
-    assert len(payload_files) == 1306
+    # The PIE gameplay entity registry (map_studio_pie_entities.py) ships
+    # through both Scene and Tools.
+    assert len(payload_files) == 1308
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 

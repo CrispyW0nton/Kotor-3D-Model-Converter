@@ -11,6 +11,47 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-15
 
+### [2026-07-15] T3008: PIE gameplay simulator step 1 — deterministic entity registry
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio Play-in-Editor simulation (Core.Scene/Core.Tools)
+
+Intersects: The published T2904 texture-painting slice and the shared dirty
+worktree; first slice of the PIE gameplay-simulator milestone.
+
+- Added `map_studio_pie_entities.py` (canonical root `src` plus Scene/Tools
+  payload mirrors): a headless, deterministic registry of every authored
+  gameplay placement — player entry, creatures, doors, placeables, triggers,
+  waypoints, sounds, cameras, and stores — with entity ids matching Map
+  Studio's `authored:<kind>:<instance>` selection ids, kind-major stable
+  ordering, and per-entity faction/interaction classification (combat,
+  dialogue, container, terminal, door, trigger, generic use).
+- Creature factions come from the authored behavior intent
+  (`creature_behaviors` metadata) first, then an optional
+  `template_inspector` callback for deep UTC/UTP fields (localized name,
+  locks, key, inventory, conversation); unknowns degrade to neutral WITH a
+  coverage warning. Stores, encounters, scripted OnUsed placeables, and
+  missing entry points all surface as honest coverage warnings — PIE remains
+  an editor simulator, never KOTOR proof.
+- `build_map_studio_pie_session` now attaches the registry to the session
+  and the build result and merges its coverage warnings into PIE validation,
+  so the existing status panel reports simulation gaps.
+
+Affected areas: new `src/core/modules/map_studio_pie_entities.py` with
+byte-identical Scene/Tools payload mirrors, `map_studio_pie.py` (all three
+copies), regenerated Scene/Tools payload manifests (payload count
+1,306 -> 1,308), and new `tests/test_map_studio_pie_entities.py`.
+
+Verification: new focused suite 4/4 (deterministic ordering/id stability,
+faction/interaction classification, honest coverage reporting, session
+wiring source contracts); the full existing PIE suite (29 tests) passes
+unchanged; payload byte-identity/coverage contracts 21/21 after the pinned
+count bump. Targeting, interaction routing, dialogue, combat, and cutscene
+sequencing are the next slices; no in-game claim.
+
 ### [2026-07-15] T2904: Made Map Studio texture painting responsive and map-wide
 
 Owner: LordVaderCW

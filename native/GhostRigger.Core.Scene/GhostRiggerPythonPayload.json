@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Scene",
-    "file_count": 112,
+    "file_count": 113,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -411,7 +411,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE",
             "source_path": "src/core/modules/map_studio_pie.py",
             "packaged_path": "Python/src/core/modules/map_studio_pie.py",
-            "sha256": "17ea2262fa2680660a4b7786a8387ec22e71290ac35561330ef30951689776fd"
+            "sha256": "89002acfb64297f6f50849a553cf48d5e64bcc47a383955a232d7af9c132912c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE_AUDIO",
@@ -424,6 +424,12 @@
             "source_path": "src/core/modules/map_studio_pie_creatures.py",
             "packaged_path": "Python/src/core/modules/map_studio_pie_creatures.py",
             "sha256": "8dafccf0ecc9bfb2076001e09005e5e17e726d8cf2c2600fa74fae8f8d22e04c"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE_ENTITIES",
+            "source_path": "src/core/modules/map_studio_pie_entities.py",
+            "packaged_path": "Python/src/core/modules/map_studio_pie_entities.py",
+            "sha256": "78b6bc0230c9f889cd7360e226d9846daacdae2670f458132aa286e97f81751e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_STOCK_CONTENT_PREVIEW",
