@@ -92,7 +92,7 @@ class WindowLifecycleMixin:
                 self._log("Placeable Builder is unavailable in this build.", "warning")
                 return
             opener()
-        elif key in {"gmodeler", "map_studio", "terrain", "texture_paint", "game_proof"}:
+        elif key in {"gmodeler", "modeling", "map_studio", "terrain", "texture_paint", "game_proof"}:
             self._open_module_editor_window()
             window = getattr(self, "module_editor_window", None)
             focus = getattr(window, "focus_map_studio_tutorial_workspace", None)

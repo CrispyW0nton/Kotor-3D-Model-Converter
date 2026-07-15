@@ -19,10 +19,12 @@ from core.geometry.mesh_topology import MeshTopology  # noqa: E402
 from core.modules.authored_imported_mesh import (  # noqa: E402
     ImportedMeshRoomPrimitive,
     ImportedMeshSurface,
+    append_imported_mesh_quad,
     bevel_imported_mesh_edge,
     delete_imported_mesh_faces,
     extrude_imported_mesh_faces,
     inset_imported_mesh_faces,
+    make_hole_in_imported_mesh_face,
     move_imported_mesh_faces,
     resolve_imported_mesh_face_target,
     split_imported_mesh_edge,
@@ -287,3 +289,246 @@ def test_validation_rejects_misaligned_lightmap_uv_channel() -> None:
     validation = validate_imported_mesh_room_primitive(broken)
     assert not validation.ok
     assert any("lightmap UV count" in issue for issue in validation.blocking_issues)
+
+
+def _lightmapped_triangle() -> ImportedMeshRoomPrimitive:
+    surface = ImportedMeshSurface(
+        name="triangle",
+        texture="lda_floor01",
+        vertices=((0.0, 0.0, 0.0), (10.0, 0.0, 0.0), (0.0, 10.0, 0.0)),
+        faces=((0, 1, 2),),
+        face_mats=(7,),
+        uvs=((0.0, 0.0), (1.0, 0.0), (0.0, 1.0)),
+        normals=((0.0, 0.0, 1.0),) * 3,
+        lightmap="lda_floor01lm",
+        texture_names=("lda_floor01", "lda_floor01lm"),
+        tex_count=2,
+        uvs_lm=((0.1, 0.1), (0.9, 0.1), (0.1, 0.9)),
+    )
+    return ImportedMeshRoomPrimitive(room_resref="grhole", surfaces=(surface,), game="K2")
+
+
+def _triangle_area(a, b, c) -> float:
+    ab = tuple(b[index] - a[index] for index in range(3))
+    ac = tuple(c[index] - a[index] for index in range(3))
+    cross = (
+        (ab[1] * ac[2]) - (ab[2] * ac[1]),
+        (ab[2] * ac[0]) - (ab[0] * ac[2]),
+        (ab[0] * ac[1]) - (ab[1] * ac[0]),
+    )
+    return 0.5 * sum(value * value for value in cross) ** 0.5
+
+
+def test_make_hole_triangulates_a_strict_internal_cutter_and_interpolates_channels() -> None:
+    primitive = _lightmapped_triangle()
+    cutter = ((2.0, 2.0, 0.0), (3.0, 2.0, 0.0), (3.0, 3.0, 0.0), (2.0, 3.0, 0.0))
+
+    edited = make_hole_in_imported_mesh_face(primitive, "render", 0, cutter)
+    repeated = make_hole_in_imported_mesh_face(primitive, "render", 0, cutter)
+    surface = edited.surfaces[0]
+    topology = MeshTopology.build(surface.vertices, surface.faces)
+    audit = topology.validate_manifold_state()
+
+    assert len(surface.faces) == 7  # four-point hole in one triangular outer boundary
+    assert surface.faces == repeated.surfaces[0].faces
+    assert not audit.degenerate_faces
+    assert not audit.non_manifold_edges
+    assert not audit.inconsistent_winding_edges
+    assert len(audit.border_edges) == 7  # three outer edges plus four intentional hole edges
+    assert surface.face_mats == (7,) * 7
+    assert sum(
+        _triangle_area(*(surface.vertices[index] for index in face))
+        for face in surface.faces
+    ) == 49.0
+    inserted = surface.vertices.index((2.0, 2.0, 0.0))
+    assert surface.uvs[inserted] == (0.2, 0.2)
+    assert all(abs(value - 0.26) < 1.0e-9 for value in surface.uvs_lm[inserted])
+    assert surface.normals[inserted] == (0.0, 0.0, 1.0)
+    assert edited.metadata["last_topology_edit"]["operation"] == "make_hole"
+    assert edited.metadata["last_topology_edit"]["scope_limit"] == "strictly_inside_one_triangle"
+    assert edited.metadata["last_topology_edit"]["walkmesh_policy"] == "requires_review"
+    _assert_channels_aligned(edited)
+
+
+def test_make_hole_uses_and_removes_the_second_selected_face_like_maya() -> None:
+    primitive = _lightmapped_triangle()
+    surface = primitive.surfaces[0]
+    with_cutter_face = replace(
+        surface,
+        vertices=surface.vertices + ((2.0, 2.0, 0.0), (3.0, 2.0, 0.0), (2.0, 3.0, 0.0)),
+        faces=surface.faces + ((3, 4, 5),),
+        face_mats=(7, 11),
+        uvs=surface.uvs + ((0.2, 0.2), (0.3, 0.2), (0.2, 0.3)),
+        normals=surface.normals + ((0.0, 0.0, 1.0),) * 3,
+        uvs_lm=surface.uvs_lm + ((0.26, 0.26), (0.34, 0.26), (0.26, 0.34)),
+    )
+    primitive = replace(primitive, surfaces=(with_cutter_face,))
+
+    edited = make_hole_in_imported_mesh_face(
+        primitive,
+        "render",
+        0,
+        cutter_face_index=1,
+    )
+    result = edited.surfaces[0]
+    audit = MeshTopology.build(result.vertices, result.faces).validate_manifold_state()
+
+    assert len(result.faces) == 6
+    assert result.face_mats == (7,) * 6
+    assert len(audit.border_edges) == 6
+    assert sum(
+        _triangle_area(*(result.vertices[index] for index in face))
+        for face in result.faces
+    ) == 49.5
+    assert edited.metadata["last_topology_edit"]["cutter_face"] == 1
+    assert edited.metadata["last_topology_edit"]["cutter_face_removed"] is True
+    _assert_channels_aligned(edited)
+
+
+def test_make_hole_rejects_cross_triangle_boundary_and_self_intersecting_cutters() -> None:
+    primitive = _lightmapped_triangle()
+    for cutter, expected in (
+        (
+            ((0.0, 2.0, 0.0), (1.0, 2.0, 0.0), (1.0, 3.0, 0.0)),
+            "strictly inside one selected triangle",
+        ),
+        (
+            ((2.0, 2.0, 0.0), (4.0, 4.0, 0.0), (2.0, 4.0, 0.0), (4.0, 2.0, 0.0)),
+            "self-intersecting",
+        ),
+    ):
+        try:
+            make_hole_in_imported_mesh_face(primitive, "render", 0, cutter)
+        except ValueError as exc:
+            assert expected in str(exc)
+        else:
+            raise AssertionError("an unsafe Make Hole cutter must be rejected explicitly")
+
+
+def test_make_hole_supports_a_concave_cutter_without_filling_its_notch() -> None:
+    primitive = _lightmapped_triangle()
+    cutter = (
+        (2.0, 2.0, 0.0),
+        (4.0, 2.0, 0.0),
+        (4.0, 4.0, 0.0),
+        (3.0, 3.0, 0.0),
+        (2.0, 4.0, 0.0),
+    )
+
+    edited = make_hole_in_imported_mesh_face(primitive, "render", 0, cutter)
+    surface = edited.surfaces[0]
+    audit = MeshTopology.build(surface.vertices, surface.faces).validate_manifold_state()
+
+    assert len(surface.faces) == 8
+    assert len(audit.border_edges) == 8
+    assert not audit.degenerate_faces
+    assert not audit.non_manifold_edges
+    assert not audit.inconsistent_winding_edges
+    assert sum(
+        _triangle_area(*(surface.vertices[index] for index in face))
+        for face in surface.faces
+    ) == 47.0  # outer 50m^2 minus the concave cutter's 3m^2
+
+
+def test_quad_draw_appends_two_wound_triangles_with_real_channels() -> None:
+    primitive = _lightmapped_triangle()
+    points = ((2.0, 2.0, 1.0), (3.0, 2.0, 1.0), (3.0, 3.0, 1.0), (2.0, 3.0, 1.0))
+
+    edited = append_imported_mesh_quad(
+        primitive,
+        "render",
+        points,
+        material=11,
+        normal_hint=(0.0, 0.0, -1.0),
+    )
+    surface = edited.surfaces[0]
+    audit = MeshTopology.build(surface.vertices, surface.faces).validate_manifold_state()
+
+    assert len(surface.faces) == 3
+    assert surface.face_mats == (7, 11, 11)
+    assert not audit.degenerate_faces
+    assert not audit.non_manifold_edges
+    for face in surface.faces[-2:]:
+        assert _triangle_area(*(surface.vertices[index] for index in face)) == 0.5
+        a, b, c = (surface.vertices[index] for index in face)
+        cross_z = ((b[0] - a[0]) * (c[1] - a[1])) - ((b[1] - a[1]) * (c[0] - a[0]))
+        assert cross_z < 0.0
+        assert all(surface.normals[index] == (0.0, 0.0, -1.0) for index in face)
+    assert edited.metadata["last_topology_edit"]["operation"] == "quad_draw_append"
+    assert edited.metadata["last_topology_edit"]["created_surface"] is False
+    assert edited.metadata["last_topology_edit"]["lightmap_uv_policy"] == "planar_placeholder_requires_bake"
+    assert edited.metadata["last_topology_edit"]["walkmesh_policy"] == "requires_review"
+    _assert_channels_aligned(edited)
+
+
+def test_quad_draw_auto_welds_neighboring_quads_into_one_connected_strip() -> None:
+    primitive = _lightmapped_triangle()
+    first = append_imported_mesh_quad(
+        primitive,
+        "imported_srf_1",
+        ((0.0, 0.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 1.0), (0.0, 1.0, 1.0)),
+        texture="lda_floor01",
+    )
+    second = append_imported_mesh_quad(
+        first,
+        "imported_srf_1",
+        ((1.0, 0.0, 1.0), (2.0, 0.0, 1.0), (2.0, 1.0, 1.0), (1.0, 1.0, 1.0)),
+        texture="lda_floor01",
+        auto_weld=True,
+        weld_tolerance=1.0e-5,
+    )
+    surface = second.surfaces[1]
+    audit = MeshTopology.build(surface.vertices, surface.faces).validate_manifold_state()
+
+    assert len(surface.vertices) == 6
+    assert len(surface.faces) == 4
+    assert len(audit.border_edges) == 6
+    assert not audit.non_manifold_edges
+    assert second.metadata["last_topology_edit"]["reused_vertex_count"] == 2
+
+
+def test_quad_draw_creates_a_new_retopology_surface_when_role_is_absent() -> None:
+    primitive = _lightmapped_triangle()
+    points = ((20.0, 0.0, 0.0), (22.0, 0.0, 0.0), (22.0, 2.0, 0.0), (20.0, 2.0, 0.0))
+
+    edited = append_imported_mesh_quad(
+        primitive,
+        "retopo",
+        points,
+        material=5,
+        texture="plc_concrete",
+        lightmap="plc_concretelm",
+    )
+    retopo = edited.surfaces[1]
+
+    assert len(edited.surfaces) == 2
+    assert retopo.name == "retopo"
+    assert retopo.texture == "plc_concrete"
+    assert retopo.lightmap == "plc_concretelm"
+    assert retopo.face_mats == (5, 5)
+    assert len(retopo.faces) == 2
+    assert len(retopo.uvs_lm) == 4
+    assert edited.metadata["last_topology_edit"]["created_surface"] is True
+    assert edited.metadata["last_topology_edit"]["requested_mesh_role"] == "retopo"
+    assert edited.metadata["last_topology_edit"]["mesh_role"] == "imported_srf_1"
+    _assert_channels_aligned(edited)
+
+
+def test_quad_draw_rejects_bow_tie_and_non_planar_points() -> None:
+    primitive = _lightmapped_triangle()
+    for points, expected in (
+        (
+            ((2.0, 2.0, 1.0), (3.0, 3.0, 1.0), (2.0, 3.0, 1.0), (3.0, 2.0, 1.0)),
+            "no stable plane",
+        ),
+        (
+            ((2.0, 2.0, 1.0), (3.0, 2.0, 1.0), (3.0, 3.0, 1.5), (2.0, 3.0, 1.0)),
+            "not planar",
+        ),
+    ):
+        try:
+            append_imported_mesh_quad(primitive, "render", points)
+        except ValueError as exc:
+            assert expected in str(exc)
+        else:
+            raise AssertionError("an invalid Quad Draw polygon must be rejected")

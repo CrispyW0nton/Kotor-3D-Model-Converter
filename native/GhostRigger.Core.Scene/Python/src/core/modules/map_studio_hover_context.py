@@ -2,7 +2,7 @@
 
 This module is deliberately headless and Qt-free.  It classifies what map
 component the cursor currently hovers (vertex, edge, face, or walkmesh face)
-from pre-projected screen-space candidates so the ZModeler-style marking menu
+from pre-projected screen-space candidates so the component marking menu
 can build a context-sensitive action tree.
 
 Conceptual owner: GhostRigger.Core.GUI.Helpers (viewport pickers).  The module
@@ -276,7 +276,7 @@ def _face_selector(
     px: float,
     py: float,
 ) -> tuple[tuple[int, int], tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
-    """Return the ZModeler face edge-selector line for the cursor position."""
+    """Return the component face edge-selector line for the cursor position."""
 
     screen = tuple(candidate.screen_points)[:3]
     world = tuple(candidate.world_points)[:3]

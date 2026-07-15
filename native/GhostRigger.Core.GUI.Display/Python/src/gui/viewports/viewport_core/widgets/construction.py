@@ -486,7 +486,9 @@ class ViewportConstructionMixin:
         self._apply_canvas_theme()
 
     def _make_map_studio_modeling_tabs(self, parent: QtWidgets.QWidget) -> QtWidgets.QTabWidget:
-        """Build the KMAP-authored Modeling belt directly in the viewport."""
+        """Build the KMAP-authored Maya-style Modeling shelf in the viewport."""
+
+        from src.gui.panels.module_editor.map_studio_modeling_shelf import MapStudioModelingShelf
 
         tabs = QtWidgets.QTabWidget(parent)
         tabs.setObjectName("ViewportToolbarMapStudioModelingTabs")
@@ -504,13 +506,19 @@ class ViewportConstructionMixin:
         modeling_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
         modeling_scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         modeling_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
-        modeling_scroll.setMinimumHeight(30)
+        modeling_scroll.setMinimumHeight(36)
         modeling_content = QtWidgets.QWidget(modeling_scroll)
         modeling_content.setObjectName("ViewportToolbarMapStudioModelingRow")
         modeling_row = QtWidgets.QHBoxLayout(modeling_content)
         modeling_row.setContentsMargins(4, 1, 4, 1)
         modeling_row.setSpacing(3)
 
+        self.map_studio_modeling_shelf = MapStudioModelingShelf(modeling_content)
+        self.map_studio_modeling_shelf.commandRequested.connect(self._run_map_studio_command_from_toolbar)
+        self.map_studio_modeling_shelf.optionsRequested.connect(self._open_map_studio_tool_options_from_toolbar)
+        modeling_row.addWidget(self.map_studio_modeling_shelf)
+
+        modeling_row.addSpacing(8)
         mode_label = QtWidgets.QLabel("Modes", modeling_content)
         mode_label.setObjectName("ViewportToolbarMapStudioModeLabel")
         modeling_row.addWidget(mode_label)
@@ -523,40 +531,6 @@ class ViewportConstructionMixin:
             button.clicked.connect(lambda _checked=False, label=mode: self._open_map_studio_mode_from_toolbar(label))
             modeling_row.addWidget(button)
 
-        modeling_row.addSpacing(8)
-        tool_label = QtWidgets.QLabel("Tools", modeling_content)
-        tool_label.setObjectName("ViewportToolbarMapStudioToolLabel")
-        modeling_row.addWidget(tool_label)
-        modeling_actions = (
-            ("select", "Select", "Focus Map Studio object selection."),
-            ("move", "Move", "Focus Map Studio object transform tools."),
-            ("duplicate_selected", "Dupe", "Duplicate the selected Map Studio item."),
-            ("delete_selected", "Delete", "Delete the selected Map Studio item."),
-            ("object_grid_snap", "Snap", "Snap the selected primitive pivot to the Map Studio grid."),
-            ("weld", "Weld", "Weld selected floor-plan vertices."),
-            ("cut", "Cut", "Cut or split room/terrain topology."),
-            ("split", "Split", "Split authored room topology into KOTOR-safe ownership pieces."),
-            ("bridge", "Bridge", "Bridge selected edges for corridors or joins."),
-            ("extrude", "Extrude", "Extrude selected authored edges or faces."),
-            ("bevel", "Bevel", "Bevel selected authored geometry."),
-            ("inset", "Inset", "Inset selected authored faces."),
-            ("flatten", "Flatten", "Flatten selected floor-plan vertices."),
-            ("cleanup", "Cleanup", "Cleanup duplicate or collinear authored geometry."),
-            ("triangulate", "Triang.", "Triangulate selected room or WOK-facing faces."),
-            ("texture_paint", "Paint", "Paint a unique project texture on the nearest visible Map Studio face."),
-            ("paint_material", "Material", "Assign KOTOR texture/material intent to the active room or selected primitive."),
-            ("paint_wok", "WOK", "Assign KOTOR WOK surface intent to the active room or selected walkmesh primitive."),
-            ("center_pivot", "Pivot", "Center the selected primitive pivot."),
-            ("freeze_transform", "Freeze", "Freeze supported primitive transforms into authored dimensions."),
-        )
-        for key, label, tooltip in modeling_actions:
-            button = QtWidgets.QToolButton(modeling_content)
-            button.setObjectName(f"ViewportToolbarMapStudioToolButton_{key}")
-            button.setText(label)
-            button.setProperty("_gr_full_text", label)
-            button.setToolTip(tooltip)
-            button.clicked.connect(lambda _checked=False, action_key=key: self._run_map_studio_command_from_toolbar(action_key))
-            modeling_row.addWidget(button)
         modeling_row.addStretch(1)
         modeling_scroll.setWidget(modeling_content)
         modeling_root.addWidget(modeling_scroll)
@@ -627,6 +601,14 @@ class ViewportConstructionMixin:
         opener = getattr(window, "_open_map_studio_modeling_workspace", None)
         if callable(opener):
             opener()
+
+    def _open_map_studio_tool_options_from_toolbar(self, action_key: str) -> None:
+        """Route a shelf double-click/right-click to Map Studio Tool Options."""
+
+        window = self.window()
+        handler = getattr(window, "_open_map_studio_modeling_tool_options", None)
+        if callable(handler):
+            handler(str(action_key or "").strip())
 
     def take_viewport_toolbar(self) -> QtWidgets.QWidget | None:
         """Detach the viewport tool strip so the application shell can host it."""

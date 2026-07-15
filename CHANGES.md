@@ -37,6 +37,23 @@ surface, and the shared dirty worktree.
   menu remains an optional shortcut. The obvious Extrude and Bevel controls now
   arm the same live component gestures when a face/edge is active, with the
   floor-plan path retained only as an explicit fallback.
+- Replaced the user-facing GModeler belt with a compact 32-command shelf in the
+  exact order of the user's Maya Custom shelf: Reset Transformations, Center
+  Pivot, Zero Pivot, Separate, Combine, Fill Hole, Mirror, Bevel, Bridge,
+  Extrude, Merge, Multi-Cut, Insert Edge Loop, Target Weld, Make Hole, Lattice,
+  Wrap, ShrinkWrap, Reverse, Soften Edge, Harden Edge, Connect, Difference A-B,
+  Bend, Delete History, Duplicate Special Options, Freeze Transformations,
+  Select Triangle Faces, Select Quad Faces, Convert Selection to Contained
+  Faces, Make Live, and Quad Draw. The shelf uses original theme-aware Ghost
+  Studio vector-painted symbols and accessible names/tooltips; no Autodesk icon
+  artwork or Maya program assets are packaged.
+- Added viewport-scoped Maya-compatible shortcuts where they do not collide
+  with Ghost Studio text entry or camera controls: `Ctrl+E` Extrude, `Ctrl+B`
+  Bevel, `Ctrl+X` Multi-Cut, `Ctrl+Q` Quad Draw, `Ctrl+Shift+D` Duplicate
+  Special, contextual `Ctrl+/` Bridge/Fill Hole, `G` repeat last, `W/E/R`
+  transforms, and the existing `End` ground snap. Shelf click runs the command;
+  double-click or right-click opens command options without the viewport panel
+  stealing the context-menu event.
 - Added prepared face-extrude and edge-bevel sessions. Topology, generated face
   templates, UV0, lightmap UV2, normals, and material inheritance are prepared
   once per gesture; pointer frames interpolate only affected rows from the
@@ -59,32 +76,55 @@ surface, and the shared dirty worktree.
   UV islands, and added editable Sphere, Cone, and Torus primitives. Visual
   floor subdivisions do not inflate the stable four-vertex/two-triangle WOK.
   Old KMAP files load with subdivision defaults of one.
+- Added deterministic KOTOR-safe kernels and controller transactions for
+  genuine authored polygon Combine, connected-shell Separate, threshold/border
+  Merge, Target Weld, Connect, Fill Hole, Mirror, Make Hole, Quad Draw,
+  provenance-safe Insert Edge Loop, Reverse/soften/harden normals, Bend,
+  Lattice, Wrap, ShrinkWrap, and closed-solid Difference A-B. Unsafe,
+  ambiguous, mixed-room, branched, duplicate, degenerate, or non-manifold
+  results are rejected atomically instead of silently editing the first item.
+- Added non-mutating Multi-Cut anchors and Quad Draw point/closure feedback,
+  Escape cancellation, Enter/fourth-point commit, Bevel width/segments/profile/
+  miter/smoothing/UV options, and Bridge divisions/taper/twist/smoothing.
+  Multi-edge Bevel now commits disconnected hard-edge sets and straight,
+  non-branching crease chains atomically with shared rails and one undo item;
+  unsupported turning/branched corner chains are rejected explicitly pending a
+  complete corner-miter solver rather than silently beveling only one edge.
+  Component face-selection helpers now leave results in Face mode, imported
+  Delete History preserves evaluated geometry/export provenance, and invalid
+  imported selections no longer fall through into unrelated floor-plan tools.
 
-Affected areas: `authored_imported_mesh.py`,
+Affected areas: `authored_imported_mesh.py`, `solid_boolean.py`,
 `map_studio_live_topology_session.py`, `authored_room_primitives.py`,
 `authored_room_operations.py`, `authored_room_composition.py`,
 `authored_module_kmap_bridge.py`, `authored_module_preview_model.py`,
 `map_studio_marking_menu_registry.py`, `map_studio_modeling_tools.py`,
-`map_studio_tool_action_dispatch.py`, `module_editor_toolbar.py`,
-`module_editor_viewport_panel.py`, `module_editor_window.py`, Scene/Tools/GUI
-Display payload manifests and Visual Studio resource lists, focused tests, the
+`map_studio_modeling_shelf.py`, `map_studio_multi_cut.py`,
+`map_studio_tool_action_dispatch.py`, `component_marking_menu.py`,
+`map_studio_modeling_shelf.py`, `module_editor_toolbar.py`,
+`module_editor_viewport_panel.py`, viewport construction/overlay/rendering
+mixins, `module_editor_window.py`, Scene/Tools/GUI Display/Core.Math payload
+manifests and Visual Studio resource lists, focused tests, the
 visible audit under `Saved/Audits/maya_modeling_parity_20260714/`, and the
 clean-room Ghidra contract under
 `Workspaces/Ghidra/projects/active/maya-2025-modeling/exports/`.
 
-Verification: targeted `py_compile`; 30 topology/live-session/primitive tests;
-four focused routing, resident-preview, and marking-menu tests; the isolated
-resident object-transform test; all 21 native Python payload tests; byte-equal
-Scene/Tools and GUI Display/Tools mirrors; 65x65 evaluator benchmark at
+Verification: targeted `py_compile`; 169 focused Maya-shelf, shortcut,
+topology, controller, Multi-Cut, Quad Draw, Boolean, primitive, live-session,
+resident-preview, and event-routing tests; six focused native Python payload
+identity/count tests; byte-equal Scene/Tools and GUI Display/Tools mirrors;
+65x65 evaluator benchmark at
 `0.383 ms/frame`; successful `Debug|x64` native-host build of
 `GhostStudio.exe` with all 18 payload DLLs staged and verified; actual Debug
-application startup and visible Map Studio launch; visible Create menu showing
-Plane, Cube, Cylinder, Sphere, Cone, and Torus; and creation/render of a real
-authored `grdev01` room through the running UI. A parallel GUI-test attempt
+application startup and visible Map Studio launch; visible 32-command modeling
+shelf with no GModeler branding; visible Create menu showing Plane, Cube,
+Cylinder, Sphere, Cone, and Torus; and creation/render of a real authored
+`grdev01` room through the running UI. A parallel GUI-test attempt
 provoked a ModernGL access violation from simultaneous GPU contexts; every
 same assertion passed when rerun sequentially. This is not retail-KOTOR proof:
-WOK regeneration/review for arbitrary render-topology edits and the user-run
-`plcaa` export/warp/live-log loop remain required before an engine-ready claim.
+full arbitrary-mesh Maya parity, WOK regeneration/review for arbitrary render-
+topology edits, and the user-run `plcaa` export/warp/live-log loop remain
+required before an engine-ready claim.
 
 ### [2026-07-14] T2801/T2806: Legacy community modules hydrate, repair, and cross-port safely
 

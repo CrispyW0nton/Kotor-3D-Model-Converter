@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Math",
-    "file_count": 58,
+    "file_count": 59,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -130,6 +130,12 @@
             "source_path": "src/core/geometry/polygon_mesh_operations.py",
             "packaged_path": "Python/src/core/geometry/polygon_mesh_operations.py",
             "sha256": "2ddb82fafa2801bb528805ec42528b7712c66e86f48eb02a3d60d476e9db410c"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_SOLID_BOOLEAN",
+            "source_path": "src/core/geometry/solid_boolean.py",
+            "packaged_path": "Python/src/core/geometry/solid_boolean.py",
+            "sha256": "e1dd698d695eced8fb837d0c22fcc4e3915eb086c6e31955cc823b55d8f0c5f8"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_VERTEX_SPACE",

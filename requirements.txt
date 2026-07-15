@@ -75,6 +75,9 @@ qasync>=0.27.0
 pykotor==2.3.1
 
 # ── 3D mesh import/export / lightmap raycasting ──────────────────────────────
+# Direct closed-solid Boolean backend.  This is explicit because
+# trimesh[easy] excludes manifold3d on Python 3.14 despite supported wheels.
+manifold3d>=3.5.2
 trimesh[easy]>=4.0
 embreex>=4.4.0
 xatlas>=0.0.11

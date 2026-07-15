@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Scene",
-    "file_count": 108,
+    "file_count": 110,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -123,7 +123,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_IMPORTED_MESH",
             "source_path": "src/core/modules/authored_imported_mesh.py",
             "packaged_path": "Python/src/core/modules/authored_imported_mesh.py",
-            "sha256": "317e84be95a0b60aa13fde9df815bc224fd28506c53d5f5ad7463bcccec9cd86"
+            "sha256": "150c9a7fb00a6c9d6a3b87345379b07b20f67a8709844c7b98c61e198c855586"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_EXPORT",
@@ -243,7 +243,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_OPERATIONS",
             "source_path": "src/core/modules/authored_room_operations.py",
             "packaged_path": "Python/src/core/modules/authored_room_operations.py",
-            "sha256": "c08fc5b2b15210cd4414e7a8828b3caa998ffae8baf556efa90479f2467ec73c"
+            "sha256": "bd212d6879f755ca4c84514d84f3b343a2caf0850a26e1be4e0d2abee47d73fa"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_OUTLINE_GEOMETRY",
@@ -363,7 +363,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_HOVER_CONTEXT",
             "source_path": "src/core/modules/map_studio_hover_context.py",
             "packaged_path": "Python/src/core/modules/map_studio_hover_context.py",
-            "sha256": "7f2f74cef4351b2c46de32a13cef6b120d544cbfa6031a2ff22aad36413db8fa"
+            "sha256": "7167edc6f11746442d2a10695fb648e11cbbe002732fe0ec0a6ebcc4041a24d4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_LIVE_TOPOLOGY_SESSION",
@@ -375,13 +375,25 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_MARKING_MENU_REGISTRY",
             "source_path": "src/core/modules/map_studio_marking_menu_registry.py",
             "packaged_path": "Python/src/core/modules/map_studio_marking_menu_registry.py",
-            "sha256": "dec5ef6ab61e1616c48a88161a111f20170eb04e8bb943168d01e85b4a30bc2a"
+            "sha256": "53d9c21d04ad4d0fce0f8e322b79cf747655d56259358997ba3dbe1be39a2e12"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_MODELING_SHELF",
+            "source_path": "src/core/modules/map_studio_modeling_shelf.py",
+            "packaged_path": "Python/src/core/modules/map_studio_modeling_shelf.py",
+            "sha256": "24d68fe6c850035bc62163011cc550dec479f3e976cbc3c1b530ff7641ac68cc"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_MODELING_TOOLS",
             "source_path": "src/core/modules/map_studio_modeling_tools.py",
             "packaged_path": "Python/src/core/modules/map_studio_modeling_tools.py",
-            "sha256": "e577904c3d25f7eee449e25783335566c39805fd83c80216cc24cd66c4dccdcb"
+            "sha256": "d4cfc5c93bcfdd45add13bed3c54e83000df51bc74a1f31da866162026241915"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_MULTI_CUT",
+            "source_path": "src/core/modules/map_studio_multi_cut.py",
+            "packaged_path": "Python/src/core/modules/map_studio_multi_cut.py",
+            "sha256": "242979909edda5d90f329f27c7c210238f3e489f619ae71c796004758135ec07"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE",
@@ -423,7 +435,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_TOOL_ACTION_DISPATCH",
             "source_path": "src/core/modules/map_studio_tool_action_dispatch.py",
             "packaged_path": "Python/src/core/modules/map_studio_tool_action_dispatch.py",
-            "sha256": "00e0ca83859e6196da4fa7abdb1f700a9c0be9bef86cb95127e4f747ed07e8ae"
+            "sha256": "a9438333de1c69f735a38b85a530e955e038a487d623845dc29dbacd50cefc57"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_TOOL_BELT_PREFERENCES",
@@ -465,7 +477,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "10283bb1c2e38035866fdc02b9cf847c07cfdf618210a249af2719b4a4d06349"
+            "sha256": "df6b1b0521710e0d7dfc7e3715de11cefd42cca5d223aca35f31bd1f4f09051c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",

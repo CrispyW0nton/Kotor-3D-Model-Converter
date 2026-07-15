@@ -703,6 +703,18 @@ class ViewportSceneModelMixin:
 
         self.set_map_studio_universal_transform_overlay(None)
 
+    def set_map_studio_modeling_points_overlay(self, overlay: object | None) -> None:
+        """Display non-mutating point/polyline feedback for a modeling tool."""
+
+        self._map_studio_modeling_points_overlay = overlay if isinstance(overlay, dict) else None
+        self._clear_map_studio_shared_debug_labels()
+        self._request_render(fast=True, reason="map studio modeling points changed", overlay=True)
+
+    def clear_map_studio_modeling_points_overlay(self) -> None:
+        """Remove the active modeling tool's point/polyline feedback."""
+
+        self.set_map_studio_modeling_points_overlay(None)
+
     def set_map_studio_terrain_walkability_overlay(self, overlay: object | None) -> None:
         """Display Map Studio terrain WOK walkability classification."""
 
@@ -779,6 +791,7 @@ class ViewportSceneModelMixin:
             "_map_studio_terrain_walkability_overlay",
             "_map_studio_universal_transform_overlay",
             "_map_studio_terrain_brush_cursor",
+            "_map_studio_modeling_points_overlay",
         ):
             if getattr(self, name, None) is not None:
                 return True

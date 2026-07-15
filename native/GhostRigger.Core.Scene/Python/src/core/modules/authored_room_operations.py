@@ -34,6 +34,7 @@ from src.core.geometry.polygon_mesh_operations import separate_indexed_mesh_shel
 from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, authored_resref_blocking_issue, normalise_resref
 from .authored_module_objects import AuthoredGameplayPlacement
 from .authored_module_placements import add_authored_gameplay_placement, update_authored_gameplay_transition
+from .authored_imported_mesh import ImportedMeshRoomPrimitive
 from .authored_room_composition import (
     AuthoredRoomComposition,
     CombinedRoomPrimitive,
@@ -2901,6 +2902,343 @@ def center_authored_room_composition_primitive_pivot(
     return _replace_rooms(project, rooms, operation="center_primitive_pivot")
 
 
+def reset_authored_room_composition_primitive_transform(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+) -> AuthoredModuleProject:
+    """Reset translate/rotate/scale while retaining the selected object's pivot.
+
+    This matches Maya's Reset Transformations contract: it intentionally moves
+    visible geometry back to its authored, untransformed position.  Pivot intent
+    is independent state and therefore survives the reset.
+    """
+
+    index = _target_room_index(project, room_resref)
+    room = project.rooms[index]
+    composition = _composition_for_room(room)
+    target = str(primitive_name or "").strip()
+    if not target:
+        raise ValueError("Reset Transformations requires a selected authored primitive.")
+
+    old_transform: PrimitiveTransform | None = None
+
+    def reset_primitive(primitive: Any) -> PlacedRoomPrimitive:
+        nonlocal old_transform
+        transform = _primitive_transform(primitive)
+        old_transform = transform
+        return PlacedRoomPrimitive(
+            primitive=_base_primitive(primitive),
+            name=_primitive_name(primitive),
+            transform=PrimitiveTransform(pivot=tuple(float(value) for value in transform.pivot)),
+        )
+
+    if _primitive_name(composition.floor) == target:
+        updated_composition = replace(composition, floor=reset_primitive(composition.floor))
+    else:
+        found = False
+        updated_primitives = []
+        for primitive in tuple(composition.primitives or ()):
+            if _primitive_name(primitive) != target:
+                updated_primitives.append(primitive)
+                continue
+            found = True
+            updated_primitives.append(reset_primitive(primitive))
+        if not found:
+            known = ", ".join(
+                _primitive_name(item)
+                for item in (composition.floor,) + tuple(composition.primitives or ())
+                if _primitive_name(item)
+            )
+            raise ValueError(
+                f"Room {room.room_resref} has no primitive named '{primitive_name}'. "
+                f"Known primitives: {known or '(none)'}."
+            )
+        updated_composition = replace(composition, primitives=tuple(updated_primitives))
+
+    old_payload = _primitive_transform_payload(old_transform or PrimitiveTransform())
+    updated_composition = replace(
+        updated_composition,
+        metadata={
+            **dict(updated_composition.metadata),
+            "last_operation": "reset_primitive_transform",
+            "last_reset_transform_primitive": target,
+            "reset_transform_space": "primitive_local_intentionally_moves_geometry",
+            "reset_from_transform": old_payload,
+        },
+    )
+    updated_room = replace(
+        room,
+        primitive=updated_composition,
+        composition=None,
+        metadata={
+            **dict(room.metadata),
+            "primitive": "authored_room_composition",
+            "last_operation": "reset_primitive_transform",
+            "last_reset_transform_primitive": target,
+        },
+    )
+    rooms = tuple(project.rooms[:index] + (updated_room,) + project.rooms[index + 1 :])
+    return _replace_rooms(project, rooms, operation="reset_primitive_transform")
+
+
+def zero_authored_room_composition_primitive_pivot(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+) -> AuthoredModuleProject:
+    """Move a selected primitive's pivot to local origin without moving geometry."""
+
+    index = _target_room_index(project, room_resref)
+    room = project.rooms[index]
+    composition = _composition_for_room(room)
+    target = str(primitive_name or "").strip()
+    if not target:
+        raise ValueError("Zero Pivot requires a selected authored primitive.")
+
+    old_transform: PrimitiveTransform | None = None
+    zero_pivot = (0.0, 0.0, 0.0)
+
+    def zero_primitive(primitive: Any) -> PlacedRoomPrimitive:
+        nonlocal old_transform
+        transform = _primitive_transform(primitive)
+        old_transform = transform
+        return PlacedRoomPrimitive(
+            primitive=_base_primitive(primitive),
+            name=_primitive_name(primitive),
+            transform=PrimitiveTransform(
+                translation=_translation_for_recentered_pivot(transform, zero_pivot),
+                rotation_degrees_z=float(transform.rotation_degrees_z),
+                scale=tuple(float(value) for value in transform.scale),
+                pivot=zero_pivot,
+            ),
+        )
+
+    if _primitive_name(composition.floor) == target:
+        updated_composition = replace(composition, floor=zero_primitive(composition.floor))
+    else:
+        found = False
+        updated_primitives = []
+        for primitive in tuple(composition.primitives or ()):
+            if _primitive_name(primitive) != target:
+                updated_primitives.append(primitive)
+                continue
+            found = True
+            updated_primitives.append(zero_primitive(primitive))
+        if not found:
+            known = ", ".join(
+                _primitive_name(item)
+                for item in (composition.floor,) + tuple(composition.primitives or ())
+                if _primitive_name(item)
+            )
+            raise ValueError(
+                f"Room {room.room_resref} has no primitive named '{primitive_name}'. "
+                f"Known primitives: {known or '(none)'}."
+            )
+        updated_composition = replace(composition, primitives=tuple(updated_primitives))
+
+    old_pivot = tuple(float(value) for value in (old_transform or PrimitiveTransform()).pivot)
+    updated_composition = replace(
+        updated_composition,
+        metadata={
+            **dict(updated_composition.metadata),
+            "last_operation": "zero_primitive_pivot",
+            "last_zeroed_pivot_primitive": target,
+            "zero_pivot_space": "primitive_local_preserve_world_geometry",
+            "old_pivot": list(old_pivot),
+            "new_pivot": [0.0, 0.0, 0.0],
+        },
+    )
+    updated_room = replace(
+        room,
+        primitive=updated_composition,
+        composition=None,
+        metadata={
+            **dict(room.metadata),
+            "primitive": "authored_room_composition",
+            "last_operation": "zero_primitive_pivot",
+            "last_zeroed_pivot_primitive": target,
+        },
+    )
+    rooms = tuple(project.rooms[:index] + (updated_room,) + project.rooms[index + 1 :])
+    return _replace_rooms(project, rooms, operation="zero_primitive_pivot")
+
+
+_TRANSIENT_CONSTRUCTION_HISTORY_KEYS = frozenset(
+    {
+        "construction_history",
+        "edit_history",
+        "history",
+        "last_topology_edit",
+        "modifier_history",
+        "operator_history",
+        "topology_edit_history",
+        "topology_history",
+    }
+)
+_TRANSIENT_CONSTRUCTION_HISTORY_PREFIXES = (
+    "live_operator_",
+    "pending_operator_",
+    "preview_operator_",
+    "preview_state_",
+    "transient_",
+)
+
+
+def _without_transient_construction_history(
+    metadata: dict[str, Any] | None,
+) -> tuple[dict[str, Any], tuple[str, ...]]:
+    """Strip editor-only operator state without touching source/export facts."""
+
+    kept: dict[str, Any] = {}
+    removed: list[str] = []
+    for raw_key, value in dict(metadata or {}).items():
+        key = str(raw_key)
+        lower = key.strip().lower()
+        if lower in _TRANSIENT_CONSTRUCTION_HISTORY_KEYS or lower.startswith(
+            _TRANSIENT_CONSTRUCTION_HISTORY_PREFIXES
+        ):
+            removed.append(key)
+            continue
+        kept[key] = value
+    return kept, tuple(sorted(removed))
+
+
+def _primitive_without_transient_construction_history(
+    primitive: Any,
+) -> tuple[Any, tuple[str, ...]]:
+    """Return the already-evaluated primitive with transient editor history removed."""
+
+    base = _base_primitive(primitive)
+    removed: list[str] = []
+
+    if isinstance(base, CombinedRoomPrimitive):
+        cleaned_sources: list[CombinedRoomPrimitiveSource] = []
+        for source_index, source in enumerate(tuple(base.sources or ())):
+            cleaned_source, source_removed = _primitive_without_transient_construction_history(source.primitive)
+            cleaned_sources.append(replace(source, primitive=cleaned_source))
+            removed.extend(f"source[{source_index}].{key}" for key in source_removed)
+        cleaned_metadata, metadata_removed = _without_transient_construction_history(base.metadata)
+        removed.extend(metadata_removed)
+        base = replace(base, sources=tuple(cleaned_sources), metadata=cleaned_metadata)
+    elif isinstance(base, ImportedMeshRoomPrimitive):
+        cleaned_metadata, metadata_removed = _without_transient_construction_history(base.metadata)
+        removed.extend(metadata_removed)
+        base = replace(base, metadata=cleaned_metadata)
+    else:
+        material = getattr(base, "material", None)
+        if isinstance(material, PrimitiveMaterial):
+            cleaned_metadata, metadata_removed = _without_transient_construction_history(material.metadata)
+            removed.extend(f"material.{key}" for key in metadata_removed)
+            base = replace(base, material=replace(material, metadata=cleaned_metadata))
+
+    return _with_primitive_base(primitive, base), tuple(sorted(set(removed)))
+
+
+def delete_authored_room_composition_primitive_history(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    primitive_name: str,
+) -> AuthoredModuleProject:
+    """Discard transient construction/operator history, preserving evaluated output.
+
+    Source model identifiers, imported runtime-graph facts, combined-source
+    recipes, material assignments, WOK data, and other export provenance are
+    deliberately retained.  Only editor-only history records are removed.
+    """
+
+    index = _target_room_index(project, room_resref)
+    room = project.rooms[index]
+    target = str(primitive_name or "").strip()
+    if not target:
+        raise ValueError("Delete History requires a selected authored primitive.")
+
+    # Imported stock rooms are already evaluated polygon meshes rather than a
+    # composition member.  They still support Maya-style Delete History without
+    # losing source_model/game/WOK/runtime-graph export provenance.
+    if isinstance(room.primitive, ImportedMeshRoomPrimitive):
+        primitive = room.primitive
+        known_names = {
+            normalise_resref(room.room_resref),
+            normalise_resref(primitive.room_resref),
+            normalise_resref(primitive.source_model),
+        }
+        if normalise_resref(target) not in {name for name in known_names if name}:
+            known = ", ".join(sorted(name for name in known_names if name))
+            raise ValueError(
+                f"Room {room.room_resref} has no primitive named '{primitive_name}'. "
+                f"Known primitives: {known or '(none)'}."
+            )
+        cleaned_primitive, removed = _primitive_without_transient_construction_history(primitive)
+        updated_room = replace(
+            room,
+            primitive=cleaned_primitive,
+            metadata={
+                **dict(room.metadata),
+                "last_operation": "delete_primitive_history",
+                "last_deleted_history_primitive": target,
+                "delete_history_policy": "preserve_evaluated_geometry_and_export_provenance",
+                "delete_history_removed_keys": list(removed),
+            },
+        )
+        rooms = tuple(project.rooms[:index] + (updated_room,) + project.rooms[index + 1 :])
+        return _replace_rooms(project, rooms, operation="delete_primitive_history")
+
+    composition = _composition_for_room(room)
+    removed: tuple[str, ...] = ()
+    if _primitive_name(composition.floor) == target:
+        cleaned, removed = _primitive_without_transient_construction_history(composition.floor)
+        updated_composition = replace(composition, floor=cleaned)
+    else:
+        found = False
+        updated_primitives = []
+        for primitive in tuple(composition.primitives or ()):
+            if _primitive_name(primitive) != target:
+                updated_primitives.append(primitive)
+                continue
+            found = True
+            cleaned, removed = _primitive_without_transient_construction_history(primitive)
+            updated_primitives.append(cleaned)
+        if not found:
+            known = ", ".join(
+                _primitive_name(item)
+                for item in (composition.floor,) + tuple(composition.primitives or ())
+                if _primitive_name(item)
+            )
+            raise ValueError(
+                f"Room {room.room_resref} has no primitive named '{primitive_name}'. "
+                f"Known primitives: {known or '(none)'}."
+            )
+        updated_composition = replace(composition, primitives=tuple(updated_primitives))
+
+    updated_composition = replace(
+        updated_composition,
+        metadata={
+            **dict(updated_composition.metadata),
+            "last_operation": "delete_primitive_history",
+            "last_deleted_history_primitive": target,
+            "delete_history_policy": "preserve_evaluated_geometry_and_export_provenance",
+            "delete_history_removed_keys": list(removed),
+        },
+    )
+    updated_room = replace(
+        room,
+        primitive=updated_composition,
+        composition=None,
+        metadata={
+            **dict(room.metadata),
+            "primitive": "authored_room_composition",
+            "last_operation": "delete_primitive_history",
+            "last_deleted_history_primitive": target,
+        },
+    )
+    rooms = tuple(project.rooms[:index] + (updated_room,) + project.rooms[index + 1 :])
+    return _replace_rooms(project, rooms, operation="delete_primitive_history")
+
+
 def _transform_local_point(
     point: tuple[float, float, float],
     transform: PrimitiveTransform,
@@ -2923,20 +3261,35 @@ def _freeze_transform_into_parametric_primitive(
     primitive: Any,
     transform: PrimitiveTransform,
 ) -> Any:
-    """Bake an unrotated primitive transform into editable primitive fields.
+    """Bake transform channels into fields or a compiled polygon recipe.
 
-    This intentionally does not pretend to be a full mesh bake.  Rotated
-    primitives and primitives without an editable X/Y center need the future
-    topology-backed mesh primitive before their transform can be frozen without
-    changing visible output.
+    Simple unrotated primitives keep their compact parametric representation.
+    Rotated/otherwise non-parametric cases become a one-source compiled polygon
+    object: the source transform is evaluated inside the mesh recipe while the
+    user-facing object channels return to identity, matching Maya Freeze.
     """
+
+    def compiled_polygon_recipe() -> CombinedRoomPrimitive:
+        name = _primitive_name(primitive) or "frozen_mesh"
+        return CombinedRoomPrimitive(
+            name=name,
+            sources=(
+                CombinedRoomPrimitiveSource(
+                    primitive=primitive,
+                    source_name=name,
+                    walkmesh_policy="inherit",
+                ),
+            ),
+            metadata={
+                "source": "map_studio:freeze_transform",
+                "bake_policy": "compiled_polygon_recipe",
+                "frozen_transform": _primitive_transform_payload(transform),
+            },
+        )
 
     rotation = float(transform.rotation_degrees_z)
     if not _nearly_equal(rotation, 0.0):
-        raise ValueError(
-            "Freeze Transform currently supports unrotated authored primitives only. "
-            "Keep the rotation as a transform or convert the primitive through a future baked-mesh workflow."
-        )
+        return compiled_polygon_recipe()
 
     sx, sy, sz = (float(value) for value in transform.scale)
     if any(value <= 0.0 for value in (sx, sy, sz)):
@@ -2970,10 +3323,7 @@ def _freeze_transform_into_parametric_primitive(
         )
     if isinstance(base, CylinderPrimitive):
         if not _nearly_equal(sx, sy):
-            raise ValueError(
-                "Freeze Transform cannot bake non-uniform X/Y scale into a cylinder because it would become an ellipse. "
-                "Keep the scale as a transform until generic baked mesh primitives are available."
-            )
+            return compiled_polygon_recipe()
         return replace(
             base,
             radius=float(base.radius) * sx,
@@ -2982,10 +3332,7 @@ def _freeze_transform_into_parametric_primitive(
         )
     if isinstance(base, SpherePrimitive):
         if not (_nearly_equal(sx, sy) and _nearly_equal(sx, sz)):
-            raise ValueError(
-                "Freeze Transform cannot bake non-uniform scale into a sphere. Keep the scale as a transform "
-                "until generic baked mesh primitives are available."
-            )
+            return compiled_polygon_recipe()
         return replace(
             base,
             radius=float(base.radius) * sx,
@@ -2993,9 +3340,7 @@ def _freeze_transform_into_parametric_primitive(
         )
     if isinstance(base, ConePrimitive):
         if not _nearly_equal(sx, sy):
-            raise ValueError(
-                "Freeze Transform cannot bake non-uniform X/Y scale into a cone because its base would become an ellipse."
-            )
+            return compiled_polygon_recipe()
         return replace(
             base,
             radius=float(base.radius) * sx,
@@ -3004,9 +3349,7 @@ def _freeze_transform_into_parametric_primitive(
         )
     if isinstance(base, TorusPrimitive):
         if not (_nearly_equal(sx, sy) and _nearly_equal(sx, sz)):
-            raise ValueError(
-                "Freeze Transform cannot bake non-uniform scale into a torus while preserving a circular section."
-            )
+            return compiled_polygon_recipe()
         return replace(
             base,
             radius=float(base.radius) * sx,
@@ -3033,10 +3376,7 @@ def _freeze_transform_into_parametric_primitive(
             center=_transform_local_point(tuple(base.center), transform),
         )
 
-    raise ValueError(
-        f"Freeze Transform cannot safely bake {type(base).__name__} yet because that primitive lacks enough editable "
-        "center/shape fields to preserve visible geometry. Use Center Pivot/Transform for now."
-    )
+    return compiled_polygon_recipe()
 
 
 def freeze_authored_room_composition_primitive_transform(
@@ -3093,7 +3433,9 @@ def freeze_authored_room_composition_primitive_transform(
             **dict(composition.metadata),
             "last_operation": "freeze_primitive_transform",
             "last_frozen_transform_primitive": target,
-            "freeze_transform_space": "primitive_local_parametric_unrotated",
+            "freeze_transform_space": (
+                "compiled_polygon_recipe" if frozen_type == "CombinedRoomPrimitive" else "primitive_local_parametric"
+            ),
             "freeze_transform_primitive_type": frozen_type,
             "frozen_transform": transform_payload,
         },
@@ -5508,6 +5850,7 @@ __all__ = [
     "combine_authored_room_composition_meshes",
     "combine_authored_room_composition_primitives",
     "duplicate_authored_room_composition_primitive",
+    "delete_authored_room_composition_primitive_history",
     "fill_authored_floor_plan_face",
     "freeze_authored_room_composition_primitive_transform",
     "flatten_authored_floor_plan_vertices",
@@ -5521,6 +5864,7 @@ __all__ = [
     "transform_authored_room_composition_primitives",
     "rename_authored_room_composition_primitive",
     "remove_authored_room_composition_primitive",
+    "reset_authored_room_composition_primitive_transform",
     "separate_authored_room_composition_primitive",
     "separate_authored_room_combined_primitive_shells",
     "set_authored_floor_plan_wall_opening",
@@ -5534,6 +5878,7 @@ __all__ = [
     "snap_authored_room_composition_primitive_pivot_to_vertex",
     "snap_authored_floor_plan_vertex_to_vertex",
     "transform_snap_authored_room_composition_primitive_level",
+    "zero_authored_room_composition_primitive_pivot",
     "transform_snap_authored_floor_plan_vertices",
     "triangulate_authored_floor_plan_face",
     "weld_authored_floor_plan_vertices",

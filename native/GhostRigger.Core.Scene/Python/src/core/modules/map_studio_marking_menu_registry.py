@@ -1,11 +1,11 @@
-"""ZModeler-style Map Studio marking-menu action registry.
+"""Maya-style Map Studio component marking-menu action registry.
 
 Headless registry describing the context-sensitive radial marking menu:
 which actions appear for each hovered component type, which targets each
 action supports, and what the Shift/Ctrl/Alt modifiers mean.  The radial
 widget renders this data; it must not own it.
 
-Vocabulary is adapted from the ZBrush 2025 ZModeler reverse-engineering
+Vocabulary is based on the clean-room modeling interaction audit
 study (action + target + modifier trees re-expressed for KOTOR authoring).
 This is a KOTOR-relevant subset, not the full 800-combination import: every
 entry states the module resources it will eventually touch so export/proof

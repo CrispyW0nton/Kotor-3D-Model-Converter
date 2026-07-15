@@ -79,6 +79,7 @@ kotor = [
     "pykotor>=2.3.1",
 ]
 mesh = [
+    "manifold3d>=3.5.2",
     "trimesh[easy]>=4.0",
     "xatlas>=0.0.11",
     "open3d",

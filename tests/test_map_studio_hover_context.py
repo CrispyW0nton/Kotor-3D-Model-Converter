@@ -33,7 +33,7 @@ def test_hover_context_payload_copies_are_byte_identical() -> None:
         scene = _read(f"native/GhostRigger.Core.Scene/Python/src/core/modules/{name}")
         tools = _read(f"native/GhostRigger.Core.Tools/Python/src/core/modules/{name}")
         assert scene == tools, f"{name} diverged between Scene and Tools payloads"
-    for panel_name in ("gmodeler_marking_menu.py",):
+    for panel_name in ("component_marking_menu.py", "gmodeler_marking_menu.py"):
         panel = f"gui/panels/module_editor/{panel_name}"
         tools_panel = _read(f"native/GhostRigger.Core.Tools/Python/src/{panel}")
         display_panel = _read(f"native/GhostRigger.Core.GUI.Display/Python/src/{panel}")
@@ -358,6 +358,7 @@ def test_gmodeler_marking_menu_sectioned_panel_runtime() -> None:
         menu.close()
         app.processEvents()
 
+
     # Sticky state survives reopening (ZModeler keeps the current action).
     menu2 = MapStudioGModelerMarkingMenu(tree)
     try:
@@ -382,6 +383,51 @@ def test_gmodeler_marking_menu_sectioned_panel_runtime() -> None:
         app.processEvents()
 
 
+def test_component_marking_menu_neutral_identity_and_compatibility_alias() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _configure_native_python_roots()
+
+    from PySide6 import QtGui, QtWidgets
+    from src.core.modules.map_studio_marking_menu_registry import map_studio_marking_menu_tree_for_hover
+    from src.gui.panels.module_editor.component_marking_menu import (
+        BRAND_LABEL,
+        MapStudioComponentMarkingMenu,
+    )
+    from src.gui.panels.module_editor.gmodeler_marking_menu import (
+        MapStudioGModelerMarkingMenu,
+    )
+
+    component_source = _read(
+        "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/module_editor/component_marking_menu.py"
+    ).lower()
+    assert b"gmodeler" not in component_source
+    assert MapStudioGModelerMarkingMenu is MapStudioComponentMarkingMenu
+    assert BRAND_LABEL == "MODELING"
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    menu = MapStudioComponentMarkingMenu(map_studio_marking_menu_tree_for_hover("face"))
+    try:
+        visible_identity = " ".join(
+            (
+                BRAND_LABEL,
+                menu.accessibleName(),
+                menu._header_text(),
+                *(cell.label for cell in menu.cells()),
+            )
+        ).lower()
+        assert menu.objectName() == "mapStudioComponentMarkingMenu"
+        assert "gmodeler" not in visible_identity
+        assert "zmodeler" not in visible_identity
+
+        image = QtGui.QImage(menu.size(), QtGui.QImage.Format_ARGB32_Premultiplied)
+        image.fill(QtGui.QColor(0, 0, 0, 0))
+        menu.render(image)
+        assert not image.isNull()
+    finally:
+        menu.close()
+        app.processEvents()
+
+
 def test_viewport_panel_hover_probe_wiring_source() -> None:
     panel = _read("native/GhostRigger.Core.Tools/Python/src/gui/panels/module_editor/module_editor_viewport_panel.py").decode("utf-8")
     assert "hoverContextChanged = QtCore.Signal(object)" in panel
@@ -398,8 +444,9 @@ def test_viewport_panel_hover_probe_wiring_source() -> None:
 
     window = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py").decode("utf-8")
     assert "hoverContextChanged.connect(self._handle_map_studio_hover_context_changed)" in window
-    assert "def _open_map_studio_gmodeler_marking_menu" in window
-    assert "MapStudioGModelerMarkingMenu" in window
+    assert "def _open_map_studio_component_marking_menu" in window
+    assert "MapStudioComponentMarkingMenu" in window
+    assert "def _open_map_studio_gmodeler_marking_menu" not in window
     assert "MapStudioRadialMarkingMenu" not in window, "deprecated radial pie must stay unwired"
     # Flat-QMenu fallback preserved for T2600 contract.
     assert "def _build_map_studio_mode_marking_menu" in window

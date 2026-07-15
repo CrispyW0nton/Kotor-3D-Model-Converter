@@ -65,8 +65,13 @@ from .stock_module_importer import import_stock_module
 from .authored_imported_mesh import (
     ImportedMeshRoomPrimitive,
     ImportedMeshSurface,
+    append_imported_mesh_quad,
+    bend_imported_mesh_vertices,
+    boolean_difference_imported_mesh_surfaces,
     imported_mesh_surface_role,
     bevel_imported_mesh_edge,
+    bevel_imported_mesh_edges,
+    bridge_imported_mesh_border_edges,
     build_imported_mesh_primitive_from_stock_model,
     imported_mesh_room_is_backdrop,
     prepare_imported_mesh_for_static_runtime_rebuild,
@@ -82,10 +87,24 @@ from .authored_imported_mesh import (
     move_imported_mesh_edge,
     move_imported_mesh_faces,
     move_imported_mesh_vertex,
+    connect_imported_mesh_vertices,
+    merge_imported_mesh_components,
+    fill_imported_mesh_boundary_loop,
+    harden_imported_mesh_edges,
+    insert_imported_mesh_edge_loop,
+    lattice_deform_imported_mesh_vertices,
+    make_hole_in_imported_mesh_face,
+    mirror_imported_mesh_geometry,
     set_imported_mesh_face_texture,
+    set_imported_mesh_face_smoothing,
+    soften_imported_mesh_edges,
     split_imported_mesh_edge,
     split_imported_mesh_face,
+    split_imported_mesh_face_at_point,
+    shrink_wrap_imported_mesh_vertices,
     weld_imported_mesh_vertex,
+    weld_imported_mesh_vertices,
+    wrap_deform_imported_mesh_vertices,
 )
 from .authored_module_project import AuthoredRoomSpec, authored_resref_blocking_issue, compile_authored_room_spec, normalise_resref
 from .authored_module_layout import (
@@ -111,6 +130,7 @@ from .map_studio_modeling_tools import (
     map_studio_tool_belt_actions_for_preset,
     map_studio_viewport_performance_policy,
 )
+from .map_studio_multi_cut import MultiCutAnchor, MultiCutSession, MultiCutSettings
 from .map_studio_export_objects import map_studio_export_object_boundaries
 from .map_studio_terrain_sculpt_session import (
     MapStudioTerrainSculptApplyResult,
@@ -210,6 +230,7 @@ from .authored_room_operations import (
     cleanup_authored_floor_plan_normals,
     cleanup_authored_floor_plan_vertices,
     combine_authored_room_composition_meshes,
+    delete_authored_room_composition_primitive_history,
     group_authored_room_composition_primitives,
     duplicate_authored_room_composition_primitive,
     fill_authored_floor_plan_face,
@@ -224,6 +245,7 @@ from .authored_room_operations import (
     transform_authored_room_composition_primitives,
     rename_authored_room_composition_primitive,
     remove_authored_room_composition_primitive,
+    reset_authored_room_composition_primitive_transform,
     separate_authored_room_composition_primitive,
     separate_authored_room_combined_primitive_shells,
     set_authored_floor_plan_extrusion_settings,
@@ -240,6 +262,7 @@ from .authored_room_operations import (
     transform_snap_authored_floor_plan_vertices,
     triangulate_authored_floor_plan_face,
     weld_authored_floor_plan_vertices,
+    zero_authored_room_composition_primitive_pivot,
 )
 from .authored_room_outline_geometry import AuthoredRoomOutlineGeometry, authored_room_outline_geometry_for_project
 from .authored_room_presets import available_authored_room_primitive_presets, create_authored_module_from_room_preset
@@ -1520,7 +1543,7 @@ class ModuleEditorController:
 
         return True, f"Imported {resref}: {', '.join(summary_parts)}."
 
-    # ---------------------------------------------- GModeler map editing
+    # ------------------------------------- Map Studio component mesh editing
 
     def _load_authored_project_or_raise(self):
         authored = self._map_studio_authored_project_snapshot()
@@ -1758,7 +1781,7 @@ class ModuleEditorController:
             return False, f"Room {resref} is not an authored room."
         before = self._capture_map_studio_command_state()
         if not isinstance(target.primitive, ImportedMeshRoomPrimitive):
-            # GModeler is universal: primitive/floor-plan/terrain rooms bake
+            # Component modeling is universal: primitive/floor-plan/terrain rooms bake
             # to editable mesh on their first component edit, so a translated
             # Create-menu cube can be edited just like a converted stock room.
             from dataclasses import replace as _bake_replace
@@ -1794,7 +1817,7 @@ class ModuleEditorController:
             )
             authored = _bake_replace(authored, rooms=rooms)
             target = next(room for room in authored.rooms if room.normalised_resref() == resref)
-            self.model.log(f"Baked room {resref} to editable mesh for GModeler editing.")
+            self.model.log(f"Baked room {resref} to an editable component-modeling mesh.")
         try:
             updated_primitive = editor(target.primitive)
         except ValueError as exc:
@@ -1939,6 +1962,50 @@ class ModuleEditorController:
             editor=lambda primitive: move_imported_mesh_faces(primitive, mesh_role, indices, offset),
         )
 
+    def commit_imported_mesh_multi_cut(
+        self,
+        *,
+        room_resref: str,
+        mesh_role: str,
+        anchors: tuple[MultiCutAnchor, MultiCutAnchor],
+        settings: MultiCutSettings | None = None,
+        expected_source_fingerprint: str = "",
+        expected_result_fingerprint: str = "",
+    ) -> tuple[bool, str]:
+        """Authoritatively commit one previewed two-anchor Multi-Cut segment.
+
+        The viewport preview never mutates KMAP.  Enter calls this method,
+        which rebuilds the result from the current immutable source, rejects a
+        stale source or mismatched preview, and records exactly one undo item.
+        """
+
+        clean_anchors = tuple(anchors or ())
+        if len(clean_anchors) != 2:
+            return False, "Multi-Cut needs exactly two anchors before Enter commits the segment."
+        expected_source = str(expected_source_fingerprint or "").strip()
+        expected_result = str(expected_result_fingerprint or "").strip()
+
+        def _commit(primitive: ImportedMeshRoomPrimitive) -> ImportedMeshRoomPrimitive:
+            session = MultiCutSession.begin(primitive, mesh_role, settings=settings)
+            if expected_source and session.source_fingerprint != expected_source:
+                raise ValueError("Multi-Cut source changed after preview; clear the line and place it again.")
+            for anchor in clean_anchors:
+                session = session.add_anchor(anchor)
+            evaluation = session.commit()
+            if not evaluation.ok:
+                raise ValueError(evaluation.diagnostics[0] if evaluation.diagnostics else "Multi-Cut is invalid.")
+            if expected_result and evaluation.result_fingerprint != expected_result:
+                raise ValueError("Multi-Cut authoritative result no longer matches the visible preview.")
+            self._last_committed_multi_cut_evaluation = evaluation
+            return evaluation.primitive
+
+        return self._apply_imported_mesh_room_edit(
+            room_resref=room_resref,
+            action_key="map_studio.imported_mesh.multi_cut",
+            label=f"Multi-Cut one segment across {normalise_resref(room_resref)}",
+            editor=_commit,
+        )
+
     def apply_imported_mesh_room_component_op(
         self,
         *,
@@ -1958,8 +2025,61 @@ class ModuleEditorController:
         uv_mode: str = "preserve",
         clamp_overlap: bool = True,
         max_distance: float = 0.5,
+        source_vertex_index: int = -1,
+        target_vertex_index: int = -1,
+        target_mesh_role: str = "",
+        first_vertex_index: int = -1,
+        second_vertex_index: int = -1,
+        merge_vertex_indices: tuple[int, ...] | list[int] = (),
+        merge_edge_vertex_indices: tuple[tuple[int, int], ...] | list[tuple[int, int]] = (),
+        merge_threshold: float = 0.01,
+        loop_vertex_indices: tuple[int, ...] | list[int] = (),
+        loop_edge_vertices: tuple[int, int] | list[int] = (-1, -1),
+        loop_position: float = 0.5,
+        edge_vertex_indices: tuple[tuple[int, int], ...] | list[tuple[int, int]] = (),
+        point: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        mirror_axis: str = "x",
+        mirror_center: float | tuple[float, float, float] = 0.0,
+        mirror_duplicate: bool = True,
+        mirror_merge_seam_tolerance: float = 1.0e-5,
+        first_edge_vertices: tuple[int, int] = (-1, -1),
+        second_edge_vertices: tuple[int, int] = (-1, -1),
+        bridge_divisions: int = 0,
+        bridge_taper: float = 0.0,
+        bridge_twist_degrees: float = 0.0,
+        bridge_smooth: bool = True,
+        boolean_cutter_mesh_role: str = "",
+        boolean_weld_tolerance: float = 1.0e-6,
+        deform_vertex_indices: tuple[int, ...] | list[int] = (),
+        deform_axis: str = "x",
+        curvature_degrees: float = 90.0,
+        lower_bound: float | None = None,
+        upper_bound: float | None = None,
+        lattice_control_deltas: tuple[tuple[float, float, float], ...] | list[tuple[float, float, float]] = (),
+        lattice_bounds_min: tuple[float, float, float] | None = None,
+        lattice_bounds_max: tuple[float, float, float] | None = None,
+        shrink_target_surface: ImportedMeshSurface | None = None,
+        shrink_projection: str = "nearest_triangle",
+        shrink_offset: float = 0.0,
+        shrink_align_normals: bool = False,
+        wrap_driver_base: ImportedMeshSurface | None = None,
+        wrap_driver_deformed: ImportedMeshSurface | None = None,
+        wrap_nearest_count: int = 4,
+        wrap_influence: float = 1.0,
+        wrap_max_distance: float = 0.0,
+        cutter_face_index: int = -1,
+        make_hole_planarity_tolerance: float = 1.0e-4,
+        make_hole_boundary_tolerance: float = 1.0e-6,
+        quad_points: tuple[tuple[float, float, float], ...] | list[tuple[float, float, float]] = (),
+        quad_material: int | None = None,
+        quad_texture: str = "",
+        quad_lightmap: str = "",
+        quad_normal_hint: tuple[float, float, float] | None = None,
+        quad_planarity_tolerance: float = 0.25,
+        quad_auto_weld: bool = True,
+        quad_weld_tolerance: float = 1.0e-4,
     ) -> tuple[bool, str]:
-        """Apply one GModeler edge/vertex/face component op with undo.
+        """Apply one component-modeling edge/vertex/face operation with undo.
 
         Position-welded ops (move/weld/collapse/flatten) touch every seam
         copy of the affected vertices across all imported surfaces.
@@ -1970,6 +2090,14 @@ class ModuleEditorController:
         faces = tuple(sorted({int(v) for v in face_indices})) or (face,)
         edge = tuple(int(v) for v in tuple(edge_corners)[:2])
         offset = tuple(float(v) for v in tuple(delta)[:3])
+        selected_vertices = tuple(sorted({int(value) for value in tuple(deform_vertex_indices)})) or None
+        operation = str(op or "")
+        if operation == "shrink_wrap" and shrink_target_surface is None:
+            return False, "Baked ShrinkWrap requires a Make Live target surface."
+        if operation == "wrap_deform" and (wrap_driver_base is None or wrap_driver_deformed is None):
+            return False, "Baked Wrap requires both the captured driver baseline and its edited surface."
+        if operation == "lattice_deform" and len(tuple(lattice_control_deltas)) != 8:
+            return False, "Baked Lattice requires eight 2x2x2 control-point deltas."
         editors = {
             "vertex_move": lambda p: move_imported_mesh_vertex(p, mesh_role, face, int(vertex_corner), offset),
             "vertex_weld": lambda p: weld_imported_mesh_vertex(
@@ -1991,14 +2119,154 @@ class ModuleEditorController:
                 uv_mode=str(uv_mode or "preserve"),
                 clamp_overlap=bool(clamp_overlap),
             ),
+            "multi_edge_bevel": lambda p: bevel_imported_mesh_edges(
+                p,
+                mesh_role,
+                tuple(tuple(int(value) for value in tuple(selected_edge)[:2]) for selected_edge in tuple(edge_vertex_indices)),
+                float(amount),
+                segments=int(segments),
+                profile=float(profile),
+                miter=str(miter or "auto"),
+                smoothing_angle_degrees=float(smoothing_angle_degrees),
+                uv_mode=str(uv_mode or "preserve"),
+                clamp_overlap=bool(clamp_overlap),
+            ),
             "edge_split": lambda p: split_imported_mesh_edge(p, mesh_role, face, edge),
             "edge_collapse": lambda p: collapse_imported_mesh_edge(p, mesh_role, face, edge),
             "edge_delete": lambda p: delete_imported_mesh_edge_faces(p, mesh_role, face, edge),
             "face_flat": lambda p: flatten_imported_mesh_faces(p, mesh_role, faces),
             "face_flip": lambda p: flip_imported_mesh_faces(p, mesh_role, faces),
             "face_split": lambda p: split_imported_mesh_face(p, mesh_role, face),
+            "face_split_at_point": lambda p: split_imported_mesh_face_at_point(
+                p, mesh_role, face, tuple(float(value) for value in tuple(point)[:3])
+            ),
+            "target_weld": lambda p: weld_imported_mesh_vertices(
+                p,
+                mesh_role,
+                int(source_vertex_index),
+                int(target_vertex_index),
+                target_mesh_role=str(target_mesh_role or mesh_role),
+            ),
+            "connect_vertices": lambda p: connect_imported_mesh_vertices(
+                p, mesh_role, int(first_vertex_index), int(second_vertex_index)
+            ),
+            "merge_components": lambda p: merge_imported_mesh_components(
+                p,
+                mesh_role,
+                tuple(int(value) for value in tuple(merge_vertex_indices)),
+                border_edges=tuple(
+                    tuple(int(value) for value in tuple(edge))
+                    for edge in tuple(merge_edge_vertex_indices)
+                ),
+                threshold=float(merge_threshold),
+            ),
+            "fill_boundary_loop": lambda p: fill_imported_mesh_boundary_loop(
+                p, mesh_role, tuple(int(value) for value in tuple(loop_vertex_indices))
+            ),
+            "insert_edge_loop": lambda p: insert_imported_mesh_edge_loop(
+                p,
+                mesh_role,
+                tuple(int(value) for value in tuple(loop_edge_vertices)[:2]),
+                position=float(loop_position),
+            ),
+            "soften_edges": lambda p: soften_imported_mesh_edges(
+                p, mesh_role, tuple(tuple(int(value) for value in edge[:2]) for edge in tuple(edge_vertex_indices))
+            ),
+            "harden_edges": lambda p: harden_imported_mesh_edges(
+                p, mesh_role, tuple(tuple(int(value) for value in edge[:2]) for edge in tuple(edge_vertex_indices))
+            ),
+            "soften_faces": lambda p: set_imported_mesh_face_smoothing(p, mesh_role, faces, soften=True),
+            "harden_faces": lambda p: set_imported_mesh_face_smoothing(p, mesh_role, faces, soften=False),
+            "make_hole": lambda p: make_hole_in_imported_mesh_face(
+                p,
+                mesh_role,
+                face,
+                cutter_face_index=int(cutter_face_index),
+                planarity_tolerance=max(0.0, float(make_hole_planarity_tolerance)),
+                boundary_tolerance=max(0.0, float(make_hole_boundary_tolerance)),
+            ),
+            "quad_draw": lambda p: append_imported_mesh_quad(
+                p,
+                mesh_role,
+                tuple(tuple(float(component) for component in tuple(value)[:3]) for value in tuple(quad_points)),
+                material=quad_material,
+                texture=str(quad_texture or ""),
+                lightmap=str(quad_lightmap or ""),
+                normal_hint=(
+                    tuple(float(component) for component in tuple(quad_normal_hint)[:3])
+                    if quad_normal_hint is not None
+                    else None
+                ),
+                planarity_tolerance=max(0.0, float(quad_planarity_tolerance)),
+                auto_weld=bool(quad_auto_weld),
+                weld_tolerance=max(0.0, float(quad_weld_tolerance)),
+            ),
+            "mirror_geometry": lambda p: mirror_imported_mesh_geometry(
+                p,
+                axis=str(mirror_axis or "x"),
+                center=mirror_center,
+                duplicate=bool(mirror_duplicate),
+                merge_seam_tolerance=float(mirror_merge_seam_tolerance),
+                mesh_roles=(mesh_role,),
+            ),
+            "bridge_border_edges": lambda p: bridge_imported_mesh_border_edges(
+                p,
+                mesh_role,
+                tuple(int(value) for value in tuple(first_edge_vertices)[:2]),
+                tuple(int(value) for value in tuple(second_edge_vertices)[:2]),
+                target_mesh_role=str(target_mesh_role or mesh_role),
+                divisions=int(bridge_divisions),
+                taper=float(bridge_taper),
+                twist_degrees=float(bridge_twist_degrees),
+                smooth=bool(bridge_smooth),
+            ),
+            "boolean_difference_closed_solids": lambda p: boolean_difference_imported_mesh_surfaces(
+                p,
+                mesh_role,
+                str(boolean_cutter_mesh_role),
+                weld_tolerance=max(0.0, float(boolean_weld_tolerance)),
+            ),
+            "bend_vertices": lambda p: bend_imported_mesh_vertices(
+                p,
+                mesh_role,
+                selected_vertices,
+                axis=str(deform_axis or "x"),
+                curvature_degrees=float(curvature_degrees),
+                lower_bound=lower_bound,
+                upper_bound=upper_bound,
+            ),
+            "lattice_deform": lambda p: lattice_deform_imported_mesh_vertices(
+                p,
+                mesh_role,
+                selected_vertices,
+                control_deltas=tuple(
+                    tuple(float(component) for component in tuple(delta_value)[:3])
+                    for delta_value in tuple(lattice_control_deltas)
+                ),
+                bounds_min=lattice_bounds_min,
+                bounds_max=lattice_bounds_max,
+            ),
+            "shrink_wrap": lambda p: shrink_wrap_imported_mesh_vertices(
+                p,
+                mesh_role,
+                shrink_target_surface,
+                selected_vertices,
+                projection=str(shrink_projection or "nearest_triangle"),
+                offset=float(shrink_offset),
+                align_normals=bool(shrink_align_normals),
+            ),
+            "wrap_deform": lambda p: wrap_deform_imported_mesh_vertices(
+                p,
+                mesh_role,
+                wrap_driver_base,
+                wrap_driver_deformed,
+                selected_vertices,
+                nearest_count=int(wrap_nearest_count),
+                influence=float(wrap_influence),
+                max_distance=float(wrap_max_distance),
+            ),
         }
-        editor = editors.get(str(op or ""))
+        editor = editors.get(operation)
         if editor is None:
             return False, f"Unknown imported-mesh component op: {op!r}"
         labels = {
@@ -2011,12 +2279,53 @@ class ModuleEditorController:
                 f"Bevel edge of {resref} by {abs(float(amount)):.3f}m "
                 f"({max(1, int(segments))} segment(s), profile {float(profile):.2f})"
             ),
+            "multi_edge_bevel": (
+                f"Bevel {len(tuple(edge_vertex_indices))} edges of {resref} atomically by {abs(float(amount)):.3f}m "
+                f"({max(1, int(segments))} segment(s), profile {float(profile):.2f})"
+            ),
             "edge_split": f"Split edge of {resref}",
             "edge_collapse": f"Collapse edge of {resref}",
             "edge_delete": f"Delete edge faces of {resref}",
             "face_flat": f"Flatten {len(faces)} face(s) of {resref}",
             "face_flip": f"Flip {len(faces)} face(s) of {resref}",
             "face_split": f"Split face of {resref} at centroid",
+            "face_split_at_point": f"Multi-Cut face of {resref} at pointer position",
+            "target_weld": f"Target-weld vertex {int(source_vertex_index)} to {int(target_vertex_index)} in {resref}",
+            "connect_vertices": f"Connect vertices {int(first_vertex_index)} and {int(second_vertex_index)} in {resref}",
+            "merge_components": (
+                f"Merge {len(tuple(merge_vertex_indices))} selected vertex/vertices in {resref}"
+                if tuple(merge_vertex_indices)
+                else f"Merge two selected border edges in {resref}"
+            ),
+            "fill_boundary_loop": f"Fill {len(tuple(loop_vertex_indices))}-vertex boundary loop in {resref}",
+            "insert_edge_loop": (
+                f"Insert edge loop at {float(loop_position):.3f} through the provenance-safe quad strip in {resref}"
+            ),
+            "soften_edges": f"Soften {len(tuple(edge_vertex_indices))} edge(s) in {resref}",
+            "harden_edges": f"Harden {len(tuple(edge_vertex_indices))} edge(s) in {resref}",
+            "soften_faces": f"Soften {len(faces)} face(s) in {resref}",
+            "harden_faces": f"Harden {len(faces)} face(s) in {resref}",
+            "make_hole": f"Make a hole in face {face} using face {int(cutter_face_index)} in {resref}",
+            "quad_draw": f"Append one projected Quad Draw polygon to {mesh_role} in {resref}",
+            "mirror_geometry": (
+                f"Bake {'copy' if mirror_duplicate else 'cut'} mirror of {mesh_role} in {resref} "
+                f"across {str(mirror_axis or 'x').upper()}"
+            ),
+            "bridge_border_edges": (
+                f"Bake bridge with {int(bridge_divisions)} division(s) from {mesh_role} "
+                f"to {str(target_mesh_role or mesh_role)} in {resref}"
+            ),
+            "boolean_difference_closed_solids": (
+                f"Subtract closed surface {str(boolean_cutter_mesh_role)} from {mesh_role} in {resref}"
+            ),
+            "bend_vertices": (
+                f"Bake {float(curvature_degrees):.2f}-degree {str(deform_axis or 'x').upper()} bend in {resref}"
+            ),
+            "lattice_deform": f"Bake 2x2x2 lattice deformation in {resref}",
+            "shrink_wrap": (
+                f"Bake {str(shrink_projection or 'nearest_triangle').replace('_', ' ')} ShrinkWrap in {resref}"
+            ),
+            "wrap_deform": f"Bake static driver-delta Wrap in {resref}",
         }
         return self._apply_imported_mesh_room_edit(
             room_resref=room_resref,
@@ -2042,7 +2351,7 @@ class ModuleEditorController:
                 resrefs.append(resref)
         # Rooms imported from a stock module carry a placeholder floor-plan
         # primitive (real geometry lives in preview metadata) — without this
-        # conversion GModeler would edit, and export would ship, a 10x10
+        # conversion component tools would edit, and export would ship, a 10x10
         # placeholder square instead of the actual room.
         extra = getattr(self.project, "extra_sections", {}) or {}
         if extra.get("authored_module") is not None:
@@ -5661,6 +5970,39 @@ class ModuleEditorController:
         )
         return self.authored_module_readiness()
 
+    def reset_authored_room_primitive_transform(self, *, room_resref: str, primitive_name: str):
+        """Reset one authored primitive's translate/rotate/scale, retaining its pivot."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = reset_authored_room_composition_primitive_transform(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Reset Map Studio transform for primitive {primitive_name}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.reset_transform",
+            label=f"Reset transformations {primitive_name}",
+            before=before,
+            metadata={"room_resref": room_resref, "primitive_name": primitive_name},
+        )
+        return self.authored_module_readiness()
+
     def center_authored_room_primitive_pivot(self, *, room_resref: str, primitive_name: str):
         """Center one authored primitive pivot while preserving visible geometry."""
 
@@ -5694,6 +6036,39 @@ class ModuleEditorController:
         )
         return self.authored_module_readiness()
 
+    def zero_authored_room_primitive_pivot(self, *, room_resref: str, primitive_name: str):
+        """Move one authored primitive pivot to local zero without moving geometry."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = zero_authored_room_composition_primitive_pivot(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Zeroed Map Studio pivot for primitive {primitive_name}; previous exports/proofs are now stale."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.zero_pivot",
+            label=f"Zero pivot {primitive_name}",
+            before=before,
+            metadata={"room_resref": room_resref, "primitive_name": primitive_name},
+        )
+        return self.authored_module_readiness()
+
     def freeze_authored_room_primitive_transform(self, *, room_resref: str, primitive_name: str):
         """Freeze a supported authored primitive transform into its parametric shape."""
 
@@ -5722,6 +6097,39 @@ class ModuleEditorController:
         self._record_map_studio_command(
             action_key="map_studio.primitive.freeze_transform",
             label=f"Freeze transform {primitive_name}",
+            before=before,
+            metadata={"room_resref": room_resref, "primitive_name": primitive_name},
+        )
+        return self.authored_module_readiness()
+
+    def delete_authored_room_primitive_history(self, *, room_resref: str, primitive_name: str):
+        """Delete transient operator history while retaining evaluated/export data."""
+
+        extra = getattr(self.project, "extra_sections", {}) or {}
+        payload = extra.get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        before = self._capture_map_studio_command_state()
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        updated = delete_authored_room_composition_primitive_history(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+        )
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
+        self.project.name = updated.metadata.module_root
+        self.project.game = updated.game
+        self.project.dirty = True
+        self.model.log(
+            f"Deleted Map Studio construction history for {primitive_name}; evaluated geometry and export provenance were retained."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.primitive.delete_history",
+            label=f"Delete history {primitive_name}",
             before=before,
             metadata={"room_resref": room_resref, "primitive_name": primitive_name},
         )

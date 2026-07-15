@@ -53,6 +53,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     componentBevelCommitted = QtCore.Signal(dict)
     componentBevelPreviewRequested = QtCore.Signal(dict)
     componentBevelPreviewCancelled = QtCore.Signal()
+    modelingToolGestureCommitted = QtCore.Signal(str, object)
     texturePaintStrokeBegan = QtCore.Signal(object)
     texturePaintSampleRequested = QtCore.Signal(object)
     texturePaintStrokeCommitted = QtCore.Signal()
@@ -85,6 +86,390 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         setter = getattr(self.viewport, "set_map_studio_component_selection", None)
         if callable(setter):
             setter(list(getattr(self, "_map_studio_component_selection", []) or []))
+
+    def _modeling_surface_identity(self) -> tuple[str, str]:
+        """Return the selected/hovered editable surface, matching Maya's active mesh."""
+
+        selection = self.map_studio_component_selection()
+        if selection:
+            return (
+                str(selection[0].get("room_resref") or ""),
+                str(selection[0].get("mesh_role") or ""),
+            )
+        context = getattr(self, "_hover_context", None)
+        if context is not None and bool(getattr(context, "is_hit", False)):
+            return (
+                str(getattr(context, "room_resref", "") or ""),
+                str(getattr(context, "mesh_role", "") or ""),
+            )
+        for room_node, mesh_node in self._iter_room_preview_mesh_nodes():
+            return (
+                str(getattr(room_node, "_gr_map_studio_room_resref", "") or ""),
+                str(getattr(mesh_node, "_gr_map_studio_mesh_role", "") or ""),
+            )
+        return ("", "")
+
+    def _modeling_surface_node(self, room_resref: str, mesh_role: str):
+        wanted_room = str(room_resref or "")
+        wanted_role = str(mesh_role or "")
+        for room_node, mesh_node in self._iter_room_preview_mesh_nodes(wanted_room):
+            if str(getattr(mesh_node, "_gr_map_studio_mesh_role", "") or "") == wanted_role:
+                return room_node, mesh_node
+        return None, None
+
+    def _modeling_face_entry(self, room_node, mesh_node, face_index: int) -> dict | None:
+        vertices = tuple(getattr(mesh_node, "vertices", ()) or ())
+        faces = tuple(getattr(mesh_node, "faces", ()) or ())
+        if not 0 <= int(face_index) < len(faces):
+            return None
+        face = tuple(int(value) for value in tuple(faces[int(face_index)])[:3])
+        if len(face) < 3 or any(index < 0 or index >= len(vertices) for index in face):
+            return None
+        room_offset = tuple(getattr(room_node, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
+        mesh_offset = tuple(getattr(mesh_node, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
+        offset = tuple(
+            float(room_offset[index] if index < len(room_offset) else 0.0)
+            + float(mesh_offset[index] if index < len(mesh_offset) else 0.0)
+            for index in range(3)
+        )
+        world = tuple(
+            tuple(float(vertices[vertex_index][axis]) + offset[axis] for axis in range(3))
+            for vertex_index in face
+        )
+        room = str(getattr(room_node, "_gr_map_studio_room_resref", "") or "")
+        role = str(getattr(mesh_node, "_gr_map_studio_mesh_role", "") or "")
+        return {
+            "component_type": "face",
+            "room_resref": room,
+            "mesh_role": role,
+            "face_index": int(face_index),
+            "vertex_index": -1,
+            "edge_indices": (-1, -1),
+            "mesh_vertex_index": -1,
+            "mesh_edge_indices": (-1, -1),
+            "mesh_face_indices": face,
+            "face_world_points": world,
+            "world_point": world[0],
+        }
+
+    @staticmethod
+    def _modeling_quad_face_pairs(vertices, faces) -> tuple[tuple[int, int], ...]:
+        """Infer deterministic coplanar triangle pairs without rewriting KOTOR triangles."""
+
+        edge_faces: dict[tuple[int, int], list[int]] = {}
+        for face_index, raw_face in enumerate(tuple(faces or ())):
+            face = tuple(int(value) for value in tuple(raw_face)[:3])
+            if len(face) < 3:
+                continue
+            for edge in ((face[0], face[1]), (face[1], face[2]), (face[2], face[0])):
+                edge_faces.setdefault(tuple(sorted(edge)), []).append(face_index)
+        candidates: list[tuple[int, int]] = []
+        for adjacent in edge_faces.values():
+            if len(adjacent) != 2:
+                continue
+            first, second = sorted(adjacent)
+            first_face = tuple(int(value) for value in tuple(faces[first])[:3])
+            second_face = tuple(int(value) for value in tuple(faces[second])[:3])
+            if len(set(first_face + second_face)) != 4:
+                continue
+            try:
+                first_points = tuple(vertices[index] for index in first_face)
+                second_points = tuple(vertices[index] for index in second_face)
+                first_normal = ModuleEditorViewportPanel._map_studio_face_normal(first_points)
+                second_normal = ModuleEditorViewportPanel._map_studio_face_normal(second_points)
+            except Exception:
+                continue
+            if sum(first_normal[index] * second_normal[index] for index in range(3)) < 0.999:
+                continue
+            candidates.append((first, second))
+        used: set[int] = set()
+        pairs: list[tuple[int, int]] = []
+        for pair in sorted(candidates):
+            if pair[0] in used or pair[1] in used:
+                continue
+            pairs.append(pair)
+            used.update(pair)
+        return tuple(pairs)
+
+    def _select_modeling_face_indices(self, face_indices) -> int:
+        room, role = self._modeling_surface_identity()
+        room_node, mesh_node = self._modeling_surface_node(room, role)
+        if mesh_node is None:
+            return 0
+        # Maya's conversion helpers visibly leave the user in Face mode; the
+        # orange result must remain editable instead of being hidden by the
+        # previous vertex/edge hover probe.
+        self.set_map_studio_hover_probe(True, "face")
+        entries = [
+            entry
+            for index in sorted({int(value) for value in tuple(face_indices or ())})
+            if (entry := self._modeling_face_entry(room_node, mesh_node, index)) is not None
+        ]
+        self._map_studio_component_selection = entries
+        self._push_map_studio_component_selection()
+        return len(entries)
+
+    def select_triangles(self) -> int:
+        room, role = self._modeling_surface_identity()
+        _room_node, mesh_node = self._modeling_surface_node(room, role)
+        if mesh_node is None:
+            return 0
+        faces = tuple(getattr(mesh_node, "faces", ()) or ())
+        vertices = tuple(getattr(mesh_node, "vertices", ()) or ())
+        quad_faces = {index for pair in self._modeling_quad_face_pairs(vertices, faces) for index in pair}
+        return self._select_modeling_face_indices(index for index in range(len(faces)) if index not in quad_faces)
+
+    def select_quads(self) -> int:
+        room, role = self._modeling_surface_identity()
+        _room_node, mesh_node = self._modeling_surface_node(room, role)
+        if mesh_node is None:
+            return 0
+        faces = tuple(getattr(mesh_node, "faces", ()) or ())
+        vertices = tuple(getattr(mesh_node, "vertices", ()) or ())
+        return self._select_modeling_face_indices(
+            index for pair in self._modeling_quad_face_pairs(vertices, faces) for index in pair
+        )
+
+    def convert_contained_faces(self) -> int:
+        selection = self.map_studio_component_selection()
+        if not selection:
+            return 0
+        room, role = self._modeling_surface_identity()
+        room_node, mesh_node = self._modeling_surface_node(room, role)
+        if mesh_node is None:
+            return 0
+        selected_vertices: set[int] = set()
+        for entry in selection:
+            if str(entry.get("room_resref") or "") != room or str(entry.get("mesh_role") or "") != role:
+                continue
+            if str(entry.get("component_type") or "") == "vertex":
+                index = int(entry.get("mesh_vertex_index", -1))
+                if index >= 0:
+                    selected_vertices.add(index)
+            elif str(entry.get("component_type") or "") == "edge":
+                selected_vertices.update(
+                    int(value) for value in tuple(entry.get("mesh_edge_indices") or ())[:2] if int(value) >= 0
+                )
+        faces = tuple(getattr(mesh_node, "faces", ()) or ())
+        contained = [
+            index for index, face in enumerate(faces)
+            if len(tuple(face)[:3]) == 3 and set(int(value) for value in tuple(face)[:3]).issubset(selected_vertices)
+        ]
+        return self._select_modeling_face_indices(contained)
+
+    def activate_map_studio_modeling_tool(self, tool_key: str) -> bool:
+        """Enter a persistent Maya-style component tool context."""
+
+        key = str(tool_key or "").strip()
+        previous = getattr(self, "_active_map_studio_modeling_tool", None)
+        self._clear_quad_draw_feedback()
+        if isinstance(previous, dict) and str(previous.get("key") or "") == "multi_cut":
+            self.clear_component_mesh_preview()
+            self.modelingToolGestureCommitted.emit("multi_cut", {"phase": "cancel"})
+        modes = {
+            "multi_cut": "face",
+            "target_weld": "vertex",
+            "make_hole": "face",
+            "connect_components": "vertex",
+            "make_live": "object",
+            "quad_draw": "face",
+        }
+        if key not in modes:
+            return False
+        self._active_map_studio_modeling_tool = {
+            "key": key,
+            "picks": [],
+            "points": [],
+            "point_entries": [],
+        }
+        self.set_map_studio_hover_probe(True, modes[key])
+        if key == "make_live":
+            selection = self.map_studio_component_selection()
+            context = getattr(self, "_hover_context", None)
+            explicit_hover = context is not None and bool(getattr(context, "is_hit", False))
+            if not selection and not explicit_hover:
+                self.marker_summary_label.setText(
+                    "Make Live needs an explicitly selected or hovered editable surface."
+                )
+                self._active_map_studio_modeling_tool = None
+                return False
+            room, role = self._modeling_surface_identity()
+            if room and role:
+                self._map_studio_live_surface = (room, role)
+                self.marker_summary_label.setText(
+                    f"Live surface: {room}/{role}. Quad Draw and ShrinkWrap now project to this mesh."
+                )
+                return True
+        if key == "quad_draw" and not tuple(getattr(self, "_map_studio_live_surface", ()) or ()):
+            self.marker_summary_label.setText("Quad Draw needs a Make Live surface first.")
+            self._active_map_studio_modeling_tool = None
+            return False
+        selected = self.map_studio_component_selection()
+        if key == "connect_components" and len(selected) == 2:
+            self.modelingToolGestureCommitted.emit(key, {"selection": selected})
+        elif key == "connect_components" and len(selected) > 2:
+            self.marker_summary_label.setText(
+                "Connect needs exactly two selected vertices; clear the extra components or click a new pair."
+            )
+            return True
+        self.marker_summary_label.setText(
+            f"{key.replace('_', ' ').title()} active. Click components to work; Enter commits and Esc exits."
+        )
+        return True
+
+    def _modeling_entry_from_context(self, context) -> dict:
+        return {
+            "component_type": str(getattr(context, "component_type", "") or ""),
+            "room_resref": str(getattr(context, "room_resref", "") or ""),
+            "mesh_role": str(getattr(context, "mesh_role", "") or ""),
+            "face_index": int(getattr(context, "face_index", -1)),
+            "vertex_index": int(getattr(context, "vertex_index", -1)),
+            "edge_indices": tuple(getattr(context, "edge_indices", (-1, -1)) or (-1, -1)),
+            "mesh_vertex_index": int(getattr(context, "mesh_vertex_index", -1)),
+            "mesh_edge_indices": tuple(getattr(context, "mesh_edge_indices", (-1, -1)) or (-1, -1)),
+            "face_world_points": self._map_studio_selection_face_points(context),
+            "world_point": tuple(getattr(context, "world_point", ()) or ()),
+        }
+
+    def _sync_quad_draw_feedback(self) -> None:
+        """Publish world-space Quad Draw anchors without mutating KMAP state."""
+
+        state = getattr(self, "_active_map_studio_modeling_tool", None)
+        if not isinstance(state, dict) or str(state.get("key") or "") != "quad_draw":
+            self._clear_quad_draw_feedback()
+            return
+        points = tuple(
+            tuple(float(value) for value in tuple(point)[:3])
+            for point in tuple(state.get("points") or ())[:3]
+            if len(tuple(point)) >= 3
+        )
+        if not points:
+            self._clear_quad_draw_feedback()
+            return
+        preview_point: tuple[float, float, float] | tuple[()] = ()
+        context = getattr(self, "_hover_context", None)
+        live_surface = tuple(getattr(self, "_map_studio_live_surface", ()) or ())
+        if (
+            context is not None
+            and bool(getattr(context, "is_hit", False))
+            and len(live_surface) >= 2
+            and str(getattr(context, "room_resref", "") or "") == str(live_surface[0])
+            and str(getattr(context, "mesh_role", "") or "") == str(live_surface[1])
+        ):
+            candidate = tuple(getattr(context, "world_point", ()) or ())
+            if len(candidate) >= 3:
+                prospective = tuple(float(value) for value in candidate[:3])
+                if sum((prospective[index] - points[-1][index]) ** 2 for index in range(3)) > 1.0e-12:
+                    preview_point = prospective
+        payload = {
+            "tool": "quad_draw",
+            "points": points,
+            "preview_point": preview_point,
+            "close_preview": len(points) == 3 and len(preview_point) == 3,
+        }
+        if payload == getattr(self, "_quad_draw_feedback_payload", None):
+            return
+        self._quad_draw_feedback_payload = payload
+        setter = getattr(self.viewport, "set_map_studio_modeling_points_overlay", None)
+        if callable(setter):
+            setter(payload)
+
+    def _clear_quad_draw_feedback(self) -> None:
+        """Clear Quad Draw anchors on commit, cancel, or tool-context exit."""
+
+        had_feedback = getattr(self, "_quad_draw_feedback_payload", None) is not None
+        self._quad_draw_feedback_payload = None
+        if not had_feedback:
+            return
+        clearer = getattr(self.viewport, "clear_map_studio_modeling_points_overlay", None)
+        setter = getattr(self.viewport, "set_map_studio_modeling_points_overlay", None)
+        if callable(clearer):
+            clearer()
+        elif callable(setter):
+            setter(None)
+
+    def _handle_active_modeling_tool_click(self, event: QtCore.QEvent) -> bool:
+        state = getattr(self, "_active_map_studio_modeling_tool", None)
+        if not isinstance(state, dict):
+            return False
+        self._update_map_studio_hover(event, force=True)
+        context = getattr(self, "_hover_context", None)
+        if context is None or not bool(getattr(context, "is_hit", False)):
+            return True
+        key = str(state.get("key") or "")
+        entry = self._modeling_entry_from_context(context)
+        if key == "make_live":
+            self._map_studio_live_surface = (entry["room_resref"], entry["mesh_role"])
+            self.marker_summary_label.setText(
+                f"Live surface: {entry['room_resref']}/{entry['mesh_role']}. Quad Draw and ShrinkWrap now project here."
+            )
+            return True
+        if key == "multi_cut":
+            picks = list(state.get("picks") or [])
+            if len(picks) >= 2:
+                self.marker_summary_label.setText(
+                    "Multi-Cut preview is ready. Press Enter to commit, Backspace to change the last point, or Esc to clear."
+                )
+                return True
+            if picks and (
+                entry["room_resref"] != picks[0].get("room_resref")
+                or entry["mesh_role"] != picks[0].get("mesh_role")
+            ):
+                self.marker_summary_label.setText("Multi-Cut anchors must stay on one editable room surface.")
+                return True
+            picks.append(entry)
+            state["picks"] = picks
+            if len(picks) == 2:
+                self.modelingToolGestureCommitted.emit(
+                    key,
+                    {"phase": "preview", "anchors": tuple(picks)},
+                )
+                self.marker_summary_label.setText(
+                    "Multi-Cut preview ready. Enter commits one undo step; Backspace removes the last anchor; Esc clears."
+                )
+            else:
+                self.marker_summary_label.setText("Multi-Cut: first anchor placed; click the second anchor.")
+            return True
+        picks = list(state.get("picks") or [])
+        picks.append(entry)
+        state["picks"] = picks
+        if key == "target_weld" and len(picks) >= 2:
+            self.modelingToolGestureCommitted.emit(key, {"source": picks[-2], "target": picks[-1]})
+            state["picks"] = []
+        elif key == "make_hole" and len(picks) >= 2:
+            self.modelingToolGestureCommitted.emit(key, {"outer": picks[-2], "cutter": picks[-1]})
+            state["picks"] = []
+        elif key == "connect_components" and len(picks) >= 2:
+            self.modelingToolGestureCommitted.emit(key, {"selection": picks[-2:]})
+            state["picks"] = []
+        elif key == "quad_draw":
+            points = list(state.get("points") or [])
+            point_entries = list(state.get("point_entries") or [])
+            world_point = tuple(entry.get("world_point") or ())
+            if len(world_point) >= 3:
+                points.append(tuple(float(value) for value in world_point[:3]))
+                point_entries.append(entry)
+            state["points"] = points
+            state["point_entries"] = point_entries
+            if len(points) >= 4:
+                self.modelingToolGestureCommitted.emit(
+                    key,
+                    {
+                        "live_surface": tuple(getattr(self, "_map_studio_live_surface", ()) or ()),
+                        "points": points[-4:],
+                        "point_entries": point_entries[-4:],
+                    },
+                )
+                state["picks"] = []
+                state["points"] = []
+                state["point_entries"] = []
+                self._clear_quad_draw_feedback()
+            else:
+                self._sync_quad_draw_feedback()
+        self.marker_summary_label.setText(
+            f"{key.replace('_', ' ').title()}: {len(state.get('picks') or state.get('points') or [])} point(s) picked."
+        )
+        return True
 
     def selected_room_primitives(self) -> list[tuple[str, str]]:
         return list(getattr(self, "_map_studio_room_primitive_selection", []) or [])
@@ -703,11 +1088,6 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             for entry in self.map_studio_component_selection()
             if str(entry.get("component_type", "") or "") == "edge"
         ]
-        if len(selection) > 1:
-            self.marker_summary_label.setText(
-                "Bevel currently supports one edge per gesture; multi-edge/loop bevel is not enabled yet."
-            )
-            return False
         context = self._hover_context
         entry = selection[0] if selection else None
         if entry is None and context is not None and getattr(context, "is_hit", False):
@@ -730,6 +1110,23 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         start = points[int(edge[0]) % 3]
         end = points[int(edge[1]) % 3]
         anchor = tuple((float(start[index]) + float(end[index])) * 0.5 for index in range(3))
+        multi_edges = tuple(
+            tuple(int(value) for value in tuple(row.get("mesh_edge_indices") or ())[:2])
+            for row in selection
+        )
+        if len(selection) > 1:
+            room = str(selection[0].get("room_resref", "") or "")
+            role = str(selection[0].get("mesh_role", "") or "")
+            if any(
+                str(row.get("room_resref", "") or "") != room
+                or str(row.get("mesh_role", "") or "") != role
+                for row in selection
+            ):
+                self.marker_summary_label.setText("Bevel needs selected edges from one editable room surface.")
+                return False
+            if any(len(edge_pair) != 2 or edge_pair[0] == edge_pair[1] for edge_pair in multi_edges):
+                self.marker_summary_label.setText("Bevel selection contains an edge without stable mesh vertex indices.")
+                return False
         self._component_bevel_armed = {
             "kind": "edge_bevel",
             "room_resref": str(entry.get("room_resref", "") or ""),
@@ -739,13 +1136,24 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "anchor": anchor,
             "axis": self._map_studio_face_normal(points),
         }
+        if len(selection) > 1:
+            self._component_bevel_armed.update(
+                {
+                    "kind": "multi_edge_bevel",
+                    "edge_vertex_indices": multi_edges,
+                    "selected_edge_count": len(multi_edges),
+                }
+            )
         self._component_bevel_drag = None
         self.bevel_options_frame.setVisible(True)
         self.marker_summary_label.setText(
-            "Bevel armed: drag in the viewport for width; segments/profile/miter/smoothing/UV update live."
+            f"Bevel armed for {len(multi_edges)} edges: adjust options, then Apply for one atomic edit."
+            if len(selection) > 1
+            else "Bevel armed: drag in the viewport for width; segments/profile/miter/smoothing/UV update live."
         )
         self._push_component_bevel_overlay()
-        self.componentBevelPreviewRequested.emit(self._component_bevel_payload())
+        if len(selection) == 1:
+            self.componentBevelPreviewRequested.emit(self._component_bevel_payload())
         return True
 
     def _disarm_component_bevel(self, message: str = "", *, cancel_preview: bool = True) -> None:
@@ -780,7 +1188,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if self._component_bevel_armed is None:
             return
         self._push_component_bevel_overlay()
-        self.componentBevelPreviewRequested.emit(self._component_bevel_payload())
+        if str(self._component_bevel_armed.get("kind", "") or "") != "multi_edge_bevel":
+            self.componentBevelPreviewRequested.emit(self._component_bevel_payload())
         options = self._component_bevel_options()
         self.marker_summary_label.setText(
             f"Bevel {float(options['amount']):.3f}m | {int(options['segments'])} segment(s) | "
@@ -789,6 +1198,9 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
 
     def _begin_component_bevel_drag(self, event: QtCore.QEvent) -> bool:
         if self._component_bevel_armed is None:
+            return False
+        if str(self._component_bevel_armed.get("kind", "") or "") == "multi_edge_bevel":
+            self.marker_summary_label.setText("Multi-edge Bevel: adjust settings and click Apply for one atomic edit.")
             return False
         start = self._event_position(event)
         if start is None:
@@ -1047,6 +1459,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._hover_probe_enabled = False
         self._hover_component_mode = ""
         self._hover_context = None
+        self._quad_draw_feedback_payload: dict[str, object] | None = None
         self._hover_candidate_cache_key = None
         self._hover_candidate_cache: list = []
         self._hover_candidate_grid: dict = {}
@@ -1442,6 +1855,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     focus = getattr(watched, "setFocus", None)
                     if callable(focus):
                         focus()
+                    if self._handle_active_modeling_tool_click(event):
+                        return True
                     if self._texture_paint_enabled and self._begin_texture_paint_drag(event):
                         return True
                     if self._component_bevel_armed is not None:
@@ -1478,7 +1893,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                         self._begin_marker_drag(placement_id, event)
                         return True
                     if not self._hover_probe_enabled:
-                        # Outline/primitive hit zones only when GModeler is off:
+                        # Outline/primitive hit zones only when component modeling is off:
                         # in edit mode those zones stole clicks meant for faces.
                         room_primitive = self._room_primitive_at_event(event)
                         if room_primitive is not None:
@@ -1827,7 +2242,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self._pie_previous_hover = (bool(self._hover_probe_enabled), str(self._hover_component_mode or ""))
             self._pie_previous_generic_hover = bool(getattr(self.viewport, "mesh_hover_enabled", True))
             # PIE only needs a WOK pick when the user clicks.  Continuous
-            # GModeler hover rebuilt the camera-dependent face grid and the
+            # Component hover rebuilt the camera-dependent face grid and the
             # legacy QPixmap overlay on every pointer move, competing with the
             # native renderer.  Keep walkmesh-only candidates but do not emit a
             # hover highlight while simulation owns the viewport.
@@ -2274,7 +2689,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 getattr(self.viewport, "mesh_hover_enabled", True)
             )
             if callable(set_generic_hover):
-                # GModeler owns the orange component hover.  Running the
+                # Component modeling owns the orange hover.  Running the
                 # generic whole-mesh CPU picker as well projected every vertex
                 # a second time (about 57 ms/move on 207tel) and could replace
                 # the nearest face with an unrelated behind-object outline.
@@ -2291,7 +2706,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     else self._generic_mesh_hover_before_map_studio
                 )
             self._generic_mesh_hover_before_map_studio = None
-        # Overlay visibility depends on whether GModeler owns the viewport.
+        # Overlay visibility depends on whether component modeling owns the viewport.
         self._sync_clean_viewport_presentation()
 
     def _map_studio_hover_navigation_active(self, event: QtCore.QEvent | None = None) -> bool:
@@ -2318,7 +2733,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         *,
         watched: QtCore.QObject | None = None,
     ) -> None:
-        """Coalesce GModeler hover work and defer it throughout camera drags."""
+        """Coalesce component-hover work and defer it throughout camera drags."""
 
         screen = self._event_position(event, watched)
         if screen is None:
@@ -2564,6 +2979,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         clearer = getattr(self.viewport, "clear_map_studio_hover_highlight", None)
         if callable(clearer):
             clearer()
+        self._sync_quad_draw_feedback()
 
     @staticmethod
     def _map_studio_face_normal(points) -> tuple[float, float, float]:
@@ -2724,7 +3140,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             for room_node in tuple(getattr(root, "children", ()) or ()):
                 # Skybox/backdrop geometry is visual context, not editable room
                 # topology.  It must remain visible without ever intercepting
-                # a GModeler face/edge/vertex hover.
+                # a component-modeling face/edge/vertex hover.
                 if bool(getattr(room_node, "_gr_map_studio_backdrop", False)):
                     continue
                 offset = tuple(getattr(room_node, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
@@ -3041,6 +3457,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return
         self._hover_context = context
         self.hoverContextChanged.emit(context)
+        self._sync_quad_draw_feedback()
         setter = getattr(self.viewport, "set_map_studio_hover_highlight", None)
         if not callable(setter):
             return
@@ -3744,6 +4161,46 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return self.arm_component_bevel()
         if ctrl or alt or shift:
             return False
+        active_tool = getattr(self, "_active_map_studio_modeling_tool", None)
+        active_multi_cut = (
+            active_tool
+            if isinstance(active_tool, dict) and str(active_tool.get("key") or "") == "multi_cut"
+            else None
+        )
+        if active_multi_cut is not None and key in {QtCore.Qt.Key_Backspace, QtCore.Qt.Key_Delete}:
+            picks = list(active_multi_cut.get("picks") or [])
+            if picks:
+                picks.pop()
+                active_multi_cut["picks"] = picks
+                self.clear_component_mesh_preview()
+                self.modelingToolGestureCommitted.emit("multi_cut", {"phase": "cancel"})
+                self.marker_summary_label.setText(
+                    "Multi-Cut: last anchor removed." if picks else "Multi-Cut: line cleared; place the first anchor."
+                )
+            return True
+        if active_multi_cut is not None and key in {QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter}:
+            picks = tuple(active_multi_cut.get("picks") or ())
+            if len(picks) == 2:
+                self.modelingToolGestureCommitted.emit(
+                    "multi_cut",
+                    {"phase": "commit", "anchors": picks},
+                )
+                active_multi_cut["picks"] = []
+                self.marker_summary_label.setText("Multi-Cut committed. Place the first anchor for the next segment.")
+            else:
+                self.marker_summary_label.setText("Multi-Cut needs two anchors before Enter can commit.")
+            return True
+        if active_multi_cut is not None and key == QtCore.Qt.Key_Escape:
+            picks = list(active_multi_cut.get("picks") or [])
+            self.clear_component_mesh_preview()
+            self.modelingToolGestureCommitted.emit("multi_cut", {"phase": "cancel"})
+            if picks:
+                active_multi_cut["picks"] = []
+                self.marker_summary_label.setText("Multi-Cut line cleared; the tool remains active.")
+            else:
+                self._active_map_studio_modeling_tool = None
+                self.marker_summary_label.setText("Multi-Cut exited.")
+            return True
         if key == QtCore.Qt.Key_Escape and bool(self._placement_context.get("enabled", False)):
             self.set_placement_tool_context({"enabled": False})
             self.placementModeExited.emit()
@@ -3753,6 +4210,15 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return True
         if key == QtCore.Qt.Key_Escape and self._component_bevel_armed is not None:
             self._disarm_component_bevel("Bevel cancelled.")
+            return True
+        if key == QtCore.Qt.Key_Escape and isinstance(
+            getattr(self, "_active_map_studio_modeling_tool", None), dict
+        ):
+            tool_key = str(self._active_map_studio_modeling_tool.get("key") or "modeling tool")
+            self._active_map_studio_modeling_tool = None
+            if tool_key == "quad_draw":
+                self._clear_quad_draw_feedback()
+            self.marker_summary_label.setText(f"{tool_key.replace('_', ' ').title()} exited.")
             return True
         if key == QtCore.Qt.Key_Escape and self._room_primitive_drag is not None:
             self._cancel_room_primitive_drag("Transform cancelled.")
@@ -4561,7 +5027,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "show_placement_guides": self._marker_drag is not None,
         }
         if self._hover_probe_enabled:
-            # GModeler edit mode: the real mesh must stay unobstructed, so the
+            # Component edit mode: the real mesh must stay unobstructed, so the
             # room fill/outline/guide overlays (the yellow footprint and its
             # grid of handles) stand down while the hover picker is live.
             presentation.update(

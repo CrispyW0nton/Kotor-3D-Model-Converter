@@ -769,6 +769,24 @@ def resolve_map_studio_tool_belt_action(
             ),
         )
 
+    if key == "reset_transform":
+        if not ctx.primitive_name:
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="grid",
+                enabled=False,
+                disabled_reason="Reset Transformations needs a selected authored room primitive.",
+            )
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="grid",
+            command_method="reset_authored_room_primitive_transform",
+            command_kwargs={"room_resref": ctx.room_resref, "primitive_name": ctx.primitive_name},
+            mutates_kmap=True,
+        )
+
     if key == "center_pivot":
         if not ctx.primitive_name:
             return _route(
@@ -794,6 +812,24 @@ def resolve_map_studio_tool_belt_action(
             ),
         )
 
+    if key == "zero_pivot":
+        if not ctx.primitive_name:
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="grid",
+                enabled=False,
+                disabled_reason="Zero Pivot needs a selected authored room primitive.",
+            )
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="grid",
+            command_method="zero_authored_room_primitive_pivot",
+            command_kwargs={"room_resref": ctx.room_resref, "primitive_name": ctx.primitive_name},
+            mutates_kmap=True,
+        )
+
     if key == "freeze_transform":
         if not ctx.primitive_name:
             return _route(
@@ -817,6 +853,63 @@ def resolve_map_studio_tool_belt_action(
                 "Freeze Transform: bake supported unrotated primitive translation and scale into the authored "
                 "parametric primitive, reset transform intent to identity, and mark validation/export/game proof stale."
             ),
+        )
+
+    if key == "delete_history":
+        if not ctx.primitive_name:
+            return _route(
+                action,
+                focus_component_mode="object",
+                focus_snap_mode="grid",
+                enabled=False,
+                disabled_reason="Delete History needs a selected authored room primitive.",
+            )
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="grid",
+            command_method="delete_authored_room_primitive_history",
+            command_kwargs={"room_resref": ctx.room_resref, "primitive_name": ctx.primitive_name},
+            mutates_kmap=True,
+        )
+
+    if key == "duplicate_special_options":
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="grid",
+            authoring_context="Open Duplicate Special options; applying the options runs the ordinary duplicate_special command.",
+        )
+
+    if key in {"multi_cut", "target_weld", "make_hole", "connect_components", "make_live", "quad_draw"}:
+        focus_mode = {
+            "target_weld": "vertex",
+            "make_hole": "face",
+            "connect_components": "edge",
+            "make_live": "object",
+            "quad_draw": "face",
+        }.get(key, "face")
+        return _route(
+            action,
+            focus_component_mode=focus_mode,
+            focus_snap_mode="surface" if key in {"make_live", "quad_draw"} else "vertex",
+            authoring_context=f"{action.label}: activate the persistent Map Studio modeling context; pointer gestures own preview/commit/cancel.",
+        )
+
+    if key in {"select_triangles", "select_quads", "convert_contained_faces"}:
+        return _route(
+            action,
+            focus_component_mode="face",
+            focus_snap_mode="face",
+            authoring_context=f"{action.label}: selection-only command; generated KOTOR resources stay unchanged.",
+        )
+
+    if key == "wrap":
+        return _route(
+            action,
+            focus_component_mode="object",
+            focus_snap_mode="surface",
+            authoring_context="Wrap: configure a driver and target object, preview the deformation, then bake one KMAP mesh edit.",
         )
 
     if key == "object_grid_snap":

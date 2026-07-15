@@ -615,6 +615,7 @@ class ViewportRenderingPipelineMixin:
                 self._draw_map_studio_terrain_walkability(draw, w, h)
             self._draw_map_studio_component_selection(draw, w, h)
             self._draw_map_studio_component_extrude_gizmo(draw, w, h)
+            self._draw_map_studio_modeling_points_overlay(draw, w, h)
             self._draw_map_studio_hover_highlight(draw, w, h)
             self._draw_map_studio_terrain_brush_cursor(draw, w, h)
             if not map_interaction_lod:

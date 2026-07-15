@@ -3,7 +3,7 @@
 Presentation-only dialog: lists every texture resref the connected KOTOR
 resource manager can see (Override, ERF texture packs, KEY/BIF) with decoded
 thumbnail previews, a substring filter, and double-click/OK selection.  Used
-by the GModeler "Set Texture" face action; owns no texture policy.
+by the component-modeling "Set Texture" face action; owns no texture policy.
 
 Thumbnails decode lazily in QTimer batches so opening the dialog stays
 instant even with thousands of TPC textures.

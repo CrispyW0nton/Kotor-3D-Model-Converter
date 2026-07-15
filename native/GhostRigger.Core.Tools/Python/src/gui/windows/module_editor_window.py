@@ -33,7 +33,7 @@ from src.core.modules.map_studio_marking_menu_registry import (
     map_studio_marking_menu_action,
     map_studio_marking_menu_tree_for_hover,
 )
-from src.gui.panels.module_editor.gmodeler_marking_menu import MapStudioGModelerMarkingMenu
+from src.gui.panels.module_editor.component_marking_menu import MapStudioComponentMarkingMenu
 from src.gui.panels.module_editor.texture_browser_dialog import MapStudioTextureBrowserDialog
 from src.gui.panels.module_editor.texture_paint_tab import MapStudioTexturePaintTab
 from src.core.modules.authored_imported_mesh import (
@@ -45,6 +45,11 @@ from src.core.modules.authored_imported_mesh import (
     resolve_imported_mesh_face_target,
 )
 from src.core.modules.map_studio_live_topology_session import MapStudioLiveTopologySession
+from src.core.modules.map_studio_multi_cut import (
+    MultiCutSession,
+    MultiCutSettings,
+    anchor_from_surface_hit,
+)
 from src.gui.panels.module_editor.module_editor_asset_browser import ModuleEditorAssetBrowser
 from src.gui.panels.module_editor.module_editor_outliner import ModuleEditorOutliner, authored_primitive_item_id
 from src.gui.panels.module_editor.module_editor_properties import ModuleEditorPropertiesPanel
@@ -1421,7 +1426,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         center_layout = QtWidgets.QVBoxLayout(center)
         center_layout.setContentsMargins(0, 0, 0, 0)
         self.viewport_panel = ModuleEditorViewportPanel(center)
-        self.viewport_panel.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        # The viewport canvas owns the Maya-style marking menu through its
+        # input filter.  A CustomContextMenu on the whole panel also captured
+        # descendant shelf buttons, making their right-click Tool Options
+        # unreachable in the real application.
+        self.viewport_panel.setContextMenuPolicy(QtCore.Qt.DefaultContextMenu)
         self.viewport_panel_scroll = None
         center_layout.addWidget(self.viewport_panel, 1)
         self.main_splitter.addWidget(center)
@@ -1518,9 +1527,6 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.map_studio_custom_tool_belt_widget.customContextMenuRequested.connect(
             lambda pos: self._open_map_studio_tool_context_menu(self.map_studio_custom_tool_belt_widget, pos)
         )
-        self.viewport_panel.customContextMenuRequested.connect(
-            lambda pos: self._open_map_studio_tool_context_menu(self.viewport_panel, pos)
-        )
         self.map_studio_command_search_action = QtGui.QAction("Map Studio Command Search", self)
         self.map_studio_command_search_action.setObjectName("mapStudioCommandSearchAction")
         self.map_studio_command_search_action.setShortcut(QtGui.QKeySequence("Ctrl+K"))
@@ -1567,6 +1573,25 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.map_studio_transform_level_snap_shortcut.activated.connect(
             lambda: self._activate_map_studio_modifier_shortcut("transform_snap_level")
         )
+        # Maya shelf parity.  These shortcuts are scoped to the Map Studio
+        # viewport, so they never steal input from text fields or the other
+        # Ghost Studio workbenches.
+        self._map_studio_maya_shortcuts: list[QtGui.QShortcut] = []
+        maya_shortcut_parent = getattr(self.viewport_panel, "viewport", self.viewport_panel)
+        for object_name, sequence, callback in (
+            ("mapStudioMayaExtrudeShortcut", "Ctrl+E", lambda: self._run_map_studio_maya_shortcut("extrude")),
+            ("mapStudioMayaBevelShortcut", "Ctrl+B", lambda: self._run_map_studio_maya_shortcut("bevel")),
+            ("mapStudioMayaMultiCutShortcut", "Ctrl+X", lambda: self._run_map_studio_maya_shortcut("multi_cut")),
+            ("mapStudioMayaQuadDrawShortcut", "Ctrl+Q", lambda: self._run_map_studio_maya_shortcut("quad_draw")),
+            ("mapStudioMayaDuplicateSpecialShortcut", "Ctrl+Shift+D", lambda: self._run_map_studio_maya_shortcut("duplicate_special")),
+            ("mapStudioMayaBridgeOrFillShortcut", "Ctrl+/", self._run_map_studio_bridge_or_fill_shortcut),
+            ("mapStudioMayaRepeatLastShortcut", "G", self._repeat_last_map_studio_modeling_command),
+        ):
+            shortcut = QtGui.QShortcut(QtGui.QKeySequence(sequence), maya_shortcut_parent)
+            shortcut.setObjectName(object_name)
+            shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(callback)
+            self._map_studio_maya_shortcuts.append(shortcut)
         self.toolbar.actionRequested.connect(self._toolbar_action)
         self.toolbar.viewModeChanged.connect(self.viewport_panel.set_view_mode)
         self.toolbar.selectionModeChanged.connect(self._handle_map_studio_edit_mode_changed)
@@ -1612,6 +1637,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.viewport_panel.componentBevelCommitted.connect(self._commit_map_studio_component_bevel)
         self.viewport_panel.componentBevelPreviewRequested.connect(self._preview_map_studio_component_bevel)
         self.viewport_panel.componentBevelPreviewCancelled.connect(self._cancel_map_studio_component_preview)
+        self.viewport_panel.modelingToolGestureCommitted.connect(self._commit_map_studio_modeling_tool_gesture)
         self.viewport_panel.texturePaintStrokeBegan.connect(self._begin_map_studio_texture_paint_stroke)
         self.viewport_panel.texturePaintSampleRequested.connect(self._append_map_studio_texture_paint_sample)
         self.viewport_panel.texturePaintStrokeCommitted.connect(self._commit_map_studio_texture_paint_stroke)
@@ -3121,7 +3147,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         route = routes.get(component)
         if route is None:
             return False
-        return self._apply_gmodeler_imported_face_action(route[0], route[1])
+        return self._apply_component_modeling_imported_face_action(route[0], route[1])
 
     def _parse_map_studio_primitive_outliner_id(self, item_id: str) -> tuple[str, str] | None:
         parts = str(item_id or "").split(":", 2)
@@ -3430,6 +3456,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "vertex": "component",
             "edge": "component",
             "face": "component",
+            "multi-component": "maya_modeling",
             "walkmesh": "component",
             "placement": "gameplay",
             "terrain": "terrain",
@@ -3877,9 +3904,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setHorizontalSpacing(6)
         layout.setVerticalSpacing(6)
-        # Two-mode design (user direction 2026-07-07): GModeler already picks
+        # Two-mode design: Component Modeling already picks
         # faces, edges, and vertices by hover, so per-component modes are
-        # redundant here. Edit Mode activates GModeler; Object Mode is
+        # redundant here. Edit Mode activates component modeling; Object Mode is
         # select/transform/delete; Terrain and Placement stay as workflows.
         entries = (
             ("edit", "Multi-Component Mode", "Multi-Component", 0, 0, "mapStudioModeMarkingAction_edit", "mapStudioModeMarkingButton_edit"),
@@ -3912,7 +3939,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         return menu
 
     def _open_map_studio_mode_marking_menu(self, global_pos: QtCore.QPoint) -> None:
-        if self._open_map_studio_gmodeler_marking_menu(global_pos):
+        if self._open_map_studio_component_marking_menu(global_pos):
             return
         menu = self._build_map_studio_mode_marking_menu(self.viewport_panel)
         menu.exec(global_pos)
@@ -3924,19 +3951,19 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if summary:
             self.statusBar().showMessage(f"Map Studio hover: {summary}", 2500)
 
-    def _open_map_studio_gmodeler_marking_menu(self, global_pos: QtCore.QPoint) -> bool:
-        """Open the GModeler compact text popup for the hovered component."""
+    def _open_map_studio_component_marking_menu(self, global_pos: QtCore.QPoint) -> bool:
+        """Open the compact component-modeling menu for the hovered target."""
 
         context = self.viewport_panel.current_map_studio_hover_context()
         tree = map_studio_marking_menu_tree_for_hover(context)
         if tree is None:
             return False
-        menu = MapStudioGModelerMarkingMenu(tree, context, self.viewport_panel)
-        menu.actionSelected.connect(self._handle_map_studio_gmodeler_action)
+        menu = MapStudioComponentMarkingMenu(tree, context, self.viewport_panel)
+        menu.actionSelected.connect(self._handle_map_studio_component_marking_action)
         menu.open_at(global_pos)
         return True
 
-    def _handle_map_studio_gmodeler_action(self, action_key: str, target: str) -> None:
+    def _handle_map_studio_component_marking_action(self, action_key: str, target: str) -> None:
         action = map_studio_marking_menu_action(action_key)
         if action is None:
             return
@@ -3964,7 +3991,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "edge_split",
             "edge_collapse",
             "edge_delete",
-        } and self._apply_gmodeler_imported_face_action(action_key, target):
+        } and self._apply_component_modeling_imported_face_action(action_key, target):
             return
         if not action.implemented:
             impacts = ", ".join(action.resource_impacts) or "editor state only"
@@ -3973,7 +4000,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 f" (affects {impacts}). {action.kotor_guardrail}",
                 6000,
             )
-            self._log(f"Map Studio GModeler action (read-only): {action.key} target={target}")
+            self._log(f"Map Studio component-modeling action (read-only): {action.key} target={target}")
             return
         belt = self._map_studio_tool_action_for_key(action.tool_belt_key) if action.tool_belt_key else None
         if belt is not None:
@@ -4175,6 +4202,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._last_map_studio_topology_preview_ms = (perf_counter() - started) * 1000.0
 
     def _preview_map_studio_component_bevel(self, payload: dict) -> None:
+        if str(payload.get("kind", "") or "") == "multi_edge_bevel":
+            return
         source = self._map_studio_live_topology_source(payload)
         if source is None:
             return
@@ -4196,9 +4225,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._map_studio_prepared_topology_preview = None
 
     def _commit_map_studio_component_bevel(self, payload: dict) -> None:
+        multi_edges = tuple(
+            tuple(int(value) for value in tuple(edge)[:2])
+            for edge in tuple(payload.get("edge_vertex_indices") or ())
+        )
         ok, message = self.controller.apply_imported_mesh_room_component_op(
             room_resref=str(payload.get("room_resref", "") or ""),
-            op="edge_bevel",
+            op="multi_edge_bevel" if len(multi_edges) > 1 else "edge_bevel",
             mesh_role=str(payload.get("mesh_role", "") or ""),
             face_index=int(payload.get("face_index", -1)),
             edge_corners=tuple(int(value) for value in tuple(payload.get("edge_corners", (0, 1)))[:2]),
@@ -4209,6 +4242,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             smoothing_angle_degrees=float(payload.get("smoothing_angle_degrees", 180.0) or 0.0),
             uv_mode=str(payload.get("uv_mode", "preserve") or "preserve"),
             clamp_overlap=bool(payload.get("clamp_overlap", True)),
+            edge_vertex_indices=multi_edges,
         )
         self.statusBar().showMessage(message, 6000)
         self._log(f"Map Studio: {message}")
@@ -4299,7 +4333,1001 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             else:
                 self._cancel_map_studio_component_preview()
 
-    def _gmodeler_amount(
+    @staticmethod
+    def _map_studio_barycentric_weights(point, triangle) -> tuple[float, float, float] | None:
+        if len(tuple(point or ())) < 3 or len(tuple(triangle or ())) < 3:
+            return None
+        a, b, c = (tuple(float(value) for value in row[:3]) for row in tuple(triangle)[:3])
+        p = tuple(float(value) for value in tuple(point)[:3])
+        v0 = tuple(b[index] - a[index] for index in range(3))
+        v1 = tuple(c[index] - a[index] for index in range(3))
+        v2 = tuple(p[index] - a[index] for index in range(3))
+        d00 = sum(v0[index] * v0[index] for index in range(3))
+        d01 = sum(v0[index] * v1[index] for index in range(3))
+        d11 = sum(v1[index] * v1[index] for index in range(3))
+        d20 = sum(v2[index] * v0[index] for index in range(3))
+        d21 = sum(v2[index] * v1[index] for index in range(3))
+        denominator = (d00 * d11) - (d01 * d01)
+        if abs(denominator) <= 1.0e-18:
+            return None
+        second = ((d11 * d20) - (d01 * d21)) / denominator
+        third = ((d00 * d21) - (d01 * d20)) / denominator
+        return (1.0 - second - third, second, third)
+
+    def _map_studio_component_local_point(self, entry: dict) -> tuple[float, float, float] | None:
+        room = str(entry.get("room_resref") or "")
+        role = str(entry.get("mesh_role") or "")
+        face_index = int(entry.get("face_index", -1))
+        world_triangle = tuple(entry.get("face_world_points") or ())[:3]
+        weights = self._map_studio_barycentric_weights(entry.get("world_point") or (), world_triangle)
+        room_spec = self.controller.imported_mesh_room(room)
+        primitive = getattr(room_spec, "primitive", None)
+        if primitive is None or weights is None:
+            return None
+        surface_index = imported_mesh_surface_index_for_role(primitive, role)
+        if surface_index < 0:
+            return None
+        surface = primitive.surfaces[surface_index]
+        if not 0 <= face_index < len(surface.faces):
+            return None
+        face = tuple(int(value) for value in tuple(surface.faces[face_index])[:3])
+        if len(face) < 3:
+            return None
+        return tuple(
+            sum(float(surface.vertices[face[corner]][axis]) * weights[corner] for corner in range(3))
+            for axis in range(3)
+        )
+
+    @staticmethod
+    def _ordered_map_studio_boundary_loop(edges) -> tuple[int, ...]:
+        adjacency: dict[int, set[int]] = {}
+        clean_edges = {
+            tuple(sorted((int(edge[0]), int(edge[1]))))
+            for edge in tuple(edges or ())
+            if len(tuple(edge or ())) >= 2 and int(edge[0]) >= 0 and int(edge[1]) >= 0
+        }
+        for first, second in clean_edges:
+            if first == second:
+                return ()
+            adjacency.setdefault(first, set()).add(second)
+            adjacency.setdefault(second, set()).add(first)
+        if len(adjacency) < 3 or any(len(neighbors) != 2 for neighbors in adjacency.values()):
+            return ()
+        start = min(adjacency)
+        loop = [start]
+        previous = None
+        current = start
+        while True:
+            candidates = sorted(value for value in adjacency[current] if value != previous)
+            if not candidates:
+                return ()
+            following = candidates[0]
+            if following == start:
+                return tuple(loop) if len(loop) == len(adjacency) else ()
+            if following in loop:
+                return ()
+            loop.append(following)
+            previous, current = current, following
+
+    def _map_studio_baked_modeling_options(self, action_key: str) -> dict[str, Any]:
+        """Return persistent options for KOTOR-safe static mesh operators.
+
+        These operators deliberately bake their result into the imported room
+        mesh.  They do not claim Maya's dependency-graph history or a live
+        deformer handle, both of which would be discarded by MDL/WOK export.
+        """
+
+        defaults: dict[str, dict[str, Any]] = {
+            "mirror": {"axis": "x", "center": 0.0, "duplicate": True, "merge_tolerance": 1.0e-5},
+            "bridge": {"divisions": 0, "taper": 0.0, "twist_degrees": 0.0, "smooth": True},
+            "boolean_a_minus_b": {"weld_tolerance": 1.0e-6},
+            "multi_cut": {
+                "coplanar_angle_degrees": 0.5,
+                "plane_tolerance": 1.0e-4,
+                "boundary_tolerance": 1.0e-7,
+                "snap_tolerance": 1.0e-4,
+            },
+            "bend_tool": {"axis": "x", "curvature_degrees": 90.0},
+            "lattice": {"offset_axis": "z", "upper_layer_offset": 0.5},
+            "shrink_wrap": {"projection": "nearest_triangle", "offset": 0.0, "align_normals": False},
+            "wrap": {"nearest_count": 4, "influence": 1.0, "max_distance": 0.0},
+            "make_hole": {"planarity_tolerance": 1.0e-4, "boundary_tolerance": 1.0e-6},
+            "merge_components": {"threshold": 0.01},
+            "insert_edge_loop": {"position": 0.5},
+            "quad_draw": {
+                "planarity_tolerance": 0.25,
+                "surface_offset": 0.0,
+                "auto_weld": True,
+                "weld_tolerance": 1.0e-4,
+            },
+        }
+        key = str(action_key or "").strip()
+        stored = getattr(self, "_map_studio_baked_mesh_options", None)
+        if not isinstance(stored, dict):
+            stored = {}
+            self._map_studio_baked_mesh_options = stored
+        if key not in stored:
+            stored[key] = dict(defaults.get(key, {}))
+        return stored[key]
+
+    def _edit_map_studio_baked_modeling_options(self, action_key: str) -> bool:
+        """Edit the honest static subset exposed by an advanced shelf tool."""
+
+        key = str(action_key or "").strip()
+        if key not in {
+            "mirror",
+            "bridge",
+            "bend_tool",
+            "lattice",
+            "shrink_wrap",
+            "wrap",
+            "make_hole",
+            "merge_components",
+            "insert_edge_loop",
+            "quad_draw",
+            "multi_cut",
+            "boolean_a_minus_b",
+        }:
+            return False
+        options = self._map_studio_baked_modeling_options(key)
+        dialog = QtWidgets.QDialog(self)
+        title = {
+            "mirror": "Mirror Options",
+            "bridge": "Bridge Options",
+            "bend_tool": "Bend Options",
+            "lattice": "Lattice Options",
+            "shrink_wrap": "ShrinkWrap Options",
+            "wrap": "Wrap Options",
+            "make_hole": "Make Hole Options",
+            "merge_components": "Merge Options",
+            "insert_edge_loop": "Insert Edge Loop Options",
+            "quad_draw": "Quad Draw Options",
+            "multi_cut": "Multi-Cut Options",
+            "boolean_a_minus_b": "Difference A - B Options",
+        }[key]
+        dialog.setWindowTitle(title)
+        dialog.setObjectName(f"mapStudio{key.title().replace('_', '')}BakedOptionsDialog")
+        layout = QtWidgets.QVBoxLayout(dialog)
+        note = QtWidgets.QLabel(
+            "This Map Studio operator bakes a static polygon result for KOTOR export; "
+            "it does not create a persistent Maya dependency-graph deformer."
+        )
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        form = QtWidgets.QFormLayout()
+        layout.addLayout(form)
+        controls: dict[str, Any] = {}
+
+        def _axis_combo(value: str) -> QtWidgets.QComboBox:
+            combo = QtWidgets.QComboBox(dialog)
+            for axis in ("X", "Y", "Z"):
+                combo.addItem(axis, axis.lower())
+            index = combo.findData(str(value or "x").lower())
+            combo.setCurrentIndex(max(0, index))
+            return combo
+
+        def _double(value: float, minimum: float, maximum: float, decimals: int = 4) -> QtWidgets.QDoubleSpinBox:
+            spin = QtWidgets.QDoubleSpinBox(dialog)
+            spin.setRange(float(minimum), float(maximum))
+            spin.setDecimals(int(decimals))
+            spin.setValue(float(value))
+            return spin
+
+        if key == "mirror":
+            controls["axis"] = _axis_combo(options["axis"])
+            controls["center"] = _double(options["center"], -100000.0, 100000.0)
+            controls["duplicate"] = QtWidgets.QCheckBox("Keep source and add mirrored copy", dialog)
+            controls["duplicate"].setChecked(bool(options["duplicate"]))
+            controls["merge_tolerance"] = _double(options["merge_tolerance"], 0.0, 10.0, 6)
+            form.addRow("Mirror axis:", controls["axis"])
+            form.addRow("Axis-plane center:", controls["center"])
+            form.addRow("Mode:", controls["duplicate"])
+            form.addRow("Seam tolerance:", controls["merge_tolerance"])
+        elif key == "bridge":
+            controls["divisions"] = QtWidgets.QSpinBox(dialog)
+            controls["divisions"].setRange(0, 1024)
+            controls["divisions"].setValue(int(options["divisions"]))
+            controls["taper"] = _double(options["taper"], -0.99, 100.0, 3)
+            controls["twist_degrees"] = _double(options["twist_degrees"], -3600.0, 3600.0, 2)
+            controls["smooth"] = QtWidgets.QCheckBox("Blend normals across the generated strip", dialog)
+            controls["smooth"].setChecked(bool(options["smooth"]))
+            form.addRow("Divisions:", controls["divisions"])
+            form.addRow("Taper:", controls["taper"])
+            form.addRow("Twist (degrees):", controls["twist_degrees"])
+            form.addRow("Normals:", controls["smooth"])
+            limitation = QtWidgets.QLabel(
+                "Select exactly two border edges. Divisions create real intermediate edge rows; taper and twist "
+                "deform only those rows so both selected borders remain exact. The result is baked for KOTOR export."
+            )
+            limitation.setWordWrap(True)
+            form.addRow("KOTOR-safe bridge:", limitation)
+        elif key == "multi_cut":
+            controls["coplanar_angle_degrees"] = _double(options["coplanar_angle_degrees"], 0.0, 45.0, 3)
+            controls["plane_tolerance"] = _double(options["plane_tolerance"], 0.0, 1.0, 7)
+            controls["boundary_tolerance"] = _double(options["boundary_tolerance"], 0.0, 1.0, 8)
+            controls["snap_tolerance"] = _double(options["snap_tolerance"], 0.0, 1.0, 7)
+            form.addRow("Coplanar angle:", controls["coplanar_angle_degrees"])
+            form.addRow("Plane tolerance:", controls["plane_tolerance"])
+            form.addRow("Boundary tolerance:", controls["boundary_tolerance"])
+            form.addRow("Component snap tolerance:", controls["snap_tolerance"])
+            subset = QtWidgets.QLabel(
+                "Place two anchors across one connected coplanar triangle patch. The line previews without changing "
+                "KMAP; Enter commits one undo step, Backspace removes the last anchor, and Esc clears before exiting. "
+                "Chained turns, MMB slice, subdivisions, edge flow, and crease crossing remain disabled until their "
+                "topology contracts are safe."
+            )
+            subset.setWordWrap(True)
+            form.addRow("Safe interactive slice:", subset)
+        elif key == "boolean_a_minus_b":
+            controls["weld_tolerance"] = _double(options["weld_tolerance"], 0.0, 0.1, 8)
+            form.addRow("Topology weld tolerance:", controls["weld_tolerance"])
+            subset = QtWidgets.QLabel(
+                "Selection order is A then B. This solid Boolean runs only when both selected surfaces are closed, "
+                "consistently wound two-manifolds. Open KOTOR floors and walls are refused without changing KMAP; "
+                "use the planar architectural subtraction workflow for those surfaces. Cutter-derived cap faces keep B's material."
+            )
+            subset.setWordWrap(True)
+            form.addRow("Closed-solid contract:", subset)
+        elif key == "bend_tool":
+            controls["axis"] = _axis_combo(options["axis"])
+            controls["curvature_degrees"] = _double(options["curvature_degrees"], -3600.0, 3600.0, 2)
+            form.addRow("Length axis:", controls["axis"])
+            form.addRow("Curvature (degrees):", controls["curvature_degrees"])
+        elif key == "lattice":
+            controls["offset_axis"] = _axis_combo(options["offset_axis"])
+            controls["upper_layer_offset"] = _double(options["upper_layer_offset"], -10000.0, 10000.0)
+            form.addRow("Upper cage-layer direction:", controls["offset_axis"])
+            form.addRow("Upper cage-layer offset:", controls["upper_layer_offset"])
+            subset = QtWidgets.QLabel("Static 2x2x2 trilinear cage; the lower Z cage layer stays fixed.")
+            subset.setWordWrap(True)
+            form.addRow("Static subset:", subset)
+        elif key == "shrink_wrap":
+            controls["projection"] = QtWidgets.QComboBox(dialog)
+            controls["projection"].addItem("Nearest triangle", "nearest_triangle")
+            controls["projection"].addItem("Nearest vertex", "nearest_vertex")
+            controls["projection"].setCurrentIndex(
+                max(0, controls["projection"].findData(options["projection"]))
+            )
+            controls["offset"] = _double(options["offset"], -10000.0, 10000.0)
+            controls["align_normals"] = QtWidgets.QCheckBox("Align selected normals to the live surface", dialog)
+            controls["align_normals"].setChecked(bool(options["align_normals"]))
+            form.addRow("Projection:", controls["projection"])
+            form.addRow("Surface offset:", controls["offset"])
+            form.addRow("Normals:", controls["align_normals"])
+        elif key == "wrap":
+            controls["nearest_count"] = QtWidgets.QSpinBox(dialog)
+            controls["nearest_count"].setRange(1, 64)
+            controls["nearest_count"].setValue(int(options["nearest_count"]))
+            controls["influence"] = _double(options["influence"], -100.0, 100.0)
+            controls["max_distance"] = _double(options["max_distance"], 0.0, 100000.0)
+            form.addRow("Nearest driver vertices:", controls["nearest_count"])
+            form.addRow("Influence:", controls["influence"])
+            form.addRow("Maximum distance (0 = unlimited):", controls["max_distance"])
+            subset = QtWidgets.QLabel(
+                "Make Live captures the driver baseline. Edit that live mesh, select the target, then run Wrap to bake its vertex deltas."
+            )
+            subset.setWordWrap(True)
+            form.addRow("Workflow:", subset)
+        elif key == "make_hole":
+            controls["planarity_tolerance"] = _double(options["planarity_tolerance"], 0.0, 10.0, 6)
+            controls["boundary_tolerance"] = _double(options["boundary_tolerance"], 0.0, 0.25, 7)
+            form.addRow("Planarity tolerance:", controls["planarity_tolerance"])
+            form.addRow("Boundary clearance:", controls["boundary_tolerance"])
+            subset = QtWidgets.QLabel(
+                "Pick the outer face first and a separate cutter face of the same mesh second. "
+                "The cutter face is removed and its outline becomes the open border."
+            )
+            subset.setWordWrap(True)
+            form.addRow("Pick order:", subset)
+        elif key == "merge_components":
+            controls["threshold"] = _double(options["threshold"], 0.0, 10000.0, 6)
+            form.addRow("Merge distance:", controls["threshold"])
+            subset = QtWidgets.QLabel(
+                "Selected vertices inside the threshold merge to deterministic centroids. Exactly two selected "
+                "border edges merge by their nearest endpoint pairing. UV, lightmap, normal, and material seams "
+                "remain valid Odyssey records; unsafe non-manifold results are refused."
+            )
+            subset.setWordWrap(True)
+            form.addRow("KOTOR-safe merge:", subset)
+        elif key == "insert_edge_loop":
+            controls["position"] = _double(options["position"], 0.001, 0.999, 3)
+            controls["position"].setSingleStep(0.05)
+            form.addRow("Position along selected edge:", controls["position"])
+            subset = QtWidgets.QLabel(
+                "Select one edge on a connected Quad Draw strip. Map Studio follows the stored logical-quad "
+                "provenance and inserts one complete loop as one undoable edit. Arbitrary stock KOTOR "
+                "triangulation, stale provenance, branches, and ambiguous rings are refused instead of guessed."
+            )
+            subset.setWordWrap(True)
+            form.addRow("Safe topology contract:", subset)
+        elif key == "quad_draw":
+            controls["planarity_tolerance"] = _double(options["planarity_tolerance"], 0.0, 100.0, 5)
+            controls["surface_offset"] = _double(options["surface_offset"], -1000.0, 1000.0, 5)
+            controls["auto_weld"] = QtWidgets.QCheckBox("Reuse nearby Quad Draw vertices", dialog)
+            controls["auto_weld"].setChecked(bool(options["auto_weld"]))
+            controls["weld_tolerance"] = _double(options["weld_tolerance"], 0.0, 10.0, 6)
+            form.addRow("Planarity tolerance:", controls["planarity_tolerance"])
+            form.addRow("Live-surface offset:", controls["surface_offset"])
+            form.addRow("Auto weld:", controls["auto_weld"])
+            form.addRow("Weld tolerance:", controls["weld_tolerance"])
+            subset = QtWidgets.QLabel(
+                "Make a reference surface Live, then click four perimeter points. The editable retopology surface "
+                "stays separate from the reference and is stored as ordinary triangulated KOTOR geometry."
+            )
+            subset.setWordWrap(True)
+            form.addRow("Workflow:", subset)
+
+        buttons = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel,
+            parent=dialog,
+        )
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        if dialog.exec() != QtWidgets.QDialog.Accepted:
+            return True
+        for name, control in controls.items():
+            if isinstance(control, QtWidgets.QComboBox):
+                options[name] = str(control.currentData() or "")
+            elif isinstance(control, QtWidgets.QCheckBox):
+                options[name] = bool(control.isChecked())
+            elif isinstance(control, QtWidgets.QSpinBox):
+                options[name] = int(control.value())
+            elif isinstance(control, QtWidgets.QDoubleSpinBox):
+                options[name] = float(control.value())
+        self.statusBar().showMessage(f"{title} saved. Run the shelf command to bake the result.", 4500)
+        return True
+
+    def _map_studio_imported_surface_in_room_space(
+        self,
+        surface_room_resref: str,
+        mesh_role: str,
+        destination_room_resref: str,
+    ) -> ImportedMeshSurface | None:
+        """Resolve one imported surface in another authored room's local space."""
+
+        source_room = self.controller.imported_mesh_room(surface_room_resref)
+        destination_room = self.controller.imported_mesh_room(destination_room_resref)
+        primitive = getattr(source_room, "primitive", None)
+        if primitive is None or destination_room is None:
+            return None
+        surface_index = imported_mesh_surface_index_for_role(primitive, mesh_role)
+        if surface_index < 0:
+            return None
+        surface = primitive.surfaces[surface_index]
+        source_position = tuple(float(value) for value in tuple(getattr(source_room, "position", (0.0, 0.0, 0.0)))[:3])
+        destination_position = tuple(
+            float(value) for value in tuple(getattr(destination_room, "position", (0.0, 0.0, 0.0)))[:3]
+        )
+        offset = tuple(source_position[axis] - destination_position[axis] for axis in range(3))
+        if all(abs(value) <= 1.0e-12 for value in offset):
+            return surface
+        return replace(
+            surface,
+            name=f"{surface.name}@{surface_room_resref}_in_{destination_room_resref}",
+            vertices=tuple(
+                tuple(float(point[axis]) + offset[axis] for axis in range(3)) for point in surface.vertices
+            ),
+        )
+
+    def _map_studio_selected_mesh_vertex_indices(
+        self,
+        room_resref: str,
+        mesh_role: str,
+        selection,
+    ) -> tuple[int, ...]:
+        """Expand selected vertices, edges, or faces to stable raw vertex IDs."""
+
+        room_spec = self.controller.imported_mesh_room(room_resref)
+        primitive = getattr(room_spec, "primitive", None)
+        surface_index = imported_mesh_surface_index_for_role(primitive, mesh_role) if primitive is not None else -1
+        surface = primitive.surfaces[surface_index] if surface_index >= 0 else None
+        selected: set[int] = set()
+        for row in tuple(selection or ()):
+            if str(row.get("room_resref") or "") != room_resref or str(row.get("mesh_role") or "") != mesh_role:
+                continue
+            component = str(row.get("component_type") or "")
+            if component == "vertex":
+                index = int(row.get("mesh_vertex_index", -1))
+                if index >= 0:
+                    selected.add(index)
+            elif component == "edge":
+                selected.update(
+                    int(value) for value in tuple(row.get("mesh_edge_indices") or ())[:2] if int(value) >= 0
+                )
+            elif component == "face" and surface is not None:
+                face_index = int(row.get("face_index", -1))
+                if 0 <= face_index < len(surface.faces):
+                    selected.update(int(value) for value in surface.faces[face_index])
+        return tuple(sorted(selected))
+
+    def _capture_map_studio_live_wrap_driver_baseline(self) -> bool:
+        """Capture the Make Live driver state used by the static Wrap bake."""
+
+        live_surface = tuple(getattr(self.viewport_panel, "_map_studio_live_surface", ()) or ())
+        if len(live_surface) < 2:
+            return False
+        room, role = str(live_surface[0]), str(live_surface[1])
+        surface = self._map_studio_imported_surface_in_room_space(room, role, room)
+        if surface is None:
+            return False
+        self._map_studio_live_wrap_driver_state = (room, role, surface)
+        return True
+
+    def _cancel_map_studio_multi_cut_preview(self) -> None:
+        """Restore the exact pre-cut resident mesh without touching KMAP."""
+
+        self.viewport_panel.clear_component_mesh_preview()
+        self._map_studio_multi_cut_preview = None
+
+    def _evaluate_map_studio_multi_cut_preview(self, entries) -> dict[str, Any] | None:
+        """Build one non-mutating two-anchor Multi-Cut preview from viewport hits."""
+
+        anchors_in = [dict(value) for value in tuple(entries or ())]
+        if len(anchors_in) != 2:
+            self._cancel_map_studio_multi_cut_preview()
+            return None
+        room = str(anchors_in[0].get("room_resref") or "")
+        role = str(anchors_in[0].get("mesh_role") or "")
+        if (
+            not room
+            or not role
+            or any(
+                str(value.get("room_resref") or "") != room
+                or str(value.get("mesh_role") or "") != role
+                for value in anchors_in
+            )
+        ):
+            self.statusBar().showMessage("Multi-Cut anchors must stay on one editable room surface.", 4500)
+            self._cancel_map_studio_multi_cut_preview()
+            return None
+        room_spec = self.controller.imported_mesh_room(room)
+        primitive = getattr(room_spec, "primitive", None)
+        if not isinstance(primitive, ImportedMeshRoomPrimitive):
+            self.statusBar().showMessage("Multi-Cut needs an editable imported polygon surface.", 4500)
+            self._cancel_map_studio_multi_cut_preview()
+            return None
+        surface_index = imported_mesh_surface_index_for_role(primitive, role)
+        if surface_index < 0:
+            self.statusBar().showMessage("Multi-Cut could not resolve the selected polygon surface.", 4500)
+            self._cancel_map_studio_multi_cut_preview()
+            return None
+        surface = primitive.surfaces[surface_index]
+        options = self._map_studio_baked_modeling_options("multi_cut")
+        settings = MultiCutSettings(
+            coplanar_angle_degrees=float(options["coplanar_angle_degrees"]),
+            plane_tolerance=float(options["plane_tolerance"]),
+            boundary_tolerance=float(options["boundary_tolerance"]),
+        )
+        try:
+            session = MultiCutSession.begin(primitive, role, settings=settings)
+            stable_anchors = []
+            for entry in anchors_in:
+                point = self._map_studio_component_local_point(entry)
+                if point is None:
+                    raise ValueError("Multi-Cut could not resolve a stable room-local pointer hit.")
+                anchor = anchor_from_surface_hit(
+                    surface,
+                    int(entry.get("face_index", -1)),
+                    point,
+                    snap_tolerance=float(options["snap_tolerance"]),
+                    plane_tolerance=float(options["plane_tolerance"]),
+                )
+                stable_anchors.append(anchor)
+                session = session.add_anchor(anchor)
+            evaluation = session.preview()
+            if not evaluation.ok:
+                raise ValueError(evaluation.diagnostics[0] if evaluation.diagnostics else "Multi-Cut is invalid.")
+            if not self._show_live_imported_surface(evaluation.primitive, room, role):
+                raise ValueError("Multi-Cut could not patch the resident viewport surface.")
+        except ValueError as exc:
+            self.statusBar().showMessage(f"Multi-Cut preview: {exc}", 5500)
+            self._cancel_map_studio_multi_cut_preview()
+            return None
+        state = {
+            "room_resref": room,
+            "mesh_role": role,
+            "anchors": tuple(stable_anchors),
+            "settings": settings,
+            "evaluation": evaluation,
+        }
+        self._map_studio_multi_cut_preview = state
+        self.statusBar().showMessage(
+            f"Multi-Cut preview crosses {len(evaluation.affected_faces)} face(s). Press Enter to commit once.",
+            4500,
+        )
+        return state
+
+    def _handle_map_studio_multi_cut_gesture(self, payload: dict[str, Any]) -> None:
+        """Handle preview/cancel/Enter phases for the persistent Multi-Cut context."""
+
+        phase = str(payload.get("phase") or "preview").strip().lower()
+        if phase == "cancel":
+            self._cancel_map_studio_multi_cut_preview()
+            return
+        entries = tuple(payload.get("anchors") or ())
+        if phase == "preview":
+            self._evaluate_map_studio_multi_cut_preview(entries)
+            return
+        if phase != "commit":
+            self.statusBar().showMessage(f"Unknown Multi-Cut gesture phase: {phase}", 3500)
+            return
+        state = getattr(self, "_map_studio_multi_cut_preview", None)
+        if not isinstance(state, dict):
+            state = self._evaluate_map_studio_multi_cut_preview(entries)
+        if not isinstance(state, dict):
+            return
+        evaluation = state["evaluation"]
+        ok, message = self.controller.commit_imported_mesh_multi_cut(
+            room_resref=str(state["room_resref"]),
+            mesh_role=str(state["mesh_role"]),
+            anchors=tuple(state["anchors"]),
+            settings=state["settings"],
+            expected_source_fingerprint=str(evaluation.source_fingerprint),
+            expected_result_fingerprint=str(evaluation.result_fingerprint),
+        )
+        self.statusBar().showMessage(message, 6000)
+        self._log(f"Map Studio: {message}")
+        if ok:
+            self._refresh_map_studio_imported_mesh_change(
+                message,
+                str(state["room_resref"]),
+                str(state["mesh_role"]),
+            )
+            self._map_studio_multi_cut_preview = None
+        else:
+            self._cancel_map_studio_multi_cut_preview()
+
+    def _commit_map_studio_modeling_tool_gesture(self, tool_key: str, payload: object) -> None:
+        """Commit one persistent-tool gesture as one controller-owned undo step."""
+
+        key = str(tool_key or "").strip()
+        values = dict(payload) if isinstance(payload, dict) else {}
+        kwargs: dict[str, Any] = {}
+        room = role = ""
+        if key == "multi_cut":
+            self._handle_map_studio_multi_cut_gesture(values)
+            return
+        elif key == "target_weld":
+            source = dict(values.get("source") or {})
+            target = dict(values.get("target") or {})
+            room = str(source.get("room_resref") or "")
+            role = str(source.get("mesh_role") or "")
+            if room != str(target.get("room_resref") or ""):
+                self.statusBar().showMessage("Target Weld requires source and target in the same KOTOR room.", 4500)
+                return
+            kwargs = {
+                "room_resref": room,
+                "op": "target_weld",
+                "mesh_role": role,
+                "face_index": int(source.get("face_index", -1)),
+                "source_vertex_index": int(source.get("mesh_vertex_index", -1)),
+                "target_vertex_index": int(target.get("mesh_vertex_index", -1)),
+                "target_mesh_role": str(target.get("mesh_role") or role),
+            }
+        elif key == "connect_components":
+            selection = [dict(value) for value in tuple(values.get("selection") or ())]
+            vertices = [value for value in selection if int(value.get("mesh_vertex_index", -1)) >= 0]
+            if len(vertices) != 2:
+                self.statusBar().showMessage("Connect needs exactly two vertices in one editable polygon patch.", 4500)
+                return
+            room = str(vertices[0].get("room_resref") or "")
+            role = str(vertices[0].get("mesh_role") or "")
+            if any(str(value.get("room_resref") or "") != room or str(value.get("mesh_role") or "") != role for value in vertices):
+                self.statusBar().showMessage("Connect vertices must belong to the same editable mesh.", 4500)
+                return
+            kwargs = {
+                "room_resref": room,
+                "op": "connect_vertices",
+                "mesh_role": role,
+                "face_index": int(vertices[0].get("face_index", -1)),
+                "first_vertex_index": int(vertices[0].get("mesh_vertex_index", -1)),
+                "second_vertex_index": int(vertices[1].get("mesh_vertex_index", -1)),
+            }
+        elif key == "make_hole":
+            outer = dict(values.get("outer") or {})
+            cutter = dict(values.get("cutter") or {})
+            room = str(outer.get("room_resref") or "")
+            role = str(outer.get("mesh_role") or "")
+            if (
+                not room
+                or not role
+                or room != str(cutter.get("room_resref") or "")
+                or role != str(cutter.get("mesh_role") or "")
+            ):
+                self.statusBar().showMessage(
+                    "Make Hole requires two faces of the same editable polygon object.", 5000
+                )
+                return
+            outer_face = int(outer.get("face_index", -1))
+            cutter_face = int(cutter.get("face_index", -1))
+            if outer_face < 0 or cutter_face < 0 or outer_face == cutter_face:
+                self.statusBar().showMessage(
+                    "Make Hole needs two different faces: outer face first, cutter face second.", 5000
+                )
+                return
+            options = self._map_studio_baked_modeling_options("make_hole")
+            kwargs = {
+                "room_resref": room,
+                "op": "make_hole",
+                "mesh_role": role,
+                "face_index": outer_face,
+                "cutter_face_index": cutter_face,
+                "make_hole_planarity_tolerance": float(options["planarity_tolerance"]),
+                "make_hole_boundary_tolerance": float(options["boundary_tolerance"]),
+            }
+        elif key == "quad_draw":
+            live = tuple(values.get("live_surface") or ())
+            entries = [dict(value) for value in tuple(values.get("point_entries") or ())]
+            if len(live) < 2 or len(entries) != 4:
+                self.statusBar().showMessage(
+                    "Quad Draw needs four ordered points on a Make Live reference surface.", 5000
+                )
+                return
+            live_room, live_role = str(live[0]), str(live[1])
+            if any(
+                str(entry.get("room_resref") or "") != live_room
+                or str(entry.get("mesh_role") or "") != live_role
+                for entry in entries
+            ):
+                self.statusBar().showMessage(
+                    "Quad Draw points must all project onto the active Make Live surface.", 5000
+                )
+                return
+            local_points = tuple(self._map_studio_component_local_point(entry) for entry in entries)
+            if any(point is None for point in local_points):
+                self.statusBar().showMessage(
+                    "Quad Draw could not resolve stable room-local points on the live surface.", 5000
+                )
+                return
+            room_spec = self.controller.imported_mesh_room(live_room)
+            primitive = getattr(room_spec, "primitive", None)
+            live_surface_index = (
+                imported_mesh_surface_index_for_role(primitive, live_role) if primitive is not None else -1
+            )
+            if primitive is None or live_surface_index < 0:
+                self.statusBar().showMessage("Quad Draw's Make Live surface is no longer available.", 5000)
+                return
+            target_state = tuple(getattr(self, "_map_studio_quad_draw_target_state", ()) or ())
+            if (
+                len(target_state) == 3
+                and target_state[:2] == (live_room, live_role)
+                and imported_mesh_surface_index_for_role(primitive, str(target_state[2])) >= 0
+            ):
+                target_role = str(target_state[2])
+            else:
+                target_role = imported_mesh_surface_role(len(primitive.surfaces))
+            source_surface = primitive.surfaces[live_surface_index]
+            source_face = int(entries[0].get("face_index", -1))
+            source_material = (
+                int(source_surface.face_mats[source_face])
+                if source_surface.face_mats and 0 <= source_face < len(source_surface.face_mats)
+                else 0
+            )
+            normal_hint = None
+            if 0 <= source_face < len(source_surface.faces) and len(source_surface.normals) == len(source_surface.vertices):
+                source_vertices = tuple(int(value) for value in source_surface.faces[source_face])
+                averaged = tuple(
+                    sum(float(source_surface.normals[index][axis]) for index in source_vertices) / len(source_vertices)
+                    for axis in range(3)
+                )
+                if sum(value * value for value in averaged) > 1.0e-12:
+                    normal_hint = averaged
+            options = self._map_studio_baked_modeling_options("quad_draw")
+            surface_offset = float(options["surface_offset"])
+            if normal_hint is not None and abs(surface_offset) > 1.0e-12:
+                length = sum(value * value for value in normal_hint) ** 0.5
+                unit_normal = tuple(value / length for value in normal_hint)
+                local_points = tuple(
+                    tuple(float(point[axis]) + (unit_normal[axis] * surface_offset) for axis in range(3))
+                    for point in local_points
+                    if point is not None
+                )
+            room = live_room
+            role = target_role
+            kwargs = {
+                "room_resref": room,
+                "op": "quad_draw",
+                "mesh_role": role,
+                "face_index": -1,
+                "quad_points": tuple(point for point in local_points if point is not None),
+                "quad_material": source_material,
+                "quad_texture": str(source_surface.texture or ""),
+                "quad_lightmap": "",
+                "quad_normal_hint": normal_hint,
+                "quad_planarity_tolerance": float(options["planarity_tolerance"]),
+                "quad_auto_weld": bool(options["auto_weld"]),
+                "quad_weld_tolerance": float(options["weld_tolerance"]),
+            }
+        else:
+            return
+        ok, message = self.controller.apply_imported_mesh_room_component_op(**kwargs)
+        self.statusBar().showMessage(message, 6500)
+        self._log(f"Map Studio: {message}")
+        if ok:
+            if key == "quad_draw":
+                self._map_studio_quad_draw_target_state = (live_room, live_role, role)
+            self._refresh_map_studio_imported_mesh_change(message, room, role)
+
+    def _apply_map_studio_component_shelf_action(self, action_key: str) -> bool:
+        """Prefer genuine imported-mesh component operations over floor-plan fallbacks."""
+
+        key = str(action_key or "").strip()
+        selection = list(self.viewport_panel.map_studio_component_selection() or ())
+        if not selection:
+            return False
+        room = str(selection[0].get("room_resref") or "")
+        role = str(selection[0].get("mesh_role") or "")
+        if not room or not role:
+            return False
+        if any(str(row.get("room_resref") or "") != room for row in selection):
+            self.statusBar().showMessage(
+                f"{key.replace('_', ' ').title()} cannot mix components from different KOTOR rooms.", 5000
+            )
+            return True
+        same_surface = all(str(row.get("mesh_role") or "") == role for row in selection)
+        if not same_surface and key not in {"bridge", "boolean_a_minus_b"}:
+            self.statusBar().showMessage(
+                f"{key.replace('_', ' ').title()} needs components from one editable mesh surface.", 5000
+            )
+            return True
+        kwargs: dict[str, Any] | None = None
+        if key == "fill_hole":
+            loop = self._ordered_map_studio_boundary_loop(
+                row.get("mesh_edge_indices") or () for row in selection if str(row.get("component_type") or "") == "edge"
+            )
+            if loop:
+                kwargs = {"op": "fill_boundary_loop", "face_index": -1, "loop_vertex_indices": loop}
+        elif key in {"soften_edges", "harden_edges"}:
+            edges = tuple(
+                tuple(int(value) for value in tuple(row.get("mesh_edge_indices") or ())[:2])
+                for row in selection if str(row.get("component_type") or "") == "edge"
+            )
+            faces = tuple(
+                int(row.get("face_index", -1))
+                for row in selection if str(row.get("component_type") or "") == "face" and int(row.get("face_index", -1)) >= 0
+            )
+            if edges:
+                kwargs = {"op": key, "face_index": -1, "edge_vertex_indices": edges}
+            elif faces:
+                kwargs = {"op": "soften_faces" if key == "soften_edges" else "harden_faces", "face_index": faces[0], "face_indices": faces}
+        elif key == "reverse_normals":
+            faces = tuple(
+                int(row.get("face_index", -1))
+                for row in selection if str(row.get("component_type") or "") == "face" and int(row.get("face_index", -1)) >= 0
+            )
+            if faces:
+                kwargs = {"op": "face_flip", "face_index": faces[0], "face_indices": faces}
+        elif key == "insert_edge_loop":
+            edge = next((row for row in selection if str(row.get("component_type") or "") == "edge"), None)
+            if edge is not None:
+                raw_edge = tuple(int(value) for value in tuple(edge.get("mesh_edge_indices") or ())[:2])
+                if len(raw_edge) == 2 and raw_edge[0] != raw_edge[1]:
+                    options = self._map_studio_baked_modeling_options(key)
+                    kwargs = {
+                        "op": "insert_edge_loop",
+                        "face_index": int(edge.get("face_index", -1)),
+                        "loop_edge_vertices": raw_edge,
+                        "loop_position": float(options["position"]),
+                    }
+        elif key == "merge_components":
+            vertices = [
+                row for row in selection
+                if str(row.get("component_type") or "") == "vertex"
+                and int(row.get("mesh_vertex_index", -1)) >= 0
+            ]
+            edges = [row for row in selection if str(row.get("component_type") or "") == "edge"]
+            options = self._map_studio_baked_modeling_options(key)
+            if len(vertices) >= 2 and not edges:
+                kwargs = {
+                    "op": "merge_components",
+                    "face_index": int(vertices[0].get("face_index", -1)),
+                    "merge_vertex_indices": tuple(
+                        sorted({int(row.get("mesh_vertex_index", -1)) for row in vertices})
+                    ),
+                    "merge_threshold": float(options["threshold"]),
+                }
+            elif len(edges) == 2 and not vertices:
+                edge_indices = tuple(
+                    tuple(int(value) for value in tuple(row.get("mesh_edge_indices") or ())[:2])
+                    for row in edges
+                )
+                if all(len(edge) == 2 and edge[0] != edge[1] for edge in edge_indices):
+                    kwargs = {
+                        "op": "merge_components",
+                        "face_index": int(edges[0].get("face_index", -1)),
+                        "merge_edge_vertex_indices": edge_indices,
+                        "merge_threshold": float(options["threshold"]),
+                    }
+        elif key == "mirror":
+            options = self._map_studio_baked_modeling_options(key)
+            kwargs = {
+                "op": "mirror_geometry",
+                "face_index": -1,
+                "mirror_axis": str(options["axis"]),
+                "mirror_center": float(options["center"]),
+                "mirror_duplicate": bool(options["duplicate"]),
+                "mirror_merge_seam_tolerance": float(options["merge_tolerance"]),
+            }
+        elif key == "bridge":
+            edges = [row for row in selection if str(row.get("component_type") or "") == "edge"]
+            if len(edges) == 2:
+                first_edge = tuple(int(value) for value in tuple(edges[0].get("mesh_edge_indices") or ())[:2])
+                second_edge = tuple(int(value) for value in tuple(edges[1].get("mesh_edge_indices") or ())[:2])
+                if len(first_edge) == 2 and len(second_edge) == 2:
+                    options = self._map_studio_baked_modeling_options(key)
+                    role = str(edges[0].get("mesh_role") or role)
+                    kwargs = {
+                        "op": "bridge_border_edges",
+                        "face_index": int(edges[0].get("face_index", -1)),
+                        "first_edge_vertices": first_edge,
+                        "second_edge_vertices": second_edge,
+                        "target_mesh_role": str(edges[1].get("mesh_role") or role),
+                        "bridge_divisions": int(options["divisions"]),
+                        "bridge_taper": float(options["taper"]),
+                        "bridge_twist_degrees": float(options["twist_degrees"]),
+                        "bridge_smooth": bool(options["smooth"]),
+                    }
+        elif key == "boolean_a_minus_b":
+            ordered_roles: list[str] = []
+            for row in selection:
+                selected_role = str(row.get("mesh_role") or "")
+                if selected_role and selected_role not in ordered_roles:
+                    ordered_roles.append(selected_role)
+            if len(ordered_roles) == 2:
+                options = self._map_studio_baked_modeling_options(key)
+                role = ordered_roles[0]
+                kwargs = {
+                    "op": "boolean_difference_closed_solids",
+                    "face_index": -1,
+                    "boolean_cutter_mesh_role": ordered_roles[1],
+                    "boolean_weld_tolerance": float(options["weld_tolerance"]),
+                }
+        elif key == "bend_tool":
+            options = self._map_studio_baked_modeling_options(key)
+            kwargs = {
+                "op": "bend_vertices",
+                "face_index": -1,
+                "deform_vertex_indices": self._map_studio_selected_mesh_vertex_indices(room, role, selection),
+                "deform_axis": str(options["axis"]),
+                "curvature_degrees": float(options["curvature_degrees"]),
+            }
+        elif key == "lattice":
+            options = self._map_studio_baked_modeling_options(key)
+            axis_index = {"x": 0, "y": 1, "z": 2}.get(str(options["offset_axis"]), 2)
+            displacement = [0.0, 0.0, 0.0]
+            displacement[axis_index] = float(options["upper_layer_offset"])
+            kwargs = {
+                "op": "lattice_deform",
+                "face_index": -1,
+                "deform_vertex_indices": self._map_studio_selected_mesh_vertex_indices(room, role, selection),
+                "lattice_control_deltas": ((0.0, 0.0, 0.0),) * 4 + (tuple(displacement),) * 4,
+            }
+        elif key == "shrink_wrap":
+            live = tuple(getattr(self.viewport_panel, "_map_studio_live_surface", ()) or ())
+            if len(live) >= 2:
+                if (room, role) == (str(live[0]), str(live[1])):
+                    self.statusBar().showMessage(
+                        "ShrinkWrap target and source are the same live surface; select a different mesh to project.",
+                        5000,
+                    )
+                    return True
+                options = self._map_studio_baked_modeling_options(key)
+                target = self._map_studio_imported_surface_in_room_space(str(live[0]), str(live[1]), room)
+                if target is not None:
+                    kwargs = {
+                        "op": "shrink_wrap",
+                        "face_index": -1,
+                        "deform_vertex_indices": self._map_studio_selected_mesh_vertex_indices(room, role, selection),
+                        "shrink_target_surface": target,
+                        "shrink_projection": str(options["projection"]),
+                        "shrink_offset": float(options["offset"]),
+                        "shrink_align_normals": bool(options["align_normals"]),
+                    }
+        elif key == "wrap":
+            live = tuple(getattr(self.viewport_panel, "_map_studio_live_surface", ()) or ())
+            baseline = getattr(self, "_map_studio_live_wrap_driver_state", None)
+            if len(live) < 2:
+                self.statusBar().showMessage("Wrap needs a Make Live driver surface first.", 4500)
+                return True
+            if (room, role) == (str(live[0]), str(live[1])):
+                self.statusBar().showMessage(
+                    "Wrap driver and target are the same surface; select a different target mesh.", 5000
+                )
+                return True
+            if not baseline or tuple(baseline[:2]) != tuple(live[:2]):
+                if self._capture_map_studio_live_wrap_driver_baseline():
+                    self.statusBar().showMessage(
+                        "Captured the live Wrap driver baseline. Edit that driver, select the target, then run Wrap again.",
+                        6000,
+                    )
+                else:
+                    self.statusBar().showMessage("Could not capture the live Wrap driver surface.", 4500)
+                return True
+            live_room, live_role, driver_base_local = baseline
+            driver_current_local = self._map_studio_imported_surface_in_room_space(live_room, live_role, live_room)
+            if driver_current_local is None:
+                self.statusBar().showMessage("The live Wrap driver is no longer available.", 4500)
+                return True
+            if tuple(driver_base_local.vertices) == tuple(driver_current_local.vertices):
+                self.statusBar().showMessage(
+                    "The live Wrap driver has not changed since Make Live; edit it before baking Wrap.", 5000
+                )
+                return True
+            driver_deformed = self._map_studio_imported_surface_in_room_space(live_room, live_role, room)
+            if driver_deformed is not None:
+                if driver_current_local.vertices and driver_deformed.vertices:
+                    room_offset = tuple(
+                        float(driver_deformed.vertices[0][axis]) - float(driver_current_local.vertices[0][axis])
+                        for axis in range(3)
+                    )
+                else:
+                    room_offset = (0.0, 0.0, 0.0)
+                driver_base = replace(
+                    driver_base_local,
+                    name=f"{driver_base_local.name}@make_live_baseline",
+                    vertices=tuple(
+                        tuple(float(point[axis]) + room_offset[axis] for axis in range(3))
+                        for point in driver_base_local.vertices
+                    ),
+                )
+                options = self._map_studio_baked_modeling_options(key)
+                kwargs = {
+                    "op": "wrap_deform",
+                    "face_index": -1,
+                    "deform_vertex_indices": self._map_studio_selected_mesh_vertex_indices(room, role, selection),
+                    "wrap_driver_base": driver_base,
+                    "wrap_driver_deformed": driver_deformed,
+                    "wrap_nearest_count": int(options["nearest_count"]),
+                    "wrap_influence": float(options["influence"]),
+                    "wrap_max_distance": float(options["max_distance"]),
+                }
+        if kwargs is None:
+            if key == "insert_edge_loop":
+                self.statusBar().showMessage(
+                    "Insert Edge Loop needs one selected edge on a provenance-safe Quad Draw strip.", 5000
+                )
+                return True
+            if key == "bridge":
+                self.statusBar().showMessage("Bridge needs exactly two selected border edges in one KOTOR room.", 4500)
+                return True
+            if key == "boolean_a_minus_b":
+                self.statusBar().showMessage(
+                    "Difference A - B needs exactly two closed surfaces in one room, selected in A-then-B order.", 5500
+                )
+                return True
+            if key == "shrink_wrap":
+                self.statusBar().showMessage("ShrinkWrap needs a Make Live target surface.", 4500)
+                return True
+            diagnostics = {
+                "fill_hole": "Fill Hole needs one complete closed border-edge loop.",
+                "soften_edges": "Soften Edge needs selected edges or faces on one editable surface.",
+                "harden_edges": "Harden Edge needs selected edges or faces on one editable surface.",
+                "reverse_normals": "Reverse needs one or more selected faces on one editable surface.",
+                "merge_components": (
+                    "Merge needs at least two selected vertices or exactly two selected border edges "
+                    "on one editable surface."
+                ),
+                "bend_tool": "Bend needs selected vertices, edges, faces, or one editable surface.",
+                "lattice": "Lattice needs selected vertices, edges, faces, or one editable surface.",
+                "wrap": "Wrap needs a Make Live driver and a different selected target surface.",
+            }
+            self.statusBar().showMessage(
+                diagnostics.get(key, f"{key.replace('_', ' ').title()} cannot use the current component selection."),
+                5500,
+            )
+            return True
+        ok, message = self.controller.apply_imported_mesh_room_component_op(
+            room_resref=room, mesh_role=role, **kwargs
+        )
+        self.statusBar().showMessage(message, 6500)
+        self._log(f"Map Studio: {message}")
+        if ok:
+            self.viewport_panel.clear_map_studio_component_selection()
+            self._refresh_map_studio_imported_mesh_change(message, room, role)
+        return True
+
+    def _component_modeling_amount(
         self,
         action_key: str,
         title: str,
@@ -4308,12 +5336,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         minimum: float,
         maximum: float,
     ) -> tuple[float, bool]:
-        """ZModeler-style amount flow: apply immediately with the remembered
+        """Component-modeling amount flow: apply immediately with the remembered
         per-action amount; hold Ctrl while picking the action to type a value."""
-        amounts = getattr(self, "_gmodeler_last_amounts", None)
+        amounts = getattr(self, "_component_modeling_last_amounts", None)
         if amounts is None:
             amounts = {}
-            self._gmodeler_last_amounts = amounts
+            self._component_modeling_last_amounts = amounts
         remembered = float(amounts.get(action_key, default))
         ctrl_held = bool(QtWidgets.QApplication.keyboardModifiers() & QtCore.Qt.ControlModifier)
         if not ctrl_held:
@@ -4325,7 +5353,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             amounts[action_key] = float(value)
         return float(value), accepted
 
-    def _apply_gmodeler_imported_face_action(self, action_key: str, target: str) -> bool:
+    def _apply_component_modeling_imported_face_action(self, action_key: str, target: str) -> bool:
         """Route Delete / Set Texture on a hovered face to imported-mesh geometry.
 
         Hovering a read-only stock room converts it to editable imported
@@ -4385,7 +5413,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             elif wanted_component == "edge":
                 component_kwargs["edge_corners"] = tuple(getattr(context, "edge_indices", (0, 1)))
             if action_key in {"vertex_move", "edge_move"}:
-                distance, accepted = self._gmodeler_amount(
+                distance, accepted = self._component_modeling_amount(
                     action_key,
                     "Move Along Face Normal",
                     "Distance (meters, negative = inward):",
@@ -4403,7 +5431,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     normal[2] * float(distance),
                 )
             elif action_key == "vertex_weld":
-                max_distance, accepted = self._gmodeler_amount(
+                max_distance, accepted = self._component_modeling_amount(
                     action_key, "Weld Vertex", "Maximum snap distance (meters):", 0.5, 0.01, 25.0
                 )
                 if not accepted:
@@ -4411,7 +5439,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     return True
                 component_kwargs["max_distance"] = float(max_distance)
             elif action_key == "edge_bevel":
-                amount, accepted = self._gmodeler_amount(
+                amount, accepted = self._component_modeling_amount(
                     action_key,
                     "Bevel Edge",
                     "Chamfer width (meters):",
@@ -4438,7 +5466,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 face_indices=face_indices,
             )
         elif action_key == "face_extrude":
-            distance, accepted = self._gmodeler_amount(
+            distance, accepted = self._component_modeling_amount(
                 action_key, "Extrude Faces", "Extrude distance (meters, negative = inward):", 2.0, -100.0, 100.0
             )
             if not accepted:
@@ -4452,7 +5480,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 point_normal=shift_held,
             )
         elif action_key == "face_inset":
-            inset, accepted = self._gmodeler_amount(
+            inset, accepted = self._component_modeling_amount(
                 action_key, "Inset Faces", "Inset amount (meters):", 0.5, 0.01, 50.0
             )
             if not accepted:
@@ -4465,7 +5493,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 inset=float(inset),
             )
         elif action_key == "face_move":
-            distance, accepted = self._gmodeler_amount(
+            distance, accepted = self._component_modeling_amount(
                 action_key, "Move Faces", "Move along face normal (meters, negative = inward):", 0.5, -100.0, 100.0
             )
             if not accepted:
@@ -4668,7 +5696,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         uv_menu.setObjectName("mapStudioToolMarkingUvMappingMenu")
         self._add_map_studio_marking_tool_action(uv_menu, "texture_paint", label="Texture Paint / Assign Target")
         self._add_map_studio_marking_tool_action(uv_menu, "paint_material", label="Assign Material Intent")
-        # Roadmap items live in the audit brief and the GModeler panel's
+        # Roadmap items live in the audit brief and the component-modeling panel's
         # dimmed actions — a "Planned / Missing" menu is UI noise, not a tool.
         return menu
 
@@ -5316,7 +6344,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return False
         label = "Extrude" if key == "extrude" else "Bevel"
         self.statusBar().showMessage(
-            f"{label} armed on the selected component. Drag the live viewport manipulator; Esc cancels.",
+            (
+                f"{label} armed on {len(selection)} selected edges. Adjust options and click Apply for one atomic edit; Esc cancels."
+                if key == "bevel" and len(selection) > 1
+                else f"{label} armed on the selected component. Drag the live viewport manipulator; Esc cancels."
+            ),
             5000,
         )
         return True
@@ -5492,6 +6524,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "move_authored_room_primitive",
             "add_authored_room_primitive",
             "apply_authored_terrain_brush_stroke",
+            "reset_authored_room_primitive_transform",
+            "zero_authored_room_primitive_pivot",
+            "delete_authored_room_primitive_history",
             "center_authored_room_primitive_pivot",
             "freeze_authored_room_primitive_transform",
             "grid_snap_authored_room_primitive",
@@ -5925,8 +6960,41 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         key = str(getattr(action, "key", "") or "")
         workspace_key = str(getattr(action, "workspace_key", "") or "")
         tool_key = str(getattr(action, "tool_key", "") or "")
+        if key == "duplicate_special_options":
+            self._open_map_studio_modeling_tool_options(key)
+            return
+        if key in {
+            "multi_cut",
+            "target_weld",
+            "make_hole",
+            "connect_components",
+            "make_live",
+            "quad_draw",
+            "select_triangles",
+            "select_quads",
+            "convert_contained_faces",
+        }:
+            self._run_map_studio_viewport_modeling_command(key)
+            return
         if key == "texture_paint":
             self._show_map_studio_texture_paint_workflow()
+            return
+        if key in {
+            "fill_hole",
+            "mirror",
+            "bridge",
+            "bend_tool",
+            "lattice",
+            "wrap",
+            "shrink_wrap",
+            "soften_edges",
+            "harden_edges",
+            "reverse_normals",
+            "insert_edge_loop",
+            "merge_components",
+            "boolean_a_minus_b",
+        } and self._apply_map_studio_component_shelf_action(key):
+            self._last_map_studio_modeling_action_key = key
             return
         if key == "combine" and self._combine_selected_authored_room_primitives():
             return
@@ -5955,6 +7023,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "door_frame",
             "arch",
             "universal_transform",
+            "reset_transform",
+            "zero_pivot",
+            "delete_history",
             "cleanup",
             "triangulate",
             "normals",
@@ -5986,6 +7057,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "bend_tool",
             "curve_tool",
             "lattice",
+            "wrap",
             "inset",
             "combine",
             "separate",
@@ -6069,6 +7141,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "create_room",
             "primitive",
             "universal_transform",
+            "reset_transform",
+            "zero_pivot",
+            "delete_history",
             "extrude",
             "bridge",
             "cut",
@@ -6099,6 +7174,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "boolean_a_minus_b",
             "boolean_b_minus_a",
             "lattice",
+            "wrap",
             "shrink_wrap",
             "duplicate_special",
             "curve_tool",
@@ -6201,10 +7277,137 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._set_map_studio_toolbar_edit_mode(label)
         self._handle_map_studio_edit_mode_changed(label)
 
+    def _run_map_studio_maya_shortcut(self, action_key: str) -> None:
+        """Run one conflict-free Maya shortcut while the viewport has focus."""
+
+        key = str(action_key or "").strip()
+        if not key:
+            return
+        self._run_map_studio_viewport_modeling_command(key)
+
+    def _run_map_studio_bridge_or_fill_shortcut(self) -> None:
+        """Match the user's contextual Ctrl+/ command: bridge two borders, otherwise fill."""
+
+        selected = list(self.viewport_panel.map_studio_component_selection() or ())
+        edges = [row for row in selected if str(row.get("component_type") or "") == "edge"]
+        # A valid Fill Hole selection is itself a closed loop of three or more
+        # border edges.  Treating every 2+ edge selection as Bridge made the
+        # contextual shortcut unable to reach Fill Hole at all.
+        self._run_map_studio_viewport_modeling_command("bridge" if len(edges) == 2 else "fill_hole")
+
+    def _repeat_last_map_studio_modeling_command(self) -> None:
+        """Maya G: repeat the most recently invoked repeatable modeling command."""
+
+        key = str(getattr(self, "_last_map_studio_modeling_action_key", "") or "").strip()
+        if not key:
+            self.statusBar().showMessage("No Map Studio modeling command to repeat yet.", 2500)
+            return
+        self._run_map_studio_viewport_modeling_command(key)
+
+    def _open_map_studio_modeling_tool_options(self, action_key: str) -> None:
+        """Open persistent tool settings without running or committing the command."""
+
+        key = str(action_key or "").strip()
+        if self._edit_map_studio_baked_modeling_options(key):
+            return
+        if key in {"duplicate_special_options", "duplicate_special"}:
+            self.show_map_studio_geometry_tools()
+            control = getattr(self.builder_tab, "duplicateSpecialCountSpinBox", None)
+            if control is not None:
+                control.setFocus(QtCore.Qt.OtherFocusReason)
+                control.selectAll()
+            self.workflow_panel.set_active_authoring_context(
+                "Duplicate Special Options: set copy count plus per-copy translation, Z rotation, and XYZ scale. "
+                "Ctrl+Shift+D repeats the current settings on the selected object."
+            )
+            self.statusBar().showMessage("Duplicate Special options focused.", 3500)
+            return
+        if key == "bevel":
+            if self.viewport_panel.arm_component_bevel():
+                self.viewport_panel.bevel_width_spin.setFocus(QtCore.Qt.OtherFocusReason)
+                self.viewport_panel.bevel_width_spin.selectAll()
+                self.statusBar().showMessage(
+                    "Bevel Tool Settings: width, segments, profile, miter, smoothing, UV mode, and overlap clamp are live.",
+                    5000,
+                )
+            else:
+                self.statusBar().showMessage("Select an editable imported-mesh edge before opening Bevel settings.", 4500)
+            return
+        if key == "extrude":
+            self._run_map_studio_viewport_modeling_command("extrude")
+            return
+        action = self._map_studio_tool_action_for_key(key)
+        if action is None:
+            return
+        route = resolve_map_studio_tool_belt_action(key, self._map_studio_tool_action_context(key))
+        self.show_map_studio_geometry_tools()
+        self.workflow_panel.set_active_authoring_context(
+            route.authoring_context or f"{getattr(action, 'label', key)} Tool Settings"
+        )
+        self.statusBar().showMessage(
+            f"{getattr(action, 'label', key)} settings are persistent; adjust the visible modeling controls, then work in the viewport.",
+            4500,
+        )
+
     def _run_map_studio_viewport_modeling_command(self, action_key: str) -> None:
         """Route the Map Studio-only viewport belt into the real tool dispatcher."""
 
         key = str(action_key or "").strip()
+        if not key:
+            return
+        if key == "duplicate_special_options":
+            self._open_map_studio_modeling_tool_options(key)
+            return
+        if key == "delete_history":
+            component_selection = list(self.viewport_panel.map_studio_component_selection() or ())
+            room = str(component_selection[0].get("room_resref") or "") if component_selection else ""
+            role = str(component_selection[0].get("mesh_role") or "") if component_selection else ""
+            if room:
+                try:
+                    self.controller.delete_authored_room_primitive_history(
+                        room_resref=room,
+                        primitive_name=room,
+                    )
+                except (ValueError, RuntimeError) as exc:
+                    self.statusBar().showMessage(str(exc), 5500)
+                else:
+                    message = (
+                        f"Deleted transient construction history for imported room {room}; "
+                        "evaluated geometry and export provenance were retained."
+                    )
+                    self.statusBar().showMessage(message, 6000)
+                    self._refresh_map_studio_imported_mesh_change(message, room, role)
+                    self._last_map_studio_modeling_action_key = key
+                return
+        if key in {"select_triangles", "select_quads", "convert_contained_faces"}:
+            selector = getattr(self.viewport_panel, key, None)
+            count = int(selector() or 0) if callable(selector) else 0
+            label = {
+                "select_triangles": "triangle face",
+                "select_quads": "quad region",
+                "convert_contained_faces": "contained face",
+            }[key]
+            self._last_map_studio_modeling_action_key = key
+            self.statusBar().showMessage(f"Selected {count} {label}{'' if count == 1 else 's'}.", 3500)
+            return
+        if key in {"multi_cut", "target_weld", "make_hole", "connect_components", "make_live", "quad_draw"}:
+            activator = getattr(self.viewport_panel, "activate_map_studio_modeling_tool", None)
+            if callable(activator) and activator(key):
+                if key == "make_live":
+                    self._capture_map_studio_live_wrap_driver_baseline()
+                self._last_map_studio_modeling_action_key = key
+                self.statusBar().showMessage(
+                    f"{key.replace('_', ' ').title()} active. Work in the viewport; Enter commits where applicable and Esc exits.",
+                    5000,
+                )
+            else:
+                self.statusBar().showMessage(
+                    f"{key.replace('_', ' ').title()} could not start in the current selection context.", 4500
+                )
+            # Persistent tools are owned by the viewport activator.  Never
+            # fall through to the belt handler: it routes these same keys back
+            # here and would recurse when activation is unavailable.
+            return
         if key == "select":
             if not self.select_map_studio_authored_context():
                 self._open_map_studio_mode_from_viewport("Object")
@@ -6221,7 +7424,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             if not self._execute_map_studio_tool_belt_command(key):
                 self.delete_selected()
             return
-        self._execute_map_studio_tool_belt_command(key)
+        action = self._map_studio_tool_action_for_key(key)
+        if action is None:
+            self.statusBar().showMessage(f"Map Studio modeling command '{key}' is unavailable.", 4000)
+            return
+        self._last_map_studio_modeling_action_key = key
+        self._handle_map_studio_tool_belt_action(action)
 
     def focus_map_studio_modeling_workspace(self) -> None:
         """Open the Map Studio modeling controls from the main viewport affordance."""
@@ -6243,7 +7451,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         """Focus a stable Map Studio workflow requested by the tutorial window."""
 
         key = str(route or "map_studio").strip().lower()
-        if key == "gmodeler":
+        if key in {"gmodeler", "modeling"}:  # legacy tutorial route remains readable
             self.show_map_studio_geometry_tools()
             self._set_map_studio_toolbar_edit_mode("Multi-Component")
             self._handle_map_studio_edit_mode_changed("Multi-Component")

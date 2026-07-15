@@ -50,7 +50,7 @@
     },
     {
         "project": "GhostRigger.Core.GUI.Display",
-        "python_file_count": 312,
+        "python_file_count": 314,
         "files": [
             "src\\gui\\__init__.py",
             "src\\gui\\assets\\__init__.py",
@@ -159,9 +159,11 @@
             "src\\gui\\panels\\module_editor\\__init__.py",
             "src\\gui\\panels\\module_editor\\blueprints_tab.py",
             "src\\gui\\panels\\module_editor\\builder_tab.py",
+            "src\\gui\\panels\\module_editor\\component_marking_menu.py",
             "src\\gui\\panels\\module_editor\\environment_tab.py",
             "src\\gui\\panels\\module_editor\\export_panel.py",
             "src\\gui\\panels\\module_editor\\gmodeler_marking_menu.py",
+            "src\\gui\\panels\\module_editor\\map_studio_modeling_shelf.py",
             "src\\gui\\panels\\module_editor\\module_editor_asset_browser.py",
             "src\\gui\\panels\\module_editor\\module_editor_outliner.py",
             "src\\gui\\panels\\module_editor\\module_editor_properties.py",
@@ -427,7 +429,7 @@
     },
     {
         "project": "GhostRigger.Core.Math",
-        "python_file_count": 58,
+        "python_file_count": 59,
         "files": [
             "src\\core\\camera\\__init__.py",
             "src\\core\\camera\\arcball_camera.py",
@@ -450,6 +452,7 @@
             "src\\core\\geometry\\mesh_topology.py",
             "src\\core\\geometry\\model_data.py",
             "src\\core\\geometry\\polygon_mesh_operations.py",
+            "src\\core\\geometry\\solid_boolean.py",
             "src\\core\\geometry\\vertex_space.py",
             "src\\core\\rendering\\frame_core\\math_helpers.py",
             "src\\gui\\camera\\arcball_camera.py",
@@ -675,7 +678,7 @@
     },
     {
         "project": "GhostRigger.Core.Scene",
-        "python_file_count": 108,
+        "python_file_count": 110,
         "files": [
             "src\\core\\level\\__init__.py",
             "src\\core\\level\\kmap_model.py",
@@ -739,7 +742,9 @@
             "src\\core\\modules\\map_studio_hover_context.py",
             "src\\core\\modules\\map_studio_live_topology_session.py",
             "src\\core\\modules\\map_studio_marking_menu_registry.py",
+            "src\\core\\modules\\map_studio_modeling_shelf.py",
             "src\\core\\modules\\map_studio_modeling_tools.py",
+            "src\\core\\modules\\map_studio_multi_cut.py",
             "src\\core\\modules\\map_studio_pie.py",
             "src\\core\\modules\\map_studio_pie_audio.py",
             "src\\core\\modules\\map_studio_pie_creatures.py",
@@ -789,7 +794,7 @@
     },
     {
         "project": "GhostRigger.Core.Tools",
-        "python_file_count": 369,
+        "python_file_count": 373,
         "files": [
             "src\\adapters\\qt_viewport\\camera_gizmo_renderer.py",
             "src\\adapters\\qt_viewport\\camera_overlays.py",
@@ -919,7 +924,9 @@
             "src\\core\\modules\\map_studio_hover_context.py",
             "src\\core\\modules\\map_studio_live_topology_session.py",
             "src\\core\\modules\\map_studio_marking_menu_registry.py",
+            "src\\core\\modules\\map_studio_modeling_shelf.py",
             "src\\core\\modules\\map_studio_modeling_tools.py",
+            "src\\core\\modules\\map_studio_multi_cut.py",
             "src\\core\\modules\\map_studio_pie.py",
             "src\\core\\modules\\map_studio_pie_audio.py",
             "src\\core\\modules\\map_studio_pie_creatures.py",
@@ -1049,9 +1056,11 @@
             "src\\gui\\panels\\module_editor\\__init__.py",
             "src\\gui\\panels\\module_editor\\blueprints_tab.py",
             "src\\gui\\panels\\module_editor\\builder_tab.py",
+            "src\\gui\\panels\\module_editor\\component_marking_menu.py",
             "src\\gui\\panels\\module_editor\\environment_tab.py",
             "src\\gui\\panels\\module_editor\\export_panel.py",
             "src\\gui\\panels\\module_editor\\gmodeler_marking_menu.py",
+            "src\\gui\\panels\\module_editor\\map_studio_modeling_shelf.py",
             "src\\gui\\panels\\module_editor\\module_editor_asset_browser.py",
             "src\\gui\\panels\\module_editor\\module_editor_outliner.py",
             "src\\gui\\panels\\module_editor\\module_editor_properties.py",

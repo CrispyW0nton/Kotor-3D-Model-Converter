@@ -731,6 +731,129 @@ class ViewportOverlayLayersMixin:
         except Exception as exc:
             log.debug("Map Studio extrude gizmo overlay failed: %s", exc)
 
+    @staticmethod
+    def _map_studio_draw_dashed_line(
+        draw,
+        start: tuple[float, float],
+        end: tuple[float, float],
+        *,
+        fill: tuple[int, int, int, int],
+        width: int,
+        dash: float = 7.0,
+        gap: float = 5.0,
+    ) -> None:
+        """Draw one screen-space dashed segment without renderer mutation."""
+
+        ax, ay = float(start[0]), float(start[1])
+        bx, by = float(end[0]), float(end[1])
+        dx, dy = bx - ax, by - ay
+        length = (dx * dx + dy * dy) ** 0.5
+        if length <= 1.0e-6:
+            return
+        ux, uy = dx / length, dy / length
+        cursor = 0.0
+        stride = max(1.0, float(dash)) + max(0.0, float(gap))
+        while cursor < length:
+            stop = min(length, cursor + max(1.0, float(dash)))
+            draw.line(
+                [
+                    (ax + ux * cursor, ay + uy * cursor),
+                    (ax + ux * stop, ay + uy * stop),
+                ],
+                fill=fill,
+                width=max(1, int(width)),
+            )
+            cursor += stride
+
+    def _draw_map_studio_modeling_points_overlay(self, draw, w: int, h: int) -> None:
+        """Paint Maya-style Quad Draw anchors and the prospective closing edge.
+
+        The payload contains world-space feedback only.  Drawing it here keeps
+        the first three clicks visible without touching the KMAP or the live
+        imported mesh before the fourth click commits the quad.
+        """
+
+        overlay = getattr(self, "_map_studio_modeling_points_overlay", None)
+        if not isinstance(overlay, dict) or str(overlay.get("tool") or "") != "quad_draw":
+            return
+        try:
+            points = tuple(overlay.get("points") or ())[:3]
+            projected: list[tuple[float, float]] = []
+            for point in points:
+                screen = self._map_studio_project_point(point, w, h)
+                if screen is None:
+                    continue
+                projected.append((float(screen[0]), float(screen[1])))
+            if not projected:
+                return
+
+            anchor_color = self._map_studio_theme_rgba("accent.secondary", "#00e5ff", 255)
+            preview_color = self._map_studio_theme_rgba("accent.primary", "#ff9f43", 235)
+            if len(projected) >= 2:
+                draw.line(projected, fill=(0, 0, 0, 205), width=7)
+                draw.line(projected, fill=anchor_color, width=3)
+
+            preview_point = tuple(overlay.get("preview_point") or ())
+            preview_screen = self._map_studio_project_point(preview_point, w, h) if len(preview_point) >= 3 else None
+            if preview_screen is not None:
+                candidate = (float(preview_screen[0]), float(preview_screen[1]))
+                self._map_studio_draw_dashed_line(
+                    draw,
+                    projected[-1],
+                    candidate,
+                    fill=(0, 0, 0, 195),
+                    width=6,
+                    dash=7.0,
+                    gap=5.0,
+                )
+                self._map_studio_draw_dashed_line(
+                    draw,
+                    projected[-1],
+                    candidate,
+                    fill=preview_color,
+                    width=3,
+                    dash=7.0,
+                    gap=5.0,
+                )
+                if len(projected) == 3 and bool(overlay.get("close_preview", False)):
+                    self._map_studio_draw_dashed_line(
+                        draw,
+                        candidate,
+                        projected[0],
+                        fill=(0, 0, 0, 195),
+                        width=6,
+                        dash=7.0,
+                        gap=5.0,
+                    )
+                    self._map_studio_draw_dashed_line(
+                        draw,
+                        candidate,
+                        projected[0],
+                        fill=preview_color,
+                        width=3,
+                        dash=7.0,
+                        gap=5.0,
+                    )
+                cx, cy = candidate
+                draw.ellipse((cx - 5.0, cy - 5.0, cx + 5.0, cy + 5.0), fill=(0, 0, 0, 205))
+                draw.ellipse(
+                    (cx - 3.5, cy - 3.5, cx + 3.5, cy + 3.5),
+                    outline=preview_color,
+                    width=2,
+                )
+
+            for index, (cx, cy) in enumerate(projected, start=1):
+                draw.ellipse((cx - 7.0, cy - 7.0, cx + 7.0, cy + 7.0), fill=(0, 0, 0, 220))
+                draw.ellipse(
+                    (cx - 4.5, cy - 4.5, cx + 4.5, cy + 4.5),
+                    fill=anchor_color,
+                    outline=(255, 255, 255, 235),
+                    width=1,
+                )
+                draw.text((cx + 8.0, cy - 11.0), str(index), fill=anchor_color)
+        except Exception as exc:
+            log.debug("Map Studio modeling point overlay failed: %s", exc)
+
     def _draw_map_studio_hover_highlight(self, draw, w: int, h: int) -> None:
         payload = getattr(self, "_map_studio_hover_highlight", None)
         if not isinstance(payload, dict):
@@ -750,7 +873,7 @@ class ViewportOverlayLayersMixin:
             if component == "walkmesh_face":
                 color = (0, 255, 122) if bool(payload.get("walkable", False)) else (255, 95, 95)
             else:
-                # ZModeler uses orange for the live hover/edge-selector cue;
+                # Orange is reserved for the live component/edge-selector cue;
                 # yellow remains reserved for committed component selection.
                 color = (255, 128, 16)
             if component in {"face", "walkmesh_face"} and len(projected) >= 3:
@@ -773,7 +896,7 @@ class ViewportOverlayLayersMixin:
                 draw.ellipse(bounds, outline=(0, 0, 0, 200), width=4)
                 draw.ellipse(bounds, outline=(255, 128, 16, 255), width=3)
 
-            # ZModeler's Edge Selector Widget makes the next operation's
+            # The edge-selector widget makes the next operation's
             # direction predictable.  Faces point from their center to the
             # cursor-nearest edge; vertices point along the chosen incident
             # edge.  Edges already communicate direction through the orange
