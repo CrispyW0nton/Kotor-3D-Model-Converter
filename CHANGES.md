@@ -11,6 +11,36 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-15
 
+### [2026-07-15] T1210: export the composed BAS build as one .mdl/.obj/.fbx
+
+Owner: LordVaderCW
+
+T###: T1210
+
+Subsystem: Body Attachment System export (Core.GUI.Display/Core.Tools)
+
+Intersects: the T1210 BAS overhaul (all heads/items attachable) and the
+T3502 FBX backend gate (composed rigged exports use the ASCII writer).
+
+- The main-viewport Body Attachment panel gains an "Export Composed Model…"
+  button (`exportComposedRequested` signal). It rebuilds the BAS preview and
+  exports the whole composed model — body plus every attached layer (head,
+  mask, weapons, belt) merged into one node tree — via the existing async
+  MDL/OBJ/FBX workers: binary MDL/MDX for the game, or OBJ/FBX for DCC tools.
+- No new export machinery: `build_bas_preview_model` already grafts each
+  attachment as a real child subtree under its hook node, so the composed
+  preview is a complete KotorModel. The handler deep-copies it, names it from
+  the active build, and routes by chosen extension. Rigged/animated output
+  inherits the T3502 ASCII-writer gate automatically.
+- Verification: new `tests/test_bas_composed_export.py` proves a head grafted
+  onto a headless body (a) lands under the headhook socket in the merged
+  tree, (b) survives a single-MDL write→reload with both body and head mesh
+  nodes present, and (c) exports one OBJ carrying both meshes; a wiring check
+  confirms the button/handler and byte-identical GUI.Display↔Tools mirrors.
+  Payload manifests regenerated for both projects; payload pin suite green.
+  Answers the user's ask to "attach any head to a headless body and export it
+  as one .mdl, .obj or .fbx."
+
 ### [2026-07-15] T3502: route rigged/animated FBX exports away from the SDK backend
 
 Owner: LordVaderCW

@@ -236,6 +236,92 @@ class BasWorkflowMixin:
                 self.body_attachment_panel.set_status(f"Saved BAS build: {path.name}")
             else:
                 self.body_attachment_panel.set_status("Could not save BAS build.")
+    def _handle_bas_export_composed_requested(self) -> None:
+        """Export the composed BAS preview (body + attached layers) as one model.
+
+        The composed preview is a complete KotorModel — head and other layers
+        are real child subtrees under their hook nodes — so it routes through
+        the same async MDL/OBJ/FBX workers as any loaded model.  Rigged output
+        goes through the ASCII FBX writer (T3502 gate); binary MDL/MDX is the
+        game-ready single-model form of the build.
+        """
+
+        panel = getattr(self, "body_attachment_panel", None)
+        body = getattr(self, "_bas_body_model", None) or getattr(self, "_current_model", None)
+        if body is None:
+            if panel is not None:
+                panel.set_status("No body model loaded.")
+            return
+        rebuild_status = self._rebuild_bas_preview()
+        preview = getattr(self, "_bas_preview_model", None)
+        if preview is None or str(rebuild_status or "").lower().startswith("bas preview failed"):
+            if panel is not None:
+                panel.set_status(rebuild_status or "BAS preview is unavailable.")
+            return
+        export_model = copy.deepcopy(preview)
+        try:
+            export_model.name = str(
+                getattr(self, "_bas_active_build_name", "") or f"{getattr(body, 'name', 'body')}_bas"
+            )
+        except Exception:
+            pass
+        path, _selected = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Export Composed BAS Model",
+            f"{export_model.name}.mdl",
+            "Binary MDL + MDX (*.mdl);;OBJ + MTL (*.obj);;FBX (*.fbx)",
+        )
+        if not path:
+            return
+        from src.gui.windows.application_core.shared.model_io import (
+            _work_export_fbx,
+            _work_export_mdl_binary,
+            _work_export_obj,
+        )
+
+        suffix = Path(path).suffix.lower()
+        attached = ", ".join(self._bas_attachment_resrefs.get(key, key) for key in self._bas_attachments)
+
+        def _on_complete(result, cancelled=False):
+            if cancelled or result is None:
+                return
+            message = f"Exported composed model ({attached or 'body only'}) -> {Path(path).name}"
+            if panel is not None:
+                panel.set_status(message)
+            self._log(message, "success")
+
+        if suffix == ".obj":
+            self._run_io_async(
+                f"Exporting composed OBJ — {Path(path).name}",
+                _work_export_obj,
+                export_model,
+                path,
+                tex_cache=self._get_tex_cache_for_export(),
+                on_complete=_on_complete,
+                error_category="export_error",
+            )
+        elif suffix == ".fbx":
+            self._run_io_async(
+                f"Exporting composed FBX — {Path(path).name}",
+                _work_export_fbx,
+                export_model,
+                path,
+                tex_cache=self._get_tex_cache_for_export(),
+                on_complete=_on_complete,
+                error_category="export_error",
+            )
+        else:
+            game = (getattr(self, "_current_game", "") or self._infer_game_from_model(body) or "K1").upper()
+            self._run_io_async(
+                f"Exporting composed binary MDL — {Path(path).name}",
+                _work_export_mdl_binary,
+                export_model,
+                path if suffix == ".mdl" else str(Path(path).with_suffix(".mdl")),
+                game_version=game,
+                on_complete=_on_complete,
+                error_category="export_error",
+            )
+
     def _save_bas_model_recipe(self, body, *, build_name: str = "") -> Path | None:
         try:
             game = (getattr(self, "_current_game", "") or self._infer_game_from_model(body) or "").upper()

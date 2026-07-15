@@ -771,7 +771,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_BODY_ATTACHMENT_PANEL",
             "source_path": "src/gui/panels/qt_body_attachment_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_body_attachment_panel.py",
-            "sha256": "e1d89afcc2d89ac8f154c84eaecdcdfd397df3149bb53f984ce1d82cc8e3fd08"
+            "sha256": "cdb79cc77261f0a252877a4d5f73082924b1155a0955e4e5faac5de73f702d01"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_BOTTOM_STRIP",
@@ -1683,7 +1683,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_BAS_WORKFLOW",
             "source_path": "src/gui/windows/application_core/shared/bas_workflow.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/bas_workflow.py",
-            "sha256": "baef7914aa0bb93bb743688d9df5cb37c62c76c243343d2f49af1e781c7e41b4"
+            "sha256": "cc92bda029ebb63f8d74c962880277e3a47da57e4047124da3bf63397d9119de"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_DOCK_HOSTS",
@@ -1713,7 +1713,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_MAIN_LAYOUT",
             "source_path": "src/gui/windows/application_core/shared/main_layout.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/main_layout.py",
-            "sha256": "d771d71574aa5949c20431f65c94b165d977d9d417d5f6ed1356ec68688503f7"
+            "sha256": "c1c0059908f4ab5c170bb27472ac4c47c2f1e7df79fe1e3891f7dfa08037ccbd"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_MODEL_IO",

@@ -378,6 +378,7 @@ knowledge_base/test_artifacts/*.zip
 !/tests/test_map_studio_wok_alignment.py
 !/tests/test_map_studio_wok_floor_fill.py
 !/tests/test_fbx_rigged_backend_gate.py
+!/tests/test_bas_composed_export.py
 /knowledge_base/books
 /docs/architecture
 /docs

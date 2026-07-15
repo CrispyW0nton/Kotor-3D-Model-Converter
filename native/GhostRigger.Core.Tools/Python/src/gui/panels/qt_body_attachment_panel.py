@@ -82,6 +82,7 @@ class QtBodyAttachmentPanel(QtWidgets.QWidget):
     attachRequested = QtCore.Signal(str, str)
     clearRequested = QtCore.Signal(str)
     saveBuildRequested = QtCore.Signal()
+    exportComposedRequested = QtCore.Signal()
     slotSelected = QtCore.Signal(str)
     modeChanged = QtCore.Signal(str)
 
@@ -160,6 +161,15 @@ class QtBodyAttachmentPanel(QtWidgets.QWidget):
         self.save_build_button = QtWidgets.QPushButton("Save Build")
         self.save_build_button.clicked.connect(self.saveBuildRequested.emit)
         root.addWidget(self.save_build_button)
+
+        self.export_composed_button = QtWidgets.QPushButton("Export Composed Model…")
+        self.export_composed_button.setObjectName("basExportComposedButton")
+        self.export_composed_button.setToolTip(
+            "Export the body with every attached layer (head, mask, weapons, belt) "
+            "merged into one model: binary MDL/MDX for the game, or OBJ/FBX for DCC tools."
+        )
+        self.export_composed_button.clicked.connect(self.exportComposedRequested.emit)
+        root.addWidget(self.export_composed_button)
 
         self.layer_tree = QtWidgets.QTreeWidget()
         self.layer_tree.setHeaderLabels(["Layer", "Model", "State"])
