@@ -9,12 +9,13 @@ class WalkmeshTab(QtWidgets.QWidget):
     actionRequested = QtCore.Signal(str)
     roomSurfaceRequested = QtCore.Signal(str, str)
 
-    ACTIONS = ("Load WOK", "Save WOK", "Generate Walkmesh", "Generate Walls", "Paint Face", "Assign Face Type", "Validate Walkmesh", "Show Face Types", "Show Walkable/Non-walkable", "Show Edges", "Show Normals")
+    ACTIONS = ("Load WOK", "Save WOK", "Generate Walkmesh", "Generate Walls", "Fill Floor Faces", "Paint Face", "Assign Face Type", "Validate Walkmesh", "Show Face Types", "Show Walkable/Non-walkable", "Show Edges", "Show Normals")
     ACTION_OBJECT_NAMES = {
         "Load WOK": "mapStudioWalkmeshLoadWokButton",
         "Save WOK": "mapStudioWalkmeshSaveWokButton",
         "Generate Walkmesh": "mapStudioWalkmeshGenerateButton",
         "Generate Walls": "mapStudioWalkmeshGenerateWallsButton",
+        "Fill Floor Faces": "mapStudioWalkmeshFillFloorFacesButton",
         "Paint Face": "mapStudioWalkmeshPaintFaceButton",
         "Assign Face Type": "mapStudioWalkmeshAssignFaceTypeButton",
         "Validate Walkmesh": "mapStudioWalkmeshValidateButton",

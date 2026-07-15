@@ -477,6 +477,172 @@ def _fallback_floor_wok(primitive: ImportedMeshRoomPrimitive) -> WOKData:
     )
 
 
+def _triangle_contains_xy(px: float, py: float, a: Vec3, b: Vec3, c: Vec3) -> tuple[bool, float]:
+    """Return (inside, interpolated_z) for one XY point against one triangle."""
+
+    denominator = ((b[1] - c[1]) * (a[0] - c[0])) + ((c[0] - b[0]) * (a[1] - c[1]))
+    if abs(denominator) < 1.0e-12:
+        return False, 0.0
+    wa = (((b[1] - c[1]) * (px - c[0])) + ((c[0] - b[0]) * (py - c[1]))) / denominator
+    wb = (((c[1] - a[1]) * (px - c[0])) + ((a[0] - c[0]) * (py - c[1]))) / denominator
+    wc = 1.0 - wa - wb
+    if min(wa, wb, wc) < -1.0e-6:
+        return False, 0.0
+    return True, (a[2] * wa) + (b[2] * wb) + (c[2] * wc)
+
+
+def fill_imported_wok_from_floor_surfaces(
+    primitive: ImportedMeshRoomPrimitive,
+    *,
+    slope_max_degrees: float = 35.0,
+    z_tolerance: float = 1.5,
+    weld_epsilon: float = 0.05,
+    render_to_wok_offset: Vec3 = (0.0, 0.0, 0.0),
+) -> tuple[ImportedMeshRoomPrimitive, dict[str, Any]]:
+    """Append walkable WOK faces under visible floor faces that lack coverage.
+
+    Converted candidate modules can ship a room whose WOK covers only part of
+    the rendered floor (921srt's custom throne room: the corridor to the next
+    room has visible floor but no walkmesh, so the player stops at an
+    invisible cliff).  Every near-horizontal, non-backdrop render triangle
+    whose centroid has no WOK face within ``z_tolerance`` becomes a new
+    walkable face.  Patch vertices weld onto existing WOK vertex positions so
+    the BWM writer can derive adjacency across the seam where positions
+    coincide; PIE never needs the adjacency, but the exported .wok benefits.
+    Areas covered by NON_WALK faces are respected as intentional blockers.
+
+    ``render_to_wok_offset`` maps room-local render coordinates into the
+    WOK's own frame: (0, 0, 0) for a room-local WOK, the room's world
+    position for a module-space WOK (render surfaces are always room-local).
+    """
+
+    import math as _math
+
+    wok = primitive.wok
+    if wok is None or not wok.verts:
+        raise ValueError(
+            f"Room {primitive.room_resref} has no imported WOK to patch; "
+            "convert the room with its stock walkmesh first."
+        )
+    frame_offset = tuple(float(v) for v in tuple(render_to_wok_offset or (0.0, 0.0, 0.0))[:3])
+    min_normal_z = _math.cos(_math.radians(max(1.0, min(89.0, float(slope_max_degrees)))))
+
+    coverage_faces: list[tuple[Vec3, Vec3, Vec3]] = []
+    for face in wok.faces:
+        try:
+            coverage_faces.append((wok.verts[face.v1], wok.verts[face.v2], wok.verts[face.v3]))
+        except IndexError:
+            continue
+
+    def covered(px: float, py: float, pz: float) -> bool:
+        for a, b, c in coverage_faces:
+            inside, z_at = _triangle_contains_xy(px, py, a, b, c)
+            if inside and abs(z_at - pz) <= float(z_tolerance):
+                return True
+        return False
+
+    new_verts: list[Vec3] = list(wok.verts)
+    vertex_lookup: dict[tuple[int, int, int], int] = {}
+
+    def _key(point: Vec3) -> tuple[int, int, int]:
+        scale = 1.0 / max(1.0e-9, float(weld_epsilon))
+        return (round(point[0] * scale), round(point[1] * scale), round(point[2] * scale))
+
+    for index, vertex in enumerate(new_verts):
+        vertex_lookup.setdefault(_key(vertex), index)
+
+    def _vertex_index(point: Vec3) -> int:
+        key = _key(point)
+        existing = vertex_lookup.get(key)
+        if existing is not None:
+            return existing
+        new_verts.append((float(point[0]), float(point[1]), float(point[2])))
+        vertex_lookup[key] = len(new_verts) - 1
+        return len(new_verts) - 1
+
+    new_faces: list[WOKFace] = []
+    considered = 0
+    skipped_covered = 0
+    skipped_steep = 0
+    for surface in primitive.surfaces:
+        if bool(getattr(surface, "backdrop", False)) or bool(getattr(surface, "background_geometry", False)):
+            continue
+        if not bool(getattr(surface, "render", True)):
+            continue
+        vertices = tuple(
+            (v[0] + frame_offset[0], v[1] + frame_offset[1], v[2] + frame_offset[2])
+            for v in surface.vertices
+        )
+        for face in tuple(surface.faces):
+            try:
+                a = vertices[int(face[0])]
+                b = vertices[int(face[1])]
+                c = vertices[int(face[2])]
+            except (IndexError, TypeError, ValueError):
+                continue
+            ux, uy, uz = b[0] - a[0], b[1] - a[1], b[2] - a[2]
+            vx, vy, vz = c[0] - a[0], c[1] - a[1], c[2] - a[2]
+            nx, ny, nz = (uy * vz) - (uz * vy), (uz * vx) - (ux * vz), (ux * vy) - (uy * vx)
+            length = _math.sqrt((nx * nx) + (ny * ny) + (nz * nz))
+            if length < 1.0e-9:
+                continue
+            considered += 1
+            if abs(nz) / length < min_normal_z:
+                skipped_steep += 1
+                continue
+            cx = (a[0] + b[0] + c[0]) / 3.0
+            cy = (a[1] + b[1] + c[1]) / 3.0
+            cz = (a[2] + b[2] + c[2]) / 3.0
+            if covered(cx, cy, cz):
+                skipped_covered += 1
+                continue
+            # Winding must face up so the engine's floor tests agree.
+            corners = (a, b, c) if nz > 0 else (a, c, b)
+            new_faces.append(
+                WOKFace(
+                    _vertex_index(corners[0]),
+                    _vertex_index(corners[1]),
+                    _vertex_index(corners[2]),
+                    surface=4,
+                    adj1=-1,
+                    adj2=-1,
+                    adj3=-1,
+                )
+            )
+            coverage_faces.append(corners)
+
+    report: dict[str, Any] = {
+        "faces_added": len(new_faces),
+        "faces_considered": considered,
+        "faces_already_covered": skipped_covered,
+        "faces_too_steep": skipped_steep,
+    }
+    if not new_faces:
+        return primitive, report
+
+    # rebuild_adjacencies mutates faces in place; the source primitive is
+    # shared with undo snapshots, so the original faces must be copied.
+    copied_faces = [
+        WOKFace(
+            face.v1, face.v2, face.v3, face.surface,
+            face.adj1, face.adj2, face.adj3,
+            getattr(face, "trans1", -1), getattr(face, "trans2", -1), getattr(face, "trans3", -1),
+        )
+        for face in wok.faces
+    ]
+    patched = WOKData(
+        name=str(wok.name or primitive.room_resref or ""),
+        verts=new_verts,
+        faces=copied_faces + new_faces,
+    )
+    patched.rebuild_adjacencies()
+    from dataclasses import replace as _replace
+
+    metadata = dict(primitive.metadata or {})
+    metadata["wok_floor_fill"] = report
+    return _replace(primitive, wok=patched, metadata=metadata), report
+
+
 def compile_imported_mesh_room_geometry(primitive: ImportedMeshRoomPrimitive) -> AuthoredRoomGeometry:
     """Compile the imported room into render meshes plus its walkmesh."""
 

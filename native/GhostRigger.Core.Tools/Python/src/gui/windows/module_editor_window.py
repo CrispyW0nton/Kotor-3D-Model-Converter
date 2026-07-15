@@ -11469,6 +11469,34 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 self._log(f"Map Studio: {message} -> {path}")
                 self.statusBar().showMessage(message, 6000)
             return
+        if action == "Fill Floor Faces":
+            room = str(self.walkmesh_tab._current_room_resref() or "").strip()
+            rooms = [room] if room else [
+                spec.normalised_resref()
+                for spec in tuple(getattr(self.controller._map_studio_authored_project_snapshot(), "rooms", ()) or ())
+            ]
+            if not rooms:
+                QtWidgets.QMessageBox.information(
+                    self, "Fill Floor Faces",
+                    "Load or import an authored module first; this patches imported room WOKs "
+                    "with walkable faces wherever visible floor has no walkmesh coverage.")
+                return
+            messages: list[str] = []
+            for resref in rooms:
+                try:
+                    ok, message = self.controller.fill_authored_room_wok_from_floors(room_resref=resref)
+                except Exception as exc:
+                    ok, message = False, f"Room {resref}: {exc}"
+                if ok and "added" in message:
+                    messages.append(message)
+                elif not ok and room:
+                    QtWidgets.QMessageBox.warning(self, "Fill Floor Faces", message)
+                    return
+            summary = " ".join(messages) if messages else "All room walkmeshes already cover their visible floors."
+            self.statusBar().showMessage(summary, 8000)
+            self._log(f"Map Studio: {summary}")
+            self._refresh_all(summary)
+            return
         if action in {"Generate Walkmesh", "Validate Walkmesh"}:
             try:
                 # Authored WOK is a deterministic derivative of the current

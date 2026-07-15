@@ -519,7 +519,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_IMPORTED_MESH",
             "source_path": "src/core/modules/authored_imported_mesh.py",
             "packaged_path": "Python/src/core/modules/authored_imported_mesh.py",
-            "sha256": "150c9a7fb00a6c9d6a3b87345379b07b20f67a8709844c7b98c61e198c855586"
+            "sha256": "29192f3640745e4a40626b243a75cacc16622cf1d0dbd9685baf02edb9b6d00d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_EXPORT",
@@ -891,7 +891,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "08f6985515e516fab212d9b35b22b505b6749e56c05ee43a8fe347f1e9d6de34"
+            "sha256": "ce994a687667af4591b37682f47c3e653b5ebfc45b9e3546f2befe76ace60afa"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",
@@ -1689,7 +1689,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_WALKMESH_TAB",
             "source_path": "src/gui/panels/module_editor/walkmesh_tab.py",
             "packaged_path": "Python/src/gui/panels/module_editor/walkmesh_tab.py",
-            "sha256": "0902785d55b803c1ac21b7cbbe1260fa3ab1c4c1bf65873d404d3b106a1f1b3d"
+            "sha256": "6bac0985a2a45d4b6d5f4023535678849b4019f112df03d79dd7f5ba87ad0d1a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_WORKFLOW_PANEL",
@@ -1845,7 +1845,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_MODULE_EDITOR_WINDOW",
             "source_path": "src/gui/windows/module_editor_window.py",
             "packaged_path": "Python/src/gui/windows/module_editor_window.py",
-            "sha256": "48203ab2d1dc9fdbf3c8acc3461a3ac902d80a7e6208de6dbb1102de2adcedbf"
+            "sha256": "de8c54c285ba6f3538888e1c30f5e5fb58384016309b63055a2409c635ca5720"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_BLUEPRINT_EDITOR",

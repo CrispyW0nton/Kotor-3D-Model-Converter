@@ -11,6 +11,46 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-15
 
+### [2026-07-15] T2801: Fill Floor Faces — patch imported WOKs from visible floor geometry
+
+Owner: LordVaderCW
+
+T###: T2801
+
+Subsystem: Map Studio walkmesh authoring (Core.Scene/Core.Tools/Core.GUI.Display)
+
+Intersects: the T2801 WOK alignment audit (this is the second 921srt lesson)
+and the imported-mesh room-edit command pattern.
+
+- Diagnosed on 921srtmovedstatues.kmap: the user blamed plc_statuefire01 for
+  "walkmesh walls", but PIE excludes placement meshes from collision — the
+  real blockers were (a) the custom room's imported WOK contradicting its own
+  rendered floor (an invisible z 3.99 ramp over flat z 3.0 floor: a 0.99
+  step-down > the 0.75 limit) and (b) the rendered corridor having no WOK
+  faces at all past the arch, ending in a genuine ~3-unit void between
+  921srtb and 903malh (y 49..52 renders nothing in any room).
+- New `fill_imported_wok_from_floor_surfaces` (authored_imported_mesh.py,
+  Scene+Tools): every near-horizontal (<= 35 deg), non-backdrop render
+  triangle whose centroid has no WOK coverage within 1.5 z-units becomes a
+  walkable face; NON_WALK coverage is respected as intentional; patch verts
+  weld onto existing WOK vertex positions and adjacency is rebuilt on a
+  copied WOKData (undo snapshots share the source faces). A
+  `render_to_wok_offset` parameter maps room-local render coordinates into
+  the WOK's frame (module-space vs room-local, resolved by the T2801 audit)
+  — the first cut skipped this and mass-misplaced faces on module-space
+  rooms; `test_fill_respects_module_space_wok_frame` pins the fix.
+- New controller op `fill_authored_room_wok_from_floors` (one undoable
+  command, per-room report) and a "Fill Floor Faces" button on the Walkmesh
+  tab (GUI.Display+Tools) that patches the selected room, or every room when
+  none is picked.
+- Verification: `tests/test_map_studio_wok_floor_fill.py` (uncovered floor
+  added + steep wall skipped + source unmutated + second run no-op;
+  module-space frame; controller undo command); walkmesh/export/PIE suites
+  green (148 passed). On the real kmap the fill added 1124 faces to 921srtb
+  and 176-482 per 903MAL room; PIE then walks the corridor floor and stops
+  at the genuine inter-room void — closing that void (move the north room
+  cluster vs author a connector) is a map-design decision left to the user.
+
 ### [2026-07-15] T2801: auto-align mislabeled room-local WOKs (921srt walkmesh/PIE repair)
 
 Owner: LordVaderCW

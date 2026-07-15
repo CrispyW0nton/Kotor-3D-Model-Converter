@@ -85,6 +85,7 @@ from .authored_imported_mesh import (
     bevel_imported_mesh_edges,
     bridge_imported_mesh_border_edges,
     build_imported_mesh_primitive_from_stock_model,
+    fill_imported_wok_from_floor_surfaces,
     imported_mesh_room_is_backdrop,
     prepare_imported_mesh_for_static_runtime_rebuild,
     collapse_imported_mesh_edge,
@@ -2116,6 +2117,68 @@ class ModuleEditorController:
             metadata={"room_resref": resref},
         )
         return True, label
+
+    def fill_authored_room_wok_from_floors(
+        self,
+        *,
+        room_resref: str,
+        slope_max_degrees: float = 35.0,
+        z_tolerance: float = 1.5,
+    ) -> tuple[bool, str]:
+        """Patch one imported room's WOK with walkable faces from its visible floor.
+
+        Repairs converted rooms whose imported WOK covers only part of the
+        rendered floor (an invisible cliff in PIE and in-game).  Recorded as
+        one undoable command; NON_WALK coverage is respected as intentional.
+        """
+
+        resref = normalise_resref(room_resref)
+        outcome: dict[str, Any] = {}
+
+        # Render surfaces are room-local; the WOK may be module-space or
+        # room-local (or mislabeled — resolve_room_wok_module_offset audits
+        # that).  frame_offset maps render coordinates into the WOK's frame:
+        # module placement is wok + wok_offset and also local + position, so
+        # render-in-wok-frame = local + position - wok_offset.
+        from .authored_module_walkmesh import resolve_room_wok_module_offset
+
+        authored = self._load_authored_project_or_raise()
+        target_room = next((room for room in authored.rooms if room.normalised_resref() == resref), None)
+        if target_room is None:
+            return False, f"Room {resref} is not an authored room."
+        position = tuple(float(v) for v in tuple(target_room.position or (0.0, 0.0, 0.0))[:3])
+        wok_offset, _warning = resolve_room_wok_module_offset(target_room)
+        frame_offset = tuple(position[axis] - wok_offset[axis] for axis in range(3))
+
+        def _editor(primitive):
+            patched, report = fill_imported_wok_from_floor_surfaces(
+                primitive,
+                slope_max_degrees=float(slope_max_degrees),
+                z_tolerance=float(z_tolerance),
+                render_to_wok_offset=frame_offset,
+            )
+            outcome.update(report)
+            return patched
+
+        ok, message = self._apply_imported_mesh_room_edit(
+            room_resref=resref,
+            action_key="map_studio.imported_mesh.wok_floor_fill",
+            label=f"Fill room {resref} walkmesh from visible floor geometry",
+            editor=_editor,
+        )
+        if not ok:
+            return ok, message
+        added = int(outcome.get("faces_added", 0) or 0)
+        if added <= 0:
+            return True, (
+                f"Room {resref} walkmesh already covers its visible floor "
+                f"({int(outcome.get('faces_already_covered', 0) or 0)} floor face(s) checked)."
+            )
+        return True, (
+            f"Room {resref}: added {added} walkable face(s) from visible floor geometry "
+            f"({int(outcome.get('faces_already_covered', 0) or 0)} already covered, "
+            f"{int(outcome.get('faces_too_steep', 0) or 0)} too steep)."
+        )
 
     def prepare_imported_room_for_static_runtime_rebuild(
         self,
