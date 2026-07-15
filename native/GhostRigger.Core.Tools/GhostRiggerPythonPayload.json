@@ -195,7 +195,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_LEVEL_INIT",
             "source_path": "src/core/level/__init__.py",
             "packaged_path": "Python/src/core/level/__init__.py",
-            "sha256": "f1bba192c5d3dbd33a06d573e9a457e17e46e803f136a1897ce2846afee19d75"
+            "sha256": "c5c75d18f17704cd9c2f1ead41a89f0b81f2c8e328d71fc8af5ab4fd6de81260"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_LEVEL_KMAP_MODEL",
@@ -261,7 +261,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_LEVEL_MAP_STUDIO_TEXTURE_ASSETS",
             "source_path": "src/core/level/map_studio_texture_assets.py",
             "packaged_path": "Python/src/core/level/map_studio_texture_assets.py",
-            "sha256": "bdf86b9602fba3a31c4d5ce50a2e02b65d0ee9bb7ef1094cbc3c1ef265a57f8c"
+            "sha256": "cb33957df59a0f053a60f457f22f8b75add2f90cd2083e3b55a57402376f7e17"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_LEVEL_MAP_STUDIO_TEXTURE_SIDECAR_JOURNAL",
@@ -837,7 +837,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_TEXTURE_PAINT",
             "source_path": "src/core/modules/map_studio_texture_paint.py",
             "packaged_path": "Python/src/core/modules/map_studio_texture_paint.py",
-            "sha256": "562b1a55e0faee9d8c2e317433ce622675016ec8f661237eb315beda01984e7a"
+            "sha256": "0cdcd200831aa03f199ffcc4e53bb20e4dc78af8507e07cbd32eb7b056541cc4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_TOOL_ACTION_DISPATCH",
@@ -885,7 +885,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "c0d93af92b478be8f7eebc332a6cba4531908c629fc407ea99266982f72aa4c9"
+            "sha256": "ae7d5a69be4b77754238da00cf23a9407ba2efa45d732e79d36c206458ccdd00"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",
@@ -1635,7 +1635,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_MODULE_EDITOR_VIEWPORT_PANEL",
             "source_path": "src/gui/panels/module_editor/module_editor_viewport_panel.py",
             "packaged_path": "Python/src/gui/panels/module_editor/module_editor_viewport_panel.py",
-            "sha256": "cd02806bfdedd53e0dd621e205c9819cc6b86f0a6c0cc8f7e9cb483270d58ba9"
+            "sha256": "da397ee62a4533f09fe8fea994913b69b0e79e0ca274a5337a12d56b847ca93e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_PLACEMENT_TAB",
@@ -1671,7 +1671,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_TEXTURE_PAINT_TAB",
             "source_path": "src/gui/panels/module_editor/texture_paint_tab.py",
             "packaged_path": "Python/src/gui/panels/module_editor/texture_paint_tab.py",
-            "sha256": "02aa37ee09629bc876398c54b40a88e683e26ef0f061c6e7e3c5785a1c24581e"
+            "sha256": "62be45bc610cde5388e3b7d19884b76dbe2e352a50f4a2c0dfb3018e4063c113"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_VALIDATION_PANEL",
@@ -1839,7 +1839,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_MODULE_EDITOR_WINDOW",
             "source_path": "src/gui/windows/module_editor_window.py",
             "packaged_path": "Python/src/gui/windows/module_editor_window.py",
-            "sha256": "f6fc045bc09aa805420c808ee94f36f8fc93432ac27f4a9bb85ae46d7204b930"
+            "sha256": "64ac319f0b00f44af0496ccb2a8baa3ba0b97445e1cd9c630f67cfffed005fde"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_BLUEPRINT_EDITOR",

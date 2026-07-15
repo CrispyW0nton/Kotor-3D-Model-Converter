@@ -204,7 +204,7 @@ class _GlTexCache:
         max_dim = max(int(width), int(height))
         return min(6, max(0, int(math.log2(max_dim)) - 2)) if max_dim > 4 else 0
 
-    def update_regions(self, img: Optional['Image.Image'], regions) -> bool:
+    def update_regions(self, img: Optional['Image.Image'], regions, *, build_mipmaps: bool = True) -> bool:
         """Write bottom-up RGBA rectangles into one resident GL texture.
 
         ``regions`` are ``(x, y, width, height)`` rectangles in the cached PIL
@@ -259,10 +259,18 @@ class _GlTexCache:
                 self.region_update_count += 1
                 self.region_update_bytes += len(payload)
                 wrote = True
-            if wrote:
+            if wrote and not build_mipmaps:
+                # The existing mip chain now describes the previous base level.
+                # Sample level zero only until stroke finalization rebuilds it;
+                # otherwise minified surfaces visibly lag behind the brush.
+                tex.filter = (moderngl.LINEAR, moderngl.LINEAR)
+            if build_mipmaps and (wrote or not tuple(regions or ())):
                 # Regenerate the existing GPU mip chain without re-uploading
-                # the full base level or replacing the texture/bindings.
+                # the full base level or replacing the texture/bindings. Live
+                # paint defers this until stroke end to avoid one full chain
+                # rebuild per pointer/display frame.
                 tex.build_mipmaps(max_level=self._mip_cap(image_width, image_height))
+                tex.filter = (moderngl.LINEAR_MIPMAP_LINEAR, moderngl.LINEAR)
             self._cache.move_to_end(key)
             return True
         except Exception as exc:

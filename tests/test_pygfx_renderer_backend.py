@@ -11,6 +11,7 @@ from PIL import Image
 
 import src.adapters.rendering.pygfx_core.renderer as pygfx_renderer_module
 import src.adapters.rendering.pygfx_core.scene_bridge as pygfx_scene_bridge_module
+import src.adapters.rendering.moderngl_resources as moderngl_resources_module
 import src.core.animation.gpu_skinning as gpu_skinning_module
 import src.core.rendering.mesh_render_data as mesh_render_data_module
 import src.core.rendering.skeleton_render_data as skeleton_render_data_module
@@ -164,6 +165,10 @@ class _FakeGfx:
         def __init__(self, data, **kwargs):
             self.data = data
             self.kwargs = kwargs
+            self.update_ranges = []
+
+        def update_range(self, offset, size):
+            self.update_ranges.append((tuple(offset), tuple(size)))
 
     class TextureMap:
         def __init__(self, texture, **kwargs):
@@ -2450,6 +2455,11 @@ def test_viewport_frame_governor_tracks_pygfx_style_and_animation_dirty_flags() 
     assert governor.dirty_flags["animation"] is True
     assert governor.dirty_flags["scene"] is False
 
+    governor.mark_clean_after_render("animation pose")
+    governor.request_redraw("paint pixels", texture=True)
+    assert governor.dirty_flags["texture"] is True
+    assert governor.dirty_flags["scene"] is False
+
 
 def test_pygfx_mesh_cache_updates_material_for_selection_without_geometry_rebuild() -> None:
     cache = PygfxMeshCache()
@@ -3711,6 +3721,10 @@ class _TextureUpdateFakeGlTexture:
         self.writes: list[dict] = []
         self.mipmap_levels: list[int] = []
         self.release_count = 0
+        self.filter = (
+            moderngl_resources_module.moderngl.LINEAR_MIPMAP_LINEAR,
+            moderngl_resources_module.moderngl.LINEAR,
+        )
 
     def write(self, data, *, viewport, alignment) -> None:
         self.writes.append(
@@ -3795,6 +3809,27 @@ def test_moderngl_region_upload_writes_only_dirty_bytes_and_never_clears_cache()
     assert cache.region_update_bytes < 512 * 512 * 4
 
 
+def test_moderngl_live_paint_defers_mip_rebuild_until_stroke_finalize() -> None:
+    image = Image.new("RGBA", (512, 512), (15, 25, 35, 255))
+    cache = _GlTexCache(SimpleNamespace())
+    texture = _TextureUpdateFakeGlTexture(image.size)
+    cache._cache[id(image)] = (weakref.ref(image), texture)
+
+    assert cache.update_regions(image, [(10, 20, 4, 4)], build_mipmaps=False) is True
+    assert texture.writes
+    assert texture.mipmap_levels == []
+    assert texture.filter == (
+        moderngl_resources_module.moderngl.LINEAR,
+        moderngl_resources_module.moderngl.LINEAR,
+    )
+    assert cache.update_regions(image, (), build_mipmaps=True) is True
+    assert texture.mipmap_levels == [6]
+    assert texture.filter == (
+        moderngl_resources_module.moderngl.LINEAR_MIPMAP_LINEAR,
+        moderngl_resources_module.moderngl.LINEAR,
+    )
+
+
 def test_moderngl_reports_live_texture_streaming_capability() -> None:
     from src.adapters.rendering.moderngl_renderer import ModernGLRenderer
 
@@ -3807,8 +3842,8 @@ def test_renderer_factory_delegates_region_update_without_cache_clear() -> None:
             self.updated = []
             self.clear_count = 0
 
-        def update_texture_regions(self, texture_name, image, regions) -> bool:
-            self.updated.append((texture_name, image, tuple(regions)))
+        def update_texture_regions(self, texture_name, image, regions, *, finalize=True) -> bool:
+            self.updated.append((texture_name, image, tuple(regions), bool(finalize)))
             return True
 
         def clear_caches(self) -> None:
@@ -3820,8 +3855,20 @@ def test_renderer_factory_delegates_region_update_without_cache_clear() -> None:
     image = Image.new("RGBA", (4, 4))
 
     assert renderer.update_texture_regions("live", image, ((0, 0, 1, 1),)) is True
-    assert backend.updated == [("live", image, ((0, 0, 1, 1),))]
+    assert backend.updated == [("live", image, ((0, 0, 1, 1),), True)]
     assert backend.clear_count == 0
+
+
+def test_renderer_factory_does_not_hide_live_texture_backend_typeerror() -> None:
+    class Backend:
+        def update_texture_regions(self, texture_name, image, regions, *, finalize=True) -> bool:
+            raise TypeError("backend texture defect")
+
+    renderer = FallbackViewportRenderer()
+    object.__setattr__(renderer, "_active", Backend())
+
+    with pytest.raises(TypeError, match="backend texture defect"):
+        renderer.update_texture_regions("live", Image.new("RGBA", (2, 2)), (), finalize=False)
 
 
 def test_wgpu_texture_update_fallback_invalidates_only_named_texture_and_materials() -> None:
@@ -3873,6 +3920,25 @@ def test_pygfx_texture_update_fallback_dirties_only_records_using_named_texture(
     assert other_record.material_dirty is False
 
 
+def test_pygfx_live_texture_update_patches_resident_pixels_without_scene_sync() -> None:
+    cache = PygfxMeshCache()
+    scene = _FakeScene()
+    data = _mesh_data(material_revision=("texture",))
+    record = cache.get_or_create(data, _FakeGfx, scene, selected=False)
+    painted_image = data.material.diffuse_texture_data.source
+    painted_image.putpixel((1, 0), (4, 90, 180, 255))
+
+    assert cache.update_texture_regions("unit_diffuse", painted_image, ((1, 0, 1, 1),)) is True
+    assert tuple(record.diffuse_map.texture.data[0, 1]) == (4, 90, 180, 255)
+    assert record.diffuse_map.texture.update_ranges == [((1, 0, 0), (1, 1, 1))]
+
+    renderer = PygfxViewportRenderer(settings=RendererSettings())
+    model = SimpleNamespace()
+    renderer._active_model_id = id(model)
+    renderer.mesh_cache.records[1] = SimpleNamespace()
+    assert renderer._needs_full_scene_sync(id(model), {"texture": True}) is False
+
+
 def test_qt_viewport_texture_update_requests_redraw_without_scene_invalidation() -> None:
     class Software:
         def update_texture_regions(self, name, image, regions):
@@ -3883,8 +3949,8 @@ def test_qt_viewport_texture_update_requests_redraw_without_scene_invalidation()
             self.clear_count = 0
             self.calls = []
 
-        def update_texture_regions(self, name, image, regions) -> bool:
-            self.calls.append((name, image, tuple(regions)))
+        def update_texture_regions(self, name, image, regions, *, finalize=True) -> bool:
+            self.calls.append((name, image, tuple(regions), bool(finalize)))
             return True
 
         def clear_caches(self) -> None:
@@ -3911,6 +3977,31 @@ def test_qt_viewport_texture_update_requests_redraw_without_scene_invalidation()
         {
             "fast": True,
             "reason": "texture pixels changed: painted",
-            "materials": True,
+            "texture": True,
         }
     ]
+
+
+def test_qt_viewport_does_not_hide_live_texture_backend_typeerror() -> None:
+    class Software:
+        def update_texture_regions(self, name, image, regions):
+            return image, tuple(regions or ())
+
+    class Gpu:
+        def update_texture_regions(self, name, image, regions, *, finalize=True) -> bool:
+            raise TypeError("gpu texture defect")
+
+    viewport = SimpleNamespace(
+        _renderer=Software(),
+        _gpu_renderer=Gpu(),
+        _request_render=lambda **_kwargs: None,
+    )
+
+    with pytest.raises(TypeError, match="gpu texture defect"):
+        ViewportResourceCacheMixin.update_texture_regions(
+            viewport,
+            "painted",
+            Image.new("RGBA", (2, 2)),
+            ((0, 0, 1, 1),),
+            finalize=False,
+        )

@@ -402,10 +402,10 @@ class PygfxViewportRenderer(ViewportRendererPort):
             self.mesh_cache.clear()
         self._active_model_id = 0
 
-    def update_texture_regions(self, texture_name: str, image, regions) -> bool:
-        # pygfx owns explicit texture objects; use the targeted invalidation
-        # path below until its public dirty-range API is stable across versions.
-        return False
+    def update_texture_regions(self, texture_name: str, image, regions, *, finalize: bool = True) -> bool:
+        # Texture.update_range marks only the touched GPU chunks dirty. The
+        # retained scene and all mesh geometry stay intact.
+        return bool(self.mesh_cache.update_texture_regions(texture_name, image, regions))
 
     def invalidate_texture(self, texture_name: str, image=None) -> bool:
         return bool(self.mesh_cache.invalidate_texture(texture_name, image=image))

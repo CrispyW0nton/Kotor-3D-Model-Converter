@@ -9,6 +9,86 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-07-15
+
+### [2026-07-15] T2904: Made Map Studio texture painting responsive and map-wide
+
+Owner: LordVaderCW
+
+T###: T2904
+
+Subsystem: Map Studio workflow rail, clean-room live texture painting, project
+texture overrides, renderer texture streaming, KMAP export gates, and native
+Python payloads
+
+Intersects: the T2907 Maya-style modeling shelf, the existing Substance Painter
+clean-room study, and the shared dirty worktree.
+
+- Replaced the overflowing eight-tab left rail with one accessible workflow
+  selector and an active-page-only stack. Every workflow remains named and
+  reachable at the 300-pixel rail width, long controls elide with full
+  accessible names/tooltips, horizontal scrolling is disabled, and hidden
+  Builder/Environment pages no longer force Paint or Rooms to inherit their
+  width or thousands of pixels of empty vertical scroll.
+- Applied the existing clean-room Substance Painter 11.1.1/Ghidra evidence as
+  an interaction contract: continuous surface-aware strokes, one undo item per
+  drag, separate opacity and flow, visible size/hardness feedback, compact
+  defaults, expandable expert controls, presets, and retained live feedback.
+  No Adobe source, program assets, icons, or proprietary implementation were
+  copied.
+- Replaced the fake single-layer presentation with a truthful Map Materials
+  inventory. It distinguishes read-only game materials from editable project
+  textures, makes editable rows act as real target selectors, excludes TPC-only
+  and lightmap assets from diffuse paint targets, can clone every used room
+  diffuse texture into same-ResRef module-local TGA/TXI overrides through one
+  cancellable/progress-visible undo transaction, and applies every pending room
+  texture through the one visible `Apply Textures` action.
+- Added Basic Paint, Soft Blend, Fine Detail, and Stamp Scatter presets plus
+  size, opacity, flow, color/stamp source, hardness, spacing, rotation, jitter,
+  and pressure-size/pressure-flow settings. The viewport now draws UV-aware
+  outer size and inner hardness rings on the actual frontmost surface and
+  breaks stroke interpolation when the cursor leaves a surface or crosses to a
+  different surface.
+- Vectorized brush rasterization, linear/sRGB compositing, dirty bounds, and TGA
+  flattening. Live dirty-rectangle uploads are coalesced to one display-frame
+  update, temporarily sample the current base level while old mipmaps are stale,
+  rebuild/restore trilinear mip sampling only at stroke finalization, and retain
+  targeted cache invalidation instead of resetting the renderer or scene.
+- Strengthened the export gate so a project TGA/TPC/TXI changed after `Apply
+  Textures` is detected by content hash and cannot silently ship stale
+  applied metadata. Sequential applies merge their TGA/TPC/TXI acceptance
+  records, and changed sidecars can be explicitly re-applied instead of leaving
+  the export gate stranded. Active-stroke Undo cancels the in-progress stroke
+  before touching prior history.
+
+Affected areas: `map_studio_texture_paint.py`,
+`map_studio_texture_assets.py`, `module_editor_controller.py`,
+`texture_paint_tab.py`, `module_editor_viewport_panel.py`,
+`module_editor_window.py`, viewport widget/resource/overlay/rendering mixins,
+ModernGL/PyGFX/WGPU/null renderer resource-update adapters, Scene/Tools/GUI
+Display/Rendering/Runtime Shared payload manifests, and focused Map
+Studio/export/renderer tests.
+
+Verification: byte-identical Scene/Tools, GUI Display/Tools, and
+Core.Rendering/Runtime.Shared renderer-interface mirror pairs; targeted
+`py_compile`; 32 focused painter, clone, undo, UV seam, cursor,
+responsive-rail, export-gate, dirty-upload, deferred-mipmap, performance, and
+native-payload tests passed. On this workstation the vector brush measured
+approximately 0.87/3.2/14.5/61.2 ms at radius 24/48/96/192, while TGA flattening
+measured about 1.4/5.3/25.6 ms at 512/1024/2048. A full `Debug|x64` native-host
+rebuild succeeded and staged all 18 payload DLLs. The actual rebuilt
+`GhostStudio.exe` then ran the visible `207tel` proof: the stock K2 module
+imported and exposed 24 room diffuse texture targets, the map-wide same-ResRef
+clone ran in the background to 6/24 while GhostStudio stayed responsive with
+its progress dialog updating and Cancel usable, cancelling rolled back every
+partial TGA/TXI sidecar, the saved KMAP remained intact, and the host logged a
+clean Qt shutdown (artifacts under
+`Saved/Audits/map_studio_texture_paint_20260715/`, including
+`async_clone_project/207tel_async_clone.kmap` and
+`async_progress_dialog.png`). This is desktop workflow proof, not KOTOR engine
+proof: the final `plcaa` multi-texture paint/export/install/manual-warp
+validation remains a user-driven follow-up.
+
 ## 2026-07-14
 
 ### [2026-07-14] T2907: Made Map Studio's first Maya-style modeling slice truthful and live

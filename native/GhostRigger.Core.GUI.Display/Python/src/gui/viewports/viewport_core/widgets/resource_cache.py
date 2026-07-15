@@ -8,7 +8,7 @@ from .snap_view_bar import *  # noqa: F401,F403
 
 
 class ViewportResourceCacheMixin:
-    def update_texture_regions(self, texture_name: str, image, dirty_regions=None):
+    def update_texture_regions(self, texture_name: str, image, dirty_regions=None, *, finalize: bool = True):
         """Publish painted pixels without reloading the model or renderer.
 
         Dirty rectangles are ``(x, y, width, height)`` in the bottom-up PIL
@@ -28,7 +28,9 @@ class ViewportResourceCacheMixin:
         if gpu_renderer is not None:
             update_gpu = getattr(gpu_renderer, "update_texture_regions", None)
             if callable(update_gpu):
-                gpu_patched = bool(update_gpu(texture_name, cached_image, clipped_regions))
+                gpu_patched = bool(
+                    update_gpu(texture_name, cached_image, clipped_regions, finalize=bool(finalize))
+                )
             if not gpu_patched:
                 invalidate_texture = getattr(gpu_renderer, "invalidate_texture", None)
                 if callable(invalidate_texture):
@@ -42,11 +44,12 @@ class ViewportResourceCacheMixin:
             "regions": tuple(clipped_regions),
             "gpu_patched": gpu_patched,
             "gpu_targeted_invalidation": gpu_targeted_invalidation,
+            "finalized": bool(finalize),
         }
         self._request_render(
             fast=True,
             reason=f"texture pixels changed: {texture_name}",
-            materials=True,
+            texture=True,
         )
         return cached_image, clipped_regions
 

@@ -739,6 +739,18 @@ class ViewportSceneModelMixin:
 
         self.set_map_studio_terrain_brush_cursor(None)
 
+    def set_map_studio_texture_paint_cursor(self, cursor: object | None) -> None:
+        """Display a UV-aware size/hardness cursor for live texture paint."""
+
+        self._map_studio_texture_paint_cursor = cursor if isinstance(cursor, dict) else None
+        self._clear_map_studio_shared_debug_labels()
+        self._request_render(fast=True, reason="map studio texture paint cursor changed", overlay=True)
+
+    def clear_map_studio_texture_paint_cursor(self) -> None:
+        """Remove the live Map Studio texture-paint cursor."""
+
+        self.set_map_studio_texture_paint_cursor(None)
+
     def set_map_studio_hover_highlight(self, payload: object | None) -> None:
         """Display the read-only Map Studio hover-picker highlight."""
 
@@ -791,6 +803,7 @@ class ViewportSceneModelMixin:
             "_map_studio_terrain_walkability_overlay",
             "_map_studio_universal_transform_overlay",
             "_map_studio_terrain_brush_cursor",
+            "_map_studio_texture_paint_cursor",
             "_map_studio_modeling_points_overlay",
         ):
             if getattr(self, name, None) is not None:

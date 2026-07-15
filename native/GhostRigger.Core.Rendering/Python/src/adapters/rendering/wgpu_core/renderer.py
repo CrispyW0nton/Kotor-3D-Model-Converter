@@ -3154,7 +3154,7 @@ class WgpuRenderer(NullDiagnosticRenderer):
         self._render_queue_cache.invalidate("manual cache clear")
         self._gizmo_line_cache.clear()
 
-    def update_texture_regions(self, texture_name: str, image, regions) -> bool:
+    def update_texture_regions(self, texture_name: str, image, regions, *, finalize: bool = True) -> bool:
         # WGPU mip chains are explicit resources.  Until the backend has a
         # dirty-mip generator, use invalidate_texture() so only this texture and
         # its material bindings are rebuilt on the next frame.

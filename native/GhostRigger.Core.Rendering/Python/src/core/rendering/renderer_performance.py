@@ -102,6 +102,7 @@ class ViewportFrameGovernor:
         "transform",
         "geometry",
         "material",
+        "texture",
         "style",
         "visibility",
         "overlay",

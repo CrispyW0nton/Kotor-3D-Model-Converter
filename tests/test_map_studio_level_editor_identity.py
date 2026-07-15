@@ -3363,6 +3363,82 @@ def test_t2600_main_screen_map_studio_action_opens_window_and_tool_belt_runtime(
         host.close()
 
 
+def test_t2600_map_studio_workflow_selector_keeps_narrow_rail_reachable_runtime() -> None:
+    """Every workflow stays named, synchronized, and inside the 300px rail."""
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _configure_native_python_roots()
+
+    from PySide6 import QtCore, QtWidgets
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    window = ModuleEditorWindow()
+    try:
+        window.show()
+        window.main_splitter.setSizes([300, 900, 300])
+        app.processEvents()
+        app.processEvents()
+
+        expected_labels = ["Rooms", "Place", "WOK", "Paint", "Environment", "Porter", "Build", "Data"]
+        assert window.workflow_selector.objectName() == "mapStudioWorkflowSelector"
+        assert window.workflow_selector.accessibleName() == "Map Studio workflow"
+        assert [window.workflow_selector.itemText(index) for index in range(window.workflow_selector.count())] == expected_labels
+        assert window.workflow_tabs.count() == len(expected_labels)
+        assert window.workflow_tabs_scroll.horizontalScrollBarPolicy() == QtCore.Qt.ScrollBarAlwaysOff
+
+        for index, label in enumerate(expected_labels):
+            window.workflow_selector.setCurrentIndex(index)
+            app.processEvents()
+            app.processEvents()
+
+            page = window.workflow_tabs.currentWidget()
+            assert page is window.workflow_tabs.widget(index)
+            assert window.workflow_tabs.tabText(index) == label
+            assert window.workflow_tabs.width() == window.workflow_tabs_scroll.viewport().width()
+            assert page.width() == window.workflow_tabs.width()
+            assert window.workflow_tabs_scroll.horizontalScrollBar().maximum() == 0
+            expected_page_height = max(page.minimumSizeHint().height(), page.sizeHint().height())
+            if page.hasHeightForWidth():
+                expected_page_height = max(
+                    expected_page_height,
+                    page.heightForWidth(max(1, window.workflow_tabs.width())),
+                )
+            assert window.workflow_tabs.height() <= expected_page_height + 1
+            assert window.workflow_tabs_scroll.verticalScrollBar().maximum() <= max(
+                0,
+                expected_page_height - window.workflow_tabs_scroll.viewport().height() + 1,
+            )
+            for control in page.findChildren(QtWidgets.QAbstractButton):
+                if not control.isVisibleTo(page):
+                    continue
+                left = control.mapTo(page, QtCore.QPoint(0, 0)).x()
+                assert left >= 0
+                assert left + control.width() <= page.width() + 1
+                full_text = str(control.property("_gr_workflow_full_text") or "")
+                if full_text and str(control.text()) != full_text:
+                    assert control.toolTip() or control.accessibleName() == full_text.replace("&", "")
+
+        window.workflow_tabs.setCurrentWidget(window.texture_paint_tab)
+        app.processEvents()
+        collapsed_height = window.workflow_tabs.height()
+        window.texture_paint_tab.advanced_button.setChecked(True)
+        app.processEvents()
+        app.processEvents()
+        assert window.workflow_tabs.height() > collapsed_height
+        window.texture_paint_tab.advanced_button.setChecked(False)
+        app.processEvents()
+        app.processEvents()
+        assert window.workflow_tabs.height() == collapsed_height
+
+        window.workflow_tabs.setCurrentWidget(window.environment_tab)
+        app.processEvents()
+        assert window.workflow_selector.currentText() == "Environment"
+    finally:
+        window.controller.project.dirty = False
+        window.close()
+
+
 def test_t2600_modeling_tabs_exist_only_after_the_main_window_opens_map_studio() -> None:
     """The main scene stays clean while the opened Map Studio owns its authoring belt."""
 

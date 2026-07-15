@@ -60,8 +60,12 @@ class IViewportRenderer(ABC):
     def upload_texture(self, texture):
         return None
 
-    def update_texture_regions(self, texture_name: str, image, regions) -> bool:
-        """Patch dirty cached-image rectangles when the backend supports it."""
+    def update_texture_regions(self, texture_name: str, image, regions, *, finalize: bool = True) -> bool:
+        """Patch dirty cached-image rectangles when the backend supports it.
+
+        ``finalize=False`` permits a backend to defer expensive derived data,
+        such as mip-chain generation, until the final call for a stroke.
+        """
         return False
 
     def invalidate_texture(self, texture_name: str, image=None) -> bool:

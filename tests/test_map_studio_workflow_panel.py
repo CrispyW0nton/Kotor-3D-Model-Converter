@@ -3009,6 +3009,57 @@ def test_map_studio_texture_paint_hover_uses_seam_expanded_per_corner_uvs() -> N
     assert tuple(fallback[2]) == pytest.approx((0.72, 0.91))
 
 
+def test_map_studio_texture_paint_cursor_maps_texel_radius_and_hardness_to_uv_surface() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.map_studio_hover_context import MapStudioHoverCandidateFace
+    from src.gui.panels.module_editor.module_editor_viewport_panel import ModuleEditorViewportPanel
+
+    captured = []
+    owner = SimpleNamespace(
+        _texture_paint_enabled=True,
+        _texture_paint_brush_context={
+            "radius_px": 100.0,
+            "hardness": 0.5,
+            "pressure_size": False,
+            "texture_size": (1000, 1000),
+            "resref": "paint_wall",
+        },
+        viewport=SimpleNamespace(set_map_studio_texture_paint_cursor=lambda payload: captured.append(payload)),
+    )
+    candidate = MapStudioHoverCandidateFace(
+        room_resref="room01",
+        mesh_role="render",
+        face_index=0,
+        screen_points=((0.0, 0.0), (100.0, 0.0), (0.0, 100.0)),
+        world_points=((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+        uv_points=((0.0, 0.0), (1.0, 0.0), (0.0, 1.0)),
+        material="paint_wall",
+    )
+    context = SimpleNamespace(
+        component_type="face",
+        room_resref="room01",
+        mesh_role="render",
+        face_index=0,
+        uv=(0.5, 0.5),
+        material="paint_wall",
+    )
+
+    ModuleEditorViewportPanel._set_texture_paint_cursor_at_screen(
+        owner,
+        context,
+        (candidate,),
+        (50.0, 50.0),
+    )
+
+    payload = captured[-1]
+    assert payload["valid"] is True
+    assert len(payload["outer"]) == 40
+    outer_radius = max(((x - 50.0) ** 2 + (y - 50.0) ** 2) ** 0.5 for x, y in payload["outer"])
+    inner_radius = max(((x - 50.0) ** 2 + (y - 50.0) ** 2) ** 0.5 for x, y in payload["inner"])
+    assert outer_radius == pytest.approx(10.0)
+    assert inner_radius == pytest.approx(5.0)
+
+
 def test_map_studio_texture_paint_targets_only_writable_project_sidecars() -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     _install_native_payload_paths()
@@ -3023,6 +3074,17 @@ def test_map_studio_texture_paint_targets_only_writable_project_sidecars() -> No
             textures=(
                 SimpleNamespace(texture_id="stock", resref="lda_wall01", path=""),
                 SimpleNamespace(texture_id="project", resref="paint_wall", path="map_assets/textures/paint_wall.tga"),
+                SimpleNamespace(
+                    texture_id="project_detail",
+                    resref="paint_detail",
+                    path="map_assets/textures/paint_detail.tga",
+                ),
+                SimpleNamespace(
+                    texture_id="lightmap",
+                    resref="lm_paint",
+                    path="map_assets/textures/lm_paint.tpc",
+                    metadata={"asset_kind": "map_studio_lightmap", "format": "tpc"},
+                ),
             ),
             extra_sections={
                 "authored_module": {
@@ -3035,13 +3097,39 @@ def test_map_studio_texture_paint_targets_only_writable_project_sidecars() -> No
         emitted = []
         tab.applyRequested.connect(lambda: emitted.append(True))
         tab.set_project(project)
-        assert tab.target_combo.count() == 1
+        oversized = [
+            (type(widget).__name__, widget.objectName(), widget.minimumSizeHint().width())
+            for widget in tab.findChildren(QtWidgets.QWidget)
+            if widget.minimumSizeHint().width() > 260
+        ]
+        assert tab.minimumSizeHint().width() <= 300, oversized
+        assert tab.target_combo.count() == 2
         assert tab.selected_texture_id() == "project"
         assert tab.selected_resref() == "paint_wall"
-        assert tab.apply_button.text() == "Apply Texture Changes"
+        assert tab.apply_button.text() == "Apply Textures (1)"
         assert tab.apply_button.isEnabled() is True
         assert tab.has_unapplied_changes() is True
         assert "before export" in tab.status_label.text()
+        selected_targets = []
+        tab.targetChanged.connect(selected_targets.append)
+        tab.set_material_inventory(("paint_wall", "paint_detail", "game_floor", "lm_paint"), project)
+        assert tab.material_list.count() == 3
+        assert "Editable" in tab.material_list.item(0).text() or "Painted" in tab.material_list.item(0).text()
+        assert "Editable" in tab.material_list.item(1).text()
+        assert "read-only" in tab.material_list.item(2).text()
+        assert tab.make_used_editable_button.isEnabled() is True
+        tab.material_list.itemClicked.emit(tab.material_list.item(1))
+        assert tab.selected_texture_id() == "project_detail"
+        assert selected_targets[-1] == "project_detail"
+        assert "paint_detail is the paint target" in tab.status_label.text()
+        tab.material_list.itemActivated.emit(tab.material_list.item(2))
+        assert tab.selected_texture_id() == "project_detail"
+        assert "read-only game room diffuse" in tab.status_label.text()
+        tab.preset_combo.setCurrentIndex(tab.preset_combo.findData("soft"))
+        assert tab.current_brush().radius_px == 96.0
+        assert tab.current_brush().opacity == pytest.approx(0.45)
+        tab.advanced_button.setChecked(True)
+        assert tab.advanced_widget.isHidden() is False
         tab.paint_button.setChecked(True)
         assert tab.apply_button.isEnabled() is False
         tab.stop_painting()
@@ -3051,10 +3139,141 @@ def test_map_studio_texture_paint_targets_only_writable_project_sidecars() -> No
         project.extra_sections["authored_module"]["texture_paint_dirty"] = False
         project.extra_sections["authored_module"]["texture_paint_unapplied"] = False
         tab.set_project(project)
-        assert tab.apply_button.isEnabled() is False
+        assert tab.apply_button.isEnabled() is True
         assert tab.has_unapplied_changes() is False
+        tab.set_apply_state(True, ("paint_detail",))
+        assert tab.apply_button.text() == "Apply Textures (1)"
+        assert "need Apply Textures" in tab.status_label.text()
     finally:
         tab.close()
+        app.processEvents()
+
+
+def test_map_studio_texture_preview_renderer_contract_reports_once_without_retry() -> None:
+    _install_native_payload_paths()
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    calls = []
+    messages = []
+    logs = []
+
+    def failing_update(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise TypeError("renderer adapter is missing the finalize contract")
+
+    owner = SimpleNamespace(
+        viewport_panel=SimpleNamespace(viewport=SimpleNamespace(update_texture_regions=failing_update)),
+        _texture_paint_resref="paint_wall",
+        _texture_paint_preview_error="",
+        texture_paint_tab=SimpleNamespace(set_status=messages.append),
+        statusBar=lambda: SimpleNamespace(showMessage=lambda message, _timeout: messages.append(message)),
+        _log=logs.append,
+    )
+
+    ok = ModuleEditorWindow._publish_map_studio_texture_paint_preview(
+        owner,
+        object(),
+        ((0, 0, 16, 16),),
+        finalize=False,
+    )
+
+    assert ok is False
+    assert len(calls) == 1
+    assert calls[0][1] == {"finalize": False}
+    assert "tile upload failed" in owner._texture_paint_preview_error
+    assert any("fix the renderer before trusting the preview" in message for message in messages)
+    assert logs and "renderer adapter is missing" in logs[-1]
+
+    source = _read("native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py")
+    publish_body = source.split("def _publish_map_studio_texture_paint_preview", 1)[1].split(
+        "def _apply_map_studio_texture_paint_tiles", 1
+    )[0]
+    assert "except TypeError" not in publish_body
+    assert publish_body.count("updater(") == 1
+
+
+def test_map_studio_room_texture_batch_shows_progress_and_cancels_cleanly() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _install_native_payload_paths()
+
+    from threading import get_ident
+
+    from PySide6 import QtCore, QtWidgets
+    from src.core.modules.module_editor_controller import MapStudioTextureCloneCancelled
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    statuses = []
+    logs = []
+    observed_progress = []
+    worker_threads = []
+    gui_thread = get_ident()
+
+    class CancellingController:
+        def clone_game_textures_for_paint(
+            self,
+            resrefs,
+            *,
+            resource_manager,
+            progress_callback,
+            cancel_requested,
+        ):
+            assert tuple(resrefs) == ("room_wall", "room_floor")
+            assert resource_manager is not None
+            worker_threads.append(get_ident())
+            progress_callback(1, 2, "room_wall")
+            for _index in range(200):
+                if cancel_requested():
+                    raise MapStudioTextureCloneCancelled("cancelled by test")
+                sleep(0.005)
+            raise AssertionError("GUI-thread Cancel did not reach the texture worker")
+
+    owner = QtWidgets.QMainWindow()
+    owner.project = SimpleNamespace(path="C:/saved/test.kmap", textures=())
+    owner.resource_manager = object()
+    owner.viewport_panel = SimpleNamespace(
+        _room_preview_model=SimpleNamespace(
+            all_nodes=lambda: (
+                SimpleNamespace(is_mesh=True, _gr_map_studio_mesh_role="stock_room_0", texture="room_wall"),
+                SimpleNamespace(is_mesh=True, _gr_map_studio_mesh_role="stock_room_1", texture="room_floor"),
+                SimpleNamespace(is_mesh=True, _gr_map_studio_mesh_role="stock_creature_0", texture="npc_body"),
+            )
+        ),
+        set_project_texture_paths=lambda _project: None,
+    )
+    owner.texture_paint_tab = SimpleNamespace(
+        set_status=statuses.append,
+        set_project=lambda _project: None,
+        set_material_inventory=lambda _resrefs, _project: None,
+    )
+    owner.controller = CancellingController()
+    owner.save_kmap_as = lambda: None
+    owner._used_map_diffuse_resrefs = ModuleEditorWindow._used_map_diffuse_resrefs
+    owner._log = logs.append
+    owner._update_map_studio_undo_redo_actions = lambda: None
+
+    def cancel_from_gui_thread() -> None:
+        dialog = next(
+            widget
+            for widget in app.topLevelWidgets()
+            if widget.objectName() == "mapStudioRoomTextureCloneProgressDialog"
+        )
+        observed_progress.append((dialog.value(), dialog.maximum(), dialog.labelText()))
+        dialog.cancel()
+
+    try:
+        QtCore.QTimer.singleShot(120, cancel_from_gui_thread)
+        ModuleEditorWindow._make_used_map_textures_editable(owner)
+        app.processEvents()
+        assert observed_progress == [(1, 2, "Made 1 of 2 room diffuse textures editable\nroom_wall")]
+        assert worker_threads and worker_threads[0] != gui_thread
+        assert statuses[-1] == (
+            "Making room diffuse textures editable was cancelled; no project textures were changed."
+        )
+        assert logs[-1] == statuses[-1]
+    finally:
+        owner.close()
+        owner.deleteLater()
         app.processEvents()
 
 
@@ -3143,6 +3362,11 @@ def test_map_studio_texture_apply_is_an_undoable_headless_export_gate(tmp_path: 
     assert accepted.message == "dry-run export accepted"
     assert len(export_calls) == 1
     assert any(item[:2] == ("paint_wall", "tga") for item in export_calls[0].extra_resources)
+    sidecar = tmp_path / "grapply_assets" / "textures" / "paint_wall.tga"
+    sidecar.write_bytes(sidecar.read_bytes()[:-1] + bytes((sidecar.read_bytes()[-1] ^ 0x01,)))
+    with pytest.raises(ValueError, match="changed after Apply Texture Changes"):
+        controller.export_authored_module(tmp_path / "externally_changed", dry_run=True)
+    assert len(export_calls) == 1
     applied_readiness = build_kmap_authored_module_readiness(project).readiness
     assert applied_readiness is not None
     assert TEXTURE_PAINT_UNAPPLIED_BLOCKER not in applied_readiness.blocking_messages
@@ -3150,6 +3374,109 @@ def test_map_studio_texture_apply_is_an_undoable_headless_export_gate(tmp_path: 
     assert controller.has_unapplied_project_texture_changes() is True
     assert controller.redo_map_studio_command() is not None
     assert controller.has_unapplied_project_texture_changes() is False
+
+
+def test_texture_apply_merges_resources_and_recovers_later_txi_hash_drift(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _install_native_payload_paths()
+    import hashlib
+
+    from src.core.level import TextureReference
+    from src.core.modules.map_studio_texture_paint import encode_tga_rgba
+    from src.core.modules.module_editor_controller import ModuleEditorController
+    import src.core.modules.module_editor_controller as controller_module
+
+    project, texture_a = _map_studio_texture_apply_draft_project(tmp_path)
+    texture_a.metadata["txi_path"] = "grapply_assets/textures/paint_wall.txi"
+    txi_a = tmp_path / "grapply_assets" / "textures" / "paint_wall.txi"
+    txi_a.write_text("mipmap 1\n", encoding="utf-8")
+    controller = ModuleEditorController()
+    controller.model.set_project(project)
+
+    first = controller.apply_project_texture_changes()
+    assert first["resrefs"] == ("paint_wall",)
+    assert first["resource_count"] == 2
+    first_manifest = {
+        (item["resref"], item["restype"]): item["sha256"]
+        for item in controller.project.extra_sections["authored_module"]["texture_paint_applied_resources"]
+    }
+    assert set(first_manifest) == {("paint_wall", "tga"), ("paint_wall", "txi")}
+
+    texture_dir = tmp_path / "grapply_assets" / "textures"
+    sidecar_b = texture_dir / "paint_floor.tga"
+    sidecar_b.write_bytes(encode_tga_rgba(4, 4, bytes((90, 60, 30, 255)) * 16))
+    txi_b = texture_dir / "paint_floor.txi"
+    txi_b.write_text("mipmap 2\n", encoding="utf-8")
+    controller.project.textures.append(
+        TextureReference(
+            resref="paint_floor",
+            path="grapply_assets/textures/paint_floor.tga",
+            source="map_studio:texture_paint_commit",
+            metadata={
+                "format": "tga",
+                "width": 4,
+                "height": 4,
+                "paint_revision": 1,
+                "paint_unapplied": True,
+                "txi_path": "grapply_assets/textures/paint_floor.txi",
+            },
+        )
+    )
+    payload = controller.project.extra_sections["authored_module"]
+    payload["texture_paint_dirty"] = True
+    payload["texture_paint_unapplied"] = True
+    payload["texture_paint_pending_resrefs"] = ["paint_floor"]
+
+    second = controller.apply_project_texture_changes()
+    assert second["resrefs"] == ("paint_floor",)
+    assert second["resource_count"] == 2
+    second_manifest = {
+        (item["resref"], item["restype"]): item["sha256"]
+        for item in controller.project.extra_sections["authored_module"]["texture_paint_applied_resources"]
+    }
+    assert set(second_manifest) == {
+        ("paint_wall", "tga"),
+        ("paint_wall", "txi"),
+        ("paint_floor", "tga"),
+        ("paint_floor", "txi"),
+    }
+    assert second_manifest[("paint_wall", "tga")] == first_manifest[("paint_wall", "tga")]
+    assert second_manifest[("paint_wall", "txi")] == first_manifest[("paint_wall", "txi")]
+
+    txi_a.write_text("mipmap 3\nfilter nearest\n", encoding="utf-8")
+    assert controller.has_unapplied_project_texture_changes() is False
+    assert controller.project_texture_reapply_resrefs() == ("paint_wall",)
+    assert controller.project_texture_apply_pending_resrefs() == ("paint_wall",)
+    assert controller.project_texture_apply_required() is True
+
+    export_calls = []
+
+    def fake_export(request):
+        export_calls.append(request)
+        return SimpleNamespace(resources=(), message="dry-run export accepted")
+
+    monkeypatch.setattr(controller_module, "export_authored_module_project", fake_export)
+    with pytest.raises(ValueError, match="changed after Apply Texture Changes"):
+        controller.export_authored_module(tmp_path / "drift_blocked", dry_run=True)
+    assert export_calls == []
+
+    reapplied = controller.apply_project_texture_changes()
+    assert reapplied["resrefs"] == ("paint_wall",)
+    assert reapplied["resource_count"] == 2
+    recovered_manifest = {
+        (item["resref"], item["restype"]): item["sha256"]
+        for item in controller.project.extra_sections["authored_module"]["texture_paint_applied_resources"]
+    }
+    assert set(recovered_manifest) == set(second_manifest)
+    assert recovered_manifest[("paint_floor", "tga")] == second_manifest[("paint_floor", "tga")]
+    assert recovered_manifest[("paint_floor", "txi")] == second_manifest[("paint_floor", "txi")]
+    assert recovered_manifest[("paint_wall", "txi")] == hashlib.sha256(txi_a.read_bytes()).hexdigest()
+    assert recovered_manifest[("paint_wall", "txi")] != second_manifest[("paint_wall", "txi")]
+    assert controller.project_texture_apply_required() is False
+    assert controller.export_authored_module(tmp_path / "recovered", dry_run=True).message == "dry-run export accepted"
+    assert len(export_calls) == 1
 
 
 def test_map_studio_window_routes_apply_texture_changes_to_readiness(tmp_path: Path, monkeypatch) -> None:
@@ -3188,7 +3515,7 @@ def test_map_studio_window_routes_apply_texture_changes_to_readiness(tmp_path: P
         app.processEvents()
         payload = window.controller.project.extra_sections["authored_module"]
         assert payload["texture_paint_unapplied"] is False
-        assert window.texture_paint_tab.apply_button.isEnabled() is False
+        assert window.texture_paint_tab.apply_button.isEnabled() is True
         assert "eligible for module export" in window.texture_paint_tab.status_label.text()
         assert window.controller.command_history.undo_label == "Apply Texture Changes"
         readiness = window.controller.authored_module_readiness().readiness
@@ -3264,7 +3591,7 @@ def test_map_studio_texture_paint_drag_updates_only_dirty_regions_and_undoes_as_
         region_updates: list[tuple[tuple[int, int, int, int], ...]] = []
         texture_updates: list[tuple[str, object]] = []
 
-        def capture_regions(_name, _image, regions=None):
+        def capture_regions(_name, _image, regions=None, *, finalize=False):
             region_updates.append(tuple(regions or ()))
             texture_updates.append((str(_name), _image))
             return _image, tuple(regions or ())
@@ -3290,6 +3617,15 @@ def test_map_studio_texture_paint_drag_updates_only_dirty_regions_and_undoes_as_
         assert window.project.extra_sections["authored_module"]["texture_paint_unapplied"] is True
         assert window.project.extra_sections["authored_module"]["texture_paint_pending_resrefs"] == [asset.resref]
         assert window.texture_paint_tab.has_unapplied_changes() is True
+
+        painted = target.read_bytes()
+        window._begin_map_studio_texture_paint_stroke(payload)
+        window._append_map_studio_texture_paint_sample(payload)
+        assert session.stroke_active is True
+        window.undo_map_studio_command()
+        assert session.stroke_active is False
+        assert target.read_bytes() == painted
+        assert window.controller.command_history.undo_label.startswith("Texture Paint Stroke")
 
         window.texture_paint_tab.stop_painting()
         assert window.texture_paint_tab.paint_button.isChecked() is False

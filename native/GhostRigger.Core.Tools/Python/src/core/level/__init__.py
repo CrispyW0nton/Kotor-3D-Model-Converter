@@ -18,6 +18,7 @@ from .kmap_validator import KMapValidationIssue, KMapValidator
 from .level_export_bridge import LevelExportBridge, LevelExportOptions, LevelExportResult
 from .level_scene import LevelScene
 from .map_studio_texture_assets import (
+    clone_game_texture_asset,
     ProjectTextureAsset,
     create_project_tpc_texture_asset,
     create_project_texture_asset,
@@ -60,6 +61,7 @@ __all__ = [
     "TextureReference",
     "WalkmeshReference",
     "create_project_tpc_texture_asset",
+    "clone_game_texture_asset",
     "create_project_texture_asset",
     "import_project_texture_asset",
     "managed_project_texture_sidecars",

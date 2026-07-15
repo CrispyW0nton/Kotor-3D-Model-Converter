@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
+import numpy as np
+
 
 _RESREF_RE = re.compile(r"^[a-z0-9_]{1,16}$")
 _SRGB_TO_LINEAR = tuple(
@@ -27,12 +29,25 @@ _SRGB_TO_LINEAR = tuple(
     else (((value / 255.0) + 0.055) / 1.055) ** 2.4
     for value in range(256)
 )
+_SRGB_TO_LINEAR_ARRAY = np.asarray(_SRGB_TO_LINEAR, dtype=np.float32)
 
 
 def _linear_to_srgb_byte(value: float) -> int:
     linear = max(0.0, min(1.0, float(value)))
     encoded = linear * 12.92 if linear <= 0.0031308 else (1.055 * (linear ** (1.0 / 2.4))) - 0.055
     return max(0, min(255, int(round(encoded * 255.0))))
+
+
+def _linear_to_srgb_array(values: np.ndarray) -> np.ndarray:
+    """Encode a linear RGB array with the scalar painter's rounding contract."""
+
+    linear = np.clip(values, 0.0, 1.0)
+    encoded = np.where(
+        linear <= 0.0031308,
+        linear * 12.92,
+        (1.055 * np.power(linear, 1.0 / 2.4)) - 0.055,
+    )
+    return np.clip(np.rint(encoded * 255.0), 0.0, 255.0).astype(np.uint8)
 
 
 @dataclass(frozen=True)
@@ -44,6 +59,10 @@ class TexturePaintBrush:
     flow: float = 1.0
     hardness: float = 0.75
     spacing: float = 0.2
+    rotation_degrees: float = 0.0
+    jitter: float = 0.0
+    pressure_size: bool = True
+    pressure_flow: bool = True
     color: tuple[int, int, int, int] = (255, 255, 255, 255)
     stamp_size: tuple[int, int] = (0, 0)
     stamp_rgba: bytes = b""
@@ -64,6 +83,10 @@ class TexturePaintBrush:
             flow=max(0.0, min(1.0, float(self.flow))),
             hardness=max(0.0, min(1.0, float(self.hardness))),
             spacing=max(0.01, min(4.0, float(self.spacing))),
+            rotation_degrees=float(self.rotation_degrees) % 360.0,
+            jitter=max(0.0, min(1.0, float(self.jitter))),
+            pressure_size=bool(self.pressure_size),
+            pressure_flow=bool(self.pressure_flow),
             color=rgba,
             stamp_size=(stamp_width, stamp_height),
             stamp_rgba=stamp_payload,
@@ -121,7 +144,13 @@ class _ActiveStroke:
     before_tiles: dict[tuple[int, int], bytes] = field(default_factory=dict)
     dirty_tiles: set[tuple[int, int]] = field(default_factory=set)
     pending_tiles: set[tuple[int, int]] = field(default_factory=set)
-    dirty_pixels: set[tuple[int, int]] = field(default_factory=set)
+    coverage: np.ndarray | None = None
+    dirty_mask: np.ndarray | None = None
+    dirty_min_x: int | None = None
+    dirty_min_y: int | None = None
+    dirty_max_x: int | None = None
+    dirty_max_y: int | None = None
+    dirty_pixel_count: int = 0
     last_pixel: tuple[float, float] | None = None
     last_pressure: float = 1.0
     stamp_count: int = 0
@@ -170,7 +199,25 @@ class TexturePaintSession:
     def begin_stroke(self, brush: TexturePaintBrush) -> None:
         if self._active is not None:
             raise RuntimeError("A texture-paint stroke is already active.")
-        self._active = _ActiveStroke(brush.normalised())
+        self._active = _ActiveStroke(
+            brush.normalised(),
+            coverage=np.zeros((self.height, self.width), dtype=np.float32),
+            dirty_mask=np.zeros((self.height, self.width), dtype=np.bool_),
+        )
+
+    def break_stroke(self) -> bool:
+        """Break interpolation while keeping the current drag one transaction.
+
+        Leaving a valid face, crossing to another mesh surface, or re-entering
+        after a picker miss must not draw a long UV-space bridge between hits.
+        """
+
+        active = self._active
+        if active is None:
+            return False
+        active.last_pixel = None
+        active.last_pressure = 1.0
+        return True
 
     def append_sample(self, sample: TexturePaintSample | tuple[float, float], pressure: float = 1.0) -> int:
         active = self._active
@@ -224,14 +271,19 @@ class TexturePaintSession:
             _TilePatch(tile_x, tile_y, active.before_tiles[(tile_x, tile_y)], self._read_tile(tile_x, tile_y))
             for tile_x, tile_y in sorted(active.dirty_tiles)
         )
-        xs = [point[0] for point in active.dirty_pixels]
-        ys = [point[1] for point in active.dirty_pixels]
+        if None in (active.dirty_min_x, active.dirty_min_y, active.dirty_max_x, active.dirty_max_y):
+            return TexturePaintStrokeResult(stamp_count=active.stamp_count)
         result = TexturePaintStrokeResult(
             changed=True,
-            dirty_rect=(min(xs), min(ys), (max(xs) - min(xs)) + 1, (max(ys) - min(ys)) + 1),
+            dirty_rect=(
+                int(active.dirty_min_x),
+                int(active.dirty_min_y),
+                (int(active.dirty_max_x) - int(active.dirty_min_x)) + 1,
+                (int(active.dirty_max_y) - int(active.dirty_min_y)) + 1,
+            ),
             dirty_tiles=tuple(sorted(active.dirty_tiles)),
             stamp_count=active.stamp_count,
-            pixels_changed=len(active.dirty_pixels),
+            pixels_changed=int(active.dirty_pixel_count),
         )
         self._undo.append(_StrokeCommand(patches, result))
         if len(self._undo) > self.max_history:
@@ -296,55 +348,141 @@ class TexturePaintSession:
         if active is None:
             return 0
         brush = active.brush
-        radius = brush.radius_px * max(0.05, pressure)
-        alpha_scale = brush.opacity * brush.flow * pressure
-        if radius <= 0.0 or alpha_scale <= 0.0:
+        radius = brush.radius_px * (max(0.05, pressure) if brush.pressure_size else 1.0)
+        flow_scale = brush.flow * (pressure if brush.pressure_flow else 1.0)
+        if radius <= 0.0 or brush.opacity <= 0.0 or flow_scale <= 0.0:
             return 0
+        if brush.jitter > 0.0 and active.stamp_count > 0:
+            # Deterministic low-discrepancy scatter: the same pointer samples
+            # always produce the same stroke and therefore the same undo bytes.
+            phase = (active.stamp_count * 0.7548776662466927) % 1.0
+            radial = (active.stamp_count * 0.5698402909980532) % 1.0
+            offset = brush.jitter * radius * radial
+            center_x = (center_x + (math.cos(phase * math.tau) * offset)) % self.width
+            center_y = (center_y + (math.sin(phase * math.tau) * offset)) % self.height
         active.stamp_count += 1
-        changed = 0
-        minimum_x = math.floor(center_x - radius)
-        maximum_x = math.ceil(center_x + radius)
-        minimum_y = math.floor(center_y - radius)
-        maximum_y = math.ceil(center_y + radius)
+
+        def axis_samples(center: float, extent: float, size: int) -> tuple[np.ndarray, np.ndarray]:
+            minimum = math.floor(center - extent)
+            maximum = math.ceil(center + extent)
+            if (maximum - minimum) + 1 <= size:
+                raw = np.arange(minimum, maximum + 1, dtype=np.int64)
+                return np.mod(raw, size), (raw.astype(np.float32) + 0.5) - float(center)
+            wrapped = np.arange(size, dtype=np.int64)
+            delta = np.mod((wrapped.astype(np.float32) + 0.5) - float(center) + (size * 0.5), size) - (size * 0.5)
+            return wrapped, delta
+
+        x_indices, x_delta = axis_samples(center_x, radius, self.width)
+        y_indices, y_delta = axis_samples(center_y, radius, self.height)
+        dx, dy = np.meshgrid(x_delta, y_delta)
+        px, py = np.meshgrid(x_indices, y_indices)
+        distance = np.hypot(dx, dy)
+        inside = distance <= radius
+        if not np.any(inside):
+            return 0
         hard_radius = radius * brush.hardness
         feather = max(1.0e-6, radius - hard_radius)
-        for sample_y in range(minimum_y, maximum_y + 1):
-            for sample_x in range(minimum_x, maximum_x + 1):
-                distance = math.hypot((sample_x + 0.5) - center_x, (sample_y + 0.5) - center_y)
-                if distance > radius:
-                    continue
-                falloff = 1.0 if distance <= hard_radius else max(0.0, 1.0 - ((distance - hard_radius) / feather))
-                source_rgba = self._brush_source_rgba(
-                    brush,
-                    ((sample_x + 0.5) - center_x) / radius,
-                    ((sample_y + 0.5) - center_y) / radius,
-                )
-                source_alpha = alpha_scale * falloff * (source_rgba[3] / 255.0)
-                if source_alpha <= 1.0e-6:
-                    continue
-                x = sample_x % self.width
-                y = sample_y % self.height
-                tile = (x // self.tile_size, y // self.tile_size)
-                if tile not in active.before_tiles:
-                    active.before_tiles[tile] = self._read_tile(*tile)
-                offset = ((y * self.width) + x) * 4
-                before = tuple(self._pixels[offset + index] for index in range(4))
-                inverse = 1.0 - source_alpha
-                source_linear = tuple(_SRGB_TO_LINEAR[value] for value in source_rgba[:3])
-                after = (
-                    _linear_to_srgb_byte((source_linear[0] * source_alpha) + (_SRGB_TO_LINEAR[before[0]] * inverse)),
-                    _linear_to_srgb_byte((source_linear[1] * source_alpha) + (_SRGB_TO_LINEAR[before[1]] * inverse)),
-                    _linear_to_srgb_byte((source_linear[2] * source_alpha) + (_SRGB_TO_LINEAR[before[2]] * inverse)),
-                    int(round((255.0 * source_alpha) + (before[3] * inverse))),
-                )
-                if after == before:
-                    continue
-                self._pixels[offset : offset + 4] = bytes(after)
-                active.dirty_tiles.add(tile)
-                active.pending_tiles.add(tile)
-                active.dirty_pixels.add((x, y))
-                changed += 1
-        return changed
+        falloff = np.where(
+            distance <= hard_radius,
+            1.0,
+            np.clip(1.0 - ((distance - hard_radius) / feather), 0.0, 1.0),
+        )[inside].astype(np.float32, copy=False)
+        xs = px[inside].astype(np.int64, copy=False)
+        ys = py[inside].astype(np.int64, copy=False)
+        local_x = (dx[inside] / radius).astype(np.float32, copy=False)
+        local_y = (dy[inside] / radius).astype(np.float32, copy=False)
+        source_rgba = self._brush_source_rgba_array(brush, local_x, local_y)
+        deposit = np.clip(
+            flow_scale * falloff * (source_rgba[:, 3].astype(np.float32) / 255.0),
+            0.0,
+            1.0,
+        )
+        coverage = active.coverage
+        if coverage is None:
+            return 0
+        previous_coverage = coverage[ys, xs]
+        wanted_coverage = previous_coverage + ((1.0 - previous_coverage) * deposit)
+        next_coverage = np.minimum(float(brush.opacity), wanted_coverage)
+        denominator = np.maximum(1.0e-7, 1.0 - previous_coverage)
+        source_alpha = np.clip((next_coverage - previous_coverage) / denominator, 0.0, 1.0)
+        eligible = source_alpha > 1.0e-6
+        if not np.any(eligible):
+            return 0
+        xs = xs[eligible]
+        ys = ys[eligible]
+        source_alpha = source_alpha[eligible]
+        source_rgba = source_rgba[eligible]
+        coverage[ys, xs] = next_coverage[eligible]
+
+        pixels = np.frombuffer(self._pixels, dtype=np.uint8).reshape((self.height, self.width, 4))
+        before = pixels[ys, xs].copy()
+        inverse = 1.0 - source_alpha
+        source_linear = _SRGB_TO_LINEAR_ARRAY[source_rgba[:, :3]]
+        before_linear = _SRGB_TO_LINEAR_ARRAY[before[:, :3]]
+        after = np.empty_like(before)
+        after[:, :3] = _linear_to_srgb_array(
+            (source_linear * source_alpha[:, None]) + (before_linear * inverse[:, None])
+        )
+        after[:, 3] = np.clip(
+            np.rint((255.0 * source_alpha) + (before[:, 3].astype(np.float32) * inverse)),
+            0.0,
+            255.0,
+        ).astype(np.uint8)
+        changed_mask = np.any(after != before, axis=1)
+        if not np.any(changed_mask):
+            return 0
+        changed_x = xs[changed_mask]
+        changed_y = ys[changed_mask]
+        changed_after = after[changed_mask]
+
+        tile_pairs = np.unique(
+            np.column_stack((changed_x // self.tile_size, changed_y // self.tile_size)),
+            axis=0,
+        )
+        for tile_x, tile_y in tile_pairs:
+            tile = (int(tile_x), int(tile_y))
+            if tile not in active.before_tiles:
+                active.before_tiles[tile] = self._read_tile(*tile)
+            active.dirty_tiles.add(tile)
+            active.pending_tiles.add(tile)
+
+        dirty_mask = active.dirty_mask
+        if dirty_mask is not None:
+            newly_dirty = ~dirty_mask[changed_y, changed_x]
+            active.dirty_pixel_count += int(np.count_nonzero(newly_dirty))
+            dirty_mask[changed_y, changed_x] = True
+        active.dirty_min_x = int(changed_x.min()) if active.dirty_min_x is None else min(active.dirty_min_x, int(changed_x.min()))
+        active.dirty_min_y = int(changed_y.min()) if active.dirty_min_y is None else min(active.dirty_min_y, int(changed_y.min()))
+        active.dirty_max_x = int(changed_x.max()) if active.dirty_max_x is None else max(active.dirty_max_x, int(changed_x.max()))
+        active.dirty_max_y = int(changed_y.max()) if active.dirty_max_y is None else max(active.dirty_max_y, int(changed_y.max()))
+        pixels[changed_y, changed_x] = changed_after
+        return int(changed_x.size)
+
+    @staticmethod
+    def _brush_source_rgba_array(
+        brush: TexturePaintBrush,
+        local_x: np.ndarray,
+        local_y: np.ndarray,
+    ) -> np.ndarray:
+        """Return vectorized source colors for one brush dab."""
+
+        width, height = brush.stamp_size
+        count = int(local_x.size)
+        if width <= 0 or height <= 0 or len(brush.stamp_rgba) != width * height * 4:
+            return np.broadcast_to(np.asarray(brush.color, dtype=np.uint8), (count, 4)).copy()
+        radians = math.radians(float(brush.rotation_degrees))
+        cosine = math.cos(radians)
+        sine = math.sin(radians)
+        rotated_x = (cosine * local_x) + (sine * local_y)
+        rotated_y = (-sine * local_x) + (cosine * local_y)
+        u = np.clip((rotated_x + 1.0) * 0.5, 0.0, 1.0)
+        v = np.clip((rotated_y + 1.0) * 0.5, 0.0, 1.0)
+        x = np.minimum(width - 1, np.rint(u * (width - 1)).astype(np.int64))
+        y = np.minimum(height - 1, np.rint(v * (height - 1)).astype(np.int64))
+        stamp = np.frombuffer(brush.stamp_rgba, dtype=np.uint8).reshape((height, width, 4))
+        source = stamp[y, x].astype(np.float32)
+        tint = np.asarray(brush.color, dtype=np.float32) / 255.0
+        return np.clip(np.rint(source * tint), 0.0, 255.0).astype(np.uint8)
 
     @staticmethod
     def _brush_source_rgba(brush: TexturePaintBrush, local_x: float, local_y: float) -> tuple[int, int, int, int]:
@@ -428,10 +566,9 @@ def encode_tga_rgba(width: int, height: int, rgba: bytes | bytearray) -> bytes:
     if len(rgba) != width * height * 4:
         raise ValueError("RGBA payload size does not match TGA dimensions.")
     header = struct.pack("<BBBHHBHHHHBB", 0, 0, 2, 0, 0, 0, 0, 0, width, height, 32, 0x28)
-    bgra = bytearray(len(rgba))
-    for offset in range(0, len(rgba), 4):
-        bgra[offset : offset + 4] = bytes((rgba[offset + 2], rgba[offset + 1], rgba[offset], rgba[offset + 3]))
-    return header + bytes(bgra)
+    pixels = np.frombuffer(rgba, dtype=np.uint8).reshape((-1, 4))
+    bgra = pixels[:, (2, 1, 0, 3)].tobytes()
+    return header + bgra
 
 
 def decode_image_rgba(data: bytes) -> tuple[int, int, bytes]:

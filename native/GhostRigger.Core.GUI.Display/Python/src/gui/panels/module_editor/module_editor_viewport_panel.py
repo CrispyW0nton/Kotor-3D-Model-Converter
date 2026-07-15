@@ -1608,6 +1608,13 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._texture_paint_enabled = False
         self._texture_paint_drag = None
         self._texture_paint_previous_hover: tuple[bool, str] | None = None
+        self._texture_paint_brush_context: dict[str, object] = {
+            "radius_px": 48.0,
+            "hardness": 0.75,
+            "pressure_size": True,
+            "texture_size": (1024, 1024),
+            "resref": "",
+        }
         self._project_texture_dirs: tuple[str, ...] = ()
         self._table_updating = False
         for widget in (
@@ -2927,9 +2934,127 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if self._texture_paint_drag is not None:
             self._cancel_texture_paint_drag()
         self._texture_paint_enabled = False
+        cursor_clearer = getattr(self.viewport, "clear_map_studio_texture_paint_cursor", None)
+        if callable(cursor_clearer):
+            cursor_clearer()
         previous = self._texture_paint_previous_hover or (False, "")
         self._texture_paint_previous_hover = None
         self.set_map_studio_hover_probe(previous[0], previous[1])
+
+    def set_texture_paint_brush_context(
+        self,
+        brush: object,
+        *,
+        texture_size: tuple[int, int] | None = None,
+        resref: str = "",
+    ) -> None:
+        """Update the non-mutating viewport cursor for the active paint document."""
+
+        previous = dict(self._texture_paint_brush_context)
+        size = tuple(texture_size or previous.get("texture_size") or (1024, 1024))
+        self._texture_paint_brush_context = {
+            "radius_px": max(0.5, float(getattr(brush, "radius_px", previous.get("radius_px", 48.0)) or 48.0)),
+            "hardness": max(0.0, min(1.0, float(getattr(brush, "hardness", previous.get("hardness", 0.75)) or 0.0))),
+            "pressure_size": bool(getattr(brush, "pressure_size", previous.get("pressure_size", True))),
+            "texture_size": (
+                max(1, int(size[0])) if len(size) >= 1 else 1024,
+                max(1, int(size[1])) if len(size) >= 2 else 1024,
+            ),
+            "resref": str(resref or previous.get("resref") or "").strip().lower(),
+        }
+
+    def _set_texture_paint_cursor_at_screen(
+        self,
+        context: object,
+        candidates: object,
+        screen: tuple[float, float],
+        *,
+        pressure: float = 1.0,
+    ) -> None:
+        setter = getattr(self.viewport, "set_map_studio_texture_paint_cursor", None)
+        if not callable(setter):
+            return
+        if (
+            not self._texture_paint_enabled
+            or context is None
+            or str(getattr(context, "component_type", "") or "") != "face"
+            or len(tuple(getattr(context, "uv", ()) or ())) < 2
+        ):
+            setter(None)
+            return
+        matched = next(
+            (
+                candidate
+                for candidate in tuple(candidates or ())
+                if str(getattr(candidate, "room_resref", "") or "")
+                == str(getattr(context, "room_resref", "") or "")
+                and str(getattr(candidate, "mesh_role", "") or "")
+                == str(getattr(context, "mesh_role", "") or "")
+                and int(getattr(candidate, "face_index", -1)) == int(getattr(context, "face_index", -1))
+                and getattr(candidate, "walkable", None) is None
+            ),
+            None,
+        )
+        points = tuple(getattr(matched, "screen_points", ()) or ())[:3]
+        uv_points = tuple(getattr(matched, "uv_points", ()) or ())[:3]
+        if len(points) != 3 or len(uv_points) != 3:
+            setter(None)
+            return
+        center_uv = tuple(getattr(context, "uv", ()) or ())[:2]
+
+        def unwrap(value: float, center: float) -> float:
+            return float(value) + round(float(center) - float(value))
+
+        unwrapped = tuple(
+            (unwrap(float(uv[0]), float(center_uv[0])), unwrap(float(uv[1]), float(center_uv[1])))
+            for uv in uv_points
+        )
+        du1, dv1 = unwrapped[1][0] - unwrapped[0][0], unwrapped[1][1] - unwrapped[0][1]
+        du2, dv2 = unwrapped[2][0] - unwrapped[0][0], unwrapped[2][1] - unwrapped[0][1]
+        determinant = (du1 * dv2) - (dv1 * du2)
+        if abs(determinant) <= 1.0e-10:
+            setter(None)
+            return
+        dx1, dy1 = float(points[1][0]) - float(points[0][0]), float(points[1][1]) - float(points[0][1])
+        dx2, dy2 = float(points[2][0]) - float(points[0][0]), float(points[2][1]) - float(points[0][1])
+        dx_du = ((dv2 * dx1) - (dv1 * dx2)) / determinant
+        dx_dv = ((-du2 * dx1) + (du1 * dx2)) / determinant
+        dy_du = ((dv2 * dy1) - (dv1 * dy2)) / determinant
+        dy_dv = ((-du2 * dy1) + (du1 * dy2)) / determinant
+        settings = self._texture_paint_brush_context
+        width, height = tuple(settings.get("texture_size") or (1024, 1024))[:2]
+        radius = float(settings.get("radius_px", 48.0) or 48.0)
+        if bool(settings.get("pressure_size", True)):
+            radius *= max(0.05, min(1.0, float(pressure)))
+        cx, cy = float(screen[0]), float(screen[1])
+
+        def ring(scale: float) -> tuple[tuple[float, float], ...]:
+            result = []
+            for index in range(40):
+                angle = (index / 40.0) * math.tau
+                du = (radius / max(1.0, float(width))) * math.cos(angle) * scale
+                dv = (radius / max(1.0, float(height))) * math.sin(angle) * scale
+                result.append((cx + (dx_du * du) + (dx_dv * dv), cy + (dy_du * du) + (dy_dv * dv)))
+            maximum = max((math.hypot(x - cx, y - cy) for x, y in result), default=0.0)
+            if maximum > 300.0:
+                factor = 300.0 / maximum
+                result = [(cx + ((x - cx) * factor), cy + ((y - cy) * factor)) for x, y in result]
+            return tuple(result)
+
+        target = str(settings.get("resref") or "").strip().lower()
+        material = str(getattr(context, "material", "") or "").strip().lower()
+        hardness = float(settings.get("hardness", 0.75) or 0.0)
+        setter(
+            {
+                "center": (cx, cy),
+                "outer": ring(1.0),
+                "inner": ring(hardness) if hardness > 0.0 else (),
+                "valid": bool(target and material == target),
+                "radius_px": radius,
+                "material": material,
+                "target": target,
+            }
+        )
 
     @staticmethod
     def _texture_paint_pressure(event: QtCore.QEvent) -> float:
@@ -2947,10 +3072,20 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         uv = tuple(getattr(context, "uv", ()) or ())
         if len(uv) < 2:
             return None
+        screen = self._event_position(event)
+        pressure = self._texture_paint_pressure(event)
+        if screen is not None:
+            self._set_texture_paint_cursor_at_screen(
+                context,
+                self._map_studio_hover_candidates_near(screen[0], screen[1]),
+                screen,
+                pressure=pressure,
+            )
         return {
             "context": context,
             "uv": (float(uv[0]), float(uv[1])),
-            "pressure": self._texture_paint_pressure(event),
+            "pressure": pressure,
+            "screen": screen,
         }
 
     def _begin_texture_paint_drag(self, event: QtCore.QEvent) -> bool:
@@ -2958,15 +3093,39 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if payload is None:
             self.marker_summary_label.setText("Texture Paint needs a visible render face with diffuse UV0.")
             return True
-        self._texture_paint_drag = {"started": True}
+        context = payload.get("context")
+        self._texture_paint_drag = {
+            "started": True,
+            "surface_key": (
+                str(getattr(context, "room_resref", "") or ""),
+                str(getattr(context, "mesh_role", "") or ""),
+                str(getattr(context, "material", "") or ""),
+            ),
+            "needs_break": False,
+        }
         self.texturePaintStrokeBegan.emit(payload)
         self.texturePaintSampleRequested.emit(payload)
         return True
 
     def _update_texture_paint_drag(self, event: QtCore.QEvent) -> bool:
         payload = self._texture_paint_payload_at_event(event)
-        if payload is not None:
-            self.texturePaintSampleRequested.emit(payload)
+        drag = self._texture_paint_drag
+        if drag is None:
+            return False
+        if payload is None:
+            drag["needs_break"] = True
+            return True
+        context = payload.get("context")
+        surface_key = (
+            str(getattr(context, "room_resref", "") or ""),
+            str(getattr(context, "mesh_role", "") or ""),
+            str(getattr(context, "material", "") or ""),
+        )
+        if bool(drag.get("needs_break", False)) or surface_key != drag.get("surface_key"):
+            payload["break_before"] = True
+        drag["surface_key"] = surface_key
+        drag["needs_break"] = False
+        self.texturePaintSampleRequested.emit(payload)
         return True
 
     def _finish_texture_paint_drag(self, event: QtCore.QEvent | None = None) -> bool:
@@ -2975,6 +3134,14 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if event is not None:
             payload = self._texture_paint_payload_at_event(event)
             if payload is not None:
+                context = payload.get("context")
+                surface_key = (
+                    str(getattr(context, "room_resref", "") or ""),
+                    str(getattr(context, "mesh_role", "") or ""),
+                    str(getattr(context, "material", "") or ""),
+                )
+                if bool(self._texture_paint_drag.get("needs_break", False)) or surface_key != self._texture_paint_drag.get("surface_key"):
+                    payload["break_before"] = True
                 self.texturePaintSampleRequested.emit(payload)
         self._texture_paint_drag = None
         self.texturePaintStrokeCommitted.emit()
@@ -3114,6 +3281,9 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         clearer = getattr(self.viewport, "clear_map_studio_hover_highlight", None)
         if callable(clearer):
             clearer()
+        cursor_clearer = getattr(self.viewport, "clear_map_studio_texture_paint_cursor", None)
+        if callable(cursor_clearer):
+            cursor_clearer()
         self._sync_quad_draw_feedback()
 
     @staticmethod
@@ -3588,6 +3758,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             tolerance_px=tolerance,
             prefer_walkmesh=self._hover_component_mode in {"walkmesh", "terrain"},
         )
+        self._set_texture_paint_cursor_at_screen(context, candidates, screen)
         if context == self._hover_context:
             return
         self._hover_context = context

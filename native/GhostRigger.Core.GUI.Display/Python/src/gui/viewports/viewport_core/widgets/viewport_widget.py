@@ -271,6 +271,7 @@ class QtViewportWidget(
         self._map_studio_marker_geometry = None
         self._map_studio_terrain_walkability_overlay = None
         self._map_studio_terrain_brush_cursor = None
+        self._map_studio_texture_paint_cursor = None
         self._map_studio_universal_transform_overlay = None
         self._map_studio_modeling_points_overlay = None
         self._map_studio_viewport_presentation: dict[str, object] = {}

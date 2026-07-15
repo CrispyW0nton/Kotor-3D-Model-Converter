@@ -626,6 +626,42 @@ class ViewportOverlayLayersMixin:
         except Exception as exc:
             log.debug("Map Studio terrain brush cursor overlay failed: %s", exc)
 
+    def _draw_map_studio_texture_paint_cursor(self, draw, w: int, h: int) -> None:
+        """Draw texture-space size and hardness rings over the picked surface."""
+
+        cursor = getattr(self, "_map_studio_texture_paint_cursor", None)
+        if not isinstance(cursor, dict):
+            return
+        try:
+            outer = list(tuple(cursor.get("outer") or ()))
+            inner = list(tuple(cursor.get("inner") or ()))
+            center = tuple(cursor.get("center") or ())
+            if len(outer) < 3 or len(center) < 2:
+                return
+            valid = bool(cursor.get("valid", False))
+            color = self._map_studio_theme_rgba(
+                "success" if valid else "error",
+                "#00e5ff" if valid else "#ff5c5c",
+                245,
+            )
+
+            def closed(points):
+                return points + [points[0]] if points else points
+
+            draw.line(closed(outer), fill=(0, 0, 0, 210), width=5)
+            draw.line(closed(outer), fill=color, width=2)
+            if len(inner) >= 3:
+                draw.line(closed(inner), fill=(0, 0, 0, 180), width=3)
+                draw.line(closed(inner), fill=(color[0], color[1], color[2], 180), width=1)
+            cx, cy = float(center[0]), float(center[1])
+            draw.line([(cx - 4.0, cy), (cx + 4.0, cy)], fill=color, width=1)
+            draw.line([(cx, cy - 4.0), (cx, cy + 4.0)], fill=color, width=1)
+            if not valid:
+                draw.line([(cx - 6.0, cy - 6.0), (cx + 6.0, cy + 6.0)], fill=color, width=2)
+                draw.line([(cx - 6.0, cy + 6.0), (cx + 6.0, cy - 6.0)], fill=color, width=2)
+        except Exception as exc:
+            log.debug("Map Studio texture paint cursor overlay failed: %s", exc)
+
     def _draw_map_studio_component_selection(self, draw, w: int, h: int) -> None:
         """Selected components render YELLOW (selection owns that color now)."""
 

@@ -167,6 +167,84 @@ def import_project_texture_asset(
     )
 
 
+def clone_game_texture_asset(
+    project: KMapProject,
+    resref: str,
+    *,
+    resource_manager: Any,
+    game: str = "",
+) -> ProjectTextureAsset:
+    """Clone one resolved game diffuse texture into a writable project TGA.
+
+    The clone intentionally keeps the original ResRef.  Packaging that TGA in
+    the authored module therefore overrides every use of the material without
+    converting or rewriting stock room geometry.  ResourceManager images use
+    the renderer's bottom-up convention; project TGA sidecars stay top-down.
+    """
+
+    clean_ref = validate_kotor_texture_resref(resref)
+    existing = next(
+        (item for item in tuple(project.textures or ()) if str(item.resref or "").strip().lower() == clean_ref),
+        None,
+    )
+    if existing is not None:
+        metadata = dict(getattr(existing, "metadata", {}) or {})
+        if str(metadata.get("asset_kind") or "") == "map_studio_lightmap":
+            raise ValueError(f'Cannot clone diffuse texture "{clean_ref}" over a project lightmap.')
+        path_value = str(getattr(existing, "path", "") or "").strip()
+        if path_value:
+            source_path = resolve_project_texture_path(project, path_value)
+            if source_path.suffix.lower() == ".tga" and source_path.is_file():
+                width, height, _rgba = decode_image_rgba(source_path.read_bytes())
+                txi_value = str(metadata.get("txi_path") or "").strip()
+                return ProjectTextureAsset(
+                    texture_id=str(existing.texture_id),
+                    resref=clean_ref,
+                    path=str(source_path),
+                    width=int(width),
+                    height=int(height),
+                    txi_path=str(resolve_project_texture_path(project, txi_value)) if txi_value else "",
+                    source=str(getattr(existing, "source", "") or ""),
+                )
+
+    if resource_manager is None:
+        raise ValueError("Connect a KOTOR game resource library before making game textures editable.")
+    load_image = getattr(resource_manager, "load_texture_image", None)
+    if not callable(load_image):
+        raise ValueError("The active game resource library cannot decode textures.")
+    game_key = str(game or getattr(project, "game", "K1") or "K1").upper()
+    try:
+        image = load_image(clean_ref, game_key, max_size=0)
+    except TypeError:
+        image = load_image(clean_ref, game_key)
+    if image is None:
+        raise ValueError(f'Game texture "{clean_ref}" could not be resolved for {game_key}.')
+
+    from PIL import Image
+
+    bottom_up = image.convert("RGBA")
+    embedded_txi = str(getattr(image, "_txi_str", "") or "").replace("\x00", "").strip()
+    get_txi = getattr(resource_manager, "get_txi", None)
+    standalone_txi = str(get_txi(clean_ref, game_key) or "").strip() if callable(get_txi) else ""
+    top_down = bottom_up.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+    width, height = top_down.size
+    return create_project_texture_asset(
+        project,
+        resref=clean_ref,
+        width=int(width),
+        height=int(height),
+        rgba=top_down.tobytes(),
+        source="map_studio:game_texture_clone",
+        txi_text=standalone_txi or embedded_txi,
+        metadata={
+            "source_game": game_key,
+            "source_resref": clean_ref,
+            "paint_unique_copy": True,
+            "clone_scope": "module_resref_override",
+        },
+    )
+
+
 def create_project_tpc_texture_asset(
     project: KMapProject,
     *,
@@ -304,6 +382,7 @@ def project_texture_export_resources(project: KMapProject) -> tuple[tuple[str, s
 
 __all__ = [
     "ProjectTextureAsset",
+    "clone_game_texture_asset",
     "create_project_tpc_texture_asset",
     "create_project_texture_asset",
     "import_project_texture_asset",

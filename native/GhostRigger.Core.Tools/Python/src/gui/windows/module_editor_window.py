@@ -8,6 +8,7 @@ from dataclasses import replace
 import json
 import math
 from pathlib import Path
+from queue import Empty, SimpleQueue
 from threading import Event
 from time import perf_counter
 from typing import Any
@@ -16,7 +17,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.core.level import KMapProject, KMapSerializer, LevelScene, LevelTransform, resolve_project_texture_path
 from src.core.modules.authored_module_export import authored_module_smoke_summary_lines
-from src.core.modules.module_editor_controller import ModuleEditorController
+from src.core.modules.module_editor_controller import MapStudioTextureCloneCancelled, ModuleEditorController
 from src.core.modules.module_editor_model import ModuleEditorModel
 from src.core.modules.map_studio_tool_action_dispatch import (
     MapStudioToolActionContext,
@@ -76,6 +77,11 @@ _MAP_STUDIO_PIE_ACTOR_EXECUTOR = ThreadPoolExecutor(
     thread_name_prefix="map-studio-pie-actors",
 )
 
+_MAP_STUDIO_TEXTURE_CLONE_EXECUTOR = ThreadPoolExecutor(
+    max_workers=1,
+    thread_name_prefix="map-studio-texture-clone",
+)
+
 # NPC idle poses are intentionally sampled below the player/render cadence.
 # A stock area such as 207TEL can retain 32 animated creatures (roughly 2,800
 # DAG nodes); evaluating every skeleton in one 30 Hz burst consumed about
@@ -90,6 +96,105 @@ _MAP_STUDIO_PIE_CREATURE_POSE_HZ = 12.0
 # Keep the quota tied to one intended timer slice; each actor separately keeps
 # its real elapsed time until its round-robin turn.
 _MAP_STUDIO_PIE_CREATURE_SCHEDULER_HZ = 60.0
+
+
+class _MapStudioWorkflowStack(QtWidgets.QStackedWidget):
+    """Compact tab-compatible workflow stack sized from only its active page.
+
+    Map Studio historically put eight workflows in a narrow ``QTabWidget``.
+    Besides clipping the tab labels, ``QTabWidget`` reports the largest child
+    as every page's preferred size.  The Builder and Environment pages could
+    therefore force horizontal overflow while the much smaller Rooms or WOK
+    pages were active.  This stack preserves the small tab API used by the
+    window while leaving workflow choice to the accessible combo box above it.
+    """
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._tab_labels: list[str] = []
+        self._tab_tooltips: dict[int, str] = {}
+        self._height_sync_pending = False
+        self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Preferred)
+        self.setMinimumWidth(0)
+        self.setMinimumHeight(0)
+        # QStackedLayout normally contributes the largest hidden page to the
+        # container's minimum size.  In Map Studio that made the compact Paint
+        # page inherit the very tall Builder page and exposed thousands of
+        # pixels of empty vertical scroll.  The stack reports the active page's
+        # size explicitly, so its internal layout must not reintroduce the
+        # hidden-page constraint.
+        layout = self.layout()
+        if layout is not None:
+            layout.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
+        self.currentChanged.connect(self._active_page_changed)
+
+    def addTab(self, widget: QtWidgets.QWidget, label: str) -> int:  # noqa: N802 - QTabWidget compatibility
+        index = self.addWidget(widget)
+        self._tab_labels.append(str(label))
+        widget.setMinimumWidth(0)
+        widget.installEventFilter(self)
+        return index
+
+    def tabText(self, index: int) -> str:  # noqa: N802 - QTabWidget compatibility
+        return self._tab_labels[index] if 0 <= index < len(self._tab_labels) else ""
+
+    def setTabToolTip(self, index: int, text: str) -> None:  # noqa: N802 - QTabWidget compatibility
+        if 0 <= index < self.count():
+            self._tab_tooltips[index] = str(text)
+
+    def tabToolTip(self, index: int) -> str:  # noqa: N802 - QTabWidget compatibility
+        return self._tab_tooltips.get(index, "")
+
+    def sizeHint(self) -> QtCore.QSize:  # noqa: N802 - Qt API
+        page = self.currentWidget()
+        if page is None:
+            return QtCore.QSize(300, 200)
+        hint = page.sizeHint()
+        # The rail owns width.  Only the active page contributes height.
+        return QtCore.QSize(min(320, max(0, hint.width())), max(0, hint.height()))
+
+    def minimumSizeHint(self) -> QtCore.QSize:  # noqa: N802 - Qt API
+        page = self.currentWidget()
+        height = 0 if page is None else max(0, page.minimumSizeHint().height())
+        return QtCore.QSize(0, height)
+
+    def _active_page_changed(self, _index: int) -> None:
+        layout = self.layout()
+        if layout is not None:
+            layout.invalidate()
+        self._queue_active_page_height_sync()
+
+    def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:  # noqa: N802 - Qt API
+        if watched is self.currentWidget() and event.type() == QtCore.QEvent.LayoutRequest:
+            self._queue_active_page_height_sync()
+        return super().eventFilter(watched, event)
+
+    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:  # noqa: N802 - Qt API
+        super().resizeEvent(event)
+        self._queue_active_page_height_sync()
+
+    def _queue_active_page_height_sync(self) -> None:
+        if self._height_sync_pending:
+            return
+        self._height_sync_pending = True
+        QtCore.QTimer.singleShot(0, self._sync_active_page_height)
+
+    def _sync_active_page_height(self) -> None:
+        self._height_sync_pending = False
+        page = self.currentWidget()
+        if page is None:
+            return
+        page_layout = page.layout()
+        if page_layout is not None:
+            page_layout.invalidate()
+        wanted = max(1, page.minimumSizeHint().height(), page.sizeHint().height())
+        if page.hasHeightForWidth():
+            wanted = max(wanted, page.heightForWidth(max(1, self.width())))
+        if self.maximumHeight() != wanted:
+            self.setMaximumHeight(wanted)
+        if self.height() != wanted:
+            self.resize(self.width(), wanted)
+        self.updateGeometry()
 
 
 def _build_map_studio_geometry_validation_snapshot(project_data: dict[str, Any]) -> dict[str, Any]:
@@ -1068,6 +1173,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._texture_paint_stamp_name = ""
         self._texture_paint_stamp_size: tuple[int, int] = (0, 0)
         self._texture_paint_stamp_rgba = b""
+        self._texture_paint_preview_error = ""
+        self._texture_paint_upload_timer = QtCore.QTimer(self)
+        self._texture_paint_upload_timer.setSingleShot(True)
+        self._texture_paint_upload_timer.setInterval(16)
+        self._texture_paint_upload_timer.timeout.connect(self._flush_map_studio_texture_paint_tiles)
         self._map_studio_pie_session: Any = None
         self._map_studio_pie_last_time = 0.0
         self._map_studio_pie_camera_snapshot: tuple[Any, ...] | None = None
@@ -1364,12 +1474,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.left_tabs = QtWidgets.QTabWidget()
         self.left_tabs.addTab(self.outliner, "Outliner")
         self.left_tabs.addTab(self.asset_browser, "Assets")
-        self.workflow_tabs = QtWidgets.QTabWidget()
-        # Elide tab labels instead of forcing scroll arrows, and let tabs
-        # expand to fill the dock width so the workflow row reads cleanly.
-        self.workflow_tabs.setElideMode(QtCore.Qt.ElideRight)
-        self.workflow_tabs.setUsesScrollButtons(False)
-        self.workflow_tabs.tabBar().setExpanding(True)
+        self.workflow_tabs = _MapStudioWorkflowStack()
+        self.workflow_tabs.setObjectName("mapStudioWorkflowStack")
+        self.workflow_selector = QtWidgets.QComboBox()
+        self.workflow_selector.setObjectName("mapStudioWorkflowSelector")
+        self.workflow_selector.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        self.workflow_selector.setToolTip(
+            "Choose the Map Studio workflow shown below. All workflows stay reachable in the narrow authoring rail."
+        )
+        self.workflow_selector.setAccessibleName("Map Studio workflow")
         self.rooms_tab = RoomsTab()
         self.placement_tab = PlacementTab()
         self.walkmesh_tab = WalkmeshTab()
@@ -1402,10 +1515,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             ("Data", self.blueprints_tab),
         ):
             self.workflow_tabs.addTab(widget, label)
+            self.workflow_selector.addItem(label)
         self.workflow_tabs.setTabToolTip(
             self.workflow_tabs.indexOf(self.environment_tab),
             "Environment: ARE world lighting/fog, baked lightmap display, loaded sky rendering, and five-face sky authoring.",
         )
+        self.workflow_selector.setItemData(
+            self.workflow_tabs.indexOf(self.environment_tab),
+            self.workflow_tabs.tabToolTip(self.workflow_tabs.indexOf(self.environment_tab)),
+            QtCore.Qt.ToolTipRole,
+        )
+        self.workflow_selector.currentIndexChanged.connect(self.workflow_tabs.setCurrentIndex)
+        self.workflow_tabs.currentChanged.connect(self._sync_map_studio_workflow_selector)
         self.left_splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.left_splitter.setChildrenCollapsible(False)
         self.left_splitter.addWidget(self.left_tabs)
@@ -1414,7 +1535,29 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "mapStudioWorkflowTabsScrollArea",
             parent=left,
         )
-        self.left_splitter.addWidget(self.workflow_tabs_scroll)
+        self.workflow_tabs_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        workflow_host = QtWidgets.QWidget(left)
+        workflow_host.setObjectName("mapStudioWorkflowRail")
+        workflow_host.setMinimumWidth(0)
+        workflow_host_layout = QtWidgets.QVBoxLayout(workflow_host)
+        workflow_host_layout.setContentsMargins(0, 0, 0, 0)
+        workflow_host_layout.setSpacing(4)
+        workflow_selector_row = QtWidgets.QHBoxLayout()
+        workflow_selector_row.setContentsMargins(4, 0, 4, 0)
+        workflow_label = QtWidgets.QLabel("Workflow")
+        workflow_label.setBuddy(self.workflow_selector)
+        workflow_selector_row.addWidget(workflow_label)
+        workflow_selector_row.addWidget(self.workflow_selector, 1)
+        workflow_host_layout.addLayout(workflow_selector_row)
+        workflow_host_layout.addWidget(self.workflow_tabs_scroll, 1)
+        self.left_splitter.addWidget(workflow_host)
+        self.main_splitter.splitterMoved.connect(
+            lambda _position, _index: self._queue_map_studio_workflow_control_fit()
+        )
+        self.workflow_tabs.currentChanged.connect(
+            lambda _index: self._queue_map_studio_workflow_control_fit()
+        )
+        QtCore.QTimer.singleShot(0, self._queue_map_studio_workflow_control_fit)
         self.left_splitter.setStretchFactor(0, 3)
         self.left_splitter.setStretchFactor(1, 2)
         self.left_splitter.setSizes([520, 340])
@@ -1744,8 +1887,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.texture_paint_tab.assignRequested.connect(self._assign_map_studio_texture_paint_target)
         self.texture_paint_tab.paintEnabledChanged.connect(self._set_map_studio_texture_paint_enabled)
         self.texture_paint_tab.targetChanged.connect(self._reset_map_studio_texture_paint_session)
+        self.texture_paint_tab.brushChanged.connect(self._update_map_studio_texture_paint_brush_context)
         self.texture_paint_tab.brushSourceRequested.connect(self._choose_map_studio_texture_paint_brush_source)
         self.texture_paint_tab.brushSourceCleared.connect(self._clear_map_studio_texture_paint_brush_source)
+        self.texture_paint_tab.makeUsedEditableRequested.connect(self._make_used_map_textures_editable)
         self.texture_paint_tab.applyRequested.connect(self._apply_map_studio_texture_changes)
         self.environment_tab.worldSettingsRequested.connect(self._apply_map_studio_world_settings)
         self.environment_tab.lightmapApplyRequested.connect(self._apply_map_studio_surface_lightmap)
@@ -1817,6 +1962,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._refresh_all(result.message)
 
     def undo_map_studio_command(self) -> None:
+        session = self._texture_paint_session
+        if session is not None and bool(getattr(session, "stroke_active", False)):
+            self._cancel_map_studio_texture_paint_stroke()
+            self._log("Cancelled the active texture-paint stroke; press Undo again for earlier edits.")
+            return
         try:
             result = self.controller.undo_map_studio_command()
         except Exception as exc:
@@ -1836,6 +1986,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._reload_map_studio_texture_paint_after_history(result)
 
     def redo_map_studio_command(self) -> None:
+        session = self._texture_paint_session
+        if session is not None and bool(getattr(session, "stroke_active", False)):
+            self._cancel_map_studio_texture_paint_stroke()
+            self._log("Cancelled the active texture-paint stroke before Redo.")
+            return
         try:
             result = self.controller.redo_map_studio_command()
         except Exception as exc:
@@ -2017,6 +2172,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         )
         self.statusBar().showMessage(message, 7000)
         self.texture_paint_tab.set_project(self.project)
+        self._sync_map_studio_texture_apply_state()
         self.viewport_panel.set_project_texture_paths(self.project)
         self._refresh_map_studio_geometry_change(
             message,
@@ -2031,7 +2187,19 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             None,
         )
 
+    def _sync_map_studio_texture_apply_state(self) -> None:
+        """Reflect controller-side draft/hash drift without polling per dab."""
+
+        try:
+            pending = tuple(self.controller.project_texture_apply_pending_resrefs())
+            required = bool(pending or self.controller.has_unapplied_project_texture_changes())
+        except Exception as exc:
+            self._log(f"Room texture Apply state refresh failed: {exc}")
+            return
+        self.texture_paint_tab.set_apply_state(required, pending)
+
     def _reset_map_studio_texture_paint_session(self, _texture_id: str = "") -> None:
+        self._texture_paint_upload_timer.stop()
         session = self._texture_paint_session
         if session is not None and session.stroke_active:
             session.cancel_stroke()
@@ -2040,6 +2208,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._texture_paint_resref = ""
         self._texture_paint_view_image = None
         self._texture_paint_accepting_stroke = False
+        self._texture_paint_preview_error = ""
         self._update_map_studio_undo_redo_actions()
 
     @staticmethod
@@ -2073,7 +2242,22 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         updater = getattr(getattr(self.viewport_panel, "viewport", None), "update_texture_regions", None)
         if callable(updater):
             updater(self._texture_paint_resref, bottom_up, None)
+        self._update_map_studio_texture_paint_brush_context(self.texture_paint_tab.current_brush())
         return session
+
+    def _update_map_studio_texture_paint_brush_context(self, brush: object | None = None) -> None:
+        """Keep the UV-aware viewport cursor synchronized with compact brush controls."""
+
+        active_brush = brush if brush is not None else self.texture_paint_tab.current_brush()
+        session = self._texture_paint_session
+        texture_size = (
+            (int(session.width), int(session.height))
+            if session is not None
+            else (1024, 1024)
+        )
+        setter = getattr(self.viewport_panel, "set_texture_paint_brush_context", None)
+        if callable(setter):
+            setter(active_brush, texture_size=texture_size, resref=self._texture_paint_resref)
 
     def _set_map_studio_texture_paint_enabled(self, enabled: bool) -> None:
         wanted = bool(enabled)
@@ -2185,6 +2369,154 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if ok:
             self._refresh_map_studio_geometry_change(message)
 
+    @staticmethod
+    def _used_map_diffuse_resrefs(preview_model: object | None) -> tuple[str, ...]:
+        """Return room diffuse materials only; gameplay actors and lightmaps stay out."""
+
+        if preview_model is None:
+            return ()
+        all_nodes = getattr(preview_model, "all_nodes", None)
+        nodes = tuple(all_nodes() or ()) if callable(all_nodes) else ()
+        if not nodes:
+            root = getattr(preview_model, "root_node", None)
+            pending = [root] if root is not None else []
+            collected: list[object] = []
+            while pending:
+                node = pending.pop()
+                collected.append(node)
+                pending.extend(tuple(getattr(node, "children", ()) or ()))
+            nodes = tuple(collected)
+        values: list[str] = []
+        for node in nodes:
+            if not bool(getattr(node, "is_mesh", False)):
+                continue
+            role = str(getattr(node, "_gr_map_studio_mesh_role", "") or "").strip().lower()
+            if role.startswith("stock_") and not role.startswith("stock_room"):
+                continue
+            texture = str(
+                getattr(node, "texture_clean", "") or getattr(node, "texture", "") or ""
+            ).strip().strip("\x00").lower()
+            if texture and texture not in {"null", "none", "default"}:
+                values.append(texture)
+        return tuple(dict.fromkeys(values))
+
+    def _make_used_map_textures_editable(self) -> None:
+        """Clone loaded-room diffuse textures as one cancellable undo command."""
+
+        if not str(getattr(self.project, "path", "") or "").strip():
+            self.save_kmap_as()
+            if not str(getattr(self.project, "path", "") or "").strip():
+                return
+        preview = getattr(self.viewport_panel, "_room_preview_model", None)
+        used = self._used_map_diffuse_resrefs(preview)
+        editable = {
+            str(getattr(texture, "resref", "") or "").strip().lower()
+            for texture in tuple(getattr(self.project, "textures", ()) or ())
+            if str(getattr(texture, "path", "") or "").strip()
+            and Path(str(getattr(texture, "path", "") or "")).suffix.lower() == ".tga"
+            and str(dict(getattr(texture, "metadata", {}) or {}).get("asset_kind") or "").lower()
+            != "map_studio_lightmap"
+        }
+        wanted = tuple(resref for resref in used if resref not in editable)
+        if not wanted:
+            self.texture_paint_tab.set_status("Every used room diffuse texture is already editable.")
+            return
+
+        progress = QtWidgets.QProgressDialog(
+            "Preparing loaded-room diffuse textures…",
+            "Cancel",
+            0,
+            len(wanted),
+            self,
+        )
+        progress.setObjectName("mapStudioRoomTextureCloneProgressDialog")
+        progress.setWindowTitle("Clone Room Textures")
+        progress.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
+        progress.setAutoClose(False)
+        progress.setAutoReset(False)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+        progress.show()
+
+        cancel_event = Event()
+        progress_updates: SimpleQueue[tuple[int, int, str]] = SimpleQueue()
+        progress.canceled.connect(cancel_event.set)
+
+        future = _MAP_STUDIO_TEXTURE_CLONE_EXECUTOR.submit(
+            self.controller.clone_game_textures_for_paint,
+            wanted,
+            resource_manager=getattr(self, "resource_manager", None),
+            progress_callback=lambda completed, total, resref: progress_updates.put(
+                (int(completed), int(total), str(resref or ""))
+            ),
+            cancel_requested=cancel_event.is_set,
+        )
+        wait_loop = QtCore.QEventLoop(self)
+        poll_timer = QtCore.QTimer(self)
+        poll_timer.setInterval(40)
+
+        def poll_clone_job() -> None:
+            while True:
+                try:
+                    completed, total, resref = progress_updates.get_nowait()
+                except Empty:
+                    break
+                progress.setMaximum(max(1, total))
+                progress.setValue(max(0, min(completed, total)))
+                progress.setLabelText(
+                    f"Made {completed} of {total} room diffuse textures editable\n{resref}"
+                )
+            if progress.wasCanceled() and not cancel_event.is_set():
+                cancel_event.set()
+            if cancel_event.is_set() and not future.done():
+                progress.setCancelButton(None)
+                progress.setLabelText(
+                    "Canceling after the current texture finishes…\n"
+                    "Project files will be rolled back automatically."
+                )
+                progress.show()
+            if future.done():
+                poll_timer.stop()
+                wait_loop.quit()
+
+        poll_timer.timeout.connect(poll_clone_job)
+        poll_timer.start()
+        poll_clone_job()
+        if not future.done():
+            wait_loop.exec()
+        poll_clone_job()
+
+        try:
+            assets = future.result()
+        except MapStudioTextureCloneCancelled:
+            message = "Making room diffuse textures editable was cancelled; no project textures were changed."
+            self.texture_paint_tab.set_status(message)
+            self.statusBar().showMessage(message, 6000)
+            self._log(message)
+            return
+        except Exception as exc:
+            message = f"Could not make the loaded-room diffuse texture set editable: {exc}"
+            self.texture_paint_tab.set_status(message)
+            QtWidgets.QMessageBox.warning(self, "Clone Room Textures", message)
+            return
+        finally:
+            poll_timer.stop()
+            poll_timer.deleteLater()
+            wait_loop.deleteLater()
+            progress.close()
+            progress.deleteLater()
+        self.viewport_panel.set_project_texture_paths(self.project)
+        self.texture_paint_tab.set_project(self.project)
+        self._sync_map_studio_texture_apply_state()
+        self.texture_paint_tab.set_material_inventory(used, self.project)
+        message = (
+            f"Made {len(assets)} used room diffuse texture(s) editable in one undoable batch. "
+            "Select a room material, paint it live, then Apply Textures."
+        )
+        self.texture_paint_tab.set_status(message)
+        self.statusBar().showMessage(message, 8000)
+        self._update_map_studio_undo_redo_actions()
+
     def _begin_map_studio_texture_paint_stroke(self, payload: object) -> None:
         values = dict(payload) if isinstance(payload, dict) else {}
         context = values.get("context")
@@ -2195,6 +2527,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 f"Hovered face uses {material or 'no diffuse texture'}; assign {self._texture_paint_resref} to it before painting."
             )
             return
+        self._texture_paint_preview_error = ""
         session = self._texture_paint_session
         if session is None:
             return
@@ -2214,6 +2547,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if session is None or not session.stroke_active or not self._texture_paint_accepting_stroke:
             return
         values = dict(payload) if isinstance(payload, dict) else {}
+        if bool(values.get("break_before", False)):
+            session.break_stroke()
         context = values.get("context")
         if str(getattr(context, "material", "") or "").strip().lower() != self._texture_paint_resref:
             return
@@ -2221,13 +2556,52 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if len(uv) < 2:
             return
         session.append_sample((float(uv[0]), float(uv[1])), pressure=float(values.get("pressure", 1.0) or 1.0))
+        if not self._texture_paint_upload_timer.isActive():
+            self._texture_paint_upload_timer.start()
+
+    def _flush_map_studio_texture_paint_tiles(self) -> None:
+        """Upload at most once per display frame while pointer samples accumulate."""
+
+        session = self._texture_paint_session
+        if session is None:
+            return
         self._apply_map_studio_texture_paint_tiles(session.pending_tile_payloads())
 
-    def _apply_map_studio_texture_paint_tiles(self, tiles) -> None:
+    def _publish_map_studio_texture_paint_preview(
+        self,
+        image: object,
+        regions: object,
+        *,
+        finalize: bool,
+    ) -> bool:
+        """Call the explicit renderer contract once and expose any failure."""
+
+        updater = getattr(getattr(self.viewport_panel, "viewport", None), "update_texture_regions", None)
+        if not callable(updater):
+            return True
+        try:
+            updater(
+                self._texture_paint_resref,
+                image,
+                tuple(regions or ()),
+                finalize=bool(finalize),
+            )
+        except Exception as exc:
+            phase = "mipmap finalize" if finalize else "tile upload"
+            detail = f"Live room-texture preview {phase} failed: {exc}"
+            self._texture_paint_preview_error = detail
+            message = f"{detail}. The paint stroke remains editable; fix the renderer before trusting the preview."
+            self.texture_paint_tab.set_status(message)
+            self.statusBar().showMessage(message, 8000)
+            self._log(message)
+            return False
+        return True
+
+    def _apply_map_studio_texture_paint_tiles(self, tiles, *, finalize: bool = False) -> bool:
         image = self._texture_paint_view_image
         session = self._texture_paint_session
         if image is None or session is None:
-            return
+            return False
         from PIL import Image
 
         regions: list[tuple[int, int, int, int]] = []
@@ -2238,10 +2612,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             image.paste(tile_image, (int(tile.x), bottom_y))
             regions.append((int(tile.x), bottom_y, int(tile.width), int(tile.height)))
         if not regions:
-            return
-        updater = getattr(getattr(self.viewport_panel, "viewport", None), "update_texture_regions", None)
-        if callable(updater):
-            updater(self._texture_paint_resref, image, regions)
+            return True
+        return self._publish_map_studio_texture_paint_preview(
+            image,
+            regions,
+            finalize=bool(finalize),
+        )
 
     def _commit_map_studio_texture_paint_stroke(self) -> None:
         session = self._texture_paint_session
@@ -2252,9 +2628,17 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if not accepting:
             session.cancel_stroke()
             return
+        self._texture_paint_upload_timer.stop()
+        self._flush_map_studio_texture_paint_tiles()
         result = session.end_stroke()
         if not result.changed:
             return
+        if self._texture_paint_view_image is not None:
+            self._publish_map_studio_texture_paint_preview(
+                self._texture_paint_view_image,
+                (),
+                finalize=True,
+            )
         texture_id = self._texture_paint_texture_id
         try:
             asset = self.controller.commit_project_texture_paint(
@@ -2277,9 +2661,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = (
             f"Painted {asset.resref}: {result.pixels_changed} texel(s), "
             f"{len(result.dirty_tiles)} dirty tile(s), one undoable stroke. "
-            "Apply Texture Changes before export."
+            "Apply Textures before export."
         )
-        self.texture_paint_tab.set_unapplied_changes(True)
+        if self._texture_paint_preview_error:
+            message = f"{message} Renderer warning: {self._texture_paint_preview_error}."
+        self.texture_paint_tab.set_unapplied_changes(True, asset.resref)
         self.texture_paint_tab.set_status(message)
         self.statusBar().showMessage(message, 6000)
         self.setWindowTitle(f"Ghost-Studio Map Studio - Level Editor - {self.project.name} *")
@@ -2290,17 +2676,17 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
 
         session = self._texture_paint_session
         if session is not None and bool(getattr(session, "stroke_active", False)):
-            message = "Finish or cancel the active paint stroke before applying texture changes."
+            message = "Finish or cancel the active paint stroke before applying room textures."
             self.texture_paint_tab.set_status(message)
             return
         try:
             result = self.controller.apply_project_texture_changes()
         except Exception as exc:
-            message = f"Texture changes were not applied: {exc}"
+            message = f"Room texture changes were not applied: {exc}"
             self.texture_paint_tab.set_status(message)
             self.statusBar().showMessage(message, 8000)
             self._log(message)
-            QtWidgets.QMessageBox.warning(self, "Apply Texture Changes", message)
+            QtWidgets.QMessageBox.warning(self, "Apply Textures", message)
             return
         message = str(result.get("message") or "Texture changes applied.")
         self._refresh_all(message)
@@ -2312,6 +2698,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._texture_paint_accepting_stroke = False
         if session is None or not session.stroke_active:
             return
+        self._texture_paint_upload_timer.stop()
         dirty = session.active_dirty_tiles()
         session.cancel_stroke()
         self._apply_map_studio_texture_paint_tiles(session.dirty_tile_payloads(dirty))
@@ -6967,10 +7354,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
 
         self.workflow_tabs.setCurrentWidget(self.texture_paint_tab)
         self.texture_paint_tab.set_project(self.project)
+        self._sync_map_studio_texture_apply_state()
         self._set_map_studio_toolbar_edit_mode("Texture Paint")
         self.viewport_panel.set_map_studio_hover_probe(True, "object")
         self.texture_paint_tab.set_status(
-            "Choose/import a unique project texture, hover a visible face, assign it, then start painting."
+            "Choose an editable room diffuse material, or import a project TGA and assign it to a visible room face."
         )
 
     def _handle_map_studio_tool_belt_action(self, action: Any) -> None:
@@ -7525,6 +7913,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if mode_key == "texture paint":
             self.workflow_tabs.setCurrentWidget(self.texture_paint_tab)
             self.texture_paint_tab.set_project(self.project)
+            self._sync_map_studio_texture_apply_state()
             if self.texture_paint_tab.selected_texture_id():
                 self.texture_paint_tab.paint_button.setChecked(True)
             else:
@@ -7605,6 +7994,64 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         for bar in (scroll.horizontalScrollBar(), scroll.verticalScrollBar()):
             QtCore.QTimer.singleShot(0, lambda target=bar: target.setValue(target.minimum()))
+
+    def _sync_map_studio_workflow_selector(self, index: int) -> None:
+        """Keep programmatic workflow routing visible in the compact selector."""
+
+        selector = getattr(self, "workflow_selector", None)
+        if selector is not None and selector.currentIndex() != index:
+            blocker = QtCore.QSignalBlocker(selector)
+            selector.setCurrentIndex(index)
+            del blocker
+        stack = getattr(self, "workflow_tabs", None)
+        if stack is not None:
+            stack.updateGeometry()
+        scroll = getattr(self, "workflow_tabs_scroll", None)
+        if scroll is not None:
+            scroll.updateGeometry()
+
+    def _queue_map_studio_workflow_control_fit(self) -> None:
+        """Elide narrow-rail controls after Qt has assigned their final widths."""
+
+        if getattr(self, "_map_studio_workflow_fit_pending", False):
+            return
+        self._map_studio_workflow_fit_pending = True
+        QtCore.QTimer.singleShot(0, self._fit_map_studio_workflow_controls)
+
+    def _fit_map_studio_workflow_controls(self) -> None:
+        """Keep long button labels readable instead of silently clipping them."""
+
+        self._map_studio_workflow_fit_pending = False
+        stack = getattr(self, "workflow_tabs", None)
+        page = None if stack is None else stack.currentWidget()
+        if page is None:
+            return
+        for control in page.findChildren(QtWidgets.QAbstractButton):
+            if not control.isVisibleTo(page) or control.width() <= 0:
+                continue
+            current_text = str(control.text() or "")
+            previous_rendered = control.property("_gr_workflow_rendered_text")
+            full_text = control.property("_gr_workflow_full_text")
+            if full_text is None or (previous_rendered is not None and current_text != previous_rendered):
+                full_text = current_text
+                control.setProperty("_gr_workflow_full_text", full_text)
+            full_text = str(full_text or "")
+            if not full_text.strip():
+                continue
+            padding = 18
+            if isinstance(control, (QtWidgets.QCheckBox, QtWidgets.QRadioButton)):
+                padding += control.style().pixelMetric(QtWidgets.QStyle.PM_IndicatorWidth, None, control) + 4
+            elif not control.icon().isNull():
+                padding += control.iconSize().width() + 4
+            available = max(12, control.width() - padding)
+            rendered = control.fontMetrics().elidedText(full_text, QtCore.Qt.ElideRight, available)
+            if current_text != rendered:
+                control.setText(rendered)
+            control.setProperty("_gr_workflow_rendered_text", rendered)
+            if not control.accessibleName():
+                control.setAccessibleName(full_text.replace("&", ""))
+            if rendered != full_text and not control.toolTip():
+                control.setToolTip(full_text.replace("&", ""))
 
     def show_map_studio_walkmesh_tools(self) -> None:
         """Focus the existing Walkmesh tab inside the Map Studio Level Editor."""
@@ -11904,6 +12351,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             authored_room_outline_geometry,
             authored_terrain_walkability_overlay,
             authored_room_preview_model,
+        )
+        self.texture_paint_tab.set_material_inventory(
+            self._used_map_diffuse_resrefs(authored_room_preview_model),
+            self.project,
         )
         self._sync_map_studio_terrain_brush_context()
         self._refresh_map_studio_selected_primitive_transform_overlay()

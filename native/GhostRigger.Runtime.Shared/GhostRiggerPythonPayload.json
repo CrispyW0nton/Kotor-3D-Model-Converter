@@ -105,7 +105,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_RENDERER_INTERFACE",
             "source_path": "src/core/rendering/renderer_interface.py",
             "packaged_path": "Python/src/core/rendering/renderer_interface.py",
-            "sha256": "49ea38d643951e4c04f3339f98d6fbb9c321e13ffcc77e7b2cae75df63446651"
+            "sha256": "7764e2e2df08e0cefc7420ed7372488b301f8bbd820cc851edcb19d70a1af0c9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_SKELETON_RENDER_DATA",

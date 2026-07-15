@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Callable
 
 from src.core.level import (
     KMapProject,
@@ -21,6 +21,7 @@ from src.core.level import (
     LevelTransform,
     MapStudioTextureSidecarJournal,
     MapStudioTextureSidecarPatch,
+    clone_game_texture_asset,
     create_project_tpc_texture_asset,
     import_project_texture_asset,
     managed_project_texture_sidecars,
@@ -510,6 +511,10 @@ class DeferredAuthoredModuleReadiness:
 
     def __getattr__(self, name: str):
         return getattr(self._resolve(), name)
+
+
+class MapStudioTextureCloneCancelled(RuntimeError):
+    """Raised when a user cancels the atomic game-texture clone transaction."""
 
 
 class ModuleEditorController:
@@ -1016,6 +1021,91 @@ class ModuleEditorController:
         )
         return asset
 
+    def clone_game_textures_for_paint(
+        self,
+        resrefs: tuple[str, ...] | list[str],
+        *,
+        resource_manager: Any,
+        progress_callback: Callable[[int, int, str], None] | None = None,
+        cancel_requested: Callable[[], bool] | None = None,
+    ) -> tuple[Any, ...]:
+        """Make used game diffuse textures writable in one atomic command.
+
+        ``progress_callback(completed, total, resref)`` runs after each clone.
+        Cancellation is checked before every clone and rolls back both KMAP
+        state and any sidecars created earlier in the same transaction.
+        """
+
+        clean_resrefs = tuple(
+            dict.fromkeys(
+                validate_kotor_texture_resref(value)
+                for value in tuple(resrefs or ())
+                if str(value or "").strip()
+            )
+        )
+        if not clean_resrefs:
+            return ()
+        target_dir = project_texture_directory(self.project)
+        sidecar_paths = tuple(
+            path
+            for resref in clean_resrefs
+            for path in (target_dir / f"{resref}.tga", target_dir / f"{resref}.txi")
+        )
+        before = self._capture_map_studio_command_state()
+        sidecar_before = self.texture_sidecar_journal.capture(self.project, paths=sidecar_paths)
+        created_paths = tuple(value for value, state in sidecar_before.states if state is None)
+        try:
+            created_assets: list[Any] = []
+            total = len(clean_resrefs)
+            for completed, resref in enumerate(clean_resrefs, start=1):
+                if callable(cancel_requested) and bool(cancel_requested()):
+                    raise MapStudioTextureCloneCancelled(
+                        "Making used map textures editable was cancelled."
+                    )
+                asset = clone_game_texture_asset(
+                    self.project,
+                    resref,
+                    resource_manager=resource_manager,
+                    game=str(getattr(self.project, "game", "K1") or "K1"),
+                )
+                created_assets.append(asset)
+                if callable(progress_callback):
+                    progress_callback(completed, total, resref)
+                if callable(cancel_requested) and bool(cancel_requested()):
+                    raise MapStudioTextureCloneCancelled(
+                        "Making used map textures editable was cancelled."
+                    )
+            assets = tuple(created_assets)
+        except Exception:
+            rollback = self.texture_sidecar_journal.finish(
+                self.project,
+                sidecar_before,
+                paths=sidecar_paths,
+                created_paths=created_paths,
+            )
+            self.texture_sidecar_journal.apply(self.project, rollback, use_after=False)
+            self._restore_map_studio_command_state_without_history(before)
+            raise
+        sidecar_patches = self.texture_sidecar_journal.finish(
+            self.project,
+            sidecar_before,
+            paths=sidecar_paths,
+            created_paths=created_paths,
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.texture.make_used_editable",
+            label=f"Make {len(assets)} room diffuse texture(s) editable",
+            before=before,
+            metadata={"resrefs": [asset.resref for asset in assets]},
+            stale_outputs=("TGA", "TXI", ".mod"),
+            readiness_impact="Project room diffuse texture overrides must be repackaged before game proof.",
+            sidecar_patches=sidecar_patches,
+        )
+        self.model.log(
+            f"Made {len(assets)} room diffuse texture(s) editable as module-local TGA overrides."
+        )
+        return assets
+
     def authored_project_texture_resources(self) -> tuple[tuple[str, str, bytes], ...]:
         """Return custom texture payloads that will be included in the MOD."""
 
@@ -1298,9 +1388,103 @@ class ModuleEditorController:
         payload = (getattr(self.project, "extra_sections", {}) or {}).get("authored_module")
         return texture_paint_has_unapplied_changes(payload)
 
+    @staticmethod
+    def _texture_resource_hashes(
+        resources: tuple[tuple[str, str, bytes], ...] | list[tuple[str, str, bytes]],
+    ) -> dict[tuple[str, str], str]:
+        return {
+            (str(resref).strip().lower(), str(restype).strip().lower()): hashlib.sha256(data).hexdigest()
+            for resref, restype, data in tuple(resources or ())
+        }
+
+    def _project_texture_applied_resource_drift(
+        self,
+        resources: tuple[tuple[str, str, bytes], ...] | None = None,
+    ) -> tuple[tuple[str, str], ...]:
+        """Return applied resource keys whose current sidecar bytes differ."""
+
+        payload = (getattr(self.project, "extra_sections", {}) or {}).get("authored_module")
+        if not isinstance(payload, dict):
+            return ()
+        applied_records = tuple(payload.get("texture_paint_applied_resources") or ())
+        tracked_textures = tuple(
+            texture
+            for texture in tuple(getattr(self.project, "textures", ()) or ())
+            if str(dict(getattr(texture, "metadata", {}) or {}).get("paint_applied_sha256") or "").strip()
+        )
+        if not applied_records and not tracked_textures:
+            return ()
+        current_resources = self._texture_resource_hashes(
+            tuple(self.authored_project_texture_resources()) if resources is None else resources
+        )
+        drifted: list[tuple[str, str]] = []
+        for record in applied_records:
+            if not isinstance(record, dict):
+                continue
+            key = (
+                str(record.get("resref") or "").strip().lower(),
+                str(record.get("restype") or "").strip().lower(),
+            )
+            expected = str(record.get("sha256") or "").strip().lower()
+            if not key[0] or not key[1] or not expected:
+                continue
+            if current_resources.get(key) != expected:
+                drifted.append(key)
+        for texture in tracked_textures:
+            metadata = dict(getattr(texture, "metadata", {}) or {})
+            expected = str(metadata.get("paint_applied_sha256") or "").strip().lower()
+            if not expected:
+                continue
+            resref = str(getattr(texture, "resref", "") or "").strip().lower()
+            path_value = str(getattr(texture, "path", "") or "").strip()
+            restype = Path(path_value).suffix.lower().lstrip(".") if path_value else "tga"
+            key = (resref, restype)
+            if current_resources.get(key) != expected:
+                drifted.append(key)
+        return tuple(dict.fromkeys(drifted))
+
+    def project_texture_reapply_resrefs(self) -> tuple[str, ...]:
+        """Return applied textures whose current sidecars need re-acceptance."""
+
+        return tuple(
+            dict.fromkeys(resref for resref, _restype in self._project_texture_applied_resource_drift())
+        )
+
+    def project_texture_apply_pending_resrefs(self) -> tuple[str, ...]:
+        """Return paint drafts plus hash-drifted resources for the Apply All UI."""
+
+        payload = (getattr(self.project, "extra_sections", {}) or {}).get("authored_module")
+        if not isinstance(payload, dict):
+            return ()
+        explicit = texture_paint_pending_resrefs(payload)
+        if texture_paint_has_unapplied_changes(payload) and not explicit:
+            explicit = tuple(
+                dict.fromkeys(
+                    str(resref or "").strip().lower()
+                    for resref, _restype, _data in self.authored_project_texture_resources()
+                    if str(resref or "").strip()
+                )
+            )
+        return tuple(dict.fromkeys((*explicit, *self.project_texture_reapply_resrefs())))
+
+    def project_texture_apply_required(self) -> bool:
+        """Return whether Apply All must accept drafts or changed sidecars."""
+
+        return bool(
+            self.has_unapplied_project_texture_changes()
+            or self.project_texture_reapply_resrefs()
+        )
+
     def _require_applied_project_texture_changes(self) -> None:
         if self.has_unapplied_project_texture_changes():
             raise ValueError(TEXTURE_PAINT_UNAPPLIED_BLOCKER)
+        drifted = self._project_texture_applied_resource_drift()
+        if drifted:
+            resref, restype = drifted[0]
+            raise ValueError(
+                f'Project texture "{resref}.{restype}" changed after Apply Texture Changes. '
+                "Apply Textures again before export."
+            )
 
     def apply_project_texture_changes(self) -> dict[str, Any]:
         """Finalize drafted TGA/TXI sidecars as the texture set eligible for export.
@@ -1316,7 +1500,26 @@ class ModuleEditorController:
         payload = (getattr(self.project, "extra_sections", {}) or {}).get("authored_module")
         if not isinstance(payload, dict):
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load one first.")
-        if not texture_paint_has_unapplied_changes(payload):
+        has_drafts = texture_paint_has_unapplied_changes(payload)
+        has_applied_records = bool(payload.get("texture_paint_applied_resources")) or any(
+            str(dict(getattr(texture, "metadata", {}) or {}).get("paint_applied_sha256") or "").strip()
+            for texture in tuple(getattr(self.project, "textures", ()) or ())
+        )
+        if not has_drafts and not has_applied_records:
+            return {
+                "applied": False,
+                "resource_count": 0,
+                "resrefs": (),
+                "message": "No unapplied texture changes are waiting.",
+            }
+        resources = tuple(self.authored_project_texture_resources())
+        drifted_resrefs = tuple(
+            dict.fromkeys(
+                resref
+                for resref, _restype in self._project_texture_applied_resource_drift(resources)
+            )
+        )
+        if not has_drafts and not drifted_resrefs:
             return {
                 "applied": False,
                 "resource_count": 0,
@@ -1326,11 +1529,19 @@ class ModuleEditorController:
 
         before = self._capture_map_studio_command_state()
         pending_resrefs = texture_paint_pending_resrefs(payload)
-        resources = tuple(self.authored_project_texture_resources())
+        if has_drafts and not pending_resrefs:
+            pending_resrefs = tuple(
+                dict.fromkeys(
+                    str(resref or "").strip().lower()
+                    for resref, _restype, _data in resources
+                    if str(resref or "").strip()
+                )
+            )
+        requested_resrefs = tuple(dict.fromkeys((*pending_resrefs, *drifted_resrefs)))
         pending_resources = tuple(
             (resref, restype, data)
             for resref, restype, data in resources
-            if not pending_resrefs or str(resref or "").strip().lower() in pending_resrefs
+            if str(resref or "").strip().lower() in requested_resrefs
         )
         finalized_resrefs = tuple(
             dict.fromkeys(str(resref or "").strip().lower() for resref, _restype, _data in pending_resources)
@@ -1339,26 +1550,39 @@ class ModuleEditorController:
             raise ValueError(
                 "Cannot apply Texture Paint changes because no project-owned TGA/TPC sidecar is available."
             )
-        if pending_resrefs:
-            missing = tuple(resref for resref in pending_resrefs if resref not in finalized_resrefs)
+        if requested_resrefs:
+            missing = tuple(resref for resref in requested_resrefs if resref not in finalized_resrefs)
             if missing:
                 raise ValueError(
                     "Cannot apply Texture Paint changes because project sidecars are missing for: "
                     + ", ".join(missing)
                 )
 
-        manifest = [
+        applied_records = [
             {
-                "resref": str(resref),
-                "restype": str(restype),
+                "resref": str(resref).strip().lower(),
+                "restype": str(restype).strip().lower(),
                 "byte_count": len(data),
                 "sha256": hashlib.sha256(data).hexdigest(),
             }
             for resref, restype, data in pending_resources
         ]
+        manifest_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+        for record in tuple(payload.get("texture_paint_applied_resources") or ()):
+            if not isinstance(record, dict):
+                continue
+            key = (
+                str(record.get("resref") or "").strip().lower(),
+                str(record.get("restype") or "").strip().lower(),
+            )
+            if key[0] and key[1] and key[0] not in finalized_resrefs:
+                manifest_by_key[key] = dict(record)
+        for record in applied_records:
+            manifest_by_key[(str(record["resref"]), str(record["restype"]))] = record
+        manifest = list(manifest_by_key.values())
         hashes_by_resref = {
             str(item["resref"]): str(item["sha256"])
-            for item in manifest
+            for item in applied_records
             if str(item["restype"]).lower() in {"tga", "tpc"}
         }
         for texture in tuple(getattr(self.project, "textures", ()) or ()):
@@ -1376,6 +1600,7 @@ class ModuleEditorController:
         updated_payload["texture_paint_dirty"] = False
         updated_payload["texture_paint_unapplied"] = False
         updated_payload["texture_paint_pending_resrefs"] = []
+        updated_payload.pop("texture_paint_resref", None)
         updated_payload["texture_paint_applied_resources"] = manifest
         updated_payload["texture_paint_applied_revision"] = int(
             updated_payload.get("texture_paint_applied_revision", 0) or 0
@@ -1392,7 +1617,7 @@ class ModuleEditorController:
             summary="Accepted the current project-owned texture sidecars without changing UV or lightmap data.",
             metadata={
                 "resrefs": list(finalized_resrefs),
-                "resource_count": len(manifest),
+                "resource_count": len(applied_records),
                 "applied_revision": updated_payload["texture_paint_applied_revision"],
             },
         )
@@ -1403,7 +1628,7 @@ class ModuleEditorController:
         self.model.log(message)
         return {
             "applied": True,
-            "resource_count": len(manifest),
+            "resource_count": len(applied_records),
             "resrefs": finalized_resrefs,
             "message": message,
         }

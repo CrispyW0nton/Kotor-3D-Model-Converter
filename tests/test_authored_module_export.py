@@ -4,6 +4,7 @@ import json
 import struct
 import sys
 from pathlib import Path
+from time import perf_counter
 
 import pytest
 
@@ -267,6 +268,127 @@ def test_texture_paint_accepts_game_or_project_texture_stamp_sources() -> None:
     assert rgba[top_left] > rgba[top_left + 2]
 
 
+def test_texture_paint_opacity_caps_one_drag_while_flow_builds_up() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.map_studio_texture_paint import TexturePaintBrush, TexturePaintSession
+
+    original = bytes((0, 0, 0, 255)) * (32 * 32)
+
+    capped = TexturePaintSession(32, 32, original)
+    capped.begin_stroke(
+        TexturePaintBrush(
+            radius_px=4.0,
+            opacity=0.5,
+            flow=1.0,
+            hardness=1.0,
+            pressure_size=False,
+            pressure_flow=False,
+            color=(255, 255, 255, 255),
+        )
+    )
+    capped.append_sample((0.5, 0.5))
+    once = capped.rgba_bytes()
+    capped.append_sample((0.5, 0.5))
+    assert capped.rgba_bytes() == once
+
+    building = TexturePaintSession(32, 32, original)
+    building.begin_stroke(
+        TexturePaintBrush(
+            radius_px=4.0,
+            opacity=1.0,
+            flow=0.5,
+            hardness=1.0,
+            pressure_size=False,
+            pressure_flow=False,
+            color=(255, 255, 255, 255),
+        )
+    )
+    building.append_sample((0.5, 0.5))
+    center = ((16 * 32) + 16) * 4
+    first_value = building.rgba_bytes()[center]
+    building.append_sample((0.5, 0.5))
+    assert building.rgba_bytes()[center] > first_value
+
+
+def test_texture_paint_break_stroke_does_not_bridge_picker_gaps() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.map_studio_texture_paint import TexturePaintBrush, TexturePaintSession
+
+    session = TexturePaintSession(64, 16, bytes((0, 0, 0, 255)) * (64 * 16), tile_size=8)
+    session.begin_stroke(
+        TexturePaintBrush(
+            radius_px=1.25,
+            hardness=1.0,
+            spacing=0.1,
+            pressure_size=False,
+            pressure_flow=False,
+            color=(0, 255, 0, 255),
+        )
+    )
+    session.append_sample((0.20, 0.5))
+    assert session.break_stroke() is True
+    session.append_sample((0.80, 0.5))
+    session.end_stroke()
+    rgba = session.rgba_bytes()
+    assert rgba[((8 * 64) + 32) * 4 + 1] == 0
+
+
+def test_texture_paint_rotation_and_jitter_are_deterministic() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.map_studio_texture_paint import TexturePaintBrush, TexturePaintSession
+
+    stamp = bytes((255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255))
+    brush = TexturePaintBrush(
+        radius_px=5.0,
+        spacing=0.2,
+        rotation_degrees=90.0,
+        jitter=0.35,
+        pressure_size=False,
+        pressure_flow=False,
+        stamp_size=(2, 2),
+        stamp_rgba=stamp,
+    )
+    results = []
+    for _index in range(2):
+        session = TexturePaintSession(32, 32, bytes((0, 0, 0, 255)) * (32 * 32))
+        session.begin_stroke(brush)
+        session.append_sample((0.25, 0.5))
+        session.append_sample((0.75, 0.5))
+        session.end_stroke()
+        results.append(session.rgba_bytes())
+    assert results[0] == results[1]
+
+
+def test_texture_paint_large_brush_and_tga_flatten_stay_interactive() -> None:
+    _install_native_payload_paths()
+    from src.core.modules.map_studio_texture_paint import TexturePaintBrush, TexturePaintSession, encode_tga_rgba
+
+    rgba = bytes((20, 30, 40, 255)) * (1024 * 1024)
+    session = TexturePaintSession(1024, 1024, rgba)
+    session.begin_stroke(
+        TexturePaintBrush(
+            radius_px=192.0,
+            hardness=0.75,
+            pressure_size=False,
+            pressure_flow=False,
+            color=(220, 40, 10, 255),
+        )
+    )
+    started = perf_counter()
+    session.append_sample((0.5, 0.5))
+    dab_seconds = perf_counter() - started
+    started = perf_counter()
+    encoded = encode_tga_rgba(1024, 1024, session.rgba_bytes())
+    flatten_seconds = perf_counter() - started
+
+    # Deliberately loose CI budgets: these catch a return to the prior nested
+    # Python texel loops (~0.8 s for this dab and ~0.22 s for a 1K flatten)
+    # without treating workstation timing as a pixel-correctness oracle.
+    assert dab_seconds < 0.35
+    assert flatten_seconds < 0.15
+    assert len(encoded) == 18 + (1024 * 1024 * 4)
+
+
 def test_project_texture_asset_roundtrips_as_referenced_tga_and_txi(tmp_path: Path) -> None:
     _install_native_payload_paths()
     from src.core.level import KMapSerializer, import_project_texture_asset, new_kmap_project, project_texture_export_resources
@@ -292,6 +414,134 @@ def test_project_texture_asset_roundtrips_as_referenced_tga_and_txi(tmp_path: Pa
         ("my_painted_rock", "tga"),
         ("my_painted_rock", "txi"),
     }
+
+
+def test_game_texture_clone_preserves_orientation_txi_and_resref_override(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+    from PIL import Image
+    from src.core.level import clone_game_texture_asset, new_kmap_project, project_texture_export_resources
+    from src.core.modules.map_studio_texture_paint import decode_image_rgba
+
+    # ResourceManager images are bottom-up: blue/white is the intended bottom
+    # row, followed by the intended red/green top row.
+    bottom_up = Image.frombytes(
+        "RGBA",
+        (2, 2),
+        bytes(
+            (
+                0, 0, 255, 255,
+                255, 255, 255, 255,
+                255, 0, 0, 255,
+                0, 255, 0, 255,
+            )
+        ),
+    )
+
+    class FakeManager:
+        def load_texture_image(self, name, game, max_size=512):
+            assert (name, game, max_size) == ("lda_wall01", "K2", 0)
+            return bottom_up.copy()
+
+        def get_txi(self, name, game):
+            assert (name, game) == ("lda_wall01", "K2")
+            return "envmaptexture CM_Baremetal"
+
+    project = new_kmap_project(name="clonepaint", game="K2")
+    project.path = str(tmp_path / "clonepaint.kmap")
+    asset = clone_game_texture_asset(
+        project,
+        "lda_wall01",
+        resource_manager=FakeManager(),
+        game="K2",
+    )
+
+    width, height, rgba = decode_image_rgba(Path(asset.path).read_bytes())
+    assert (width, height) == (2, 2)
+    assert rgba[:8] == bytes((255, 0, 0, 255, 0, 255, 0, 255))
+    assert project.textures[0].resref == "lda_wall01"
+    assert project.textures[0].metadata["clone_scope"] == "module_resref_override"
+    resources = project_texture_export_resources(project)
+    assert {(resref, restype) for resref, restype, _data in resources} == {
+        ("lda_wall01", "tga"),
+        ("lda_wall01", "txi"),
+    }
+
+
+def test_make_used_game_textures_editable_is_one_batch_undo(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+    from PIL import Image
+    from src.core.level import new_kmap_project
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    class FakeManager:
+        def load_texture_image(self, _name, _game, max_size=512):
+            assert max_size == 0
+            return Image.new("RGBA", (4, 4), (80, 100, 120, 255))
+
+        def get_txi(self, _name, _game):
+            return "mipmap 1"
+
+    project = new_kmap_project(name="batchpaint", game="K2")
+    project.path = str(tmp_path / "batchpaint.kmap")
+    controller = ModuleEditorController()
+    controller.model.set_project(project)
+    assets = controller.clone_game_textures_for_paint(
+        ("lda_wall01", "lda_floor01"),
+        resource_manager=FakeManager(),
+    )
+
+    assert tuple(asset.resref for asset in assets) == ("lda_wall01", "lda_floor01")
+    assert controller.command_history.undo_label == "Make 2 room diffuse texture(s) editable"
+    assert len(project.textures) == 2
+    assert all(Path(asset.path).is_file() for asset in assets)
+    controller.undo_map_studio_command()
+    assert controller.project.textures == []
+    assert all(not Path(asset.path).exists() for asset in assets)
+
+
+def test_make_used_game_textures_editable_cancel_rolls_back_batch_without_undo(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+    from PIL import Image
+    from src.core.level import new_kmap_project
+    from src.core.modules.module_editor_controller import (
+        MapStudioTextureCloneCancelled,
+        ModuleEditorController,
+    )
+
+    class FakeManager:
+        def load_texture_image(self, _name, _game, max_size=512):
+            assert max_size == 0
+            return Image.new("RGBA", (4, 4), (80, 100, 120, 255))
+
+        def get_txi(self, _name, _game):
+            return "mipmap 1"
+
+    project = new_kmap_project(name="cancelpaint", game="K2")
+    project.path = str(tmp_path / "cancelpaint.kmap")
+    controller = ModuleEditorController()
+    controller.model.set_project(project)
+    progress: list[tuple[int, int, str]] = []
+
+    with pytest.raises(MapStudioTextureCloneCancelled, match="was cancelled"):
+        controller.clone_game_textures_for_paint(
+            ("lda_wall01", "lda_floor01"),
+            resource_manager=FakeManager(),
+            progress_callback=lambda completed, total, resref: progress.append(
+                (completed, total, resref)
+            ),
+            # Simulate the modal dialog processing a Cancel click while the
+            # first completed-item callback is pumping GUI events.
+            cancel_requested=lambda: bool(progress),
+        )
+
+    assert progress == [(1, 2, "lda_wall01")]
+    assert controller.project.textures == []
+    assert controller.can_undo_map_studio_command() is False
+    target_dir = tmp_path / "cancelpaint_assets" / "textures"
+    assert not (target_dir / "lda_wall01.tga").exists()
+    assert not (target_dir / "lda_wall01.txi").exists()
+    assert not (target_dir / "lda_floor01.tga").exists()
+    assert not (target_dir / "lda_floor01.txi").exists()
 
 
 def test_used_project_texture_missing_or_engine_invalid_blocks_kmap_readiness(tmp_path: Path) -> None:

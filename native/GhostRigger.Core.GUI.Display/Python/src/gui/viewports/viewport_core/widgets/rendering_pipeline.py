@@ -618,6 +618,7 @@ class ViewportRenderingPipelineMixin:
             self._draw_map_studio_modeling_points_overlay(draw, w, h)
             self._draw_map_studio_hover_highlight(draw, w, h)
             self._draw_map_studio_terrain_brush_cursor(draw, w, h)
+            self._draw_map_studio_texture_paint_cursor(draw, w, h)
             if not map_interaction_lod:
                 self._draw_map_studio_room_outlines(draw, w, h)
             self._draw_map_studio_universal_transform_overlay(draw, w, h)

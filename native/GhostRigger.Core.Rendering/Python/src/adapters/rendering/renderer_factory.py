@@ -288,12 +288,12 @@ class FallbackViewportRenderer(ViewportRendererPort):
         if active is not None and hasattr(active, "reset_framebuffers"):
             active.reset_framebuffers()
 
-    def update_texture_regions(self, texture_name: str, image, regions) -> bool:
+    def update_texture_regions(self, texture_name: str, image, regions, *, finalize: bool = True) -> bool:
         """Delegate a targeted live-texture write to the active backend."""
         active = object.__getattribute__(self, "_active")
         update = getattr(active, "update_texture_regions", None) if active is not None else None
         if callable(update):
-            return bool(update(texture_name, image, regions))
+            return bool(update(texture_name, image, regions, finalize=bool(finalize)))
         return False
 
     def invalidate_texture(self, texture_name: str, image=None) -> bool:

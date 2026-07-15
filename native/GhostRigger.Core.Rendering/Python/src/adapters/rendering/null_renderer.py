@@ -116,7 +116,7 @@ class NullDiagnosticRenderer(ViewportRendererPort):
     def reset_framebuffers(self) -> None:
         return None
 
-    def update_texture_regions(self, texture_name: str, image, regions) -> bool:
+    def update_texture_regions(self, texture_name: str, image, regions, *, finalize: bool = True) -> bool:
         return False
 
     def invalidate_texture(self, texture_name: str, image=None) -> bool:

@@ -87,13 +87,13 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RENDERER_IMPL",
             "source_path": "src/adapters/rendering/moderngl_renderer_impl.py",
             "packaged_path": "Python/src/adapters/rendering/moderngl_renderer_impl.py",
-            "sha256": "debd1c373f7176a6f54ba3da35e3439f93ab963df8806f5d2bc02a766397bcea"
+            "sha256": "2b6b6ace4778b84293125387dd8a8b4903cd4bb685b16c7f56832a80665ea676"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RESOURCES",
             "source_path": "src/adapters/rendering/moderngl_resources.py",
             "packaged_path": "Python/src/adapters/rendering/moderngl_resources.py",
-            "sha256": "fc66fc9b7655d96ee6fd1dd07d2da15dd114bef47081ac62e50985e9b0bb7387"
+            "sha256": "c162e337fc938fe7ea1e1c0ac950d5d35481eccbc8bd24738bce1d07e4a876e0"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_SCENE_HELPERS",
@@ -105,7 +105,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_NULL_RENDERER",
             "source_path": "src/adapters/rendering/null_renderer.py",
             "packaged_path": "Python/src/adapters/rendering/null_renderer.py",
-            "sha256": "0bf0621842d0ca33af38f44a2cb5b2a1dad48fc45a18ebb48c845b5c0888bcd4"
+            "sha256": "4a35e1679d680e52db99453af8b94729bb6dcb499df7588ddbb0cb49e861078f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_PYGFX_CORE_INIT",
@@ -129,7 +129,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_PYGFX_CORE_RENDERER",
             "source_path": "src/adapters/rendering/pygfx_core/renderer.py",
             "packaged_path": "Python/src/adapters/rendering/pygfx_core/renderer.py",
-            "sha256": "f5682e23a4695dd5ca1f65e2b1924160fa68a73bf620ecfd3df1fe95e517622e"
+            "sha256": "b149da09f8965145705d85261d80815da3bc8b924e7e588abf4f3e8a554fd4bd"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_PYGFX_CORE_SCENE_BRIDGE",
@@ -147,7 +147,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_RENDERER_FACTORY",
             "source_path": "src/adapters/rendering/renderer_factory.py",
             "packaged_path": "Python/src/adapters/rendering/renderer_factory.py",
-            "sha256": "75ab46e2c01c9e96e5a03c8ce99b91ea0e53803a8a91d319fe4e53b85b9d06a1"
+            "sha256": "b7b3a048914eeca46dbb5fe5f150841a422d6ebc4194144b562f6269da49c598"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_CORE_INIT",
@@ -159,7 +159,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_CORE_RENDERER",
             "source_path": "src/adapters/rendering/wgpu_core/renderer.py",
             "packaged_path": "Python/src/adapters/rendering/wgpu_core/renderer.py",
-            "sha256": "bcc01cf5df7c4c537a6767dc8f806d2cca0f68fe19d8b5b8178269dc28a7f169"
+            "sha256": "e4224f4be5a1a2e6036efacdcc620be6df62924ca4c535b648a0ba8864bba8e9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_CORE_RESOURCES",
@@ -639,13 +639,13 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_RENDERER_INTERFACE",
             "source_path": "src/core/rendering/renderer_interface.py",
             "packaged_path": "Python/src/core/rendering/renderer_interface.py",
-            "sha256": "49ea38d643951e4c04f3339f98d6fbb9c321e13ffcc77e7b2cae75df63446651"
+            "sha256": "7764e2e2df08e0cefc7420ed7372488b301f8bbd820cc851edcb19d70a1af0c9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_RENDERER_PERFORMANCE",
             "source_path": "src/core/rendering/renderer_performance.py",
             "packaged_path": "Python/src/core/rendering/renderer_performance.py",
-            "sha256": "d1935d937d13e148adf80a6541ce81e5797add62e0960e6cff8e93b1b78a673e"
+            "sha256": "9b2ddfae8d223fa3e2b42879e7d2d090ebc450a0db042a51054ccbe170eec39a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_RENDERER_PROFILER",

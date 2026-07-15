@@ -3313,12 +3313,12 @@ class GpuRenderer:
 
     # ── Invalidate node cache ─────────────────────────────────────────────────
 
-    def update_texture_regions(self, texture_name: str, image, regions) -> bool:
+    def update_texture_regions(self, texture_name: str, image, regions, *, finalize: bool = True) -> bool:
         """Patch one resident GL texture without touching scene resources."""
         cache = self._tex_cache
         if cache is None:
             return False
-        return bool(cache.update_regions(image, regions))
+        return bool(cache.update_regions(image, regions, build_mipmaps=bool(finalize)))
 
     def invalidate_node(self, node) -> None:
         """Remove cached GPU buffers and world-transform for a node (call after mesh edits)."""
