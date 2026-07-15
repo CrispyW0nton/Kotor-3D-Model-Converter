@@ -126,6 +126,7 @@ PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_COMMAND_HISTORY RCDATA "Python/src/core/m
 PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_CURVE_GUIDES RCDATA "Python/src/core/modules/map_studio_curve_guides.py"
 PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_EXPORT_OBJECTS RCDATA "Python/src/core/modules/map_studio_export_objects.py"
 PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_HOVER_CONTEXT RCDATA "Python/src/core/modules/map_studio_hover_context.py"
+PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_LIVE_TOPOLOGY_SESSION RCDATA "Python/src/core/modules/map_studio_live_topology_session.py"
 PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_MARKING_MENU_REGISTRY RCDATA "Python/src/core/modules/map_studio_marking_menu_registry.py"
 PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_MODELING_TOOLS RCDATA "Python/src/core/modules/map_studio_modeling_tools.py"
 PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE RCDATA "Python/src/core/modules/map_studio_pie.py"

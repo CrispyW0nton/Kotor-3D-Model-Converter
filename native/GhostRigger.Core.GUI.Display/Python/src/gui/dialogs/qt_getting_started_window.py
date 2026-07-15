@@ -61,11 +61,11 @@ TUTORIAL_PAGES: tuple[TutorialPage, ...] = (
     ),
     TutorialPage(
         key="gmodeler",
-        title="3. GModeler Geometry",
+        title="3. Multi-Component Modeling",
         icon="mesh_tools",
         goal="Edit the nearest visible face, edge, or vertex with a Maya/ZModeler-style hover-and-act loop while keeping KOTOR-safe topology.",
         steps=(
-            "Open Map Studio, choose Edit (GModeler), and orbit until the intended component is visibly unobstructed.",
+            "Open Map Studio, choose Multi-Component, and orbit until the intended component is visibly unobstructed.",
             "Hover the orange component highlight; the nearest visible surface is the editing target.",
             "Use the marking menu or labeled tool belt for Extrude, Bevel, Inset, Bridge, Combine, Separate, normals, and cleanup.",
             "Inspect the live result, undo if needed, then run topology validation before walkmesh or export work.",
@@ -73,7 +73,7 @@ TUTORIAL_PAGES: tuple[TutorialPage, ...] = (
         outputs="Editable KMAP room geometry with material, UV, normal, selection, and topology intent retained for MDL/MDX export.",
         readiness="No degenerate triangles, accidental occluded selection, broken winding, isolated vertices, missing UV intent, or unreviewed open borders remain.",
         route="gmodeler",
-        route_label="Open GModeler",
+        route_label="Open Multi-Component Modeling",
     ),
     TutorialPage(
         key="placeable_builder",

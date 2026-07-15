@@ -154,6 +154,9 @@ _PRIMITIVE_ACTIONS: dict[str, str] = {
     "ramp": "ramp",
     "stairs": "stairs",
     "cylinder": "cylinder",
+    "sphere": "sphere",
+    "cone": "cone",
+    "torus": "torus",
     "door_frame": "door_frame",
     "arch": "arch",
 }

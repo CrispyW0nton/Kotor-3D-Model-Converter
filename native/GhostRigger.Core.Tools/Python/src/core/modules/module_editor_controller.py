@@ -1430,6 +1430,9 @@ class ModuleEditorController:
         # "_s.rim" companion, so overlay that too when it exists; without it,
         # creatures/doors/placeables render as markers instead of real models.
         if resource_manager is not None and hasattr(resource_manager, "add_module_overlay"):
+            clear_overlay = getattr(resource_manager, "clear_module_overlay", None)
+            if callable(clear_overlay):
+                clear_overlay()
             overlay_paths = [rim_path]
             if rim_path.suffix.lower() == ".rim":
                 companion = rim_path.with_name(f"{rim_path.stem}_s.rim")
@@ -1442,6 +1445,34 @@ class ModuleEditorController:
                         self.model.log(f"Indexed {overlaid} bundled resource(s) from {overlay_path.name} for editing.")
                 except Exception as exc:
                     self.model.log(f"Could not index bundled module resources from {overlay_path.name}: {exc}")
+
+            # Classic module releases put only ARE/GIT/IFO in Modules/*.mod
+            # and ship the actual LYT/VIS/MDL/MDX/WOK/textures loose beside it
+            # (usually in a sibling Override directory).  Index that bundle
+            # lazily.  A real game installation is deliberately excluded: its
+            # chitin.key/Override/Modules layers are already indexed and a
+            # recursive scan there would be both redundant and expensive.
+            add_loose_overlay = getattr(resource_manager, "add_loose_overlay", None)
+            bundle_root = rim_path.parent
+            if bundle_root.name.strip().lower() in {"module", "modules"}:
+                bundle_root = bundle_root.parent
+            # MediaFire/archive staging keeps each release below
+            # ``Extracted/<package>`` and some releases share textures or room
+            # binaries from a sibling subfolder inside that package.  Expand
+            # to that one package boundary, never to the whole collection.
+            for ancestor in rim_path.parents:
+                if ancestor.parent.name.strip().lower() == "extracted":
+                    bundle_root = ancestor
+                    break
+            if callable(add_loose_overlay) and not (bundle_root / "chitin.key").is_file():
+                try:
+                    loose_count = int(add_loose_overlay(str(bundle_root), recursive=True) or 0)
+                    if loose_count:
+                        self.model.log(
+                            f"Indexed {loose_count} loose companion resource(s) from {bundle_root.name} for editing."
+                        )
+                except Exception as exc:
+                    self.model.log(f"Could not index loose module companions from {bundle_root}: {exc}")
             # The manager object is intentionally reused across imports, so
             # object identity cannot reveal that its overlay bytes changed.
             self._invalidate_map_studio_stock_preview_resources()

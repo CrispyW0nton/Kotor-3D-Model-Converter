@@ -60,7 +60,7 @@ class MapStudioTexturePaintTab(QtWidgets.QWidget):
         self.import_button.clicked.connect(self.importRequested.emit)
         self.assign_button = QtWidgets.QPushButton("Assign to Hovered Face")
         self.assign_button.setObjectName("mapStudioTexturePaintAssignButton")
-        self.assign_button.setToolTip("Assign the selected unique texture to the nearest visible GModeler face.")
+        self.assign_button.setToolTip("Assign the selected unique texture to the nearest visible Multi-Component face.")
         self.assign_button.clicked.connect(lambda: self.assignRequested.emit(self.selected_texture_id()))
         target_buttons.addWidget(self.import_button)
         target_buttons.addWidget(self.assign_button)

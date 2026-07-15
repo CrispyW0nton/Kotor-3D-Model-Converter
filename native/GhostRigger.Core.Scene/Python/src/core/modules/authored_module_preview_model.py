@@ -158,6 +158,17 @@ def _mesh_node(md: Any, mesh: PrimitiveMesh, parent: Any, *, room_resref: str, r
         "_gr_map_studio_primitive_name",
         str(metadata.get("logical_primitive_name") or mesh.name or ""),
     )
+    transform = dict(metadata.get("transform") or {})
+    setattr(
+        node,
+        "_gr_map_studio_transform_translation",
+        _vec3(transform.get("translation", (0.0, 0.0, 0.0))),
+    )
+    setattr(
+        node,
+        "_gr_map_studio_transform_pivot",
+        _vec3(transform.get("pivot", (0.0, 0.0, 0.0))),
+    )
     setattr(node, "_gr_map_studio_authored_mesh", True)
     node.compute_bounds()
     return node

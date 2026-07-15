@@ -60,13 +60,16 @@ from .authored_room_geometry import RectangularRoomPrimitive
 from .authored_terrain_builder import TerrainHeightfieldPrimitive
 from .authored_room_primitives import (
     ArchPrimitive,
+    ConePrimitive,
     CubePrimitive,
     CylinderPrimitive,
     DoorFramePrimitive,
     FloorPrimitive,
     PrimitiveMaterial,
     RampPrimitive,
+    SpherePrimitive,
     StairsPrimitive,
+    TorusPrimitive,
     WallPrimitive,
 )
 
@@ -242,6 +245,8 @@ def _floor_primitive(data: Any, room_resref: str) -> FloorPrimitive | PlacedRoom
         z=_float(source.get("z"), 0.0),
         surface_id=source.get("surface_id", source.get("floor_surface_id", 4)),
         material=_material(source.get("material")),
+        subdivisions_width=int(_float(source.get("subdivisions_width"), 1.0)),
+        subdivisions_depth=int(_float(source.get("subdivisions_depth"), 1.0)),
     )
     if source.get("transform") is None:
         return floor
@@ -257,7 +262,7 @@ def _base_room_primitive(
     room_resref: str,
     *,
     _depth: int = 0,
-) -> FloorPrimitive | WallPrimitive | CubePrimitive | RampPrimitive | StairsPrimitive | CylinderPrimitive | DoorFramePrimitive | ArchPrimitive | CombinedRoomPrimitive:
+) -> FloorPrimitive | WallPrimitive | CubePrimitive | SpherePrimitive | ConePrimitive | TorusPrimitive | RampPrimitive | StairsPrimitive | CylinderPrimitive | DoorFramePrimitive | ArchPrimitive | CombinedRoomPrimitive:
     if _depth > 32:
         raise ValueError("Combined room primitive recipe nesting exceeds the supported depth of 32.")
     source = _dict(data)
@@ -295,6 +300,8 @@ def _base_room_primitive(
             z=_float(source.get("z"), 0.0),
             surface_id=source.get("surface_id", source.get("floor_surface_id", 4)),
             material=material,
+            subdivisions_width=int(_float(source.get("subdivisions_width"), 1.0)),
+            subdivisions_depth=int(_float(source.get("subdivisions_depth"), 1.0)),
         )
     if primitive_type == "wall":
         return WallPrimitive(
@@ -312,6 +319,9 @@ def _base_room_primitive(
             size=_vec3(source.get("size"), (1.0, 1.0, 1.0)),
             center=_vec3(source.get("center"), (0.0, 0.0, 0.5)),
             material=material,
+            subdivisions_x=int(_float(source.get("subdivisions_x"), 1.0)),
+            subdivisions_y=int(_float(source.get("subdivisions_y"), 1.0)),
+            subdivisions_z=int(_float(source.get("subdivisions_z"), 1.0)),
         )
     if primitive_type == "ramp":
         return RampPrimitive(
@@ -339,6 +349,36 @@ def _base_room_primitive(
             radius=_float(source.get("radius"), 0.5),
             height=_float(source.get("height"), 1.0),
             segments=int(_float(source.get("segments"), 16.0)),
+            center=_vec3(source.get("center"), (0.0, 0.0, 0.5)),
+            material=material,
+        )
+    if primitive_type in {"sphere", "uv_sphere", "poly_sphere"}:
+        return SpherePrimitive(
+            name=name,
+            radius=_float(source.get("radius"), 0.5),
+            subdivisions_axis=int(_float(source.get("subdivisions_axis"), 20.0)),
+            subdivisions_height=int(_float(source.get("subdivisions_height"), 20.0)),
+            center=_vec3(source.get("center"), (0.0, 0.0, 0.5)),
+            material=material,
+        )
+    if primitive_type in {"cone", "poly_cone"}:
+        return ConePrimitive(
+            name=name,
+            radius=_float(source.get("radius"), 0.5),
+            height=_float(source.get("height"), 1.0),
+            subdivisions_axis=int(_float(source.get("subdivisions_axis"), 20.0)),
+            subdivisions_height=int(_float(source.get("subdivisions_height"), 1.0)),
+            subdivisions_caps=int(_float(source.get("subdivisions_caps"), 1.0)),
+            center=_vec3(source.get("center"), (0.0, 0.0, 0.5)),
+            material=material,
+        )
+    if primitive_type in {"torus", "poly_torus"}:
+        return TorusPrimitive(
+            name=name,
+            radius=_float(source.get("radius"), 1.0),
+            section_radius=_float(source.get("section_radius"), 0.25),
+            subdivisions_axis=int(_float(source.get("subdivisions_axis"), 20.0)),
+            subdivisions_height=int(_float(source.get("subdivisions_height"), 20.0)),
             center=_vec3(source.get("center"), (0.0, 0.0, 0.5)),
             material=material,
         )
@@ -688,6 +728,9 @@ def _base_primitive_payload(
     primitive: FloorPrimitive
     | WallPrimitive
     | CubePrimitive
+    | SpherePrimitive
+    | ConePrimitive
+    | TorusPrimitive
     | RampPrimitive
     | StairsPrimitive
     | CylinderPrimitive
@@ -731,6 +774,8 @@ def _base_primitive_payload(
             "z": float(primitive.z),
             "surface_id": primitive.surface_id,
             "material": _material_payload(primitive.material),
+            "subdivisions_width": int(primitive.subdivisions_width),
+            "subdivisions_depth": int(primitive.subdivisions_depth),
         }
     elif isinstance(primitive, WallPrimitive):
         payload = {
@@ -750,6 +795,9 @@ def _base_primitive_payload(
             "size": _vec3_payload(primitive.size),
             "center": _vec3_payload(primitive.center),
             "material": _material_payload(primitive.material),
+            "subdivisions_x": int(primitive.subdivisions_x),
+            "subdivisions_y": int(primitive.subdivisions_y),
+            "subdivisions_z": int(primitive.subdivisions_z),
         }
     elif isinstance(primitive, RampPrimitive):
         payload = {
@@ -780,6 +828,39 @@ def _base_primitive_payload(
             "radius": float(primitive.radius),
             "height": float(primitive.height),
             "segments": int(primitive.segments),
+            "center": _vec3_payload(primitive.center),
+            "material": _material_payload(primitive.material),
+        }
+    elif isinstance(primitive, SpherePrimitive):
+        payload = {
+            "type": "sphere",
+            "name": primitive.name,
+            "radius": float(primitive.radius),
+            "subdivisions_axis": int(primitive.subdivisions_axis),
+            "subdivisions_height": int(primitive.subdivisions_height),
+            "center": _vec3_payload(primitive.center),
+            "material": _material_payload(primitive.material),
+        }
+    elif isinstance(primitive, ConePrimitive):
+        payload = {
+            "type": "cone",
+            "name": primitive.name,
+            "radius": float(primitive.radius),
+            "height": float(primitive.height),
+            "subdivisions_axis": int(primitive.subdivisions_axis),
+            "subdivisions_height": int(primitive.subdivisions_height),
+            "subdivisions_caps": int(primitive.subdivisions_caps),
+            "center": _vec3_payload(primitive.center),
+            "material": _material_payload(primitive.material),
+        }
+    elif isinstance(primitive, TorusPrimitive):
+        payload = {
+            "type": "torus",
+            "name": primitive.name,
+            "radius": float(primitive.radius),
+            "section_radius": float(primitive.section_radius),
+            "subdivisions_axis": int(primitive.subdivisions_axis),
+            "subdivisions_height": int(primitive.subdivisions_height),
             "center": _vec3_payload(primitive.center),
             "material": _material_payload(primitive.material),
         }

@@ -39,7 +39,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_ASSETS_RESOURCE_MANAGER",
             "source_path": "src/core/assets/resource_manager.py",
             "packaged_path": "Python/src/core/assets/resource_manager.py",
-            "sha256": "7de28d50f6490c3184ab7ccb84593217be12e105043f40bdb017bf0f73f1a402"
+            "sha256": "f0433aba9e9a192e1c4abe299eca87bf3a1c6482157df0dfe1668ad97b245939"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_PORTS_INIT",

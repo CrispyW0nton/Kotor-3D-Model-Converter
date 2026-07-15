@@ -2530,7 +2530,8 @@ def test_t2603_imported_face_extrude_promotes_resident_mesh_without_renderer_res
 
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     room_resref = "perfroom"
-    base = _cube_surfaces()[0]
+    source_face_mats = tuple(index % 2 for index in range(len(_cube_surfaces()[0].faces)))
+    base = replace(_cube_surfaces()[0], face_mats=source_face_mats)
     neighbor = replace(
         base,
         name="neighbor_cube",
@@ -2589,6 +2590,21 @@ def test_t2603_imported_face_extrude_promotes_resident_mesh_without_renderer_res
             "axis": (0.0, 0.0, 1.0),
         }
         window._preview_map_studio_component_extrude(payload)
+        prepared = window._map_studio_prepared_topology_preview
+        assert prepared is not None
+        assert prepared[1].prepared_sample_count == 2
+        preview_at_035 = dict(payload, distance=0.35)
+        window._preview_map_studio_component_extrude(preview_at_035)
+        assert window._map_studio_prepared_topology_preview[1] is prepared[1]
+        assert window._last_map_studio_topology_preview_ms < 10.0
+        assert viewport.model is resident_model
+        assert nodes["render"] is target
+        assert nodes["imported_srf_1"] is neighbor_node
+        assert load_model_calls == []
+        # Return to the release value. The commit below still re-evaluates the
+        # authoritative controller operator and patches that exact surface
+        # before promoting the resident preview.
+        window._preview_map_studio_component_extrude(payload)
         window._commit_map_studio_component_extrude(payload)
 
         assert load_model_calls == []
@@ -2596,7 +2612,10 @@ def test_t2603_imported_face_extrude_promotes_resident_mesh_without_renderer_res
         assert nodes["render"] is target
         assert nodes["imported_srf_1"] is neighbor_node
         assert len(target.faces) > target_faces_before
+        assert len(target.face_mats) == len(target.faces)
+        assert set(target.face_mats) == {0, 1}
         assert window.viewport_panel._component_mesh_preview_baselines == {}
+        assert window._map_studio_prepared_topology_preview is None
         assert window.viewport_panel._room_preview_model_key.startswith("resident-topology:perfroom:render:")
         assert window._last_map_studio_geometry_refresh_ms < 10.0
 
@@ -2605,7 +2624,9 @@ def test_t2603_imported_face_extrude_promotes_resident_mesh_without_renderer_res
             fallback_name="perfmod",
             fallback_game="K1",
         )
-        assert len(committed.rooms[0].primitive.surfaces[0].faces) == len(target.faces)
+        committed_surface = committed.rooms[0].primitive.surfaces[0]
+        assert len(committed_surface.faces) == len(target.faces)
+        assert tuple(target.face_mats) == committed_surface.face_mats
         assert window.controller.command_history.undo_label.startswith("Extrude 1 face(s)")
 
         generation = int(window._map_studio_geometry_refresh_generation)
@@ -2629,6 +2650,82 @@ def test_t2603_imported_face_extrude_promotes_resident_mesh_without_renderer_res
         window.controller.project.dirty = False
         window.close()
         app.processEvents()
+
+
+def test_t2907_visible_extrude_and_bevel_controls_arm_live_component_tools() -> None:
+    _install_native_payload_paths()
+
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    armed: list[str] = []
+    messages: list[str] = []
+    panel = SimpleNamespace(
+        _hover_component_mode="face",
+        map_studio_component_selection=lambda: [{"component_type": "face"}],
+        arm_component_extrude=lambda: armed.append("extrude") or True,
+        arm_component_bevel=lambda: armed.append("bevel") or True,
+    )
+    window = SimpleNamespace(
+        viewport_panel=panel,
+        statusBar=lambda: SimpleNamespace(showMessage=lambda message, _duration=0: messages.append(message)),
+    )
+
+    assert ModuleEditorWindow._try_arm_map_studio_component_tool(window, "extrude") is True
+    assert ModuleEditorWindow._try_arm_map_studio_component_tool(window, "bevel") is True
+    assert armed == ["extrude", "bevel"]
+    assert messages[0].startswith("Extrude armed")
+    assert messages[1].startswith("Bevel armed")
+
+
+def test_t2907_bevel_width_frames_reuse_prepared_resident_topology() -> None:
+    _install_native_payload_paths()
+
+    from scripts.gmodeler_tool_matrix import _cube_surfaces
+    from src.core.modules.authored_imported_mesh import ImportedMeshRoomPrimitive
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    source = ImportedMeshRoomPrimitive(
+        room_resref="bevelperf",
+        surfaces=(_cube_surfaces()[0],),
+        game="K1",
+    )
+    shown: list[ImportedMeshRoomPrimitive] = []
+    messages: list[str] = []
+    window = SimpleNamespace(
+        _map_studio_prepared_topology_preview=None,
+        _map_studio_live_topology_source=lambda _payload: source,
+        _show_live_imported_surface=lambda primitive, _room, _role: shown.append(primitive) or True,
+        statusBar=lambda: SimpleNamespace(showMessage=lambda message, _duration=0: messages.append(message)),
+    )
+    window._map_studio_prepared_topology_session = lambda primitive, payload, operation: (
+        ModuleEditorWindow._map_studio_prepared_topology_session(window, primitive, payload, operation)
+    )
+    payload = {
+        "kind": "edge_bevel",
+        "room_resref": "bevelperf",
+        "mesh_role": "render",
+        "face_index": 0,
+        "edge_corners": (0, 1),
+        "amount": 0.1,
+        "segments": 3,
+        "profile": 0.75,
+        "miter": "patch",
+        "smoothing_angle_degrees": 60.0,
+        "uv_mode": "preserve",
+        "clamp_overlap": True,
+    }
+
+    ModuleEditorWindow._preview_map_studio_component_bevel(window, payload)
+    prepared = window._map_studio_prepared_topology_preview
+    assert prepared is not None
+    ModuleEditorWindow._preview_map_studio_component_bevel(window, dict(payload, amount=0.3))
+
+    assert window._map_studio_prepared_topology_preview[1] is prepared[1]
+    assert len(shown) == 2
+    assert shown[0].surfaces[0].faces is shown[1].surfaces[0].faces
+    assert shown[0].surfaces[0].face_mats is shown[1].surfaces[0].face_mats
+    assert window._last_map_studio_topology_preview_ms < 10.0
+    assert messages == []
 
 
 def test_t2603_topology_refresh_defers_validation_and_keeps_structural_fallback(monkeypatch) -> None:

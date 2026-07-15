@@ -124,6 +124,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     "name": str(getattr(node, "_gr_map_studio_primitive_name", "") or getattr(node, "name", "") or ""),
                     "vertices": tuple(tuple(float(value) for value in vertex[:3]) for vertex in tuple(getattr(node, "vertices", ()) or ())),
                     "faces": tuple(tuple(int(value) for value in face[:3]) for face in tuple(getattr(node, "faces", ()) or ())),
+                    "face_mats": tuple(int(value) for value in tuple(getattr(node, "face_mats", ()) or ())),
                     "uvs": tuple(tuple(float(value) for value in uv[:2]) for uv in tuple(getattr(node, "uvs", ()) or ())),
                     "uvs_lm": tuple(tuple(float(value) for value in uv[:2]) for uv in tuple(getattr(node, "uvs_lm", ()) or ())),
                     "normals": tuple(tuple(float(value) for value in normal[:3]) for normal in tuple(getattr(node, "normals", ()) or ())),
@@ -145,6 +146,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         normals=(),
         uvs=(),
         uvs_lm=(),
+        face_mats=(),
     ) -> bool:
         """Patch one live mesh node without rebuilding/serializing the KMAP."""
 
@@ -165,12 +167,25 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                         "face_mats": list(getattr(node, "face_mats", ()) or ()),
                     },
                 )
-            node.vertices = [tuple(float(value) for value in vertex[:3]) for vertex in tuple(vertices or ())]
-            node.faces = [tuple(int(value) for value in face[:3]) for face in tuple(faces or ())]
-            node.normals = [tuple(float(value) for value in normal[:3]) for normal in tuple(normals or ())]
-            node.uvs = [tuple(float(value) for value in uv[:2]) for uv in tuple(uvs or ())]
-            node.uvs_lm = [tuple(float(value) for value in uv[:2]) for uv in tuple(uvs_lm or ())]
-            node.face_mats = [0] * len(node.faces)
+            # The Scene-owned operator/session already returns validated,
+            # immutable numeric tuples.  Re-coercing every scalar here cost
+            # ~9 ms on a 65x65 room before the renderer saw the frame.  A
+            # shallow list gives the mutable ModelNode its own container while
+            # retaining the trusted rows and keeps this presentation bridge
+            # allocation-light.
+            node.vertices = list(vertices or ())
+            node.faces = list(faces or ())
+            node.normals = list(normals or ())
+            node.uvs = list(uvs or ())
+            node.uvs_lm = list(uvs_lm or ())
+            preview_face_mats = list(face_mats or ())
+            if len(preview_face_mats) != len(node.faces):
+                previous_face_mats = list(getattr(node, "face_mats", ()) or ())
+                preview_face_mats = previous_face_mats if len(previous_face_mats) == len(node.faces) else [0] * len(node.faces)
+            node.face_mats = preview_face_mats
+            self._hover_candidate_cache_key = None
+            self._hover_candidate_cache = []
+            self._hover_candidate_grid = {}
             compute_bounds = getattr(node, "compute_bounds", None)
             if callable(compute_bounds):
                 compute_bounds()
@@ -198,6 +213,9 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             if callable(invalidate):
                 invalidate(node)
         if baselines:
+            self._hover_candidate_cache_key = None
+            self._hover_candidate_cache = []
+            self._hover_candidate_grid = {}
             request = getattr(self.viewport, "_request_render", None)
             if callable(request):
                 request(fast=True, reason="Map Studio topology preview restored", resources=True, overlay=True, hud=True)
@@ -239,7 +257,9 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if viewport_model is not None:
             setattr(viewport_model, "_gr_map_studio_preview_key", key)
         self._room_preview_model_key = key
+        self._hover_candidate_cache_key = None
         self._hover_candidate_cache = []
+        self._hover_candidate_grid = {}
         request = getattr(getattr(self, "viewport", None), "_request_render", None)
         if callable(request):
             request(
@@ -476,6 +496,11 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self._push_component_extrude_overlay()
             return True
         if edges:
+            if len(edges) > 1:
+                self.marker_summary_label.setText(
+                    "Edge Extrude currently supports one edge per gesture; reduce the selection before dragging."
+                )
+                return False
             entry = edges[0]
             points = tuple(entry.get("face_world_points", ()) or ())[:3]
             edge = tuple(entry.get("edge_indices", (0, 1)) or (0, 1))
@@ -678,6 +703,11 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             for entry in self.map_studio_component_selection()
             if str(entry.get("component_type", "") or "") == "edge"
         ]
+        if len(selection) > 1:
+            self.marker_summary_label.setText(
+                "Bevel currently supports one edge per gesture; multi-edge/loop bevel is not enabled yet."
+            )
+            return False
         context = self._hover_context
         entry = selection[0] if selection else None
         if entry is None and context is not None and getattr(context, "is_hit", False):
@@ -1002,6 +1032,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._transform_snap_modifier_active = False
         self._transform_gizmo_mode = "translate"
         self._room_primitive_drag: dict[str, object] | None = None
+        self._pending_room_primitive_commit_preview: dict[str, object] | None = None
         self._terrain_brush_drag: dict[str, object] | None = None
         self._terrain_brush_option_drag: dict[str, object] | None = None
         self._terrain_brush_context: dict[str, object] = {
@@ -3794,6 +3825,12 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 "node_position": node_position,
                 "vertices": vertices,
                 "normals": normals,
+                "authored_world_pivot": tuple(
+                    room_position[index]
+                    + float(tuple(getattr(node, "_gr_map_studio_transform_translation", (0.0, 0.0, 0.0)))[index])
+                    + float(tuple(getattr(node, "_gr_map_studio_transform_pivot", (0.0, 0.0, 0.0)))[index])
+                    for index in range(3)
+                ),
             }
             baselines.append(baseline)
             for vertex in vertices:
@@ -3804,7 +3841,9 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                         vertex[2] + room_position[2] + node_position[2],
                     )
                 )
-        if world_points:
+        if len(baselines) == 1:
+            pivot = tuple(float(value) for value in tuple(baselines[0]["authored_world_pivot"])[:3])
+        elif world_points:
             mins = tuple(min(point[index] for point in world_points) for index in range(3))
             maxs = tuple(max(point[index] for point in world_points) for index in range(3))
             pivot = tuple((mins[index] + maxs[index]) * 0.5 for index in range(3))
@@ -3902,12 +3941,66 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if message:
             self.marker_summary_label.setText(message)
 
+    def cancel_pending_room_primitive_commit_preview(self) -> None:
+        """Roll a live object transform back when its KMAP transaction fails."""
+
+        drag = self._pending_room_primitive_commit_preview
+        self._pending_room_primitive_commit_preview = None
+        if drag is not None:
+            self._restore_room_primitive_drag_preview(drag)
+
+    def promote_room_primitive_drag_preview(self, selection=()) -> bool:
+        """Keep the final live transform resident after its KMAP commit.
+
+        Maya keeps the evaluated result on screen when a manipulator commits.
+        The old Map Studio path restored the pre-drag vertices and rebuilt the
+        complete room model, producing a visible reset on mouse release.  A
+        successful controller transaction can instead promote the already
+        evaluated nodes; Undo or any structural refresh still rebuilds from
+        authoritative KMAP state.
+        """
+
+        drag = self._pending_room_primitive_commit_preview
+        if drag is None:
+            return False
+        expected = {
+            (str(room or "").strip().lower(), str(name or "").strip())
+            for room, name in tuple(drag.get("selection", ()) or ())
+        }
+        requested = {
+            (str(room or "").strip().lower(), str(name or "").strip())
+            for room, name in tuple(selection or ())
+        }
+        if requested and requested != expected:
+            return False
+        self._pending_room_primitive_commit_preview = None
+        self._mark_room_preview_model_promoted()
+        self._hover_candidate_cache_key = None
+        self._hover_candidate_cache = []
+        self._hover_candidate_grid = {}
+        request = getattr(self.viewport, "_request_render", None)
+        if callable(request):
+            try:
+                request(
+                    fast=True,
+                    reason="Map Studio object transform committed in place",
+                    resources=True,
+                    overlay=True,
+                    gizmo=True,
+                )
+            except TypeError:
+                request()
+        return True
+
     def set_authored_room_preview_model(self, authored_room_preview_model) -> None:
         """Replace only authored geometry, preserving camera and panel state."""
 
         self._room_preview_model = authored_room_preview_model
         self._sync_room_preview_model(authored_room_preview_model)
+        self._pending_room_primitive_commit_preview = None
+        self._hover_candidate_cache_key = None
         self._hover_candidate_cache = []
+        self._hover_candidate_grid = {}
         self._push_map_studio_component_selection()
 
     def set_authored_room_outline_geometry(self, authored_room_outline_geometry) -> None:
@@ -4220,14 +4313,17 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self._update_room_primitive_drag(event)
         drag = self._room_primitive_drag
         self._room_primitive_drag = None
-        # The durable controller transaction starts from the immutable KMAP
-        # baseline, so remove the render-only override before committing.
-        self._restore_room_primitive_drag_preview(drag)
         self._sync_clean_viewport_presentation()
         if not bool(drag.get("active", False)):
+            self._restore_room_primitive_drag_preview(drag)
             return True
         mode = str(drag.get("mode") or "translate")
         selection = tuple(drag.get("selection", ()) or ())
+        # Keep the evaluated vertices resident while the direct Qt signal
+        # commits the authoritative KMAP transaction.  The window promotes
+        # this preview on success or rolls it back on failure.  If no receiver
+        # handled the signal, the fallback below restores the baseline.
+        self._pending_room_primitive_commit_preview = drag
         if len(selection) > 1:
             self.roomPrimitivesTransformCommitted.emit(
                 {
@@ -4239,6 +4335,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     "scale_multiplier": tuple(drag.get("pending_scale_multiplier", (1.0, 1.0, 1.0))),
                 }
             )
+            if self._pending_room_primitive_commit_preview is drag:
+                self.cancel_pending_room_primitive_commit_preview()
             return True
         if mode == "rotate":
             self.roomPrimitiveRotated.emit(
@@ -4246,6 +4344,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 str(drag.get("primitive_name", "") or ""),
                 float(drag.get("pending_rotation_delta_degrees", 0.0) or 0.0),
             )
+            if self._pending_room_primitive_commit_preview is drag:
+                self.cancel_pending_room_primitive_commit_preview()
             return True
         if mode == "scale":
             self.roomPrimitiveScaled.emit(
@@ -4253,15 +4353,20 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 str(drag.get("primitive_name", "") or ""),
                 tuple(float(value) for value in tuple(drag.get("pending_scale_multiplier", (1.0, 1.0, 1.0)))[:3]),
             )
+            if self._pending_room_primitive_commit_preview is drag:
+                self.cancel_pending_room_primitive_commit_preview()
             return True
         delta = tuple(float(v) for v in tuple(drag.get("pending_delta", (0.0, 0.0, 0.0)))[:3])
         if len(delta) < 3:
+            self.cancel_pending_room_primitive_commit_preview()
             return True
         self.roomPrimitiveMoved.emit(
             str(drag.get("room_resref", "") or ""),
             str(drag.get("primitive_name", "") or ""),
             delta,
         )
+        if self._pending_room_primitive_commit_preview is drag:
+            self.cancel_pending_room_primitive_commit_preview()
         return True
 
     def _project_world_to_screen(self, position: object) -> tuple[float, float] | None:

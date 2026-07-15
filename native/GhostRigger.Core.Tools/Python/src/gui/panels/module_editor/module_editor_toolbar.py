@@ -28,7 +28,7 @@ class ModuleEditorToolbar(QtWidgets.QWidget):
     )
     EDIT_MODES = (
         ("Object", "Select, move, duplicate, and organize rooms, placements, lights, and module objects."),
-        ("Edit (GModeler)", "GModeler edit mode: hover any face, edge, or vertex and use RMB tools - no component-mode switching needed."),
+        ("Multi-Component", "Maya-style automatic component mode: the nearest visible vertex, edge, or face wins; RMB opens the optional marking menu."),
         ("Texture Paint", "Paint a unique project TGA on the nearest visible face through diffuse UV0."),
         ("Vertex", "Edit room and walkmesh vertices with snap, weld, flatten, mirror, and cleanup tools."),
         ("Edge", "Edit seams, door or corridor borders, bridge edges, bevels, and rectangular cuts."),
@@ -43,12 +43,15 @@ class ModuleEditorToolbar(QtWidgets.QWidget):
         ("cube", "Cube", "Add a KMAP-safe cube/blockout primitive to the active authored room."),
         ("wall", "Wall", "Add a wall/slab primitive aligned to room and doorway seams."),
         ("cylinder", "Cylinder", "Add a column or pedestal cylinder primitive."),
+        ("sphere", "Sphere", "Add a Maya-style UV sphere with editable radius and subdivisions."),
+        ("cone", "Cone", "Add a Maya-style capped cone with editable side and cap subdivisions."),
+        ("torus", "Torus", "Add a Maya-style torus with editable ring and section dimensions."),
         ("ramp", "Ramp", "Add a sloped ramp primitive with walkmesh intent."),
         ("stairs", "Stairs", "Add a stair primitive with a ramp-style WOK proxy."),
         ("arch", "Arch", "Add an arch primitive for visual portal silhouettes."),
         ("universal_transform", "Ctrl+T", "Activate the Universal Manipulator with selected width, depth, and height dimensions."),
-        ("extrude", "Extrude", "Focus edge/face extrusion for room and corridor growth."),
-        ("bevel", "Bevel", "Focus bevel/inset tools for blockout cleanup."),
+        ("extrude", "Extrude", "Arm a live Maya-style extrusion on the selected face or edge; falls back to blockout growth when no component is active."),
+        ("bevel", "Bevel", "Arm the live edge bevel manipulator with segments, profile, miter, smoothing, and UV controls."),
         ("bridge", "Bridge", "Focus edge bridge tools for corridors and room joins."),
         ("vertex_snap", "Snap Vtx", "Focus vertex snapping. Hold V previews snap targets."),
         ("grid_snap", "Grid Snap", "Move selected floor-plan vertices to the authored Map Studio grid without welding topology."),
@@ -113,7 +116,7 @@ class ModuleEditorToolbar(QtWidgets.QWidget):
         self.show_skybox.setChecked(True)
         self.show_skybox.setToolTip(
             "Render loaded or authored skybox/backdrop surfaces with their real game textures. "
-            "Backdrop geometry remains depth-tested but cannot be selected by GModeler."
+            "Backdrop geometry remains depth-tested but cannot be selected by component tools."
         )
         self.show_skybox.toggled.connect(self.skyboxVisibilityChanged.emit)
         row.addWidget(self.show_skybox)

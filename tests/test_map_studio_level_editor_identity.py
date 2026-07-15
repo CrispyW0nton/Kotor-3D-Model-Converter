@@ -3740,7 +3740,7 @@ def test_t2600_map_studio_marking_menus_route_modes_and_tools_runtime() -> None:
         assert edit_action is not None
         edit_action.trigger()
         app.processEvents()
-        assert window.toolbar.selection_mode.currentText() == "Edit (GModeler)"
+        assert window.toolbar.selection_mode.currentText() == "Multi-Component"
         panel = window.viewport_panel
         assert panel._hover_probe_enabled is True
         assert panel._hover_component_mode == ""  # all components at once
@@ -4165,6 +4165,67 @@ def test_t2600_map_studio_gimbal_rotate_and_scale_commit_authored_kmap_runtime()
             "PTH",
             ".mod",
         )
+    finally:
+        window.controller.project.dirty = False
+        window.close()
+
+
+def test_t2907_object_drag_commit_promotes_resident_preview_without_level_rebuild() -> None:
+    """A finished Maya-style object drag lands the visible result in place."""
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    _configure_native_python_roots()
+
+    from PySide6 import QtWidgets
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    window = ModuleEditorWindow()
+    try:
+        window.show()
+        app.processEvents()
+        belt = window.findChild(QtWidgets.QWidget, "mapStudioToolBeltWidget")
+        assert belt is not None
+        cube = belt.findChild(QtWidgets.QToolButton, "mapStudioToolBeltButton_cube")
+        assert cube is not None
+        cube.click()
+        app.processEvents()
+
+        selected = window.builder_tab.roomPrimitiveTransformComboBox.currentData()
+        assert isinstance(selected, dict)
+        identity = (str(selected["room_resref"]), str(selected["primitive_name"]))
+        selection = (identity,)
+        baselines, pivot = window.viewport_panel._capture_room_primitive_drag_preview(selection)
+        assert len(baselines) == 1
+        node = baselines[0]["node"]
+        model = window.viewport_panel._room_preview_model
+        drag = {
+            "selection": selection,
+            "mode": "translate",
+            "group_pivot": pivot,
+            "preview_baselines": baselines,
+            "pending_delta": (0.75, -0.25, 0.0),
+            "pending_rotation_delta_degrees": 0.0,
+            "pending_scale_multiplier": (1.0, 1.0, 1.0),
+            "active": True,
+        }
+        window.viewport_panel._apply_room_primitive_drag_preview(drag)
+        visible_vertices = tuple(node.vertices)
+        window.viewport_panel._pending_room_primitive_commit_preview = drag
+
+        window._move_authored_room_primitive(identity[0], identity[1], (0.75, -0.25, 0.0))
+        app.processEvents()
+
+        assert window.viewport_panel._room_preview_model is model
+        assert baselines[0]["node"] is node
+        assert tuple(node.vertices) == visible_vertices
+        assert window.viewport_panel._pending_room_primitive_commit_preview is None
+        row = next(
+            item
+            for item in window.controller.authored_room_primitive_transforms()
+            if str(getattr(item, "primitive_name", "")) == identity[1]
+        )
+        assert tuple(round(float(value), 3) for value in row.translation) == (0.75, -0.25, 0.0)
     finally:
         window.controller.project.dirty = False
         window.close()

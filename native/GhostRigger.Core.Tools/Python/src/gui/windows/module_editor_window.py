@@ -39,12 +39,12 @@ from src.gui.panels.module_editor.texture_paint_tab import MapStudioTexturePaint
 from src.core.modules.authored_imported_mesh import (
     ImportedMeshRoomPrimitive,
     ImportedMeshSurface,
-    bevel_imported_mesh_edge,
     extrude_imported_mesh_edge,
-    extrude_imported_mesh_faces,
     imported_mesh_surface_index_for_role,
     imported_mesh_surface_role,
+    resolve_imported_mesh_face_target,
 )
+from src.core.modules.map_studio_live_topology_session import MapStudioLiveTopologySession
 from src.gui.panels.module_editor.module_editor_asset_browser import ModuleEditorAssetBrowser
 from src.gui.panels.module_editor.module_editor_outliner import ModuleEditorOutliner, authored_primitive_item_id
 from src.gui.panels.module_editor.module_editor_properties import ModuleEditorPropertiesPanel
@@ -2437,7 +2437,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._refresh_all(f"Imported module {resref} ({game}).")
 
     def _detect_module_game(self, capsule: Path) -> str:
-        """Return 'K1'/'K2' from a bundled room MDL function pointer, or ''."""
+        """Return 'K1'/'K2' from a bundled or loose room MDL pointer."""
 
         try:
             import struct as _struct
@@ -2445,16 +2445,43 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             from pykotor.extract.capsule import LazyCapsule
             from pykotor.resource.type import ResourceType as _RT
 
+            def _game_from_header(data: bytes) -> str:
+                if len(data) < 16:
+                    return ""
+                fp1 = _struct.unpack_from("<I", data, 12)[0]
+                if fp1 == 4285200:
+                    return "K2"
+                if fp1 == 4273776:
+                    return "K1"
+                return ""
+
             for item in LazyCapsule(str(capsule)):
                 if item.restype() != _RT.MDL:
                     continue
                 data = bytes(item.data() or b"")
-                if len(data) >= 16:
-                    fp1 = _struct.unpack_from("<I", data, 12)[0]
-                    if fp1 == 4285200:
-                        return "K2"
-                    if fp1 == 4273776:
-                        return "K1"
+                detected = _game_from_header(data)
+                if detected:
+                    return detected
+
+            # Metadata-only MODs from older toolchains keep their models in a
+            # sibling Override directory.  Probe only the nearest recovered
+            # bundle, reading 16-byte headers rather than loading each model.
+            bundle_root = capsule.parent
+            if bundle_root.name.strip().lower() in {"module", "modules"}:
+                bundle_root = bundle_root.parent
+            for ancestor in capsule.parents:
+                if ancestor.parent.name.strip().lower() == "extracted":
+                    bundle_root = ancestor
+                    break
+            if not (bundle_root / "chitin.key").is_file():
+                for model_path in sorted(bundle_root.rglob("*.mdl"), key=lambda item: str(item).lower()):
+                    try:
+                        with model_path.open("rb") as stream:
+                            detected = _game_from_header(stream.read(16))
+                    except OSError:
+                        continue
+                    if detected:
+                        return detected
         except Exception:
             return ""
         return ""
@@ -3710,6 +3737,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         "wall",
         "cube",
         "cylinder",
+        "sphere",
+        "cone",
+        "torus",
         "ramp",
         "stairs",
         "door_frame",
@@ -3852,7 +3882,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         # redundant here. Edit Mode activates GModeler; Object Mode is
         # select/transform/delete; Terrain and Placement stay as workflows.
         entries = (
-            ("edit", "Edit Mode (GModeler)", "Edit (GModeler)", 0, 0, "mapStudioModeMarkingAction_edit", "mapStudioModeMarkingButton_edit"),
+            ("edit", "Multi-Component Mode", "Multi-Component", 0, 0, "mapStudioModeMarkingAction_edit", "mapStudioModeMarkingButton_edit"),
             ("object", "Object Mode", "Object", 0, 1, "mapStudioModeMarkingAction_object", "mapStudioModeMarkingButton_object"),
             ("terrain", "Terrain", "Terrain", 1, 0, "mapStudioModeMarkingAction_terrain", "mapStudioModeMarkingButton_terrain"),
             ("placement", "Placement", "Placement", 1, 1, "mapStudioModeMarkingAction_placement", "mapStudioModeMarkingButton_placement"),
@@ -3869,7 +3899,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             button.setToolButtonStyle(QtCore.Qt.ToolButtonTextOnly)
             button.setMinimumWidth(82)
             button.setToolTip(
-                "Activate GModeler: hover faces/edges/vertices and use RMB tools." if key == "edit"
+                "Automatically target the nearest visible face, edge, or vertex; RMB opens the marking menu." if key == "edit"
                 else f"Switch Map Studio to {mode_label} mode."
             )
             layout.addWidget(button, row, column)
@@ -3978,6 +4008,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     texture_names=tuple(row.get("texture_names", ()) or ()),
                     tex_count=int(row.get("tex_count", 1) or 1),
                     uvs_lm=tuple(row.get("uvs_lm", ()) or ()),
+                    face_mats=tuple(int(value) for value in tuple(row.get("face_mats", ()) or ())),
                 )
             )
         if not surfaces:
@@ -3985,6 +4016,73 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         primitive = ImportedMeshRoomPrimitive(room_resref=room_resref, surfaces=tuple(surfaces))
         self._map_studio_topology_preview_source = (key, primitive)
         return primitive
+
+    def _map_studio_prepared_topology_session(
+        self,
+        source: ImportedMeshRoomPrimitive,
+        payload: dict,
+        operation: str,
+    ) -> MapStudioLiveTopologySession:
+        """Prepare once per gesture/option identity, then reuse for drag frames."""
+
+        room_resref = str(payload.get("room_resref", "") or "")
+        mesh_role = str(payload.get("mesh_role", "") or "")
+        if operation == "face_extrude":
+            face_indices = tuple(sorted({int(value) for value in tuple(payload.get("face_indices", ()) or ())}))
+            world_mode = str(payload.get("axis_mode", "normal") or "normal") == "world"
+            axis = tuple(float(value) for value in tuple(payload.get("axis", (0.0, 0.0, 1.0)))[:3])
+            key = (
+                id(source),
+                operation,
+                room_resref,
+                mesh_role,
+                face_indices,
+                axis if world_mode else None,
+            )
+            cached = getattr(self, "_map_studio_prepared_topology_preview", None)
+            if cached is not None and cached[0] == key:
+                return cached[1]
+            session = MapStudioLiveTopologySession.prepare_face_extrude(
+                source,
+                mesh_role,
+                face_indices,
+                direction=axis if world_mode else None,
+            )
+        elif operation == "edge_bevel":
+            corners = tuple(int(value) for value in tuple(payload.get("edge_corners", (0, 1)))[:2])
+            key = (
+                id(source),
+                operation,
+                room_resref,
+                mesh_role,
+                int(payload.get("face_index", -1)),
+                corners,
+                int(payload.get("segments", 1) or 1),
+                float(payload.get("profile", 0.5) or 0.0),
+                str(payload.get("miter", "auto") or "auto"),
+                float(payload.get("smoothing_angle_degrees", 180.0) or 0.0),
+                str(payload.get("uv_mode", "preserve") or "preserve"),
+                bool(payload.get("clamp_overlap", True)),
+            )
+            cached = getattr(self, "_map_studio_prepared_topology_preview", None)
+            if cached is not None and cached[0] == key:
+                return cached[1]
+            session = MapStudioLiveTopologySession.prepare_edge_bevel(
+                source,
+                mesh_role,
+                int(payload.get("face_index", -1)),
+                corners,
+                segments=int(payload.get("segments", 1) or 1),
+                profile=float(payload.get("profile", 0.5) or 0.0),
+                miter=str(payload.get("miter", "auto") or "auto"),
+                smoothing_angle_degrees=float(payload.get("smoothing_angle_degrees", 180.0) or 0.0),
+                uv_mode=str(payload.get("uv_mode", "preserve") or "preserve"),
+                clamp_overlap=bool(payload.get("clamp_overlap", True)),
+            )
+        else:
+            raise ValueError(f"Unsupported prepared topology operation: {operation}")
+        self._map_studio_prepared_topology_preview = (key, session)
+        return session
 
     def _show_live_imported_surface(self, primitive: ImportedMeshRoomPrimitive, room_resref: str, mesh_role: str) -> bool:
         surface_index = imported_mesh_surface_index_for_role(primitive, mesh_role)
@@ -3999,6 +4097,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             normals=surface.normals,
             uvs=surface.uvs,
             uvs_lm=surface.uvs_lm,
+            face_mats=surface.face_mats,
         )
 
     def _refresh_map_studio_imported_mesh_change(
@@ -4040,6 +4139,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         )
         if promoted:
             self._map_studio_topology_preview_source = None
+            self._map_studio_prepared_topology_preview = None
         self._refresh_map_studio_geometry_change(
             message,
             rebuild_viewport_model=not promoted,
@@ -4054,6 +4154,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         room_resref = str(payload.get("room_resref", "") or "")
         mesh_role = str(payload.get("mesh_role", "") or "")
         distance = float(payload.get("distance", 0.0) or 0.0)
+        started = perf_counter()
         try:
             if str(payload.get("kind", "") or "") == "edge":
                 axis = tuple(float(value) for value in tuple(payload.get("axis", (0.0, 0.0, 1.0)))[:3])
@@ -4065,18 +4166,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     tuple(axis[index] * distance for index in range(3)),
                 )
             else:
-                world_mode = str(payload.get("axis_mode", "normal") or "normal") == "world"
-                axis = tuple(float(value) for value in tuple(payload.get("axis", (0.0, 0.0, 1.0)))[:3])
-                updated = extrude_imported_mesh_faces(
-                    source,
-                    mesh_role,
-                    tuple(int(value) for value in tuple(payload.get("face_indices", ()) or ())),
-                    distance,
-                    direction=axis if world_mode else None,
-                )
+                session = self._map_studio_prepared_topology_session(source, payload, "face_extrude")
+                updated = session.evaluate(distance)
             self._show_live_imported_surface(updated, room_resref, mesh_role)
         except ValueError as exc:
             self.statusBar().showMessage(f"Extrude preview: {exc}", 2500)
+        finally:
+            self._last_map_studio_topology_preview_ms = (perf_counter() - started) * 1000.0
 
     def _preview_map_studio_component_bevel(self, payload: dict) -> None:
         source = self._map_studio_live_topology_source(payload)
@@ -4084,27 +4180,20 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         room_resref = str(payload.get("room_resref", "") or "")
         mesh_role = str(payload.get("mesh_role", "") or "")
+        started = perf_counter()
         try:
-            updated = bevel_imported_mesh_edge(
-                source,
-                mesh_role,
-                int(payload.get("face_index", -1)),
-                tuple(int(value) for value in tuple(payload.get("edge_corners", (0, 1)))[:2]),
-                float(payload.get("amount", 0.25) or 0.25),
-                segments=int(payload.get("segments", 1) or 1),
-                profile=float(payload.get("profile", 0.5) or 0.0),
-                miter=str(payload.get("miter", "auto") or "auto"),
-                smoothing_angle_degrees=float(payload.get("smoothing_angle_degrees", 180.0) or 0.0),
-                uv_mode=str(payload.get("uv_mode", "preserve") or "preserve"),
-                clamp_overlap=bool(payload.get("clamp_overlap", True)),
-            )
+            session = self._map_studio_prepared_topology_session(source, payload, "edge_bevel")
+            updated = session.evaluate(float(payload.get("amount", 0.25) or 0.25))
             self._show_live_imported_surface(updated, room_resref, mesh_role)
         except ValueError as exc:
             self.statusBar().showMessage(f"Bevel preview: {exc}", 2500)
+        finally:
+            self._last_map_studio_topology_preview_ms = (perf_counter() - started) * 1000.0
 
     def _cancel_map_studio_component_preview(self) -> None:
         self.viewport_panel.clear_component_mesh_preview()
         self._map_studio_topology_preview_source = None
+        self._map_studio_prepared_topology_preview = None
 
     def _commit_map_studio_component_bevel(self, payload: dict) -> None:
         ok, message = self.controller.apply_imported_mesh_room_component_op(
@@ -4273,12 +4362,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return False
 
         face_indices: list[int] = [face_index]
-        if target in {"Same Texture Faces", "Material Region", "Room Island"}:
-            room_spec = self.controller.imported_mesh_room(room_resref)
-            if room_spec is not None:
-                surface_index = imported_mesh_surface_index_for_role(room_spec.primitive, mesh_role)
-                if surface_index >= 0:
-                    face_indices = list(range(len(room_spec.primitive.surfaces[surface_index].faces)))
+        room_spec = self.controller.imported_mesh_room(room_resref)
+        if room_spec is not None:
+            try:
+                face_indices = list(
+                    resolve_imported_mesh_face_target(room_spec.primitive, mesh_role, face_index, target)
+                )
+            except (IndexError, ValueError) as exc:
+                self.statusBar().showMessage(f"Cannot resolve {target}: {exc}", 5000)
+                return True
 
         shift_held = bool(QtWidgets.QApplication.keyboardModifiers() & QtCore.Qt.ShiftModifier)
         if wanted_component in {"vertex", "edge"} or action_key in {"face_flat", "face_flip", "face_split"}:
@@ -4426,7 +4518,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         label_by_key = {
             "object": "Object",
-            "edit": "Edit (GModeler)",
+            "edit": "Multi-Component",
             "terrain": "Terrain",
             "placement": "Placement",
             "vertex": "Vertex",
@@ -4681,6 +4773,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             "ramp": "ramp",
             "stairs": "stairs",
             "cylinder": "cylinder",
+            "sphere": "sphere",
+            "cone": "cone",
+            "torus": "torus",
             "door_frame": "door_frame",
             "arch": "arch",
         }.get(str(action_key or "").strip(), "")
@@ -5202,11 +5297,37 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.export_panel.dry_run.setChecked(bool(values.get("dry_run")))
         return values
 
+    def _try_arm_map_studio_component_tool(self, action_key: str) -> bool:
+        """Prefer Maya-style live component tools when a component is active."""
+
+        key = str(action_key or "").strip().lower()
+        if key not in {"extrude", "bevel"}:
+            return False
+        panel = getattr(self, "viewport_panel", None)
+        if panel is None:
+            return False
+        selection_reader = getattr(panel, "map_studio_component_selection", None)
+        selection = list(selection_reader() or ()) if callable(selection_reader) else []
+        component_mode = str(getattr(panel, "_hover_component_mode", "") or "").strip().lower()
+        if not selection and component_mode not in {"face", "edge"}:
+            return False
+        armer = getattr(panel, "arm_component_extrude" if key == "extrude" else "arm_component_bevel", None)
+        if not callable(armer) or not bool(armer()):
+            return False
+        label = "Extrude" if key == "extrude" else "Bevel"
+        self.statusBar().showMessage(
+            f"{label} armed on the selected component. Drag the live viewport manipulator; Esc cancels.",
+            5000,
+        )
+        return True
+
     def _execute_map_studio_tool_belt_command(self, action_key: str) -> bool:
         """Execute a tool-belt action when the core dispatcher has a command."""
 
         if action_key == "texture_paint":
             self._show_map_studio_texture_paint_workflow()
+            return True
+        if self._try_arm_map_studio_component_tool(action_key):
             return True
         if action_key in {"stage_module", "install_module"}:
             values = self._open_map_studio_package_wizard(
@@ -6124,8 +6245,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         key = str(route or "map_studio").strip().lower()
         if key == "gmodeler":
             self.show_map_studio_geometry_tools()
-            self._set_map_studio_toolbar_edit_mode("Edit (GModeler)")
-            self._handle_map_studio_edit_mode_changed("Edit (GModeler)")
+            self._set_map_studio_toolbar_edit_mode("Multi-Component")
+            self._handle_map_studio_edit_mode_changed("Multi-Component")
         elif key == "terrain":
             self._set_map_studio_toolbar_edit_mode("Terrain")
             self._handle_map_studio_edit_mode_changed("Terrain")
@@ -6212,7 +6333,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._sync_map_studio_edit_mode_context(label)
         hover_modes = {
             "Object": "object",
-            "Edit (GModeler)": "",
+            "Multi-Component": "",
             "Texture Paint": "object",
             "Vertex": "vertex",
             "Edge": "edge",
@@ -6223,7 +6344,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.viewport_panel.set_map_studio_hover_probe(label in hover_modes, hover_modes.get(label, ""))
         descriptions = {
             "Object": "select, move, duplicate, and organize rooms, placements, lights, and module objects",
-            "Edit (GModeler)": "GModeler edit mode: hover any face, edge, or vertex and use RMB tools (no component switching)",
+            "Multi-Component": "automatically edit the nearest visible face, edge, or vertex; RMB opens the optional marking menu",
             "Texture Paint": "paint a unique project texture on the nearest visible face through diffuse UV0",
             "Vertex": "edit room and walkmesh vertices with snap, weld, flatten, mirror, and cleanup tools",
             "Edge": "edit seams, door or corridor borders, bridge edges, bevels, and rectangular cuts",
@@ -9800,6 +9921,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.statusBar().showMessage(message)
 
     def _move_authored_room_primitive(self, room_resref: str, primitive_name: str, world_delta: object) -> None:
+        selection = ((room_resref, primitive_name),)
         try:
             self.controller.move_authored_room_primitive(
                 room_resref=room_resref,
@@ -9807,12 +9929,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 world_delta=tuple(world_delta),
             )
         except Exception as exc:
+            self.viewport_panel.cancel_pending_room_primitive_commit_preview()
             QtWidgets.QMessageBox.warning(self, "Move Authored Room Primitive", str(exc))
             return
+        promoted = self.viewport_panel.promote_room_primitive_drag_preview(selection)
         self._refresh_map_studio_geometry_change(
             f"Moved room primitive {primitive_name}; previous exports/proofs are now stale.",
-            primitive_selection=((room_resref, primitive_name),),
+            primitive_selection=selection,
+            rebuild_viewport_model=not promoted,
+            refresh_scene_tree=not promoted,
         )
+        if promoted:
+            self._refresh_map_studio_selected_primitive_transform_overlay()
 
     def _authored_room_primitive_row(self, room_resref: str, primitive_name: str):
         room = str(room_resref or "").strip()
@@ -9828,7 +9956,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
     def _rotate_authored_room_primitive(self, room_resref: str, primitive_name: str, delta_degrees: float) -> None:
         row = self._authored_room_primitive_row(room_resref, primitive_name)
         if row is None:
+            self.viewport_panel.cancel_pending_room_primitive_commit_preview()
             return
+        selection = ((room_resref, primitive_name),)
         current = float(getattr(row, "rotation_degrees_z", 0.0) or 0.0)
         try:
             self.controller.set_authored_room_primitive_transform(
@@ -9837,17 +9967,25 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 rotation_degrees_z=current + float(delta_degrees),
             )
         except Exception as exc:
+            self.viewport_panel.cancel_pending_room_primitive_commit_preview()
             QtWidgets.QMessageBox.warning(self, "Rotate Authored Room Primitive", str(exc))
             return
+        promoted = self.viewport_panel.promote_room_primitive_drag_preview(selection)
         self._refresh_map_studio_geometry_change(
             f"Rotated room primitive {primitive_name}; previous exports/proofs are now stale.",
-            primitive_selection=((room_resref, primitive_name),),
+            primitive_selection=selection,
+            rebuild_viewport_model=not promoted,
+            refresh_scene_tree=not promoted,
         )
+        if promoted:
+            self._refresh_map_studio_selected_primitive_transform_overlay()
 
     def _scale_authored_room_primitive(self, room_resref: str, primitive_name: str, scale_multiplier: object) -> None:
         row = self._authored_room_primitive_row(room_resref, primitive_name)
         if row is None:
+            self.viewport_panel.cancel_pending_room_primitive_commit_preview()
             return
+        selection = ((room_resref, primitive_name),)
         current = tuple(float(value) for value in tuple(getattr(row, "scale", (1.0, 1.0, 1.0)) or (1.0, 1.0, 1.0))[:3])
         if len(current) != 3:
             current = (1.0, 1.0, 1.0)
@@ -9862,12 +10000,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 scale=updated,
             )
         except Exception as exc:
+            self.viewport_panel.cancel_pending_room_primitive_commit_preview()
             QtWidgets.QMessageBox.warning(self, "Scale Authored Room Primitive", str(exc))
             return
+        promoted = self.viewport_panel.promote_room_primitive_drag_preview(selection)
         self._refresh_map_studio_geometry_change(
             f"Scaled room primitive {primitive_name}; previous exports/proofs are now stale.",
-            primitive_selection=((room_resref, primitive_name),),
+            primitive_selection=selection,
+            rebuild_viewport_model=not promoted,
+            refresh_scene_tree=not promoted,
         )
+        if promoted:
+            self._refresh_map_studio_selected_primitive_transform_overlay()
 
     def _transform_authored_room_primitives(self, payload: object) -> None:
         data = dict(payload or {})
@@ -9889,11 +10033,20 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 world_pivot=tuple(data.get("world_pivot", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)),
             )
         except Exception as exc:
+            self.viewport_panel.cancel_pending_room_primitive_commit_preview()
             QtWidgets.QMessageBox.warning(self, "Transform Authored Room Primitives", str(exc))
             return
+        promoted = self.viewport_panel.promote_room_primitive_drag_preview(selection)
         verb = {"translate": "Moved", "rotate": "Rotated", "scale": "Scaled"}.get(mode, "Transformed")
         message = f"{verb} {len(selection)} room primitives as one selection; previous exports/proofs are now stale."
-        self._refresh_map_studio_geometry_change(message, primitive_selection=selection)
+        self._refresh_map_studio_geometry_change(
+            message,
+            primitive_selection=selection,
+            rebuild_viewport_model=not promoted,
+            refresh_scene_tree=not promoted,
+        )
+        if promoted:
+            self._refresh_map_studio_selected_primitive_transform_overlay()
 
     def _current_map_studio_room_primitive_identity(self) -> tuple[str, str] | None:
         data = self._map_studio_combo_data("roomPrimitiveTransformComboBox")
@@ -10241,6 +10394,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self.viewport_panel.set_authored_room_preview_model(preview)
         else:
             self._map_studio_topology_preview_source = None
+            self._map_studio_prepared_topology_preview = None
         if refresh_outlines:
             room_outlines = self.controller.authored_room_outline_geometry()
             self.viewport_panel.set_authored_room_outline_geometry(room_outlines)

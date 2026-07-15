@@ -675,7 +675,7 @@
     },
     {
         "project": "GhostRigger.Core.Scene",
-        "python_file_count": 107,
+        "python_file_count": 108,
         "files": [
             "src\\core\\level\\__init__.py",
             "src\\core\\level\\kmap_model.py",
@@ -737,6 +737,7 @@
             "src\\core\\modules\\map_studio_curve_guides.py",
             "src\\core\\modules\\map_studio_export_objects.py",
             "src\\core\\modules\\map_studio_hover_context.py",
+            "src\\core\\modules\\map_studio_live_topology_session.py",
             "src\\core\\modules\\map_studio_marking_menu_registry.py",
             "src\\core\\modules\\map_studio_modeling_tools.py",
             "src\\core\\modules\\map_studio_pie.py",
@@ -788,7 +789,7 @@
     },
     {
         "project": "GhostRigger.Core.Tools",
-        "python_file_count": 368,
+        "python_file_count": 369,
         "files": [
             "src\\adapters\\qt_viewport\\camera_gizmo_renderer.py",
             "src\\adapters\\qt_viewport\\camera_overlays.py",
@@ -916,6 +917,7 @@
             "src\\core\\modules\\map_studio_curve_guides.py",
             "src\\core\\modules\\map_studio_export_objects.py",
             "src\\core\\modules\\map_studio_hover_context.py",
+            "src\\core\\modules\\map_studio_live_topology_session.py",
             "src\\core\\modules\\map_studio_marking_menu_registry.py",
             "src\\core\\modules\\map_studio_modeling_tools.py",
             "src\\core\\modules\\map_studio_pie.py",
@@ -1186,7 +1188,7 @@
     },
     {
         "project": "GhostRigger.Core.Workflow",
-        "python_file_count": 132,
+        "python_file_count": 134,
         "files": [
             "src\\autorig\\__init__.py",
             "src\\autorig\\accurig.py",
@@ -1317,6 +1319,8 @@
             "src\\core\\workflow\\__init__.py",
             "src\\core\\workflow\\_workflow_base.py",
             "src\\core\\workflow\\composite_workflow.py",
+            "src\\core\\workflow\\legacy_module_repair.py",
+            "src\\core\\workflow\\legacy_texture_port.py",
             "src\\core\\workflow\\map_studio_lightmap_apply.py",
             "src\\core\\workflow\\placeable_builder_service.py",
             "src\\core\\workflow\\plcaa_manual_proof_kit.py"

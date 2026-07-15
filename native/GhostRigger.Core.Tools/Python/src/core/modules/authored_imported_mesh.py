@@ -501,6 +501,63 @@ def compile_imported_mesh_room_geometry(primitive: ImportedMeshRoomPrimitive) ->
 # Face operations
 
 
+def resolve_imported_mesh_face_target(
+    primitive: ImportedMeshRoomPrimitive,
+    mesh_role: str,
+    face_index: int,
+    target: str,
+) -> tuple[int, ...]:
+    """Resolve a marking-menu face target without broadening it accidentally.
+
+    ``Material Region`` is the connected same-material flood fill, ``Same
+    Texture Faces`` is the whole material slot, and ``Room Island`` is the
+    connected geometric shell.  This distinction mirrors the labels shown to
+    users and prevents a local edit from silently mutating every room face.
+    """
+
+    surface_index = imported_mesh_surface_index_for_role(primitive, mesh_role)
+    if surface_index < 0:
+        raise ValueError(f"Unknown imported mesh surface role: {mesh_role!r}")
+    surface = primitive.surfaces[surface_index]
+    selected = int(face_index)
+    if not 0 <= selected < len(surface.faces):
+        raise ValueError(f"Face index {face_index} out of range for surface {mesh_role}.")
+    key = " ".join(str(target or "Single Face").strip().lower().split())
+    if key in {"single face", "this face", "each face", "face corners"}:
+        return (selected,)
+    if key in {"all faces", "all mesh"}:
+        return tuple(range(len(surface.faces)))
+
+    face_mats = (
+        tuple(int(value) for value in surface.face_mats)
+        if len(surface.face_mats) == len(surface.faces)
+        else (0,) * len(surface.faces)
+    )
+    material = face_mats[selected]
+    if key == "same texture faces":
+        return tuple(index for index, value in enumerate(face_mats) if value == material)
+
+    topology = MeshTopology.build(surface.vertices, surface.faces)
+    if key == "room island":
+        for component in topology.components():
+            if selected in component.faces:
+                return tuple(sorted(int(index) for index in component.faces))
+        return (selected,)
+    if key == "material region":
+        pending = [selected]
+        region = {selected}
+        while pending:
+            current = pending.pop()
+            for neighbor in topology.geometric_face_to_faces.get(current, ()):
+                neighbor_index = int(neighbor)
+                if neighbor_index in region or face_mats[neighbor_index] != material:
+                    continue
+                region.add(neighbor_index)
+                pending.append(neighbor_index)
+        return tuple(sorted(region))
+    return (selected,)
+
+
 def _compact_surface(surface: ImportedMeshSurface, faces: list[Face]) -> ImportedMeshSurface:
     """Compact through the shared stable remap while preserving all channels."""
 
@@ -778,6 +835,11 @@ def extrude_imported_mesh_faces(
         raise ValueError("Extrude requires a manifold selected region; repair non-manifold edges first.")
 
     vertices, faces, uvs, normals, uvs_lm = _surface_arrays(surface)
+    source_face_mats = (
+        tuple(int(value) for value in surface.face_mats)
+        if len(surface.face_mats) == len(surface.faces)
+        else (0,) * len(surface.faces)
+    )
 
     face_normals = {index: topology.face_normals[index] for index in wanted}
     region_normal = _vec_normalized(
@@ -824,14 +886,13 @@ def extrude_imported_mesh_faces(
 
     # The shared topology view recognizes UV/hard-normal seam copies as one
     # geometric edge, so internal selected edges do not sprout duplicate walls.
-    boundary = [
-        (row.origin, row.destination)
-        for row in topology.region_boundary_half_edges(wanted)
-    ]
+    boundary = topology.region_boundary_half_edges(wanted)
 
     side_faces: list[Face] = []
+    side_face_mats: list[int] = []
     v_extent = abs(offset_distance) / max(1.0e-6, tile)
-    for start, end in boundary:
+    for boundary_edge in boundary:
+        start, end = boundary_edge.origin, boundary_edge.destination
         pa = surface.vertices[start]
         pb = surface.vertices[end]
         pa_top = vertices[cap_map[start]]
@@ -846,13 +907,22 @@ def extrude_imported_mesh_faces(
         if uvs_lm:
             uvs_lm.extend((uvs_lm[start], uvs_lm[end], uvs_lm[cap_map[end]], uvs_lm[cap_map[start]]))
         side_faces.extend(((base, base + 1, base + 2), (base, base + 2, base + 3)))
+        side_face_mats.extend((source_face_mats[boundary_edge.face],) * 2)
 
-    kept_faces = [face for index, face in enumerate(surface.faces) if index not in set(wanted)]
+    wanted_set = set(wanted)
+    kept_indices = [index for index in range(len(surface.faces)) if index not in wanted_set]
+    kept_faces = [surface.faces[index] for index in kept_indices]
     new_faces = kept_faces + cap_faces + side_faces
+    new_face_mats = (
+        [source_face_mats[index] for index in kept_indices]
+        + [source_face_mats[index] for index in wanted]
+        + side_face_mats
+    )
     rebuilt = replace(
         surface,
         vertices=tuple(vertices),
         faces=tuple(new_faces),
+        face_mats=tuple(new_face_mats),
         uvs=tuple(uvs),
         normals=tuple(normals),
         uvs_lm=tuple(uvs_lm),
@@ -886,7 +956,13 @@ def inset_imported_mesh_faces(
     _validate_face_indices(surface, wanted, role=mesh_role)
 
     vertices, faces, uvs, normals, uvs_lm = _surface_arrays(surface)
+    source_face_mats = (
+        tuple(int(value) for value in surface.face_mats)
+        if len(surface.face_mats) == len(surface.faces)
+        else (0,) * len(surface.faces)
+    )
     replacement_faces: list[Face] = []
+    replacement_face_mats: list[int] = []
     for face_index in wanted:
         a, b, c = surface.faces[face_index]
         pa, pb, pc = vertices[a], vertices[b], vertices[c]
@@ -937,12 +1013,17 @@ def inset_imported_mesh_faces(
                 (c, ia, ic),
             )
         )
-    kept_faces = [face for index, face in enumerate(surface.faces) if index not in set(wanted)]
+        replacement_face_mats.extend((source_face_mats[face_index],) * 7)
+    wanted_set = set(wanted)
+    kept_indices = [index for index in range(len(surface.faces)) if index not in wanted_set]
+    kept_faces = [surface.faces[index] for index in kept_indices]
     new_faces = kept_faces + replacement_faces
+    new_face_mats = [source_face_mats[index] for index in kept_indices] + replacement_face_mats
     rebuilt = replace(
         surface,
         vertices=tuple(vertices),
         faces=tuple(new_faces),
+        face_mats=tuple(new_face_mats),
         uvs=tuple(uvs),
         normals=tuple(normals),
         uvs_lm=tuple(uvs_lm),
@@ -959,7 +1040,14 @@ def move_imported_mesh_faces(
     face_indices: tuple[int, ...] | list[int],
     delta: Vec3,
 ) -> ImportedMeshRoomPrimitive:
-    """Translate the vertices of the target faces (shared vertices drag neighbors)."""
+    """Translate target-face points and every co-located seam copy.
+
+    KOTOR room meshes commonly split one geometric point into several raw
+    vertices for UV, lightmap, normal, or material seams.  Moving only the raw
+    indices referenced by a selected triangle opens cracks along those seams.
+    Face movement therefore follows the same position-welded policy as the
+    edge and vertex manipulators below.
+    """
 
     offset = tuple(float(v) for v in tuple(delta)[:3])
     if _vec_length(offset) <= 1.0e-9:
@@ -970,15 +1058,10 @@ def move_imported_mesh_faces(
     surface = primitive.surfaces[surface_index]
     wanted = tuple(sorted({int(index) for index in face_indices}))
     _validate_face_indices(surface, wanted, role=mesh_role)
-    moved: set[int] = set()
+    moved_positions: set[tuple[float, float, float]] = set()
     for face_index in wanted:
-        moved.update(surface.faces[face_index])
-    vertices = tuple(
-        _vec_add(vertex, offset) if index in moved else vertex for index, vertex in enumerate(surface.vertices)
-    )
-    surfaces = list(primitive.surfaces)
-    surfaces[surface_index] = replace(surface, vertices=vertices)
-    return replace(primitive, surfaces=tuple(surfaces))
+        moved_positions.update(_position_key(surface.vertices[index]) for index in surface.faces[face_index])
+    return _translate_positions(primitive, list(moved_positions), offset)
 
 
 # ---------------------------------------------------------------------------
@@ -1143,6 +1226,11 @@ def extrude_imported_mesh_edge(
     end = surface.vertices[face[b_corner]]
     tile = float(tile_size) if tile_size > 0.0 else matched_uv_tile_size(primitive, texture=surface.texture)
     vertices, faces, uvs, normals, uvs_lm = _surface_arrays(surface)
+    source_face_mats = (
+        tuple(int(value) for value in surface.face_mats)
+        if len(surface.face_mats) == len(surface.faces)
+        else (0,) * len(surface.faces)
+    )
     edge_length = _vec_length(_vec_sub(end, start))
     u_extent = edge_length / max(1.0e-6, tile)
     v_extent = _vec_length(offset) / max(1.0e-6, tile)
@@ -1165,6 +1253,7 @@ def extrude_imported_mesh_edge(
         surface,
         vertices=tuple(vertices),
         faces=tuple(faces),
+        face_mats=source_face_mats + (source_face_mats[int(face_index)],) * 2,
         uvs=tuple(uvs),
         normals=tuple(normals),
         uvs_lm=tuple(uvs_lm),
@@ -1418,6 +1507,11 @@ def bevel_imported_mesh_edge(
     distance = min(requested, maximum) if clamp_overlap else requested
 
     vertices, faces, uvs, normals, uvs_lm = _surface_arrays(surface)
+    source_face_mats = (
+        tuple(int(value) for value in surface.face_mats)
+        if len(surface.face_mats) == len(surface.faces)
+        else (0,) * len(surface.faces)
+    )
     component_faces = next(
         (
             set(component.faces)
@@ -1642,6 +1736,7 @@ def bevel_imported_mesh_edge(
         surface,
         vertices=tuple(vertices),
         faces=tuple(rewritten_faces),
+        face_mats=source_face_mats + (source_face_mats[selected_face_index],) * len(generated_faces),
         uvs=tuple(uvs),
         normals=tuple(normals),
         uvs_lm=tuple(uvs_lm),
@@ -2550,6 +2645,7 @@ __all__ = [
     "move_imported_mesh_vertex",
     "planar_uvs_for_vertices",
     "prepare_imported_mesh_for_static_runtime_rebuild",
+    "resolve_imported_mesh_face_target",
     "set_imported_mesh_face_texture",
     "split_imported_mesh_edge",
     "split_imported_mesh_face",

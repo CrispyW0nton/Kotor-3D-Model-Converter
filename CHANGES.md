@@ -9,6 +9,150 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-07-14
+
+### [2026-07-14] T2907: Made Map Studio's first Maya-style modeling slice truthful and live
+
+Owner: LordVaderCW
+
+T###: T2907
+
+Subsystem: Map Studio component modeling, authored primitives, resident viewport
+preview, KMAP topology channels, picking invalidation, and native Python payloads
+
+Intersects: the ongoing Map Studio/PIE performance work, GModeler compatibility
+surface, and the shared dirty worktree.
+
+- Completed a clean-room Maya 2025.3.1 study with Ghidra 12.1.2 plus visible,
+  recorded Maya workflows. The evidence establishes a common
+  begin/update-preview/commit-or-cancel transaction, immutable preview base,
+  depth-correct component targeting, retained multi-object selection, editable
+  primitive history, one logical undo item, and dirty-region refresh as the
+  Map Studio interaction contract. The user's unsaved Maya scene was restored
+  exactly: `pCube1`, selection, topology/history, camera matrices, modified
+  flag, Custom shelf, Modeling Toolkit, and Attribute Editor placement all
+  match the pre-study snapshot, and every temporary probe was removed.
+- Kept the correct topology kernels but retired GModeler as the primary visible
+  modeling identity. The automatic mode is now `Multi-Component`; the marking
+  menu remains an optional shortcut. The obvious Extrude and Bevel controls now
+  arm the same live component gestures when a face/edge is active, with the
+  floor-plan path retained only as an explicit fallback.
+- Added prepared face-extrude and edge-bevel sessions. Topology, generated face
+  templates, UV0, lightmap UV2, normals, and material inheritance are prepared
+  once per gesture; pointer frames interpolate only affected rows from the
+  immutable source. The 65x65/8,192-triangle face-extrude evaluator now averages
+  `0.383 ms/frame` on this workstation, down from roughly `200 ms/frame` for
+  full operator reconstruction, while release still executes the authoritative
+  operator and one KMAP transaction.
+- Preserved per-face material slots through face/edge extrude, inset, bevel,
+  preview, promotion, and compaction. Face target scopes now distinguish
+  Single, All, Same Texture, Material Region, and connected Room Island.
+  Unsupported multi-edge and false target scopes are blocked or removed instead
+  of silently editing one edge or the whole surface.
+- Kept component previews and object-transform results resident. Drag release
+  promotes the already-visible final nodes instead of restoring the old mesh
+  and rebuilding the renderer; failed commits roll back. Topology preview and
+  promotion now invalidate the complete hover cache/key/grid so orange hover
+  cannot keep selecting pre-edit geometry.
+- Added Maya-style Plane/Floor and Cube construction history subdivisions,
+  corrected cube/wall outward winding, hard per-face normals, and nondegenerate
+  UV islands, and added editable Sphere, Cone, and Torus primitives. Visual
+  floor subdivisions do not inflate the stable four-vertex/two-triangle WOK.
+  Old KMAP files load with subdivision defaults of one.
+
+Affected areas: `authored_imported_mesh.py`,
+`map_studio_live_topology_session.py`, `authored_room_primitives.py`,
+`authored_room_operations.py`, `authored_room_composition.py`,
+`authored_module_kmap_bridge.py`, `authored_module_preview_model.py`,
+`map_studio_marking_menu_registry.py`, `map_studio_modeling_tools.py`,
+`map_studio_tool_action_dispatch.py`, `module_editor_toolbar.py`,
+`module_editor_viewport_panel.py`, `module_editor_window.py`, Scene/Tools/GUI
+Display payload manifests and Visual Studio resource lists, focused tests, the
+visible audit under `Saved/Audits/maya_modeling_parity_20260714/`, and the
+clean-room Ghidra contract under
+`Workspaces/Ghidra/projects/active/maya-2025-modeling/exports/`.
+
+Verification: targeted `py_compile`; 30 topology/live-session/primitive tests;
+four focused routing, resident-preview, and marking-menu tests; the isolated
+resident object-transform test; all 21 native Python payload tests; byte-equal
+Scene/Tools and GUI Display/Tools mirrors; 65x65 evaluator benchmark at
+`0.383 ms/frame`; successful `Debug|x64` native-host build of
+`GhostStudio.exe` with all 18 payload DLLs staged and verified; actual Debug
+application startup and visible Map Studio launch; visible Create menu showing
+Plane, Cube, Cylinder, Sphere, Cone, and Torus; and creation/render of a real
+authored `grdev01` room through the running UI. A parallel GUI-test attempt
+provoked a ModernGL access violation from simultaneous GPU contexts; every
+same assertion passed when rerun sequentially. This is not retail-KOTOR proof:
+WOK regeneration/review for arbitrary render-topology edits and the user-run
+`plcaa` export/warp/live-log loop remain required before an engine-ready claim.
+
+### [2026-07-14] T2801/T2806: Legacy community modules hydrate, repair, and cross-port safely
+
+Owner: LordVaderCW
+
+T###: T2801, T2806
+
+Subsystem: Map Studio module hydration, legacy-room recovery, MDLOps 1.0.2
+conversion, exact K1/K2 texture staging, and module regression fixtures
+
+Intersects: the MediaFire Q_SellOut/Marius_Things preservation audit, the
+authored-module exporter, native Python payload ownership, and the shared dirty
+worktree.
+
+- Added a lazy, package-bounded loose-resource overlay so metadata-only MODs can
+  hydrate their companion `Override`, `BINS`, and binary room resources without
+  scanning or modifying a game installation. Map Studio now recovers legacy
+  ASCII LYT files with blank rows, resolves loose LYT/VIS/PTH resources, and
+  infers K1/K2 from room headers when a capsule has no model payload.
+- Preserved the exact imported GIT, IFO, and unknown ARE data through KMAP. An
+  export patches only Map Studio-owned placement lists, entry routing, and area
+  lists, instead of replacing scripts, globals, time/VO data, or unrecognized
+  fields in a legacy module.
+- Added an isolated Workflow-owned room and module repair pipeline. Every
+  recoverable room is decompiled/recompiled separately with MDLOps 1.0.2,
+  source/output hashes and command logs are recorded, collisions are refused,
+  and the result is gated on raw MDL/MDX/WOK structure, node-header `+8` zeroes,
+  embedded AABB presence, controller parity, closed WOK perimeter loops, and
+  packaged-MOD readback. A room missing only its embedded AABB receives one
+  controller-free AABB mesh sourced from its own WOK; no render topology is
+  invented.
+- Added deterministic missing LYT/VIS/PTH generation and an exact texture-port
+  workflow. Cross-game ports copy a vanilla TPC only when the target game lacks
+  the named texture, follow TXI environment/bump dependencies, record donor
+  hashes, and refuse conflicts or look-alike substitutions.
+- Audited all 19 discovered source MOD files and 30 loose LYT layouts in both
+  game modes. All 38 MOD cases and all 60 LYT cases now import and save/reopen
+  as KMAP. Sixteen identities now have isolated, editable K1/K2 candidates
+  spanning 72 recovered room units; `vul801` is retained as one non-renderable
+  structural reference, and seven identities have explicit blocker dossiers
+  instead of guessed room geometry or metadata. Conflicting alternate
+  worktrees are recorded separately from their promoted authorities.
+- Treated walkmesh containment as the engine contract it is: repaired closed
+  perimeter records around walkable floor faces, while deliberately avoiding
+  vertical wall or ceiling WOK slabs that can freeze KOTOR movement. Layouts
+  whose source room offsets are all zero and disconnected path graphs remain
+  clearly marked for manual placement and in-game movement proof.
+
+Affected areas: `native/GhostRigger.Core.Resources/Python/src/core/assets/resource_manager.py`,
+`native/GhostRigger.Core.Scene/Python/src/core/modules/`, mirrored
+`GhostRigger.Core.Tools`/`GhostRigger.Runtime.Shared` payloads,
+`native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py`,
+`native/GhostRigger.Core.Workflow/Python/src/core/workflow/legacy_module_repair.py`,
+`legacy_texture_port.py`, `scripts/repair_legacy_modules.py`,
+`scripts/prove_legacy_module_mapstudio_roundtrip.py`, focused tests, audit
+evidence under `Saved/Audits/mediafire_module_conversion/`, and preserved
+outputs under `C:\Users\NewAdmin\Documents\KotorMods\Modules\Converted`.
+
+Verification: targeted `py_compile`; 16 focused repair, texture, importer,
+metadata, AABB, and native-payload tests; the authorized collection-wide Map
+Studio import/save/reopen sweep; candidate-specific MDLOps/hash/raw-structure,
+texture-coverage, packaged-MOD, and editable KMAP proofs; and a successful
+Debug x64 native-host rebuild. The rebuilt `GhostStudio.exe` was visibly
+launched, then used to import the repaired ten-room K2 `501qgm` candidate and
+the original metadata-only `clubrb.mod` with its sibling loose rooms. No
+candidate was installed into K1/K2 for retail warp/movement proof, so editor
+and structural success is not presented as engine proof.
+
 ## 2026-07-13
 
 ### [2026-07-13] T3401-T3406: GhostScripter preserved in GhostStudio Scripting Suite

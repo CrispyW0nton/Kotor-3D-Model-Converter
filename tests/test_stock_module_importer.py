@@ -465,6 +465,203 @@ def test_map_resource_type_constants_cover_lyt_vis_and_pth() -> None:
     }
 
 
+def test_resource_manager_indexes_legacy_loose_module_bundle_lazily(tmp_path: Path) -> None:
+    """Classic Modules+Override releases resolve without loading the bundle eagerly."""
+
+    _configure_native_python_roots()
+    from src.core.assets.resource_manager import RES_LYT, RES_MDL, ResourceManager
+
+    override = tmp_path / "Override"
+    source = tmp_path / "Source"
+    binaries = tmp_path / "BINS"
+    override.mkdir()
+    source.mkdir()
+    binaries.mkdir()
+    (source / "legacy01.lyt").write_bytes(b"source-layout")
+    (override / "legacy01.lyt").write_bytes(b"override-layout")
+    (override / "legacy01_01a.mdl").write_bytes(b"binary-model")
+    (source / "legacy01_01b.mdl").write_bytes(b"newmodel legacy01_01b")
+    (binaries / "legacy01_01b.mdl").write_bytes(b"\x00\x00\x00\x00binary-model")
+    (override / "readme.pdf").write_bytes(b"not-a-resource")
+
+    resources = ResourceManager()
+    assert resources.add_loose_overlay(str(tmp_path), recursive=True) == 5
+    assert resources.get_strict("legacy01", RES_LYT, "K1") == b"override-layout"
+    assert resources.get_strict("legacy01_01a", RES_MDL, "K2") == b"binary-model"
+    assert resources.overlay_source_path("legacy01", RES_LYT) == str(override / "legacy01.lyt")
+    assert resources.overlay_source_path("legacy01_01b", RES_MDL) == str(binaries / "legacy01_01b.mdl")
+    assert resources.overlay_candidate_paths("legacy01_01b", RES_MDL) == (
+        str(source / "legacy01_01b.mdl"),
+        str(binaries / "legacy01_01b.mdl"),
+    )
+    # The index retains paths, not the potentially huge model/texture bytes.
+    assert all(isinstance(path, Path) for path in resources._loose_overlay.values())
+    resources.clear_module_overlay()
+    assert resources.get_strict("legacy01", RES_LYT, "K1") is None
+
+
+def test_map_studio_detects_game_from_loose_legacy_room_header(tmp_path: Path) -> None:
+    """A metadata-only MOD inherits its game from sibling Override models."""
+
+    _configure_native_python_roots()
+    from pykotor.resource.formats.erf import ERF, ERFType, write_erf
+    from pykotor.resource.type import ResourceType
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    package = tmp_path / "RecoveredPackage"
+    modules = package / "Modules"
+    override = package / "Override"
+    modules.mkdir(parents=True)
+    override.mkdir(parents=True)
+    capsule = ERF(ERFType.MOD)
+    capsule.set_data("readme", ResourceType.TXT, b"metadata-only legacy module")
+    module_path = modules / "legacy.mod"
+    write_erf(capsule, module_path)
+
+    header = bytearray(16)
+    header[12:16] = int(4_285_200).to_bytes(4, "little")
+    (override / "legacy_room.mdl").write_bytes(header)
+
+    assert ModuleEditorWindow._detect_module_game(object(), module_path) == "K2"
+
+
+def test_auxiliary_resolver_uses_metadata_mod_loose_companions(tmp_path: Path) -> None:
+    """LYT/VIS/PTH beside a metadata-only MOD retain exact companion provenance."""
+
+    _configure_native_python_roots()
+    from pykotor.resource.formats.erf import ERF, ERFType, write_erf
+    from pykotor.resource.formats.gff import bytes_gff
+    from pykotor.resource.formats.gff.gff_data import GFF, GFFContent
+    from pykotor.resource.type import ResourceType
+    from src.core.assets.resource_manager import ResourceManager
+    from src.core.modules.stock_module_importer import resolve_stock_module_auxiliary_resources
+
+    modules = tmp_path / "Modules"
+    override = tmp_path / "Override"
+    modules.mkdir()
+    override.mkdir()
+    ifo = GFF(GFFContent.IFO)
+    ifo.root.set_resref("Mod_Entry_Area", "legacy01")
+    are = GFF(GFFContent.ARE)
+    capsule = ERF(ERFType.MOD)
+    capsule.set_data("legacy01", ResourceType.ARE, bytes_gff(are))
+    capsule.set_data("module", ResourceType.IFO, bytes_gff(ifo))
+    module_path = modules / "legacy01.mod"
+    write_erf(capsule, module_path)
+
+    expected = {
+        "lyt": b"#MAXLAYOUT ASCII\nbeginlayout\nroomcount 0\ndonelayout\n",
+        "vis": b"",
+        "pth": b"GFF V3.2 placeholder",
+    }
+    for extension, data in expected.items():
+        (override / f"legacy01.{extension}").write_bytes(data)
+
+    resources = ResourceManager()
+    resources.add_module_overlay(str(module_path))
+    resources.add_loose_overlay(str(tmp_path), recursive=True)
+    resolved = resolve_stock_module_auxiliary_resources(
+        module_resref="legacy01",
+        game="K1",
+        rim_path=module_path,
+        resource_provider=resources,
+    )
+    assert resolved.lyt_bytes == expected["lyt"]
+    # Empty VIS is correctly treated as absent by the importer contract.
+    assert resolved.vis_bytes is None
+    assert resolved.pth_bytes == expected["pth"]
+    assert resolved.provenance["lyt"]["source_layer"] == "module_companion"
+    assert resolved.provenance["lyt"]["source_path"] == str(override / "legacy01.lyt")
+    assert not any("legacy01.lyt" in warning for warning in resolved.warnings)
+
+
+def test_legacy_ascii_lyt_blank_lines_recover_declared_room_rows() -> None:
+    """Map Studio accepts old MAX LYT whitespace without weakening row validation."""
+
+    _configure_native_python_roots()
+    from src.core.modules.stock_module_importer import lyt_room_positions_from_resource
+
+    payload = b"""#MAXLAYOUT ASCII
+filedependancy legacy.max
+beginlayout
+  roomcount 2
+    legacy_01a 1.0 2.0 3.0
+	legacy_01b -4.0 5.5 0.0
+
+
+  trackcount 0
+  obstaclecount 0
+  doorhookcount 0
+donelayout
+"""
+    assert lyt_room_positions_from_resource(payload) == {
+        "legacy_01a": (1.0, 2.0, 3.0),
+        "legacy_01b": (-4.0, 5.5, 0.0),
+    }
+
+
+def test_preserved_git_and_ifo_patch_only_map_studio_owned_fields() -> None:
+    """Legacy metadata repair retains ambient audio and module script hooks."""
+
+    _configure_native_python_roots()
+    from pykotor.resource.formats.gff import GFF, bytes_gff, read_gff
+    from pykotor.resource.formats.gff.gff_data import GFFContent, GFFList, GFFStruct
+    from src.core.modules.authored_module_metadata import patch_preserved_stock_ifo_bytes
+    from src.core.modules.authored_module_objects import (
+        AuthoredGameplayPlacement,
+        ModuleEntryPoint,
+        patch_preserved_stock_git_bytes,
+    )
+
+    git = GFF(GFFContent.GIT)
+    git.root.set_uint8("UseTemplates", 1)
+    area_properties = GFFStruct(100)
+    area_properties.set_int32("AmbientSndDay", 15)
+    area_properties.set_int32("MusicBattle", 41)
+    area_properties.set_int32("MusicDelay", 1234)
+    git.root.set_struct("AreaProperties", area_properties)
+    git.root.set_string("LegacyRootField", "keep-me")
+    for label in (
+        "CameraList", "Creature List", "Door List", "TriggerList", "Encounter List",
+        "SoundList", "StoreList", "List", "Placeable List", "WaypointList",
+    ):
+        git.root.set_list(label, GFFList())
+    patched_git = read_gff(
+        patch_preserved_stock_git_bytes(
+            bytes_gff(git),
+            AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref="clubrb")),
+            game="K2",
+        )
+    )
+    patched_area = patched_git.root.acquire("AreaProperties", None)
+    assert patched_area.acquire("AmbientSndDay", 0) == 15
+    assert patched_area.acquire("MusicBattle", 0) == 41
+    assert patched_area.acquire("MusicDelay", 0) == 1234
+    assert patched_git.root.acquire("LegacyRootField", "") == "keep-me"
+
+    ifo = GFF(GFFContent.IFO)
+    ifo.root.set_resref("Mod_Entry_Area", "wrongarea")
+    ifo.root.set_single("Mod_Entry_X", 1.0)
+    ifo.root.set_single("Mod_Entry_Y", 2.0)
+    ifo.root.set_single("Mod_Entry_Z", 3.0)
+    ifo.root.set_single("Mod_Entry_Dir_X", 1.0)
+    ifo.root.set_single("Mod_Entry_Dir_Y", 0.0)
+    ifo.root.set_resref("Mod_OnHeartbeat", "legacy_hook")
+    area_list = GFFList()
+    area_list.add(6).set_resref("Area_Name", "wrongarea")
+    ifo.root.set_list("Mod_Area_list", area_list)
+    source_ifo = bytes_gff(ifo)
+    entry = ModuleEntryPoint(area_resref="clubrb", position=(4.0, 5.0, 6.0), facing=math.pi / 2.0)
+    patched_ifo_bytes = patch_preserved_stock_ifo_bytes(source_ifo, entry, area_resrefs=("clubrb",))
+    patched_ifo = read_gff(patched_ifo_bytes)
+    assert str(patched_ifo.root.acquire("Mod_Entry_Area", "")).lower() == "clubrb"
+    assert patched_ifo.root.acquire("Mod_Entry_X", 0.0) == pytest.approx(4.0)
+    assert patched_ifo.root.acquire("Mod_Entry_Dir_X", 0.0) == pytest.approx(0.0, abs=1.0e-6)
+    assert patched_ifo.root.acquire("Mod_Entry_Dir_Y", 0.0) == pytest.approx(1.0, abs=1.0e-6)
+    assert str(patched_ifo.root.acquire("Mod_OnHeartbeat", "")).lower() == "legacy_hook"
+    assert str(patched_ifo.root.acquire("Mod_Area_list", [])[0].acquire("Area_Name", "")).lower() == "clubrb"
+
+
 def test_k2_001ebo_controller_import_preserves_bif_lyt_vis_and_pth() -> None:
     if not (_K2_ROOT / "Modules/001ebo.rim").is_file():
         import pytest
@@ -523,31 +720,47 @@ def test_k2_001ebo_controller_import_preserves_bif_lyt_vis_and_pth() -> None:
         for room in project.rooms
     } == expected_visibility
     stock_resources = project.extra["stock_resources"]
-    assert set(stock_resources) == {"are", "lyt", "vis", "pth"}
+    assert set(stock_resources) == {"are", "git", "ifo", "lyt", "vis", "pth"}
     for restype, source in (
         ("are", (_K2_ROOT / "Modules/001ebo.rim")),
+        ("git", (_K2_ROOT / "Modules/001ebo.rim")),
+        ("ifo", (_K2_ROOT / "Modules/001ebo.rim")),
         ("lyt", lyt_resource.data),
         ("vis", vis_resource.data),
         ("pth", pth_resource.data),
     ):
-        if restype == "are":
+        if restype in {"are", "git", "ifo"}:
             from pykotor.extract.capsule import LazyCapsule
 
-            source = LazyCapsule(source).resource("001ebo", ResourceType.ARE)
+            source = LazyCapsule(source).resource(
+                "module" if restype == "ifo" else "001ebo",
+                {"are": ResourceType.ARE, "git": ResourceType.GIT, "ifo": ResourceType.IFO}[restype],
+            )
             assert source is not None
         record = stock_resources[restype]
         restored = base64.b64decode(record["data"])
         assert restored == source
         assert record["size"] == len(source)
         assert record["sha256"] == hashlib.sha256(source).hexdigest()
-        assert record["resref"] == "001ebo"
+        assert record["resref"] == ("module" if restype == "ifo" else "001ebo")
         assert record["game"] == "K2"
         assert record["module_resref"] == "001ebo"
     assert stock_resources["lyt"]["source_layer"] == "chitin"
-    assert stock_resources["vis"]["source_layer"] == "chitin"
+    assert stock_resources["vis"]["source_layer"] in {"chitin", "override"}
     assert stock_resources["pth"]["source_layer"] == "module"
     assert stock_resources["pth"]["source_archive"].lower() == "001ebo_s.rim"
     assert project.extra["stock_pth_preserved"] is True
+    assert project.extra["stock_git_preserved"] is True
+    assert project.extra["stock_ifo_preserved"] is True
+
+    from src.core.modules.authored_module_export import build_authored_module
+
+    unedited_build = build_authored_module(project)
+    assert unedited_build.resources[("001ebo", "git")].data == base64.b64decode(stock_resources["git"]["data"])
+    assert unedited_build.resources[("module", "ifo")].data == base64.b64decode(stock_resources["ifo"]["data"])
+    assert next(
+        item.source for item in unedited_build.packaged_resources if item.key == ("001ebo", "git")
+    ) == "map_studio:stock:git_preserved"
 
     assert any("001ebo17" in set(room.visible_rooms) for room in project.rooms)
     deleted, delete_message = controller.delete_map_studio_rooms(("001ebo17",))

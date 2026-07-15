@@ -82,12 +82,15 @@ from .authored_terrain_builder import (
 )
 from .authored_room_primitives import (
     ArchPrimitive,
+    ConePrimitive,
     CubePrimitive,
     CylinderPrimitive,
     DoorFramePrimitive,
     FloorPrimitive,
     RampPrimitive,
+    SpherePrimitive,
     StairsPrimitive,
+    TorusPrimitive,
     WallPrimitive,
     PrimitiveMaterial,
 )
@@ -233,6 +236,9 @@ _COMPOSITION_PRIMITIVE_KINDS: tuple[AuthoredCompositionPrimitiveKind, ...] = (
     AuthoredCompositionPrimitiveKind("ramp", "Ramp", "A sloped walkable ramp that contributes WOK faces.", creates_walkmesh=True),
     AuthoredCompositionPrimitiveKind("stairs", "Stairs", "A visual staircase with a walkable ramp-style WOK proxy.", creates_walkmesh=True),
     AuthoredCompositionPrimitiveKind("cylinder", "Cylinder", "A round column or pedestal primitive."),
+    AuthoredCompositionPrimitiveKind("sphere", "Sphere", "A Maya-style UV sphere with editable axis and height subdivisions."),
+    AuthoredCompositionPrimitiveKind("cone", "Cone", "A capped Maya-style cone with editable side and cap subdivisions."),
+    AuthoredCompositionPrimitiveKind("torus", "Torus", "A Maya-style torus with editable ring and tube subdivisions."),
     AuthoredCompositionPrimitiveKind("door_frame", "Door Frame", "A rectangular doorway frame primitive for transition and portal blockout."),
     AuthoredCompositionPrimitiveKind("arch", "Arch", "A curved arch primitive for room entrances and visual portal silhouettes."),
 )
@@ -652,6 +658,8 @@ def _primitive_dimensions(primitive: Any) -> tuple[AuthoredCompositionPrimitiveD
         return (
             _dimension("width", "Width", base.width),
             _dimension("depth", "Depth", base.depth),
+            _dimension("subdivisions_width", "Width Subdivisions", base.subdivisions_width, minimum=1.0, maximum=128.0, step=1.0, suffix="", integer=True),
+            _dimension("subdivisions_depth", "Depth Subdivisions", base.subdivisions_depth, minimum=1.0, maximum=128.0, step=1.0, suffix="", integer=True),
         )
     if isinstance(base, WallPrimitive):
         return (
@@ -664,6 +672,9 @@ def _primitive_dimensions(primitive: Any) -> tuple[AuthoredCompositionPrimitiveD
             _dimension("size_x", "Size X", base.size[0]),
             _dimension("size_y", "Size Y", base.size[1]),
             _dimension("size_z", "Size Z", base.size[2]),
+            _dimension("subdivisions_x", "X Subdivisions", base.subdivisions_x, minimum=1.0, maximum=128.0, step=1.0, suffix="", integer=True),
+            _dimension("subdivisions_y", "Y Subdivisions", base.subdivisions_y, minimum=1.0, maximum=128.0, step=1.0, suffix="", integer=True),
+            _dimension("subdivisions_z", "Z Subdivisions", base.subdivisions_z, minimum=1.0, maximum=128.0, step=1.0, suffix="", integer=True),
         )
     if isinstance(base, RampPrimitive):
         return (
@@ -683,6 +694,27 @@ def _primitive_dimensions(primitive: Any) -> tuple[AuthoredCompositionPrimitiveD
             _dimension("radius", "Radius", base.radius),
             _dimension("height", "Height", base.height),
             _dimension("segments", "Segments", base.segments, minimum=3.0, maximum=128.0, step=1.0, suffix="", integer=True),
+        )
+    if isinstance(base, SpherePrimitive):
+        return (
+            _dimension("radius", "Radius", base.radius),
+            _dimension("subdivisions_axis", "Axis Subdivisions", base.subdivisions_axis, minimum=3.0, maximum=256.0, step=1.0, suffix="", integer=True),
+            _dimension("subdivisions_height", "Height Subdivisions", base.subdivisions_height, minimum=2.0, maximum=256.0, step=1.0, suffix="", integer=True),
+        )
+    if isinstance(base, ConePrimitive):
+        return (
+            _dimension("radius", "Radius", base.radius),
+            _dimension("height", "Height", base.height),
+            _dimension("subdivisions_axis", "Axis Subdivisions", base.subdivisions_axis, minimum=3.0, maximum=256.0, step=1.0, suffix="", integer=True),
+            _dimension("subdivisions_height", "Height Subdivisions", base.subdivisions_height, minimum=1.0, maximum=256.0, step=1.0, suffix="", integer=True),
+            _dimension("subdivisions_caps", "Cap Subdivisions", base.subdivisions_caps, minimum=1.0, maximum=128.0, step=1.0, suffix="", integer=True),
+        )
+    if isinstance(base, TorusPrimitive):
+        return (
+            _dimension("radius", "Radius", base.radius),
+            _dimension("section_radius", "Section Radius", base.section_radius),
+            _dimension("subdivisions_axis", "Axis Subdivisions", base.subdivisions_axis, minimum=3.0, maximum=256.0, step=1.0, suffix="", integer=True),
+            _dimension("subdivisions_height", "Height Subdivisions", base.subdivisions_height, minimum=3.0, maximum=256.0, step=1.0, suffix="", integer=True),
         )
     if isinstance(base, DoorFramePrimitive):
         return (
@@ -814,6 +846,10 @@ def _primitive_kind(value: Any) -> str:
     aliases = {
         "box": "cube",
         "column": "cylinder",
+        "uv_sphere": "sphere",
+        "poly_sphere": "sphere",
+        "poly_cone": "cone",
+        "poly_torus": "torus",
         "floor": "plane",
         "platform": "plane",
         "stair": "stairs",
@@ -892,6 +928,12 @@ def _default_primitive_for_kind(kind: str, name: str, material: PrimitiveMateria
         return StairsPrimitive(name=name, width=2.0, depth=3.0, height=1.0, steps=4, surface_id=floor_surface, material=material)
     if kind == "cylinder":
         return CylinderPrimitive(name=name, radius=0.5, height=1.0, segments=16, center=(0.0, 0.0, 0.5), material=material)
+    if kind == "sphere":
+        return SpherePrimitive(name=name, radius=0.5, subdivisions_axis=20, subdivisions_height=20, center=(0.0, 0.0, 0.5), material=material)
+    if kind == "cone":
+        return ConePrimitive(name=name, radius=0.5, height=1.0, subdivisions_axis=20, subdivisions_height=1, subdivisions_caps=1, center=(0.0, 0.0, 0.5), material=material)
+    if kind == "torus":
+        return TorusPrimitive(name=name, radius=1.0, section_radius=0.25, subdivisions_axis=20, subdivisions_height=20, center=(0.0, 0.0, 0.5), material=material)
     if kind == "door_frame":
         return DoorFramePrimitive(name=name, width=2.2, height=3.0, jamb_width=0.22, lintel_height=0.28, depth=0.25, center=(0.0, 0.0, 1.5), material=material)
     if kind == "arch":
@@ -934,12 +976,14 @@ def _reject_unknown_dimensions(values: dict[str, Any], allowed: set[str], primit
 def _updated_base_primitive_dimensions(base: Any, dimensions: Any) -> Any:
     values = _dimension_values(dimensions)
     if isinstance(base, FloorPrimitive):
-        allowed = {"width", "depth"}
+        allowed = {"width", "depth", "subdivisions_width", "subdivisions_depth"}
         _reject_unknown_dimensions(values, allowed, base.name)
         return replace(
             base,
             width=_dimension_float(values, "width", base.width),
             depth=_dimension_float(values, "depth", base.depth),
+            subdivisions_width=_dimension_int(values, "subdivisions_width", base.subdivisions_width, minimum=1),
+            subdivisions_depth=_dimension_int(values, "subdivisions_depth", base.subdivisions_depth, minimum=1),
         )
     if isinstance(base, WallPrimitive):
         allowed = {"width", "height", "thickness"}
@@ -951,7 +995,7 @@ def _updated_base_primitive_dimensions(base: Any, dimensions: Any) -> Any:
             thickness=_dimension_float(values, "thickness", base.thickness, minimum=0.01),
         )
     if isinstance(base, CubePrimitive):
-        allowed = {"size_x", "size_y", "size_z"}
+        allowed = {"size_x", "size_y", "size_z", "subdivisions_x", "subdivisions_y", "subdivisions_z"}
         _reject_unknown_dimensions(values, allowed, base.name)
         return replace(
             base,
@@ -960,6 +1004,9 @@ def _updated_base_primitive_dimensions(base: Any, dimensions: Any) -> Any:
                 _dimension_float(values, "size_y", base.size[1]),
                 _dimension_float(values, "size_z", base.size[2]),
             ),
+            subdivisions_x=_dimension_int(values, "subdivisions_x", base.subdivisions_x, minimum=1),
+            subdivisions_y=_dimension_int(values, "subdivisions_y", base.subdivisions_y, minimum=1),
+            subdivisions_z=_dimension_int(values, "subdivisions_z", base.subdivisions_z, minimum=1),
         )
     if isinstance(base, RampPrimitive):
         allowed = {"width", "length", "height"}
@@ -988,6 +1035,40 @@ def _updated_base_primitive_dimensions(base: Any, dimensions: Any) -> Any:
             radius=_dimension_float(values, "radius", base.radius),
             height=_dimension_float(values, "height", base.height),
             segments=_dimension_int(values, "segments", base.segments, minimum=3),
+        )
+    if isinstance(base, SpherePrimitive):
+        allowed = {"radius", "subdivisions_axis", "subdivisions_height"}
+        _reject_unknown_dimensions(values, allowed, base.name)
+        return replace(
+            base,
+            radius=_dimension_float(values, "radius", base.radius),
+            subdivisions_axis=_dimension_int(values, "subdivisions_axis", base.subdivisions_axis, minimum=3),
+            subdivisions_height=_dimension_int(values, "subdivisions_height", base.subdivisions_height, minimum=2),
+        )
+    if isinstance(base, ConePrimitive):
+        allowed = {"radius", "height", "subdivisions_axis", "subdivisions_height", "subdivisions_caps"}
+        _reject_unknown_dimensions(values, allowed, base.name)
+        return replace(
+            base,
+            radius=_dimension_float(values, "radius", base.radius),
+            height=_dimension_float(values, "height", base.height),
+            subdivisions_axis=_dimension_int(values, "subdivisions_axis", base.subdivisions_axis, minimum=3),
+            subdivisions_height=_dimension_int(values, "subdivisions_height", base.subdivisions_height, minimum=1),
+            subdivisions_caps=_dimension_int(values, "subdivisions_caps", base.subdivisions_caps, minimum=1),
+        )
+    if isinstance(base, TorusPrimitive):
+        allowed = {"radius", "section_radius", "subdivisions_axis", "subdivisions_height"}
+        _reject_unknown_dimensions(values, allowed, base.name)
+        radius = _dimension_float(values, "radius", base.radius)
+        section_radius = _dimension_float(values, "section_radius", base.section_radius)
+        if radius <= section_radius:
+            raise ValueError("Torus radius must be greater than its section radius.")
+        return replace(
+            base,
+            radius=radius,
+            section_radius=section_radius,
+            subdivisions_axis=_dimension_int(values, "subdivisions_axis", base.subdivisions_axis, minimum=3),
+            subdivisions_height=_dimension_int(values, "subdivisions_height", base.subdivisions_height, minimum=3),
         )
     if isinstance(base, DoorFramePrimitive):
         allowed = {"width", "height", "jamb_width", "lintel_height", "depth"}
@@ -2897,6 +2978,39 @@ def _freeze_transform_into_parametric_primitive(
             base,
             radius=float(base.radius) * sx,
             height=float(base.height) * sz,
+            center=_transform_local_point(tuple(base.center), transform),
+        )
+    if isinstance(base, SpherePrimitive):
+        if not (_nearly_equal(sx, sy) and _nearly_equal(sx, sz)):
+            raise ValueError(
+                "Freeze Transform cannot bake non-uniform scale into a sphere. Keep the scale as a transform "
+                "until generic baked mesh primitives are available."
+            )
+        return replace(
+            base,
+            radius=float(base.radius) * sx,
+            center=_transform_local_point(tuple(base.center), transform),
+        )
+    if isinstance(base, ConePrimitive):
+        if not _nearly_equal(sx, sy):
+            raise ValueError(
+                "Freeze Transform cannot bake non-uniform X/Y scale into a cone because its base would become an ellipse."
+            )
+        return replace(
+            base,
+            radius=float(base.radius) * sx,
+            height=float(base.height) * sz,
+            center=_transform_local_point(tuple(base.center), transform),
+        )
+    if isinstance(base, TorusPrimitive):
+        if not (_nearly_equal(sx, sy) and _nearly_equal(sx, sz)):
+            raise ValueError(
+                "Freeze Transform cannot bake non-uniform scale into a torus while preserving a circular section."
+            )
+        return replace(
+            base,
+            radius=float(base.radius) * sx,
+            section_radius=float(base.section_radius) * sx,
             center=_transform_local_point(tuple(base.center), transform),
         )
     if isinstance(base, DoorFramePrimitive):

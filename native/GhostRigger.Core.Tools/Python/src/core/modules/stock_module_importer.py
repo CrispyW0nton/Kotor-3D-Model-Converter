@@ -104,6 +104,7 @@ def resolve_stock_module_auxiliary_resources(
     module_resref: str,
     game: str,
     rim_path: Path | str,
+    resource_provider: Any = None,
 ) -> StockModuleAuxiliaryResources:
     """Resolve effective LYT/VIS/PTH bytes without crossing game installs.
 
@@ -192,6 +193,7 @@ def resolve_stock_module_auxiliary_resources(
             except Exception:
                 pass
 
+        installation_error: Exception | None = None
         try:
             if installation is None:
                 installation = Installation(rim.parent.parent)
@@ -214,7 +216,31 @@ def resolve_stock_module_auxiliary_resources(
                     source_layer = "installation"
                 return bytes(result.data), _record(source_path, source_layer)
         except Exception as exc:
-            warnings.append(f"Could not resolve {area_resref}.{restype.extension}: {exc}")
+            installation_error = exc
+
+        # Recovered community releases frequently keep the real map payload
+        # loose beside a tiny metadata-only MOD.  The caller indexes that
+        # companion tree in ResourceManager; consult it only after the normal
+        # installation lookup so stock-module provenance remains exact.
+        if resource_provider is not None:
+            try:
+                getter = getattr(resource_provider, "get_strict", None)
+                if not callable(getter):
+                    getter = getattr(resource_provider, "get", None)
+                if callable(getter):
+                    supplied = getter(area_resref, int(restype.type_id), game_tag)
+                    if supplied:
+                        source_path = ""
+                        source_getter = getattr(resource_provider, "overlay_source_path", None)
+                        if callable(source_getter):
+                            source_path = str(source_getter(area_resref, int(restype.type_id)) or "")
+                        return bytes(supplied), _record(source_path, "module_companion")
+            except Exception as exc:
+                warnings.append(
+                    f"Could not resolve {area_resref}.{restype.extension} from the module companion overlay: {exc}"
+                )
+        if installation_error is not None:
+            warnings.append(f"Could not resolve {area_resref}.{restype.extension}: {installation_error}")
         return None, _record("", "unresolved")
 
     lyt_bytes, lyt_provenance = _resolve(RT.LYT)
@@ -695,7 +721,49 @@ def lyt_room_positions_from_resource(
         return positions
     except Exception as exc:
         log.debug("LYT room-position parse failed: %s", exc)
-        return {}
+        # Older MAX/KOTOR toolchains emitted harmless blank lines and mixed
+        # tabs inside the room block.  Current PyKotor rejects some of those
+        # files even though the retail text grammar and older tools accept the
+        # room rows.  Recover only the narrow, declared room list; malformed
+        # coordinates or a short list still fail closed.
+        try:
+            text = bytes(lyt_data).decode("latin-1", errors="replace")
+            lines = [line.strip() for line in text.splitlines()]
+            room_count = -1
+            start = -1
+            for index, line in enumerate(lines):
+                parts = line.split()
+                if len(parts) >= 2 and parts[0].lower() == "roomcount":
+                    room_count = int(parts[1])
+                    start = index + 1
+                    break
+            if room_count < 0 or start < 0:
+                return {}
+            positions: dict[str, tuple[float, float, float]] = {}
+            for line in lines[start:]:
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split()
+                if parts and parts[0].lower() in {
+                    "trackcount", "obstaclecount", "doorhookcount", "donelayout"
+                }:
+                    break
+                if len(parts) < 4:
+                    return {}
+                positions[parts[0].lower()] = (
+                    float(parts[1]),
+                    float(parts[2]),
+                    float(parts[3]),
+                )
+                if len(positions) == room_count:
+                    break
+            if len(positions) != room_count:
+                return {}
+            log.info("Recovered %d room(s) from legacy ASCII LYT formatting.", room_count)
+            return positions
+        except Exception as fallback_exc:
+            log.debug("Legacy ASCII LYT recovery failed: %s", fallback_exc)
+            return {}
 
 
 def vis_pairs_from_resource(vis_data: bytes | None, lyt_room_names: tuple[str, ...] = ()) -> tuple[tuple[str, str], ...]:
@@ -816,6 +884,7 @@ def import_stock_module(
             module_resref=module_resref,
             game=game,
             rim_path=rim,
+            resource_provider=resource_provider,
         )
         resolved_area_resref = auxiliary.area_resref
         warnings.extend(auxiliary.warnings)
@@ -846,6 +915,8 @@ def import_stock_module(
 
     are_root = git_root = ifo_root = pth_root = None
     are_bytes: bytes | None = None
+    git_bytes: bytes | None = None
+    ifo_bytes: bytes | None = None
     are_resref = ""
     try:
         cap = LazyCapsule(rim)
@@ -857,9 +928,11 @@ def import_stock_module(
                     are_root = read_gff(are_bytes).root
                     are_resref = normalise_resref(res.resname())
                 elif rt == RT.GIT and git_root is None:
-                    git_root = read_gff(cap.resource(res.resname(), rt)).root
+                    git_bytes = bytes(cap.resource(res.resname(), rt) or b"")
+                    git_root = read_gff(git_bytes).root
                 elif rt == RT.IFO and ifo_root is None:
-                    ifo_root = read_gff(cap.resource(res.resname(), rt)).root
+                    ifo_bytes = bytes(cap.resource(res.resname(), rt) or b"")
+                    ifo_root = read_gff(ifo_bytes).root
             except Exception as exc:
                 warnings.append(f"Failed to read {res.resname()}.{rt.extension} from RIM: {exc}")
     except Exception as exc:
@@ -883,6 +956,18 @@ def import_stock_module(
             "source_layer": "module",
             "source_archive": rim.name,
         }
+    for restype, raw, resref in (
+        ("git", git_bytes, are_resref or resolved_area_resref or normalise_resref(module_resref)),
+        ("ifo", ifo_bytes, "module"),
+    ):
+        if raw and restype not in resolved_provenance:
+            resolved_provenance[restype] = {
+                "resref": resref,
+                "game": str(game or "").upper(),
+                "module_resref": normalise_resref(module_resref),
+                "source_layer": "module",
+                "source_archive": rim.name,
+            }
 
     # ── 2. Extract IFO entry point ──────────────────────────────────────
     # The re-exported module names its ARE/GIT/LYT/VIS after the module root
@@ -1053,6 +1138,8 @@ def import_stock_module(
             ("vis", _source_resource_record(vis_bytes, "vis")),
             ("pth", _source_resource_record(pth_bytes, "pth")),
             ("are", _source_resource_record(are_bytes, "are")),
+            ("git", _source_resource_record(git_bytes, "git")),
+            ("ifo", _source_resource_record(ifo_bytes, "ifo")),
         )
         if record
     }
@@ -1072,6 +1159,8 @@ def import_stock_module(
             "vis_pairs": list(vis_pairs or ()),
             "stock_resources": stock_resources,
             "stock_pth_preserved": bool(stock_resources.get("pth")),
+            "stock_git_preserved": bool(stock_resources.get("git")),
+            "stock_ifo_preserved": bool(stock_resources.get("ifo")),
         },
     )
 

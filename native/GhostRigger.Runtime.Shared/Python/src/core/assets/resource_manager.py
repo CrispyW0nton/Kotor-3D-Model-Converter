@@ -286,6 +286,13 @@ class ResourceManager:
         # editing an imported custom map resolves its bundled assets. Keyed by
         # (resref_lower, res_type).
         self._overlay: Dict[Tuple[str, int], bytes] = {}
+        # Legacy community maps commonly ship a tiny ARE/GIT/IFO ``.mod`` in
+        # ``Modules`` and put LYT/VIS/MDL/MDX/WOK/textures in a sibling
+        # ``Override`` folder.  Keep those files lazy: several recovered map
+        # sets are hundreds of megabytes and must not be decoded or retained
+        # just to make the module discoverable in Map Studio.
+        self._loose_overlay: Dict[Tuple[str, int], Path] = {}
+        self._loose_overlay_candidates: Dict[Tuple[str, int], Tuple[Path, ...]] = {}
 
     # ── Setup ────────────────────────────────────────────────────────────
 
@@ -361,9 +368,93 @@ class ResourceManager:
         log.info("ResourceManager: module overlay indexed %d resources from %r", added, capsule_path)
         return added
 
+    def add_loose_overlay(self, directory: str, *, recursive: bool = True) -> int:
+        """Index loose KOTOR resources from a recovered module bundle.
+
+        Only extensions understood by :data:`EXT_TO_TYPE` are indexed and the
+        bytes stay on disk until requested.  Later files win deterministically,
+        with files inside an ``Override`` directory taking engine-like
+        precedence over ancillary source folders in the same bundle.
+        """
+
+        root = Path(str(directory or "")).expanduser()
+        if not root.is_dir():
+            return 0
+        try:
+            candidates = root.rglob("*") if recursive else root.iterdir()
+            files = [path for path in candidates if path.is_file()]
+        except OSError as exc:
+            log.warning("ResourceManager.add_loose_overlay: cannot scan %r: %s", str(root), exc)
+            return 0
+
+        def _priority(path: Path) -> tuple[int, int, int, str]:
+            in_override = any(part.lower() == "override" for part in path.parts)
+            in_binary_dir = any(part.lower() in {"bin", "bins", "binary", "compiled"} for part in path.parts)
+            binary_mdl = False
+            if path.suffix.lower() == ".mdl":
+                try:
+                    with path.open("rb") as stream:
+                        prefix = stream.read(8)
+                    binary_mdl = len(prefix) >= 4 and prefix[:4] == b"\x00\x00\x00\x00"
+                except OSError:
+                    binary_mdl = False
+            return (
+                1 if in_override else 0,
+                1 if in_binary_dir else 0,
+                1 if binary_mdl else 0,
+                str(path).lower(),
+            )
+
+        added = 0
+        candidates_by_key: Dict[Tuple[str, int], List[Path]] = {}
+        for path in sorted(files, key=_priority):
+            extension = path.suffix.lower().lstrip(".")
+            res_type = EXT_TO_TYPE.get(extension)
+            if res_type is None:
+                continue
+            resref = path.stem.strip().lower()
+            if not resref:
+                continue
+            key = (resref, res_type)
+            candidates_by_key.setdefault(key, []).append(path)
+            self._loose_overlay[key] = path
+            added += 1
+        for key, candidates in candidates_by_key.items():
+            prior = list(self._loose_overlay_candidates.get(key, ()))
+            for candidate in candidates:
+                if candidate not in prior:
+                    prior.append(candidate)
+            self._loose_overlay_candidates[key] = tuple(prior)
+        log.info("ResourceManager: loose overlay indexed %d resources from %r", added, str(root))
+        return added
+
+    def _get_loose_overlay(self, name: str, res_type: int) -> Optional[bytes]:
+        path = self._loose_overlay.get((str(name or "").lower(), int(res_type)))
+        if path is None:
+            return None
+        try:
+            return path.read_bytes()
+        except OSError as exc:
+            log.warning("ResourceManager: loose overlay read failed for %r: %s", str(path), exc)
+            return None
+
+    def overlay_source_path(self, name: str, res_type: int) -> str:
+        """Return the physical loose-overlay source used for diagnostics."""
+
+        path = self._loose_overlay.get((str(name or "").lower(), int(res_type)))
+        return str(path) if path is not None else ""
+
+    def overlay_candidate_paths(self, name: str, res_type: int) -> Tuple[str, ...]:
+        """Return every same-resref loose candidate considered for diagnostics."""
+
+        paths = self._loose_overlay_candidates.get((str(name or "").lower(), int(res_type)), ())
+        return tuple(str(path) for path in paths)
+
     def clear_module_overlay(self) -> None:
         """Drop all bundled-module overlay resources."""
         self._overlay.clear()
+        self._loose_overlay.clear()
+        self._loose_overlay_candidates.clear()
 
     def get_k1(self) -> Optional['_GameInstall']:
         return self._k1
@@ -386,6 +477,9 @@ class ResourceManager:
         """
         # Bundled-module overlay wins (matches the engine's Override priority):
         # a custom module's own room models/WOKs/textures shadow the base game.
+        loose = self._get_loose_overlay(name, res_type)
+        if loose is not None:
+            return loose
         overlaid = self._overlay.get((name.lower(), res_type))
         if overlaid is not None:
             return overlaid
@@ -410,6 +504,9 @@ class ResourceManager:
         that does not exist in the target game.
         """
 
+        loose = self._get_loose_overlay(name, res_type)
+        if loose is not None:
+            return loose
         overlaid = self._overlay.get((name.lower(), res_type))
         if overlaid is not None:
             return overlaid

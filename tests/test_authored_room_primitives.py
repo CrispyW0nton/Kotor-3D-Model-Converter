@@ -100,7 +100,7 @@ def test_t2602_builds_wall_cube_ramp_and_stairs_meshes() -> None:
     assert min(vertex[2] for vertex in arch.vertices) == 0.0
     assert max(vertex[2] for vertex in arch.vertices) == 3.0
     assert wall.metadata["primitive"] == "wall"
-    assert len(wall.vertices) == 8
+    assert len(wall.vertices) == 24
     assert len(wall.faces) == 12
     assert cube.metadata["primitive"] == "cube"
     assert min(vertex[2] for vertex in cube.vertices) == 0.0

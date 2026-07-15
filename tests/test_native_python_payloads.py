@@ -54,10 +54,12 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     }
 
     assert len(entries) == 18
-    # 2026-07-13: the complete Scripting Suite adds its typed Workflow services,
-    # GUI Display pages/controllers/widget, Qt audio preview adapter, and the
-    # package-local Automation compatibility surface.
-    assert len(payload_files) == 1289
+    # 2026-07-14: the complete Scripting Suite plus package-local legacy
+    # module-repair and exact vanilla-texture-port workflows add their typed
+    # Workflow/GUI/Automation payloads.
+    # The prepared live-topology evaluator is packaged by both Scene (owner)
+    # and Tools (embedded consumer), adding two byte-identical payload rows.
+    assert len(payload_files) == 1293
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 

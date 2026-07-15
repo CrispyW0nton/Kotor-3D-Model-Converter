@@ -8,6 +8,7 @@ inspector can call the same compiler used by smoke exports.
 from __future__ import annotations
 
 import hashlib
+import math
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -773,6 +774,64 @@ def patch_preserved_stock_are_bytes(
             if room is not None:
                 patched_rooms.append(room)
         source.root.set_list("Rooms", patched_rooms)
+    return _bytes_gff(source)
+
+
+def patch_preserved_stock_ifo_bytes(
+    source_ifo_bytes: bytes,
+    entry_point: ModuleEntryPoint,
+    *,
+    area_resrefs: tuple[str, ...] = (),
+) -> bytes:
+    """Patch only entry/area routing into an imported stock IFO.
+
+    Module script hooks, globals, VO identity, time settings, localized names,
+    and unknown fields remain untouched.  A byte-identical result is returned
+    when the source already names the requested entry point and area list.
+    """
+
+    raw = bytes(source_ifo_bytes or b"")
+    if not raw:
+        raise ValueError("A preserved stock IFO byte stream is required.")
+    from pykotor.resource.formats.gff import read_gff
+
+    source = read_gff(raw)
+    root = source.root
+    target_area_names = tuple(
+        normalise_resref(value) for value in area_resrefs if normalise_resref(value)
+    ) or (normalise_resref(entry_point.area_resref),)
+    current_area_names = tuple(
+        normalise_resref(str(item.acquire("Area_Name", "") or ""))
+        for item in tuple(root.acquire("Mod_Area_list", ()) or ())
+        if normalise_resref(str(item.acquire("Area_Name", "") or ""))
+    )
+    expected_direction = (math.cos(float(entry_point.facing)), math.sin(float(entry_point.facing)))
+    current_values = (
+        normalise_resref(str(root.acquire("Mod_Entry_Area", "") or "")),
+        float(root.acquire("Mod_Entry_X", 0.0) or 0.0),
+        float(root.acquire("Mod_Entry_Y", 0.0) or 0.0),
+        float(root.acquire("Mod_Entry_Z", 0.0) or 0.0),
+        float(root.acquire("Mod_Entry_Dir_X", 1.0) or 0.0),
+        float(root.acquire("Mod_Entry_Dir_Y", 0.0) or 0.0),
+    )
+    expected_values = (
+        normalise_resref(entry_point.area_resref),
+        float(entry_point.position[0]),
+        float(entry_point.position[1]),
+        float(entry_point.position[2]),
+        expected_direction[0],
+        expected_direction[1],
+    )
+    values_match = current_values[0] == expected_values[0] and all(
+        abs(float(current_values[index]) - float(expected_values[index])) <= 1.0e-6
+        for index in range(1, len(current_values))
+    )
+    if values_match and current_area_names == target_area_names:
+        return raw
+
+    apply_entry_point_to_ifo(root, entry_point)
+    if current_area_names != target_area_names:
+        root.set_list("Mod_Area_list", _area_list(target_area_names[0]))
     return _bytes_gff(source)
 
 

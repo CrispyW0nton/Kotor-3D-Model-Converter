@@ -42,11 +42,13 @@ from .authored_module_metadata import (
     authored_module_script_hooks,
     compile_authored_module_metadata,
     patch_preserved_stock_are_bytes,
+    patch_preserved_stock_ifo_bytes,
 )
 from .authored_module_objects import (
     AuthoredGameplayPlacement,
     build_git_bytes,
     normalise_resource_resref,
+    patch_preserved_stock_git_bytes,
     validate_authored_gameplay_placement_against_walkmesh,
 )
 from .authored_module_pathing import AuthoredPathAnchor, compile_authored_pathing_for_module
@@ -1658,6 +1660,8 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
     mdl_light_sanitizer_rows: list[dict[str, Any]] = []
     preserved_stock_pth: bytes | None = None
     preserved_stock_are: bytes | None = None
+    preserved_stock_git: bytes | None = None
+    preserved_stock_ifo: bytes | None = None
     try:
         preserved_stock_pth = _preserved_stock_resource(project, "pth")
     except Exception as exc:
@@ -1666,6 +1670,14 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
         preserved_stock_are = _preserved_stock_resource(project, "are")
     except Exception as exc:
         blocking.append(f"Imported stock ARE could not be preserved safely: {exc}")
+    try:
+        preserved_stock_git = _preserved_stock_resource(project, "git")
+    except Exception as exc:
+        blocking.append(f"Imported stock GIT could not be preserved safely: {exc}")
+    try:
+        preserved_stock_ifo = _preserved_stock_resource(project, "ifo")
+    except Exception as exc:
+        blocking.append(f"Imported stock IFO could not be preserved safely: {exc}")
 
     try:
         layout = compile_authored_module_layout(project)
@@ -1813,6 +1825,21 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
                     "world_lighting_patched": lighting_source == "map_studio:world_settings",
                 },
             )
+        if preserved_stock_ifo is not None:
+            patched_ifo = patch_preserved_stock_ifo_bytes(
+                preserved_stock_ifo,
+                project.placements.entry_point,
+                area_resrefs=(root,),
+            )
+            metadata = replace(
+                metadata,
+                ifo_bytes=patched_ifo,
+                metadata={
+                    **dict(metadata.metadata),
+                    "preserved_stock_ifo": True,
+                    "stock_ifo_entry_patched": patched_ifo != preserved_stock_ifo,
+                },
+            )
         warnings.extend(metadata.validation.warnings)
         blocking.extend(metadata.validation.blocking_issues)
     except Exception as exc:
@@ -1847,14 +1874,34 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
         packaged.append(_make_packaged(root, "are", metadata.are_bytes, "map_studio:authored:are"))
         packaged.append(_make_packaged(ENGINE_MODULE_IFO_RESREF, "ifo", metadata.ifo_bytes, "map_studio:authored:ifo"))
     try:
-        packaged.append(
-            _make_packaged(
-                root,
-                "git",
-                build_git_bytes(project.placements, game=project.game),
-                "map_studio:authored:git",
-            )
+        placement_edit_keys = (
+            "last_gameplay_placement",
+            "last_gameplay_placement_transform",
+            "last_gameplay_placement_rename",
+            "last_gameplay_placement_duplicate",
+            "last_gameplay_placement_remove",
+            "last_creature_behavior_update",
         )
+        placement_was_edited = any(dict(getattr(project, "extra", {}) or {}).get(key) for key in placement_edit_keys)
+        if preserved_stock_git is not None and not placement_was_edited:
+            git_bytes = preserved_stock_git
+            git_source = "map_studio:stock:git_preserved"
+        elif preserved_stock_git is not None:
+            git_bytes = patch_preserved_stock_git_bytes(
+                preserved_stock_git,
+                project.placements,
+                game=project.game,
+            )
+            git_source = "map_studio:stock:git_lists_patched"
+            warnings.append(
+                "Imported GIT placement lists were patched while stock root fields (including AreaProperties) "
+                "were preserved. Per-instance fields outside Map Studio's editable placement contract still "
+                "require an in-game behavior proof."
+            )
+        else:
+            git_bytes = build_git_bytes(project.placements, game=project.game)
+            git_source = "map_studio:authored:git"
+        packaged.append(_make_packaged(root, "git", git_bytes, git_source))
     except Exception as exc:
         blocking.append(f"Authored gameplay placements could not be compiled into GIT: {exc}")
     if preserved_stock_pth is not None:
@@ -2008,6 +2055,11 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
             "visibility": visibility_metadata,
             "walkability": walkability_metadata,
             "pathing": pathing_metadata,
+            "stock_metadata_preservation": {
+                "are": preserved_stock_are is not None,
+                "git": preserved_stock_git is not None,
+                "ifo": preserved_stock_ifo is not None,
+            },
             "walkmesh_gate": walkmesh_gate,
             "engine_contract": engine_contract_metadata,
             "smoke_expectations": smoke_expectations,

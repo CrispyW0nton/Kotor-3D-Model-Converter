@@ -801,6 +801,48 @@ def build_git_bytes(placement: AuthoredGameplayPlacement, *, game: str = "K1") -
     return _bytes_gff(build_git_gff(placement, game=game))
 
 
+def patch_preserved_stock_git_bytes(
+    source_git_bytes: bytes,
+    placement: AuthoredGameplayPlacement,
+    *,
+    game: str = "K1",
+) -> bytes:
+    """Patch authored object lists while preserving stock GIT area metadata.
+
+    Imported modules may carry music, ambient sound, environmental audio, and
+    unknown extension fields in the GIT root.  Rebuilding the entire resource
+    from the editable placement subset used to reset those fields.  This
+    routine replaces only the lists Map Studio owns and leaves every other
+    root field intact.  Unedited imports should continue to use the original
+    byte stream directly; this patch path is for deliberate placement edits.
+    """
+
+    raw = bytes(source_git_bytes or b"")
+    if not raw:
+        return build_git_bytes(placement, game=game)
+    from pykotor.resource.formats.gff import read_gff
+
+    source = read_gff(raw)
+    candidate = build_git_gff(placement, game=game)
+    for label in (
+        "CameraList",
+        "Creature List",
+        "Door List",
+        "TriggerList",
+        "Encounter List",
+        "SoundList",
+        "StoreList",
+        "List",
+        "Placeable List",
+        "WaypointList",
+    ):
+        source.root.set_list(label, candidate.root.acquire(label, _empty_gff_list()))
+    # UseTemplates is owned by the placement compiler; AreaProperties and
+    # every unknown source-root field are intentionally preserved.
+    source.root.set_uint8("UseTemplates", int(candidate.root.acquire("UseTemplates", 1) or 0))
+    return _bytes_gff(source)
+
+
 __all__ = [
     "AuthoredCameraInstance",
     "AuthoredCreatureInstance",
@@ -819,6 +861,7 @@ __all__ = [
     "apply_entry_point_to_ifo",
     "build_git_bytes",
     "build_git_gff",
+    "patch_preserved_stock_git_bytes",
     "normalise_resource_resref",
     "validate_authored_gameplay_placement",
     "validate_authored_gameplay_placement_against_walkmesh",

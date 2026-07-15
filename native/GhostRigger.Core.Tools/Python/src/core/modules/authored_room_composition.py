@@ -24,15 +24,19 @@ from .authored_room_geometry import AuthoredRoomGeometry, PrimitiveMesh, Rectang
 from .authored_walkmesh_surfaces import require_walkable_walkmesh_surface, resolve_walkmesh_surface_id, walkmesh_surface_name
 from .authored_room_primitives import (
     ArchPrimitive,
+    ConePrimitive,
     CubePrimitive,
     CylinderPrimitive,
     DoorFramePrimitive,
     FloorPrimitive,
     PrimitiveMaterial,
     RampPrimitive,
+    SpherePrimitive,
     StairsPrimitive,
+    TorusPrimitive,
     WallPrimitive,
     build_arch_mesh,
+    build_cone_mesh,
     build_cube_mesh,
     build_cylinder_mesh,
     build_door_frame_mesh,
@@ -40,8 +44,10 @@ from .authored_room_primitives import (
     build_floor_wok,
     build_ramp_mesh,
     build_ramp_wok,
+    build_sphere_mesh,
     build_stairs_mesh,
     build_stairs_wok,
+    build_torus_mesh,
     build_wall_mesh,
 )
 from .module_format import WOKData, WOKFace
@@ -54,6 +60,9 @@ BaseRoomPrimitive = Union[
     FloorPrimitive,
     WallPrimitive,
     CubePrimitive,
+    SpherePrimitive,
+    ConePrimitive,
+    TorusPrimitive,
     RampPrimitive,
     StairsPrimitive,
     CylinderPrimitive,
@@ -450,6 +459,12 @@ def _primitive_to_mesh(primitive: RoomPrimitive) -> PrimitiveMesh:
         return build_stairs_mesh(primitive)
     if isinstance(primitive, CylinderPrimitive):
         return build_cylinder_mesh(primitive)
+    if isinstance(primitive, SpherePrimitive):
+        return build_sphere_mesh(primitive)
+    if isinstance(primitive, ConePrimitive):
+        return build_cone_mesh(primitive)
+    if isinstance(primitive, TorusPrimitive):
+        return build_torus_mesh(primitive)
     if isinstance(primitive, DoorFramePrimitive):
         return build_door_frame_mesh(primitive)
     if isinstance(primitive, ArchPrimitive):
@@ -653,6 +668,8 @@ def validate_authored_room_composition(composition: AuthoredRoomComposition) -> 
         blocking.append("Authored room composition requires a room resref.")
     if float(floor.width) <= 0.0 or float(floor.depth) <= 0.0:
         blocking.append("Authored room floor must have positive width and depth.")
+    if int(floor.subdivisions_width) < 1 or int(floor.subdivisions_depth) < 1:
+        blocking.append("Authored room floor subdivisions must be at least 1 on width and depth.")
     try:
         require_walkable_walkmesh_surface(floor.surface_id, context=f"{composition.room_resref} floor")
     except ValueError as exc:
@@ -676,10 +693,20 @@ def validate_authored_room_composition(composition: AuthoredRoomComposition) -> 
         if isinstance(base, FloorPrimitive):
             if float(base.width) <= 0.0 or float(base.depth) <= 0.0:
                 blocking.append(f"Plane primitive {base_name} must have positive width and depth.")
+            if int(base.subdivisions_width) < 1 or int(base.subdivisions_depth) < 1:
+                blocking.append(f"Plane primitive {base_name} subdivisions must be at least 1 on width and depth.")
             try:
                 require_walkable_walkmesh_surface(base.surface_id, context=f"{base_name} plane")
             except ValueError as exc:
                 blocking.append(str(exc))
+        if isinstance(base, CubePrimitive):
+            if any(float(value) <= 0.0 for value in base.size):
+                blocking.append(f"Cube primitive {base_name} must have positive X, Y, and Z sizes.")
+            if any(
+                int(value) < 1
+                for value in (base.subdivisions_x, base.subdivisions_y, base.subdivisions_z)
+            ):
+                blocking.append(f"Cube primitive {base_name} subdivisions must be at least 1 on X, Y, and Z.")
         if isinstance(base, RampPrimitive):
             if float(base.width) <= 0.0 or float(base.length) <= 0.0 or float(base.height) <= 0.0:
                 blocking.append(f"Ramp primitive {base_name} must have positive width, length, and height.")
@@ -699,6 +726,40 @@ def validate_authored_room_composition(composition: AuthoredRoomComposition) -> 
                 require_walkable_walkmesh_surface(base.surface_id, context=f"{base_name} stairs")
             except ValueError as exc:
                 blocking.append(str(exc))
+        if isinstance(base, SpherePrimitive):
+            if (
+                float(base.radius) <= 0.0
+                or int(base.subdivisions_axis) < 3
+                or int(base.subdivisions_height) < 2
+            ):
+                blocking.append(
+                    f"Sphere primitive {base_name} requires a positive radius, at least 3 axis subdivisions, "
+                    "and at least 2 height subdivisions."
+                )
+        if isinstance(base, ConePrimitive):
+            if (
+                float(base.radius) <= 0.0
+                or float(base.height) <= 0.0
+                or int(base.subdivisions_axis) < 3
+                or int(base.subdivisions_height) < 1
+                or int(base.subdivisions_caps) < 1
+            ):
+                blocking.append(
+                    f"Cone primitive {base_name} requires positive radius/height, at least 3 axis subdivisions, "
+                    "and at least 1 height/cap subdivision."
+                )
+        if isinstance(base, TorusPrimitive):
+            if (
+                float(base.radius) <= 0.0
+                or float(base.section_radius) <= 0.0
+                or float(base.radius) <= float(base.section_radius)
+                or int(base.subdivisions_axis) < 3
+                or int(base.subdivisions_height) < 3
+            ):
+                blocking.append(
+                    f"Torus primitive {base_name} requires radius greater than a positive section radius and "
+                    "at least 3 axis/height subdivisions."
+                )
         if isinstance(base, ArchPrimitive):
             if (
                 float(base.width) <= 0.0

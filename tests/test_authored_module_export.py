@@ -2983,3 +2983,67 @@ def test_t2644_export_panel_exposes_authored_module_stage_action() -> None:
     assert "mode=\"install\"" in window_source
     assert "self.controller.stage_authored_module(path, dry_run=bool(values.get(\"dry_run\")))" in window_source
     assert "game_modules_dir=modules_path" in window_source
+
+
+def test_legacy_room_repair_embeds_missing_aabb_without_controllers(tmp_path) -> None:
+    from src.core.modules.module_format import WOKData, WOKFace
+    from core.workflow.legacy_module_repair import _inject_embedded_aabb_from_wok
+
+    ascii_mdl = tmp_path / "legacy_room-ascii.mdl"
+    ascii_mdl.write_text(
+        "newmodel legacy_room\n"
+        "beginmodelgeom legacy_room\n"
+        "node dummy legacy_room\n"
+        "  parent NULL\n"
+        "endnode\n"
+        "endmodelgeom legacy_room\n"
+        "donemodel legacy_room\n",
+        encoding="latin-1",
+    )
+    source_wok = tmp_path / "legacy_room.wok"
+    source_wok.write_bytes(
+        WOKData(
+            name="legacy_room",
+            verts=[(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (0.0, 2.0, 0.0)],
+            faces=[WOKFace(0, 1, 2, 10)],
+        ).to_bytes()
+    )
+
+    assert _inject_embedded_aabb_from_wok(ascii_mdl, source_wok, "legacy_room") is True
+    text = ascii_mdl.read_text(encoding="latin-1")
+    node_text = text.split("node aabb legacy_room_wg", 1)[1].split("endnode", 1)[0]
+    assert "parent legacy_room" in node_text
+    assert "verts 3" in node_text
+    assert "faces 1" in node_text
+    assert "0 1 2 1 0 0 0 10" in node_text
+    assert "position" not in node_text
+    assert "orientation" not in node_text
+    assert text.index("node aabb legacy_room_wg") < text.index("endmodelgeom legacy_room")
+    assert _inject_embedded_aabb_from_wok(ascii_mdl, source_wok, "legacy_room") is False
+
+
+def test_legacy_room_repair_parity_accepts_one_controller_free_aabb_node() -> None:
+    from core.workflow.legacy_module_repair import _parity_issues
+
+    source = {
+        "mdl": {
+            "declared_node_count": 188,
+            "visited_node_count": 188,
+            "aabb_node_count": 0,
+            "controller_count": 561,
+        }
+    }
+    repaired = {
+        "mdl": {
+            "declared_node_count": 189,
+            "visited_node_count": 189,
+            "aabb_node_count": 1,
+            "controller_count": 561,
+            "nonzero_node_plus_8": 0,
+        }
+    }
+
+    assert _parity_issues(source, repaired, has_source_wok=False) == []
+    repaired["mdl"]["controller_count"] = 562
+    issues = _parity_issues(source, repaired, has_source_wok=False)
+    assert any("controller_count" in issue for issue in issues)
