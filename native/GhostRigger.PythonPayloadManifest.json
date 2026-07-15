@@ -678,7 +678,7 @@
     },
     {
         "project": "GhostRigger.Core.Scene",
-        "python_file_count": 110,
+        "python_file_count": 112,
         "files": [
             "src\\core\\level\\__init__.py",
             "src\\core\\level\\kmap_model.py",
@@ -715,6 +715,8 @@
             "src\\core\\modules\\authored_module_validation_projection.py",
             "src\\core\\modules\\authored_module_walkmesh.py",
             "src\\core\\modules\\authored_module_world_lighting.py",
+            "src\\core\\modules\\authored_primitive_polygon_cages.py",
+            "src\\core\\modules\\authored_primitive_topology_policy.py",
             "src\\core\\modules\\authored_room_composition.py",
             "src\\core\\modules\\authored_room_floorplan.py",
             "src\\core\\modules\\authored_room_geometry.py",
@@ -794,7 +796,7 @@
     },
     {
         "project": "GhostRigger.Core.Tools",
-        "python_file_count": 373,
+        "python_file_count": 375,
         "files": [
             "src\\adapters\\qt_viewport\\camera_gizmo_renderer.py",
             "src\\adapters\\qt_viewport\\camera_overlays.py",
@@ -897,6 +899,8 @@
             "src\\core\\modules\\authored_module_validation_projection.py",
             "src\\core\\modules\\authored_module_walkmesh.py",
             "src\\core\\modules\\authored_module_world_lighting.py",
+            "src\\core\\modules\\authored_primitive_polygon_cages.py",
+            "src\\core\\modules\\authored_primitive_topology_policy.py",
             "src\\core\\modules\\authored_room_composition.py",
             "src\\core\\modules\\authored_room_floorplan.py",
             "src\\core\\modules\\authored_room_geometry.py",

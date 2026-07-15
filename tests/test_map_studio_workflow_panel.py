@@ -2728,6 +2728,54 @@ def test_t2907_bevel_width_frames_reuse_prepared_resident_topology() -> None:
     assert messages == []
 
 
+def test_t2907_edge_extrude_distance_frames_reuse_prepared_resident_topology() -> None:
+    _install_native_payload_paths()
+
+    from scripts.gmodeler_tool_matrix import _cube_surfaces
+    from src.core.modules.authored_imported_mesh import ImportedMeshRoomPrimitive
+    from src.gui.windows.module_editor_window import ModuleEditorWindow
+
+    source = ImportedMeshRoomPrimitive(
+        room_resref="edgeperf",
+        surfaces=(_cube_surfaces()[0],),
+        game="K1",
+    )
+    shown: list[ImportedMeshRoomPrimitive] = []
+    messages: list[str] = []
+    window = SimpleNamespace(
+        _map_studio_prepared_topology_preview=None,
+        _map_studio_live_topology_source=lambda _payload: source,
+        _show_live_imported_surface=lambda primitive, _room, _role: shown.append(primitive) or True,
+        statusBar=lambda: SimpleNamespace(showMessage=lambda message, _duration=0: messages.append(message)),
+    )
+    window._map_studio_prepared_topology_session = lambda primitive, payload, operation: (
+        ModuleEditorWindow._map_studio_prepared_topology_session(window, primitive, payload, operation)
+    )
+    payload = {
+        "kind": "edge",
+        "room_resref": "edgeperf",
+        "mesh_role": "render",
+        "face_index": 0,
+        "edge_corners": (0, 1),
+        "distance": 0.2,
+        "axis": (0.0, 0.0, 1.0),
+    }
+
+    ModuleEditorWindow._preview_map_studio_component_extrude(window, payload)
+    prepared = window._map_studio_prepared_topology_preview
+    assert prepared is not None
+    assert prepared[1].identity.operation == "edge_extrude"
+    ModuleEditorWindow._preview_map_studio_component_extrude(window, dict(payload, distance=-0.35))
+
+    assert window._map_studio_prepared_topology_preview[1] is prepared[1]
+    assert len(shown) == 2
+    assert shown[0].surfaces[0].faces is shown[1].surfaces[0].faces
+    assert shown[0].surfaces[0].face_mats is shown[1].surfaces[0].face_mats
+    assert shown[0].surfaces[0].uvs_lm is shown[1].surfaces[0].uvs_lm
+    assert window._last_map_studio_topology_preview_ms < 10.0
+    assert messages == []
+
+
 def test_t2603_topology_refresh_defers_validation_and_keeps_structural_fallback(monkeypatch) -> None:
     _install_native_payload_paths()
 

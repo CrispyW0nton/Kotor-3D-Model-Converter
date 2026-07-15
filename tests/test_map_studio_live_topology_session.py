@@ -22,6 +22,7 @@ from core.modules.authored_imported_mesh import (  # noqa: E402
     ImportedMeshRoomPrimitive,
     ImportedMeshSurface,
     bevel_imported_mesh_edge,
+    extrude_imported_mesh_edge,
     extrude_imported_mesh_faces,
 )
 from core.modules.map_studio_live_topology_session import MapStudioLiveTopologySession  # noqa: E402
@@ -111,6 +112,66 @@ def test_prepared_face_extrude_matches_authoritative_operator(distance: float) -
     assert session.identity.direction == (0.0, 0.0, 1.0)
     _assert_surface_close(evaluated.surfaces[0], authoritative.surfaces[0])
     assert source == _lightmapped_cube(), "preparing/evaluating must not mutate the immutable source"
+
+
+@pytest.mark.parametrize("distance", (0.11, 0.64, -0.11, -0.64))
+def test_prepared_edge_extrude_matches_authoritative_operator_and_preserves_channels(
+    distance: float,
+) -> None:
+    source = _lightmapped_cube()
+    source_snapshot = _lightmapped_cube()
+    direction = (0.0, 0.6, 0.8)
+    session = MapStudioLiveTopologySession.prepare_edge_extrude(
+        source,
+        "render",
+        0,
+        (0, 1),
+        direction=(0.0, 3.0, 4.0),
+        tile_size=1.25,
+        reference_distance=0.8,
+    )
+
+    evaluated = session.evaluate(distance)
+    authoritative = extrude_imported_mesh_edge(
+        source,
+        "render",
+        0,
+        (0, 1),
+        tuple(component * distance for component in direction),
+        tile_size=1.25,
+    )
+
+    assert session.source is source
+    assert session.evaluate(0.0) is source
+    assert session.prepared_sample_count == 2
+    assert session.identity.operation == "edge_extrude"
+    assert session.identity.direction == pytest.approx(direction)
+    _assert_surface_close(evaluated.surfaces[0], authoritative.surfaces[0])
+    assert evaluated.surfaces[0].faces is session.evaluate(distance * 0.5).surfaces[0].faces
+    assert evaluated.surfaces[0].face_mats is session.evaluate(distance * 0.5).surfaces[0].face_mats
+    assert evaluated.surfaces[0].uvs_lm is session.evaluate(distance * 0.5).surfaces[0].uvs_lm
+    assert source == source_snapshot, "preparing/evaluating must not mutate source mesh or channels"
+
+
+@pytest.mark.parametrize("distance", (0.4, -0.4))
+def test_prepared_parallel_edge_extrude_preserves_authoritative_fallback_normal(distance: float) -> None:
+    source = _lightmapped_cube()
+    session = MapStudioLiveTopologySession.prepare_edge_extrude(
+        source,
+        "render",
+        0,
+        (0, 1),
+        direction=(1.0, 0.0, 0.0),
+    )
+    evaluated = session.evaluate(distance)
+    authoritative = extrude_imported_mesh_edge(
+        source,
+        "render",
+        0,
+        (0, 1),
+        (distance, 0.0, 0.0),
+    )
+    _assert_surface_close(evaluated.surfaces[0], authoritative.surfaces[0])
 
 
 @pytest.mark.parametrize("width", (0.08, 0.31, -0.31))
@@ -232,4 +293,34 @@ def test_prepared_65x65_drag_evaluation_stays_inside_four_millisecond_cpu_budget
     assert result is not None
     assert result.surfaces[0].faces is session.evaluate(0.2).surfaces[0].faces
     print(f"prepared 65x65 face-extrude evaluation: {average_ms:.3f} ms/frame")
+    assert average_ms < 4.0
+
+
+def test_prepared_65x65_edge_extrude_stays_inside_four_millisecond_cpu_budget() -> None:
+    source = _grid_65()
+    session = MapStudioLiveTopologySession.prepare_edge_extrude(
+        source,
+        "render",
+        0,
+        (0, 1),
+        direction=(0.0, 0.0, 1.0),
+        reference_distance=0.75,
+    )
+    for value in (0.1, -0.2, 0.3):
+        session.evaluate(value)
+
+    values = tuple((-1.0 if index % 2 else 1.0) * (0.05 + ((index % 50) * 0.01)) for index in range(200))
+    started = time.perf_counter()
+    result = None
+    for value in values:
+        result = session.evaluate(value)
+    average_ms = ((time.perf_counter() - started) * 1000.0) / len(values)
+
+    assert result is not None
+    second = session.evaluate(0.2)
+    assert result.surfaces[0].faces is second.surfaces[0].faces
+    assert result.surfaces[0].face_mats is second.surfaces[0].face_mats
+    assert result.surfaces[0].uvs_lm is second.surfaces[0].uvs_lm
+    assert source == _grid_65()
+    print(f"prepared 65x65 edge-extrude evaluation: {average_ms:.3f} ms/frame")
     assert average_ms < 4.0

@@ -8,6 +8,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
+from types import SimpleNamespace
 from typing import Any
 
 from src.core.level import (
@@ -54,6 +55,16 @@ from .authored_module_kmap_bridge import (
     texture_paint_pending_resrefs,
 )
 from .authored_module_preview_model import build_authored_module_preview_model
+from .authored_primitive_polygon_cages import (
+    build_authored_primitive_polygon_cage,
+    logical_topology_counts,
+)
+from .authored_room_composition import AuthoredRoomComposition, primitive_to_mesh
+from .authored_primitive_topology_policy import (
+    PrimitivePreviewDeferred,
+    PrimitiveTopologySafetyError,
+    enforce_primitive_topology_budget,
+)
 from .map_studio_pie import build_map_studio_pie_session
 from .map_studio_stock_content_preview import (
     TemplateModelResolver,
@@ -397,6 +408,37 @@ MAP_STUDIO_ACTIVE_SELECTION_SECTION = "map_studio_active_selection"
 MAP_STUDIO_SELECTION_READINESS_IMPACT = "Map Studio selection target changed; generated resources are unchanged."
 
 
+def _authored_primitive_by_identity(
+    authored,
+    *,
+    room_resref: str,
+    primitive_name: str,
+):
+    """Find one retained recipe without evaluating or allocating its mesh."""
+
+    wanted_room = normalise_resref(room_resref)
+    wanted_name = str(primitive_name or "").strip()
+    for room in tuple(getattr(authored, "rooms", ()) or ()):
+        if room.normalised_resref() != wanted_room:
+            continue
+        composition = room.primitive
+        if not isinstance(composition, AuthoredRoomComposition):
+            break
+        for primitive in (composition.floor,) + tuple(composition.primitives or ()):
+            base = getattr(primitive, "primitive", primitive)
+            candidate_name = str(
+                getattr(primitive, "name", "")
+                or getattr(base, "name", "")
+                or ""
+            ).strip()
+            if candidate_name == wanted_name:
+                return primitive
+        break
+    raise ValueError(
+        f"Room {room_resref} has no authored primitive named '{primitive_name}'."
+    )
+
+
 @dataclass(frozen=True)
 class MapStudioLaunchHandoffSummary:
     """Non-mutating summary of the current Map Studio in-game launch handoff."""
@@ -492,6 +534,12 @@ class ModuleEditorController:
         self.last_map_studio_unresolved_placement_ids: tuple[str, ...] = ()
         self.last_map_studio_preview_cache_hit = False
         self.last_map_studio_preview_elapsed_ms = 0.0
+        self.last_map_studio_primitive_preview_elapsed_ms = 0.0
+        self.last_map_studio_primitive_preview_overlay = None
+        self.last_map_studio_primitive_preview_deferred = False
+        self.last_map_studio_primitive_preview_identity = None
+        self.last_map_studio_primitive_preview_dimensions = None
+        self.last_map_studio_primitive_commit_matches_preview = False
         self._map_studio_combined_preview_cache: tuple[Any, Any, Any] | None = None
         self._map_studio_authored_state_revision = 0
         self._map_studio_cached_authored_project: tuple[tuple[Any, ...], Any] | None = None
@@ -6284,16 +6332,31 @@ class ModuleEditorController:
         if payload is None:
             raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
         before = self._capture_map_studio_command_state()
-        authored = authored_project_from_kmap_payload(
-            payload,
-            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
-            fallback_game=str(getattr(self.project, "game", "") or "K1"),
-        )
+        # The decoded authored project is immutable and cached by payload
+        # identity/revision.  Reusing it here keeps an Apply commit to one
+        # recipe evaluation plus one KMAP serialization; live scrubbing uses
+        # ``preview_authored_room_primitive_dimensions`` below and performs
+        # neither serialization nor command-history capture.
+        authored = self._load_authored_project_or_raise()
         updated = set_authored_room_composition_primitive_dimensions(
             authored,
             room_resref=room_resref,
             primitive_name=primitive_name,
             dimensions=dimensions,
+        )
+        updated_primitive = _authored_primitive_by_identity(
+            updated,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+        )
+        # The immutable recipe update above allocates no geometry.  Enforce the
+        # absolute safety policy before KMAP serialization, history mutation,
+        # or any downstream mesh evaluation.
+        enforce_primitive_topology_budget(updated_primitive, operation="commit")
+        preview_identity = (normalise_resref(room_resref), str(primitive_name or "").strip())
+        self.last_map_studio_primitive_commit_matches_preview = bool(
+            self.last_map_studio_primitive_preview_identity == preview_identity
+            and self.last_map_studio_primitive_preview_dimensions == dimensions
         )
         self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(updated)
         self.project.name = updated.metadata.module_root
@@ -6309,6 +6372,153 @@ class ModuleEditorController:
             metadata={"room_resref": room_resref, "primitive_name": primitive_name, "dimensions": dimensions},
         )
         return self.authored_module_readiness()
+
+    def preview_authored_room_primitive_dimensions(
+        self,
+        *,
+        room_resref: str,
+        primitive_name: str,
+        dimensions: Any,
+    ) -> tuple[dict[str, Any], ...]:
+        """Evaluate one retained primitive recipe without mutating KMAP state.
+
+        Maya's primitive attributes dirty one construction node and redraw the
+        selected mesh in place.  This method is the Scene-owned equivalent: it
+        reuses the decoded authored snapshot, replaces one immutable recipe in
+        memory, and returns only that primitive's render arrays.  It creates no
+        undo record, does not mark the project dirty, and never serializes the
+        authored payload.
+        """
+
+        started = perf_counter()
+        authored = self._load_authored_project_or_raise()
+        updated = set_authored_room_composition_primitive_dimensions(
+            authored,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+            dimensions=dimensions,
+        )
+        wanted_room = normalise_resref(room_resref)
+        wanted_name = str(primitive_name or "").strip()
+        updated_primitive = _authored_primitive_by_identity(
+            updated,
+            room_resref=room_resref,
+            primitive_name=primitive_name,
+        )
+        try:
+            # This integer-only estimate happens before ``primitive_to_mesh``
+            # allocates positions, normals, UVs, or face tuples.
+            enforce_primitive_topology_budget(updated_primitive, operation="preview")
+        except (PrimitivePreviewDeferred, PrimitiveTopologySafetyError):
+            self.last_map_studio_primitive_preview_deferred = True
+            self.last_map_studio_primitive_preview_identity = None
+            self.last_map_studio_primitive_preview_dimensions = None
+            self.last_map_studio_primitive_preview_overlay = None
+            self.last_map_studio_primitive_preview_elapsed_ms = (perf_counter() - started) * 1000.0
+            raise
+        self.last_map_studio_primitive_preview_deferred = False
+        for room in tuple(updated.rooms or ()):
+            if room.normalised_resref() != wanted_room:
+                continue
+            composition = room.primitive
+            if not isinstance(composition, AuthoredRoomComposition):
+                break
+            candidates = (composition.floor,) + tuple(composition.primitives or ())
+            for primitive in candidates:
+                base = getattr(primitive, "primitive", primitive)
+                candidate_name = str(
+                    getattr(primitive, "name", "")
+                    or getattr(base, "name", "")
+                    or ""
+                ).strip()
+                if candidate_name != wanted_name:
+                    continue
+                mesh = primitive_to_mesh(primitive)
+                try:
+                    logical_cage = build_authored_primitive_polygon_cage(
+                        primitive,
+                        room_resref=wanted_room,
+                    )
+                except TypeError:
+                    logical_cage = None
+                if logical_cage is not None:
+                    logical_vertex_count, logical_edge_count, logical_face_count = logical_topology_counts(logical_cage)
+                    topology_count_source = "retained_construction_cage"
+                else:
+                    logical_vertex_count = len(tuple(mesh.vertices or ()))
+                    logical_face_count = len(tuple(mesh.faces or ()))
+                    logical_edge_count = 0
+                    topology_count_source = "legacy_render_mesh_fallback"
+                metadata = dict(getattr(mesh, "metadata", {}) or {})
+                faces = tuple(tuple(int(value) for value in face[:3]) for face in tuple(mesh.faces or ()))
+                face_mats = tuple(
+                    int(value)
+                    for value in tuple(
+                        metadata.get("face_mats")
+                        or metadata.get("face_material_ids")
+                        or ()
+                    )
+                )
+                if len(face_mats) != len(faces):
+                    face_mats = tuple(0 for _ in faces)
+                result = (
+                    {
+                        "room_resref": wanted_room,
+                        "primitive_name": wanted_name,
+                        "mesh_name": str(mesh.name or wanted_name),
+                        "vertices": tuple(tuple(float(value) for value in vertex[:3]) for vertex in tuple(mesh.vertices or ())),
+                        "faces": faces,
+                        "normals": tuple(tuple(float(value) for value in normal[:3]) for normal in tuple(mesh.normals or ())),
+                        "uvs": tuple(tuple(float(value) for value in uv[:2]) for uv in tuple(mesh.uvs or ())),
+                        "uvs_lm": tuple(tuple(float(value) for value in uv[:2]) for uv in tuple(metadata.get("uvs_lm") or ())),
+                        "face_mats": face_mats,
+                        "texture": str(mesh.texture or ""),
+                    },
+                )
+                room_offset = tuple(float(value) for value in tuple(room.position or (0.0, 0.0, 0.0))[:3])
+                if len(room_offset) < 3:
+                    room_offset = (0.0, 0.0, 0.0)
+                world_vertices = tuple(
+                    tuple(float(vertex[index]) + room_offset[index] for index in range(3))
+                    for vertex in tuple(mesh.vertices or ())
+                )
+                if world_vertices:
+                    bounds_min = tuple(min(vertex[index] for vertex in world_vertices) for index in range(3))
+                    bounds_max = tuple(max(vertex[index] for vertex in world_vertices) for index in range(3))
+                    center = tuple((bounds_min[index] + bounds_max[index]) * 0.5 for index in range(3))
+                    dimensions3 = tuple(bounds_max[index] - bounds_min[index] for index in range(3))
+                    self.last_map_studio_primitive_preview_overlay = build_map_studio_universal_transform_overlay(
+                        SimpleNamespace(
+                            room_resref=wanted_room,
+                            primitive_name=wanted_name,
+                            primitive_type=type(base).__name__.removesuffix("Primitive").lower(),
+                            coordinate_space="kmap_world_preview",
+                            bounds_min=bounds_min,
+                            bounds_max=bounds_max,
+                            center=center,
+                            dimensions=dimensions3,
+                            vertex_count=logical_vertex_count,
+                            face_count=logical_face_count,
+                            committed_edit_stale_outputs=("MDL", "MDX", "WOK", "LYT", "VIS", "PTH", ".mod"),
+                            readiness_impact=(
+                                "Committing construction inputs invalidates validation, export, install handoff, and game proof."
+                            ),
+                            metadata={
+                                "preview_only": True,
+                                "construction_recipe": True,
+                                "logical_edge_count": logical_edge_count,
+                                "topology_count_source": topology_count_source,
+                            },
+                        )
+                    )
+                self.last_map_studio_primitive_preview_elapsed_ms = (perf_counter() - started) * 1000.0
+                self.last_map_studio_primitive_preview_identity = (wanted_room, wanted_name)
+                self.last_map_studio_primitive_preview_dimensions = deepcopy(dimensions)
+                return result
+            break
+        raise ValueError(
+            f"Room {room_resref} has no authored primitive named '{primitive_name}' to preview."
+        )
 
     def set_authored_room_primitive_style(
         self,

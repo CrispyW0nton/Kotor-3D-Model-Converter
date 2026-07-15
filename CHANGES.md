@@ -126,6 +126,81 @@ full arbitrary-mesh Maya parity, WOK regeneration/review for arbitrary render-
 topology edits, and the user-run `plcaa` export/warp/live-log loop remain
 required before an engine-ready claim.
 
+### [2026-07-14] T2907: Retained primitive construction now drives live Map Studio topology
+
+Owner: LordVaderCW
+
+T###: T2907
+
+Subsystem: Map Studio primitive construction history, logical polygon cages,
+Freeze Transformations, live topology preview, KMAP persistence, and viewport
+performance safety
+
+Intersects: the committed Maya modeling shelf at `4b2cabf9`, the ongoing shared
+dirty worktree, and the existing T2907 component-modeling performance work.
+
+- Completed another clean-room Maya 2025.3.1/Ghidra 12.1.2 pass focused on
+  primitive creation, dependency-node history, manipulators, topology fields,
+  Freeze Transformations, and all 32 commands on the user's custom shelf. The
+  evidence and hashes are recorded in
+  `docs/audits/maya_map_studio_modeling_construction_clean_room_2026-07-14.md`
+  and `Saved/Audits/maya_modeling_parity_20260714/`. No Autodesk source,
+  algorithms, icons, or other assets were copied.
+- Replaced the fixed five-row primitive-dimension form with a dynamic
+  **Primitive Construction History** inspector. Plane, Cube, Cylinder, Sphere,
+  Cone, and Torus expose typed dimensions, independent subdivisions, signed
+  normalized axis, height baseline, cap controls, twist, and UV policy, with
+  grouped controls, hard versus soft limits, Reset Defaults, Apply, Cancel,
+  Escape, implementation notes, and one-command undo semantics.
+- Added stable versioned construction-node IDs and backward-compatible KMAP
+  persistence. One-primitive scrubbing evaluates an immutable recipe without
+  serializing KMAP or creating undo entries, patches only its resident mesh,
+  restores exactly on Cancel, and promotes the resident result on Apply rather
+  than rebuilding the complete room renderer.
+- Added connected shared-index polygon cages for the six standard primitives.
+  Their logical vertex/edge/face counts match the measured Maya oracles; cages
+  preserve stable construction-scoped provenance, per-corner normals/UV0,
+  cap/axis/baseline/twist behavior, and now back production logical counts and
+  primitive snap/edge domains while Odyssey render/export triangles remain a
+  separate representation.
+- Changed Freeze Transformations to append ordered downstream evaluation
+  stages and reset only the editable transform channels. Render geometry and
+  WOK apply the same stages; repeated freeze and KMAP reload preserve visible
+  geometry, primitive type, recipe fields, and construction identity. Duplicate
+  Special now creates independent construction identities rather than silently
+  sharing a source recipe ID.
+- Added pre-allocation topology budgets so large typed subdivision values are
+  not clamped or rewritten, but expensive live previews defer clearly and
+  unsafe allocations fail before blocking or exhausting the UI process.
+- Moved single-edge extrusion onto the prepared live topology-session path.
+  Topology is built once per drag and sparse signed samples average about
+  `0.07 ms/frame` on the 65x65 kernel fixture; release still runs the
+  authoritative operation and one KMAP transaction.
+
+Affected areas: Scene/Tools primitive, composition, operations, KMAP bridge,
+live-topology-session, preview-policy, and controller payloads; GUI
+Display/Tools Builder and viewport-panel mirrors; Map Studio window wiring;
+focused primitive/history/cage/viewport/performance tests; payload manifests
+and native resource lists; `docs/knowledgebase/mapstudioskill.md`; and the
+clean-room audit above.
+
+Verification: targeted `py_compile`; 51 focused primitive schema/KMAP, exact
+logical topology, Freeze/WOK, Duplicate Special identity, preview mutation,
+viewport apply/cancel/promote, signed inspector range, live edge-extrude, and
+performance-policy checks; 17 shelf/window integration checks; the legacy
+compatibility operation matrix at `27/27 PASS`; four native-payload checks;
+byte-identical Scene/Tools and GUI Display/Tools mirrors; native payload
+regeneration; and a successful Debug native-host rebuild. The actual rebuilt
+`GhostStudio.exe` then created a Composition Starter Room and cube, previewed
+width plus `4/3/2` subdivisions in `1.77 ms`, cancelled back to `1/1/1`,
+applied once, undid, and redid through the real Qt controls. Captures are under
+`Saved/Audits/maya_modeling_parity_20260714/`. This is Ghost Studio workflow
+proof, not retail-KOTOR proof. The
+strict shelf score remains `0/32` fully Maya-equivalent until every command
+passes the complete gesture/options/history/remap/visible-performance gate, and
+writer changes still require vanilla comparison plus the user-run `plcaa`
+warp before an engine-ready claim.
+
 ### [2026-07-14] T2801/T2806: Legacy community modules hydrate, repair, and cross-port safely
 
 Owner: LordVaderCW

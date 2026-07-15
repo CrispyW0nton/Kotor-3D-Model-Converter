@@ -2054,7 +2054,23 @@ def test_t2908_controller_adds_plane_composition_primitive_and_generates_wok() -
     assert plane_payload["transform"]["translation"] == [2.0, 0.0, 0.25]
     assert plane_row.primitive_type == "plane"
     assert plane_row.supports_walkmesh_surface is True
-    assert {dimension.key for dimension in plane_row.dimensions} == {"width", "depth"}
+    assert {dimension.key for dimension in plane_row.dimensions} == {
+        "width",
+        "depth",
+        "subdivisions_width",
+        "subdivisions_depth",
+    }
+    assert {property_row.key for property_row in plane_row.properties} >= {
+        "width",
+        "depth",
+        "subdivisions_width",
+        "subdivisions_depth",
+        "axis_x",
+        "axis_y",
+        "axis_z",
+        "height_baseline",
+        "create_uvs",
+    }
     assert len(wok.faces) >= 4
     assert build.module.room_geometry["grplane_room01"].metadata["walkmesh_primitive_count"] >= 3
     assert not build.blocking_issues
@@ -2606,6 +2622,14 @@ def test_t2673_builder_tab_exposes_primitive_dimension_controls() -> None:
     ).read_text(encoding="utf-8")
 
     assert "roomPrimitiveDimensionsRequested" in source
+    assert "roomPrimitiveDimensionsPreviewRequested" in source
+    assert "roomPrimitiveDimensionsPreviewCancelled" in source
+    assert "Primitive Construction History" in source
+    assert "for index in range(5)" not in source
+    assert "def _rebuild_primitive_property_controls" in source
+    assert 'kind == "bool"' in source
+    assert 'kind == "vector3"' in source
+    assert 'kind == "choice"' in source
     assert "mapStudioPrimitiveDimension{index + 1}SpinBox" in source
     assert "mapStudioApplyPrimitiveDimensionsButton" in source
     assert "def _emit_primitive_dimensions" in source

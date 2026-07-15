@@ -11,10 +11,21 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 from typing import Any
+from uuid import UUID, uuid5
 
 from .authored_room_geometry import Face, PrimitiveMesh, Vec2, Vec3
 from .authored_walkmesh_surfaces import resolve_walkmesh_surface_id, walkmesh_surface_name
 from .module_format import WOKData, WOKFace
+
+
+_PRIMITIVE_CONSTRUCTION_NAMESPACE = UUID("668cd23c-c116-5c29-a1cc-b34fda3f45fd")
+
+
+def primitive_construction_node_id(*, room_resref: str, primitive_type: str, name: str) -> str:
+    """Create the stable identity used by a retained construction recipe."""
+
+    seed = f"{str(room_resref or '').strip().lower()}:{str(primitive_type or '').strip().lower()}:{str(name or '').strip()}"
+    return str(uuid5(_PRIMITIVE_CONSTRUCTION_NAMESPACE, seed))
 
 
 @dataclass(frozen=True)
@@ -37,6 +48,12 @@ class FloorPrimitive:
     material: PrimitiveMaterial = field(default_factory=PrimitiveMaterial)
     subdivisions_width: int = 1
     subdivisions_depth: int = 1
+    axis: Vec3 = (0.0, 0.0, 1.0)
+    height_baseline: float = 0.0
+    create_uvs: int = 1
+    recipe_version: int = 1
+    construction_node_id: str = ""
+    construction_schema_version: int = 1
 
 
 @dataclass(frozen=True)
@@ -59,6 +76,12 @@ class CubePrimitive:
     subdivisions_x: int = 1
     subdivisions_y: int = 1
     subdivisions_z: int = 1
+    axis: Vec3 = (0.0, 0.0, 1.0)
+    height_baseline: float = 0.0
+    create_uvs: int = 3
+    recipe_version: int = 1
+    construction_node_id: str = ""
+    construction_schema_version: int = 1
 
 
 @dataclass(frozen=True)
@@ -91,6 +114,22 @@ class CylinderPrimitive:
     segments: int = 16
     center: Vec3 = (0.0, 0.0, 0.5)
     material: PrimitiveMaterial = field(default_factory=PrimitiveMaterial)
+    subdivisions_height: int = 1
+    subdivisions_caps: int = 0
+    axis: Vec3 = (0.0, 0.0, 1.0)
+    height_baseline: float = 0.0
+    create_uvs: int = 2
+    round_cap: bool = False
+    round_cap_height_compensation: bool = False
+    recipe_version: int = 1
+    construction_node_id: str = ""
+    construction_schema_version: int = 1
+
+    @property
+    def subdivisions_axis(self) -> int:
+        """Maya-compatible name retained alongside legacy ``segments``."""
+
+        return int(self.segments)
 
 
 @dataclass(frozen=True)
@@ -103,6 +142,12 @@ class SpherePrimitive:
     subdivisions_height: int = 20
     center: Vec3 = (0.0, 0.0, 0.5)
     material: PrimitiveMaterial = field(default_factory=PrimitiveMaterial)
+    axis: Vec3 = (0.0, 0.0, 1.0)
+    height_baseline: float = 0.0
+    create_uvs: int = 2
+    recipe_version: int = 1
+    construction_node_id: str = ""
+    construction_schema_version: int = 1
 
 
 @dataclass(frozen=True)
@@ -114,9 +159,16 @@ class ConePrimitive:
     height: float = 1.0
     subdivisions_axis: int = 20
     subdivisions_height: int = 1
-    subdivisions_caps: int = 1
+    subdivisions_caps: int = 0
     center: Vec3 = (0.0, 0.0, 0.5)
     material: PrimitiveMaterial = field(default_factory=PrimitiveMaterial)
+    axis: Vec3 = (0.0, 0.0, 1.0)
+    height_baseline: float = 0.0
+    create_uvs: int = 2
+    round_cap: bool = False
+    recipe_version: int = 1
+    construction_node_id: str = ""
+    construction_schema_version: int = 1
 
 
 @dataclass(frozen=True)
@@ -130,6 +182,13 @@ class TorusPrimitive:
     subdivisions_height: int = 20
     center: Vec3 = (0.0, 0.0, 0.5)
     material: PrimitiveMaterial = field(default_factory=PrimitiveMaterial)
+    axis: Vec3 = (0.0, 0.0, 1.0)
+    height_baseline: float = 0.0
+    create_uvs: bool = True
+    twist: float = 0.0
+    recipe_version: int = 1
+    construction_node_id: str = ""
+    construction_schema_version: int = 1
 
 
 @dataclass(frozen=True)
@@ -184,6 +243,139 @@ def _mesh(
         ambient=material.ambient,
         metadata={"primitive": primitive, **dict(metadata or {}), **dict(material.metadata)},
     )
+
+
+def normalise_primitive_axis(axis: Vec3 | tuple[float, ...] | list[float]) -> Vec3:
+    """Return a deterministic non-zero axis for a retained primitive recipe.
+
+    KOTOR authoring is Z-up, so legacy payloads and invalid zero vectors fall
+    back to positive Z.  Numeric recipe edits reject a zero vector before they
+    reach this evaluator; the fallback keeps old or hand-edited KMAP data safe.
+    """
+
+    try:
+        x, y, z = (float(axis[0]), float(axis[1]), float(axis[2]))
+    except (IndexError, TypeError, ValueError):
+        return (0.0, 0.0, 1.0)
+    length = math.sqrt(x * x + y * y + z * z)
+    if length <= 1.0e-12:
+        return (0.0, 0.0, 1.0)
+    return (x / length, y / length, z / length)
+
+
+def _orient_vector_from_z(vector: Vec3, axis: Vec3) -> Vec3:
+    """Rotate a local-Z vector onto ``axis`` using the shortest rotation."""
+
+    target = normalise_primitive_axis(axis)
+    x, y, z = vector
+    cosine = max(-1.0, min(1.0, target[2]))
+    if cosine >= 1.0 - 1.0e-12:
+        return (x, y, z)
+    if cosine <= -1.0 + 1.0e-12:
+        # Stable 180-degree turn around local X.
+        return (x, -y, -z)
+    # Rodrigues rotation from (0, 0, 1) to target.  The unnormalised cross
+    # vector is (-target.y, target.x, 0).
+    vx, vy, vz = -target[1], target[0], 0.0
+    sine_squared = vx * vx + vy * vy
+    cross_x = vy * z - vz * y
+    cross_y = vz * x - vx * z
+    cross_z = vx * y - vy * x
+    dot = vx * x + vy * y + vz * z
+    factor = (1.0 - cosine) / sine_squared
+    return (
+        x * cosine + cross_x + vx * dot * factor,
+        y * cosine + cross_y + vy * dot * factor,
+        z * cosine + cross_z + vz * dot * factor,
+    )
+
+
+def _orient_primitive_channels(
+    vertices: list[Vec3],
+    normals: list[Vec3],
+    *,
+    center: Vec3,
+    axis: Vec3,
+    height_baseline: float,
+    baseline_extent: float,
+) -> tuple[list[Vec3], list[Vec3]]:
+    """Apply axis plus Maya-style -1..1 height anchoring to mesh channels."""
+
+    resolved_axis = normalise_primitive_axis(axis)
+    baseline = max(-1.0, min(1.0, float(height_baseline)))
+    shift = -baseline * max(0.0, float(baseline_extent)) * 0.5
+    shifted_center = tuple(center[index] + resolved_axis[index] * shift for index in range(3))
+    oriented_vertices: list[Vec3] = []
+    for position in vertices:
+        delta = tuple(float(position[index]) - float(center[index]) for index in range(3))
+        rotated = _orient_vector_from_z(delta, resolved_axis)
+        oriented_vertices.append(tuple(shifted_center[index] + rotated[index] for index in range(3)))
+    oriented_normals = [_orient_vector_from_z(normal, resolved_axis) for normal in normals]
+    return oriented_vertices, oriented_normals
+
+
+def primitive_logical_topology(primitive: Any) -> dict[str, int]:
+    """Return Maya-oracle cage counts before render-channel corner expansion."""
+
+    if isinstance(primitive, FloorPrimitive):
+        width = max(1, int(primitive.subdivisions_width))
+        depth = max(1, int(primitive.subdivisions_depth))
+        return {
+            "vertices": (width + 1) * (depth + 1),
+            "edges": width * (depth + 1) + depth * (width + 1),
+            "faces": width * depth,
+            "triangles": 2 * width * depth,
+        }
+    if isinstance(primitive, CubePrimitive):
+        x = max(1, int(primitive.subdivisions_x))
+        y = max(1, int(primitive.subdivisions_y))
+        z = max(1, int(primitive.subdivisions_z))
+        faces = 2 * (x * y + x * z + y * z)
+        return {"vertices": faces + 2, "edges": faces * 2, "faces": faces, "triangles": faces * 2}
+    if isinstance(primitive, CylinderPrimitive):
+        axis = max(3, int(primitive.segments))
+        height = max(1, int(primitive.subdivisions_height))
+        caps = max(0, int(primitive.subdivisions_caps))
+        vertices = axis * (height + 1) + (0 if caps == 0 else 2 * (1 + axis * (caps - 1)))
+        faces = axis * height + (2 if caps == 0 else 2 * axis * caps)
+        cap_triangles = 2 * (axis - 2) if caps == 0 else 2 * axis * (2 * caps - 1)
+        return {"vertices": vertices, "edges": vertices + faces - 2, "faces": faces, "triangles": 2 * axis * height + cap_triangles}
+    if isinstance(primitive, SpherePrimitive):
+        axis = max(3, int(primitive.subdivisions_axis))
+        height = max(3, int(primitive.subdivisions_height))
+        return {
+            "vertices": axis * (height - 1) + 2,
+            "edges": axis * (2 * height - 1),
+            "faces": axis * height,
+            "triangles": 2 * axis * (height - 1),
+        }
+    if isinstance(primitive, ConePrimitive):
+        axis = max(3, int(primitive.subdivisions_axis))
+        height = max(1, int(primitive.subdivisions_height))
+        caps = max(0, int(primitive.subdivisions_caps))
+        vertices = axis * height + 1 + (0 if caps == 0 else 1 + axis * (caps - 1))
+        faces = axis * height + (1 if caps == 0 else axis * caps)
+        cap_triangles = axis - 2 if caps == 0 else axis * (2 * caps - 1)
+        return {"vertices": vertices, "edges": vertices + faces - 2, "faces": faces, "triangles": axis * (2 * height - 1) + cap_triangles}
+    if isinstance(primitive, TorusPrimitive):
+        axis = max(3, int(primitive.subdivisions_axis))
+        height = max(3, int(primitive.subdivisions_height))
+        faces = axis * height
+        return {"vertices": faces, "edges": faces * 2, "faces": faces, "triangles": faces * 2}
+    return {}
+
+
+def _construction_mesh_metadata(primitive: Any) -> dict[str, Any]:
+    node_id = str(getattr(primitive, "construction_node_id", "") or "").strip()
+    if not node_id:
+        return {}
+    return {
+        "construction_node_id": node_id,
+        "construction_schema_version": max(1, int(getattr(primitive, "construction_schema_version", 1))),
+        "logical_topology": primitive_logical_topology(primitive),
+        "component_provenance": "retained_recipe_logical_cage",
+        "render_topology_policy": "expanded_face_corners_for_kotor_normal_uv_seams",
+    }
 
 
 def _append_corner_triangle(
@@ -275,6 +467,11 @@ def _box_vertices_faces(
     subdivisions_x: int = 1,
     subdivisions_y: int = 1,
     subdivisions_z: int = 1,
+    axis: Vec3 = (0.0, 0.0, 1.0),
+    height_baseline: float = 0.0,
+    create_uvs: int = 3,
+    recipe_version: int = 1,
+    construction_metadata: dict[str, Any] | None = None,
 ) -> PrimitiveMesh:
     """Build a Maya-style hard-edged box with outward winding and face UVs.
 
@@ -324,12 +521,21 @@ def _box_vertices_faces(
             v_subdivisions=v_subdivisions,
             normal=normal,
         )
+    vertices, normals = _orient_primitive_channels(
+        vertices,
+        normals,
+        center=center,
+        axis=axis,
+        height_baseline=height_baseline,
+        baseline_extent=abs(float(z)),
+    )
+    uv_mode = max(0, min(4, int(create_uvs)))
     return _mesh(
         name=name,
         vertices=tuple(vertices),
         faces=tuple(faces),
         normals=tuple(normals),
-        uvs=tuple(uvs),
+        uvs=tuple(uvs) if uv_mode else (),
         material=material,
         primitive=primitive,
         metadata={
@@ -338,6 +544,11 @@ def _box_vertices_faces(
             "subdivisions_x": sub_x,
             "subdivisions_y": sub_y,
             "subdivisions_z": sub_z,
+            "axis": normalise_primitive_axis(axis),
+            "height_baseline": max(-1.0, min(1.0, float(height_baseline))),
+            "create_uvs": uv_mode,
+            "recipe_version": max(1, int(recipe_version)),
+            **dict(construction_metadata or {}),
         },
     )
 
@@ -411,12 +622,21 @@ def build_floor_mesh(primitive: FloorPrimitive) -> PrimitiveMesh:
         v_subdivisions=subdivisions_depth,
         normal=(0.0, 0.0, 1.0),
     )
+    vertices, normals = _orient_primitive_channels(
+        vertices,
+        normals,
+        center=(0.0, 0.0, z),
+        axis=primitive.axis,
+        height_baseline=primitive.height_baseline,
+        baseline_extent=0.0,
+    )
+    uv_mode = max(0, min(2, int(primitive.create_uvs)))
     return _mesh(
         name=primitive.name,
         vertices=tuple(vertices),
         faces=tuple(faces),
         normals=tuple(normals),
-        uvs=tuple(uvs),
+        uvs=tuple(uvs) if uv_mode else (),
         material=primitive.material,
         primitive="floor",
         metadata={
@@ -424,6 +644,11 @@ def build_floor_mesh(primitive: FloorPrimitive) -> PrimitiveMesh:
             "surface_name": walkmesh_surface_name(surface_id),
             "subdivisions_width": subdivisions_width,
             "subdivisions_depth": subdivisions_depth,
+            "axis": normalise_primitive_axis(primitive.axis),
+            "height_baseline": max(-1.0, min(1.0, float(primitive.height_baseline))),
+            "create_uvs": uv_mode,
+            "recipe_version": max(1, int(primitive.recipe_version)),
+            **_construction_mesh_metadata(primitive),
         },
     )
 
@@ -433,12 +658,20 @@ def build_floor_wok(primitive: FloorPrimitive) -> WOKData:
     half_w = float(primitive.width) * 0.5
     half_d = float(primitive.depth) * 0.5
     z = float(primitive.z)
-    vertices = [
+    vertices: list[Vec3] = [
         (-half_w, -half_d, z),
         (half_w, -half_d, z),
         (half_w, half_d, z),
         (-half_w, half_d, z),
     ]
+    vertices, _ = _orient_primitive_channels(
+        vertices,
+        [],
+        center=(0.0, 0.0, z),
+        axis=primitive.axis,
+        height_baseline=primitive.height_baseline,
+        baseline_extent=0.0,
+    )
     return WOKData(
         # Render subdivisions do not inflate the engine walkmesh: the same
         # rectangular walkable region remains two stable WOK triangles.
@@ -479,6 +712,11 @@ def build_cube_mesh(primitive: CubePrimitive) -> PrimitiveMesh:
         subdivisions_x=primitive.subdivisions_x,
         subdivisions_y=primitive.subdivisions_y,
         subdivisions_z=primitive.subdivisions_z,
+        axis=primitive.axis,
+        height_baseline=primitive.height_baseline,
+        create_uvs=primitive.create_uvs,
+        recipe_version=primitive.recipe_version,
+        construction_metadata=_construction_mesh_metadata(primitive),
     )
 
 
@@ -592,33 +830,140 @@ def build_stairs_wok(primitive: StairsPrimitive) -> WOKData:
 
 def build_cylinder_mesh(primitive: CylinderPrimitive) -> PrimitiveMesh:
     segments = max(3, int(primitive.segments))
-    radius = float(primitive.radius)
-    half_h = float(primitive.height) * 0.5
+    height_subdivisions = max(1, int(primitive.subdivisions_height))
+    cap_subdivisions = max(0, int(primitive.subdivisions_caps))
+    cap_rings = cap_subdivisions
+    radius = max(0.01, float(primitive.radius))
+    requested_height = max(0.01, float(primitive.height))
+    round_cap = bool(primitive.round_cap)
+    compensation = bool(primitive.round_cap_height_compensation) and round_cap
+    cap_depth = radius if round_cap else 0.0
+    if compensation:
+        cap_depth = min(radius, max(0.0, requested_height * 0.5 - 0.005))
+        body_half_height = max(0.005, requested_height * 0.5 - cap_depth)
+        evaluated_height = requested_height
+    else:
+        body_half_height = requested_height * 0.5
+        evaluated_height = requested_height + cap_depth * 2.0
+    if round_cap and cap_subdivisions == 0 and not compensation:
+        # A cap-0 Maya cylinder retains two logical n-gons (no center/rings),
+        # so preserve the 28-triangle oracle while extending the end planes.
+        body_half_height += radius
+    elif round_cap and cap_subdivisions == 0 and compensation:
+        body_half_height = requested_height * 0.5
+        cap_depth = 0.0
     cx, cy, cz = primitive.center
-    vertices: list[Vec3] = [(cx, cy, cz - half_h), (cx, cy, cz + half_h)]
-    for index in range(segments):
-        angle = (math.tau * index) / segments
-        x = cx + math.cos(angle) * radius
-        y = cy + math.sin(angle) * radius
-        vertices.append((x, y, cz - half_h))
-        vertices.append((x, y, cz + half_h))
+    vertices: list[Vec3] = []
     faces: list[Face] = []
-    for index in range(segments):
-        b0 = 2 + index * 2
-        t0 = b0 + 1
-        b1 = 2 + ((index + 1) % segments) * 2
-        t1 = b1 + 1
-        faces.append((0, b1, b0))
-        faces.append((1, t0, t1))
-        faces.append((b0, b1, t1))
-        faces.append((b0, t1, t0))
+    normals: list[Vec3] = []
+    uvs: list[Vec2] = []
+
+    def side_corner(u: float, v: float) -> tuple[Vec3, Vec3, Vec2]:
+        angle = math.tau * u
+        cosine = math.cos(angle)
+        sine = math.sin(angle)
+        return (
+            (cx + cosine * radius, cy + sine * radius, cz - body_half_height + body_half_height * 2.0 * v),
+            (cosine, sine, 0.0),
+            (u, v),
+        )
+
+    for row in range(height_subdivisions):
+        v0 = row / height_subdivisions
+        v1 = (row + 1) / height_subdivisions
+        for column in range(segments):
+            u0 = column / segments
+            u1 = (column + 1) / segments
+            p00 = side_corner(u0, v0)
+            p10 = side_corner(u1, v0)
+            p11 = side_corner(u1, v1)
+            p01 = side_corner(u0, v1)
+            _append_corner_triangle(vertices, faces, normals, uvs, (p00, p10, p11))
+            _append_corner_triangle(vertices, faces, normals, uvs, (p00, p11, p01))
+
+    def cap_corner(sign: float, ring_fraction: float, u: float) -> tuple[Vec3, Vec3, Vec2]:
+        angle = math.tau * u
+        cosine = math.cos(angle)
+        sine = math.sin(angle)
+        if round_cap and cap_subdivisions > 0:
+            profile_angle = math.pi * 0.5 * ring_fraction
+            radial = radius * math.sin(profile_angle)
+            z = cz + sign * (body_half_height + cap_depth * math.cos(profile_angle))
+            normal = (
+                cosine * math.sin(profile_angle),
+                sine * math.sin(profile_angle),
+                sign * math.cos(profile_angle),
+            )
+        else:
+            radial = radius * ring_fraction
+            z = cz + sign * body_half_height
+            normal = (0.0, 0.0, sign)
+        return (
+            (cx + cosine * radial, cy + sine * radial, z),
+            normal,
+            (0.5 + cosine * ring_fraction * 0.5, 0.5 + sine * ring_fraction * 0.5),
+        )
+
+    if cap_subdivisions == 0:
+        for sign in (-1.0, 1.0):
+            anchor = cap_corner(sign, 1.0, 0.0)
+            for column in range(1, segments - 1):
+                current = cap_corner(sign, 1.0, column / segments)
+                following = cap_corner(sign, 1.0, (column + 1) / segments)
+                corners = (anchor, following, current) if sign < 0.0 else (anchor, current, following)
+                _append_corner_triangle(vertices, faces, normals, uvs, corners)
+    for sign in (-1.0, 1.0):
+        for ring in range(cap_rings):
+            inner = ring / cap_rings
+            outer = (ring + 1) / cap_rings
+            for column in range(segments):
+                u0 = column / segments
+                u1 = (column + 1) / segments
+                inner0 = cap_corner(sign, inner, u0)
+                outer0 = cap_corner(sign, outer, u0)
+                outer1 = cap_corner(sign, outer, u1)
+                if ring == 0:
+                    corners = (inner0, outer1, outer0) if sign < 0.0 else (inner0, outer0, outer1)
+                    _append_corner_triangle(vertices, faces, normals, uvs, corners)
+                else:
+                    inner1 = cap_corner(sign, inner, u1)
+                    if sign < 0.0:
+                        _append_corner_triangle(vertices, faces, normals, uvs, (inner0, inner1, outer1))
+                        _append_corner_triangle(vertices, faces, normals, uvs, (inner0, outer1, outer0))
+                    else:
+                        _append_corner_triangle(vertices, faces, normals, uvs, (inner0, outer1, inner1))
+                        _append_corner_triangle(vertices, faces, normals, uvs, (inner0, outer0, outer1))
+
+    vertices, normals = _orient_primitive_channels(
+        vertices,
+        normals,
+        center=primitive.center,
+        axis=primitive.axis,
+        height_baseline=primitive.height_baseline,
+        baseline_extent=evaluated_height,
+    )
+    uv_mode = max(0, min(3, int(primitive.create_uvs)))
     return _mesh(
         name=primitive.name,
         vertices=tuple(vertices),
         faces=tuple(faces),
+        normals=tuple(normals),
+        uvs=tuple(uvs) if uv_mode else (),
         material=primitive.material,
         primitive="cylinder",
-        metadata={"segments": segments},
+        metadata={
+            "segments": segments,
+            "subdivisions_axis": segments,
+            "subdivisions_height": height_subdivisions,
+            "subdivisions_caps": cap_subdivisions,
+            "axis": normalise_primitive_axis(primitive.axis),
+            "height_baseline": max(-1.0, min(1.0, float(primitive.height_baseline))),
+            "create_uvs": uv_mode,
+            "round_cap": round_cap,
+            "round_cap_height_compensation": compensation,
+            "recipe_version": max(1, int(primitive.recipe_version)),
+            **_construction_mesh_metadata(primitive),
+        },
     )
 
 
@@ -626,8 +971,8 @@ def build_sphere_mesh(primitive: SpherePrimitive) -> PrimitiveMesh:
     """Build a smooth, seam-safe UV sphere from Maya-style parameters."""
 
     axis = max(3, int(primitive.subdivisions_axis))
-    height = max(2, int(primitive.subdivisions_height))
-    radius = float(primitive.radius)
+    height = max(3, int(primitive.subdivisions_height))
+    radius = max(0.01, float(primitive.radius))
     cx, cy, cz = primitive.center
     vertices: list[Vec3] = []
     faces: list[Face] = []
@@ -685,15 +1030,44 @@ def build_sphere_mesh(primitive: SpherePrimitive) -> PrimitiveMesh:
                 _append_corner_triangle(vertices, faces, normals, uvs, (p00, p10, p11))
                 _append_corner_triangle(vertices, faces, normals, uvs, (p00, p11, p01))
 
+    vertices, normals = _orient_primitive_channels(
+        vertices,
+        normals,
+        center=primitive.center,
+        axis=primitive.axis,
+        height_baseline=primitive.height_baseline,
+        baseline_extent=radius * 2.0,
+    )
+    uv_mode = max(0, min(2, int(primitive.create_uvs)))
+    metadata: dict[str, Any] = {
+        "subdivisions_axis": axis,
+        "subdivisions_height": height,
+    }
+    if (
+        normalise_primitive_axis(primitive.axis) != (0.0, 0.0, 1.0)
+        or not math.isclose(float(primitive.height_baseline), 0.0, abs_tol=1.0e-12)
+        or uv_mode != 2
+        or int(primitive.recipe_version) != 1
+        or bool(primitive.construction_node_id)
+    ):
+        metadata.update(
+            {
+                "axis": normalise_primitive_axis(primitive.axis),
+                "height_baseline": max(-1.0, min(1.0, float(primitive.height_baseline))),
+                "create_uvs": uv_mode,
+                "recipe_version": max(1, int(primitive.recipe_version)),
+            }
+        )
+    metadata.update(_construction_mesh_metadata(primitive))
     return _mesh(
         name=primitive.name,
         vertices=tuple(vertices),
         faces=tuple(faces),
         normals=tuple(normals),
-        uvs=tuple(uvs),
+        uvs=tuple(uvs) if uv_mode else (),
         material=primitive.material,
         primitive="sphere",
-        metadata={"subdivisions_axis": axis, "subdivisions_height": height},
+        metadata=metadata,
     )
 
 
@@ -702,16 +1076,20 @@ def build_cone_mesh(primitive: ConePrimitive) -> PrimitiveMesh:
 
     axis = max(3, int(primitive.subdivisions_axis))
     height_subdivisions = max(1, int(primitive.subdivisions_height))
-    cap_subdivisions = max(1, int(primitive.subdivisions_caps))
-    radius = float(primitive.radius)
-    height = float(primitive.height)
+    cap_subdivisions = max(0, int(primitive.subdivisions_caps))
+    cap_rings = cap_subdivisions
+    radius = max(0.01, float(primitive.radius))
+    height = max(0.01, float(primitive.height))
     half_height = height * 0.5
     cx, cy, cz = primitive.center
     vertices: list[Vec3] = []
     faces: list[Face] = []
     normals: list[Vec3] = []
     uvs: list[Vec2] = []
-    slant = math.sqrt(height * height + radius * radius) or 1.0
+    round_cap = bool(primitive.round_cap)
+    base_extension = radius if round_cap and cap_subdivisions == 0 else 0.0
+    side_height = height + base_extension
+    slant = math.sqrt(side_height * side_height + radius * radius) or 1.0
 
     def side_corner(u: float, v: float, *, uv: Vec2 | None = None) -> tuple[Vec3, Vec3, Vec2]:
         theta = math.tau * u
@@ -719,11 +1097,11 @@ def build_cone_mesh(primitive: ConePrimitive) -> PrimitiveMesh:
         position = (
             cx + math.cos(theta) * ring_radius,
             cy + math.sin(theta) * ring_radius,
-            cz - half_height + height * v,
+            cz - half_height - base_extension + side_height * v,
         )
         normal = (
-            math.cos(theta) * height / slant,
-            math.sin(theta) * height / slant,
+            math.cos(theta) * side_height / slant,
+            math.sin(theta) * side_height / slant,
             radius / slant,
         )
         return position, normal, uv if uv is not None else (u, v)
@@ -746,23 +1124,40 @@ def build_cone_mesh(primitive: ConePrimitive) -> PrimitiveMesh:
                 _append_corner_triangle(vertices, faces, normals, uvs, (p00, p10, p11))
                 _append_corner_triangle(vertices, faces, normals, uvs, (p00, p11, p01))
 
-    cap_z = cz - half_height
-    cap_normal: Vec3 = (0.0, 0.0, -1.0)
+    cap_z = cz - half_height - base_extension
 
     def cap_corner(ring_fraction: float, u: float) -> tuple[Vec3, Vec3, Vec2]:
         theta = math.tau * u
         cos_theta = math.cos(theta)
         sin_theta = math.sin(theta)
-        ring_radius = radius * ring_fraction
+        if round_cap and cap_subdivisions > 0:
+            profile_angle = math.pi * 0.5 * ring_fraction
+            ring_radius = radius * math.sin(profile_angle)
+            z = cap_z - radius * math.cos(profile_angle)
+            normal: Vec3 = (
+                cos_theta * math.sin(profile_angle),
+                sin_theta * math.sin(profile_angle),
+                -math.cos(profile_angle),
+            )
+        else:
+            ring_radius = radius * ring_fraction
+            z = cap_z
+            normal = (0.0, 0.0, -1.0)
         return (
-            (cx + cos_theta * ring_radius, cy + sin_theta * ring_radius, cap_z),
-            cap_normal,
+            (cx + cos_theta * ring_radius, cy + sin_theta * ring_radius, z),
+            normal,
             (0.5 + cos_theta * ring_fraction * 0.5, 0.5 + sin_theta * ring_fraction * 0.5),
         )
 
-    for ring in range(cap_subdivisions):
-        inner = ring / cap_subdivisions
-        outer = (ring + 1) / cap_subdivisions
+    if cap_subdivisions == 0:
+        anchor = cap_corner(1.0, 0.0)
+        for column in range(1, axis - 1):
+            current = cap_corner(1.0, column / axis)
+            following = cap_corner(1.0, (column + 1) / axis)
+            _append_corner_triangle(vertices, faces, normals, uvs, (anchor, following, current))
+    for ring in range(cap_rings):
+        inner = ring / cap_rings
+        outer = (ring + 1) / cap_rings
         for column in range(axis):
             u0 = column / axis
             u1 = (column + 1) / axis
@@ -782,18 +1177,33 @@ def build_cone_mesh(primitive: ConePrimitive) -> PrimitiveMesh:
                 _append_corner_triangle(vertices, faces, normals, uvs, (inner0, inner1, outer1))
                 _append_corner_triangle(vertices, faces, normals, uvs, (inner0, outer1, outer0))
 
+    vertices, normals = _orient_primitive_channels(
+        vertices,
+        normals,
+        center=primitive.center,
+        axis=primitive.axis,
+        height_baseline=primitive.height_baseline,
+        baseline_extent=height + base_extension,
+    )
+    uv_mode = max(0, min(3, int(primitive.create_uvs)))
     return _mesh(
         name=primitive.name,
         vertices=tuple(vertices),
         faces=tuple(faces),
         normals=tuple(normals),
-        uvs=tuple(uvs),
+        uvs=tuple(uvs) if uv_mode else (),
         material=primitive.material,
         primitive="cone",
         metadata={
             "subdivisions_axis": axis,
             "subdivisions_height": height_subdivisions,
             "subdivisions_caps": cap_subdivisions,
+            "axis": normalise_primitive_axis(primitive.axis),
+            "height_baseline": max(-1.0, min(1.0, float(primitive.height_baseline))),
+            "create_uvs": uv_mode,
+            "round_cap": round_cap,
+            "recipe_version": max(1, int(primitive.recipe_version)),
+            **_construction_mesh_metadata(primitive),
         },
     )
 
@@ -803,8 +1213,9 @@ def build_torus_mesh(primitive: TorusPrimitive) -> PrimitiveMesh:
 
     axis = max(3, int(primitive.subdivisions_axis))
     height = max(3, int(primitive.subdivisions_height))
-    radius = float(primitive.radius)
-    section_radius = float(primitive.section_radius)
+    radius = max(0.01, float(primitive.radius))
+    section_radius = max(0.01, float(primitive.section_radius))
+    twist = max(0.0, min(360.0, float(primitive.twist)))
     cx, cy, cz = primitive.center
     vertices: list[Vec3] = []
     faces: list[Face] = []
@@ -812,8 +1223,11 @@ def build_torus_mesh(primitive: TorusPrimitive) -> PrimitiveMesh:
     uvs: list[Vec2] = []
 
     def corner(u: float, v: float) -> tuple[Vec3, Vec3, Vec2]:
-        theta = math.tau * u
-        phi = math.tau * v
+        # Keep the wrap corner identical to the first ring so the expanded
+        # render representation never opens a geometric crack at the seam.
+        wrapped_u = 0.0 if math.isclose(u, 1.0, abs_tol=1.0e-12) else u
+        theta = math.tau * wrapped_u
+        phi = math.tau * v + math.radians(twist) * wrapped_u
         cos_theta = math.cos(theta)
         sin_theta = math.sin(theta)
         cos_phi = math.cos(phi)
@@ -840,15 +1254,33 @@ def build_torus_mesh(primitive: TorusPrimitive) -> PrimitiveMesh:
             _append_corner_triangle(vertices, faces, normals, uvs, (p00, p10, p11))
             _append_corner_triangle(vertices, faces, normals, uvs, (p00, p11, p01))
 
+    vertices, normals = _orient_primitive_channels(
+        vertices,
+        normals,
+        center=primitive.center,
+        axis=primitive.axis,
+        height_baseline=primitive.height_baseline,
+        baseline_extent=section_radius * 2.0,
+    )
+    create_uvs = bool(primitive.create_uvs)
     return _mesh(
         name=primitive.name,
         vertices=tuple(vertices),
         faces=tuple(faces),
         normals=tuple(normals),
-        uvs=tuple(uvs),
+        uvs=tuple(uvs) if create_uvs else (),
         material=primitive.material,
         primitive="torus",
-        metadata={"subdivisions_axis": axis, "subdivisions_height": height},
+        metadata={
+            "subdivisions_axis": axis,
+            "subdivisions_height": height,
+            "axis": normalise_primitive_axis(primitive.axis),
+            "height_baseline": max(-1.0, min(1.0, float(primitive.height_baseline))),
+            "create_uvs": create_uvs,
+            "twist": twist,
+            "recipe_version": max(1, int(primitive.recipe_version)),
+            **_construction_mesh_metadata(primitive),
+        },
     )
 
 
@@ -1033,4 +1465,7 @@ __all__ = [
     "build_sphere_mesh",
     "build_torus_mesh",
     "build_wall_mesh",
+    "normalise_primitive_axis",
+    "primitive_construction_node_id",
+    "primitive_logical_topology",
 ]

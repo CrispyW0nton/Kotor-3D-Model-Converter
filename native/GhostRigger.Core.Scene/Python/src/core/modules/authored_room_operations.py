@@ -35,6 +35,10 @@ from .authored_module_project import AuthoredModuleProject, AuthoredRoomSpec, au
 from .authored_module_objects import AuthoredGameplayPlacement
 from .authored_module_placements import add_authored_gameplay_placement, update_authored_gameplay_transition
 from .authored_imported_mesh import ImportedMeshRoomPrimitive
+from .authored_primitive_polygon_cages import (
+    build_authored_primitive_polygon_cage,
+    logical_topology_counts,
+)
 from .authored_room_composition import (
     AuthoredRoomComposition,
     CombinedRoomPrimitive,
@@ -94,6 +98,8 @@ from .authored_room_primitives import (
     TorusPrimitive,
     WallPrimitive,
     PrimitiveMaterial,
+    normalise_primitive_axis,
+    primitive_construction_node_id,
 )
 from .authored_walkmesh_surfaces import resolve_walkmesh_surface_id, walkmesh_surface_name
 
@@ -114,6 +120,10 @@ class AuthoredCompositionPrimitiveTransform:
     surface_name: str = ""
     supports_walkmesh_surface: bool = False
     dimensions: tuple["AuthoredCompositionPrimitiveDimension", ...] = ()
+    properties: tuple["AuthoredCompositionPrimitiveProperty", ...] = ()
+    construction_kind: str = ""
+    construction_node_id: str = ""
+    construction_schema_version: int = 0
 
 
 @dataclass(frozen=True)
@@ -160,6 +170,29 @@ class AuthoredCompositionPrimitiveDimension:
     step: float = 0.1
     suffix: str = " m"
     integer: bool = False
+
+
+@dataclass(frozen=True)
+class AuthoredCompositionPrimitiveProperty:
+    """Typed retained-construction input exposed by the headless Scene owner."""
+
+    key: str
+    label: str
+    value: Any
+    value_type: str = "float"
+    group: str = "Dimensions"
+    minimum: float | None = None
+    maximum: float | None = None
+    soft_minimum: float | None = None
+    soft_maximum: float | None = None
+    step: float = 0.1
+    suffix: str = ""
+    choices: tuple[tuple[str, int], ...] = ()
+    affects_topology: bool = False
+    affects_uvs: bool = False
+    default: Any = None
+    has_default: bool = False
+    implementation_note: str = ""
 
 
 @dataclass(frozen=True)
@@ -569,6 +602,28 @@ def _primitive_transform(primitive: Any) -> PrimitiveTransform:
     return primitive.transform if isinstance(primitive, PlacedRoomPrimitive) else PrimitiveTransform()
 
 
+def _primitive_evaluation_transforms(primitive: Any) -> tuple[PrimitiveTransform, ...]:
+    """Return immutable downstream transform stages retained by Freeze."""
+
+    if not isinstance(primitive, PlacedRoomPrimitive):
+        return ()
+    return tuple(primitive.evaluation_transforms or ())
+
+
+def _with_primitive_transform(
+    primitive: Any,
+    transform: PrimitiveTransform,
+    *,
+    name: str = "",
+) -> PlacedRoomPrimitive:
+    """Set editable channels without discarding retained evaluation stages."""
+
+    resolved_name = str(name or _primitive_name(primitive) or getattr(_base_primitive(primitive), "name", "") or "")
+    if isinstance(primitive, PlacedRoomPrimitive):
+        return replace(primitive, transform=transform, name=resolved_name)
+    return PlacedRoomPrimitive(primitive=primitive, name=resolved_name, transform=transform)
+
+
 def _primitive_type(primitive: Any) -> str:
     base = primitive.primitive if isinstance(primitive, PlacedRoomPrimitive) else primitive
     if isinstance(base, CombinedRoomPrimitive):
@@ -604,8 +659,37 @@ def _edge_index_values(edge_indices: Any) -> list[int]:
         return [int(edge_indices)]
 
 
-def _primitive_mesh_edge_count(primitive: Any) -> int:
-    mesh = primitive_to_mesh(primitive)
+def _primitive_edit_cage(primitive: Any, *, room_resref: str = "") -> Any | None:
+    """Return a connected retained-recipe cage or ``None`` for legacy shapes."""
+
+    try:
+        return build_authored_primitive_polygon_cage(primitive, room_resref=room_resref)
+    except TypeError:
+        return None
+
+
+def _primitive_edit_vertices(
+    primitive: Any,
+    *,
+    room_resref: str = "",
+) -> tuple[tuple[float, float, float], ...]:
+    cage = _primitive_edit_cage(primitive, room_resref=room_resref)
+    source = cage.vertices if cage is not None else tuple(primitive_to_mesh(primitive).vertices or ())
+    return tuple(tuple(float(value) for value in vertex[:3]) for vertex in source)
+
+
+def _primitive_logical_topology_counts(
+    primitive: Any,
+    *,
+    room_resref: str = "",
+) -> tuple[int, int, int]:
+    cage = _primitive_edit_cage(primitive, room_resref=room_resref)
+    if cage is not None:
+        return logical_topology_counts(cage)
+    return _mesh_topology_counts(primitive_to_mesh(primitive))
+
+
+def _mesh_topology_counts(mesh: Any) -> tuple[int, int, int]:
     edges: set[tuple[int, int]] = set()
     for face in tuple(mesh.faces or ()):
         indices = tuple(int(index) for index in face)
@@ -614,7 +698,11 @@ def _primitive_mesh_edge_count(primitive: Any) -> int:
         for left, right in zip(indices, indices[1:] + indices[:1]):
             edge = (left, right) if left <= right else (right, left)
             edges.add(edge)
-    return len(edges)
+    return len(tuple(mesh.vertices or ())), len(edges), len(tuple(mesh.faces or ()))
+
+
+def _primitive_mesh_edge_count(primitive: Any, *, room_resref: str = "") -> int:
+    return _primitive_logical_topology_counts(primitive, room_resref=room_resref)[1]
 
 
 def _validate_edge_indices(indices: list[int], *, edge_count: int, label: str) -> None:
@@ -736,6 +824,212 @@ def _primitive_dimensions(primitive: Any) -> tuple[AuthoredCompositionPrimitiveD
     return ()
 
 
+def _property(
+    key: str,
+    label: str,
+    value: Any,
+    *,
+    value_type: str = "float",
+    group: str = "Dimensions",
+    minimum: float | None = None,
+    maximum: float | None = None,
+    soft_minimum: float | None = None,
+    soft_maximum: float | None = None,
+    step: float = 0.1,
+    suffix: str = "",
+    choices: tuple[tuple[str, int], ...] = (),
+    affects_topology: bool = False,
+    affects_uvs: bool = False,
+    default: Any = None,
+    has_default: bool = False,
+    implementation_note: str = "",
+) -> AuthoredCompositionPrimitiveProperty:
+    return AuthoredCompositionPrimitiveProperty(
+        key=key,
+        label=label,
+        value=value,
+        value_type=value_type,
+        group=group,
+        minimum=minimum,
+        maximum=maximum,
+        soft_minimum=soft_minimum,
+        soft_maximum=soft_maximum,
+        step=step,
+        suffix=suffix,
+        choices=choices,
+        affects_topology=affects_topology,
+        affects_uvs=affects_uvs,
+        default=default,
+        has_default=has_default,
+        implementation_note=implementation_note,
+    )
+
+
+def _maya_dimension_property(key: str, label: str, value: Any, *, default: float) -> AuthoredCompositionPrimitiveProperty:
+    return _property(
+        key,
+        label,
+        float(value),
+        minimum=0.01,
+        soft_maximum=100.0,
+        suffix=" m",
+        affects_topology=True,
+        default=float(default),
+        has_default=True,
+    )
+
+
+def _maya_subdivision_property(
+    key: str,
+    label: str,
+    value: Any,
+    *,
+    minimum: int,
+    default: int,
+) -> AuthoredCompositionPrimitiveProperty:
+    return _property(
+        key,
+        label,
+        int(value),
+        value_type="integer",
+        group="Topology",
+        minimum=float(minimum),
+        soft_maximum=50.0,
+        step=1.0,
+        affects_topology=True,
+        default=int(default),
+        has_default=True,
+    )
+
+
+def _maya_axis_anchor_properties(base: Any) -> tuple[AuthoredCompositionPrimitiveProperty, ...]:
+    axis = normalise_primitive_axis(getattr(base, "axis", (0.0, 0.0, 1.0)))
+    return (
+        _property("axis_x", "Axis X", axis[0], group="Axis / Anchor", soft_minimum=-1.0, soft_maximum=1.0, step=0.1, affects_topology=True, default=0.0, has_default=True),
+        _property("axis_y", "Axis Y", axis[1], group="Axis / Anchor", soft_minimum=-1.0, soft_maximum=1.0, step=0.1, affects_topology=True, default=0.0, has_default=True),
+        _property("axis_z", "Axis Z", axis[2], group="Axis / Anchor", soft_minimum=-1.0, soft_maximum=1.0, step=0.1, affects_topology=True, default=1.0, has_default=True),
+        _property(
+            "height_baseline",
+            "Height Baseline",
+            float(getattr(base, "height_baseline", 0.0)),
+            group="Axis / Anchor",
+            minimum=-1.0,
+            maximum=1.0,
+            soft_minimum=-1.0,
+            soft_maximum=1.0,
+            step=0.1,
+            affects_topology=True,
+            default=0.0,
+            has_default=True,
+        ),
+    )
+
+
+def _maya_uv_property(base: Any, choices: tuple[tuple[str, int], ...], *, default: int | bool) -> AuthoredCompositionPrimitiveProperty:
+    value = getattr(base, "create_uvs", 0)
+    return _property(
+        "create_uvs",
+        "Create UVs",
+        bool(value) if isinstance(value, bool) else int(value),
+        value_type="boolean" if isinstance(value, bool) else "choice",
+        group="UVs",
+        minimum=0.0,
+        maximum=float(max((choice[1] for choice in choices), default=1)),
+        step=1.0,
+        choices=choices,
+        affects_uvs=True,
+        default=default,
+        has_default=True,
+        implementation_note=(
+            "None disables UV0. Nonzero modes are retained exactly in KMAP; "
+            "the current KOTOR preview/export evaluator shares one deterministic UV layout across nonzero normalization modes."
+        ),
+    )
+
+
+def _primitive_properties(primitive: Any) -> tuple[AuthoredCompositionPrimitiveProperty, ...]:
+    """Return the complete typed retained recipe without changing old dimensions."""
+
+    base = _base_primitive(primitive)
+    if isinstance(base, FloorPrimitive):
+        return (
+            _maya_dimension_property("width", "Width", base.width, default=1.0),
+            _maya_dimension_property("depth", "Depth", base.depth, default=1.0),
+            _maya_subdivision_property("subdivisions_width", "Width Subdivisions", base.subdivisions_width, minimum=1, default=10),
+            _maya_subdivision_property("subdivisions_depth", "Depth Subdivisions", base.subdivisions_depth, minimum=1, default=10),
+            *_maya_axis_anchor_properties(base),
+            _maya_uv_property(base, (("None", 0), ("Normalization Off", 1), ("Normalize and Preserve Aspect Ratio", 2)), default=1),
+        )
+    if isinstance(base, CubePrimitive):
+        return (
+            _maya_dimension_property("size_x", "Width (X)", base.size[0], default=1.0),
+            _maya_dimension_property("size_y", "Depth (Y)", base.size[1], default=1.0),
+            _maya_dimension_property("size_z", "Height (Z)", base.size[2], default=1.0),
+            _maya_subdivision_property("subdivisions_x", "X Subdivisions", base.subdivisions_x, minimum=1, default=1),
+            _maya_subdivision_property("subdivisions_y", "Y Subdivisions", base.subdivisions_y, minimum=1, default=1),
+            _maya_subdivision_property("subdivisions_z", "Z Subdivisions", base.subdivisions_z, minimum=1, default=1),
+            *_maya_axis_anchor_properties(base),
+            _maya_uv_property(base, (("None", 0), ("Normalization Off", 1), ("Normalize Each Face Separately", 2), ("Normalize Collectively", 3), ("Normalize Collectively and Preserve Aspect Ratio", 4)), default=3),
+        )
+    if isinstance(base, CylinderPrimitive):
+        return (
+            _maya_dimension_property("radius", "Radius", base.radius, default=1.0),
+            _maya_dimension_property("height", "Height", base.height, default=2.0),
+            _maya_subdivision_property("subdivisions_axis", "Axis Subdivisions", base.segments, minimum=3, default=20),
+            _maya_subdivision_property("subdivisions_height", "Height Subdivisions", base.subdivisions_height, minimum=1, default=1),
+            _maya_subdivision_property("subdivisions_caps", "Cap Subdivisions", base.subdivisions_caps, minimum=0, default=0),
+            *_maya_axis_anchor_properties(base),
+            _property("round_cap", "Round Cap", bool(base.round_cap), value_type="boolean", group="Caps", minimum=0.0, maximum=1.0, step=1.0, affects_topology=True, default=False, has_default=True),
+            _property("round_cap_height_compensation", "Round Cap Height Compensation", bool(base.round_cap_height_compensation), value_type="boolean", group="Caps", minimum=0.0, maximum=1.0, step=1.0, affects_topology=True, default=False, has_default=True),
+            _maya_uv_property(base, (("None", 0), ("Normalization Off", 1), ("Normalize", 2), ("Normalize and Preserve Aspect Ratio", 3)), default=2),
+        )
+    if isinstance(base, SpherePrimitive):
+        return (
+            _maya_dimension_property("radius", "Radius", base.radius, default=1.0),
+            _maya_subdivision_property("subdivisions_axis", "Axis Subdivisions", base.subdivisions_axis, minimum=3, default=20),
+            _maya_subdivision_property("subdivisions_height", "Height Subdivisions", base.subdivisions_height, minimum=3, default=20),
+            *_maya_axis_anchor_properties(base),
+            _maya_uv_property(base, (("None", 0), ("Pinched at Pole", 1), ("Sawtooth at Pole", 2)), default=2),
+        )
+    if isinstance(base, ConePrimitive):
+        return (
+            _maya_dimension_property("radius", "Radius", base.radius, default=1.0),
+            _maya_dimension_property("height", "Height", base.height, default=2.0),
+            _maya_subdivision_property("subdivisions_axis", "Axis Subdivisions", base.subdivisions_axis, minimum=3, default=20),
+            _maya_subdivision_property("subdivisions_height", "Height Subdivisions", base.subdivisions_height, minimum=1, default=1),
+            _maya_subdivision_property("subdivisions_caps", "Cap Subdivisions", base.subdivisions_caps, minimum=0, default=0),
+            *_maya_axis_anchor_properties(base),
+            _property("round_cap", "Round Cap", bool(base.round_cap), value_type="boolean", group="Caps", minimum=0.0, maximum=1.0, step=1.0, affects_topology=True, default=False, has_default=True),
+            _maya_uv_property(base, (("None", 0), ("Normalization Off", 1), ("Normalize", 2), ("Normalize and Preserve Aspect Ratio", 3)), default=2),
+        )
+    if isinstance(base, TorusPrimitive):
+        return (
+            _maya_dimension_property("radius", "Radius", base.radius, default=1.0),
+            _maya_dimension_property("section_radius", "Section Radius", base.section_radius, default=0.5),
+            _maya_subdivision_property("subdivisions_axis", "Axis Subdivisions", base.subdivisions_axis, minimum=3, default=20),
+            _maya_subdivision_property("subdivisions_height", "Height Subdivisions", base.subdivisions_height, minimum=3, default=20),
+            _property("twist", "Twist", float(base.twist), group="Topology", minimum=0.0, maximum=360.0, soft_minimum=0.0, soft_maximum=360.0, step=1.0, suffix=" deg", affects_topology=True, default=0.0, has_default=True),
+            *_maya_axis_anchor_properties(base),
+            _maya_uv_property(base, (("Off", 0), ("On", 1)), default=True),
+        )
+    return tuple(
+        _property(
+            dimension.key,
+            dimension.label,
+            int(round(dimension.value)) if dimension.integer else float(dimension.value),
+            value_type="integer" if dimension.integer else "float",
+            minimum=dimension.minimum,
+            maximum=dimension.maximum,
+            step=dimension.step,
+            suffix=dimension.suffix,
+            affects_topology=True,
+            default=int(round(dimension.value)) if dimension.integer else float(dimension.value),
+            has_default=True,
+        )
+        for dimension in _primitive_dimensions(base)
+    )
+
+
 def _primitive_material_value(primitive: Any) -> PrimitiveMaterial:
     return getattr(_base_primitive(primitive), "material", PrimitiveMaterial())
 
@@ -749,6 +1043,18 @@ def _primitive_surface_id(primitive: Any) -> int | None:
 
 def _primitive_supports_walkmesh_surface(primitive: Any) -> bool:
     return _primitive_surface_id(primitive) is not None
+
+
+def _primitive_construction_identity(primitive: Any, *, room_resref: str, primitive_type: str) -> tuple[str, int]:
+    base = _base_primitive(primitive)
+    node_id = str(getattr(base, "construction_node_id", "") or "").strip()
+    if not node_id:
+        node_id = primitive_construction_node_id(
+            room_resref=room_resref,
+            primitive_type=primitive_type,
+            name=_primitive_name(primitive),
+        )
+    return node_id, max(1, int(getattr(base, "construction_schema_version", 1)))
 
 
 def _primitive_world_vertices(room: AuthoredRoomSpec, primitive: Any) -> tuple[tuple[float, float, float], ...]:
@@ -810,7 +1116,21 @@ def authored_room_composition_primitive_universal_transform(
         if _primitive_name(primitive) != target:
             continue
         mesh = primitive_to_mesh(primitive)
-        vertices = _primitive_world_vertices(room, primitive)
+        logical_cage = _primitive_edit_cage(primitive, room_resref=room.room_resref)
+        logical_vertex_count, logical_edge_count, logical_face_count = (
+            logical_topology_counts(logical_cage)
+            if logical_cage is not None
+            else _mesh_topology_counts(mesh)
+        )
+        offset = _room_offset(room)
+        vertices = tuple(
+            (
+                float(vertex[0]) + offset[0],
+                float(vertex[1]) + offset[1],
+                float(vertex[2]) + offset[2],
+            )
+            for vertex in tuple(mesh.vertices or ())
+        )
         bounds_min, bounds_max = _vec_bounds(vertices)
         transform = _primitive_transform(primitive)
         surface_id = _primitive_surface_id(primitive)
@@ -828,8 +1148,8 @@ def authored_room_composition_primitive_universal_transform(
             rotation_degrees_z=float(transform.rotation_degrees_z),
             scale=tuple(float(value) for value in transform.scale),
             pivot=tuple(float(value) for value in transform.pivot),
-            vertex_count=len(tuple(mesh.vertices or ())),
-            face_count=len(tuple(mesh.faces or ())),
+            vertex_count=logical_vertex_count,
+            face_count=logical_face_count,
             texture=str(material.texture or ""),
             surface_id=surface_id,
             surface_name=walkmesh_surface_name(surface_id) if surface_id is not None else "",
@@ -837,6 +1157,12 @@ def authored_room_composition_primitive_universal_transform(
                 "source": "map_studio:universal_transform",
                 "selection_space": "authored_room_composition_primitive",
                 "room_offset": list(_room_offset(room)),
+                "logical_edge_count": logical_edge_count,
+                "topology_count_source": (
+                    "retained_construction_cage"
+                    if logical_cage is not None
+                    else "legacy_render_mesh_fallback"
+                ),
             },
         )
     raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'.")
@@ -928,13 +1254,13 @@ def _default_primitive_for_kind(kind: str, name: str, material: PrimitiveMateria
     if kind == "stairs":
         return StairsPrimitive(name=name, width=2.0, depth=3.0, height=1.0, steps=4, surface_id=floor_surface, material=material)
     if kind == "cylinder":
-        return CylinderPrimitive(name=name, radius=0.5, height=1.0, segments=16, center=(0.0, 0.0, 0.5), material=material)
+        return CylinderPrimitive(name=name, radius=1.0, height=2.0, segments=20, center=(0.0, 0.0, 1.0), material=material)
     if kind == "sphere":
-        return SpherePrimitive(name=name, radius=0.5, subdivisions_axis=20, subdivisions_height=20, center=(0.0, 0.0, 0.5), material=material)
+        return SpherePrimitive(name=name, radius=1.0, subdivisions_axis=20, subdivisions_height=20, center=(0.0, 0.0, 1.0), material=material)
     if kind == "cone":
-        return ConePrimitive(name=name, radius=0.5, height=1.0, subdivisions_axis=20, subdivisions_height=1, subdivisions_caps=1, center=(0.0, 0.0, 0.5), material=material)
+        return ConePrimitive(name=name, radius=1.0, height=2.0, subdivisions_axis=20, subdivisions_height=1, subdivisions_caps=0, center=(0.0, 0.0, 1.0), material=material)
     if kind == "torus":
-        return TorusPrimitive(name=name, radius=1.0, section_radius=0.25, subdivisions_axis=20, subdivisions_height=20, center=(0.0, 0.0, 0.5), material=material)
+        return TorusPrimitive(name=name, radius=1.0, section_radius=0.5, subdivisions_axis=20, subdivisions_height=20, center=(0.0, 0.0, 0.5), material=material)
     if kind == "door_frame":
         return DoorFramePrimitive(name=name, width=2.2, height=3.0, jamb_width=0.22, lintel_height=0.28, depth=0.25, center=(0.0, 0.0, 1.5), material=material)
     if kind == "arch":
@@ -968,6 +1294,57 @@ def _dimension_int(values: dict[str, Any], key: str, current: int, *, minimum: i
     return value
 
 
+def _dimension_range(
+    values: dict[str, Any],
+    key: str,
+    current: float,
+    *,
+    minimum: float,
+    maximum: float,
+) -> float:
+    if key not in values or values[key] in (None, ""):
+        return float(current)
+    value = float(values[key])
+    if not minimum <= value <= maximum:
+        raise ValueError(f"Primitive property '{key}' must be between {minimum} and {maximum}.")
+    return value
+
+
+def _dimension_bool(values: dict[str, Any], key: str, current: bool) -> bool:
+    if key not in values or values[key] in (None, ""):
+        return bool(current)
+    value = values[key]
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in {"1", "true", "yes", "on"}:
+            return True
+        if text in {"0", "false", "no", "off"}:
+            return False
+        raise ValueError(f"Primitive property '{key}' must be true or false.")
+    return bool(value)
+
+
+def _dimension_choice(values: dict[str, Any], key: str, current: int, *, minimum: int, maximum: int) -> int:
+    value = _dimension_int(values, key, current, minimum=minimum)
+    if value > maximum:
+        raise ValueError(f"Primitive property '{key}' must be between {minimum} and {maximum}.")
+    return value
+
+
+def _dimension_axis(values: dict[str, Any], current: tuple[float, float, float]) -> tuple[float, float, float]:
+    keys = ("axis_x", "axis_y", "axis_z")
+    if not any(key in values and values[key] not in (None, "") for key in keys):
+        return normalise_primitive_axis(current)
+    axis = tuple(
+        float(values[key]) if key in values and values[key] not in (None, "") else float(current[index])
+        for index, key in enumerate(keys)
+    )
+    length_squared = sum(component * component for component in axis)
+    if length_squared <= 1.0e-20:
+        raise ValueError("Primitive axis must be a non-zero vector.")
+    return normalise_primitive_axis(axis)
+
+
 def _reject_unknown_dimensions(values: dict[str, Any], allowed: set[str], primitive_name: str) -> None:
     unknown = sorted(key for key in values if key not in allowed)
     if unknown:
@@ -977,14 +1354,17 @@ def _reject_unknown_dimensions(values: dict[str, Any], allowed: set[str], primit
 def _updated_base_primitive_dimensions(base: Any, dimensions: Any) -> Any:
     values = _dimension_values(dimensions)
     if isinstance(base, FloorPrimitive):
-        allowed = {"width", "depth", "subdivisions_width", "subdivisions_depth"}
+        allowed = {"width", "depth", "subdivisions_width", "subdivisions_depth", "axis_x", "axis_y", "axis_z", "height_baseline", "create_uvs"}
         _reject_unknown_dimensions(values, allowed, base.name)
         return replace(
             base,
-            width=_dimension_float(values, "width", base.width),
-            depth=_dimension_float(values, "depth", base.depth),
+            width=_dimension_float(values, "width", base.width, minimum=0.01),
+            depth=_dimension_float(values, "depth", base.depth, minimum=0.01),
             subdivisions_width=_dimension_int(values, "subdivisions_width", base.subdivisions_width, minimum=1),
             subdivisions_depth=_dimension_int(values, "subdivisions_depth", base.subdivisions_depth, minimum=1),
+            axis=_dimension_axis(values, base.axis),
+            height_baseline=_dimension_range(values, "height_baseline", base.height_baseline, minimum=-1.0, maximum=1.0),
+            create_uvs=_dimension_choice(values, "create_uvs", base.create_uvs, minimum=0, maximum=2),
         )
     if isinstance(base, WallPrimitive):
         allowed = {"width", "height", "thickness"}
@@ -996,18 +1376,21 @@ def _updated_base_primitive_dimensions(base: Any, dimensions: Any) -> Any:
             thickness=_dimension_float(values, "thickness", base.thickness, minimum=0.01),
         )
     if isinstance(base, CubePrimitive):
-        allowed = {"size_x", "size_y", "size_z", "subdivisions_x", "subdivisions_y", "subdivisions_z"}
+        allowed = {"size_x", "size_y", "size_z", "subdivisions_x", "subdivisions_y", "subdivisions_z", "axis_x", "axis_y", "axis_z", "height_baseline", "create_uvs"}
         _reject_unknown_dimensions(values, allowed, base.name)
         return replace(
             base,
             size=(
-                _dimension_float(values, "size_x", base.size[0]),
-                _dimension_float(values, "size_y", base.size[1]),
-                _dimension_float(values, "size_z", base.size[2]),
+                _dimension_float(values, "size_x", base.size[0], minimum=0.01),
+                _dimension_float(values, "size_y", base.size[1], minimum=0.01),
+                _dimension_float(values, "size_z", base.size[2], minimum=0.01),
             ),
             subdivisions_x=_dimension_int(values, "subdivisions_x", base.subdivisions_x, minimum=1),
             subdivisions_y=_dimension_int(values, "subdivisions_y", base.subdivisions_y, minimum=1),
             subdivisions_z=_dimension_int(values, "subdivisions_z", base.subdivisions_z, minimum=1),
+            axis=_dimension_axis(values, base.axis),
+            height_baseline=_dimension_range(values, "height_baseline", base.height_baseline, minimum=-1.0, maximum=1.0),
+            create_uvs=_dimension_choice(values, "create_uvs", base.create_uvs, minimum=0, maximum=4),
         )
     if isinstance(base, RampPrimitive):
         allowed = {"width", "length", "height"}
@@ -1029,39 +1412,59 @@ def _updated_base_primitive_dimensions(base: Any, dimensions: Any) -> Any:
             steps=_dimension_int(values, "steps", base.steps, minimum=1),
         )
     if isinstance(base, CylinderPrimitive):
-        allowed = {"radius", "height", "segments"}
+        allowed = {"radius", "height", "segments", "subdivisions_axis", "subdivisions_height", "subdivisions_caps", "axis_x", "axis_y", "axis_z", "height_baseline", "create_uvs", "round_cap", "round_cap_height_compensation"}
         _reject_unknown_dimensions(values, allowed, base.name)
+        if "segments" in values and "subdivisions_axis" in values:
+            legacy_segments = int(round(float(values["segments"])))
+            axis_segments = int(round(float(values["subdivisions_axis"])))
+            if legacy_segments != axis_segments:
+                raise ValueError("Cylinder segments and subdivisions_axis cannot specify different values.")
+        segment_key = "subdivisions_axis" if "subdivisions_axis" in values else "segments"
         return replace(
             base,
-            radius=_dimension_float(values, "radius", base.radius),
-            height=_dimension_float(values, "height", base.height),
-            segments=_dimension_int(values, "segments", base.segments, minimum=3),
+            radius=_dimension_float(values, "radius", base.radius, minimum=0.01),
+            height=_dimension_float(values, "height", base.height, minimum=0.01),
+            segments=_dimension_int(values, segment_key, base.segments, minimum=3),
+            subdivisions_height=_dimension_int(values, "subdivisions_height", base.subdivisions_height, minimum=1),
+            subdivisions_caps=_dimension_int(values, "subdivisions_caps", base.subdivisions_caps, minimum=0),
+            axis=_dimension_axis(values, base.axis),
+            height_baseline=_dimension_range(values, "height_baseline", base.height_baseline, minimum=-1.0, maximum=1.0),
+            create_uvs=_dimension_choice(values, "create_uvs", base.create_uvs, minimum=0, maximum=3),
+            round_cap=_dimension_bool(values, "round_cap", base.round_cap),
+            round_cap_height_compensation=_dimension_bool(values, "round_cap_height_compensation", base.round_cap_height_compensation),
         )
     if isinstance(base, SpherePrimitive):
-        allowed = {"radius", "subdivisions_axis", "subdivisions_height"}
+        allowed = {"radius", "subdivisions_axis", "subdivisions_height", "axis_x", "axis_y", "axis_z", "height_baseline", "create_uvs"}
         _reject_unknown_dimensions(values, allowed, base.name)
         return replace(
             base,
-            radius=_dimension_float(values, "radius", base.radius),
+            radius=_dimension_float(values, "radius", base.radius, minimum=0.01),
             subdivisions_axis=_dimension_int(values, "subdivisions_axis", base.subdivisions_axis, minimum=3),
-            subdivisions_height=_dimension_int(values, "subdivisions_height", base.subdivisions_height, minimum=2),
+            subdivisions_height=_dimension_int(values, "subdivisions_height", base.subdivisions_height, minimum=3),
+            axis=_dimension_axis(values, base.axis),
+            height_baseline=_dimension_range(values, "height_baseline", base.height_baseline, minimum=-1.0, maximum=1.0),
+            create_uvs=_dimension_choice(values, "create_uvs", base.create_uvs, minimum=0, maximum=2),
         )
     if isinstance(base, ConePrimitive):
-        allowed = {"radius", "height", "subdivisions_axis", "subdivisions_height", "subdivisions_caps"}
+        allowed = {"radius", "height", "subdivisions_axis", "subdivisions_height", "subdivisions_caps", "axis_x", "axis_y", "axis_z", "height_baseline", "create_uvs", "round_cap"}
         _reject_unknown_dimensions(values, allowed, base.name)
         return replace(
             base,
-            radius=_dimension_float(values, "radius", base.radius),
-            height=_dimension_float(values, "height", base.height),
+            radius=_dimension_float(values, "radius", base.radius, minimum=0.01),
+            height=_dimension_float(values, "height", base.height, minimum=0.01),
             subdivisions_axis=_dimension_int(values, "subdivisions_axis", base.subdivisions_axis, minimum=3),
             subdivisions_height=_dimension_int(values, "subdivisions_height", base.subdivisions_height, minimum=1),
-            subdivisions_caps=_dimension_int(values, "subdivisions_caps", base.subdivisions_caps, minimum=1),
+            subdivisions_caps=_dimension_int(values, "subdivisions_caps", base.subdivisions_caps, minimum=0),
+            axis=_dimension_axis(values, base.axis),
+            height_baseline=_dimension_range(values, "height_baseline", base.height_baseline, minimum=-1.0, maximum=1.0),
+            create_uvs=_dimension_choice(values, "create_uvs", base.create_uvs, minimum=0, maximum=3),
+            round_cap=_dimension_bool(values, "round_cap", base.round_cap),
         )
     if isinstance(base, TorusPrimitive):
-        allowed = {"radius", "section_radius", "subdivisions_axis", "subdivisions_height"}
+        allowed = {"radius", "section_radius", "subdivisions_axis", "subdivisions_height", "twist", "axis_x", "axis_y", "axis_z", "height_baseline", "create_uvs"}
         _reject_unknown_dimensions(values, allowed, base.name)
-        radius = _dimension_float(values, "radius", base.radius)
-        section_radius = _dimension_float(values, "section_radius", base.section_radius)
+        radius = _dimension_float(values, "radius", base.radius, minimum=0.01)
+        section_radius = _dimension_float(values, "section_radius", base.section_radius, minimum=0.01)
         if radius <= section_radius:
             raise ValueError("Torus radius must be greater than its section radius.")
         return replace(
@@ -1070,6 +1473,10 @@ def _updated_base_primitive_dimensions(base: Any, dimensions: Any) -> Any:
             section_radius=section_radius,
             subdivisions_axis=_dimension_int(values, "subdivisions_axis", base.subdivisions_axis, minimum=3),
             subdivisions_height=_dimension_int(values, "subdivisions_height", base.subdivisions_height, minimum=3),
+            twist=_dimension_range(values, "twist", base.twist, minimum=0.0, maximum=360.0),
+            axis=_dimension_axis(values, base.axis),
+            height_baseline=_dimension_range(values, "height_baseline", base.height_baseline, minimum=-1.0, maximum=1.0),
+            create_uvs=_dimension_bool(values, "create_uvs", base.create_uvs),
         )
     if isinstance(base, DoorFramePrimitive):
         allowed = {"width", "height", "jamb_width", "lintel_height", "depth"}
@@ -1153,6 +1560,11 @@ def authored_room_composition_primitives(
         floor_material = _primitive_material_value(floor)
         floor_surface_id = _primitive_surface_id(floor)
         floor_name = _primitive_name(floor) or f"{room_name}_floor"
+        floor_node_id, floor_schema_version = _primitive_construction_identity(
+            floor,
+            room_resref=room_name,
+            primitive_type="plane",
+        )
         rows.append(
             AuthoredCompositionPrimitiveTransform(
                 room_resref=room_name,
@@ -1167,6 +1579,10 @@ def authored_room_composition_primitives(
                 surface_name=walkmesh_surface_name(floor_surface_id) if floor_surface_id is not None else "",
                 supports_walkmesh_surface=True,
                 dimensions=_primitive_dimensions(floor),
+                properties=_primitive_properties(floor),
+                construction_kind="plane",
+                construction_node_id=floor_node_id,
+                construction_schema_version=floor_schema_version,
             )
         )
         for primitive in tuple(composition.primitives or ()):
@@ -1176,11 +1592,17 @@ def authored_room_composition_primitives(
             transform = _primitive_transform(primitive)
             material = _primitive_material_value(primitive)
             surface_id = _primitive_surface_id(primitive)
+            primitive_type = _primitive_type(primitive)
+            node_id, schema_version = _primitive_construction_identity(
+                primitive,
+                room_resref=room_name,
+                primitive_type=primitive_type,
+            )
             rows.append(
                 AuthoredCompositionPrimitiveTransform(
                     room_resref=room_name,
                     primitive_name=name,
-                    primitive_type=_primitive_type(primitive),
+                    primitive_type=primitive_type,
                     translation=tuple(float(value) for value in transform.translation),
                     rotation_degrees_z=float(transform.rotation_degrees_z),
                     scale=tuple(float(value) for value in transform.scale),
@@ -1190,6 +1612,10 @@ def authored_room_composition_primitives(
                     surface_name=walkmesh_surface_name(surface_id) if surface_id is not None else "",
                     supports_walkmesh_surface=_primitive_supports_walkmesh_surface(primitive),
                     dimensions=_primitive_dimensions(primitive),
+                    properties=_primitive_properties(primitive),
+                    construction_kind=primitive_type,
+                    construction_node_id=node_id,
+                    construction_schema_version=schema_version,
                 )
             )
     return tuple(rows)
@@ -1220,6 +1646,16 @@ def add_authored_room_composition_primitive(
     surface = floor_surface if floor_surface is not None else getattr(base_floor, "surface_id", 4)
     material = _primitive_material(composition, texture)
     base = _default_primitive_for_kind(kind, name, material, surface)
+    if hasattr(base, "construction_node_id"):
+        base = replace(
+            base,
+            construction_node_id=primitive_construction_node_id(
+                room_resref=composition.room_resref,
+                primitive_type=kind,
+                name=name,
+            ),
+            construction_schema_version=1,
+        )
     transform = _updated_transform(
         PrimitiveTransform(),
         translation=translation,
@@ -1546,11 +1982,14 @@ def set_authored_room_edge_normal_policy(
             if selected is None:
                 known = ", ".join(_primitive_name(item) for item in tuple(composition.primitives or ()) if _primitive_name(item))
                 raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'. Known primitives: {known or '(none)'}.")
-            edge_count = _primitive_mesh_edge_count(selected)
+            edge_count = _primitive_mesh_edge_count(selected, room_resref=composition.room_resref)
             _validate_edge_indices(indices, edge_count=edge_count, label=f"Primitive {target_name}")
             coordinate_space = "authored_room_composition_primitive_edges"
         else:
-            edge_count = sum(_primitive_mesh_edge_count(item) for item in tuple(composition.primitives or ()))
+            edge_count = sum(
+                _primitive_mesh_edge_count(item, room_resref=composition.room_resref)
+                for item in tuple(composition.primitives or ())
+            )
         payload = _edge_normal_policy_payload(
             policy=policy,
             primitive_name=target_name,
@@ -1912,11 +2351,7 @@ def _set_composition_primitive_transform(
         )
         return replace(
             composition,
-            floor=PlacedRoomPrimitive(
-                primitive=_base_primitive(composition.floor),
-                name=target,
-                transform=transform,
-            ),
+            floor=_with_primitive_transform(composition.floor, transform, name=target),
             metadata={
                 **dict(composition.metadata),
                 "last_operation": "set_floor_transform",
@@ -2247,11 +2682,7 @@ def grid_snap_authored_room_composition_primitive(
             pivot=pivot,
         )
         if primitive is composition.floor:
-            updated_floor = PlacedRoomPrimitive(
-                primitive=_base_primitive(primitive),
-                name=name,
-                transform=snapped_transform,
-            )
+            updated_floor = _with_primitive_transform(primitive, snapped_transform, name=name)
         elif isinstance(primitive, PlacedRoomPrimitive):
             updated_primitives.append(replace(primitive, transform=snapped_transform))
         else:
@@ -2333,7 +2764,9 @@ def authored_room_composition_primitive_vertex_snap_candidates(
             continue
         if target_filter and name != target_filter:
             continue
-        for vertex_index, vertex in enumerate(tuple(primitive_to_mesh(primitive).vertices or ())):
+        for vertex_index, vertex in enumerate(
+            _primitive_edit_vertices(primitive, room_resref=composition.room_resref)
+        ):
             position = tuple(float(value) for value in vertex)
             distance = math.sqrt(sum((position[i] - source_position[i]) ** 2 for i in range(3)))
             if limit is not None and distance > limit:
@@ -2402,7 +2835,7 @@ def snap_authored_room_composition_primitive_pivot_to_vertex(
     if target_primitive is None:
         raise ValueError(f"Room {room.room_resref} has no target primitive named '{target_primitive_name}'. Known primitives: {known or '(none)'}.")
 
-    vertices = tuple(primitive_to_mesh(target_primitive).vertices or ())
+    vertices = _primitive_edit_vertices(target_primitive, room_resref=composition.room_resref)
     if not vertices:
         raise ValueError(f"Target primitive '{target_name}' has no vertices to snap to.")
     vertex_index = int(target_vertex_index)
@@ -2509,7 +2942,7 @@ def transform_snap_authored_room_composition_primitive_level(
             target_primitive = next((item for item in primitives if _primitive_name(item) == resolved_target_name), None)
             if target_primitive is None:
                 raise ValueError(f"Room {room.room_resref} has no target primitive named '{target_primitive_name}'. Known primitives: {known or '(none)'}.")
-            vertices = tuple(primitive_to_mesh(target_primitive).vertices or ())
+            vertices = _primitive_edit_vertices(target_primitive, room_resref=composition.room_resref)
             if resolved_target_vertex_index is None:
                 candidates = authored_room_composition_primitive_vertex_snap_candidates(
                     project,
@@ -2928,10 +3361,10 @@ def reset_authored_room_composition_primitive_transform(
         nonlocal old_transform
         transform = _primitive_transform(primitive)
         old_transform = transform
-        return PlacedRoomPrimitive(
-            primitive=_base_primitive(primitive),
+        return _with_primitive_transform(
+            primitive,
+            PrimitiveTransform(pivot=tuple(float(value) for value in transform.pivot)),
             name=_primitive_name(primitive),
-            transform=PrimitiveTransform(pivot=tuple(float(value) for value in transform.pivot)),
         )
 
     if _primitive_name(composition.floor) == target:
@@ -3005,15 +3438,15 @@ def zero_authored_room_composition_primitive_pivot(
         nonlocal old_transform
         transform = _primitive_transform(primitive)
         old_transform = transform
-        return PlacedRoomPrimitive(
-            primitive=_base_primitive(primitive),
-            name=_primitive_name(primitive),
-            transform=PrimitiveTransform(
+        return _with_primitive_transform(
+            primitive,
+            PrimitiveTransform(
                 translation=_translation_for_recentered_pivot(transform, zero_pivot),
                 rotation_degrees_z=float(transform.rotation_degrees_z),
                 scale=tuple(float(value) for value in transform.scale),
                 pivot=zero_pivot,
             ),
+            name=_primitive_name(primitive),
         )
 
     if _primitive_name(composition.floor) == target:
@@ -3239,153 +3672,13 @@ def delete_authored_room_composition_primitive_history(
     return _replace_rooms(project, rooms, operation="delete_primitive_history")
 
 
-def _transform_local_point(
-    point: tuple[float, float, float],
-    transform: PrimitiveTransform,
-) -> tuple[float, float, float]:
-    px, py, pz = (float(value) for value in transform.pivot)
-    sx, sy, sz = (float(value) for value in transform.scale)
-    tx, ty, tz = (float(value) for value in transform.translation)
-    return (
-        (float(point[0]) - px) * sx + px + tx,
-        (float(point[1]) - py) * sy + py + ty,
-        (float(point[2]) - pz) * sz + pz + tz,
-    )
-
-
-def _nearly_equal(left: float, right: float, *, tolerance: float = 1.0e-6) -> bool:
-    return abs(float(left) - float(right)) <= tolerance
-
-
-def _freeze_transform_into_parametric_primitive(
-    primitive: Any,
-    transform: PrimitiveTransform,
-) -> Any:
-    """Bake transform channels into fields or a compiled polygon recipe.
-
-    Simple unrotated primitives keep their compact parametric representation.
-    Rotated/otherwise non-parametric cases become a one-source compiled polygon
-    object: the source transform is evaluated inside the mesh recipe while the
-    user-facing object channels return to identity, matching Maya Freeze.
-    """
-
-    def compiled_polygon_recipe() -> CombinedRoomPrimitive:
-        name = _primitive_name(primitive) or "frozen_mesh"
-        return CombinedRoomPrimitive(
-            name=name,
-            sources=(
-                CombinedRoomPrimitiveSource(
-                    primitive=primitive,
-                    source_name=name,
-                    walkmesh_policy="inherit",
-                ),
-            ),
-            metadata={
-                "source": "map_studio:freeze_transform",
-                "bake_policy": "compiled_polygon_recipe",
-                "frozen_transform": _primitive_transform_payload(transform),
-            },
-        )
-
-    rotation = float(transform.rotation_degrees_z)
-    if not _nearly_equal(rotation, 0.0):
-        return compiled_polygon_recipe()
-
-    sx, sy, sz = (float(value) for value in transform.scale)
-    if any(value <= 0.0 for value in (sx, sy, sz)):
-        raise ValueError("Freeze Transform requires positive primitive scale values.")
-
-    base = _base_primitive(primitive)
-    if isinstance(base, CubePrimitive):
-        return replace(
-            base,
-            size=(float(base.size[0]) * sx, float(base.size[1]) * sy, float(base.size[2]) * sz),
-            center=_transform_local_point(tuple(base.center), transform),
-        )
-    if isinstance(base, WallPrimitive):
-        axis = str(base.axis or "x").lower()
-        width_scale = sy if axis == "y" else sx
-        thickness_scale = sx if axis == "y" else sy
-        return replace(
-            base,
-            width=float(base.width) * width_scale,
-            height=float(base.height) * sz,
-            thickness=float(base.thickness) * thickness_scale,
-            center=_transform_local_point(tuple(base.center), transform),
-        )
-    if isinstance(base, RampPrimitive):
-        return replace(
-            base,
-            width=float(base.width) * sx,
-            length=float(base.length) * sy,
-            height=float(base.height) * sz,
-            center=_transform_local_point(tuple(base.center), transform),
-        )
-    if isinstance(base, CylinderPrimitive):
-        if not _nearly_equal(sx, sy):
-            return compiled_polygon_recipe()
-        return replace(
-            base,
-            radius=float(base.radius) * sx,
-            height=float(base.height) * sz,
-            center=_transform_local_point(tuple(base.center), transform),
-        )
-    if isinstance(base, SpherePrimitive):
-        if not (_nearly_equal(sx, sy) and _nearly_equal(sx, sz)):
-            return compiled_polygon_recipe()
-        return replace(
-            base,
-            radius=float(base.radius) * sx,
-            center=_transform_local_point(tuple(base.center), transform),
-        )
-    if isinstance(base, ConePrimitive):
-        if not _nearly_equal(sx, sy):
-            return compiled_polygon_recipe()
-        return replace(
-            base,
-            radius=float(base.radius) * sx,
-            height=float(base.height) * sz,
-            center=_transform_local_point(tuple(base.center), transform),
-        )
-    if isinstance(base, TorusPrimitive):
-        if not (_nearly_equal(sx, sy) and _nearly_equal(sx, sz)):
-            return compiled_polygon_recipe()
-        return replace(
-            base,
-            radius=float(base.radius) * sx,
-            section_radius=float(base.section_radius) * sx,
-            center=_transform_local_point(tuple(base.center), transform),
-        )
-    if isinstance(base, DoorFramePrimitive):
-        return replace(
-            base,
-            width=float(base.width) * sx,
-            height=float(base.height) * sz,
-            jamb_width=float(base.jamb_width) * sx,
-            lintel_height=float(base.lintel_height) * sz,
-            depth=float(base.depth) * sy,
-            center=_transform_local_point(tuple(base.center), transform),
-        )
-    if isinstance(base, ArchPrimitive):
-        return replace(
-            base,
-            width=float(base.width) * sx,
-            height=float(base.height) * sz,
-            frame_thickness=float(base.frame_thickness) * sx,
-            depth=float(base.depth) * sy,
-            center=_transform_local_point(tuple(base.center), transform),
-        )
-
-    return compiled_polygon_recipe()
-
-
 def freeze_authored_room_composition_primitive_transform(
     project: AuthoredModuleProject,
     *,
     room_resref: str,
     primitive_name: str,
 ) -> AuthoredModuleProject:
-    """Bake a selected primitive's supported transform into its authored shape."""
+    """Freeze a selected primitive without destroying its construction recipe."""
 
     index = _target_room_index(project, room_resref)
     room = project.rooms[index]
@@ -3395,29 +3688,47 @@ def freeze_authored_room_composition_primitive_transform(
         raise ValueError("Freeze Transform requires a selected authored primitive.")
 
     updated_primitives = []
+    updated_floor = composition.floor
     found = False
     frozen_type = ""
+    frozen_stage_count = 0
     old_transform: PrimitiveTransform | None = None
+
+    def freeze_primitive(primitive: Any) -> PlacedRoomPrimitive:
+        nonlocal frozen_type, frozen_stage_count, old_transform
+        transform = _primitive_transform(primitive)
+        if any(float(value) <= 0.0 for value in tuple(transform.scale or (1.0, 1.0, 1.0))):
+            raise ValueError("Freeze Transform requires positive primitive scale values.")
+        old_transform = transform
+        base = _base_primitive(primitive)
+        frozen_type = type(base).__name__
+        stages = _primitive_evaluation_transforms(primitive) + (transform,)
+        frozen_stage_count = len(stages)
+        return PlacedRoomPrimitive(
+            primitive=base,
+            name=_primitive_name(primitive),
+            transform=PrimitiveTransform(),
+            evaluation_transforms=stages,
+        )
+
+    if _primitive_name(composition.floor) == target:
+        updated_floor = freeze_primitive(composition.floor)
+        found = True
+
     for primitive in tuple(composition.primitives or ()):
         name = _primitive_name(primitive)
         if name != target:
             updated_primitives.append(primitive)
             continue
         found = True
-        transform = _primitive_transform(primitive)
-        old_transform = transform
-        frozen_base = _freeze_transform_into_parametric_primitive(primitive, transform)
-        frozen_type = type(frozen_base).__name__
-        updated_primitives.append(
-            PlacedRoomPrimitive(
-                primitive=frozen_base,
-                name=name,
-                transform=PrimitiveTransform(),
-            )
-        )
+        updated_primitives.append(freeze_primitive(primitive))
 
     if not found:
-        known = ", ".join(_primitive_name(item) for item in tuple(composition.primitives or ()) if _primitive_name(item))
+        known = ", ".join(
+            _primitive_name(item)
+            for item in (composition.floor,) + tuple(composition.primitives or ())
+            if _primitive_name(item)
+        )
         raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'. Known primitives: {known or '(none)'}.")
 
     transform_payload = {
@@ -3428,15 +3739,16 @@ def freeze_authored_room_composition_primitive_transform(
     }
     updated_composition = replace(
         composition,
+        floor=updated_floor,
         primitives=tuple(updated_primitives),
         metadata={
             **dict(composition.metadata),
             "last_operation": "freeze_primitive_transform",
             "last_frozen_transform_primitive": target,
-            "freeze_transform_space": (
-                "compiled_polygon_recipe" if frozen_type == "CombinedRoomPrimitive" else "primitive_local_parametric"
-            ),
+            "freeze_transform_space": "retained_construction_recipe_evaluation_stages",
             "freeze_transform_primitive_type": frozen_type,
+            "freeze_transform_stage_count": frozen_stage_count,
+            "freeze_transform_preserved_construction_recipe": True,
             "frozen_transform": transform_payload,
         },
     )
@@ -3529,6 +3841,7 @@ def duplicate_authored_room_composition_primitive(
         raise ValueError(f"Room {room.room_resref} has no primitive named '{primitive_name}'. Known primitives: {known or '(none)'}.")
     source_transform = _primitive_transform(source)
     source_base = source.primitive if isinstance(source, PlacedRoomPrimitive) else source
+    source_kind = _primitive_type(source)
     duplicates: list[PlacedRoomPrimitive] = []
     duplicate_records: list[dict[str, Any]] = []
     for step in range(1, count + 1):
@@ -3542,11 +3855,22 @@ def duplicate_authored_room_composition_primitive(
             pivot=source_transform.pivot,
         )
         duplicate_name = _duplicate_primitive_name(existing_names, target, step)
+        duplicate_base_updates: dict[str, Any] = {"name": duplicate_name}
+        duplicate_node_id = ""
+        if hasattr(source_base, "construction_node_id"):
+            duplicate_node_id = primitive_construction_node_id(
+                room_resref=composition.room_resref,
+                primitive_type=source_kind,
+                name=duplicate_name,
+            )
+            duplicate_base_updates["construction_node_id"] = duplicate_node_id
+        duplicate_base = replace(source_base, **duplicate_base_updates)
         duplicates.append(
             PlacedRoomPrimitive(
-                primitive=source_base,
+                primitive=duplicate_base,
                 name=duplicate_name,
                 transform=transform,
+                evaluation_transforms=_primitive_evaluation_transforms(source),
             )
         )
         duplicate_records.append(
@@ -3554,6 +3878,7 @@ def duplicate_authored_room_composition_primitive(
                 "name": duplicate_name,
                 "step": step,
                 "transform": _primitive_transform_payload(transform),
+                "construction_node_id": duplicate_node_id,
             }
         )
     existing_batches = tuple(dict(item) for item in tuple(dict(composition.metadata).get("duplicate_special_batches") or ()))
@@ -3569,7 +3894,7 @@ def duplicate_authored_room_composition_primitive(
         "scale_multiplier": [float(value) for value in multiplier],
         "source_transform": _primitive_transform_payload(source_transform),
         "duplicate_transforms": duplicate_records,
-        "topology_policy": "instanced_authored_primitive_copy_no_mesh_bake",
+        "topology_policy": "independent_retained_recipe_copy_no_mesh_bake",
         "readiness_impact": "MDL/MDX/WOK/LYT/VIS/PTH/.mod export and game proof are stale.",
         "source": "map_studio:duplicate_special",
     }
@@ -3980,6 +4305,7 @@ def separate_authored_room_combined_primitive_shells(
                     primitive=shell_base,
                     transform=target.transform,
                     name=shell_name,
+                    evaluation_transforms=target.evaluation_transforms,
                 )
             )
         else:
@@ -5819,6 +6145,7 @@ def apply_authored_terrain_operation(project: AuthoredModuleProject, operation: 
 __all__ = [
     "AuthoredCompositionPrimitiveKind",
     "AuthoredCompositionPrimitiveDimension",
+    "AuthoredCompositionPrimitiveProperty",
     "AuthoredCompositionPrimitiveTransform",
     "AuthoredUniversalTransformSelection",
     "AuthoredFloorPlanVertexSnapCandidate",

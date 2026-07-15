@@ -131,10 +131,10 @@ def test_zero_pivot_compensates_translation_and_preserves_world_geometry_under_r
     )
 
 
-def test_freeze_transform_compiles_rotated_primitive_and_preserves_visible_geometry() -> None:
+def test_freeze_transform_retains_rotated_primitive_recipe_and_preserves_visible_geometry() -> None:
     _install_native_payload_paths()
 
-    from src.core.modules.authored_room_composition import CombinedRoomPrimitive, primitive_to_mesh
+    from src.core.modules.authored_room_composition import primitive_to_mesh
     from src.core.modules.authored_room_operations import (
         freeze_authored_room_composition_primitive_transform,
         set_authored_room_composition_primitive_transform,
@@ -170,9 +170,13 @@ def test_freeze_transform_compiles_rotated_primitive_and_preserves_visible_geome
     assert result.transform.rotation_degrees_z == 0.0
     assert result.transform.scale == (1.0, 1.0, 1.0)
     assert result.transform.pivot == (0.0, 0.0, 0.0)
-    assert isinstance(result.primitive, CombinedRoomPrimitive)
+    assert type(result.primitive) is type(_named_primitive(transformed, name).primitive)
+    assert len(result.evaluation_transforms) == 1
     _assert_vec3_rows_equal(before_vertices, after_vertices)
-    assert frozen.rooms[0].primitive.metadata["freeze_transform_space"] == "compiled_polygon_recipe"
+    assert frozen.rooms[0].primitive.metadata["freeze_transform_space"] == (
+        "retained_construction_recipe_evaluation_stages"
+    )
+    assert frozen.rooms[0].primitive.metadata["freeze_transform_preserved_construction_recipe"] is True
 
 
 def test_delete_history_on_imported_mesh_preserves_geometry_wok_and_export_provenance_through_kmap() -> None:

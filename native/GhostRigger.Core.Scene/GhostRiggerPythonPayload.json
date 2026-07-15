@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Scene",
-    "file_count": 110,
+    "file_count": 112,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -135,7 +135,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_KMAP_BRIDGE",
             "source_path": "src/core/modules/authored_module_kmap_bridge.py",
             "packaged_path": "Python/src/core/modules/authored_module_kmap_bridge.py",
-            "sha256": "08372ce8f20b26f0fe4c74606fab4048e3f2b4c87e6c0418d054af1aec1127d7"
+            "sha256": "e1987786ea8761ccc1c6daedf4c9bde35804d6251eba538e488d9b2d9d4cb4bb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_LAYOUT",
@@ -216,10 +216,22 @@
             "sha256": "a139c08b70e2474d91e896346f731fc585709058142b466d6967fe5e00084f80"
         },
         {
+            "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_PRIMITIVE_POLYGON_CAGES",
+            "source_path": "src/core/modules/authored_primitive_polygon_cages.py",
+            "packaged_path": "Python/src/core/modules/authored_primitive_polygon_cages.py",
+            "sha256": "9305c91acf4e2067719f6ca03311656667c8dbd532141656c35487279c1fa801"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_PRIMITIVE_TOPOLOGY_POLICY",
+            "source_path": "src/core/modules/authored_primitive_topology_policy.py",
+            "packaged_path": "Python/src/core/modules/authored_primitive_topology_policy.py",
+            "sha256": "4741ac0e531d8b642d17fa0a3c1852b335d710b0921690d518fae93f0c819bc6"
+        },
+        {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_COMPOSITION",
             "source_path": "src/core/modules/authored_room_composition.py",
             "packaged_path": "Python/src/core/modules/authored_room_composition.py",
-            "sha256": "4e93cd455a69fb3b34b7523559274adaebc85ccebeb17119368280df4f680007"
+            "sha256": "70705d5db5cf222cce58a7ba8b30496fe659a5e43070560c066de95244a1b6ac"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_FLOORPLAN",
@@ -243,7 +255,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_OPERATIONS",
             "source_path": "src/core/modules/authored_room_operations.py",
             "packaged_path": "Python/src/core/modules/authored_room_operations.py",
-            "sha256": "bd212d6879f755ca4c84514d84f3b343a2caf0850a26e1be4e0d2abee47d73fa"
+            "sha256": "36d95205a6debde6d921e156fa196b6442c768c6e303eeb4959634f58310051f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_OUTLINE_GEOMETRY",
@@ -261,7 +273,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_PRIMITIVES",
             "source_path": "src/core/modules/authored_room_primitives.py",
             "packaged_path": "Python/src/core/modules/authored_room_primitives.py",
-            "sha256": "640f5ec4cdc0475f11e91a691338520dc0e891d384d25a4a63bd6df11dbbe1bb"
+            "sha256": "1dd4d2147948f395844c1df05c7a77449d9bdfbea025acc34d1f973f10c1731a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_STYLE",
@@ -369,7 +381,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_LIVE_TOPOLOGY_SESSION",
             "source_path": "src/core/modules/map_studio_live_topology_session.py",
             "packaged_path": "Python/src/core/modules/map_studio_live_topology_session.py",
-            "sha256": "ded2ba3f4e2733a3ddee112c8cc327a0d4cc6bbbabdfb0f8f950dd5544546b5d"
+            "sha256": "49a9fa5666188bdd9a757634cabc253d83dcc209308342dd6f624dbc8b82387a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_MARKING_MENU_REGISTRY",
@@ -477,7 +489,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "df6b1b0521710e0d7dfc7e3715de11cefd42cca5d223aca35f31bd1f4f09051c"
+            "sha256": "c0d93af92b478be8f7eebc332a6cba4531908c629fc407ea99266982f72aa4c9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",

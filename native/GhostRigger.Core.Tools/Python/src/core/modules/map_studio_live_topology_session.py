@@ -24,6 +24,7 @@ from .authored_imported_mesh import (
     ImportedMeshRoomPrimitive,
     ImportedMeshSurface,
     bevel_imported_mesh_edge,
+    extrude_imported_mesh_edge,
     extrude_imported_mesh_faces,
     imported_mesh_surface_index_for_role,
 )
@@ -52,7 +53,7 @@ class LiveBevelOptions:
 class LiveTopologySessionIdentity:
     """Everything that requires preparing a new topology sample cache."""
 
-    operation: Literal["face_extrude", "edge_bevel"]
+    operation: Literal["face_extrude", "edge_extrude", "edge_bevel"]
     room_resref: str
     mesh_role: str
     face_indices: tuple[int, ...] = ()
@@ -147,7 +148,7 @@ class _PreparedSurface:
         if low.face_mats != high.face_mats:
             raise ValueError("Prepared operator samples produced different face material slots.")
         negative_normal_vertices: frozenset[int] = frozenset()
-        if operation == "face_extrude":
+        if operation in {"face_extrude", "edge_extrude"}:
             side_face_count = max(0, len(high.faces) - int(source_face_count))
             side_faces = high.faces[-side_face_count:] if side_face_count else ()
             negative_normal_vertices = frozenset(index for face in side_faces for index in face)
@@ -182,16 +183,16 @@ class _PreparedSurface:
             normals = tuple(rows)
         return replace(
             self.template,
-            vertices=tuple(tuple(row) for row in vertices),
+            vertices=vertices,
             # Faces and face_mats intentionally remain the exact cached tuples.
-            uvs=tuple(tuple(row) for row in uvs),
-            normals=tuple(tuple(row) for row in normals),
-            uvs_lm=tuple(tuple(row) for row in uvs_lm),
+            uvs=uvs,
+            normals=normals,
+            uvs_lm=uvs_lm,
         )
 
 
 class MapStudioLiveTopologySession:
-    """Prepared face-extrude or edge-bevel evaluator for one immutable source."""
+    """Prepared face/edge-extrude or edge-bevel evaluator for one immutable source."""
 
     __slots__ = (
         "_source",
@@ -408,6 +409,104 @@ class MapStudioLiveTopologySession:
             bevel_edit_template=high_edit,
         )
 
+    @classmethod
+    def prepare_edge_extrude(
+        cls,
+        source: ImportedMeshRoomPrimitive,
+        mesh_role: str,
+        face_index: int,
+        edge_corners: tuple[int, int] | list[int],
+        *,
+        direction: Vec3 = (0.0, 0.0, 1.0),
+        tile_size: float = 0.0,
+        reference_distance: float = 1.0,
+        maximum_abs_distance: float | None = None,
+    ) -> MapStudioLiveTopologySession:
+        """Prepare one edge-extrude quad and its sparse signed channel deltas."""
+
+        surface_index = imported_mesh_surface_index_for_role(source, str(mesh_role))
+        if surface_index < 0:
+            raise ValueError(f"Unknown imported mesh surface role: {mesh_role!r}")
+        surface = source.surfaces[surface_index]
+        selected_face = int(face_index)
+        if selected_face < 0 or selected_face >= len(surface.faces):
+            raise ValueError(f"Face index {face_index} out of range for surface {mesh_role}.")
+        raw_corners = tuple(int(value) for value in tuple(edge_corners)[:2])
+        if len(raw_corners) != 2:
+            raise ValueError("Edge extrude needs two edge corner indices.")
+        corner_count = len(surface.faces[selected_face])
+        corners = (raw_corners[0] % corner_count, raw_corners[1] % corner_count)
+        if corners[0] == corners[1]:
+            raise ValueError("Edge corners must reference two different face corners.")
+        normalized_direction = _normalized_direction(direction)
+        if normalized_direction is None:
+            normalized_direction = (0.0, 0.0, 1.0)
+        reference = abs(float(reference_distance))
+        if not math.isfinite(reference) or reference <= (_ZERO_EPSILON * 4.0):
+            raise ValueError("Edge-extrude preview reference distance must be finite and non-zero.")
+        maximum: float | None = None
+        if maximum_abs_distance is not None:
+            maximum = abs(float(maximum_abs_distance))
+            if not math.isfinite(maximum) or maximum <= (_ZERO_EPSILON * 4.0):
+                raise ValueError("Edge-extrude preview distance limit must be finite and non-zero.")
+            reference = min(reference, maximum)
+        low_value = reference * 0.5
+        high_value = reference
+
+        def _sample(distance: float) -> ImportedMeshRoomPrimitive:
+            delta = tuple(component * float(distance) for component in normalized_direction)
+            return extrude_imported_mesh_edge(
+                source,
+                str(mesh_role),
+                selected_face,
+                corners,
+                delta,
+                tile_size=float(tile_size),
+            )
+
+        low = _sample(low_value).surfaces[surface_index]
+        high = _sample(high_value).surfaces[surface_index]
+        prepared = _PreparedSurface.from_samples(
+            low_value,
+            low,
+            high_value,
+            high,
+            source_face_count=len(surface.faces),
+            operation="edge_extrude",
+        )
+        # The authoritative operator deliberately falls back to +Z for a
+        # degenerate pull parallel to the edge.  Such a fallback does not flip
+        # for a negative distance, so preserve it instead of applying the
+        # ordinary extrusion sign correction.
+        face = surface.faces[selected_face]
+        edge = tuple(
+            surface.vertices[face[corners[1]]][axis] - surface.vertices[face[corners[0]]][axis]
+            for axis in range(3)
+        )
+        cross = (
+            (edge[1] * normalized_direction[2]) - (edge[2] * normalized_direction[1]),
+            (edge[2] * normalized_direction[0]) - (edge[0] * normalized_direction[2]),
+            (edge[0] * normalized_direction[1]) - (edge[1] * normalized_direction[0]),
+        )
+        if math.sqrt(sum(component * component for component in cross)) <= _ZERO_EPSILON:
+            prepared = replace(prepared, negative_extrude_normal_vertices=frozenset())
+        identity = LiveTopologySessionIdentity(
+            operation="edge_extrude",
+            room_resref=str(source.room_resref),
+            mesh_role=str(mesh_role),
+            face_index=selected_face,
+            edge_corners=corners,
+            direction=normalized_direction,
+            tile_size=float(tile_size),
+        )
+        return cls(
+            source=source,
+            surface_index=surface_index,
+            prepared=prepared,
+            identity=identity,
+            maximum_value=maximum,
+        )
+
     def evaluate(self, value: float) -> ImportedMeshRoomPrimitive:
         """Evaluate one drag frame without rebuilding topology or serializing KMAP."""
 
@@ -417,7 +516,7 @@ class MapStudioLiveTopologySession:
         if abs(requested) <= _ZERO_EPSILON:
             return self._source
 
-        extrude = self.identity.operation == "face_extrude"
+        extrude = self.identity.operation in {"face_extrude", "edge_extrude"}
         evaluated_value = requested
         if extrude:
             if self._maximum_value is not None:

@@ -521,6 +521,139 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             )
         return tuple(rows)
 
+    def apply_primitive_recipe_preview(
+        self,
+        room_resref: str,
+        primitive_name: str,
+        mesh_payloads,
+    ) -> bool:
+        """Patch one retained primitive recipe into its resident mesh node.
+
+        Numeric primitive-property scrubbing must not rebuild the merged room,
+        evict stock textures, or serialize KMAP on every value change.  The
+        controller supplies the evaluated arrays for only the selected logical
+        primitive; this presentation bridge keeps a baseline for Cancel/Escape
+        and invalidates only the affected renderer nodes.
+        """
+
+        wanted_room = str(room_resref or "").strip().lower()
+        wanted_name = str(primitive_name or "").strip()
+        payloads = tuple(dict(payload) for payload in tuple(mesh_payloads or ()) if isinstance(payload, dict))
+        if not wanted_room or not wanted_name or not payloads:
+            return False
+        nodes = [
+            node
+            for _room_node, node in self._iter_room_preview_mesh_nodes(wanted_room)
+            if str(getattr(node, "_gr_map_studio_primitive_name", "") or "").strip() == wanted_name
+        ]
+        if len(nodes) != len(payloads):
+            return False
+        by_name = {str(payload.get("mesh_name") or ""): payload for payload in payloads}
+        ordered_payloads = [by_name.get(str(getattr(node, "name", "") or "")) for node in nodes]
+        if any(payload is None for payload in ordered_payloads):
+            ordered_payloads = list(payloads)
+        invalidate = getattr(self.viewport, "_evict_transform_cache", None)
+        for node, payload in zip(nodes, ordered_payloads):
+            key = id(node)
+            if key not in self._primitive_recipe_preview_baselines:
+                self._primitive_recipe_preview_baselines[key] = (
+                    node,
+                    {
+                        "vertices": list(getattr(node, "vertices", ()) or ()),
+                        "faces": list(getattr(node, "faces", ()) or ()),
+                        "normals": list(getattr(node, "normals", ()) or ()),
+                        "uvs": list(getattr(node, "uvs", ()) or ()),
+                        "uvs_lm": list(getattr(node, "uvs_lm", ()) or ()),
+                        "face_mats": list(getattr(node, "face_mats", ()) or ()),
+                    },
+                )
+            node.vertices = list(payload.get("vertices") or ())
+            node.faces = list(payload.get("faces") or ())
+            node.normals = list(payload.get("normals") or ())
+            node.uvs = list(payload.get("uvs") or ())
+            node.uvs_lm = list(payload.get("uvs_lm") or ())
+            node.face_mats = list(payload.get("face_mats") or ())
+            compute_bounds = getattr(node, "compute_bounds", None)
+            if callable(compute_bounds):
+                compute_bounds()
+            if callable(invalidate):
+                invalidate(node)
+        self._hover_candidate_cache_key = None
+        self._hover_candidate_cache = []
+        self._hover_candidate_grid = {}
+        request = getattr(self.viewport, "_request_render", None)
+        if callable(request):
+            request(
+                fast=True,
+                reason="Map Studio primitive recipe preview",
+                resources=True,
+                overlay=True,
+                hud=True,
+            )
+        return True
+
+    def clear_primitive_recipe_preview(self) -> None:
+        """Restore the resident primitive arrays captured before live editing."""
+
+        baselines = dict(getattr(self, "_primitive_recipe_preview_baselines", {}) or {})
+        self._primitive_recipe_preview_baselines = {}
+        invalidate = getattr(self.viewport, "_evict_transform_cache", None)
+        for node, state in baselines.values():
+            for field, values in state.items():
+                setattr(node, field, list(values))
+            compute_bounds = getattr(node, "compute_bounds", None)
+            if callable(compute_bounds):
+                compute_bounds()
+            if callable(invalidate):
+                invalidate(node)
+        if baselines:
+            self._hover_candidate_cache_key = None
+            self._hover_candidate_cache = []
+            self._hover_candidate_grid = {}
+            request = getattr(self.viewport, "_request_render", None)
+            if callable(request):
+                request(
+                    fast=True,
+                    reason="Map Studio primitive recipe preview restored",
+                    resources=True,
+                    overlay=True,
+                    hud=True,
+                )
+
+    def promote_primitive_recipe_preview(self, room_resref: str, primitive_name: str) -> bool:
+        """Keep the last one-primitive preview resident after an Apply commit."""
+
+        wanted_room = str(room_resref or "").strip().lower()
+        wanted_name = str(primitive_name or "").strip()
+        baselines = dict(getattr(self, "_primitive_recipe_preview_baselines", {}) or {})
+        if not baselines:
+            return False
+        nodes = [entry[0] for entry in baselines.values()]
+        if any(
+            str(getattr(node, "_gr_map_studio_room_resref", "") or "").strip().lower() != wanted_room
+            or str(getattr(node, "_gr_map_studio_primitive_name", "") or "").strip() != wanted_name
+            for node in nodes
+        ):
+            return False
+        self._primitive_recipe_preview_baselines = {}
+        serial = int(getattr(self, "_primitive_recipe_commit_serial", 0) or 0) + 1
+        self._primitive_recipe_commit_serial = serial
+        key = f"resident-primitive-recipe:{wanted_room}:{wanted_name}:{serial}"
+        model = getattr(self, "_room_preview_model", None)
+        if model is not None:
+            setattr(model, "_gr_map_studio_preview_key", key)
+        viewport_model = getattr(getattr(self, "viewport", None), "model", None)
+        if viewport_model is not None:
+            setattr(viewport_model, "_gr_map_studio_preview_key", key)
+        self._room_preview_model_key = key
+        self._hover_candidate_cache_key = None
+        self._hover_candidate_cache = []
+        self._hover_candidate_grid = {}
+        request = getattr(self.viewport, "_request_render", None)
+        if callable(request):
+            request(fast=True, reason="Map Studio primitive recipe committed", scene=True, overlay=True, hud=True)
+        return True
+
     def apply_component_mesh_preview(
         self,
         room_resref: str,
@@ -1433,6 +1566,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._room_preview_model: object | None = None
         self._room_preview_model_key = ""
         self._component_mesh_preview_baselines: dict[int, tuple[object, dict[str, object]]] = {}
+        self._primitive_recipe_preview_baselines: dict[int, tuple[object, dict[str, object]]] = {}
+        self._primitive_recipe_commit_serial = 0
         self._terrain_walkability_overlay: object | None = None
         self._universal_transform_overlay: object | None = None
         self._marker_drag: dict[str, object] | None = None
@@ -4461,6 +4596,11 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     def set_authored_room_preview_model(self, authored_room_preview_model) -> None:
         """Replace only authored geometry, preserving camera and panel state."""
 
+        # A replacement model supersedes any arrays captured from the old
+        # nodes.  Never let a later Cancel restore data onto detached renderer
+        # objects after an undo, module reload, or structural edit.
+        self._component_mesh_preview_baselines = {}
+        self._primitive_recipe_preview_baselines = {}
         self._room_preview_model = authored_room_preview_model
         self._sync_room_preview_model(authored_room_preview_model)
         self._pending_room_primitive_commit_preview = None

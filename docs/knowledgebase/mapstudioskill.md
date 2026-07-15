@@ -56,31 +56,41 @@ workflows in the main model viewer, Character Builder, or Retarget Workbench.
   strokes, object combine/separate, placement moves, and transition edits must
   leave command-level evidence.
 
-## GModeler Marking Menu
+## Maya Modeling Shelf And Construction History
 
-- The canonical Map Studio context menu is the GModeler sectioned panel
-  (`gmodeler_marking_menu.py`), matching the real ZModeler popup verified
-  frame-by-frame from capture video: one cursor-anchored panel with a header
-  ("GMODELER | FACE ACTIONS"), an ACTIONS grid (up to three columns, includes
-  Do Nothing), a TARGET grid for the current action, and a MODIFIERS hint
-  strip — all visible at once. Do not build radial/pie context menus or
-  nested cascades in Map Studio.
-- Selections are sticky like ZModeler: the current action per hover context
-  and the target per action persist across reopens. Clicking an ACTION
-  executes with the current target and closes; clicking a TARGET re-targets
-  and keeps the panel open (configure-then-act).
-- The hover probe stays enabled in Object mode with face-only picking
-  (tolerance 0) so the panel opens over stock module geometry, not just
-  authored graybox rooms.
-- `radial_marking_menu.py` is deprecated and unwired; delete it after the
-  GModeler popup passes a full manual test pass. Do not extend it.
-- The action/target/modifier vocabulary is owned by
-  `map_studio_marking_menu_registry`; marking-menu widgets must stay
-  presentation-only. Flip an action's `implemented` flag only when it is
-  actually routed to a geometry operation through the tool-belt dispatch.
-- Direction of travel: ZModeler-style hover → menu → action is replacing the
-  Maya-style tool-first flows. When a GModeler path fully covers a Maya-style
-  belt/menu path, deprecate the old path instead of maintaining both.
+- The canonical manual-modeling surface is the Map Studio Maya Modeling shelf,
+  using original Ghost Studio icon art and stable Ghost action keys. Do not copy
+  Autodesk icon files, private code, or proprietary assets. The retired
+  `gmodeler_marking_menu.py` path is compatibility state only; do not add new
+  product behavior to it.
+- A routed shelf button is not proof of Maya parity. Each command must prove
+  frontmost hover, live non-accumulating preview, complete advertised options,
+  cancel, one commit/undo/redo transaction, selection retention, attribute
+  preservation, practical frame time, KMAP reload, and the relevant KOTOR
+  export/game gate before it is labeled equivalent.
+- Polygon primitives are retained construction recipes, not one-shot mesh
+  replacements. Persist a versioned construction-node ID and typed parameters;
+  property scrubbing evaluates only that primitive and patches only its
+  resident renderer node. Do not decode/serialize the full authored KMAP during
+  a preview frame.
+- The initial retained primitive set is Plane, Cube, Cylinder, Sphere, Cone,
+  and Torus. Preserve dimensions/radii, independent subdivisions, normalized
+  KOTOR Z-up axis, height baseline, UV policy, cap policy, and twist where the
+  primitive supports them. Render subdivision density must not automatically
+  inflate a floor WOK.
+- `Freeze Transformations` and `Delete History` are separate contracts. Freeze
+  resets transform channels while preserving the primitive recipe through a
+  downstream transform stage. Delete History explicitly evaluates and bakes
+  the construction stack; it must be undoable. Never silently destroy every
+  primitive recipe in a room because one object enters component editing.
+- Editable topology needs stable logical vertex/edge/face/shell identity
+  separate from renderer triangles and UV/hard-normal seam duplication.
+  Extrude, Bevel, Bridge, Connect, Multi-Cut, Insert Edge Loop, Target Weld,
+  Combine, and Separate must consume that shared topology/remap contract rather
+  than infer polygons repeatedly from export triangles.
+- Picking is depth-correct and frontmost. A face, edge, or vertex hidden behind
+  nearer geometry must not become the active modeling target unless the user
+  explicitly enables through/backface selection.
 
 ## Imported Stock Geometry (map editing)
 

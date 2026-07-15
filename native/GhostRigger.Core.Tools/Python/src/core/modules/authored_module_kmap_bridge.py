@@ -71,6 +71,7 @@ from .authored_room_primitives import (
     StairsPrimitive,
     TorusPrimitive,
     WallPrimitive,
+    primitive_construction_node_id,
 )
 
 
@@ -88,6 +89,18 @@ class AuthoredModuleKMapBridgeResult:
 
 def _dict(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
+
+
+def _bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return bool(default)
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in {"1", "true", "yes", "on"}:
+            return True
+        if text in {"0", "false", "no", "off", ""}:
+            return False
+    return bool(value)
 
 
 TEXTURE_PAINT_UNAPPLIED_BLOCKER = (
@@ -223,6 +236,18 @@ def _transform(data: Any) -> PrimitiveTransform:
     )
 
 
+def _evaluation_transforms(data: Any) -> tuple[PrimitiveTransform, ...]:
+    """Decode optional downstream Freeze Transformations stages.
+
+    Older KMAP payloads have no such field and therefore decode to the exact
+    previous single-transform behavior.
+    """
+
+    if not isinstance(data, (list, tuple)):
+        return ()
+    return tuple(_transform(value) for value in data if isinstance(value, dict))
+
+
 def _opening(data: Any) -> FloorPlanWallOpening:
     source = _dict(data)
     return FloorPlanWallOpening(
@@ -247,13 +272,21 @@ def _floor_primitive(data: Any, room_resref: str) -> FloorPrimitive | PlacedRoom
         material=_material(source.get("material")),
         subdivisions_width=int(_float(source.get("subdivisions_width"), 1.0)),
         subdivisions_depth=int(_float(source.get("subdivisions_depth"), 1.0)),
+        axis=_vec3(source.get("axis"), (0.0, 0.0, 1.0)),
+        height_baseline=_float(source.get("height_baseline"), 0.0),
+        create_uvs=int(_float(source.get("create_uvs"), 1.0)),
+        recipe_version=max(1, int(_float(source.get("recipe_version"), 1.0))),
+        construction_node_id=str(source.get("construction_node_id") or primitive_construction_node_id(room_resref=room_resref, primitive_type="plane", name=str(source.get("name") or f"{room_resref}_floor"))),
+        construction_schema_version=max(1, int(_float(source.get("construction_schema_version"), 1.0))),
     )
-    if source.get("transform") is None:
+    evaluation_transforms = _evaluation_transforms(source.get("evaluation_transforms"))
+    if source.get("transform") is None and not evaluation_transforms:
         return floor
     return PlacedRoomPrimitive(
         primitive=floor,
         transform=_transform(source.get("transform")),
         name=str(source.get("instance_name") or source.get("name") or floor.name),
+        evaluation_transforms=evaluation_transforms,
     )
 
 
@@ -302,6 +335,12 @@ def _base_room_primitive(
             material=material,
             subdivisions_width=int(_float(source.get("subdivisions_width"), 1.0)),
             subdivisions_depth=int(_float(source.get("subdivisions_depth"), 1.0)),
+            axis=_vec3(source.get("axis"), (0.0, 0.0, 1.0)),
+            height_baseline=_float(source.get("height_baseline"), 0.0),
+            create_uvs=int(_float(source.get("create_uvs"), 1.0)),
+            recipe_version=max(1, int(_float(source.get("recipe_version"), 1.0))),
+            construction_node_id=str(source.get("construction_node_id") or primitive_construction_node_id(room_resref=room_resref, primitive_type="plane", name=name)),
+            construction_schema_version=max(1, int(_float(source.get("construction_schema_version"), 1.0))),
         )
     if primitive_type == "wall":
         return WallPrimitive(
@@ -322,6 +361,12 @@ def _base_room_primitive(
             subdivisions_x=int(_float(source.get("subdivisions_x"), 1.0)),
             subdivisions_y=int(_float(source.get("subdivisions_y"), 1.0)),
             subdivisions_z=int(_float(source.get("subdivisions_z"), 1.0)),
+            axis=_vec3(source.get("axis"), (0.0, 0.0, 1.0)),
+            height_baseline=_float(source.get("height_baseline"), 0.0),
+            create_uvs=int(_float(source.get("create_uvs"), 3.0)),
+            recipe_version=max(1, int(_float(source.get("recipe_version"), 1.0))),
+            construction_node_id=str(source.get("construction_node_id") or primitive_construction_node_id(room_resref=room_resref, primitive_type="cube", name=name)),
+            construction_schema_version=max(1, int(_float(source.get("construction_schema_version"), 1.0))),
         )
     if primitive_type == "ramp":
         return RampPrimitive(
@@ -348,9 +393,19 @@ def _base_room_primitive(
             name=name,
             radius=_float(source.get("radius"), 0.5),
             height=_float(source.get("height"), 1.0),
-            segments=int(_float(source.get("segments"), 16.0)),
+            segments=int(_float(source.get("subdivisions_axis", source.get("segments")), 16.0)),
             center=_vec3(source.get("center"), (0.0, 0.0, 0.5)),
             material=material,
+            subdivisions_height=int(_float(source.get("subdivisions_height"), 1.0)),
+            subdivisions_caps=int(_float(source.get("subdivisions_caps"), 0.0)),
+            axis=_vec3(source.get("axis"), (0.0, 0.0, 1.0)),
+            height_baseline=_float(source.get("height_baseline"), 0.0),
+            create_uvs=int(_float(source.get("create_uvs"), 2.0)),
+            round_cap=_bool(source.get("round_cap"), False),
+            round_cap_height_compensation=_bool(source.get("round_cap_height_compensation"), False),
+            recipe_version=max(1, int(_float(source.get("recipe_version"), 1.0))),
+            construction_node_id=str(source.get("construction_node_id") or primitive_construction_node_id(room_resref=room_resref, primitive_type="cylinder", name=name)),
+            construction_schema_version=max(1, int(_float(source.get("construction_schema_version"), 1.0))),
         )
     if primitive_type in {"sphere", "uv_sphere", "poly_sphere"}:
         return SpherePrimitive(
@@ -360,6 +415,12 @@ def _base_room_primitive(
             subdivisions_height=int(_float(source.get("subdivisions_height"), 20.0)),
             center=_vec3(source.get("center"), (0.0, 0.0, 0.5)),
             material=material,
+            axis=_vec3(source.get("axis"), (0.0, 0.0, 1.0)),
+            height_baseline=_float(source.get("height_baseline"), 0.0),
+            create_uvs=int(_float(source.get("create_uvs"), 2.0)),
+            recipe_version=max(1, int(_float(source.get("recipe_version"), 1.0))),
+            construction_node_id=str(source.get("construction_node_id") or primitive_construction_node_id(room_resref=room_resref, primitive_type="sphere", name=name)),
+            construction_schema_version=max(1, int(_float(source.get("construction_schema_version"), 1.0))),
         )
     if primitive_type in {"cone", "poly_cone"}:
         return ConePrimitive(
@@ -368,9 +429,21 @@ def _base_room_primitive(
             height=_float(source.get("height"), 1.0),
             subdivisions_axis=int(_float(source.get("subdivisions_axis"), 20.0)),
             subdivisions_height=int(_float(source.get("subdivisions_height"), 1.0)),
-            subdivisions_caps=int(_float(source.get("subdivisions_caps"), 1.0)),
+            subdivisions_caps=int(
+                _float(
+                    source.get("subdivisions_caps"),
+                    0.0 if ("recipe_version" in source or "construction_schema_version" in source) else 1.0,
+                )
+            ),
             center=_vec3(source.get("center"), (0.0, 0.0, 0.5)),
             material=material,
+            axis=_vec3(source.get("axis"), (0.0, 0.0, 1.0)),
+            height_baseline=_float(source.get("height_baseline"), 0.0),
+            create_uvs=int(_float(source.get("create_uvs"), 2.0)),
+            round_cap=_bool(source.get("round_cap"), False),
+            recipe_version=max(1, int(_float(source.get("recipe_version"), 1.0))),
+            construction_node_id=str(source.get("construction_node_id") or primitive_construction_node_id(room_resref=room_resref, primitive_type="cone", name=name)),
+            construction_schema_version=max(1, int(_float(source.get("construction_schema_version"), 1.0))),
         )
     if primitive_type in {"torus", "poly_torus"}:
         return TorusPrimitive(
@@ -381,6 +454,13 @@ def _base_room_primitive(
             subdivisions_height=int(_float(source.get("subdivisions_height"), 20.0)),
             center=_vec3(source.get("center"), (0.0, 0.0, 0.5)),
             material=material,
+            axis=_vec3(source.get("axis"), (0.0, 0.0, 1.0)),
+            height_baseline=_float(source.get("height_baseline"), 0.0),
+            create_uvs=_bool(source.get("create_uvs"), True),
+            twist=_float(source.get("twist"), 0.0),
+            recipe_version=max(1, int(_float(source.get("recipe_version"), 1.0))),
+            construction_node_id=str(source.get("construction_node_id") or primitive_construction_node_id(room_resref=room_resref, primitive_type="torus", name=name)),
+            construction_schema_version=max(1, int(_float(source.get("construction_schema_version"), 1.0))),
         )
     if primitive_type in {"door_frame", "doorframe", "doorway_frame"}:
         return DoorFramePrimitive(
@@ -412,12 +492,14 @@ def _room_primitive_recipe(data: Any, room_resref: str, *, _depth: int = 0) -> A
 
     source = _dict(data)
     base = _base_room_primitive(source, room_resref, _depth=_depth)
-    if source.get("transform") is None:
+    evaluation_transforms = _evaluation_transforms(source.get("evaluation_transforms"))
+    if source.get("transform") is None and not evaluation_transforms:
         return base
     return PlacedRoomPrimitive(
         primitive=base,
         transform=_transform(source.get("transform")),
         name=str(source.get("instance_name") or source.get("name") or getattr(base, "name", "")),
+        evaluation_transforms=evaluation_transforms,
     )
 
 
@@ -724,6 +806,21 @@ def _transform_payload(transform: PrimitiveTransform) -> dict[str, Any]:
     }
 
 
+def _construction_recipe_payload(primitive: Any, primitive_type: str, *, room_resref: str = "") -> dict[str, Any]:
+    node_id = str(getattr(primitive, "construction_node_id", "") or "").strip()
+    if not node_id:
+        node_id = primitive_construction_node_id(
+            room_resref=room_resref,
+            primitive_type=primitive_type,
+            name=str(getattr(primitive, "name", "") or ""),
+        )
+    return {
+        "recipe_version": max(1, int(getattr(primitive, "recipe_version", 1))),
+        "construction_node_id": node_id,
+        "construction_schema_version": max(1, int(getattr(primitive, "construction_schema_version", 1))),
+    }
+
+
 def _base_primitive_payload(
     primitive: FloorPrimitive
     | WallPrimitive
@@ -740,13 +837,16 @@ def _base_primitive_payload(
     | PlacedRoomPrimitive,
     *,
     _depth: int = 0,
+    room_resref: str = "",
 ) -> dict[str, Any]:
     if _depth > 32:
         raise ValueError("Combined room primitive recipe nesting exceeds the supported depth of 32.")
     transform: PrimitiveTransform | None = None
+    evaluation_transforms: tuple[PrimitiveTransform, ...] = ()
     instance_name = ""
     if isinstance(primitive, PlacedRoomPrimitive):
         transform = primitive.transform
+        evaluation_transforms = tuple(primitive.evaluation_transforms or ())
         instance_name = primitive.name
         primitive = primitive.primitive
     payload: dict[str, Any]
@@ -759,7 +859,7 @@ def _base_primitive_payload(
                     "source_name": source.source_name,
                     "face_indices": [int(index) for index in source.face_indices],
                     "walkmesh_policy": source.walkmesh_policy,
-                    "primitive": _base_primitive_payload(source.primitive, _depth=_depth + 1),
+                    "primitive": _base_primitive_payload(source.primitive, _depth=_depth + 1, room_resref=room_resref),
                 }
                 for source in primitive.sources
             ],
@@ -776,6 +876,10 @@ def _base_primitive_payload(
             "material": _material_payload(primitive.material),
             "subdivisions_width": int(primitive.subdivisions_width),
             "subdivisions_depth": int(primitive.subdivisions_depth),
+            "axis": _vec3_payload(primitive.axis),
+            "height_baseline": float(primitive.height_baseline),
+            "create_uvs": int(primitive.create_uvs),
+            **_construction_recipe_payload(primitive, "plane", room_resref=room_resref),
         }
     elif isinstance(primitive, WallPrimitive):
         payload = {
@@ -798,6 +902,10 @@ def _base_primitive_payload(
             "subdivisions_x": int(primitive.subdivisions_x),
             "subdivisions_y": int(primitive.subdivisions_y),
             "subdivisions_z": int(primitive.subdivisions_z),
+            "axis": _vec3_payload(primitive.axis),
+            "height_baseline": float(primitive.height_baseline),
+            "create_uvs": int(primitive.create_uvs),
+            **_construction_recipe_payload(primitive, "cube", room_resref=room_resref),
         }
     elif isinstance(primitive, RampPrimitive):
         payload = {
@@ -828,8 +936,17 @@ def _base_primitive_payload(
             "radius": float(primitive.radius),
             "height": float(primitive.height),
             "segments": int(primitive.segments),
+            "subdivisions_axis": int(primitive.segments),
+            "subdivisions_height": int(primitive.subdivisions_height),
+            "subdivisions_caps": int(primitive.subdivisions_caps),
             "center": _vec3_payload(primitive.center),
             "material": _material_payload(primitive.material),
+            "axis": _vec3_payload(primitive.axis),
+            "height_baseline": float(primitive.height_baseline),
+            "create_uvs": int(primitive.create_uvs),
+            "round_cap": bool(primitive.round_cap),
+            "round_cap_height_compensation": bool(primitive.round_cap_height_compensation),
+            **_construction_recipe_payload(primitive, "cylinder", room_resref=room_resref),
         }
     elif isinstance(primitive, SpherePrimitive):
         payload = {
@@ -840,6 +957,10 @@ def _base_primitive_payload(
             "subdivisions_height": int(primitive.subdivisions_height),
             "center": _vec3_payload(primitive.center),
             "material": _material_payload(primitive.material),
+            "axis": _vec3_payload(primitive.axis),
+            "height_baseline": float(primitive.height_baseline),
+            "create_uvs": int(primitive.create_uvs),
+            **_construction_recipe_payload(primitive, "sphere", room_resref=room_resref),
         }
     elif isinstance(primitive, ConePrimitive):
         payload = {
@@ -852,6 +973,11 @@ def _base_primitive_payload(
             "subdivisions_caps": int(primitive.subdivisions_caps),
             "center": _vec3_payload(primitive.center),
             "material": _material_payload(primitive.material),
+            "axis": _vec3_payload(primitive.axis),
+            "height_baseline": float(primitive.height_baseline),
+            "create_uvs": int(primitive.create_uvs),
+            "round_cap": bool(primitive.round_cap),
+            **_construction_recipe_payload(primitive, "cone", room_resref=room_resref),
         }
     elif isinstance(primitive, TorusPrimitive):
         payload = {
@@ -863,6 +989,11 @@ def _base_primitive_payload(
             "subdivisions_height": int(primitive.subdivisions_height),
             "center": _vec3_payload(primitive.center),
             "material": _material_payload(primitive.material),
+            "axis": _vec3_payload(primitive.axis),
+            "height_baseline": float(primitive.height_baseline),
+            "create_uvs": bool(primitive.create_uvs),
+            "twist": float(primitive.twist),
+            **_construction_recipe_payload(primitive, "torus", room_resref=room_resref),
         }
     elif isinstance(primitive, DoorFramePrimitive):
         payload = {
@@ -892,19 +1023,23 @@ def _base_primitive_payload(
         raise TypeError(f"Unsupported authored room composition primitive: {type(primitive)!r}")
     if transform is not None:
         payload["transform"] = _transform_payload(transform)
+        if evaluation_transforms:
+            payload["evaluation_transforms"] = [
+                _transform_payload(stage) for stage in evaluation_transforms
+            ]
         if instance_name:
             payload["instance_name"] = instance_name
     return payload
 
 
 def _composition_payload(composition: AuthoredRoomComposition) -> dict[str, Any]:
-    floor_payload = _base_primitive_payload(composition.floor)
+    floor_payload = _base_primitive_payload(composition.floor, room_resref=composition.room_resref)
     floor_payload["type"] = "floor"
     return {
         "type": "composition",
         "room_resref": composition.room_resref,
         "floor": floor_payload,
-        "primitives": [_base_primitive_payload(item) for item in composition.primitives],
+        "primitives": [_base_primitive_payload(item, room_resref=composition.room_resref) for item in composition.primitives],
         "metadata": dict(composition.metadata),
     }
 

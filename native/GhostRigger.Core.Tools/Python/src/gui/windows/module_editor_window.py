@@ -39,7 +39,6 @@ from src.gui.panels.module_editor.texture_paint_tab import MapStudioTexturePaint
 from src.core.modules.authored_imported_mesh import (
     ImportedMeshRoomPrimitive,
     ImportedMeshSurface,
-    extrude_imported_mesh_edge,
     imported_mesh_surface_index_for_role,
     imported_mesh_surface_role,
     resolve_imported_mesh_face_target,
@@ -1721,6 +1720,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.floorPlanBridgeRequested.connect(self.bridge_authored_floor_plan_edges)
         self.builder_tab.roomPrimitiveAddRequested.connect(self.add_authored_room_primitive)
         self.builder_tab.roomPrimitiveTransformRequested.connect(self.apply_authored_room_primitive_transform)
+        self.builder_tab.roomPrimitiveDimensionsPreviewRequested.connect(self.preview_authored_room_primitive_dimensions)
+        self.builder_tab.roomPrimitiveDimensionsPreviewCancelled.connect(self.cancel_authored_room_primitive_dimensions_preview)
         self.builder_tab.roomPrimitiveDimensionsRequested.connect(self.apply_authored_room_primitive_dimensions)
         self.builder_tab.roomPrimitiveStyleRequested.connect(self.apply_authored_room_primitive_style)
         self.builder_tab.roomPrimitiveRemoveRequested.connect(self.remove_authored_room_primitive)
@@ -4075,6 +4076,31 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 face_indices,
                 direction=axis if world_mode else None,
             )
+        elif operation == "edge_extrude":
+            corners = tuple(int(value) for value in tuple(payload.get("edge_corners", (0, 1)))[:2])
+            axis = tuple(float(value) for value in tuple(payload.get("axis", (0.0, 0.0, 1.0)))[:3])
+            tile_size = float(payload.get("tile_size", 0.0) or 0.0)
+            key = (
+                id(source),
+                operation,
+                room_resref,
+                mesh_role,
+                int(payload.get("face_index", -1)),
+                corners,
+                axis,
+                tile_size,
+            )
+            cached = getattr(self, "_map_studio_prepared_topology_preview", None)
+            if cached is not None and cached[0] == key:
+                return cached[1]
+            session = MapStudioLiveTopologySession.prepare_edge_extrude(
+                source,
+                mesh_role,
+                int(payload.get("face_index", -1)),
+                corners,
+                direction=axis,
+                tile_size=tile_size,
+            )
         elif operation == "edge_bevel":
             corners = tuple(int(value) for value in tuple(payload.get("edge_corners", (0, 1)))[:2])
             key = (
@@ -4183,18 +4209,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         distance = float(payload.get("distance", 0.0) or 0.0)
         started = perf_counter()
         try:
-            if str(payload.get("kind", "") or "") == "edge":
-                axis = tuple(float(value) for value in tuple(payload.get("axis", (0.0, 0.0, 1.0)))[:3])
-                updated = extrude_imported_mesh_edge(
-                    source,
-                    mesh_role,
-                    int(payload.get("face_index", -1)),
-                    tuple(int(value) for value in tuple(payload.get("edge_corners", (0, 1)))[:2]),
-                    tuple(axis[index] * distance for index in range(3)),
-                )
-            else:
-                session = self._map_studio_prepared_topology_session(source, payload, "face_extrude")
-                updated = session.evaluate(distance)
+            operation = "edge_extrude" if str(payload.get("kind", "") or "") == "edge" else "face_extrude"
+            session = self._map_studio_prepared_topology_session(source, payload, operation)
+            updated = session.evaluate(distance)
             self._show_live_imported_surface(updated, room_resref, mesh_role)
         except ValueError as exc:
             self.statusBar().showMessage(f"Extrude preview: {exc}", 2500)
@@ -8666,6 +8683,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         )
 
     def add_authored_room_primitive(self, primitive_kind: str, primitive_name: str) -> None:
+        before_keys = {
+            (
+                str(getattr(row, "room_resref", "") or ""),
+                str(getattr(row, "primitive_name", "") or ""),
+            )
+            for row in tuple(self.controller.authored_room_primitive_transforms() or ())
+        }
         try:
             result = self.controller.add_authored_room_primitive(
                 primitive_kind=primitive_kind,
@@ -8679,7 +8703,24 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         message = f"Added room primitive {label}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
-        self._refresh_map_studio_geometry_change(message, refresh_outlines=True)
+        after_rows = tuple(self.controller.authored_room_primitive_transforms() or ())
+        created = tuple(
+            (
+                str(getattr(row, "room_resref", "") or ""),
+                str(getattr(row, "primitive_name", "") or ""),
+            )
+            for row in after_rows
+            if (
+                str(getattr(row, "room_resref", "") or ""),
+                str(getattr(row, "primitive_name", "") or ""),
+            )
+            not in before_keys
+        )
+        self._refresh_map_studio_geometry_change(
+            message,
+            primitive_selection=created[-1:] if created else (),
+            refresh_outlines=True,
+        )
 
     def apply_authored_room_primitive_transform(
         self,
@@ -8726,17 +8767,79 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 dimensions=dimensions,
             )
         except Exception as exc:
+            self.viewport_panel.clear_primitive_recipe_preview()
+            self._refresh_map_studio_selected_primitive_transform_overlay()
             QtWidgets.QMessageBox.warning(self, "Apply Primitive Dimensions", str(exc))
             return
         readiness = result.readiness
         message = f"Edited room primitive dimensions for {primitive_name}; previous exports/proofs are now stale."
         if readiness is not None:
             message = f"{message} Readiness: {readiness.capability_stage}."
+        # Only promote a resident preview when it was evaluated from the exact
+        # values just committed.  A deferred high-topology preview may leave an
+        # older lightweight mesh resident; promoting that stale mesh would make
+        # the viewport disagree with the retained recipe.
+        promoted = bool(
+            getattr(self.controller, "last_map_studio_primitive_commit_matches_preview", False)
+        ) and self.viewport_panel.promote_primitive_recipe_preview(room_resref, primitive_name)
         self._refresh_map_studio_geometry_change(
             message,
             primitive_selection=((room_resref, primitive_name),),
             refresh_outlines=True,
+            rebuild_viewport_model=not promoted,
         )
+
+    def preview_authored_room_primitive_dimensions(
+        self,
+        room_resref: str,
+        primitive_name: str,
+        dimensions: object,
+    ) -> None:
+        """Evaluate and display one construction recipe without touching KMAP."""
+
+        try:
+            payloads = self.controller.preview_authored_room_primitive_dimensions(
+                room_resref=room_resref,
+                primitive_name=primitive_name,
+                dimensions=dimensions,
+            )
+        except Exception as exc:
+            # A partially typed numeric value should not interrupt modeling
+            # with a modal dialog.  Keep the last valid preview resident and
+            # surface the constraint in the status bar until the user edits or
+            # explicitly applies the property set.
+            if bool(getattr(self.controller, "last_map_studio_primitive_preview_deferred", False)):
+                self.viewport_panel.clear_primitive_recipe_preview()
+                self._refresh_map_studio_selected_primitive_transform_overlay()
+            self.statusBar().showMessage(f"Primitive preview: {exc}", 5000)
+            return
+        if self.viewport_panel.apply_primitive_recipe_preview(
+            room_resref,
+            primitive_name,
+            payloads,
+        ):
+            overlay = getattr(self.controller, "last_map_studio_primitive_preview_overlay", None)
+            if overlay is not None:
+                self.viewport_panel.set_universal_transform_overlay(overlay)
+            elapsed = float(
+                getattr(self.controller, "last_map_studio_primitive_preview_elapsed_ms", 0.0)
+                or 0.0
+            )
+            self.statusBar().showMessage(
+                f"Previewing {primitive_name} construction inputs ({elapsed:.2f} ms; not committed).",
+                2500,
+            )
+
+    def cancel_authored_room_primitive_dimensions_preview(
+        self,
+        _room_resref: str = "",
+        _primitive_name: str = "",
+    ) -> None:
+        """Restore the resident mesh before the current recipe scrub."""
+
+        self.viewport_panel.clear_primitive_recipe_preview()
+        self._refresh_map_studio_selected_primitive_transform_overlay()
+        self.statusBar().showMessage("Primitive construction changes cancelled.", 2500)
 
     def apply_authored_room_primitive_style(self, room_resref: str, primitive_name: str, texture: str, surface_id: str) -> None:
         try:

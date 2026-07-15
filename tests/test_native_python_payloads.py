@@ -62,7 +62,9 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     # Core.Math also owns the direct manifold3d closed-solid Boolean kernel.
     # The Maya-style Map Studio shelf, neutral component marking menu, and
     # non-mutating Multi-Cut session add eight owner/consumer payload rows.
-    assert len(payload_files) == 1302
+    # Retained primitive construction now packages the connected logical cage
+    # and topology-budget policy through both Scene and Tools.
+    assert len(payload_files) == 1306
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 

@@ -87,11 +87,19 @@ class PrimitiveTransform:
 
 @dataclass(frozen=True)
 class PlacedRoomPrimitive:
-    """A primitive plus editor-authored transform data."""
+    """A primitive plus editor-authored transform data.
+
+    ``evaluation_transforms`` are immutable downstream transform stages.  A
+    Maya-style Freeze Transformations operation moves the current user-facing
+    channels into this tuple instead of baking dimensions or replacing the
+    retained construction recipe.  The ordinary ``transform`` remains the
+    only W/E/R-editable stage.
+    """
 
     primitive: BaseRoomPrimitive | "CombinedRoomPrimitive"
     transform: PrimitiveTransform = field(default_factory=PrimitiveTransform)
     name: str = ""
+    evaluation_transforms: tuple[PrimitiveTransform, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -257,6 +265,23 @@ def _floor_base_and_transform(floor: FloorPrimitive | PlacedRoomPrimitive) -> tu
             raise TypeError(f"Authored room composition floor must be a FloorPrimitive, not {type(base)!r}.")
         return base, floor.transform
     return floor, None
+
+
+def _primitive_transform_stages(primitive: RoomPrimitive) -> tuple[PrimitiveTransform, ...]:
+    """Return downstream frozen stages followed by the editable transform."""
+
+    if not isinstance(primitive, PlacedRoomPrimitive):
+        return ()
+    return tuple(primitive.evaluation_transforms or ()) + (primitive.transform,)
+
+
+def _transform_wok_stages(wok: WOKData, stages: tuple[PrimitiveTransform, ...]) -> WOKData:
+    """Evaluate retained transform stages in construction-graph order."""
+
+    result = wok
+    for stage in stages:
+        result = transform_wok_data(result, stage)
+    return result
 
 
 def _primitive_name(primitive: FloorPrimitive | RoomPrimitive) -> str:
@@ -444,7 +469,22 @@ def compile_combined_room_primitive(primitive: CombinedRoomPrimitive) -> Primiti
 def _primitive_to_mesh(primitive: RoomPrimitive) -> PrimitiveMesh:
     if isinstance(primitive, PlacedRoomPrimitive):
         mesh = _primitive_to_mesh(primitive.primitive)
-        return transform_primitive_mesh(mesh, primitive.transform, name=_primitive_name(primitive))
+        stages = _primitive_transform_stages(primitive)
+        for stage in stages:
+            mesh = transform_primitive_mesh(mesh, stage, name=_primitive_name(primitive))
+        if primitive.evaluation_transforms:
+            mesh = replace(
+                mesh,
+                metadata={
+                    **dict(mesh.metadata),
+                    "evaluation_transform_stages": [
+                        _transform_manifest(stage) for stage in primitive.evaluation_transforms
+                    ],
+                    "evaluation_transform_stage_count": len(primitive.evaluation_transforms),
+                    "construction_recipe_preserved_through_freeze": True,
+                },
+            )
+        return mesh
     if isinstance(primitive, CombinedRoomPrimitive):
         return compile_combined_room_primitive(primitive)
     if isinstance(primitive, FloorPrimitive):
@@ -588,7 +628,11 @@ def primitive_to_wok(primitive: RoomPrimitive) -> WOKData | None:
 
     if isinstance(primitive, PlacedRoomPrimitive):
         primitive_wok = primitive_to_wok(primitive.primitive)
-        return transform_wok_data(primitive_wok, primitive.transform) if primitive_wok is not None else None
+        return (
+            _transform_wok_stages(primitive_wok, _primitive_transform_stages(primitive))
+            if primitive_wok is not None
+            else None
+        )
     if isinstance(primitive, CombinedRoomPrimitive):
         combined = WOKData(name=primitive.name)
         contributed = False
@@ -617,10 +661,11 @@ def primitive_to_wok(primitive: RoomPrimitive) -> WOKData | None:
 def _build_floor_wok_for_composition(composition: AuthoredRoomComposition) -> WOKData:
     """Build the base floor WOK, optionally reserving a doorway transition strip."""
 
-    floor, transform = _floor_base_and_transform(composition.floor)
+    floor, _transform = _floor_base_and_transform(composition.floor)
+    transform_stages = _primitive_transform_stages(composition.floor)
     if not bool(dict(composition.metadata or {}).get("include_door_transition_surface", False)):
         wok = build_floor_wok(floor)
-        return transform_wok_data(wok, transform) if transform is not None else wok
+        return _transform_wok_stages(wok, transform_stages)
 
     surface_id = resolve_walkmesh_surface_id(floor.surface_id)
     half_w = float(floor.width) * 0.5
@@ -644,7 +689,7 @@ def _build_floor_wok_for_composition(composition: AuthoredRoomComposition) -> WO
             WOKFace(3, 4, 5, surface=DOOR_TRANSITION_SURFACE_ID, adj1=2, adj2=-1, adj3=-1),
         ],
     )
-    return transform_wok_data(wok, transform) if transform is not None else wok
+    return _transform_wok_stages(wok, transform_stages)
 
 
 def build_composition_wok(composition: AuthoredRoomComposition) -> WOKData:
@@ -674,8 +719,13 @@ def validate_authored_room_composition(composition: AuthoredRoomComposition) -> 
         require_walkable_walkmesh_surface(floor.surface_id, context=f"{composition.room_resref} floor")
     except ValueError as exc:
         blocking.append(str(exc))
-    if floor_transform is not None and any(float(value) <= 0.0 for value in floor_transform.scale):
-        blocking.append(f"Placed floor {_primitive_name(composition.floor) or '(unnamed)'} must have positive transform scale.")
+    floor_transforms = _primitive_transform_stages(composition.floor)
+    if floor_transform is not None and any(
+        any(float(value) <= 0.0 for value in transform.scale) for transform in floor_transforms
+    ):
+        blocking.append(
+            f"Placed floor {_primitive_name(composition.floor) or '(unnamed)'} must have positive transform scale."
+        )
     names: set[str] = set()
     for primitive in (composition.floor, *composition.primitives):
         name = _primitive_name(primitive)
@@ -686,8 +736,13 @@ def validate_authored_room_composition(composition: AuthoredRoomComposition) -> 
             blocking.append(f"Duplicate authored room primitive name: {name}")
         names.add(name)
     for primitive in composition.primitives:
-        if isinstance(primitive, PlacedRoomPrimitive) and any(float(value) <= 0.0 for value in primitive.transform.scale):
-            blocking.append(f"Placed primitive {_primitive_name(primitive) or '(unnamed)'} must have positive transform scale.")
+        if isinstance(primitive, PlacedRoomPrimitive) and any(
+            any(float(value) <= 0.0 for value in transform.scale)
+            for transform in _primitive_transform_stages(primitive)
+        ):
+            blocking.append(
+                f"Placed primitive {_primitive_name(primitive) or '(unnamed)'} must have positive transform scale."
+            )
         base = _base_primitive(primitive)
         base_name = _primitive_name(primitive) or str(getattr(base, "name", "") or "(unnamed)")
         if isinstance(base, FloorPrimitive):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 
 class BuilderTab(QtWidgets.QWidget):
@@ -32,6 +32,8 @@ class BuilderTab(QtWidgets.QWidget):
     roomPrimitiveAddRequested = QtCore.Signal(str, str)
     roomPrimitiveTransformRequested = QtCore.Signal(str, str, float, float, float, float, float, float, float, float, float, float)
     roomPrimitiveDimensionsRequested = QtCore.Signal(str, str, object)
+    roomPrimitiveDimensionsPreviewRequested = QtCore.Signal(str, str, object)
+    roomPrimitiveDimensionsPreviewCancelled = QtCore.Signal(str, str)
     roomPrimitiveStyleRequested = QtCore.Signal(str, str, str, str)
     roomPrimitiveRemoveRequested = QtCore.Signal(str, str)
     roomPrimitiveSeparateRequested = QtCore.Signal(str, str, str)
@@ -649,29 +651,55 @@ class BuilderTab(QtWidgets.QWidget):
         duplicate_layout.addRow("Scale Y:", self.duplicateSpecialScaleYSpinBox)
         duplicate_layout.addRow("Scale Z:", self.duplicateSpecialScaleZSpinBox)
         layout.addWidget(duplicate_box)
-        dimensions_box = QtWidgets.QGroupBox("Primitive Dimensions")
+        dimensions_box = QtWidgets.QGroupBox("Primitive Construction History")
+        dimensions_box.setObjectName("mapStudioPrimitiveConstructionHistoryGroupBox")
         dimensions_layout = QtWidgets.QFormLayout(dimensions_box)
         self.primitiveDimensionHintLabel = QtWidgets.QLabel("Select an authored primitive to edit its dimensions.")
         self.primitiveDimensionHintLabel.setObjectName("mapStudioPrimitiveDimensionHintLabel")
         self.primitiveDimensionHintLabel.setWordWrap(True)
         dimensions_layout.addRow(self.primitiveDimensionHintLabel)
-        self._primitive_dimension_controls: list[tuple[QtWidgets.QLabel, QtWidgets.QDoubleSpinBox]] = []
-        for index in range(5):
-            label = QtWidgets.QLabel(f"Dimension {index + 1}:")
-            label.setObjectName(f"mapStudioPrimitiveDimension{index + 1}Label")
-            spin = self._make_transform_spin(
-                f"mapStudioPrimitiveDimension{index + 1}SpinBox",
-                0.001,
-                1000.0,
-                " m",
-                value=0.0,
-                step=0.1,
-            )
-            self._primitive_dimension_controls.append((label, spin))
-            dimensions_layout.addRow(label, spin)
-        self.applyPrimitiveDimensionsButton = QtWidgets.QPushButton("Apply Primitive Dimensions")
+        self.primitivePropertyRowsWidget = QtWidgets.QWidget()
+        self.primitivePropertyRowsWidget.setObjectName("mapStudioPrimitivePropertyRowsWidget")
+        self.primitivePropertyRowsLayout = QtWidgets.QFormLayout(self.primitivePropertyRowsWidget)
+        self.primitivePropertyRowsLayout.setContentsMargins(0, 0, 0, 0)
+        dimensions_layout.addRow(self.primitivePropertyRowsWidget)
+        self._primitive_property_controls: list[dict[str, object]] = []
+        # Kept as a public-ish compatibility surface for older UI contracts. The
+        # rows are now allocated from the selected generator schema, not capped.
+        self._primitive_dimension_controls: list[tuple[QtWidgets.QLabel, QtWidgets.QWidget]] = []
+        self._primitive_property_baseline: dict[str, object] = {}
+        self._primitive_preview_identity: tuple[str, str] | None = None
+        self._primitive_property_preview_timer = QtCore.QTimer(self)
+        self._primitive_property_preview_timer.setSingleShot(True)
+        self._primitive_property_preview_timer.setInterval(45)
+        self._primitive_property_preview_timer.timeout.connect(self._emit_primitive_dimensions_preview)
+        self.applyPrimitiveDimensionsButton = QtWidgets.QPushButton("Apply Topology Properties")
         self.applyPrimitiveDimensionsButton.setObjectName("mapStudioApplyPrimitiveDimensionsButton")
-        dimensions_layout.addRow(self.applyPrimitiveDimensionsButton)
+        self.applyPrimitiveDimensionsButton.setToolTip(
+            "Commit all edited construction inputs as one topology rebuild and one undo step."
+        )
+        self.resetPrimitiveDimensionsButton = QtWidgets.QPushButton("Reset Defaults")
+        self.resetPrimitiveDimensionsButton.setObjectName("mapStudioResetPrimitiveDimensionsButton")
+        self.resetPrimitiveDimensionsButton.setToolTip("Restore generator defaults without committing them.")
+        self.cancelPrimitiveDimensionsButton = QtWidgets.QPushButton("Cancel Changes")
+        self.cancelPrimitiveDimensionsButton.setObjectName("mapStudioCancelPrimitiveDimensionsButton")
+        self.cancelPrimitiveDimensionsButton.setToolTip("Discard unapplied construction-input changes (Esc).")
+        primitive_property_buttons = QtWidgets.QWidget()
+        primitive_property_buttons.setObjectName("mapStudioPrimitivePropertyButtonsWidget")
+        primitive_property_buttons_layout = QtWidgets.QGridLayout(primitive_property_buttons)
+        primitive_property_buttons_layout.setContentsMargins(0, 0, 0, 0)
+        primitive_property_buttons_layout.addWidget(self.resetPrimitiveDimensionsButton, 0, 0)
+        primitive_property_buttons_layout.addWidget(self.cancelPrimitiveDimensionsButton, 0, 1)
+        primitive_property_buttons_layout.addWidget(self.applyPrimitiveDimensionsButton, 1, 0, 1, 2)
+        primitive_property_buttons_layout.setColumnStretch(0, 1)
+        primitive_property_buttons_layout.setColumnStretch(1, 1)
+        dimensions_layout.addRow(primitive_property_buttons)
+        self.cancelPrimitivePropertiesShortcut = QtGui.QShortcut(
+            QtGui.QKeySequence(QtCore.Qt.Key.Key_Escape),
+            dimensions_box,
+        )
+        self.cancelPrimitivePropertiesShortcut.setContext(QtCore.Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self.cancelPrimitivePropertiesShortcut.setEnabled(False)
         layout.addWidget(dimensions_box)
         primitive_style_box = QtWidgets.QGroupBox("Primitive Material + Walkmesh")
         primitive_style_layout = QtWidgets.QFormLayout(primitive_style_box)
@@ -974,9 +1002,12 @@ class BuilderTab(QtWidgets.QWidget):
         self.bridgeFloorPlanEdgesButton.clicked.connect(self._emit_floor_plan_bridge)
         self.compositionPrimitiveKindComboBox.currentIndexChanged.connect(self._update_composition_primitive_kind_hint)
         self.addCompositionPrimitiveButton.clicked.connect(self._emit_add_composition_primitive)
-        self.roomPrimitiveTransformComboBox.currentIndexChanged.connect(self._update_primitive_transform_controls)
+        self.roomPrimitiveTransformComboBox.currentIndexChanged.connect(self._on_primitive_selection_changed)
         self.applyPrimitiveTransformButton.clicked.connect(self._emit_primitive_transform)
         self.applyPrimitiveDimensionsButton.clicked.connect(self._emit_primitive_dimensions)
+        self.resetPrimitiveDimensionsButton.clicked.connect(self._reset_primitive_properties_to_defaults)
+        self.cancelPrimitiveDimensionsButton.clicked.connect(self._cancel_primitive_property_changes)
+        self.cancelPrimitivePropertiesShortcut.activated.connect(self._cancel_primitive_property_changes)
         self.primitiveSurfaceComboBox.currentIndexChanged.connect(self._update_primitive_surface_hint)
         self.applyPrimitiveStyleButton.clicked.connect(self._emit_primitive_style)
         self.removePrimitiveButton.clicked.connect(self._emit_remove_composition_primitive)
@@ -2109,9 +2140,138 @@ class BuilderTab(QtWidgets.QWidget):
         if kind:
             self.roomPrimitiveAddRequested.emit(kind, name)
 
+    @staticmethod
+    def _primitive_property_field(source: object, name: str, default: object = None) -> object:
+        if isinstance(source, dict):
+            return source.get(name, default)
+        return getattr(source, name, default)
+
+    @staticmethod
+    def _coerce_primitive_property_value(kind: str, value: object) -> object:
+        normalized_kind = str(kind or "float").strip().lower()
+        if normalized_kind == "bool":
+            if isinstance(value, str):
+                return value.strip().lower() in {"1", "true", "yes", "on", "enabled"}
+            return bool(value)
+        if normalized_kind == "int":
+            try:
+                return int(round(float(value)))
+            except (TypeError, ValueError):
+                return 0
+        if normalized_kind == "vector3":
+            source = tuple(value or ()) if isinstance(value, (tuple, list)) else ()
+            if len(source) < 3:
+                source = (0.0, 0.0, 0.0)
+            try:
+                return tuple(float(component) for component in source[:3])
+            except (TypeError, ValueError):
+                return (0.0, 0.0, 0.0)
+        if normalized_kind == "choice":
+            return value
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
+
+    @classmethod
+    def _primitive_property_payload(cls, source: object) -> dict[str, object]:
+        """Normalize legacy dimensions and typed construction properties for the inspector."""
+
+        value = cls._primitive_property_field(source, "value", 0.0)
+        choices = cls._primitive_property_field(source, "choices", None)
+        if choices is None:
+            choices = cls._primitive_property_field(source, "options", ())
+        raw_kind = str(
+            cls._primitive_property_field(
+                source,
+                "kind",
+                cls._primitive_property_field(source, "value_type", cls._primitive_property_field(source, "type", "")),
+            )
+            or ""
+        ).strip().lower()
+        aliases = {
+            "boolean": "bool",
+            "double": "float",
+            "number": "float",
+            "integer": "int",
+            "enum": "choice",
+            "select": "choice",
+            "vector": "vector3",
+            "vec3": "vector3",
+            "double3": "vector3",
+            "axis": "vector3",
+        }
+        kind = aliases.get(raw_kind, raw_kind)
+        if bool(cls._primitive_property_field(source, "integer", False)):
+            kind = "int"
+        elif not kind and choices:
+            kind = "choice"
+        elif not kind and isinstance(value, bool):
+            kind = "bool"
+        elif not kind and isinstance(value, (tuple, list)) and len(value) == 3:
+            kind = "vector3"
+        elif not kind:
+            kind = "float"
+        if kind not in {"float", "int", "bool", "vector3", "choice"}:
+            kind = "float"
+
+        default_names = ("default", "default_value", "defaultValue")
+        explicit_has_default = cls._primitive_property_field(source, "has_default", None)
+        if explicit_has_default is not None:
+            has_default = bool(explicit_has_default)
+        elif isinstance(source, dict):
+            has_default = any(name in source for name in default_names)
+        else:
+            has_default = any(hasattr(source, name) for name in default_names)
+        default_value: object = None
+        if has_default:
+            for name in default_names:
+                marker = object()
+                candidate = cls._primitive_property_field(source, name, marker)
+                if candidate is not marker:
+                    default_value = cls._coerce_primitive_property_value(kind, candidate)
+                    break
+
+        default_suffix = " m" if kind == "float" else ""
+        return {
+            "key": str(cls._primitive_property_field(source, "key", "") or ""),
+            "label": str(cls._primitive_property_field(source, "label", "") or ""),
+            "group": str(cls._primitive_property_field(source, "group", "Construction") or "Construction"),
+            "kind": kind,
+            "value": cls._coerce_primitive_property_value(kind, value),
+            "minimum": cls._primitive_property_field(source, "minimum", 0.001),
+            "maximum": cls._primitive_property_field(source, "maximum", 1000.0),
+            "step": cls._primitive_property_field(source, "step", 0.1),
+            "suffix": str(cls._primitive_property_field(source, "suffix", default_suffix) or ""),
+            "integer": kind == "int",
+            "choices": choices,
+            "component_labels": tuple(cls._primitive_property_field(source, "component_labels", ("X", "Y", "Z")) or ("X", "Y", "Z")),
+            "description": str(
+                cls._primitive_property_field(
+                    source,
+                    "description",
+                    cls._primitive_property_field(
+                        source,
+                        "tooltip",
+                        cls._primitive_property_field(source, "implementation_note", ""),
+                    ),
+                )
+                or ""
+            ),
+            "read_only": bool(cls._primitive_property_field(source, "read_only", False)),
+            "affects_topology": bool(cls._primitive_property_field(source, "affects_topology", False)),
+            "affects_uvs": bool(cls._primitive_property_field(source, "affects_uvs", False)),
+            "soft_minimum": cls._primitive_property_field(source, "soft_minimum", None),
+            "soft_maximum": cls._primitive_property_field(source, "soft_maximum", None),
+            "decimals": int(cls._primitive_property_field(source, "decimals", 3) or 0),
+            "has_default": has_default,
+            "default": default_value,
+        }
+
     def set_room_primitives(self, primitives) -> None:
         """Populate editable primitive transform choices from the controller."""
 
+        self._cancel_active_primitive_dimensions_preview()
         current_key = ""
         current = self.roomPrimitiveTransformComboBox.currentData()
         if isinstance(current, dict):
@@ -2124,6 +2284,10 @@ class BuilderTab(QtWidgets.QWidget):
             name = str(getattr(primitive, "primitive_name", "") or "")
             primitive_type = str(getattr(primitive, "primitive_type", "") or "primitive")
             key = f"{room}:{name}"
+            property_source = getattr(primitive, "properties", None)
+            if property_source is None:
+                property_source = getattr(primitive, "dimensions", ())
+            properties = tuple(self._primitive_property_payload(item) for item in property_source or ())
             data = {
                 "room_resref": room,
                 "primitive_name": name,
@@ -2136,19 +2300,8 @@ class BuilderTab(QtWidgets.QWidget):
                 "surface_id": "" if getattr(primitive, "surface_id", None) is None else str(getattr(primitive, "surface_id")),
                 "surface_name": str(getattr(primitive, "surface_name", "") or ""),
                 "supports_walkmesh_surface": bool(getattr(primitive, "supports_walkmesh_surface", False)),
-                "dimensions": tuple(
-                    {
-                        "key": str(getattr(dimension, "key", "") or ""),
-                        "label": str(getattr(dimension, "label", "") or ""),
-                        "value": float(getattr(dimension, "value", 0.0)),
-                        "minimum": float(getattr(dimension, "minimum", 0.001)),
-                        "maximum": float(getattr(dimension, "maximum", 1000.0)),
-                        "step": float(getattr(dimension, "step", 0.1)),
-                        "suffix": str(getattr(dimension, "suffix", " m") or ""),
-                        "integer": bool(getattr(dimension, "integer", False)),
-                    }
-                    for dimension in getattr(primitive, "dimensions", ()) or ()
-                ),
+                "properties": properties,
+                "dimensions": properties,
             }
             self.roomPrimitiveTransformComboBox.addItem(f"{room} / {primitive_type} / {name}", data)
             if key == current_key:
@@ -2342,38 +2495,319 @@ class BuilderTab(QtWidgets.QWidget):
             f"Editing {data.get('primitive_type', 'primitive')} {data.get('primitive_name', '')}; mesh and WOK will be regenerated together."
         )
 
+    @staticmethod
+    def _primitive_numeric_component(value: object, index: int, fallback: float) -> float:
+        source = value
+        if isinstance(source, (tuple, list)):
+            source = source[index] if index < len(source) else fallback
+        try:
+            return float(source)
+        except (TypeError, ValueError):
+            return float(fallback)
+
+    @classmethod
+    def _primitive_choice_entries(cls, choices: object) -> tuple[tuple[str, object], ...]:
+        if isinstance(choices, dict):
+            return tuple((str(label), value) for label, value in choices.items())
+        entries: list[tuple[str, object]] = []
+        for choice in choices or ():
+            if isinstance(choice, dict):
+                value = choice.get("value", choice.get("id", choice.get("key")))
+                label = choice.get("label", choice.get("name", value))
+            elif isinstance(choice, (tuple, list)) and len(choice) >= 2:
+                label, value = choice[0], choice[1]
+            else:
+                value = choice
+                label = choice
+            entries.append((str(label), value))
+        return tuple(entries)
+
+    @staticmethod
+    def _primitive_property_token(key: str, index: int) -> str:
+        token = "".join(character if character.isalnum() else "_" for character in str(key or ""))
+        return token.strip("_") or f"Property{index + 1}"
+
+    def _clear_primitive_property_controls(self) -> None:
+        self._primitive_property_preview_timer.stop()
+        while self.primitivePropertyRowsLayout.count():
+            item = self.primitivePropertyRowsLayout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+        self._primitive_property_controls.clear()
+        self._primitive_dimension_controls.clear()
+        self._primitive_property_baseline.clear()
+
+    def _make_primitive_numeric_editor(
+        self,
+        property_data: dict[str, object],
+        index: int,
+        component_index: int | None = None,
+    ) -> QtWidgets.QAbstractSpinBox:
+        kind = str(property_data.get("kind") or "float")
+        integer = kind == "int"
+        raw_minimum = property_data.get("minimum")
+        raw_maximum = property_data.get("maximum")
+        # Missing hard bounds are intentional for signed construction inputs
+        # such as primitive axes.  Soft bounds guide scrubbing; they must not
+        # clamp zero/negative typed values or change the retained recipe.
+        minimum = self._primitive_numeric_component(
+            raw_minimum,
+            component_index or 0,
+            -2147483647.0 if raw_minimum is None else 0.001,
+        )
+        maximum = self._primitive_numeric_component(
+            raw_maximum,
+            component_index or 0,
+            2147483647.0 if raw_maximum is None else 1000.0,
+        )
+        step = self._primitive_numeric_component(property_data.get("step"), component_index or 0, 1.0 if integer else 0.1)
+        if maximum < minimum:
+            minimum, maximum = maximum, minimum
+        if integer:
+            editor = QtWidgets.QSpinBox()
+            editor.setRange(max(-2147483647, int(round(minimum))), min(2147483647, int(round(maximum))))
+            editor.setSingleStep(max(1, int(round(step))))
+        else:
+            editor = QtWidgets.QDoubleSpinBox()
+            editor.setRange(minimum, maximum)
+            editor.setDecimals(max(0, min(9, int(property_data.get("decimals", 3) or 0))))
+            editor.setSingleStep(max(0.000001, step))
+        suffix = str(property_data.get("suffix") or "")
+        editor.setSuffix(suffix)
+        editor.setAccelerated(True)
+        editor.setKeyboardTracking(False)
+        if component_index is None:
+            editor.setObjectName(f"mapStudioPrimitiveDimension{index + 1}SpinBox")
+        else:
+            axis = "XYZ"[component_index]
+            editor.setObjectName(f"mapStudioPrimitiveProperty{index + 1}{axis}SpinBox")
+        editor.setProperty("dimensionKey", str(property_data.get("key") or ""))
+        editor.setProperty("dimensionInteger", integer)
+        editor.setProperty("primitivePropertyKind", kind)
+        editor.valueChanged.connect(self._on_primitive_property_edited)
+        return editor
+
+    def _create_primitive_property_editor(
+        self,
+        property_data: dict[str, object],
+        index: int,
+    ) -> tuple[QtWidgets.QWidget, tuple[QtWidgets.QWidget, ...]]:
+        kind = str(property_data.get("kind") or "float")
+        key = str(property_data.get("key") or "")
+        if kind == "bool":
+            editor = QtWidgets.QCheckBox()
+            editor.setObjectName(f"mapStudioPrimitiveProperty{index + 1}CheckBox")
+            editor.setProperty("dimensionKey", key)
+            editor.setProperty("primitivePropertyKind", kind)
+            editor.toggled.connect(self._on_primitive_property_edited)
+            return editor, (editor,)
+        if kind == "choice":
+            editor = QtWidgets.QComboBox()
+            editor.setObjectName(f"mapStudioPrimitiveProperty{index + 1}ComboBox")
+            editor.setProperty("dimensionKey", key)
+            editor.setProperty("primitivePropertyKind", kind)
+            for label, value in self._primitive_choice_entries(property_data.get("choices")):
+                editor.addItem(label, value)
+            if editor.count() <= 0:
+                editor.addItem(str(property_data.get("value") or ""), property_data.get("value"))
+            editor.currentIndexChanged.connect(self._on_primitive_property_edited)
+            return editor, (editor,)
+        if kind == "vector3":
+            editor = QtWidgets.QWidget()
+            editor.setObjectName(f"mapStudioPrimitiveProperty{index + 1}Vector3Widget")
+            editor.setProperty("dimensionKey", key)
+            editor.setProperty("primitivePropertyKind", kind)
+            row = QtWidgets.QHBoxLayout(editor)
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(4)
+            component_labels = tuple(property_data.get("component_labels") or ("X", "Y", "Z"))
+            components: list[QtWidgets.QWidget] = []
+            for component_index in range(3):
+                component_label = QtWidgets.QLabel(
+                    str(component_labels[component_index] if component_index < len(component_labels) else "XYZ"[component_index])
+                )
+                component_label.setObjectName(f"mapStudioPrimitiveProperty{index + 1}ComponentLabel{component_index + 1}")
+                component = self._make_primitive_numeric_editor(property_data, index, component_index)
+                row.addWidget(component_label)
+                row.addWidget(component, 1)
+                components.append(component)
+            return editor, tuple(components)
+        editor = self._make_primitive_numeric_editor(property_data, index)
+        return editor, (editor,)
+
+    def _set_primitive_property_control_value(self, control: dict[str, object], value: object) -> None:
+        kind = str(control.get("kind") or "float")
+        widgets = tuple(control.get("widgets") or ())
+        if kind == "vector3":
+            source = self._coerce_primitive_property_value(kind, value)
+            for widget, component in zip(widgets, tuple(source)):
+                widget.blockSignals(True)
+                widget.setValue(float(component))
+                widget.blockSignals(False)
+            return
+        if not widgets:
+            return
+        widget = widgets[0]
+        widget.blockSignals(True)
+        if kind == "bool":
+            widget.setChecked(bool(value))
+        elif kind == "choice":
+            wanted_index = widget.findData(value)
+            if wanted_index < 0:
+                wanted_index = widget.findText(str(value))
+            widget.setCurrentIndex(max(0, wanted_index))
+        elif kind == "int":
+            widget.setValue(int(round(float(value))))
+        else:
+            widget.setValue(float(value))
+        widget.blockSignals(False)
+
+    def _primitive_property_control_value(self, control: dict[str, object]) -> object:
+        kind = str(control.get("kind") or "float")
+        widgets = tuple(control.get("widgets") or ())
+        if kind == "vector3":
+            return tuple(float(widget.value()) for widget in widgets[:3])
+        if not widgets:
+            return None
+        widget = widgets[0]
+        if kind == "bool":
+            return bool(widget.isChecked())
+        if kind == "choice":
+            return widget.currentData()
+        if kind == "int":
+            return int(widget.value())
+        return float(widget.value())
+
+    def _current_primitive_property_values(self) -> dict[str, object]:
+        return {
+            str(control.get("key") or ""): self._primitive_property_control_value(control)
+            for control in self._primitive_property_controls
+            if str(control.get("key") or "")
+        }
+
+    def _rebuild_primitive_property_controls(self, properties: tuple[dict[str, object], ...]) -> None:
+        self._clear_primitive_property_controls()
+        previous_group = ""
+        for index, source in enumerate(properties):
+            property_data = self._primitive_property_payload(source)
+            key = str(property_data.get("key") or "")
+            group = str(property_data.get("group") or "Construction")
+            if group != previous_group:
+                group_label = QtWidgets.QLabel(group)
+                group_label.setObjectName(
+                    f"mapStudioPrimitivePropertyGroup{self._primitive_property_token(group, index)}Label"
+                )
+                group_label.setProperty("uiRole", "sectionHeader")
+                self.primitivePropertyRowsLayout.addRow(group_label)
+                previous_group = group
+            label_text = str(property_data.get("label") or key or f"Property {index + 1}")
+            label = QtWidgets.QLabel(f"{label_text}:")
+            label.setObjectName(f"mapStudioPrimitiveProperty{self._primitive_property_token(key, index)}Label")
+            editor, widgets = self._create_primitive_property_editor(property_data, index)
+            description = str(property_data.get("description") or "")
+            if description:
+                label.setToolTip(description)
+                editor.setToolTip(description)
+                for widget in widgets:
+                    widget.setToolTip(description)
+            editor.setProperty("softMinimum", property_data.get("soft_minimum"))
+            editor.setProperty("softMaximum", property_data.get("soft_maximum"))
+            editor.setProperty("affectsTopology", bool(property_data.get("affects_topology", False)))
+            editor.setProperty("affectsUvs", bool(property_data.get("affects_uvs", False)))
+            read_only = bool(property_data.get("read_only", False))
+            label.setEnabled(not read_only)
+            editor.setEnabled(not read_only)
+            control = {
+                "key": key,
+                "kind": str(property_data.get("kind") or "float"),
+                "label": label,
+                "editor": editor,
+                "widgets": widgets,
+                "has_default": bool(property_data.get("has_default", False)),
+                "default": property_data.get("default"),
+                "read_only": read_only,
+            }
+            self._primitive_property_controls.append(control)
+            self._primitive_dimension_controls.append((label, widgets[0] if widgets else editor))
+            self.primitivePropertyRowsLayout.addRow(label, editor)
+            self._set_primitive_property_control_value(control, property_data.get("value"))
+        self._primitive_property_baseline = self._current_primitive_property_values()
+        self._update_primitive_property_dirty_state()
+
+    def _update_primitive_property_dirty_state(self) -> bool:
+        values = self._current_primitive_property_values()
+        dirty = bool(values) and values != self._primitive_property_baseline
+        has_editable = any(not bool(control.get("read_only", False)) for control in self._primitive_property_controls)
+        has_defaults = any(
+            bool(control.get("has_default", False)) and not bool(control.get("read_only", False))
+            for control in self._primitive_property_controls
+        )
+        self.applyPrimitiveDimensionsButton.setEnabled(dirty and has_editable)
+        self.cancelPrimitiveDimensionsButton.setEnabled(dirty)
+        self.resetPrimitiveDimensionsButton.setEnabled(has_defaults)
+        self.cancelPrimitivePropertiesShortcut.setEnabled(dirty)
+        return dirty
+
+    def _on_primitive_property_edited(self, *_args) -> None:
+        if self._update_primitive_property_dirty_state():
+            self._primitive_property_preview_timer.start()
+        else:
+            self._cancel_active_primitive_dimensions_preview()
+
+    def _emit_primitive_dimensions_preview(self) -> None:
+        data = self._current_primitive_transform_data()
+        values = self._current_primitive_property_values()
+        if not data or not values or values == self._primitive_property_baseline:
+            return
+        identity = (
+            str(data.get("room_resref") or ""),
+            str(data.get("primitive_name") or ""),
+        )
+        self._primitive_preview_identity = identity
+        self.roomPrimitiveDimensionsPreviewRequested.emit(identity[0], identity[1], values)
+
+    def _cancel_active_primitive_dimensions_preview(self) -> None:
+        self._primitive_property_preview_timer.stop()
+        identity = self._primitive_preview_identity
+        self._primitive_preview_identity = None
+        if identity is not None:
+            self.roomPrimitiveDimensionsPreviewCancelled.emit(identity[0], identity[1])
+
+    def _reset_primitive_properties_to_defaults(self) -> None:
+        self._cancel_active_primitive_dimensions_preview()
+        for control in self._primitive_property_controls:
+            if bool(control.get("has_default", False)) and not bool(control.get("read_only", False)):
+                self._set_primitive_property_control_value(control, control.get("default"))
+        if self._update_primitive_property_dirty_state():
+            self._primitive_property_preview_timer.start()
+
+    def _cancel_primitive_property_changes(self) -> None:
+        self._cancel_active_primitive_dimensions_preview()
+        for control in self._primitive_property_controls:
+            key = str(control.get("key") or "")
+            if key in self._primitive_property_baseline:
+                self._set_primitive_property_control_value(control, self._primitive_property_baseline[key])
+        self._update_primitive_property_dirty_state()
+
+    def _on_primitive_selection_changed(self, *_args) -> None:
+        self._cancel_active_primitive_dimensions_preview()
+        self._update_primitive_transform_controls()
+
     def _update_primitive_dimension_controls(self, data: dict | None = None) -> None:
         current = self._current_primitive_transform_data() if data is None else data
-        dimensions = tuple(current.get("dimensions") or ()) if current else ()
-        for index, (label, spin) in enumerate(self._primitive_dimension_controls):
-            enabled = index < len(dimensions)
-            if not enabled:
-                label.setText(f"Dimension {index + 1}:")
-                spin.setProperty("dimensionKey", "")
-                spin.setProperty("dimensionInteger", False)
-                spin.setEnabled(False)
-                label.setEnabled(False)
-                continue
-            dimension = dict(dimensions[index])
-            label.setText(f"{dimension.get('label') or dimension.get('key')}:")
-            label.setEnabled(True)
-            spin.blockSignals(True)
-            spin.setProperty("dimensionKey", str(dimension.get("key") or ""))
-            spin.setProperty("dimensionInteger", bool(dimension.get("integer", False)))
-            spin.setRange(float(dimension.get("minimum", 0.001)), float(dimension.get("maximum", 1000.0)))
-            spin.setDecimals(0 if bool(dimension.get("integer", False)) else 3)
-            spin.setSingleStep(float(dimension.get("step", 0.1)))
-            spin.setSuffix(str(dimension.get("suffix", " m") or ""))
-            spin.setValue(float(dimension.get("value", 0.0)))
-            spin.setEnabled(True)
-            spin.blockSignals(False)
-        self.applyPrimitiveDimensionsButton.setEnabled(bool(current and dimensions))
+        properties = tuple(current.get("properties") or current.get("dimensions") or ()) if current else ()
+        self._rebuild_primitive_property_controls(tuple(dict(item) for item in properties))
         if not current:
-            self.primitiveDimensionHintLabel.setText("Select an authored primitive to edit its dimensions.")
-        elif not dimensions:
-            self.primitiveDimensionHintLabel.setText("This primitive has no editable dimensions.")
+            self.primitiveDimensionHintLabel.setText("Select an authored primitive to edit its construction inputs.")
+        elif not properties:
+            self.primitiveDimensionHintLabel.setText("This primitive has no editable construction inputs.")
         else:
-            self.primitiveDimensionHintLabel.setText("Dimension edits rebuild the room mesh and any generated WOK faces for this primitive.")
+            self.primitiveDimensionHintLabel.setText(
+                f"{len(properties)} construction input(s). Changes preview after a short pause; "
+                "Apply commits one topology rebuild. Cancel or Esc discards unapplied changes."
+            )
 
     def _emit_primitive_transform(self) -> None:
         data = self._current_primitive_transform_data()
@@ -2398,16 +2832,9 @@ class BuilderTab(QtWidgets.QWidget):
         data = self._current_primitive_transform_data()
         if not data:
             return
-        values = {}
-        for _label, spin in self._primitive_dimension_controls:
-            key = str(spin.property("dimensionKey") or "")
-            if not key:
-                continue
-            if bool(spin.property("dimensionInteger")):
-                values[key] = int(round(float(spin.value())))
-            else:
-                values[key] = float(spin.value())
+        values = self._current_primitive_property_values()
         if values:
+            self._primitive_property_preview_timer.stop()
             self.roomPrimitiveDimensionsRequested.emit(
                 str(data.get("room_resref") or ""),
                 str(data.get("primitive_name") or ""),
