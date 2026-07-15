@@ -375,6 +375,7 @@ knowledge_base/test_artifacts/*.zip
 !/tests/test_sith_ithorian_visual_capture_harness.py
 !/tests/test_map_studio_pie_entities.py
 !/tests/test_map_studio_pie_performance.py
+!/tests/test_map_studio_wok_alignment.py
 /knowledge_base/books
 /docs/architecture
 /docs

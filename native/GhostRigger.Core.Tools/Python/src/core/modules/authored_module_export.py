@@ -60,6 +60,7 @@ from .authored_sky_traffic import (
     read_authored_project_sky_traffic,
     validate_authored_sky_traffic_collection,
 )
+from .authored_module_walkmesh import offset_wok_data, resolve_room_wok_module_offset
 from .authored_walkmesh_audit import DOOR_TRANSITION_SURFACE_ID, AuthoredWalkmeshAudit, audit_authored_wok
 from .authored_walkmesh_boundaries import apply_authored_walkmesh_boundary_policy_to_geometry
 from .custom_module_packager import CustomModulePackRequest, CustomModulePackResult, PackagedModuleResource, package_custom_module
@@ -1738,6 +1739,15 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
             if not imported_wok:
                 geometry = apply_authored_walkmesh_boundary_policy_to_geometry(geometry)
                 geometry = replace(geometry, wok=_walkmesh_walkable_only(geometry.wok))
+            else:
+                # Converted rooms can ship a room-local WOK mislabeled as
+                # module-space (921srt's 921srtb); the engine reads .wok files
+                # in module coordinates, so rebase it the same way the PIE
+                # combiner does or the exported floor detaches from the room.
+                alignment_offset, alignment_warning = resolve_room_wok_module_offset(room, geometry.wok)
+                if alignment_warning:
+                    warnings.append(alignment_warning)
+                    geometry = replace(geometry, wok=offset_wok_data(geometry.wok, alignment_offset))
         except Exception as exc:
             blocking.append(f"Room {room_resref or '(unnamed)'} geometry could not be compiled: {exc}")
             continue

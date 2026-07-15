@@ -78,6 +78,98 @@ def _offset_vertex(vertex: Any, offset: tuple[float, float, float]) -> tuple[flo
     )
 
 
+def _bounds_center_xy(points: Any) -> tuple[float, float] | None:
+    min_x = min_y = float("inf")
+    max_x = max_y = float("-inf")
+    for point in tuple(points or ()):
+        x, y = float(point[0]), float(point[1])
+        min_x, max_x = min(min_x, x), max(max_x, x)
+        min_y, max_y = min(min_y, y), max(max_y, y)
+    if min_x > max_x:
+        return None
+    return ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0)
+
+
+def _room_visual_center_xy(room: Any) -> tuple[float, float] | None:
+    """World-space XY bounds center of the room's non-backdrop render surfaces."""
+
+    primitive = getattr(room, "primitive", None)
+    points: list[Any] = []
+    for surface in tuple(getattr(primitive, "surfaces", ()) or ()):
+        if bool(getattr(surface, "backdrop", False)):
+            continue
+        points.extend(tuple(getattr(surface, "vertices", ()) or ()))
+    center = _bounds_center_xy(points)
+    if center is None:
+        return None
+    offset = _room_offset(room)
+    return (center[0] + offset[0], center[1] + offset[1])
+
+
+#: A declared module-space WOK whose XY bounds center sits further than this
+#: many units from the room's rendered geometry is suspect; the room-local
+#: reading must then cut the misalignment by at least half to win.
+_WOK_ALIGNMENT_TOLERANCE = 4.0
+
+
+def resolve_room_wok_module_offset(
+    room: Any, wok: Any = None
+) -> tuple[tuple[float, float, float], str | None]:
+    """Return the vertex offset that places one room WOK in module space.
+
+    The declared ``wok_coordinate_space`` contract is trusted unless the WOK
+    is geometrically far from the room's rendered surfaces and re-reading it
+    as room-local clearly fixes the alignment.  Converted candidate modules
+    can ship custom rooms whose WOK is stored room-local even though stock
+    import labeled every room module-space (921srt's 921srtb); without this
+    audit that room's collision floats at the label-implied coordinates and
+    the player start has no floor under it in PIE or in-game.
+    """
+
+    source_wok = wok if wok is not None else getattr(getattr(room, "primitive", None), "wok", None)
+    room_offset = _room_offset(room)
+    if _room_wok_coordinate_space(room) != "module":
+        return room_offset, None
+    if room_offset == (0.0, 0.0, 0.0):
+        return (0.0, 0.0, 0.0), None
+    wok_center = _bounds_center_xy(getattr(source_wok, "verts", ()) or ())
+    visual_center = _room_visual_center_xy(room)
+    if wok_center is None or visual_center is None:
+        return (0.0, 0.0, 0.0), None
+    declared_error = (
+        ((wok_center[0] - visual_center[0]) ** 2) + ((wok_center[1] - visual_center[1]) ** 2)
+    ) ** 0.5
+    corrected_error = (
+        ((wok_center[0] + room_offset[0] - visual_center[0]) ** 2)
+        + ((wok_center[1] + room_offset[1] - visual_center[1]) ** 2)
+    ) ** 0.5
+    if declared_error > _WOK_ALIGNMENT_TOLERANCE and corrected_error < declared_error * 0.5:
+        room_resref = ""
+        normalised = getattr(room, "normalised_resref", None)
+        if callable(normalised):
+            room_resref = str(normalised() or "")
+        warning = (
+            f"Room {room_resref or '(unnamed)'} WOK is declared module-space but its geometry sits "
+            f"{declared_error:.1f} units from the room's rendered surfaces; treating it as room-local "
+            f"and applying the room position ({room_offset[0]:.1f}, {room_offset[1]:.1f}, "
+            f"{room_offset[2]:.1f}) instead (residual {corrected_error:.1f} units)."
+        )
+        return room_offset, warning
+    return (0.0, 0.0, 0.0), None
+
+
+def offset_wok_data(wok: Any, offset: tuple[float, float, float]) -> Any:
+    """Return a copy of one WOK with every vertex offset; the source is unchanged."""
+
+    if tuple(offset) == (0.0, 0.0, 0.0):
+        return wok
+    return WOKData(
+        name=str(getattr(wok, "name", "") or ""),
+        verts=[_offset_vertex(vertex, offset) for vertex in tuple(getattr(wok, "verts", ()) or ())],
+        faces=list(getattr(wok, "faces", ()) or ()),
+    )
+
+
 def combine_authored_module_walkmesh(project: AuthoredModuleProject) -> AuthoredModuleWalkmesh:
     """Compile all authored room WOKs into module-coordinate space."""
 
@@ -104,7 +196,7 @@ def combine_authored_module_walkmesh(project: AuthoredModuleProject) -> Authored
         vertex_offset = len(combined.verts)
         face_offset = len(combined.faces)
         wok_coordinate_space = _room_wok_coordinate_space(room)
-        position_offset = (0.0, 0.0, 0.0) if wok_coordinate_space == "module" else _room_offset(room)
+        position_offset, alignment_warning = resolve_room_wok_module_offset(room, source_wok)
         combined.verts.extend(_offset_vertex(vertex, position_offset) for vertex in tuple(source_wok.verts or ()))
         for face in tuple(source_wok.faces or ()):
             combined.faces.append(
@@ -122,7 +214,9 @@ def combine_authored_module_walkmesh(project: AuthoredModuleProject) -> Authored
                 )
             )
         source_rooms.append(room_resref)
-        if wok_coordinate_space == "module" and _room_offset(room) != (0.0, 0.0, 0.0):
+        if alignment_warning:
+            warnings.append(alignment_warning)
+        elif wok_coordinate_space == "module" and _room_offset(room) != (0.0, 0.0, 0.0):
             warnings.append(
                 f"Room {room_resref or '(unnamed)'} uses a stock module-space WOK; "
                 "its LYT position was not applied a second time."
@@ -237,5 +331,7 @@ __all__ = [
     "AuthoredModuleWalkmesh",
     "AuthoredWalkmeshSnapResult",
     "combine_authored_module_walkmesh",
+    "offset_wok_data",
+    "resolve_room_wok_module_offset",
     "snap_position_to_authored_walkmesh",
 ]

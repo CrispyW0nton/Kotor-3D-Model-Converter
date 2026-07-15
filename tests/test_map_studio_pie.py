@@ -435,10 +435,18 @@ def test_pie_stock_module_wok_is_not_double_offset_and_kmap_is_unchanged() -> No
         verts=list(stock_vertices),
         faces=[WOKFace(0, 1, 2, 4), WOKFace(0, 2, 3, 4)],
     )
+    # Stock import bakes render surfaces room-local (the LYT position places
+    # them) while the WOK stays module-space; the surface must therefore be
+    # the WOK minus the room position or the alignment audit rightly treats
+    # the module-space label as a lie and rebases the WOK.
+    room_position = (8.410, -44.268, 0.0)
     surface = ImportedMeshSurface(
         name="render",
         texture="lka_wall01",
-        vertices=tuple(stock_vertices),
+        vertices=tuple(
+            (x - room_position[0], y - room_position[1], z - room_position[2])
+            for x, y, z in stock_vertices
+        ),
         faces=((0, 1, 2), (0, 2, 3)),
     )
     primitive = ImportedMeshRoomPrimitive(
@@ -452,7 +460,7 @@ def test_pie_stock_module_wok_is_not_double_offset_and_kmap_is_unchanged() -> No
     room = AuthoredRoomSpec(
         room_resref="207tel_1",
         primitive=primitive,
-        position=(8.410, -44.268, 0.0),
+        position=room_position,
         metadata={"source": "stock_module_import"},
     )
     project = AuthoredModuleProject(

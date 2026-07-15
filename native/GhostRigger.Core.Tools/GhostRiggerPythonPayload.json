@@ -525,7 +525,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_EXPORT",
             "source_path": "src/core/modules/authored_module_export.py",
             "packaged_path": "Python/src/core/modules/authored_module_export.py",
-            "sha256": "735325d8ec2bc13e83c1a33e10cd4c871b4d832113636505385f34fb82def27f"
+            "sha256": "61be3df8525c89ce39c473e6472a6660baea2b2d82ff8260ddcde97c83c3ac03"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_KMAP_BRIDGE",
@@ -603,7 +603,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_WALKMESH",
             "source_path": "src/core/modules/authored_module_walkmesh.py",
             "packaged_path": "Python/src/core/modules/authored_module_walkmesh.py",
-            "sha256": "d1cfef8b5ecaedfa892f43c4ee455cbc0f0d9f629a0d33432df89f8d9a6438f8"
+            "sha256": "21640317c65ea39200074e11cccb0c5fe10188cdd6d2beba6da7dd2a3ddc9bab"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_WORLD_LIGHTING",
@@ -723,7 +723,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_WALKMESH_STATUS",
             "source_path": "src/core/modules/authored_walkmesh_status.py",
             "packaged_path": "Python/src/core/modules/authored_walkmesh_status.py",
-            "sha256": "3577a7efc63ea9e3bbc6cfd2de3ab179c6045ae57df0a07a9893671d128ded4e"
+            "sha256": "152f0083b48f7b7fe5d0e57867c9c9bef36b89241f7a6aa034db43604ec9edab"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_WALKMESH_SURFACES",

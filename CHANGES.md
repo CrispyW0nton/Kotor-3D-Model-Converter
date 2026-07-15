@@ -11,6 +11,55 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-15
 
+### [2026-07-15] T2801: auto-align mislabeled room-local WOKs (921srt walkmesh/PIE repair)
+
+Owner: LordVaderCW
+
+T###: T2801
+
+Subsystem: Map Studio walkmesh compile/status/export + PIE (Core.Scene/Core.Tools)
+
+Intersects: the T2532 "stock module-space WOK is not double-offset" contract
+(_room_wok_coordinate_space) and the T3008 PIE simulator work.
+
+- Diagnosed on the user's 921srt.k2.kmap (converted candidate mixing one
+  custom 921srtb room with nine rebased 903MAL rooms): PIE blocked with
+  "Player start is not on a walkable WOK face" because 921srtb ships a
+  room-local WOK while stock import labels every converted room
+  `wok_coordinate_space: "module"`. Trusting the label left that room's
+  collision 21 units from its rendered geometry; the module entry point
+  (0.03, -3.45) sat on no walkable face anywhere in the module. The nine
+  903MAL rooms were genuinely module-space (visual-vs-WOK deltas < 1 unit).
+- `authored_module_walkmesh.py` (Scene+Tools mirrors): new
+  `resolve_room_wok_module_offset(room, wok)` geometric alignment audit —
+  a declared module-space WOK whose XY bounds center sits > 4 units from the
+  room's non-backdrop rendered surfaces, where re-reading it as room-local
+  cuts the misalignment by more than half, is treated as mislabeled and gets
+  the room position applied, with an explicit repair warning. Aligned
+  module-space WOKs and generated room-local WOKs are untouched. New
+  `offset_wok_data` helper copies a WOK with offset vertices (shared
+  primitive WOK objects are never mutated). `combine_authored_module_walkmesh`
+  now routes every room offset through the audit.
+- `authored_walkmesh_status.py` (Scene+Tools): Generate/Validate Walkmesh now
+  reports the repair warning so a misaligned converted room is explained in
+  the Walkmesh tab instead of surfacing as an unexplained PIE spawn failure.
+- `authored_module_export.py` (Scene+Tools): exported imported-room WOKs run
+  the same audit, so the packaged .wok/.mdl AABB land in engine module space
+  instead of shipping the source module's defect.
+- One stale fixture reconciled: `test_pie_stock_module_wok_is_not_double_offset...`
+  stored its render surface in module space with a nonzero room position — no
+  real import produces that (stock import bakes surfaces room-local; the LYT
+  position places them). The fixture now bakes room-local surfaces; the
+  no-double-offset contract it guards is unchanged and still green.
+- Verification: new `tests/test_map_studio_wok_alignment.py` (aligned WOK
+  passthrough unchanged, mislabeled WOK rebased with warning + snap proof +
+  source WOK unmutated, status surfacing, offset_wok_data copy semantics);
+  walkmesh/export/PIE suites green (134 passed); headless proof on the real
+  921srt.k2.kmap: PIE session builds (validation ok=True), player spawns at
+  the entry point, runs 11 units, traverses into the 903MAL rooms without
+  falling through. Editor-side proof only — the packaged module still needs
+  the user's manual in-game warp test.
+
 ### [2026-07-15] T3008: PIE start-time performance on large modules (koq201 62 s -> 3-7 s)
 
 Owner: LordVaderCW

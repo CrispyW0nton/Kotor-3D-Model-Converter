@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .authored_module_project import AuthoredModuleProject, compile_authored_room_spec
+from .authored_module_walkmesh import resolve_room_wok_module_offset
 from .authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive
 from .authored_room_floorplan import FloorPlanRoomPrimitive
 from .authored_room_geometry import RectangularRoomPrimitive
@@ -135,7 +136,18 @@ def authored_walkmesh_status_for_project(project: AuthoredModuleProject) -> Auth
     open_edges = sum(audit.open_edge_count for audit in audits)
     steep_walkable_faces = sum(audit.steep_walkable_face_count for audit in audits)
     max_audit_slope = max((float(audit.max_walkable_slope_degrees) for audit in audits), default=0.0)
-    audit_warnings = tuple(warning for audit in audits for warning in audit.warnings)
+    # Module-space alignment: a converted room can carry a room-local WOK
+    # mislabeled module-space, which floats its collision away from the
+    # rendered geometry.  The combiner auto-corrects; report it here so the
+    # Generate/Validate Walkmesh UI explains the repair instead of the map
+    # silently failing PIE with "player start not on a walkable face".
+    alignment_warnings = tuple(
+        warning
+        for room in rooms
+        for warning in (resolve_room_wok_module_offset(room)[1],)
+        if warning
+    )
+    audit_warnings = alignment_warnings + tuple(warning for audit in audits for warning in audit.warnings)
     audit_blocking = tuple(message for audit in audits for message in audit.blocking_messages)
     overlay = authored_terrain_walkability_overlay_for_project(project)
     overlay_blocking = tuple(
