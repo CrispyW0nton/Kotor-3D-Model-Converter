@@ -366,6 +366,43 @@ Each staged variant produces its own `grdev01.mod`. Copy one variant at a time
 into the KOTOR `Modules` folder, run `warp grdev01`, and record screenshot or
 video evidence before treating it as game-tested.
 
+## Legacy Module Recovery And Cross-Game Candidates
+
+Convert one recovered room through MDLOps 1.0.2 into an isolated K1 or K2
+worktree. The command never overwrites the downloaded source unless
+`--overwrite` is explicitly supplied for an existing candidate directory:
+
+```powershell
+py -3.14 scripts/repair_legacy_modules.py room --room myroom_01a --game K2 --mdl "C:\Recovered\myroom_01a.mdl" --mdx "C:\Recovered\myroom_01a.mdx" --wok "C:\Recovered\myroom_01a.wok" --mdlops "Saved\ExternalTools\mdlops\mdlops.exe" --output "C:\Candidates\myroom\K2\Rooms"
+```
+
+Assemble repaired rooms with preserved or explicitly supplied module metadata.
+The workflow generates absent LYT/VIS/PTH only where the result is derivable,
+patches WOK perimeter records, and blocks ambiguous resource collisions:
+
+```powershell
+py -3.14 scripts/repair_legacy_modules.py module --module myroom --game K2 --rooms "C:\Candidates\myroom\K2\Rooms" --output "C:\Candidates\myroom\K2\Candidate" --source-mod "C:\Recovered\myroom.mod" --lyt "C:\Recovered\myroom.lyt" --vis "C:\Recovered\myroom.vis"
+```
+
+Stage exact vanilla texture dependencies from one game only when the target
+game does not already provide them. TXI environment/bump dependencies are
+followed automatically and every copied TPC receives hash/provenance evidence:
+
+```powershell
+py -3.14 scripts/repair_legacy_modules.py textures --source-root "C:\Program Files (x86)\Steam\steamapps\common\swkotor" --target-root "C:\Program Files (x86)\Steam\steamapps\common\Knights of the Old Republic II" --texture LMA_wall09 --texture LMA_tab01 --output "C:\Candidates\myroom\K2\VanillaTextures"
+```
+
+Prove the actual Map Studio API can import the candidate, convert every stock
+room to editable geometry, save KMAP, and reopen it through a fresh controller:
+
+```powershell
+py -3.14 scripts/prove_legacy_module_mapstudio_roundtrip.py --game K2 --game-root "C:\Program Files (x86)\Steam\steamapps\common\Knights of the Old Republic II" --module "C:\Candidates\myroom\K2\Candidate\Modules\myroom.mod" --kmap "C:\Candidates\myroom\K2\MapStudioProof\myroom.kmap" --report "C:\Candidates\myroom\K2\MapStudioProof\myroom.mapstudio-roundtrip.json"
+```
+
+These commands establish structural and editor compatibility only. Install the
+exact resulting MOD and complete a manual warp, movement, camera, texture, and
+transition test in each target game before calling a candidate game-compatible.
+
 ## Map Studio Targeted Refresh Timing
 
 After dragging or property-editing a placed GIT object or room light in Map

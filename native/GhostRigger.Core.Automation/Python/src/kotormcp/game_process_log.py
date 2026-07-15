@@ -44,6 +44,7 @@ TH32CS_SNAPMODULE32 = 0x00000010
 INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 PROCESS_QUERY_INFORMATION = 0x0400
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+STILL_ACTIVE = 259
 PROCESS_VM_READ = 0x0010
 THREAD_GET_CONTEXT = 0x0008
 THREAD_QUERY_INFORMATION = 0x0040
@@ -294,6 +295,8 @@ class Win32ProcessProbe:
         k.CloseHandle.restype = wintypes.BOOL
         k.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
         k.OpenProcess.restype = wintypes.HANDLE
+        k.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+        k.GetExitCodeProcess.restype = wintypes.BOOL
         k.OpenThread.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
         k.OpenThread.restype = wintypes.HANDLE
         k.ReadProcessMemory.argtypes = [
@@ -352,8 +355,14 @@ class Win32ProcessProbe:
         handle = self.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
         if not handle:
             return False
-        self.kernel32.CloseHandle(handle)
-        return True
+        try:
+            exit_code = wintypes.DWORD(0)
+            return bool(
+                self.kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code))
+                and int(exit_code.value) == STILL_ACTIVE
+            )
+        finally:
+            self.kernel32.CloseHandle(handle)
 
     def modules(self, pid: int) -> list[dict[str, Any]]:
         flags = TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32
@@ -740,18 +749,29 @@ def run_monitor(
         return 2
 
     writer.write({"event": "process_selected", "timestamp": _utc_now(), "process": target.as_dict()})
+    modules = probe.modules(target.pid)
+    module_inventory = summarize_module_inventory(modules, game_root=game_root)
+    _write_json(session_path / "module_inventory.json", {"pid": target.pid, "modules": module_inventory})
     attached = bool(probe.kernel32.DebugActiveProcess(int(target.pid)))
     if not attached:
         error = int(ctypes.get_last_error())
         writer.write({"event": "debug_attach_failed", "timestamp": _utc_now(), "pid": target.pid, "last_error": error})
+        writer.write(
+            {
+                "event": "monitor_fallback",
+                "timestamp": _utc_now(),
+                "pid": target.pid,
+                "mode": "process_liveness",
+                "reason": "debug_attach_denied" if error == 5 else "debug_attach_failed",
+                "last_error": error,
+                "modules": module_inventory,
+            }
+        )
         _poll_until_exit(session_path, writer, probe, target.pid, started_epoch, duration_seconds)
         _finalize_summary(session_path, writer, probe, started_epoch, game_root, asset_resrefs)
-        return 3
+        return 0
 
     probe.kernel32.DebugSetProcessKillOnExit(False)
-    modules = probe.modules(target.pid)
-    module_inventory = summarize_module_inventory(modules, game_root=game_root)
-    _write_json(session_path / "module_inventory.json", {"pid": target.pid, "modules": module_inventory})
     writer.write(
         {
             "event": "debug_attached",

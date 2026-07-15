@@ -218,7 +218,9 @@ def queue_text(
             continue
         scan, shifted = _scan_for_char(char)
         if shifted:
-            commands.append(f"key_combo 0x{SCAN_SHIFT:02x} 0x{scan:02x} {int(key_polls)}")
+            commands.append(
+                f"key_combo_send 0x{SCAN_SHIFT:02x} 0x{scan:02x} {int(key_polls)}"
+            )
         else:
             commands.append(_key_tap(scan, key_polls))
     if press_enter:
@@ -236,6 +238,42 @@ def queue_mouse_click(
     return queue_commands(
         game_root,
         [f"mouse_click {int(mouse_polls or DEFAULT_MOUSE_POLLS)}"],
+        proxy_path=proxy_path,
+        reset_first=reset_first,
+    )
+
+
+def queue_mouse_click_at(
+    game_root: str | Path,
+    screen_x: int,
+    screen_y: int,
+    *,
+    proxy_path: Optional[str] = None,
+    reset_first: bool = False,
+) -> dict[str, Any]:
+    """Ask the in-process proxy to click one absolute screen position."""
+
+    return queue_commands(
+        game_root,
+        [f"mouse_click_at {int(screen_x)} {int(screen_y)}"],
+        proxy_path=proxy_path,
+        reset_first=reset_first,
+    )
+
+
+def queue_mouse_move(
+    game_root: str | Path,
+    delta_x: int,
+    delta_y: int,
+    *,
+    proxy_path: Optional[str] = None,
+    reset_first: bool = False,
+) -> dict[str, Any]:
+    """Queue one signed DirectInput-relative mouse movement."""
+
+    return queue_commands(
+        game_root,
+        [f"mouse_move {int(delta_x)} {int(delta_y)}"],
         proxy_path=proxy_path,
         reset_first=reset_first,
     )
@@ -273,7 +311,20 @@ def _clean_command(command: str) -> str:
     if "\r" in text or "\n" in text:
         raise ValueError("DirectInput proxy commands must be one line each.")
     command_name = text.split(maxsplit=1)[0].lower()
-    if command_name not in {"reset", "mouse_click", "key_tap", "key_combo"}:
+    if command_name not in {
+        "reset",
+        "mouse_click",
+        "mouse_click_at",
+        "mouse_move",
+        "key_tap",
+        "key_combo",
+        "key_buffer",
+        "key_message",
+        "key_send",
+        "key_system",
+        "key_post",
+        "key_combo_send",
+    }:
         raise ValueError(f"Unsupported DirectInput proxy command: {command_name}")
     return text
 
@@ -288,4 +339,4 @@ def _scan_for_char(char: str) -> tuple[int, bool]:
 
 
 def _key_tap(scan: int, polls: int) -> str:
-    return f"key_tap 0x{int(scan):02x} {int(polls or DEFAULT_KEY_POLLS)}"
+    return f"key_system 0x{int(scan):02x} 35"

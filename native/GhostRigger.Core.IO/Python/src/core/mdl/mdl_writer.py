@@ -2289,16 +2289,16 @@ class MDLBinaryWriter:
           Event array
           Animation node tree
         """
-        preserve_source_tree = self._animation_has_source_hierarchy(anim)
+        has_source_tree = self._animation_has_source_hierarchy(anim)
         anim_nodes = self._animation_nodes_with_hierarchy(anim, self._nodes)
         self._validate_animation_export_tree(
             anim,
             anim_nodes,
             self._nodes,
-            allow_source_subset=preserve_source_tree,
+            allow_source_subset=has_source_tree,
         )
         anim_root_name = anim.anim_root or (anim_nodes[0].name if anim_nodes else '')
-        node_count = len(self._nodes) if preserve_source_tree and self._nodes else len(anim_nodes)
+        node_count = len(self._nodes) if has_source_tree and self._nodes else len(anim_nodes)
 
         fp1 = _K2_ANIM_FP1 if self._is_k2 else _K1_ANIM_FP1
         fp2 = _K2_ANIM_FP2 if self._is_k2 else _K1_ANIM_FP2
@@ -2371,15 +2371,21 @@ class MDLBinaryWriter:
         Retarget preview can use sparse/flat animation-node lists because
         playback resolves controllers by name. The KotOR engine walks the
         binary animation tree itself in routines such as UpdateAnimFootprint,
-        so export must preserve the target Aurora hierarchy shape, including
-        controllerless placeholders for unkeyed toes, hands, helpers, and
-        meshes. Controllers from ``anim.nodes`` are overlaid onto cloned target
-        nodes by name; node rest transforms and parent/child links come from the
-        target model.
+        so every serialized parent edge must follow the target Aurora tree.
+        A carried, target-native sparse tree is preserved. A carried donor tree
+        is rebuilt on the target ancestor closure so required shoulders, neck
+        segments, and helpers are restored without bloating every clip with
+        unrelated mesh siblings. A truly flat override still expands to the
+        complete target tree because it carries no hierarchy evidence at all.
         """
         source_nodes = list(getattr(anim, 'nodes', None) or [])
         if self._animation_has_source_hierarchy(anim):
-            return self._clone_source_animation_tree(source_nodes)
+            if self._animation_source_hierarchy_matches_target(anim, all_nodes):
+                return self._clone_source_animation_tree(source_nodes)
+            return self._rebuild_source_animation_tree_on_target(
+                source_nodes,
+                all_nodes,
+            )
 
         if not all_nodes:
             return []
@@ -2474,6 +2480,169 @@ class MDLBinaryWriter:
                 if id(child) in source_ids:
                     return True
         return False
+
+    @classmethod
+    def _animation_source_hierarchy_matches_target(
+        cls,
+        anim: Animation,
+        target_nodes: List[ModelNode],
+    ) -> bool:
+        """Return True only when a carried animation tree is target-native.
+
+        Retargeted clips often arrive with valid node names but with the donor
+        rig's parent edges.  GhostRigger playback resolves tracks by name and
+        can hide that mismatch; Odyssey walks the serialized animation tree
+        and requires every carried edge to agree with the model hierarchy.
+        Preserve a sparse source tree only when its direct parent edges are
+        already target-correct.  Otherwise the normal export path overlays its
+        controllers onto the complete target hierarchy, restoring required
+        shoulder, neck, helper, and mesh placeholders.
+
+        Real binary models can contain duplicate node names, so node IDs are
+        preferred whenever they are unique.  Name matching is only the
+        fallback for synthetic/editor trees whose IDs were not populated.
+        """
+
+        source_nodes = list(getattr(anim, 'nodes', None) or [])
+        if not cls._animation_has_source_hierarchy(anim) or not target_nodes:
+            return False
+
+        identity_mode = cls._animation_node_identity_mode(
+            source_nodes,
+            target_nodes,
+        )
+        target_by_identity = {
+            cls._animation_node_identity_key(node, identity_mode): node
+            for node in target_nodes
+        }
+        source_ids = {id(node) for node in source_nodes}
+        for source in source_nodes:
+            source_identity = cls._animation_node_identity_key(
+                source,
+                identity_mode,
+            )
+            target = target_by_identity.get(source_identity)
+            if target is None:
+                return False
+
+            source_parent = getattr(source, 'parent', None)
+            source_parent_identity = (
+                cls._animation_node_identity_key(source_parent, identity_mode)
+                if source_parent is not None and id(source_parent) in source_ids
+                else None
+            )
+            target_parent = getattr(target, 'parent', None)
+            target_parent_identity = (
+                cls._animation_node_identity_key(target_parent, identity_mode)
+                if target_parent is not None else None
+            )
+            if source_parent_identity != target_parent_identity:
+                return False
+        return True
+
+    @staticmethod
+    def _animation_node_identity_mode(
+        source_nodes: List[ModelNode],
+        target_nodes: List[ModelNode],
+    ) -> str:
+        """Choose an unambiguous animation-to-geometry identity contract."""
+
+        source_indexes = [int(getattr(node, 'index', 0) or 0) for node in source_nodes]
+        target_indexes = [int(getattr(node, 'index', 0) or 0) for node in target_nodes]
+        if (
+            len(source_indexes) == len(set(source_indexes))
+            and len(target_indexes) == len(set(target_indexes))
+            and set(source_indexes).issubset(set(target_indexes))
+        ):
+            return 'index'
+
+        def name(node: ModelNode) -> str:
+            return str(getattr(node, 'name', '') or '').strip().lower()
+
+        source_names = [name(node) for node in source_nodes]
+        target_names = [name(node) for node in target_nodes]
+        if (
+            all(source_names)
+            and all(target_names)
+            and len(source_names) == len(set(source_names))
+            and len(target_names) == len(set(target_names))
+            and set(source_names).issubset(set(target_names))
+        ):
+            return 'name'
+
+        raise ValueError(
+            "Animation nodes cannot be matched safely to the target hierarchy: "
+            "node IDs are not unique and node names are duplicated or missing."
+        )
+
+    @staticmethod
+    def _animation_node_identity_key(node: ModelNode, mode: str):
+        if mode == 'index':
+            return int(getattr(node, 'index', 0) or 0)
+        return str(getattr(node, 'name', '') or '').strip().lower()
+
+    def _rebuild_source_animation_tree_on_target(
+        self,
+        source_nodes: List[ModelNode],
+        target_nodes: List[ModelNode],
+    ) -> List[ModelNode]:
+        """Overlay source controllers on the target node ancestor closure."""
+
+        identity_mode = self._animation_node_identity_mode(
+            source_nodes,
+            target_nodes,
+        )
+        source_by_identity = {
+            self._animation_node_identity_key(node, identity_mode): node
+            for node in source_nodes
+        }
+        target_by_identity = {
+            self._animation_node_identity_key(node, identity_mode): node
+            for node in target_nodes
+        }
+        missing = sorted(set(source_by_identity).difference(target_by_identity))
+        if missing:
+            raise ValueError(
+                "Animation tree references nodes missing from the target model: "
+                f"{missing!r}."
+            )
+
+        required_ids: set[int] = set()
+        for identity in source_by_identity:
+            target = target_by_identity[identity]
+            seen: set[int] = set()
+            while target is not None and id(target) not in seen:
+                seen.add(id(target))
+                required_ids.add(id(target))
+                target = getattr(target, 'parent', None)
+
+        ordered_targets = [
+            node for node in target_nodes
+            if id(node) in required_ids
+        ]
+        clones: Dict[int, ModelNode] = {}
+        for target in ordered_targets:
+            clone = target.clone_shallow() if hasattr(target, 'clone_shallow') else copy.copy(target)
+            clone.children = []
+            clone.parent = None
+            source = source_by_identity.get(
+                self._animation_node_identity_key(target, identity_mode)
+            )
+            clone.controllers = copy.deepcopy(
+                list(getattr(source, 'controllers', []) or [])
+                if source is not None else []
+            )
+            clones[id(target)] = clone
+
+        for target in ordered_targets:
+            clone = clones[id(target)]
+            parent = getattr(target, 'parent', None)
+            parent_clone = clones.get(id(parent)) if parent is not None else None
+            if parent_clone is not None:
+                clone.parent = parent_clone
+                parent_clone.children.append(clone)
+
+        return [clones[id(target)] for target in ordered_targets]
 
     def _clone_source_animation_tree(self, source_nodes: List[ModelNode]) -> List[ModelNode]:
         """Clone an existing animation tree without expanding it to geometry nodes."""
@@ -2580,8 +2749,9 @@ class MDLBinaryWriter:
             }
         )
 
-    @staticmethod
+    @classmethod
     def _validate_animation_export_tree(
+        cls,
         anim: Animation,
         anim_nodes: List[ModelNode],
         target_nodes: List[ModelNode],
@@ -2595,10 +2765,20 @@ class MDLBinaryWriter:
         expected_names = [str(getattr(node, 'name', '') or '') for node in target_nodes]
         actual_names = [str(getattr(node, 'name', '') or '') for node in anim_nodes]
         if allow_source_subset:
-            expected_set = set(expected_names)
+            identity_mode = cls._animation_node_identity_mode(
+                anim_nodes,
+                target_nodes,
+            )
+            expected_keys = {
+                cls._animation_node_identity_key(node, identity_mode)
+                for node in target_nodes
+            }
+            actual_keys = [
+                cls._animation_node_identity_key(node, identity_mode)
+                for node in anim_nodes
+            ]
             missing_from_target = [
-                name for name in actual_names
-                if name and name not in expected_set
+                key for key in actual_keys if key not in expected_keys
             ]
             if missing_from_target:
                 raise ValueError(
@@ -2606,27 +2786,59 @@ class MDLBinaryWriter:
                     f"in the target model hierarchy: {missing_from_target!r}."
                 )
 
-            actual_by_name = {
-                str(getattr(node, 'name', '') or ''): node
+            actual_by_identity = {
+                cls._animation_node_identity_key(node, identity_mode): node
                 for node in anim_nodes
-                if getattr(node, 'name', '')
             }
+            target_by_identity = {
+                cls._animation_node_identity_key(node, identity_mode): node
+                for node in target_nodes
+            }
+            actual_object_ids = {id(node) for node in anim_nodes}
             for actual in anim_nodes:
-                actual_children = [
-                    str(getattr(child, 'name', '') or '')
-                    for child in getattr(actual, 'children', []) or []
-                ]
                 if actual.parent is actual or any(child is actual for child in getattr(actual, 'children', []) or []):
                     raise ValueError(
                         f"Animation '{getattr(anim, 'name', '')}' export tree has a self-reference at "
                         f"node '{getattr(actual, 'name', '')}'."
                     )
-                for child_name in actual_children:
-                    if child_name not in actual_by_name:
+                for child in getattr(actual, 'children', []) or []:
+                    if id(child) not in actual_object_ids:
                         raise ValueError(
                             f"Animation '{getattr(anim, 'name', '')}' export tree references missing child "
-                            f"node '{child_name}'."
+                            f"node '{getattr(child, 'name', '')}'."
                         )
+                actual_identity = cls._animation_node_identity_key(
+                    actual,
+                    identity_mode,
+                )
+                target = target_by_identity.get(actual_identity)
+                if target is None:
+                    continue
+                actual_parent = getattr(actual, 'parent', None)
+                target_parent = getattr(target, 'parent', None)
+                actual_parent_identity = (
+                    cls._animation_node_identity_key(actual_parent, identity_mode)
+                    if actual_parent is not None else None
+                )
+                target_parent_identity = (
+                    cls._animation_node_identity_key(target_parent, identity_mode)
+                    if target_parent is not None else None
+                )
+                if actual_parent_identity != target_parent_identity:
+                    actual_name = str(getattr(actual, 'name', '') or '')
+                    actual_parent_name = (
+                        str(getattr(actual_parent, 'name', '') or '')
+                        if actual_parent is not None else ''
+                    )
+                    target_parent_name = (
+                        str(getattr(target_parent, 'name', '') or '')
+                        if target_parent is not None else ''
+                    )
+                    raise ValueError(
+                        f"Animation '{getattr(anim, 'name', '')}' export tree has donor parent "
+                        f"'{actual_parent_name}' for node '{actual_name}'; target parent is "
+                        f"'{target_parent_name}'."
+                    )
             return
 
         if actual_names != expected_names:

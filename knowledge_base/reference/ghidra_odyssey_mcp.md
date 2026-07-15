@@ -95,6 +95,33 @@ Writer implication:
 The regression test is `tests/test_roundtrip_verification.py::
 test_mdl_writer_exports_full_target_hierarchy_for_sparse_animation_tree`.
 
+## K1 Animation Parent-Edge Binding
+
+K1 `AnimateHierarchy` at `0x00483d80` recursively pairs an animation Part with
+the corresponding geometry node, then searches only that geometry parent's
+immediate children by node ID. It does not globally resolve every animation
+node by name or ID.
+
+Writer implication:
+
+- Correct animation names, node IDs, controllers, and raw offsets are not
+  sufficient when a retargeted node retains its donor parent.
+- Every carried animation parent edge must match the target model's direct
+  parent edge.
+- When a donor clip omits target-only intermediary nodes, export must insert
+  controllerless target ancestors rather than attaching the child to its
+  nearest surviving donor ancestor.
+- A sparse tree may omit unrelated target siblings, matching stock creature
+  clips, as long as the serialized nodes form a target-native ancestor closure.
+
+The K1 Lorum fixture exposed this exact failure: 268 Dark-Jedi-derived clips
+contained 1,331 wrong parent edges while all 16 native Ithorian clips were
+clean. The repeated breaks bypassed `RShoulder_g`, `LShoulder_g`, the Ithorian
+neck chain, and `torso_g`; GhostRigger preview still moved because it binds
+controllers by name, while retail KOTOR left the creature rigid. The writer
+regression is `tests/test_roundtrip_verification.py::
+test_mdl_writer_rebuilds_donor_parent_edges_on_target_hierarchy`.
+
 ## Recommended Use
 
 Use Ghidra MCP when:

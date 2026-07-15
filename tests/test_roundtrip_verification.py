@@ -579,6 +579,130 @@ def test_mdl_writer_exports_full_target_hierarchy_for_sparse_animation_tree():
     assert len(visited_offsets) == node_count
 
 
+def test_mdl_writer_rebuilds_donor_parent_edges_on_target_hierarchy():
+    from src.core.geometry.model_data import Animation, KotorModel, ModelNode
+    from src.core.game.kotor_loader import load_model_from_bytes
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
+
+    root = ModelNode(name="C_Ithorian")
+    torso = ModelNode(name="torsoUpr_g", parent=root)
+    shoulder = ModelNode(name="RShoulder_g", parent=torso)
+    bicep = ModelNode(name="rbicep_g", parent=shoulder)
+    neck_base = ModelNode(name="NeckBase_g", parent=torso)
+    neck_upper = ModelNode(name="NeckUpr03_g", parent=neck_base)
+    neck = ModelNode(name="Neck_g", parent=neck_upper)
+    head = ModelNode(name="Head_g", parent=neck)
+    unrelated_helper = ModelNode(name="headhook", parent=root)
+    root.children = [torso, unrelated_helper]
+    torso.children = [shoulder, neck_base]
+    shoulder.children = [bicep]
+    neck_base.children = [neck_upper]
+    neck_upper.children = [neck]
+    neck.children = [head]
+
+    donor_root = ModelNode(name="C_Ithorian")
+    donor_torso = ModelNode(name="torsoUpr_g", parent=donor_root)
+    donor_bicep = ModelNode(
+        name="rbicep_g",
+        parent=donor_torso,
+        controllers=[{
+            "type": 20,
+            "name": "orientation",
+            "columns": 4,
+            "times": [0.0],
+            "values": [(0.0, 0.0, 0.0, 1.0)],
+        }],
+    )
+    donor_neck = ModelNode(name="Neck_g", parent=donor_torso)
+    donor_head = ModelNode(name="Head_g", parent=donor_neck)
+    donor_root.children = [donor_torso]
+    donor_torso.children = [donor_bicep, donor_neck]
+    donor_neck.children = [donor_head]
+    animation = Animation(
+        name="c2a1",
+        length=1.0,
+        anim_root="C_Ithorian",
+        nodes=[donor_root, donor_torso, donor_bicep, donor_neck, donor_head],
+    )
+    model = KotorModel(name="c_ithlord", root_node=root, animations=[animation])
+    writer = MDLBinaryWriter()
+    writer._nodes = list(model.all_nodes())
+
+    nodes = writer._animation_nodes_with_hierarchy(animation, writer._nodes)
+    by_name = {node.name: node for node in nodes}
+
+    assert [node.name for node in nodes] == [
+        "C_Ithorian", "torsoUpr_g", "RShoulder_g", "rbicep_g",
+        "NeckBase_g", "NeckUpr03_g", "Neck_g", "Head_g",
+    ]
+    assert by_name["rbicep_g"].parent is by_name["RShoulder_g"]
+    assert by_name["Neck_g"].parent is by_name["NeckUpr03_g"]
+    assert by_name["Head_g"].parent is by_name["Neck_g"]
+    assert "headhook" not in by_name
+    assert by_name["RShoulder_g"].controllers == []
+    assert by_name["NeckBase_g"].controllers == []
+    assert any(
+        int(controller.get("type", 0)) == 20
+        for controller in by_name["rbicep_g"].controllers
+    )
+
+    mdl_bytes, mdx_bytes = MDLBinaryWriter().write(model)
+    reloaded = load_model_from_bytes(mdl_bytes, mdx_bytes)
+    assert reloaded is not None
+    reloaded_animation = next(
+        anim for anim in reloaded.animations
+        if str(anim.name or "").lower() == "c2a1"
+    )
+    reloaded_by_name = {
+        str(node.name or ""): node
+        for node in reloaded_animation.nodes
+    }
+    assert reloaded_by_name["rbicep_g"].parent is reloaded_by_name["RShoulder_g"]
+    assert reloaded_by_name["Neck_g"].parent is reloaded_by_name["NeckUpr03_g"]
+    assert reloaded_by_name["Head_g"].parent is reloaded_by_name["Neck_g"]
+
+
+def test_mdl_writer_repairs_donor_edges_when_target_names_are_duplicated():
+    from src.core.geometry.model_data import Animation, ModelNode
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
+
+    root = ModelNode(name="root", index=0)
+    torso = ModelNode(name="torso", index=1, parent=root)
+    shoulder = ModelNode(name="shoulder", index=2, parent=torso)
+    arm = ModelNode(name="arm", index=3, parent=shoulder)
+    duplicate_a = ModelNode(name="duplicate", index=4, parent=root)
+    duplicate_b = ModelNode(name="duplicate", index=5, parent=root)
+    root.children = [torso, duplicate_a, duplicate_b]
+    torso.children = [shoulder]
+    shoulder.children = [arm]
+
+    donor_root = ModelNode(name="root", index=0)
+    donor_torso = ModelNode(name="torso", index=1, parent=donor_root)
+    donor_arm = ModelNode(name="arm", index=3, parent=donor_torso)
+    donor_root.children = [donor_torso]
+    donor_torso.children = [donor_arm]
+    animation = Animation(
+        name="attack",
+        length=1.0,
+        anim_root="root",
+        nodes=[donor_root, donor_torso, donor_arm],
+    )
+    target_nodes = [root, torso, shoulder, arm, duplicate_a, duplicate_b]
+
+    writer = MDLBinaryWriter()
+    rebuilt = writer._animation_nodes_with_hierarchy(animation, target_nodes)
+    by_index = {int(node.index): node for node in rebuilt}
+
+    assert sorted(by_index) == [0, 1, 2, 3]
+    assert by_index[3].parent is by_index[2]
+    writer._validate_animation_export_tree(
+        animation,
+        rebuilt,
+        target_nodes,
+        allow_source_subset=True,
+    )
+
+
 def test_mdl_writer_preserves_existing_sparse_donor_animation_tree():
     from src.core.geometry.model_data import Animation, KotorModel, ModelNode
     from src.core.mdl.mdl_writer import MDLBinaryWriter

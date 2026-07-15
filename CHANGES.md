@@ -52,6 +52,130 @@ unchanged; payload byte-identity/coverage contracts 21/21 after the pinned
 count bump. Targeting, interaction routing, dialogue, combat, and cutscene
 sequencing are the next slices; no in-game claim.
 
+### [2026-07-15] T2575: Raised the cpause2 thinking hand to the custom Ithorian's chin
+
+Owner: LordVaderCW
+
+T###: T2575
+
+Subsystem: KOTOR creature animation packaging (Sith Ithorian dual variant)
+
+Intersects: T2568 morphology-aware arm IK, T2572 dialogue slot split.
+
+- The user compared the custom Ithorian's cpause2 thinking pose against the
+  stock Ithorian: the stock creature touches its chin; the custom model's
+  hand stopped ~6cm low (payload byte-identical, proportions differ — min
+  lhand-to-head 0.500m vs vanilla 0.436m, both at t=1.667).
+- New `scripts/patch_ithorian_cpause2_chin.py`: transfers the vanilla left
+  hand position through the animated `head_g` frame (the chin rides the
+  head), analytically two-bone solves the custom arm per key, restores the
+  authored hand orientation, and blends the correction by the vanilla
+  hand-to-head distance (full ≤0.55m, zero ≥0.85m) so the rise/lower phases
+  stay authored. 59 keys corrected, zero landing error; serialized model
+  measures min lhand-to-head 0.4364m — matching vanilla exactly.
+- Refreshed the ten modeltype-F aliases (pause2 now mirrors the corrected
+  cpause2), advanced the pinned hashes (golden `fcd16170…`, purple
+  `c3fa3cd6…`, MDX unchanged), regenerated the demo package/zip, and
+  installed both MDLs to the live Override with `pre_t2575` backups.
+- `tests/test_sith_ithorian_native_animation_preservation.py` now allows
+  cpause2 to differ from stock ONLY on lbicep_g/lforearm_g/lhand_g (length,
+  events, and every other node must stay stock, and the arm must actually
+  differ so a regression to the uncorrected clip fails).
+
+Affected areas: `scripts/patch_ithorian_cpause2_chin.py`,
+`scripts/build_sith_ithorian_dual_demo_package.py`, preservation test,
+golden package model, demo zip, live Override models.
+
+Verification: patch gates (per-key IK landing ≤1e-3 on the working model,
+30Hz chin rescan on the RELOADED serialized bytes equals the vanilla
+contact distance, 284 other clips byte-stable, pause2==cpause2, remaining
+aliases still vanilla, hand hooks, purple clone contract); 27 focused
+pytest cases passed; viewport captures of the chin hold at t=1.7-4.2
+(artifacts/t2575_chin_fix_proof). No broad test run.
+
+### [2026-07-15] T2574: Routed knockdown-recovery slots to the native Ithorian get-up
+
+Owner: LordVaderCW
+
+T###: T2574
+
+Subsystem: KOTOR creature animation packaging (Sith Ithorian dual variant)
+
+Intersects: T2573 death-variant routing, T2572 dialogue/death slot split,
+T2571 dual-variant demo package.
+
+- `getupdead`/`getupdead1` (animations.2da rows 381/382) still carried baked
+  humanoid retargets after T2573. The stock Ithorian's own get-up clip is
+  `cgustandb`, so both slots now mirror it via
+  `MODELTYPE_F_NATIVE_STATE_ALIASES` in `scripts/build_sith_ithorians.py`
+  (test mirror updated).
+- Generalized `scripts/patch_ithorian_death_variants.py` to verify every
+  aliased slot against its table source in the vanilla model, advanced its
+  pre-hash pin to the T2573 golden, and re-ran it: 10 aliased slots refreshed,
+  276 non-aliased clips byte-stable. Golden MDL advanced to `ea790a88…`,
+  purple clone to `9889523c…`; MDX unchanged.
+- Updated the pinned hashes in
+  `scripts/build_sith_ithorian_dual_demo_package.py`, regenerated the demo
+  package/zip, and installed the full package to the live game: both patched
+  MDLs replaced (with `pre_t2574` backups); MDX pairs, both textures,
+  appearance.2da, and `Modules/PLCaa.mod` verified hash-identical to the
+  package (test map confirmed installed; no stale `currentgame` cache).
+
+Affected areas: `scripts/build_sith_ithorians.py`,
+`scripts/patch_ithorian_death_variants.py`,
+`scripts/build_sith_ithorian_dual_demo_package.py`,
+`tests/test_sith_ithorian_native_animation_preservation.py`, golden package
+model, demo zip, live Override/Modules.
+
+Verification: patch gates (10 aliased slots byte-equal vanilla sources after
+independent reload, 276 clips unchanged, hand-hook contract, 286 animations,
+purple clone contract); 27 focused pytest cases passed; live reload shows all
+10 aliased slots native on both variants; viewport captures of deployed
+`getupdead` show the native Ithorian rise (artifacts/t2574_getup_fix_proof).
+No broad test run.
+
+### [2026-07-15] T2573: Routed engine death-variant slots to the native Ithorian death
+
+Owner: LordVaderCW
+
+T###: T2573
+
+Subsystem: KOTOR creature animation packaging (Sith Ithorian dual variant)
+
+Intersects: T2572 dialogue/death slot split, T2571 dual-variant demo package.
+
+- The T2572 fix routed the modeltype-F `die`/`dead` slots to the stock
+  Ithorian `cdie`/`cdead`, but K1's animations.2da also carries death VARIANT
+  rows the engine can select instead of plain die/dead: `die1`/`dead1`
+  (rows 82/83) and `die3`/`dead3` (rows 374/375). Those slots still held the
+  baked humanoid retargets, so in-game deaths played with the Ithorian's long
+  arms locked stiffly upward on the corpse.
+- Extended `MODELTYPE_F_NATIVE_STATE_ALIASES` in
+  `scripts/build_sith_ithorians.py` (and its test mirror) with the four
+  variant slots, all mirroring native `cdie`/`cdead`.
+- Added `scripts/patch_ithorian_death_variants.py`: applies the alias set to
+  the already-built golden package model with pre/post hash gates, verifies
+  every death-facing slot serializes byte-equal to vanilla `cdie`/`cdead`,
+  and proves the other 278 clips stayed byte-stable. Golden MDL advanced to
+  `0bfa04f5…`, purple clone to `89907972…`; MDX unchanged. Updated the pinned
+  hashes in `scripts/build_sith_ithorian_dual_demo_package.py`, regenerated
+  the demo zip, and installed both patched MDLs to the live Override with
+  `pre_t2573` backups.
+
+Affected areas: `scripts/build_sith_ithorians.py`,
+`scripts/patch_ithorian_death_variants.py`,
+`scripts/build_sith_ithorian_dual_demo_package.py`,
+`tests/test_sith_ithorian_native_animation_preservation.py`, golden package
+model, demo zip, live Override models.
+
+Verification: patch script gates (8 alias slots == vanilla payload signature
+after independent reload, 278 non-aliased clips unchanged, hand-hook contract,
+286 animations, 9-field purple clone contract); 27 focused Sith Ithorian
+pytest cases passed; live Override reload shows all eight death-facing slots
+(`cdie`/`cdead`/`die`/`dead`/`die1`/`dead1`/`die3`/`dead3`) native for both
+variants; viewport captures of deployed `die1`/`dead1` match vanilla `cdie`
+end pose (artifacts/t2573_death_fix_proof). No broad test run.
+
 ### [2026-07-15] T2904: Made Map Studio texture painting responsive and map-wide
 
 Owner: LordVaderCW
@@ -131,6 +255,47 @@ proof: the final `plcaa` multi-texture paint/export/install/manual-warp
 validation remains a user-driven follow-up.
 
 ## 2026-07-14
+
+### [2026-07-14] T2572: Split custom Ithorian dialogue/death behavior from Malak combat
+
+Owner: LordVaderCW
+
+T###: T2572
+
+Subsystem: KOTOR creature animation baking, Sith Ithorian model packaging, and
+animation-payload validation
+
+Intersects: T2571 custom Sith Ithorian model and dual-variant demo packaging,
+plus the shared dirty worktree.
+
+- Kept appearance rows 509/510 as model type `F` for external weapon support,
+  while explicitly routing the engine-facing `pause1`, `pause2`, `die`, and
+  `dead` slots to the stock Ithorian `cpause1`, `cpause2`, `cdie`, and `cdead`
+  payloads. Dialogue scripts can therefore request the normal humanoid slot
+  names while the custom creature performs the native Ithorian poses.
+- Added `N_DarthMalak` as the authoritative donor for the custom model's
+  combat-facing animation set, including its saber attacks, defenses, parries,
+  ready states, and required compatibility aliases. Retained the wider baked
+  inventory only for non-Malak utility coverage.
+- Added measured Ithorian-safe arm/saber corrections and post-export gates for
+  Malak clips whose original humanoid reach intersected the custom robe/body,
+  without replacing the authored native Ithorian dialogue or death payloads.
+- Rebuilt and installed both `c_ithlord` and `c_ithpurp` MDL/MDX pairs in the
+  live KOTOR Override, regenerated the dual-variant demo package, and preserved
+  the previous four live model files in the T2572 pre-install backup artifact.
+
+Affected areas: `scripts/build_sith_ithorians.py`,
+`scripts/build_sith_ithorian_dual_demo_package.py`,
+`scripts/prove_sith_ithorians_k1_existing_slot.py`, focused Sith Ithorian
+animation/package tests, live Override model assets, and T2572 proof artifacts.
+
+Verification: full focused model build/export/reload completed with 286
+animations per variant and exact serialized equality for all four native
+Ithorian aliases; dual-package builder completed; 22 focused pytest cases
+passed; MCP/PyKotor comparisons matched for both live models (69/69 nodes,
+zero discrepancies, 286 animations); visible pose captures confirmed matching
+orange/purple Ithorian dialogue poses, Ithorian death-state routing, and a
+Malak `c2a1` combat pose. No broad test or model scan was run.
 
 ### [2026-07-14] T2907: Made Map Studio's first Maya-style modeling slice truthful and live
 
@@ -322,6 +487,393 @@ passes the complete gesture/options/history/remap/visible-performance gate, and
 writer changes still require vanilla comparison plus the user-run `plcaa`
 warp before an engine-ready claim.
 
+### [2026-07-14] T2571: Packaged dual Sith-Ithorian models and a neutral-player PLCaa showcase fight
+
+Owner: LordVaderCW
+
+T###: T2571
+
+Subsystem: Character Pipeline binary model identity, K1 appearance/UTC
+authoring, Map Studio encounter packaging, and portable mod distribution
+
+Intersects: T2571 Lorum Ipsat retail proof, the user-approved clean PLCaa
+arena, the historical broken `c_ithschol` export, and the shared dirty worktree.
+
+- Preserved the exact user/retail-proven `c_ithlord` MDL/MDX as the Sith Lord
+  variant. The packaged MDL remains SHA-256
+  `110c8c4ebec0cef62845eaa158c193f1adeb0602af716df04fc20ea4299baef5`
+  and its MDX remains
+  `be156cc8ccd0f2e225d66f385ae37713f52874f957cfeb3e74c5f981ec4677b1`.
+- Rejected the historical `c_ithschol` model because 268 clips still carried
+  1,331 donor-parent edges and its weapon hooks lacked transform controllers.
+  Built fresh `c_ithpurp` instead by changing only nine equal-length fixed
+  fields in the golden MDL: its model identity and eight body texture slots.
+  Exactly 27 bytes differ, the MDX is byte-identical, and the new MDL SHA-256
+  is `3568023b51fabc3f561f138f98e39f7ccdbe3bccdb7e3338f84361e994dfd8a5`.
+- Packaged the two existing 2048-square RGBA runtime textures without pixel
+  changes: the orange-eyed Lord atlas and the UV-compatible purple-eye atlas.
+  Both models reload with 69 nodes, 284 unique local animations, all 16 native
+  Ithorian dialogue/idle clips, the accepted Combat Set 4 payload, zero
+  animation-parent mismatches, and `rhand`/`lhand` attachment controllers.
+- Generated a vanilla-derived 511-row `appearance.2da`. Rows 509/510 are
+  `c_ithlord`/`c_ithpurp`, both use external-weapon modeltype `F`, have arms,
+  and carry no head or racetex override. Every cell in vanilla rows 0-508 is
+  preserved exactly.
+- Extended the clean PLCaa arena to a self-starting two-on-two showcase:
+  blue- and green-saber Jedi Knights at `(26,36,0)`/`(32,36,0)` face Lorum
+  Ipsat and the Violet-Eyed Sith at `(32,43,0)`/`(26,43,0)`. All four have 100
+  HP, 64 Force, level/CR 8 combat templates, eleven-meter perception, stock
+  globally resolved `k_def_*` AI, and walkmesh-valid placements.
+- Embedded the four unique UTCs in the MOD and used stock factions 16/17.
+  Each team is self-friendly (100), mutually hostile (0), and neutral (50) to
+  the player and party, so they fight without an OnEnter/heartbeat encounter
+  script while the player remains a spectator. The MOD has exactly 13
+  resources, four six-field K1 creature instances, no other GIT objects,
+  blank ARE/IFO events, no custom NCS, and preserves all eight non-GIT clean
+  map resources byte-for-byte.
+- Produced the ready-to-copy distribution
+  `artifacts/Sith_Ithorian_Dual_Variant_PLCaa_Demo.zip` (19,707,980 bytes,
+  SHA-256
+  `716a50afc04b0d2dfc17d8e0a2c815cba47655bb7c37c283aab69c21da25757e`).
+  It contains `Override`, `Modules/PLCaa.mod`, account/save-state-safe test
+  guidance, and the validation manifest. The 304,365-byte PLCaa MOD SHA-256 is
+  `b471ca31d57fc1bf2c242fca05ca0f43af05dabad0c79e3f10420f4ff8668017`.
+  The README warns that its vanilla-based `appearance.2da` must be merged on a
+  modded install rather than overwriting another appearance mod.
+- The user's first showcase warp exposed an installation-state gap: retail K1
+  still had the previous 286,250-byte one-Lorum `PLCaa.mod` (SHA-256
+  `a5b0afff2ca26a45122d487f27000933a229b2180d9a9eff9ea84620dafeed56`),
+  the older one-row `appearance.2da`, and no `c_ithpurp` assets. After proving
+  KOTOR was closed and `currentgame` contained no PLCaa cache, backed up all
+  five replaced live files under
+  `artifacts/sith_ithorian_dual_variant_demo/backups/20260714T163439/` and
+  installed the eight package payloads transactionally. Independent readback
+  from the actual KOTOR `Modules`/`Override` directories now byte-matches every
+  staged payload.
+- Forensically confirmed why the next retail warp still showed only Lorum:
+  the 16:42 autosave embeds a runtime `plcaa.sav` whose GIT has exactly one
+  `sithlord01`, and the original/repaired LorumTest saves embed that same stale
+  one-creature area. KOTOR combined that persisted GIT with the newly installed
+  clean room resources. The installed PLCaa MOD itself continued to read back
+  with all four intended templates; no package placement was missing.
+- Briefly staged and installed `LorumDemo.mod` as an outer-name/Mod-ID alias,
+  but retired it immediately after the retail attempt reached a black screen.
+  K1 produced no crash event or surviving runtime cache, so that run cannot
+  distinguish an unsupported single-MOD alias from a first-load issue in the
+  fresh four-creature payload. The live and staged alias copies were removed
+  only after exact hash confirmation; the distributable has returned to the
+  proven identity-matched `PLCaa.mod` path.
+- Diagnosed the accompanying white save thumbnails as a separate Steam
+  AutoCloud/account-switch event, not damaged TGA data. Steam launched K1 under
+  `AntiSaint` at 16:58, moved the prior `KAIGEN` account's 25 live save files
+  into `userdata/740270344/32370/ac/GameInstall/Saves`, and then restarted under
+  `Xiao`; the numbered live save directories were consequently empty. All
+  25 KAIGEN files (4,236,404 bytes) remain hash-intact and were copied to the
+  `20260714T1700_kaigen_autocloud` folder under
+  `Saved/GameTestStaging/steam_account_save_recovery/`. The older
+  `thew4nclerer` K1 save set was
+  also preserved independently. No cross-account restore was attempted while
+  Steam remained active under `Xiao`.
+
+Affected areas: `scripts/build_sith_ithorian_dual_demo_package.py`,
+`tests/test_sith_ithorian_dual_demo_package.py`,
+`artifacts/sith_ithorian_dual_variant_demo/`, and
+`artifacts/Sith_Ithorian_Dual_Variant_PLCaa_Demo.zip`; retail K1 installation
+under `Modules/` and `Override/`, with the replaced state preserved in the
+timestamped artifact backup above.
+The Steam-account save snapshots are preserved under
+`Saved/GameTestStaging/steam_account_save_recovery/`.
+
+Verification: targeted `py_compile`; five clone/model/texture/appearance/
+module/ZIP tests plus ten existing Set-4, native-animation, Lorum UTC/hook, and
+PLCaa cleanup tests (`15 passed`); exhaustive 284-clip Lord/purple payload
+identity; 27-byte MDL diff and byte-identical MDX checks; 13-resource MOD
+readback; faction/reputation/default-script resolution; WOK sampling; clean
+room visibility/AABB/WOK contract with `export_ready=true`; and ZIP CRC plus
+per-entry SHA-256 readback. Isolated D3D12/flat renderer captures showed the
+same `cpause1` pose and UV regions with orange versus purple eye emission, and
+the purple clone played `c4a1` across four fresh frames. Post-install validation
+read the live 13-resource MOD directly, found exactly four intended creature
+refs and zero other dynamic GIT entries, confirmed all 19 stock demo meshes and
+12 cone references disabled, returned `export_ready=true` with no issues, and
+revalidated both installed 69-node/284-clip models, rows 509/510, attachment
+hooks, textures, and all eight installed SHA-256 identities. KOTOR remained
+closed and no stale `currentgame/PLCaa.mod` existed. Steam `cloud_log.txt`,
+`loginusers.vdf`, live-save inventory, AutoCloud inventory, and per-file SHA-256
+readback prove the account-switch/save-move sequence and both workspace backup
+copies. After Steam returns to `KAIGEN`, the isolated retail acceptance route is
+load cache-free `Game2`, then `warp plcaa`: success with four actors isolates
+the retired alias; another black screen isolates the fresh encounter payload.
+
+### [2026-07-14] T2571: Restored the clean PLCaa Lorum combat arena
+
+Owner: LordVaderCW
+
+T###: T2571
+
+Subsystem: Map Studio module packaging, K1 room-model visibility, and the
+Lorum Ipsat retail-game test fixture
+
+Intersects: T2571 Lorum Ipsat game proof, the earlier PLCaa cleanup/static-lab
+artifacts, and the shared dirty worktree.
+
+- Traced the unexpectedly restored demo scene to BioWare's stock `plcaa` room
+  MDL, not to GIT placements or surviving scripts. The existing Lorum package
+  intentionally used the stock engine-safe room after older four-node and
+  binary-pruned cleanup rooms crashed or failed current runtime contracts.
+- Kept the stock 43-node hierarchy, eight animation records, MDX, embedded AABB,
+  structural `Cylinder01`/`Plane01`/`Plane02` meshes, and WOK intact. A
+  non-structural 31-byte MDL patch disables rendering on `Box01..12`,
+  `GeoSphere01/02`, and `ScriptLoop01..05`, and clears the reference type bit
+  on `ConeRef01..12` so the cone models cannot instantiate. No node, child,
+  controller, offset, or animation table was deleted or rewritten.
+- Rebuilt the scriptless PLCaa shell with exactly one GIT creature,
+  `sithlord01`; all cameras, doors, triggers, encounters, sounds, stores,
+  placeables, waypoints, and other creature entries remain absent. Module and
+  area event hooks are blank, the LYT has no door hooks, and VIS remains the
+  normalized single-room form.
+- Produced the map-only archive
+  `artifacts/Lorum_Ipsat_PLCaa_Clean_Dev_Map.zip`. It contains
+  `Modules/PLCaa.mod`, an install/readme, and the detailed validation manifest.
+  The module is 286,250 bytes with SHA-256
+  `259b7ae81852ae382d4b81ac5a937c939a78f6f8db7c166ba2ef08eb17760f0a`;
+  the ZIP is 68,366 bytes with SHA-256
+  `50783a33c0bea417d5b6331e0c0f0ba713ada23c6b97ef7cdb3496f65b874e61`.
+  The package assumes the existing Lorum Override assets are already installed
+  and intentionally does not duplicate or overwrite `appearance.2da`.
+
+Affected areas: `scripts/deploy_lorum_ipsat_plcaa.py`,
+`tests/test_lorum_ipsat_plcaa_deployment.py`,
+`artifacts/lorum_ipsat_plcaa/`, and
+`artifacts/lorum_ipsat_plcaa_clean_dev_map/`.
+
+Verification: targeted `py_compile`; three focused PLCaa deployment tests;
+nine combined PLCaa/Lorum/Set-4 contract tests; staged MOD readback with exactly
+nine resources, one `sithlord01`, zero other dynamic GIT entries, blank event
+hooks, zero LYT door hooks, 19 hidden demo meshes, 12 disabled references,
+preserved 43 nodes/eight animations/AABB/structural shell, and
+`engine_contract.export_ready=true`; ZIP inventory and SHA-256 verification.
+The package was staged only: KOTOR was not launched, closed, or modified. A
+user-controlled `warp plcaa` remains the final retail visual acceptance check.
+
+### [2026-07-14] T2571: Repaired Lorum's frozen retail-K1 animation hierarchy
+
+Owner: LordVaderCW
+
+T###: T2571
+
+Subsystem: Core.IO binary MDL animation export, Sith-Ithorian retargeting,
+K1 runtime animation binding, and frame-by-frame game proof
+
+Intersects: T2555-T2571 Sith-Ithorian retargeting, the Lorum PLCaa encounter,
+the KotorMCP live-game harness, and the shared dirty worktree.
+
+- Decoded and inspected every one of the 851 frames in the user's 30 fps,
+  28.366667-second `LorumCombat.mp4`. Across all 673 unpaused frames
+  (`117-789`), Lorum had zero visible local skeletal articulation: AI,
+  targeting, root translation/yaw, saber attachment, effects, and three
+  airborne attack arcs ran, but the neck, torso, arms, hands, and legs stayed
+  locked in one hunched pose.
+- Raw MDL forensics isolated the retail-only cause. All 284 animation records,
+  controller spans, node IDs, offsets, hooks, and the container itself were
+  valid, but 268 Dark-Jedi-derived clips carried 1,331 donor-parent edges.
+  Repeated breaks skipped the Ithorian `RShoulder_g`, `LShoulder_g`,
+  `NeckBase_g`/upper-neck chain, and `torso_g`; all 16 native Ithorian clips
+  were target-hierarchy clean.
+- Confirmed in K1's `AnimateHierarchy` at `0x00483d80` that animation parts are
+  paired recursively and a node ID is searched only among the corresponding
+  geometry parent's immediate children. GhostRigger's name-based preview had
+  hidden the bad parent edges, while retail KOTOR could not bind their local
+  controllers.
+- Hardened `MDLBinaryWriter` so a target-native sparse tree is preserved, a
+  donor-shaped carried tree is rebuilt on the target ancestor closure, and a
+  flat override still expands to the full target hierarchy. Export validation
+  now rejects donor parent edges, prefers unique binary node IDs when model
+  names are duplicated, and focused regressions cover shoulder/neck ancestor
+  restoration, binary reload, and duplicate-name targets without adding
+  unrelated siblings.
+- Repaired and installed the package/Override model with all 284 clips and
+  controller payloads preserved. The installed MDL is 4,952,456 bytes with
+  SHA-256
+  `110c8c4ebec0cef62845eaa158c193f1adeb0602af716df04fc20ea4299baef5`;
+  every animation parent edge now matches the Ithorian model. The matching MDX
+  remains byte-identical at SHA-256
+  `be156cc8ccd0f2e225d66f385ae37713f52874f957cfeb3e74c5f981ec4677b1`.
+- Retail K1 visibly loaded the corrected Lorum in PLCaa and captured him with
+  articulated arms, head, torso, and legs during an overhead saber attack; the
+  user independently confirmed that the fight and animation were working.
+  The automation then misclassified the already-active combat screen and its
+  process-safety cleanup closed the process it had launched. The proof harness
+  now fails closed on gameplay/unknown screens before sending navigation
+  input, never closes KOTOR on errors, leaves it open after success by default,
+  and permits shutdown only through an explicit `--close-game` option. Its
+  whole-screen pixel metric is also labeled capture activity rather than
+  skeletal proof; body-local articulation remains a manual visual gate. No
+  complete automated 150-frame post-fix capture is claimed.
+
+Affected areas: `src/core/mdl/mdl_writer.py`, its Core.IO and Runtime.Core.Host
+native payload copies/manifests, `scripts/repair_lorum_animation_hierarchy.py`,
+`scripts/build_sith_ithorians.py`,
+`scripts/prove_sith_ithorians_k1_existing_slot.py`,
+`tests/test_roundtrip_verification.py`,
+`tests/test_sith_ithorian_set4_payload_contract.py`,
+`tests/test_sith_ithorian_game_proof_safety.py`,
+`knowledge_base/reference/ghidra_odyssey_mcp.md`, the generated Sith-Ithorian
+package, K1 Override, `Saved/VideoAnalysis/lorum_combat/`, and
+`artifacts/lorum_animation_hierarchy_repair/`.
+
+Verification: targeted `py_compile`; four focused writer hierarchy/round-trip
+tests; three proof-harness fail-closed/shutdown tests; three Set 4
+payload-contract tests; the native Ithorian preservation test;
+repair readback with `0` bad parent edges, `284` unique clips, unchanged
+controller payloads/base fingerprint/hooks; independent MDLOps decompile and
+recompile; post-fix MCP comparison with `match=true`, 69/69 nodes, zero
+discrepancies, and 284 clips; package-to-Override hash identity; exhaustive
+851-frame source-video audit; and the live retail-K1 articulation frame plus
+the user's mid-fight confirmation. The two broad native-payload manifest tests
+remain red only from unrelated Map/Module Studio count/SHA drift; both Lorum
+writer payload rows are independently byte- and manifest-hash exact.
+
+### [2026-07-14] T2571: Recovered the second KSE-corrupted LorumTest save and proved it loads in retail K1
+
+Owner: LordVaderCW
+
+T###: T2571
+
+Subsystem: K1 save recovery, nested SAV/ERF integrity, player equipment
+prerequisites, and retail-game load proof
+
+Intersects: T2571 Lorum Ipsat PLCaa game proof, the earlier LorumTest repair,
+and the KotorMCP live-game validation harness.
+
+- Preserved the newly broken `000005 - Game4` byte-for-byte in
+  `Saved/GameTestStaging/lorumtest_repair/20260714T141848_game4_second_kse_edit_original`
+  and created collision-free slot `000006 - Game5`, displayed as
+  `LorumTest Repaired 2`; the original Game3 and first repaired Game4 remain
+  unchanged.
+- Rebuilt the outer SAVEGAME and nested PLCaa SAV after KSE 3.3.7a displaced
+  their key/resource tables by 160 bytes. The repair restores the overwritten
+  ARE tail plus the truncated END_M01AA and REPUTE tails from the intact source,
+  while preserving the second edit's valid inventory and active-player IFO.
+- Preserved lightsaber proficiency 43 and `G_A_CLASS6005` Arkanian Bond Armor.
+  Replaced the incorrect Force Sensitive feat 116 one-for-one with Jedi Defense
+  55, the actual K1 Jedi-robe prerequisite. The player remains Soldier 1 with
+  one matching level-history row and retains the robe, `g_w_lghtsbr03`, and
+  armor.
+- Added the hash-pinned, refusal-safe recovery helper
+  `scripts/repair_lorumtest_second_kse.py` and recorded source/destination,
+  per-file hashes, payload hashes, logical state, and live proof in
+  `Saved/GameTestStaging/lorumtest_repair/20260714T141848_second_repair_manifest.json`.
+
+Affected areas: `scripts/repair_lorumtest_second_kse.py`, K1 save slot
+`000006 - Game5`, the immutable second-edit backup and proof manifest under
+`Saved/GameTestStaging/lorumtest_repair/`, the live screenshot under
+`Saved/KotorLiveLogs/lorumtest_second_repair_20260714/`, and this changelog.
+
+Verification: targeted `py_compile`; canonical outer header
+`loc/key/resources = 160/160/256`; canonical nested header
+`160/160/232`; full outer/nested PyKotor round trips; GIT, ARE, IFO,
+INVENTORY, and REPUTE GFF round trips; exact restored resource lengths and
+hashes; Game3/Game4 source hashes unchanged; and independent KotorMCP save
+discovery. Retail `swkotor.exe` then loaded Game5 into Derran Sora's in-game
+equipment screen with the lightsaber equipped. The engine-created
+`currentgame`/`gameinprogress` payloads matched all four repaired payload hashes
+byte-for-byte, the process was responsive, and Windows recorded no recent
+`swkotor.exe` Application Error or WER crash event.
+
+### [2026-07-14] T2571: Repaired the KSE-corrupted LorumTest player state in a separate K1 save slot
+
+Owner: LordVaderCW
+
+T###: T2571
+
+Subsystem: K1 retail-game proof save, nested SAVEGAME/Module IFO player state,
+and safe save recovery
+
+Intersects: T2571 Lorum Ipsat PLCaa game proof and the KotorMCP live-game
+validation harness.
+
+- Preserved the original `000004 - Game3` (`LorumTest`) byte-for-byte and made
+  an immutable five-file backup under
+  `Saved/GameTestStaging/lorumtest_repair/20260714T135222_original`.
+- Created collision-free save slot `000005 - Game4`, displayed in KOTOR as
+  `LorumTest Repaired`, and transactionally repaired only the active PLCaa
+  player's inconsistent KSE class edit. The added Jedi Consular level and its
+  eight powers were removed, restoring Soldier 1 with one matching
+  `LvlStatList` record.
+- Preserved the edited attributes, stock Jedi Knight robe, stock
+  `g_w_lghtsbr03` lightsaber, inventory, party/global state, END_M01AA state,
+  PLCaa GIT/ARE, and Lorum/module content. Unrelated outer and inner resources
+  remain byte-identical.
+- Recorded pre/post hashes, nested resource inventories, the exact repair, and
+  validation state in
+  `Saved/GameTestStaging/lorumtest_repair/20260714T135222_repair_manifest.json`.
+
+Affected areas: K1 save slot `000005 - Game4`, the immutable staging backup and
+repair manifest under `Saved/GameTestStaging/lorumtest_repair/`, and this
+changelog. No GhostRigger source code or original KOTOR save was modified.
+
+Verification: full PyKotor outer/nested ERF and player-GFF round trip;
+independent GhostRigger parsing of SAVENFO, GLOBALVARS, PARTYTABLE, INVENTORY,
+PLCaa IFO/ARE/GIT; exact class-level/history invariant `1 == 1`; both inventory
+items preserved; original Game3 SHA-256 still
+`2ed3768610b4cf4ef30ae7dab8c059d34521e70693fc2e00368d0fcc8da77e71`.
+The automated retail run exited from the main menu before selecting any save,
+so it was inconclusive and is not claimed as an in-game load pass; the Windows
+`~ RUNASADMIN` compatibility flag was restored and the repair hashes remained
+unchanged.
+
+### [2026-07-14] T2571: Lorum Ipsat receives Malak's lightsaber on K1's external-weapon path
+
+Owner: LordVaderCW
+
+T###: T2571
+
+Subsystem: K1 Sith Ithorian equipment, Odyssey weapon attachment, PLCaa
+engine-safe deployment, and retail-game proof
+
+Intersects: T2555-T2571 Sith Ithorian retargeting, the KotorMCP live-game
+proof harness, and the shared dirty worktree.
+
+- Replaced Lorum's generic Dark Jedi saber with K1's uniquely named
+  `g_w_lghtsbr06` **Malak's Lightsaber** blueprint in right-hand equipment
+  slot 16. The package and deployment gates resolve its BaseItem 8,
+  ModelVariation 6, StrRef 38951, `w_lghtsbr_006` model, and red blade assets.
+- Repaired `rhand` and `lhand` as retail-shaped weapon sockets with static
+  type-8 position and type-20 orientation controllers. A targeted post-export
+  patch preserved the game-proven model, all 69 nodes, and all 284 animation
+  payloads; the decoded model fingerprint is identical apart from the explicit
+  hook transform/controller contract.
+- Changed only custom appearance row 509 from model type S to F while keeping
+  `race=c_ithlord`, `hasarms=1`, and a blank `normalhead`. This selects the
+  stock K1 external right-hand weapon attachment route used by full-body Dark
+  Jedi; Lorum's Set-2-shaped engine slots already contain the approved Combat
+  Set 4 payloads, so no animation motion changed.
+- Replaced the crashing authored PLCaa room with BioWare's byte-exact K1 room
+  MDL/MDX/WOK, normalized the one-room LYT/VIS, and kept the scriptless module
+  shell with one fresh `sithlord01` instance. The installed module now has
+  SHA-256 `a5b0afff2ca26a45122d487f27000933a229b2180d9a9eff9ea84620dafeed56`.
+
+Affected areas: `scripts/build_sith_ithorians.py`,
+`scripts/patch_lorum_weapon_hooks.py`,
+`scripts/deploy_lorum_ipsat_plcaa.py`,
+`scripts/prove_sith_ithorians_k1_existing_slot.py`,
+`tests/test_lorum_ipsat_utc_contract.py`,
+`tests/test_lorum_ipsat_plcaa_deployment.py`, the generated Sith-Ithorian
+package, K1 Override, `PLCaa.mod`, and evidence under
+`artifacts/lorum_weapon_hook_patch/` and `artifacts/lorum_ipsat_plcaa/`.
+
+Verification: targeted `py_compile`; five focused UTC/appearance/hook/module
+tests; package-to-Override hash identity; production MDL reload with 69 nodes
+and 284 unique local animations; Malak saber model reload with 7 nodes and 6
+animations; and the PLCaa raw-engine gate (43/43 zero runtime words, one AABB,
+18/18 walkable WOK faces, one closed perimeter, and zero VIS links). KOTOR 1
+now loads the repaired PLCaa and Lorum without the prior access-violation
+crash, as confirmed by the user's live-game capture. The newly attached Malak
+saber still requires one fresh manual PLCaa load for visual acceptance because
+the automated proof run could not drive this installation's main-menu input;
+no in-game saber-visibility claim is made here.
+
 ### [2026-07-14] T2801/T2806: Legacy community modules hydrate, repair, and cross-port safely
 
 Owner: LordVaderCW
@@ -388,6 +940,61 @@ launched, then used to import the repaired ten-room K2 `501qgm` candidate and
 the original metadata-only `clubrb.mod` with its sibling loose rooms. No
 candidate was installed into K1/K2 for retail warp/movement proof, so editor
 and structural success is not presented as engine proof.
+
+### [2026-07-14] T2571: Lorum Ipsat is Combat Set 4-ready for the clean K1 PLCaa proof
+
+Owner: LordVaderCW
+
+T###: T2571
+
+Subsystem: K1 Sith Ithorian animation-slot assignment, creature blueprint,
+clean-module deployment, and visible acceptance proof
+
+Intersects: T2555-T2570 Sith Ithorian model/retarget work, KotorMCP live-game
+proof tooling, and the shared dirty worktree.
+
+- Focused the shipped encounter on `c_ithlord`, named the hostile creature
+  **Lorum Ipsat**, and configured the level-8/CR-8 Sith UTC with 68 HP, 64
+  Force points, 13 mid-tier Force powers, 20 combat feats, an Ithorian
+  soundset, the Korriban hostile-spawn script, and one red Dark Jedi saber.
+- Adapted the requested Combat Set 4 choreography to K1's actual modeltype-S
+  resolver. The engine-facing `g0a1`, `g0a2`, and `creadyr` slots carry
+  `c4a1`, `c4a2`, and `g4r1`; all 41 Set-2-shaped C/F/G/M slots that K1 can
+  request carry their corresponding Set 4 payloads. The complete 284-clip
+  local inventory remains available, and all 16 stock Ithorian clips are
+  preserved byte-semantically at the front of the model so native dialogue
+  motion (`cpause1`, `cpause2`, `tlknorm`, and `listen`) remains unchanged.
+- Built and installed the stripped `PLCaa.mod` acceptance fixture with exactly
+  one `sithlord01` creature at `(29, 32, 0)` and zero cameras, doors,
+  encounters, placeables, sounds, stores, triggers, or waypoints. Package and
+  K1 Override copies of the five deployed files are byte-identical; the staged
+  and installed module share SHA-256
+  `ebbb89c0d1f04b25c8c1dfebf7635146792db88b80115172a4e52efea0e3941e`.
+- Completed a fresh visible review of every assigned Set 4 source slot,
+  engine-facing alias, and native dialogue clip on `c_ithlord`: 89 animations
+  at six times from front and right, for 1,068 rendered samples. The current
+  installed MDL+MDX identity hash
+  `16f69134bcc41eb5051f768954ff3b8b7b73ec83d90f14a4025610f1f88facaa`
+  exactly matches capture generation `e0a11375d30641f78716ab0c935f5167`.
+  The narrowly passing `c2d2` 80.15% frame also received a dedicated
+  front/right inspection.
+
+Affected areas: `scripts/build_sith_ithorians.py`,
+`scripts/verify_sith_ithorian_all_animations.py`,
+`scripts/deploy_lorum_ipsat_plcaa.py`,
+`scripts/prove_sith_ithorians_k1_existing_slot.py`,
+`tests/test_sith_ithorian_visual_capture_harness.py`, the generated
+Sith-Ithorian package, K1 Override, `PLCaa.mod`,
+`artifacts/lorum_ipsat_set4_visual_20260713/`, and
+`artifacts/lorum_ipsat_plcaa/`.
+
+Verification: targeted `py_compile`; 12 focused visual-harness tests; static
+installed-model readback of 69 nodes and 284 unique local clips; exact native
+Ithorian, Set 4 payload, event, UTC, equipment, appearance-row, Override, and
+module-hash assertions; 89-row/1,068-sample visible Debug-app review; and the
+dedicated `c2d2` 80.15% front/right capture. Actual KOTOR 1 loading/combat
+playback on `plcaa` remains the final manual engine-acceptance gate and is not
+claimed here.
 
 ## 2026-07-13
 

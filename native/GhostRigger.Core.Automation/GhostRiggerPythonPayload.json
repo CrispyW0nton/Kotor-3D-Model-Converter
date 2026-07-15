@@ -63,19 +63,19 @@
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_GAME_DINPUT_HOOK",
             "source_path": "src/kotormcp/game_dinput_hook.py",
             "packaged_path": "Python/src/kotormcp/game_dinput_hook.py",
-            "sha256": "d30c422dc182ee67e3066f6abb1abd833a3bbac4e6fe4e5cc50eee583fad0d25"
+            "sha256": "f93406a9c4357ecb7216ccdd438b27a9d6017ecff1ceeeac135b31116fbb6ba3"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_GAME_INPUT",
             "source_path": "src/kotormcp/game_input.py",
             "packaged_path": "Python/src/kotormcp/game_input.py",
-            "sha256": "234bc571e40cad39c0fb53ca9a9b4116e94b2d2e151596788d97a9f4b8c62432"
+            "sha256": "1064384ecfdf812db85bd0a3e507eb33f8858dc0e76a021f1b1783be8ad412e0"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_GAME_PROCESS_LOG",
             "source_path": "src/kotormcp/game_process_log.py",
             "packaged_path": "Python/src/kotormcp/game_process_log.py",
-            "sha256": "4b2e71cfd1eb7e3665e6175283eb1749f070135ad792964de190b70b22569f52"
+            "sha256": "99636edb4d353256ca68f9d055ba75a5db52b7d5deb993e3de90336703f78202"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_MCP_RESOURCES",

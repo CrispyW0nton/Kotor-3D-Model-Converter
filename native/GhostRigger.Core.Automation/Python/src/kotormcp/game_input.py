@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from ctypes import wintypes
-from kotormcp.game_dinput_hook import queue_commands, queue_mouse_click, queue_text
+from kotormcp.game_dinput_hook import (
+    queue_commands,
+    queue_mouse_click,
+    queue_text,
+)
 
 
 K2_WINDOW_TITLE = "Star Wars: Knights of the Old Republic II: The Sith Lords"
@@ -108,8 +112,10 @@ class _POINT(ctypes.Structure):
 
 INPUT_MOUSE = 0
 INPUT_KEYBOARD = 1
+MOUSEEVENTF_MOVE = 0x0001
 MOUSEEVENTF_LEFTDOWN = 0x0002
 MOUSEEVENTF_LEFTUP = 0x0004
+KEYEVENTF_EXTENDEDKEY = 0x0001
 KEYEVENTF_KEYUP = 0x0002
 KEYEVENTF_SCANCODE = 0x0008
 SW_RESTORE = 9
@@ -194,6 +200,8 @@ class KotorWindowInput:
         self.dinput_hook_root = Path(dinput_hook_root) if dinput_hook_root else None
         self._user32 = ctypes.WinDLL("user32", use_last_error=True)
         self._kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        self._dinput_cursor_hwnd = 0
+        self._dinput_cursor_screen: Optional[tuple[int, int]] = None
         self._configure_signatures()
 
     def _configure_signatures(self) -> None:
@@ -230,6 +238,8 @@ class KotorWindowInput:
         self._user32.SetFocus.restype = wintypes.HWND
         self._user32.SetCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
         self._user32.SetCursorPos.restype = wintypes.BOOL
+        self._user32.GetCursorPos.argtypes = [ctypes.POINTER(_POINT)]
+        self._user32.GetCursorPos.restype = wintypes.BOOL
         self._user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(_POINT)]
         self._user32.ClientToScreen.restype = wintypes.BOOL
         self._user32.SendInput.argtypes = [wintypes.UINT, ctypes.POINTER(_INPUT), ctypes.c_int]
@@ -370,6 +380,12 @@ class KotorWindowInput:
             for first, second in reversed(attached_pairs):
                 self._user32.AttachThreadInput(first, second, False)
 
+    def reset_dinput_cursor_tracking(self) -> None:
+        """Forget KOTOR's virtual cursor after a menu/screen transition."""
+
+        self._dinput_cursor_hwnd = 0
+        self._dinput_cursor_screen = None
+
     def click(
         self,
         x: float,
@@ -382,13 +398,56 @@ class KotorWindowInput:
         hwnd = self.require_window()
         focus = self.activate()
         sx, sy = self._screen_point(hwnd, x, y, coordinate_space)
-        if not self._user32.SetCursorPos(int(round(sx)), int(round(sy))):
-            raise KotorInputError(f"SetCursorPos failed: {ctypes.get_last_error()}")
+        target = (int(round(sx)), int(round(sy)))
+        if self._dinput_cursor_hwnd != hwnd:
+            self._dinput_cursor_hwnd = hwnd
+            self._dinput_cursor_screen = None
+        move_from = self._dinput_cursor_screen or self._dinput_cursor_origin(hwnd)
+        move_delta = (target[0] - move_from[0], target[1] - move_from[1])
+        ctypes.set_last_error(0)
+        cursor_positioned = bool(self._user32.SetCursorPos(*target))
+        cursor_error = int(ctypes.get_last_error()) if not cursor_positioned else 0
+        cursor_route = "win32_relative"
+        cursor_restore_error = 0
+        if cursor_positioned:
+            # KOTOR reads relative mouse deltas through DirectInput.  Moving the
+            # Windows cursor absolutely can succeed without updating KOTOR's
+            # private menu cursor, so return to the known origin and deliver the
+            # same motion through SendInput as a real relative mouse event.
+            ctypes.set_last_error(0)
+            if not self._user32.SetCursorPos(*move_from):
+                cursor_restore_error = int(ctypes.get_last_error())
+                raise KotorInputError(
+                    f"SetCursorPos could not restore the relative-mouse origin: "
+                    f"{cursor_restore_error}"
+                )
+            self._dinput_cursor_screen = target
+        elif self.dinput_hook_root:
+            self._dinput_cursor_screen = target
+            cursor_route = "dinput_relative_state"
+        else:
+            raise KotorInputError(f"SetCursorPos failed: {cursor_error}")
         hook_results: list[dict[str, Any]] = []
-        for _ in range(max(1, int(clicks or 1))):
-            if self.dinput_hook_root:
-                hook_results.append(queue_mouse_click(self.dinput_hook_root))
+        for click_index in range(max(1, int(clicks or 1))):
+            if self.dinput_hook_root and cursor_route == "dinput_relative_state":
+                if cursor_route == "dinput_relative_state" and click_index == 0:
+                    assert move_delta is not None
+                    hook_result = queue_commands(
+                        self.dinput_hook_root,
+                        [
+                            f"mouse_move {move_delta[0]} {move_delta[1]}",
+                            "mouse_click 24",
+                        ],
+                    )
+                else:
+                    hook_result = queue_mouse_click(self.dinput_hook_root)
+                if not hook_result.get("ok"):
+                    raise KotorInputError(f"DirectInput mouse click failed: {hook_result}")
+                hook_results.append(hook_result)
             else:
+                if click_index == 0:
+                    self._send_mouse_relative(*move_delta)
+                    time.sleep(max(0.01, delay_seconds))
                 self._send_mouse(MOUSEEVENTF_LEFTDOWN)
                 time.sleep(max(0.01, delay_seconds))
                 self._send_mouse(MOUSEEVENTF_LEFTUP)
@@ -400,6 +459,12 @@ class KotorWindowInput:
             "coordinate_space": coordinate_space,
             "clicks": max(1, int(clicks or 1)),
             "dinput_hook": bool(self.dinput_hook_root),
+            "cursor_route": cursor_route,
+            "set_cursor_pos_error": cursor_error,
+            "cursor_restore_error": cursor_restore_error,
+            "relative_move_from": list(move_from) if move_from else None,
+            "relative_move_to": list(target) if move_from else None,
+            "relative_move_delta": list(move_delta) if move_delta else None,
             "hook_results": hook_results,
             "focus": focus,
         }
@@ -493,12 +558,49 @@ class KotorWindowInput:
 
     def tap_scan(self, scan: int, *, key_delay_seconds: float = 0.035) -> None:
         if self.dinput_hook_root:
-            queue_commands(self.dinput_hook_root, [f"key_tap 0x{int(scan):02x} 12"])
+            focus = self.activate()
+            if not focus.get("is_foreground"):
+                raise KotorInputError(
+                    f"KOTOR must be foreground before buffered key delivery: {focus}"
+                )
+            # DirectInput's foreground device reacquires asynchronously after
+            # Windows focus changes.  Give KOTOR one stable polling window
+            # before placing the synthetic record in its buffered stream.
+            time.sleep(0.35)
+            focus = self.status()
+            if not focus.get("is_foreground"):
+                raise KotorInputError(
+                    f"KOTOR lost foreground before buffered key delivery: {focus}"
+                )
+            queue_commands(
+                self.dinput_hook_root,
+                [f"key_system 0x{int(scan):02x} 35"],
+            )
             time.sleep(max(0.01, key_delay_seconds))
             return
         self._send_key(scan, key_up=False)
         time.sleep(max(0.01, key_delay_seconds))
         self._send_key(scan, key_up=True)
+
+    def post_scan(self, scan: int, *, key_delay_seconds: float = 0.075) -> dict[str, Any]:
+        """Post one scan-key message from the elevated in-process proxy."""
+
+        if not self.dinput_hook_root:
+            self.tap_scan(scan, key_delay_seconds=key_delay_seconds)
+            return {"ok": True, "dinput_hook": False, "scan": int(scan)}
+        focus = self.activate()
+        result = queue_commands(
+            self.dinput_hook_root,
+            [f"key_post 0x{int(scan):02x} 50"],
+        )
+        time.sleep(max(0.01, key_delay_seconds))
+        return {
+            "ok": bool(result.get("ok")),
+            "dinput_hook": True,
+            "scan": int(scan),
+            "hook_result": result,
+            "focus": focus,
+        }
 
     def _screen_point(self, hwnd: int, x: float, y: float, coordinate_space: str) -> tuple[float, float]:
         space = str(coordinate_space or "ratio").lower()
@@ -515,6 +617,16 @@ class KotorWindowInput:
         if space == "ratio":
             return rect.left + (rect.width * float(x)), rect.top + (rect.height * float(y))
         raise KotorInputError(f"Unsupported coordinate space: {coordinate_space}")
+
+    def _dinput_cursor_origin(self, hwnd: int) -> tuple[int, int]:
+        point = _POINT()
+        if self._user32.GetCursorPos(ctypes.byref(point)):
+            return int(point.x), int(point.y)
+        rect = self.rect(hwnd)
+        return (
+            int(round(rect.left + (rect.width / 2.0))),
+            int(round(rect.top + (rect.height / 2.0))),
+        )
 
     def _capture_rect(self, hwnd: int, region: str) -> WindowRect:
         mode = str(region or "client").strip().lower()
@@ -561,11 +673,24 @@ class KotorWindowInput:
         item.u.mi = _MOUSEINPUT(0, 0, 0, flags, 0, None)
         self._send_input(item)
 
+    def _send_mouse_relative(self, dx: int, dy: int) -> None:
+        item = _INPUT()
+        item.type = INPUT_MOUSE
+        item.u.mi = _MOUSEINPUT(int(dx), int(dy), 0, MOUSEEVENTF_MOVE, 0, None)
+        self._send_input(item)
+
     def _send_key(self, scan: int, *, key_up: bool) -> None:
         item = _INPUT()
         item.type = INPUT_KEYBOARD
-        flags = KEYEVENTF_SCANCODE | (KEYEVENTF_KEYUP if key_up else 0)
-        item.u.ki = _KEYBDINPUT(0, int(scan), flags, 0, None)
+        direct_input_scan = int(scan) & 0xFF
+        extended = bool(direct_input_scan & 0x80)
+        windows_scan = direct_input_scan & 0x7F if extended else direct_input_scan
+        flags = (
+            KEYEVENTF_SCANCODE
+            | (KEYEVENTF_EXTENDEDKEY if extended else 0)
+            | (KEYEVENTF_KEYUP if key_up else 0)
+        )
+        item.u.ki = _KEYBDINPUT(0, windows_scan, flags, 0, None)
         self._send_input(item)
 
     def _send_input(self, item: _INPUT) -> None:
@@ -583,9 +708,9 @@ def run_save_warp_route(
     start_screen: str = "main_menu",
     save_row_index: int = 1,
     main_menu_load_ratio: tuple[float, float] = (0.604, 0.547),
-    save_row_ratio: tuple[float, float] = (0.302, 0.266),
-    save_row_step_ratio: float = 0.039,
-    load_button_ratio: tuple[float, float] = (0.334, 0.882),
+    save_row_ratio: tuple[float, float] = (0.377, 0.356),
+    save_row_step_ratio: float = 0.066,
+    load_button_ratio: tuple[float, float] = (0.499, 0.742),
     after_menu_seconds: float = 2.0,
     after_load_seconds: float = 12.0,
     after_warp_seconds: float = 15.0,
