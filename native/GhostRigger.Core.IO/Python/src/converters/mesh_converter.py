@@ -1210,15 +1210,32 @@ class FBXExporter:
         """
         exporter_backend = ""
         fbx_format = ""
-        # Try fbx module (Autodesk FBX Python SDK)
-        try:
-            import fbx as _fbx
-            ok = self._export_fbx_sdk(model, fbx_path, _fbx)
-            if ok:
-                exporter_backend = "autodesk_fbx_python_sdk"
-                fbx_format = "FBX SDK writer"
-        except ImportError:
+        # Rigged or animated models must use the ASCII 7.4 writer: the SDK
+        # path writes skeleton nodes translation-only (no rotation), builds no
+        # skin clusters, and exports no animation takes, so a creature body
+        # arrives in Max/Unity as scattered rigid parts (2026-07-15 user
+        # report: republic soldier female).  The SDK path stays available for
+        # static props, where a binary FBX is friendlier to Unity.
+        has_skins = any(getattr(node, "is_skin", False) for node in model.all_nodes())
+        has_animations = bool(getattr(model, "animations", None))
+        if has_skins or has_animations:
+            log.info(
+                "FBX export: %s has %s; using the ASCII FBX writer (the SDK bridge "
+                "does not export skin clusters or animation takes yet).",
+                model.name,
+                "skinned meshes" if has_skins else "animations",
+            )
             ok = None
+        else:
+            # Try fbx module (Autodesk FBX Python SDK)
+            try:
+                import fbx as _fbx
+                ok = self._export_fbx_sdk(model, fbx_path, _fbx)
+                if ok:
+                    exporter_backend = "autodesk_fbx_python_sdk"
+                    fbx_format = "FBX SDK writer"
+            except ImportError:
+                ok = None
 
         if ok is None:
             # Try pyassimp (treated as a hint only – fall through on any failure)

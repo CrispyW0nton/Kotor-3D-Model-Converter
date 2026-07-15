@@ -11,6 +11,43 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-15
 
+### [2026-07-15] T3502: route rigged/animated FBX exports away from the SDK backend
+
+Owner: LordVaderCW
+
+T###: T3502
+
+Subsystem: FBX export (Core.IO mesh_converter)
+
+Intersects: the Unreal animator / character export flows
+(qt_unreal_animator, level_export_bridge) that call
+`mesh_converter.FBXExporter().export`.
+
+- User bug report reproduced at code level: baking animations onto the
+  republic soldier female and exporting FBX produced a scrambled model in
+  3ds Max/Unity. When the Autodesk `fbx` Python module is importable,
+  `FBXExporter.export` preferred `_export_fbx_sdk`, which writes skeleton
+  nodes translation-only (no rotation), builds no skin clusters, and exports
+  no animation takes — while the zero-dependency ASCII 7.4 writer supports
+  bind poses, skin deformers, hierarchy, and animations. Backend choice was
+  environment-dependent, so the same export worked on machines without the
+  SDK and broke on machines with it.
+- `FBXExporter.export` now routes any model with skinned meshes or
+  animations straight to the ASCII writer with an explanatory log line; the
+  SDK backend remains for static props (binary FBX is friendlier to Unity).
+- Also investigated the "MDL texture messed up" half of the report: a full
+  write→reload roundtrip of pfbbs (K1 female soldier body, 47 meshes) through
+  MDLBinaryWriter/MDLBinaryParser is byte-faithful for texture names and UVs.
+  The real cause is that player-body MDLs legitimately carry bitmap NULL (the
+  engine assigns the uniform texture from appearance.2da at runtime), so any
+  DCC import shows the body untextured. Planned follow-up: bake resolved
+  appearance/BAS textures into exports (part of the BAS merged-export work).
+- Verification: new `tests/test_fbx_rigged_backend_gate.py` (skinned routes
+  ASCII, animated routes ASCII, static still uses SDK when importable);
+  `tests/test_fbx_exporter.py` failures confirmed pre-existing via stash A/B
+  (missing kotor_stock fixture files, unrelated); payload manifest
+  regenerated for Core.IO; payload pin suite green.
+
 ### [2026-07-15] T2801: Fill Floor Faces — patch imported WOKs from visible floor geometry
 
 Owner: LordVaderCW
