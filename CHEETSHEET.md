@@ -368,6 +368,35 @@ video evidence before treating it as game-tested.
 
 ## Legacy Module Recovery And Cross-Game Candidates
 
+Preflight the non-destructive modern KOTORMax fallback for the surviving
+Vul803 Max 9 scenes. This writes a JSON evidence report and makes no install or
+scene changes when 3ds Max is absent:
+
+```powershell
+py -3.14 scripts/recover_vul803_max_scenes.py --preflight
+```
+
+After installing licensed 3ds Max, run the fallback in a fresh evidence
+directory. Its output is visual forensics; use
+`scripts/kotormax/README.md` for the preferred isolated NWMax 0.8 b60 room-
+partition workflow:
+
+```powershell
+py -3.14 scripts/recover_vul803_max_scenes.py
+```
+
+Compile the surviving Vul803 `01a` visual ASCII with the original `01b` AABB
+source into a controller-free K2 structural candidate. Repeat with `--game K1`
+and a separate output directory for K1:
+
+```powershell
+py -3.14 scripts/compile_nwmax_room_candidate.py --room vul803_01a --game K2 --render-ascii "C:\Users\NewAdmin\Documents\KotorMods\Modules\Q_SellOut\Extracted\LavaPlanet_2011-12-26\LavaPlanet\LavaPlanet\Vul803_01a.mdl" --walkmesh-ascii "C:\Users\NewAdmin\Documents\KotorMods\Modules\Q_SellOut\Extracted\LavaPlanet_2011-12-26\LavaPlanet\LavaPlanet\Vul803_01b.mdl" --output "C:\Users\NewAdmin\Documents\KotorMods\Modules\Converted\WalkmeshAudit\GeneratedCandidates\vul803\NWMaxCompileVerified\K2"
+```
+
+This compiler runs MDLOps only as a compatibility audit and promotes Ghost
+Studio's zero-controller MDL/MDX plus its validated floor-only WOK. A passing
+report is still not retail-game proof.
+
 Convert one recovered room through MDLOps 1.0.2 into an isolated K1 or K2
 worktree. The command never overwrites the downloaded source unless
 `--overwrite` is explicitly supplied for an existing candidate directory:

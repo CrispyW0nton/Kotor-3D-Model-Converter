@@ -9,6 +9,63 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-07-16
+
+### [2026-07-16] T2906/T3101: guarded Vul803 NWMax/KOTORMax recovery and controller-free room proof
+
+Owner: LordVaderCW
+
+T###: T2906 / T3101
+
+Subsystem: legacy 3ds Max room recovery, MDL/MDX/WOK compilation, and Map Studio module evidence (Core.IO/Core.Scene/Core.Validation tooling)
+
+Intersects: the 2026-07 converted-module/walkmesh audit work and the existing
+dirty `ghost-studio` Map Studio/PIE payload changes; this slice adds scripts,
+tests, and documentation only and does not rewrite packaged Python mirrors.
+
+- Proved the Max 9 Vul803 sources retain recoverable visual geometry and mapped
+  their historical room roles. The surviving ARE lists `01a/01b/01c`; the old
+  `01a` ASCII contains 292 visual meshes while old `01b` is an AABB collision
+  source. Late `01a`/`01b` manifests overlap on 354/356 names, so both must not
+  be shipped as visible rooms. `01d/01e` remain optional forensic artifacts.
+- Added an isolated NWMax 0.8 b60 loader and guarded NWMax/KOTORMax bridges.
+  Manifest reconstruction preserves duplicate-name multiplicity, hierarchy,
+  frame-0 world transforms, Auto Key state, frozen state, exporter globals, and
+  source-root identity; it rejects animated/ambiguous nodes, suppresses texture
+  conversion and WOK/PWK/DWK side effects, refuses overwrites/empty files, and
+  never opens or saves a `.max` scene.
+- Added a KOTORMax batch fallback/preflight with unique evidence directories,
+  source hashes before/after, exact-resref ASCII checks, timeouts, safe plugin
+  installation checks, and the audited OpenKotOR revision. KOTORMax is labeled
+  visual-forensics only because NWMax DLight/Reference superclass contracts and
+  saved walkmesh fields are not losslessly compatible.
+- Added the controller-free compiler. It rejects transformed/ambiguous AABB
+  ancestors and invalid slopes, removes stacked non-walk ceiling components,
+  generates a floor-only WOK, runs MDLOps as an independent audit, and promotes
+  only Ghost Studio output after binary visual/AABB readback and vanilla-derived
+  structural gates. MDLOps' 606 synthetic static controllers are recorded and
+  deliberately not promoted.
+- Affected: `scripts/kotormax/`,
+  `scripts/max2021_mcp/kotormax_batch_export.ms`,
+  `scripts/recover_vul803_max_scenes.py`,
+  `scripts/compile_nwmax_room_candidate.py`, focused tests, CHEETSHEET, and the
+  learned legacy-room-recovery knowledgebase entry.
+- Verification: Python compilation passed; 15 focused compiler/bridge tests
+  passed. Fresh isolated K1 and K2 candidates each retained 292 visual meshes,
+  11,362 visual vertices, 17,301 visual faces, 11 textures, one 127-vertex/
+  145-face embedded AABB matching the external WOK, 11 closed perimeter loops,
+  zero controllers, zero nonzero node-header `+8` values, and no structural
+  blockers. The new binaries are byte-identical to the room resources in the
+  prior one-room MODs; fresh current-code K1/K2 Map Studio import, editable
+  conversion, save, and reopen proofs passed with 1/1 room, 292 surfaces,
+  17,301 render faces, 145 WOK faces, and no blockers.
+  The ordinary proof launcher currently encounters an unrelated dirty-worktree
+  payload gap (`map_studio_pie_resources.py` exists only in root `src`), so the
+  fresh proof explicitly extended the module namespace to the canonical source;
+  this Vul803 slice did not silently modify that concurrent PIE payload work.
+  No licensed 3ds Max/gmax runtime is installed, so live MaxScript export and
+  manual K1/K2 warp/movement proof remain explicitly outstanding.
+
 ## 2026-07-15
 
 ### [2026-07-15] T2801: Auto Generate Walkmesh — one button, any loaded map

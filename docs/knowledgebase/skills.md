@@ -62,6 +62,7 @@ task, then return to the source PDFs only when deeper detail is needed.
 ### Level Design, Map Studio, and Procedural Generation (2026-06 books)
 
 - `learned/leveldesignskill.md`: Use for Map Studio room/area authoring decisions, module layout design, LYT/VIS/WOK spatial planning, gameplay placement strategy, grayboxing, and modular room construction. Grounded in Totten's *Architectural Approach to Level Design*, Phil Co's *Level Design for Games*, and Eliasz's *Procedural Content Generation*.
+- `learned/kotormaxlegacyroomrecovery.md`: Use when recovering KOTOR rooms from legacy 3ds Max/NWMax scenes, KOTORMax fallback exports, or historical sanity manifests. Covers scripted-plugin class/superclass compatibility, lossless first-open discipline, non-destructive partition reconstruction, Vul803 room-role evidence, controller-free compilation, and the vanilla-to-retail proof ladder.
 - `learned/proceduralgenerationskill.md`: Use for ISM/HISM instancing for performance, PCG graph systems, spline-driven generation, animated crowd spawning, and performance budgeting. Grounded in Eliasz's *Procedural Content Generation with UE5*.
 - `learned/gamedesignskill.md`: Use for workflow and tool design through mechanics, feedback, difficulty, narrative/task flow, playtest loops, and user motivation.
 
