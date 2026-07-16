@@ -11,6 +11,40 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-15
 
+### [2026-07-15] T3008: animated PIE door actors (doors swing open on approach)
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE (Core.Scene/Core.Tools, root mirror + window)
+
+Intersects: the T3008 PIE door open/close state and the creature actor
+render pipeline (which this door pipeline mirrors).
+
+- Doors now visually animate in PIE. New `map_studio_pie_doors.py` (Scene +
+  Tools): `build_map_studio_pie_door_plan` resolves each authored door
+  placement to its genericdoors model; `door_state_clip_candidates` +
+  `play_map_studio_pie_door_clip` select and play the door model's real
+  opening1/opened1/closing1/closed clips (candidate fallbacks per model).
+- Window (module_editor_window.py): `_create_map_studio_pie_door_actors`
+  loads each door model (cached), attaches a retained animated actor at the
+  door's placement, plays the closed pose, and hides the nearest baked static
+  door (matched by position) so the animated door replaces it — mirroring the
+  creature actor swap. `_update_map_studio_pie_door_actors` reads the frame's
+  door states each tick and plays the swing (opening/closing) then the held
+  pose (opened/closed) when a door flips, feeding poses through the same
+  runtime-character-frame path as creatures. Detached and restored on Stop.
+- Verified structurally on the real 921srt: the plan resolves 21 of 33 doors
+  to the dor_mal02 model (the 12 Force Field Sith doors have no genericdoors
+  model and keep their static preview, handled gracefully). The setup is
+  fully guarded so a resolution/clip miss never breaks PIE.
+- Verification: new `tests/test_map_studio_pie_door_actors.py` (plan resolves
+  models + ids; state->transition/hold clip selection; first-available clip
+  playback with fallback); PIE + payload suites green (58 passed); payload
+  pin 1314 -> 1316. On-screen swing is confirmed by the user's in-editor Play
+  test; the pipeline and clip selection are verified headlessly.
+
 ### [2026-07-15] T3008: PIE plays authored scene animations per creature (207TEL)
 
 Owner: LordVaderCW

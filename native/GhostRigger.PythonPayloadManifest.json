@@ -678,7 +678,7 @@
     },
     {
         "project": "GhostRigger.Core.Scene",
-        "python_file_count": 116,
+        "python_file_count": 117,
         "files": [
             "src\\core\\level\\__init__.py",
             "src\\core\\level\\kmap_model.py",
@@ -750,6 +750,7 @@
             "src\\core\\modules\\map_studio_pie.py",
             "src\\core\\modules\\map_studio_pie_audio.py",
             "src\\core\\modules\\map_studio_pie_creatures.py",
+            "src\\core\\modules\\map_studio_pie_doors.py",
             "src\\core\\modules\\map_studio_pie_entities.py",
             "src\\core\\modules\\map_studio_room_catalog.py",
             "src\\core\\modules\\map_studio_room_snapping.py",
@@ -800,7 +801,7 @@
     },
     {
         "project": "GhostRigger.Core.Tools",
-        "python_file_count": 379,
+        "python_file_count": 380,
         "files": [
             "src\\adapters\\qt_viewport\\camera_gizmo_renderer.py",
             "src\\adapters\\qt_viewport\\camera_overlays.py",
@@ -938,6 +939,7 @@
             "src\\core\\modules\\map_studio_pie.py",
             "src\\core\\modules\\map_studio_pie_audio.py",
             "src\\core\\modules\\map_studio_pie_creatures.py",
+            "src\\core\\modules\\map_studio_pie_doors.py",
             "src\\core\\modules\\map_studio_pie_entities.py",
             "src\\core\\modules\\map_studio_room_catalog.py",
             "src\\core\\modules\\map_studio_room_snapping.py",

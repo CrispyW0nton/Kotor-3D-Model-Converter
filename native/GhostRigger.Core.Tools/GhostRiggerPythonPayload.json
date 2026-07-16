@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Tools",
-    "file_count": 379,
+    "file_count": 380,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -820,6 +820,12 @@
             "source_path": "src/core/modules/map_studio_pie_creatures.py",
             "packaged_path": "Python/src/core/modules/map_studio_pie_creatures.py",
             "sha256": "b0488a10c50d026873e1272759cd22658204604b27c4bf432647d42b8d4f961b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE_DOORS",
+            "source_path": "src/core/modules/map_studio_pie_doors.py",
+            "packaged_path": "Python/src/core/modules/map_studio_pie_doors.py",
+            "sha256": "81f154242203832d42320b28260b4fcb9f392b72e63c03bb8cb2b4620ca1e981"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE_ENTITIES",
@@ -1863,7 +1869,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_MODULE_EDITOR_WINDOW",
             "source_path": "src/gui/windows/module_editor_window.py",
             "packaged_path": "Python/src/gui/windows/module_editor_window.py",
-            "sha256": "c81ce5f35aa2fab4f72c6b5cd4c316b7e9387f739b26f1ec2e64596d9b91925c"
+            "sha256": "6eddfb718cd04aa8de47837a0435413b9ca8daf529381020e7d60e769b4ee7b6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_BLUEPRINT_EDITOR",

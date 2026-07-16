@@ -1195,6 +1195,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._map_studio_pie_camera_turn_velocity = 0.0
         self._map_studio_pie_creature_entries: list[dict[str, Any]] = []
         self._map_studio_pie_hidden_creature_groups: list[tuple[int, Any]] = []
+        self._map_studio_pie_door_entries: list[dict[str, Any]] = []
         self._map_studio_pie_creature_summary = "creatures 0"
         self._map_studio_pie_creature_animation_budget = 0.0
         self._map_studio_pie_creature_animation_cursor = 0
@@ -10750,13 +10751,141 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._map_studio_pie_creature_animation_cursor = (cursor + update_count) % actor_count
         return tuple(rows)
 
+    def _create_map_studio_pie_door_actors(self, preview_model: Any, game: str) -> str:
+        """Swap each static door for an animated door actor that opens in PIE."""
+
+        self._map_studio_pie_door_entries = []
+        manager = getattr(self, "resource_manager", None)
+        root = getattr(preview_model, "root_node", None)
+        session = self._map_studio_pie_session
+        if manager is None or root is None or session is None:
+            return ""
+        try:
+            from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
+            from src.core.modules.map_studio_pie import attach_map_studio_pie_actor
+            from src.core.modules.map_studio_pie_doors import (
+                build_map_studio_pie_door_plan,
+                door_state_clip_candidates,
+                play_map_studio_pie_door_clip,
+            )
+            from src.core.modules.map_studio_stock_content_preview import load_stock_kotor_model
+
+            placements = self.controller.map_studio_authored_placements_snapshot()
+            resolver = getattr(self.controller, "_map_studio_stock_template_resolver", None)
+            if placements is None or resolver is None:
+                return ""
+            specs = tuple(spec for spec in build_map_studio_pie_door_plan(placements, resolver) if spec.can_build_actor)
+            if not specs:
+                return ""
+            SuperModelResolver.configure(manager)
+            # Baked door groups in the resident scene, matched to specs by position.
+            door_groups = [
+                node
+                for node in tuple(getattr(root, "children", ()) or ())
+                if str(getattr(node, "_gr_map_studio_placement_kind", "") or "").lower() == "door"
+            ]
+            model_cache: dict[str, Any] = {}
+            hidden_nodes: set[int] = set()
+            entries: list[dict[str, Any]] = []
+            for spec in specs:
+                source = model_cache.get(spec.model_resref)
+                if source is None:
+                    source = load_stock_kotor_model(manager, spec.model_resref, game)
+                    model_cache[spec.model_resref] = source
+                if source is None:
+                    continue
+                import copy as _copy
+
+                actor_model = _copy.deepcopy(source)
+                actor = attach_map_studio_pie_actor(
+                    preview_model,
+                    actor_model,
+                    position=spec.position,
+                    facing_radians=spec.bearing,
+                    actor_id=f"__map_studio_pie_door__:{spec.door_id}",
+                    recompute_bounds=False,
+                    append_to_preview=True,
+                )
+                if actor is None:
+                    continue
+                engine = AnimationEngine(actor_model)
+                play_map_studio_pie_door_clip(
+                    engine, door_state_clip_candidates(is_open=False, transitioning=False), loop=True
+                )
+                # Hide the nearest baked door node (avoid a doubled static door).
+                nearest = min(
+                    (node for node in door_groups if id(node) not in hidden_nodes),
+                    key=lambda node: sum(
+                        (float(getattr(node, "position", (0, 0, 0))[i]) - spec.position[i]) ** 2 for i in range(3)
+                    ),
+                    default=None,
+                )
+                if nearest is not None:
+                    hidden_nodes.add(id(nearest))
+                entries.append({"actor": actor, "engine": engine, "spec": spec, "is_open": False, "transition_time": 0.0})
+            if hidden_nodes:
+                root.children = [node for node in tuple(getattr(root, "children", ()) or ()) if id(node) not in hidden_nodes]
+            self._map_studio_pie_door_entries = entries
+            return ""
+        except Exception as exc:
+            self._map_studio_pie_door_entries = []
+            return f"Animated door setup failed: {exc}"
+
+    def _update_map_studio_pie_door_actors(self, frame: Any, delta_time: float) -> tuple[tuple[Any, ...], ...]:
+        """Play each door's opening/opened/closing/closed clips from its state."""
+
+        entries = self._map_studio_pie_door_entries
+        if not entries:
+            return ()
+        from src.core.modules.map_studio_pie_doors import (
+            door_state_clip_candidates,
+            play_map_studio_pie_door_clip,
+        )
+
+        states = {str(getattr(state, "entity_id", "")): bool(getattr(state, "is_open", False)) for state in tuple(getattr(frame, "door_states", ()) or ())}
+        step = max(0.0, min(float(delta_time), 0.25))
+        rows: list[tuple[Any, ...]] = []
+        for entry in entries:
+            spec = entry["spec"]
+            engine = entry["engine"]
+            actor = entry["actor"]
+            wanted_open = states.get(spec.door_id, entry["is_open"])
+            if wanted_open != entry["is_open"]:
+                entry["is_open"] = wanted_open
+                entry["transition_time"] = 0.35  # brief swing before the held pose
+                play_map_studio_pie_door_clip(engine, door_state_clip_candidates(is_open=wanted_open, transitioning=True), loop=False)
+            elif entry["transition_time"] > 0.0:
+                entry["transition_time"] = max(0.0, entry["transition_time"] - step)
+                if entry["transition_time"] <= 0.0:
+                    play_map_studio_pie_door_clip(engine, door_state_clip_candidates(is_open=wanted_open, transitioning=False), loop=True)
+            engine.advance(step)
+            pose = engine.evaluate()
+            setattr(pose, "_gr_animation_scene_object_id", actor.actor_id)
+            setattr(pose, "_gr_animation_source_model_id", id(actor.source_model))
+            rows.append(
+                (
+                    actor.root_node,
+                    actor.actor_id,
+                    pose,
+                    str(getattr(getattr(engine, "current_animation", None), "name", "") or ""),
+                    float(getattr(engine, "current_time", 0.0) or 0.0),
+                    float(getattr(getattr(engine, "current_animation", None), "length", 0.0) or 0.0),
+                )
+            )
+        return tuple(rows)
+
     def _remove_map_studio_pie_runtime_actors(self) -> None:
         """Detach all runtime DAGs, restore flattened authoring actors, reload once."""
 
         self._cancel_map_studio_pie_creature_preparation()
         player = self._map_studio_pie_actor
         creature_entries = tuple(self._map_studio_pie_creature_entries)
-        actors = ([player] if player is not None else []) + [entry["actor"] for entry in creature_entries]
+        door_entries = tuple(self._map_studio_pie_door_entries)
+        actors = (
+            ([player] if player is not None else [])
+            + [entry["actor"] for entry in creature_entries]
+            + [entry["actor"] for entry in door_entries]
+        )
         preview_model = next((actor.preview_model for actor in actors if actor is not None), None)
         viewport = getattr(self.viewport_panel, "viewport", None)
         if viewport is not None:
@@ -10793,6 +10922,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._map_studio_pie_animation_run = False
         self._map_studio_pie_creature_entries = []
         self._map_studio_pie_hidden_creature_groups = []
+        self._map_studio_pie_door_entries = []
         self._map_studio_pie_creature_summary = "creatures 0"
         self._map_studio_pie_creature_animation_budget = 0.0
         self._map_studio_pie_creature_animation_cursor = 0
@@ -10962,6 +11092,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.viewport_panel.set_map_studio_pie_active(True)
         self._map_studio_pie_actor_warning = self._create_map_studio_pie_player_actor(session, preview_model, game)
         creature_warning = self._create_map_studio_pie_creature_actors(preview_model, game)
+        door_warning = self._create_map_studio_pie_door_actors(preview_model, game)
         runtime_actor_warning = self._activate_map_studio_pie_runtime_actors(preview_model)
         audio_warning = self._start_map_studio_pie_ambient_audio(session, game)
         camera.target = list(session.player_eye_target())
@@ -10988,6 +11119,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._log(f"Simulation player warning: {self._map_studio_pie_actor_warning}")
         if creature_warning:
             self._log(f"Simulation creature warning: {creature_warning}")
+        if door_warning:
+            self._log(f"Simulation door warning: {door_warning}")
         if runtime_actor_warning:
             self._log(f"Simulation retained actor warning: {runtime_actor_warning}")
         if audio_warning:
@@ -11117,6 +11250,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             camera_blocked = resolved + 0.02 < desired_distance
         player_runtime_row = self._update_map_studio_pie_player_actor(frame, delta_time)
         runtime_rows = list(self._update_map_studio_pie_creature_actors(delta_time))
+        runtime_rows.extend(self._update_map_studio_pie_door_actors(frame, delta_time))
         if player_runtime_row is not None:
             runtime_rows.insert(0, player_runtime_row)
         if runtime_rows:

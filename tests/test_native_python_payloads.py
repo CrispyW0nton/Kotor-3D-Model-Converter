@@ -72,7 +72,9 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     # adding another two byte-identical payload rows.
     # Scene-animation NCS intent extraction (map_studio_scene_animations.py)
     # ships through both, adding another two byte-identical payload rows.
-    assert len(payload_files) == 1314
+    # Animated PIE door actors (map_studio_pie_doors.py) ship through both,
+    # adding another two byte-identical payload rows.
+    assert len(payload_files) == 1316
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 

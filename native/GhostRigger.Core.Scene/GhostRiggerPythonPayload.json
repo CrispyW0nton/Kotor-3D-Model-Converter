@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Scene",
-    "file_count": 116,
+    "file_count": 117,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -424,6 +424,12 @@
             "source_path": "src/core/modules/map_studio_pie_creatures.py",
             "packaged_path": "Python/src/core/modules/map_studio_pie_creatures.py",
             "sha256": "b0488a10c50d026873e1272759cd22658204604b27c4bf432647d42b8d4f961b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE_DOORS",
+            "source_path": "src/core/modules/map_studio_pie_doors.py",
+            "packaged_path": "Python/src/core/modules/map_studio_pie_doors.py",
+            "sha256": "81f154242203832d42320b28260b4fcb9f392b72e63c03bb8cb2b4620ca1e981"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE_ENTITIES",
