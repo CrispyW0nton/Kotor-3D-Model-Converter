@@ -137,6 +137,8 @@ PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE RCDATA "Python/src/core/modules/map_s
 PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE_AUDIO RCDATA "Python/src/core/modules/map_studio_pie_audio.py"
 PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE_CREATURES RCDATA "Python/src/core/modules/map_studio_pie_creatures.py"
 PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE_ENTITIES RCDATA "Python/src/core/modules/map_studio_pie_entities.py"
+PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_ROOM_CATALOG RCDATA "Python/src/core/modules/map_studio_room_catalog.py"
+PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_ROOM_SNAPPING RCDATA "Python/src/core/modules/map_studio_room_snapping.py"
 PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_STOCK_CONTENT_PREVIEW RCDATA "Python/src/core/modules/map_studio_stock_content_preview.py"
 PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_TERRAIN_SCULPT_SESSION RCDATA "Python/src/core/modules/map_studio_terrain_sculpt_session.py"
 PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_TEXTURE_PAINT RCDATA "Python/src/core/modules/map_studio_texture_paint.py"

@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Tools",
-    "file_count": 377,
+    "file_count": 378,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -834,6 +834,12 @@
             "sha256": "c7e0a9b17a336f7b1ea4095bafb9f663befdf7ea6e9a019aabefb1f232e54d5c"
         },
         {
+            "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_ROOM_SNAPPING",
+            "source_path": "src/core/modules/map_studio_room_snapping.py",
+            "packaged_path": "Python/src/core/modules/map_studio_room_snapping.py",
+            "sha256": "ab7c6fc76b635eb7cab3161669e9385b6c8991e84dd9111abaf5d98c2b408810"
+        },
+        {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_STOCK_CONTENT_PREVIEW",
             "source_path": "src/core/modules/map_studio_stock_content_preview.py",
             "packaged_path": "Python/src/core/modules/map_studio_stock_content_preview.py",
@@ -897,7 +903,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "3bd6a182e944f13e4203e73daba201f72ea5d968d32bd399268e2446df4e514d"
+            "sha256": "5890ea539fc455e7abe91aac430025050ad73ca3aef591c3ab2b2c30d691880d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",
@@ -1851,7 +1857,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_MODULE_EDITOR_WINDOW",
             "source_path": "src/gui/windows/module_editor_window.py",
             "packaged_path": "Python/src/gui/windows/module_editor_window.py",
-            "sha256": "a325c96c1d2bb7a14577bc78a8328e053c6677e5aecbbb1aa355a3c0a036f845"
+            "sha256": "19e4ffa679ae57128149bd0d69bb806d5360728b17b6b236861cfecebd3cf839"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_BLUEPRINT_EDITOR",

@@ -2063,6 +2063,7 @@ class ModuleEditorController:
         game: str = "",
         resource_manager: Any = None,
         position: Any = None,
+        connection_points: Any = None,
     ) -> tuple[bool, str]:
         """Add a catalog-indexed room from another module into the current project.
 
@@ -2070,7 +2071,8 @@ class ModuleEditorController:
         then bakes it into editable imported-mesh geometry positioned at
         ``position`` (defaults just past the current module's east edge so it
         does not overlap existing rooms, ready to be snapped into place). The
-        source module is recorded on the room for later doorway snapping.
+        source module and the room's doorway connection points are recorded on
+        the room for later doorway snapping.
         """
 
         from pathlib import Path as _Path
@@ -2097,6 +2099,14 @@ class ModuleEditorController:
         if snapshot is not None and any(room.normalised_resref() == resref for room in tuple(getattr(snapshot, "rooms", ()) or ())):
             return False, f"Room {resref} is already in this module. Rename or remove it before re-adding."
         drop_position = position if position is not None else self._next_added_room_position()
+        serialised_hooks = [
+            {
+                "door": str(getattr(hook, "door", "") or (hook.get("door", "") if isinstance(hook, dict) else "")),
+                "local_position": [float(v) for v in tuple(getattr(hook, "local_position", None) or (hook.get("local_position", (0.0, 0.0, 0.0)) if isinstance(hook, dict) else (0.0, 0.0, 0.0)))[:3]],
+                "orientation": [float(v) for v in tuple(getattr(hook, "orientation", None) or (hook.get("orientation", (0.0, 0.0, 0.0, 1.0)) if isinstance(hook, dict) else (0.0, 0.0, 0.0, 1.0)))[:4]],
+            }
+            for hook in tuple(connection_points or ())
+        ]
         return self.convert_stock_room_to_imported_mesh(
             room_resref=resref,
             resource_manager=resource_manager,
@@ -2105,6 +2115,7 @@ class ModuleEditorController:
                 "catalog_source_path": str(capsule),
                 "catalog_source_module": normalise_resref(source_module) or normalise_resref(capsule.stem),
                 "added_from_catalog": True,
+                "connection_points": serialised_hooks,
             },
         )
 
@@ -2120,6 +2131,69 @@ class ModuleEditorController:
                 max_x = max(max_x, float(values[0]))
                 found = True
         return (max_x + 30.0 if found else 0.0, 0.0, 0.0)
+
+    def authored_room_doorway_choices(self) -> tuple[dict[str, Any], ...]:
+        """Return rooms and their recorded door hooks for the snapping UI."""
+
+        from .map_studio_room_snapping import authored_room_door_hooks
+
+        snapshot = self._map_studio_authored_project_snapshot()
+        rows: list[dict[str, Any]] = []
+        for room in tuple(getattr(snapshot, "rooms", ()) or ()):
+            hooks = authored_room_door_hooks(room)
+            rows.append(
+                {
+                    "room_resref": room.normalised_resref(),
+                    "doors": tuple(hook.door for hook in hooks),
+                    "hook_count": len(hooks),
+                }
+            )
+        return tuple(rows)
+
+    def snap_authored_rooms_at_doorway(
+        self,
+        *,
+        source_room_resref: str,
+        source_door: str,
+        target_room_resref: str,
+        target_door: str,
+    ) -> tuple[bool, str]:
+        """Translate one room so its door hook meets another room's. One undo step."""
+
+        from .map_studio_room_snapping import snap_authored_room_to_room
+
+        authored = self._load_authored_project_or_raise()
+        before = self._capture_map_studio_command_state()
+        try:
+            result = snap_authored_room_to_room(
+                authored,
+                source_room_resref=normalise_resref(source_room_resref),
+                source_door=source_door,
+                target_room_resref=normalise_resref(target_room_resref),
+                target_door=target_door,
+            )
+        except ValueError as exc:
+            return False, str(exc)
+        self._store_authored_project(result.project)
+        tx = result.translation
+        message = (
+            f"Snapped {normalise_resref(source_room_resref)} to {normalise_resref(target_room_resref)} at their doorways "
+            f"(moved {tx[0]:.2f}, {tx[1]:.2f}, {tx[2]:.2f})."
+        )
+        if result.warnings:
+            message = f"{message} {result.warnings[0]}"
+        self.model.log(f"Map Studio: {message}")
+        self._record_map_studio_command(
+            action_key="map_studio.rooms.snap_doorway",
+            label=f"Snap {normalise_resref(source_room_resref)} to {normalise_resref(target_room_resref)}",
+            before=before,
+            metadata={
+                "source_room": normalise_resref(source_room_resref),
+                "target_room": normalise_resref(target_room_resref),
+                "translation": list(tx),
+            },
+        )
+        return True, message
 
     def _apply_imported_mesh_room_edit(self, *, room_resref: str, action_key: str, label: str, editor) -> tuple[bool, str]:
         from dataclasses import replace as _replace

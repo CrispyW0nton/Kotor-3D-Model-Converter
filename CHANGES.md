@@ -11,6 +11,39 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-15
 
+### [2026-07-15] T3601: modular maps Phase 3 — doorway snapping
+
+Owner: LordVaderCW
+
+T###: T3601
+
+Subsystem: Map Studio modular authoring (Core.Scene/Core.Tools/window)
+
+Intersects: the T3601 room catalog + Add Room from Module (Phases 1-2);
+completes the pick-rooms → snap-doorways → walkmesh → export workflow.
+
+- New `map_studio_room_snapping.py` (Scene + Tools): resolves a room's stored
+  door hooks into module/world coordinates (`authored_room_door_hooks`) and
+  translates one room so a chosen hook coincides exactly with a chosen hook on
+  another room (`snap_authored_room_to_room`). KOTOR LYT rooms have no
+  rotation, so this is a translation-only align; the result flags hooks whose
+  facings do not oppose (~180 deg), since those doorways will not read
+  correctly without rotation the engine does not support.
+- `add_catalog_room_to_project` now serialises the catalog entry's door hooks
+  (door, room-local position, orientation) into the added room's metadata so
+  snapping is self-contained; controller ops `authored_room_doorway_choices`
+  (rooms + hooks for the UI) and `snap_authored_rooms_at_doorway` (one
+  undoable command).
+- "Snap Rooms at Doorway..." File-menu action (module_editor_window.py): pick
+  the room to move + its doorway, then the room to snap onto + its doorway.
+- Verification: new `tests/test_map_studio_room_snapping.py` (hooks resolve to
+  world space; snap makes hooks coincide; non-opposing facings warn;
+  same-room/missing-hook rejected; controller op undoable). Real-data smoke:
+  added 903malc + 903malab from 921srt.mod (6 and 5 hooks recorded) and
+  snapped them so the chosen doors coincide (hook distance 0.0000). Payloads
+  regenerated, pin bumped 1310 -> 1312; suites green. Room geometry alignment
+  is editor-side; the in-game warp test remains the user's.
+
 ### [2026-07-15] T3601: modular maps Phase 2 — Add Room from Module
 
 Owner: LordVaderCW

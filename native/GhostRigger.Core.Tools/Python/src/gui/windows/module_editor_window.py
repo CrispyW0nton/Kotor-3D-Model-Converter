@@ -1244,6 +1244,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.add_room_from_module_action.setToolTip(
             "Browse rooms indexed from any .mod/.rim/.kmap and add one to this module, ready to snap into place."
         )
+        self.snap_rooms_doorway_action = QtGui.QAction("Snap Rooms at Doorway...", self)
+        self.snap_rooms_doorway_action.setObjectName("mapStudioSnapRoomsDoorwayAction")
+        self.snap_rooms_doorway_action.setToolTip(
+            "Move one room so a chosen doorway lines up exactly with a doorway on another room."
+        )
         self.import_library_asset_action = QtGui.QAction("Import Selected Library Asset", self)
         self.import_texture_action = QtGui.QAction("Import Texture to Project...", self)
         self.import_texture_action.setObjectName("mapStudioImportTextureAction")
@@ -1289,6 +1294,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         file_menu.addAction(self.import_stock_module_action)
         file_menu.addAction(self.convert_all_stock_rooms_action)
         file_menu.addAction(self.add_room_from_module_action)
+        file_menu.addAction(self.snap_rooms_doorway_action)
         file_menu.addAction(self.import_library_asset_action)
         file_menu.addAction(self.import_texture_action)
         file_menu.addSeparator()
@@ -1639,6 +1645,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.import_stock_module_action.triggered.connect(self._import_stock_module)
         self.convert_all_stock_rooms_action.triggered.connect(self._convert_all_stock_rooms)
         self.add_room_from_module_action.triggered.connect(self._add_room_from_module)
+        self.snap_rooms_doorway_action.triggered.connect(self._snap_rooms_at_doorway)
         self.import_library_asset_action.triggered.connect(self.import_selected_library_asset)
         self.import_texture_action.triggered.connect(self.import_project_texture)
         self.export_fbx_action.triggered.connect(lambda: self.export_fbx(False))
@@ -2911,6 +2918,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 source_module=entry.module_resref,
                 game=entry.game or str(getattr(self.project, "game", "") or "").upper(),
                 resource_manager=resource_manager,
+                connection_points=entry.connection_points,
             )
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Add Room from Module", f"Could not add room {entry.room_resref}: {exc}")
@@ -2926,6 +2934,61 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         except Exception:
             pass
         self._refresh_all(f"Added room {entry.room_resref} from {entry.module_resref}.")
+
+    def _snap_rooms_at_doorway(self) -> None:
+        """Move one room so a chosen doorway lines up with a doorway on another."""
+
+        choices = [row for row in self.controller.authored_room_doorway_choices() if int(row.get("hook_count", 0) or 0) > 0]
+        if len(choices) < 2:
+            QtWidgets.QMessageBox.information(
+                self, "Snap Rooms at Doorway",
+                "Add at least two rooms that carry doorway hooks (rooms added via 'Add Room from Module' "
+                "record their door hooks) before snapping.")
+            return
+
+        def _pick_room(title: str) -> dict | None:
+            labels = [f"{row['room_resref']} ({row['hook_count']} door hook(s))" for row in choices]
+            choice, accepted = QtWidgets.QInputDialog.getItem(self, "Snap Rooms at Doorway", title, labels, 0, False)
+            return choices[labels.index(str(choice))] if accepted else None
+
+        def _pick_door(row: dict, title: str) -> str | None:
+            doors = list(row.get("doors", ()) or ())
+            if not doors:
+                return None
+            if len(doors) == 1:
+                return doors[0]
+            choice, accepted = QtWidgets.QInputDialog.getItem(self, "Snap Rooms at Doorway", title, doors, 0, False)
+            return str(choice) if accepted else None
+
+        source_row = _pick_room("Room to MOVE:")
+        if source_row is None:
+            return
+        source_door = _pick_door(source_row, f"{source_row['room_resref']} doorway to align:")
+        if source_door is None:
+            return
+        remaining = [row for row in choices if row["room_resref"] != source_row["room_resref"]]
+        target_labels = [f"{row['room_resref']} ({row['hook_count']} door hook(s))" for row in remaining]
+        target_choice, accepted = QtWidgets.QInputDialog.getItem(
+            self, "Snap Rooms at Doorway", "Room to snap ONTO (stays put):", target_labels, 0, False
+        )
+        if not accepted:
+            return
+        target_row = remaining[target_labels.index(str(target_choice))]
+        target_door = _pick_door(target_row, f"{target_row['room_resref']} doorway to meet:")
+        if target_door is None:
+            return
+        ok, message = self.controller.snap_authored_rooms_at_doorway(
+            source_room_resref=source_row["room_resref"],
+            source_door=source_door,
+            target_room_resref=target_row["room_resref"],
+            target_door=target_door,
+        )
+        if not ok:
+            QtWidgets.QMessageBox.warning(self, "Snap Rooms at Doorway", message)
+            return
+        self._log(f"Map Studio: {message}")
+        self.statusBar().showMessage(message, 8000)
+        self._refresh_all(message)
 
     def _detect_module_game(self, capsule: Path) -> str:
         """Return 'K1'/'K2' from a bundled or loose room MDL pointer."""
