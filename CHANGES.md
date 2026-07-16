@@ -11,6 +11,42 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-15
 
+### [2026-07-15] T2801: unblock large-module export — pathing spatial grid + door TransitionDestin sentinel
+
+Owner: LordVaderCW
+
+T###: T2801
+
+Subsystem: Map Studio module export (Core.Scene/Core.Tools)
+
+Intersects: the T2801 Fill Floor Faces walkmesh work (which exposed both
+issues) and authored module PTH generation.
+
+- Exporting the floor-filled 921srt (dense walkmesh, ~6800 combined faces)
+  hung for 20+ minutes. A watchdog stack dump traced it to PTH generation:
+  `build_authored_path_graph_from_walkmesh` samples every candidate
+  connection at 0.5-unit steps and tested each sample with a linear
+  `face_at_point` scan over all walkmesh faces — O(connections x samples x
+  faces). Added `_WalkmeshFaceGrid`, a one-time XY bucket index, and routed
+  the point/connection sampling in both the builder and
+  `validate_authored_path_graph` through it. koq/921srt export: 20+ min
+  (timeout) -> 194 s; the grid returns the same faces as the linear scan
+  (test) so the generated PTH is unchanged.
+- With export reaching preflight for the first time, it wrongly blocked on 45
+  "Door has an invalid negative TransitionDestin value" errors. `-1` is the
+  standard CExoLocString "no transition text" sentinel that the writer itself
+  emits and that every plain open/close stock door carries (all 33 of
+  921srt's doors). `_validate_transition_intent` now accepts `-1` (only
+  values below it are malformed) and treats it as "no transition text" for
+  the incomplete-transition check (`-1` is truthy in Python, so it previously
+  also false-flagged those doors).
+- Verification: new `tests/test_authored_pathing_grid_and_door_transition.py`
+  (grid matches linear scan + fast; path graph on a 4050-face mesh under 10 s;
+  door `-1` accepted, `< -1` blocked, transition text without a link flagged);
+  existing pathing/objects suites green; payloads regenerated. Editor-side; no
+  in-game claim. (921srt export now reaches the deliberate room-light
+  flattening gate — a separate quality decision, not a defect.)
+
 ### [2026-07-15] T3601: modular maps Phase 1 — indexed room catalog
 
 Owner: LordVaderCW

@@ -272,18 +272,27 @@ def _validate_transition_intent(kind: str, item: Any, blocking: list[str]) -> No
     except (TypeError, ValueError):
         blocking.append(f"{kind} {label} has an invalid TransitionDestin value.")
         return
-    if destination_type < 0:
-        blocking.append(f"{kind} {label} has an invalid negative TransitionDestin value.")
+    # TransitionDestin is a CExoLocString StringRef into dialog.tlk. -1
+    # (0xFFFFFFFF) is the standard "no transition text" sentinel that the
+    # writer itself emits and that most stock doors carry; only values below
+    # it are genuinely malformed. Treating -1 as an error blocked export of
+    # every ordinary open/close door imported from a stock module (921srt).
+    if destination_type < -1:
+        blocking.append(
+            f"{kind} {label} has an invalid TransitionDestin value {destination_type}; "
+            "use -1 for no transition text."
+        )
         return
     if destination_type > 2147483647:
         blocking.append(f"{kind} {label} has TransitionDestin={destination_type}; dialog.tlk StringRefs are signed 32-bit values.")
         return
+    has_transition_text = destination_type > 0
     if not linked_to and linked_module:
         blocking.append(
             f"{kind} {label} has an incomplete transition: LinkedToModule is set to {linked_module}, "
             "but LinkedTo/destination tag is missing."
         )
-    if not linked_to and destination_type:
+    if not linked_to and has_transition_text:
         blocking.append(
             f"{kind} {label} has an incomplete transition: TransitionDestin is set, "
             "but LinkedTo/destination tag is missing."

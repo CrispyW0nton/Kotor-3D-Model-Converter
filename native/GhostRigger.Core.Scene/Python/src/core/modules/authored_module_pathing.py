@@ -13,7 +13,11 @@ from math import ceil, hypot, isfinite
 from typing import Any
 
 from .module_format import WALKABLE_IDS
-from .authored_walkmesh_sampling import walkmesh_face_at_xy
+from .authored_walkmesh_sampling import (
+    POINT_IN_TRIANGLE_EPSILON,
+    _face_contains_xy,
+    walkmesh_face_at_xy,
+)
 
 
 Vec2 = tuple[float, float]
@@ -87,8 +91,64 @@ def _walkmesh_bounds(wok: Any) -> tuple[float, float, float, float]:
     return (min(xs), min(ys), max(xs), max(ys))
 
 
-def _point_on_walkmesh(wok: Any, x: float, y: float) -> tuple[bool, int]:
-    face_index = walkmesh_face_at_xy(wok, float(x), float(y))
+class _WalkmeshFaceGrid:
+    """XY bucket grid over WOK faces for O(faces-per-cell) point queries.
+
+    The path-graph builder samples every candidate connection at 0.5-unit
+    intervals and tests each sample against the walkmesh.  The default
+    ``face_at_point`` is a linear scan over all faces, so a dense walkmesh
+    (a floor-filled converted room can reach thousands of faces) made pathing
+    O(connections x samples x faces) and stalled export for many minutes.
+    Bucketing faces once makes each sample query touch only its own cell.
+    """
+
+    __slots__ = ("_faces", "_verts", "_cell", "_min_x", "_min_y", "_buckets", "_ready")
+
+    def __init__(self, wok: Any, *, target_cells_across: int = 128) -> None:
+        self._faces = list(getattr(wok, "faces", ()) or ())
+        self._verts = list(getattr(wok, "verts", ()) or ())
+        self._buckets: dict[tuple[int, int], list[int]] = {}
+        self._ready = False
+        if not self._faces or not self._verts:
+            self._cell = 1.0
+            self._min_x = self._min_y = 0.0
+            return
+        xs = [float(v[0]) for v in self._verts]
+        ys = [float(v[1]) for v in self._verts]
+        self._min_x, self._min_y = min(xs), min(ys)
+        span = max(max(xs) - self._min_x, max(ys) - self._min_y, 1.0)
+        self._cell = max(1.0, span / max(1, int(target_cells_across)))
+        for face_index, face in enumerate(self._faces):
+            indices = _face_indices(face)
+            if any(index < 0 or index >= len(self._verts) for index in indices):
+                continue
+            fxs = [float(self._verts[i][0]) for i in indices]
+            fys = [float(self._verts[i][1]) for i in indices]
+            for col in range(self._col(min(fxs)), self._col(max(fxs)) + 1):
+                for row in range(self._row(min(fys)), self._row(max(fys)) + 1):
+                    self._buckets.setdefault((col, row), []).append(face_index)
+        self._ready = True
+
+    def _col(self, x: float) -> int:
+        return int((float(x) - self._min_x) // self._cell)
+
+    def _row(self, y: float) -> int:
+        return int((float(y) - self._min_y) // self._cell)
+
+    def face_at(self, x: float, y: float, *, epsilon: float = POINT_IN_TRIANGLE_EPSILON) -> int:
+        if not self._ready:
+            return -1
+        for face_index in self._buckets.get((self._col(x), self._row(y)), ()):
+            if _face_contains_xy(self._verts, self._faces[face_index], float(x), float(y), epsilon=epsilon):
+                return face_index
+        return -1
+
+
+def _point_on_walkmesh(wok: Any, x: float, y: float, *, grid: _WalkmeshFaceGrid | None = None) -> tuple[bool, int]:
+    if grid is not None:
+        face_index = grid.face_at(float(x), float(y))
+    else:
+        face_index = walkmesh_face_at_xy(wok, float(x), float(y))
     if face_index < 0:
         return False, face_index
     faces = list(getattr(wok, "faces", ()) or ())
@@ -105,6 +165,7 @@ def _connection_on_walkmesh(
     target: AuthoredPathPoint,
     *,
     sample_interval: float,
+    grid: _WalkmeshFaceGrid | None = None,
 ) -> tuple[bool, tuple[float, float, int] | None]:
     distance = hypot(float(target.x) - float(source.x), float(target.y) - float(source.y))
     if distance <= 1.0e-7:
@@ -114,7 +175,7 @@ def _connection_on_walkmesh(
         fraction = step / steps
         x = float(source.x) + (float(target.x) - float(source.x)) * fraction
         y = float(source.y) + (float(target.y) - float(source.y)) * fraction
-        ok, _face_index = _point_on_walkmesh(wok, x, y)
+        ok, _face_index = _point_on_walkmesh(wok, x, y, grid=grid)
         if not ok:
             return False, (x, y, step)
     return True, None
@@ -198,6 +259,7 @@ def build_authored_path_graph_from_walkmesh(
     """Build a compact initial path graph from a WOK and gameplay anchors."""
 
     min_x, min_y, max_x, max_y = _walkmesh_bounds(wok)
+    grid = _WalkmeshFaceGrid(wok)
     points: list[AuthoredPathPoint] = []
     seen: set[tuple[int, int]] = set()
     components = _walkable_components(wok)
@@ -246,7 +308,7 @@ def build_authored_path_graph_from_walkmesh(
         anchor_labels.append(anchor.label)
         if key in seen:
             continue
-        ok, face_index = _point_on_walkmesh(wok, x, y)
+        ok, face_index = _point_on_walkmesh(wok, x, y, grid=grid)
         points.append(
             AuthoredPathPoint(
                 label=anchor.label,
@@ -267,7 +329,7 @@ def build_authored_path_graph_from_walkmesh(
     for source in range(len(points)):
         for target in range(len(points)):
             if source != target:
-                ok, _failed = _connection_on_walkmesh(wok, points[source], points[target], sample_interval=0.5)
+                ok, _failed = _connection_on_walkmesh(wok, points[source], points[target], sample_interval=0.5, grid=grid)
                 if ok:
                     connections.append(AuthoredPathConnection(source=source, target=target))
     return AuthoredPathGraph(
@@ -293,6 +355,7 @@ def validate_authored_path_graph(
 
     warnings: list[str] = []
     blocking: list[str] = []
+    grid = _WalkmeshFaceGrid(wok) if wok is not None else None
     if not isfinite(float(connection_sample_interval)) or float(connection_sample_interval) <= 0.0:
         blocking.append("Path connection sample interval must be positive.")
     if not graph.points:
@@ -303,7 +366,7 @@ def validate_authored_path_graph(
         if not (isfinite(float(point.x)) and isfinite(float(point.y))):
             blocking.append(f"Path point {index} has non-finite coordinates.")
         if wok is not None:
-            ok, _face_index = _point_on_walkmesh(wok, float(point.x), float(point.y))
+            ok, _face_index = _point_on_walkmesh(wok, float(point.x), float(point.y), grid=grid)
             if not ok:
                 blocking.append(f"Path point {index} ({point.label}) is outside the generated walkmesh.")
     seen_edges: set[tuple[int, int]] = set()
@@ -328,6 +391,7 @@ def validate_authored_path_graph(
                 graph.points[edge.source],
                 graph.points[edge.target],
                 sample_interval=float(connection_sample_interval),
+                grid=grid,
             )
             if not ok and failed_sample is not None:
                 x, y, step = failed_sample

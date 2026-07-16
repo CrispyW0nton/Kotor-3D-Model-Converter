@@ -380,6 +380,7 @@ knowledge_base/test_artifacts/*.zip
 !/tests/test_fbx_rigged_backend_gate.py
 !/tests/test_bas_composed_export.py
 !/tests/test_map_studio_room_catalog.py
+!/tests/test_authored_pathing_grid_and_door_transition.py
 /knowledge_base/books
 /docs/architecture
 /docs

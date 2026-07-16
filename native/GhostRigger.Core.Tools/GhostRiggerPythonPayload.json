@@ -555,13 +555,13 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_OBJECTS",
             "source_path": "src/core/modules/authored_module_objects.py",
             "packaged_path": "Python/src/core/modules/authored_module_objects.py",
-            "sha256": "d17679f41e521cc2ed3ba54234a0c653830f942458b9b4623d10302cdc6652dd"
+            "sha256": "507609f7576e63f51e5269b74f148c448cbf47df3a476bdf88ee9195698f0246"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_PATHING",
             "source_path": "src/core/modules/authored_module_pathing.py",
             "packaged_path": "Python/src/core/modules/authored_module_pathing.py",
-            "sha256": "b329e945263a5b89f9561b011c213f87986e4993005dffadf6c14128d0fea7b8"
+            "sha256": "c6c4f68764b26106d6798204462f78d4d1737aa6173798f05da2e9effd1ae0a5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_PLACEMENTS",
