@@ -70,7 +70,9 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     # both Scene and Tools, adding two byte-identical payload rows.
     # Doorway snapping (map_studio_room_snapping.py) ships through both too,
     # adding another two byte-identical payload rows.
-    assert len(payload_files) == 1312
+    # Scene-animation NCS intent extraction (map_studio_scene_animations.py)
+    # ships through both, adding another two byte-identical payload rows.
+    assert len(payload_files) == 1314
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 

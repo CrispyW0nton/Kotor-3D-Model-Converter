@@ -11,6 +11,43 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-15
 
+### [2026-07-15] T3008: read authored scene animations from OnEnter NCS (207TEL)
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE scene animation (Core.Scene/Core.Tools)
+
+Intersects: the T3008 PIE creature actors (which currently play a generic
+idle) and stock-module import.
+
+- Investigated 207TEL: the seated cantina NPCs' animations are NOT GIT data —
+  the module's OnEnter script assigns them by tag
+  (`AssignCommand(GetObjectByTag("SittingBith"), ActionPlayAnimation(206))`).
+  GIT creature instances carry only position/orientation/template, and PIE
+  does not run NWScript.
+- New `map_studio_scene_animations.py` (Scene + Tools): disassembles the
+  compiled OnEnter NCS (PyKotor `NCSBinaryReader`) and recovers each
+  `ActionPlayAnimation` on a `GetObjectByTag` literal as a
+  `{creature_tag: animation_constant}` map, then resolves each constant to
+  ordered candidate clip names (`SCENE_ANIMATION_CLIP_CANDIDATES`; 205/206 ->
+  sit variants, 5-9 -> talk, etc.) so PIE can play the first clip that
+  resolves per model. `module_onenter_script_resref` reads the script name
+  from the IFO (`Mod_OnClientEntr`). This is intent extraction, not script
+  execution — only direct ActionPlayAnimation-on-tagged-object is recovered.
+- Verified against the real k_207tel_enter.ncs: extracts 8 tag->constant
+  intents (sittingbith->206, sittingalien->205, ...) matching the script.
+  Note: the stock game install's k_207tel_enter targets `Sitting*` tags while
+  the stock creature UTCs are tagged differently (Walrusman, CommM, ...), so
+  the extractor is correct but a module must be internally tag-consistent for
+  visible matches — the user's 207TEL mod (which ships the matching Sitting*
+  enter script) is the consistent case.
+- Verification: new `tests/test_map_studio_scene_animations.py` (clip
+  candidates; IFO resref; empty/bad NCS; real 207tel extraction).
+  Payloads regenerated, pin 1312 -> 1314; suites green. PIE playback wiring
+  (match creature tag -> scene animation) is the next slice.
+
 ### [2026-07-15] T3601: modular maps Phase 3 — doorway snapping
 
 Owner: LordVaderCW

@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Scene",
-    "file_count": 115,
+    "file_count": 116,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -442,6 +442,12 @@
             "source_path": "src/core/modules/map_studio_room_snapping.py",
             "packaged_path": "Python/src/core/modules/map_studio_room_snapping.py",
             "sha256": "ab7c6fc76b635eb7cab3161669e9385b6c8991e84dd9111abaf5d98c2b408810"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_SCENE_ANIMATIONS",
+            "source_path": "src/core/modules/map_studio_scene_animations.py",
+            "packaged_path": "Python/src/core/modules/map_studio_scene_animations.py",
+            "sha256": "d1dd399c02bc0cf42a7bc1e028a8664eab84e0e2b59ff33a50d278076ba49f0e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_STOCK_CONTENT_PREVIEW",
