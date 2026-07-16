@@ -525,7 +525,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_EXPORT",
             "source_path": "src/core/modules/authored_module_export.py",
             "packaged_path": "Python/src/core/modules/authored_module_export.py",
-            "sha256": "61be3df8525c89ce39c473e6472a6660baea2b2d82ff8260ddcde97c83c3ac03"
+            "sha256": "fa5385481429c2b51eb8fc2247cb56f9d35037bf4fb8ffee0dcaf5dda306b4bd"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_KMAP_BRIDGE",
@@ -741,7 +741,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_DEV_MODULE_SMOKE",
             "source_path": "src/core/modules/dev_module_smoke.py",
             "packaged_path": "Python/src/core/modules/dev_module_smoke.py",
-            "sha256": "44959c33b220877cd27330f263ca397eba326c6941ac523710cde96a8177d716"
+            "sha256": "3350189f114c3eee72a63ed938f7bdf8af265c1def1202502c9841e94432a771"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_BASE_GAME_CONTRACT",
@@ -897,7 +897,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "ce994a687667af4591b37682f47c3e653b5ebfc45b9e3546f2befe76ace60afa"
+            "sha256": "0c913c2cb31767993a6d8c9e1d4aff6b527ad05e21eb5fa6c361a5f65c81d31f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",

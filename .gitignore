@@ -381,6 +381,7 @@ knowledge_base/test_artifacts/*.zip
 !/tests/test_bas_composed_export.py
 !/tests/test_map_studio_room_catalog.py
 !/tests/test_authored_pathing_grid_and_door_transition.py
+!/tests/test_authored_room_light_preservation.py
 /knowledge_base/books
 /docs/architecture
 /docs

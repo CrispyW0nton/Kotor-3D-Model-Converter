@@ -924,7 +924,9 @@ def _list_length(value: Any) -> int:
         return -1
 
 
-def _verify_ifo_engine_contract(data: bytes, module_root: str, blocking: list[str]) -> str:
+def _verify_ifo_engine_contract(
+    data: bytes, module_root: str, blocking: list[str], *, ifo_preserved: bool = False
+) -> str:
     root = _gff_root(data)
     _require_gff_fields(
         root,
@@ -953,8 +955,13 @@ def _verify_ifo_engine_contract(data: bytes, module_root: str, blocking: list[st
     module_id_hex = raw_module_id.hex()
     if len(raw_module_id) != 16:
         blocking.append(f"module.ifo Mod_ID must be 16 bytes; found {len(raw_module_id)} byte(s).")
+    # A preserved stock IFO keeps the original module's identity and tag, which
+    # are the game-shipped, load-proven values (e.g. 921srt's real Mod_ID and
+    # its 'ImTraskUlgoensignwiththeRepublic' Mod_Tag). Only a from-scratch
+    # GhostRigger-authored IFO must match GhostRigger's computed identity and
+    # the stock-style MODULE tag.
     expected_module_id = authored_module_id_bytes(module_root)
-    if raw_module_id and raw_module_id != expected_module_id:
+    if not ifo_preserved and raw_module_id and raw_module_id != expected_module_id:
         blocking.append(
             "module.ifo Mod_ID does not match GhostRigger's authored module identity "
             f"for {module_root}: got {module_id_hex}, expected {expected_module_id.hex()}."
@@ -965,7 +972,7 @@ def _verify_ifo_engine_contract(data: bytes, module_root: str, blocking: list[st
     first_area = str(area_list.at(0).get("Area_Name") or "").lower()
     if first_area != module_root:
         blocking.append(f"module.ifo Mod_Area_list first Area_Name is {first_area or '(blank)'}, expected {module_root}.")
-    if str(root.get("Mod_Tag") or "") != "MODULE":
+    if not ifo_preserved and str(root.get("Mod_Tag") or "") != "MODULE":
         blocking.append("module.ifo Mod_Tag must be stock-style MODULE for K1 runtime loading.")
     try:
         description_count = len(root.get("Mod_Description"))
@@ -1094,6 +1101,7 @@ def verify_dev_test_module_package(
     expected_room_resref: str = "grdev01_room01",
     expected_room_resrefs: Iterable[str] | None = None,
     game: str = "K1",
+    stock_ifo_preserved: bool = False,
 ) -> DevModulePackageVerification:
     """Read back the generated MOD and verify every expected room resource."""
 
@@ -1149,7 +1157,9 @@ def verify_dev_test_module_package(
             else:
                 parsed_gff.append(f"{resref}.{restype}")
                 if restype == "ifo":
-                    module_id_hex = _verify_ifo_engine_contract(payloads[key][1], module_root, blocking)
+                    module_id_hex = _verify_ifo_engine_contract(
+                        payloads[key][1], module_root, blocking, ifo_preserved=stock_ifo_preserved
+                    )
                 elif restype == "are":
                     _verify_are_engine_contract(payloads[key][1], module_root, room, blocking, game=game)
                 elif restype == "git":

@@ -293,6 +293,53 @@ def _preserved_stock_resource(project: AuthoredModuleProject, restype: str) -> b
     return raw or None
 
 
+def _room_render_geometry_edited(room: Any) -> bool:
+    """Return whether a room's visual geometry has been edited since import.
+
+    WOK-only edits (the floor-fill walkmesh repair) leave the render surfaces
+    untouched and keep the room eligible for original-model preservation;
+    surface/vertex/face edits set ``render_geometry_edited`` and force a
+    static rebuild instead.
+    """
+
+    primitive = getattr(room, "primitive", None)
+    metadata = dict(getattr(primitive, "metadata", {}) or {})
+    return bool(metadata.get("render_geometry_edited", False))
+
+
+def _preserved_stock_room_model(project: Any, room_resref: str) -> tuple[bytes, bytes] | None:
+    """Return the imported module's original ``(mdl, mdx)`` bytes for a room.
+
+    Reused verbatim on export for stock-converted rooms whose render geometry
+    is unedited, so the room keeps its baked Aurora lights, model animations,
+    emitters, and references instead of shipping a flattened static rebuild.
+    The bytes come straight from the ``import_source`` capsule already recorded
+    in the KMAP, so no game directory or resource manager is needed at export.
+    """
+
+    resref = str(room_resref or "").strip().lower()
+    if not resref:
+        return None
+    source = str((getattr(project, "extra", {}) or {}).get("import_source") or "").strip()
+    if not source:
+        return None
+    capsule_path = Path(source)
+    if not capsule_path.is_file():
+        return None
+    try:
+        from pykotor.extract.capsule import LazyCapsule
+        from pykotor.resource.type import ResourceType as RT
+
+        capsule = LazyCapsule(str(capsule_path))
+        mdl = capsule.resource(resref, RT.MDL)
+        mdx = capsule.resource(resref, RT.MDX)
+    except Exception:
+        return None
+    if not mdl or not mdx:
+        return None
+    return bytes(mdl), bytes(mdx)
+
+
 def _load_module(module_name: str, path: Path) -> Any:
     module = sys.modules.get(module_name)
     if module is not None:
@@ -1630,6 +1677,10 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
     room_geometries: dict[str, AuthoredRoomGeometry] = {}
     room_woks: dict[str, WOKData] = {}
     backdrop_rooms: set[str] = set()
+    # Stock-converted rooms whose render geometry is unedited keep their
+    # original imported MDL/MDX (baked lights, animations, emitters) instead of
+    # a flattened static rebuild; the edited .wok still ships alongside.
+    preserved_model_rooms: dict[str, tuple[bytes, bytes]] = {}
     walkmesh_audits: list[AuthoredWalkmeshAudit] = []
     warnings: list[str] = []
     blocking: list[str] = []
@@ -1710,7 +1761,27 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
             for label in ("animation_count", "light_count", "emitter_count", "reference_count")
             if int(runtime_graph.get(label, 0) or 0) > 0
         }
-        if lost_runtime and not bool(runtime_graph.get("preserved", False)):
+        # A pristine stock-converted room keeps its original imported model, so
+        # its runtime graph (lights/anims/emitters) is retained byte-for-byte
+        # rather than flattened. Resolve that before the gate.
+        preserved_room_model: tuple[bytes, bytes] | None = None
+        if (
+            lost_runtime
+            and isinstance(getattr(room, "primitive", None), ImportedMeshRoomPrimitive)
+            and not _room_render_geometry_edited(room)
+            and str(room_metadata.get("source") or "").strip().lower()
+            in {"stock_room_conversion", "stock_module_import"}
+        ):
+            preserved_room_model = _preserved_stock_room_model(project, room_resref)
+        if preserved_room_model is not None:
+            preserved_model_rooms[room_resref] = preserved_room_model
+        if lost_runtime and preserved_room_model is not None:
+            summary = ", ".join(f"{key.replace('_count', '')}={value}" for key, value in lost_runtime.items())
+            warnings.append(
+                f"Room {room_resref} reuses its original imported model to retain its baked runtime graph "
+                f"({summary}); only its walkmesh is regenerated. Confirm the room's lighting in the in-game warp test."
+            )
+        elif lost_runtime and not bool(runtime_graph.get("preserved", False)):
             summary = ", ".join(f"{key.replace('_count', '')}={value}" for key, value in lost_runtime.items())
             if (
                 isinstance(getattr(room, "primitive", None), ImportedMeshRoomPrimitive)
@@ -1919,6 +1990,15 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
     elif pathing is not None:
         packaged.append(_make_packaged(root, "pth", pathing.pth_bytes, "map_studio:authored:pth"))
     for room_resref, geometry in room_geometries.items():
+        preserved_room_model = preserved_model_rooms.get(room_resref)
+        if preserved_room_model is not None:
+            # Ship the original imported room MDL/MDX verbatim (baked lights,
+            # animations, emitters retained); the edited .wok is packaged
+            # separately below.
+            mdl_bytes, mdx_bytes = preserved_room_model
+            packaged.append(_make_packaged(room_resref, "mdl", mdl_bytes, "map_studio:stock:room_model_preserved"))
+            packaged.append(_make_packaged(room_resref, "mdx", mdx_bytes, "map_studio:stock:room_model_preserved"))
+            continue
         try:
             mdl_bytes, mdx_bytes = _make_room_model_bytes(
                 project.game,
@@ -2261,6 +2341,9 @@ def export_authored_module_project(request: AuthoredModuleExportRequest) -> Auth
             expected_room_resref=room_resrefs[0],
             expected_room_resrefs=room_resrefs,
             game=build.game,
+            stock_ifo_preserved=bool(
+                dict(dict(build.metadata or {}).get("stock_metadata_preservation") or {}).get("ifo", False)
+            ),
         )
     export_job = _augment_authored_manifest(package_result.manifest_path, build, package_result, verification)
     verification_warnings = list(verification.warnings) if verification is not None else []

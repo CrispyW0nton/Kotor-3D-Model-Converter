@@ -2099,6 +2099,16 @@ class ModuleEditorController:
             return False, str(exc)
         if updated_primitive is target.primitive:
             return True, "No change."
+        # If the edit changed the room's render surfaces (not just its WOK),
+        # mark the render geometry edited so export rebuilds the room MDL
+        # instead of preserving the original stock model. WOK-only edits (the
+        # floor-fill walkmesh repair) leave surfaces untouched and keep the
+        # room eligible for original-model/light preservation.
+        if tuple(getattr(updated_primitive, "surfaces", ()) or ()) != tuple(getattr(target.primitive, "surfaces", ()) or ()):
+            updated_metadata = dict(getattr(updated_primitive, "metadata", {}) or {})
+            if not updated_metadata.get("render_geometry_edited"):
+                updated_metadata["render_geometry_edited"] = True
+                updated_primitive = _replace(updated_primitive, metadata=updated_metadata)
         rooms = tuple(
             room if room is not target else _replace(room, primitive=updated_primitive) for room in authored.rooms
         )

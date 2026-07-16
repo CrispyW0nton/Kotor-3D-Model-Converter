@@ -11,6 +11,50 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-15
 
+### [2026-07-15] T2801: preserve stock room lights on export (921srt.mod ships)
+
+Owner: LordVaderCW
+
+T###: T2801
+
+Subsystem: Map Studio module export (Core.Scene/Core.Tools)
+
+Intersects: the T2801 export perf + door fixes and the imported-mesh
+conversion runtime-graph gate.
+
+- With export finally running to completion, the deliberate runtime-graph
+  gate blocked all 10 921srt rooms: making a stock room editable flattens it
+  and drops its baked model lights (79 in the throne room), and export
+  refuses to silently ship unlit rooms. The user's edits (moved placeables,
+  filled walkmesh) never touched room render geometry, so the fix is to reuse
+  each pristine stock-converted room's ORIGINAL imported MDL/MDX verbatim
+  (lights, animations, emitters intact) and ship the edited .wok alongside.
+- `authored_module_export.py` (Scene+Tools): `_preserved_stock_room_model`
+  reads the original room MDL/MDX from the `import_source` capsule already
+  recorded in the KMAP (no game dir or resource manager needed);
+  `build_authored_module` reuses them for stock-converted rooms whose
+  `render_geometry_edited` flag is unset, marks the runtime graph retained
+  (gate passes), and packages the preserved bytes. Verified on the real map:
+  the exported `921srtb.mdl` is byte-identical to the source (all 79 lights)
+  while its `.wok` is the filled 1334-face walkmesh.
+- `module_editor_controller.py` (Scene+Tools): `_apply_imported_mesh_room_edit`
+  now sets `render_geometry_edited` when an edit changes the room's render
+  surfaces, so genuine geometry edits force a static rebuild while WOK-only
+  edits (the floor fill) stay eligible for preservation.
+- `dev_module_smoke.py` (Scene+Tools): the readback IFO engine-contract check
+  no longer demands GhostRigger's computed Mod_ID or a `MODULE` Mod_Tag when
+  the stock IFO is preserved — 921srt's original module ships Mod_ID
+  `ed8ae69e…` and Mod_Tag `ImTraskUlgoensignwiththeRepublic`, which are the
+  game-shipped, load-proven values. Threaded `stock_ifo_preserved` from the
+  build's `stock_metadata_preservation.ifo` flag.
+- Result: `921srt.mod` exports clean (no blocking issues) in ~232 s with
+  preserved lighting, the filled walkmesh, and the moved statues.
+- Verification: new `tests/test_authored_room_light_preservation.py`
+  (render-edited flag gates preservation; import-source model read; IFO
+  contract accepts preserved identity/tag but still flags a from-scratch
+  IFO); export/objects suites green (87 passed); payloads regenerated.
+  Editor-side export proof only — the in-game warp test remains the user's.
+
 ### [2026-07-15] T2801: unblock large-module export — pathing spatial grid + door TransitionDestin sentinel
 
 Owner: LordVaderCW
