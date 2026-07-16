@@ -27,7 +27,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_ASSETS_RESOURCE_MANAGER",
             "source_path": "src/core/assets/resource_manager.py",
             "packaged_path": "Python/src/core/assets/resource_manager.py",
-            "sha256": "f0433aba9e9a192e1c4abe299eca87bf3a1c6482157df0dfe1668ad97b245939"
+            "sha256": "fef51ecf2fd4c6415eede850253673c19a8c5658465582a35fdf2922c6a63bed"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GAME_INIT",

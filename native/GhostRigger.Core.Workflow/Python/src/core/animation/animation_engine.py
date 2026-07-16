@@ -99,6 +99,7 @@ class SuperModelResolver:
     # Configured by ``configure()``.  When None, the resolver still works
     # for in-memory / pre-loaded models but cannot load chains from disk.
     _resource_manager: Any = None
+    _resource_manager_revision = 0
 
     _NULL_REFS = frozenset({'', 'null', 'none'})
 
@@ -106,9 +107,18 @@ class SuperModelResolver:
     def configure(cls, resource_manager: Any) -> None:
         """Install the ResourceManager used to load supermodel MDL/MDX.
 
-        Safe to call repeatedly; later calls replace the previous manager.
+        Safe to call repeatedly. Cached chains remain valid only while both
+        the manager object and its published resource revision are unchanged.
         """
+
+        try:
+            revision = max(0, int(getattr(resource_manager, "revision", 0) or 0))
+        except (TypeError, ValueError):
+            revision = 0
+        if resource_manager is not cls._resource_manager or revision != cls._resource_manager_revision:
+            cls.clear_cache()
         cls._resource_manager = resource_manager
+        cls._resource_manager_revision = revision
 
     @classmethod
     def clear_cache(cls) -> None:
@@ -186,8 +196,9 @@ class SuperModelResolver:
 
         cls._cache[key] = super_model
         # Proactively pre-load the rest of the chain so later lookups are hot.
-        if super_model is not None and not cls._is_null_ref(super_model.supermodel):
-            cls.load_supermodel(super_model.supermodel, game_tag)
+        next_super_ref = str(getattr(super_model, "supermodel", "") or "")
+        if super_model is not None and not cls._is_null_ref(next_super_ref):
+            cls.load_supermodel(next_super_ref, game_tag)
         return super_model
 
     @classmethod

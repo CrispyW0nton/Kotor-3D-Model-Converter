@@ -1182,9 +1182,9 @@ class FBXAnimationExporter:
                     w(f"\t\tKeyValueFloat: *{nt} {{")
                     w("\t\t\ta: " + ",".join(f"{v:.6f}" for v in kvals))
                     w(f"\t\t}}")
-                    # KeyAttrFlags: *1 (single flag, linear=8 is faithful to source data)
+                    # FBX SDK FbxAnimCurveDef: eInterpolationLinear = 0x00000004.
                     w(f"\t\tKeyAttrFlags: *1 {{")
-                    w("\t\t\ta: 8")    # 8 = linear interpolation (faithful to game data)
+                    w("\t\t\ta: 4")
                     w(f"\t\t}}")
                     # KeyAttrDataFloat: required for Blender
                     w(f"\t\tKeyAttrDataFloat: *4 {{")

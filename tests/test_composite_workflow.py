@@ -513,7 +513,10 @@ def test_t705_check_composite_warns_on_headhook_seam_gap(monkeypatch):
 
 def test_t1003_export_composite_writes_fbx_gltf_and_sidecar(monkeypatch, tmp_path):
     scene = _make_scene()
-    scene.assign(md.PartSlot.HEADLESS_BODY, _body(), resref="pfbcm")
+    body = _body()
+    base_skeleton = object()
+    body._gr_fbx_base_skeleton_model = base_skeleton
+    scene.assign(md.PartSlot.HEADLESS_BODY, body, resref="pfbcm")
     scene.assign(md.PartSlot.HEAD_SHELL, _head(), resref="pfhc01")
     scene.set_mode(md.CharacterMode.SUPERMODEL, locked=True)
     _install_backends(monkeypatch)
@@ -525,6 +528,7 @@ def test_t1003_export_composite_writes_fbx_gltf_and_sidecar(monkeypatch, tmp_pat
         out_dir=str(tmp_path),
         write_sidecar=True,
         skip_validation=True,
+        fbx_compatibility_profile="unity",
     )
 
     assert result.ok is True
@@ -535,6 +539,8 @@ def test_t1003_export_composite_writes_fbx_gltf_and_sidecar(monkeypatch, tmp_pat
     assert (tmp_path / "pfbcm_pfhc01_composite.glb").exists()
     assert result.sidecar_path.endswith(".ghostrig.json")
     assert _FakeFBXExporter.calls[0][0].name == "pfbcm_pfhc01_composite"
+    assert _FakeFBXExporter.calls[0][3]["compatibility_profile"] == "unity"
+    assert _FakeFBXExporter.calls[0][3]["base_skeleton_model"] is base_skeleton
     assert _FakeGLTFExporter.calls[0][3]["binary"] is True
     assert scene.metadata["composite_export"]["resref"] == "pfbcm_pfhc01_composite"
     assert scene.metadata["composite_snap"]["code"] == "snapped"

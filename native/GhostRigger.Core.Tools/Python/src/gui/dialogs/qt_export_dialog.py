@@ -36,6 +36,13 @@ _DIALOG_FORMATS: Tuple[Tuple[str, str], ...] = (
     ("obj",   "OBJ (Wavefront)"),
 )
 
+_FBX_PROFILES: Tuple[Tuple[str, str], ...] = (
+    ("standard", "Standard FBX"),
+    ("unity", "Unity-Compatible FBX"),
+    ("unreal", "Unreal Engine-Compatible FBX"),
+    ("3ds_max", "3ds Max-Compatible FBX"),
+)
+
 
 class QtExportDialog(QtWidgets.QDialog):
     """Modal dialog: pick formats + output dir + sidecar option.
@@ -62,6 +69,7 @@ class QtExportDialog(QtWidgets.QDialog):
         initial_resref: str = "",
         initial_formats: Optional[Sequence[str]] = None,
         initial_write_sidecar: bool = True,
+        initial_fbx_compatibility_profile: str = "standard",
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Export Headless Body")
@@ -98,6 +106,25 @@ class QtExportDialog(QtWidgets.QDialog):
             self._format_checks[key] = cb
             fmt_layout.addWidget(cb)
         layout.addWidget(fmt_group)
+
+        fbx_row = QtWidgets.QFormLayout()
+        self._fbx_profile_combo = QtWidgets.QComboBox()
+        self._fbx_profile_combo.setObjectName("fbxProfileCombo")
+        for key, label in _FBX_PROFILES:
+            self._fbx_profile_combo.addItem(label, key)
+        profile_key = str(initial_fbx_compatibility_profile or "standard").strip().lower()
+        profile_index = self._fbx_profile_combo.findData(profile_key)
+        self._fbx_profile_combo.setCurrentIndex(max(0, profile_index))
+        self._fbx_profile_combo.setToolTip(
+            "Unity and Unreal Engine modes write target-compatible units, bind data, "
+            "relative texture sidecars, and linear continuous animation takes."
+        )
+        fbx_check = self._format_checks.get("fbx")
+        self._fbx_profile_combo.setEnabled(bool(fbx_check and fbx_check.isChecked()))
+        if fbx_check is not None:
+            fbx_check.toggled.connect(self._fbx_profile_combo.setEnabled)
+        fbx_row.addRow("FBX compatibility:", self._fbx_profile_combo)
+        layout.addLayout(fbx_row)
 
         # ── Output directory row ────────────────────────────────────
         out_row = QtWidgets.QHBoxLayout()
@@ -164,6 +191,10 @@ class QtExportDialog(QtWidgets.QDialog):
     def write_sidecar(self) -> bool:
         """Return True when the sidecar checkbox is ticked."""
         return self._sidecar_cb.isChecked()
+
+    def fbx_compatibility_profile(self) -> str:
+        """Return the selected FBX target profile key."""
+        return str(self._fbx_profile_combo.currentData() or "standard")
 
     # ── Internal slots ───────────────────────────────────────────────
 

@@ -668,7 +668,11 @@ class ResourceLoadingMixin:
         if manager is None:
             raise RuntimeError("No resource manager is available for BAS build import.")
 
-        body = manager.load_model(body_resref, game)
+        body = (
+            manager.load_model_strict(body_resref, game)
+            if hasattr(manager, "load_model_strict")
+            else manager.load_model(body_resref, game)
+        )
         if body is None:
             raise FileNotFoundError(f"{game}:{body_resref}.mdl")
         self._animation_timer.stop()
@@ -709,7 +713,11 @@ class ResourceLoadingMixin:
                     game=layer_game,
                 )
                 load_resref = resolution.resolved_resref or load_resref
-            model = manager.load_model(load_resref, layer_game)
+            model = (
+                manager.load_model_strict(load_resref, layer_game)
+                if hasattr(manager, "load_model_strict")
+                else manager.load_model(load_resref, layer_game)
+            )
             if model is None:
                 raise FileNotFoundError(f"{layer_game}:{load_resref}.mdl")
             self._bas_attachments[slot] = model

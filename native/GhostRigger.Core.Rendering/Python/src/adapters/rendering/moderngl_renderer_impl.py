@@ -92,11 +92,17 @@ from src.adapters.rendering.moderngl_resources import (
 )
 from src.core.rendering.mesh_render_data import (
     _animated_node_world_transform,
+    _bas_attachment_world_transform,
+    _effective_animation_pose_for_node,
     _pose_node_for_transform,
     animation_pose_applies_to_node,
     animation_pose_for_node,
     bas_attachment_palette_model_for_node,
     runtime_source_model_for_node,
+)
+from src.core.rendering.skeleton_render_data import (
+    bas_attachment_root_local_skin_palette,
+    skin_palette_flat_bytes,
 )
 from src.core.rendering.renderer_performance import (
     bounds_intersects_frustum,
@@ -1193,7 +1199,15 @@ class GpuRenderer:
             anim_pose,
             anim_base_pose=anim_base_pose,
         )
-        palette_bytes = uploader.as_flat_bytes()
+        if bool(getattr(skin_node, "_gr_bas_attachment_layer", False)):
+            palette = bas_attachment_root_local_skin_palette(
+                skin_node,
+                uploader.as_numpy_array(),
+                anim_pose,
+            )
+            palette_bytes = skin_palette_flat_bytes(palette, _SKIN_MAX_BONES)
+        else:
+            palette_bytes = uploader.as_flat_bytes()
         self._skin_palette_bytes_cache[cache_key] = (
             stamp,
             bone_count,
@@ -1785,7 +1799,7 @@ class GpuRenderer:
                     return None
                 node_id = id(nd)
                 if node_id not in _node_anim_pose_cache:
-                    _node_anim_pose_cache[node_id] = animation_pose_for_node(
+                    _node_anim_pose_cache[node_id] = _effective_animation_pose_for_node(
                         nd,
                         anim_pose,
                     )
@@ -1821,40 +1835,14 @@ class GpuRenderer:
                     return _frame_wt_cache[nid]
                 _bas_root = _bas_attachment_root_for_node(nd)
                 if _bas_root is not None:
-                    _parent = getattr(nd, "parent", None)
-                    if nd is _bas_root:
-                        _socket = _bas_attachment_socket_node(_bas_root)
-                        if _socket is not None:
-                            _base_wp, _base_wo = _get_world_transform(_socket)
-                        else:
-                            _base_wp, _base_wo = (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)
-                    elif (
-                        _parent is not None
-                        and _bas_attachment_root_for_node(_parent) is _bas_root
-                    ):
-                        _base_wp, _base_wo = _get_world_transform(_parent)
-                    else:
-                        # Preserve the old corrupt-chain fallback: valid BAS DAGs
-                        # always reach their tagged root through ``parent``.
-                        _socket = _bas_attachment_socket_node(_bas_root)
-                        if _socket is not None:
-                            _base_wp, _base_wo = _get_world_transform(_socket)
-                        else:
-                            _base_wp, _base_wo = (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)
-                        _local_wp, _local_wo = _bas_attachment_local_transform_np(nd, _bas_root)
-                        result = _compose_world_transform_np(
-                            _base_wp,
-                            _base_wo,
-                            _local_wp,
-                            _local_wo,
-                        )
-                        _frame_wt_cache[nid] = result
-                        return result
-                    result = _compose_world_transform_np(
-                        _base_wp,
-                        _base_wo,
-                        getattr(nd, "position", (0.0, 0.0, 0.0)),
-                        getattr(nd, "rotation", (0.0, 0.0, 0.0, 1.0)),
+                    # The body pose places the headhook socket while the
+                    # attachment source pose drives facial bones and rigid
+                    # eye/mouth descendants. The shared helper owns the space
+                    # conversion so the attachment transform is applied once.
+                    result = _bas_attachment_world_transform(
+                        nd,
+                        _bas_root,
+                        anim_pose=_resolved_animation_pose(nd),
                     )
                     _frame_wt_cache[nid] = result
                     return result
@@ -2243,7 +2231,7 @@ class GpuRenderer:
                     )
                 _skin_anim_pose = _node_anim_pose
                 _skin_anim_base_pose = (
-                    animation_pose_for_node(node, anim_base_pose)
+                    _effective_animation_pose_for_node(node, anim_base_pose)
                     if anim_base_pose is not None else None
                 )
                 _skin_palette_scope = (
@@ -2263,7 +2251,6 @@ class GpuRenderer:
                 )
                 _skin_can_lbs = bool(
                     _nd_is_skin
-                    and not bool(getattr(node, "_gr_bas_attachment_layer", False))
                     and _has_skin_nodes
                     and _skin_uploader is not None
                     and _skin_anim_pose is not None
@@ -2951,8 +2938,9 @@ class GpuRenderer:
                 if txi_blend == 2:      _feat_mask |= (1 << 12)  # FEAT_PUNCHTHRU
                 if txi_blend == 1:      _feat_mask |= (1 << 13)  # FEAT_ADDITIVE
                 # Phase A: Set FEAT_SKIN bit only when this draw is actually
-                # palette-skinned. BAS attachment skins are socket followers,
-                # so their VBO data is already root-local and must pass through.
+                # palette-skinned. BAS attachment palettes are converted to
+                # attachment-root local space before upload, then the socket/root
+                # draw matrix places the skinned result on the body.
                 if _skin_can_lbs:
                     _feat_mask |= (1 << 10)  # FEAT_SKIN
                 _u['u_features'].value = _feat_mask

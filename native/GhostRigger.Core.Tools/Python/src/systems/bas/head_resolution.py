@@ -139,7 +139,12 @@ def _model_exists(manager: Any, resref: str, game: str) -> bool:
     if not res or manager is None:
         return False
     try:
-        if hasattr(manager, "get_mdl") and manager.get_mdl(res, game) is not None:
+        if hasattr(manager, "get_strict"):
+            from src.core.assets.resource_manager import RES_MDL
+
+            if manager.get_strict(res, RES_MDL, game) is not None:
+                return True
+        elif hasattr(manager, "get_mdl") and manager.get_mdl(res, game) is not None:
             return True
     except Exception:
         pass
@@ -164,8 +169,9 @@ def _resolve_head_from_appearance_tables(manager: Any, body_resref: str, game: s
         from src.core.assets.resource_manager import RES_2DA
         from src.core.templates.twoda import TwoDA
 
-        appearance_bytes = manager.get("appearance", RES_2DA, game)
-        heads_bytes = manager.get("heads", RES_2DA, game)
+        getter = manager.get_strict if hasattr(manager, "get_strict") else manager.get
+        appearance_bytes = getter("appearance", RES_2DA, game)
+        heads_bytes = getter("heads", RES_2DA, game)
         if not appearance_bytes or not heads_bytes:
             return ""
         appearance = TwoDA.from_bytes(appearance_bytes, name="appearance")

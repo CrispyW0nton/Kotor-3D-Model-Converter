@@ -76,6 +76,40 @@ Seek through the selected/current animation by percent:
 seek_animation(50)
 ```
 
+## Selected Animation FBX Exports
+
+Export a KOTOR model into a Unity project and embed only the named effective
+local or inherited animation sets. Repeat `--animation` once per take:
+
+```powershell
+python scripts/export_kotor_model_for_unity.py --game k1 --game-dir "C:\Games\KOTOR" --resref pmbam --unity-project "C:\Projects\MyUnityProject" --asset-subdir "Assets\Characters\PMBAM" --animation walk --animation talk
+```
+
+Use `--no-animations` instead to export only the mesh and rig. Omitting both
+options preserves the model's existing local animation blocks.
+
+Export the same selected takes with the Unreal Engine compatibility profile
+through the embedded KotorMCP bridge:
+
+```python
+import asyncio
+from kotormcp.tools import handle_tool
+
+async def export_unreal_fbx():
+    result = await handle_tool("ghostrigger_export_model_for_unreal", {
+        "game": "k1",
+        "game_path": r"C:\Games\KOTOR",
+        "resref": "pmbam",
+        "output_path": r"C:\Exports\pmbam_unreal.fbx",
+        "animation_names": ["walk", "talk"],
+    })
+    print(result["text"])
+
+asyncio.run(export_unreal_fbx())
+```
+
+Pass an empty `animation_names` list for a mesh-and-rig-only Unreal FBX.
+
 ## Drexl Re-UV Runtime Proof
 
 The Drexl replacement package is staged in the local KOTOR II Override folder.

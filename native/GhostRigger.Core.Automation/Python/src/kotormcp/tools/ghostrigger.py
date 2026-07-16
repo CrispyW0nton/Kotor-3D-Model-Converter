@@ -254,8 +254,69 @@ def get_tools() -> List[Dict[str, Any]]:
                         "default": True,
                         "description": "Write rigging JSON sidecars next to the FBX",
                     },
+                    "animation_names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Effective local or inherited animation set names to embed as "
+                            "Unity-compatible FBX takes. An explicit empty array exports a "
+                            "mesh/rig-only FBX; omitting this property preserves legacy local clips."
+                        ),
+                    },
                 },
                 "required": ["resref", "game", "unity_project"],
+            },
+        },
+        {
+            "name": "ghostrigger_export_model_for_unreal",
+            "description": (
+                "Export a KotOR MDL/MDX model as an Unreal Engine-compatible FBX. "
+                "Selected effective animation sets are materialized from the supermodel "
+                "chain and embedded as independent FBX takes."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "resref": {
+                        "type": "string",
+                        "description": "MDL resource name or absolute file path",
+                    },
+                    "game": {
+                        "type": "string",
+                        "description": "Game alias: k1 or k2",
+                    },
+                    "game_path": {
+                        "type": "string",
+                        "description": "Optional absolute path to the KotOR installation",
+                    },
+                    "output_path": {
+                        "type": "string",
+                        "description": "Complete destination .fbx path",
+                    },
+                    "export_dir": {
+                        "type": "string",
+                        "description": "Destination folder; filename defaults to the model resref",
+                    },
+                    "output_name": {
+                        "type": "string",
+                        "description": "Optional filename stem when export_dir is used",
+                    },
+                    "export_rigging": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "Write rigging JSON sidecars next to the FBX",
+                    },
+                    "animation_names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Effective local or inherited animation set names to embed as "
+                            "Unreal-compatible FBX takes. An explicit empty array exports a "
+                            "mesh/rig-only FBX; omitting this property preserves legacy local clips."
+                        ),
+                    },
+                },
+                "required": ["resref", "game"],
             },
         },
         {
@@ -361,7 +422,128 @@ def _export_fbx_for_unity(model: Any, out_path: Path, export_rigging: bool) -> b
     except ImportError:                                      # pragma: no cover - MCP path shim
         from converters.mesh_converter import FBXExporter     # type: ignore  # noqa: PLC0415
 
-    return FBXExporter().export(model, str(out_path), export_rigging=export_rigging)
+    return FBXExporter().export(
+        model,
+        str(out_path),
+        export_rigging=export_rigging,
+        base_skeleton_model=getattr(model, "_gr_fbx_base_skeleton_model", None),
+        compatibility_profile="unity",
+    )
+
+
+def _export_fbx_for_unreal(model: Any, out_path: Path, export_rigging: bool) -> bool:
+    """Small seam for tests around the Unreal-compatible FBX exporter."""
+    try:
+        from src.converters.mesh_converter import FBXExporter  # noqa: PLC0415
+    except ImportError:                                      # pragma: no cover - MCP path shim
+        from converters.mesh_converter import FBXExporter     # type: ignore  # noqa: PLC0415
+
+    return FBXExporter().export(
+        model,
+        str(out_path),
+        export_rigging=export_rigging,
+        base_skeleton_model=getattr(model, "_gr_fbx_base_skeleton_model", None),
+        compatibility_profile="unreal",
+    )
+
+
+class _McpAnimationResourceAdapter:
+    """Expose the MCP locator/parser pair as a supermodel-chain loader."""
+
+    revision = 0
+
+    def __init__(self, services: _Services, game_path: Optional[str]) -> None:
+        self._services = services
+        self._game_path = game_path
+
+    def load_model(self, resref: str, game: str) -> Any:
+        try:
+            _path_label, model = _locate_and_parse(
+                resref,
+                game,
+                self._game_path,
+                self._services,
+            )
+            return model
+        except Exception:
+            return None
+
+    def load_model_strict(self, resref: str, game: str) -> Any:
+        return self.load_model(resref, game)
+
+
+def _resolve_fbx_base_skeleton(
+    model: Any,
+    game: Optional[str],
+    game_path: Optional[str],
+    services: _Services,
+) -> Any:
+    """Resolve and attach the immediate supermodel used for FBX bind poses."""
+    supermodel = str(getattr(model, "supermodel", "") or "").strip()
+    if not supermodel or supermodel.lower() in {"null", "none", "****"}:
+        return None
+    try:
+        _base_path, base_skeleton = _locate_and_parse(
+            supermodel,
+            game,
+            game_path,
+            services,
+        )
+    except Exception:
+        # qBone/tBone is the bounded fallback. The exported validation
+        # manifest will still report any unresolved palette entries.
+        return None
+    setattr(model, "_gr_fbx_base_skeleton_model", base_skeleton)
+    return base_skeleton
+
+
+def _requested_animation_names(arguments: Dict[str, Any]) -> Optional[Tuple[str, ...]]:
+    """Preserve omitted-vs-empty selection semantics from the MCP request."""
+    if "animation_names" not in arguments or arguments.get("animation_names") is None:
+        return None
+    raw_names = arguments.get("animation_names")
+    if isinstance(raw_names, str):
+        raw_names = [raw_names]
+    if not isinstance(raw_names, (list, tuple)):
+        raise ValueError("animation_names must be an array of strings.")
+    if any(not isinstance(name, str) for name in raw_names):
+        raise ValueError("animation_names must contain only strings.")
+    return tuple(raw_names)
+
+
+def _prepare_selected_fbx_animations(
+    model: Any,
+    arguments: Dict[str, Any],
+    *,
+    game: str,
+    game_path: Optional[str],
+    services: _Services,
+) -> Any:
+    """Materialize exactly the requested effective clips before FBX writing."""
+    selected_names = _requested_animation_names(arguments)
+
+    try:
+        from src.core.animation.fbx_animation_selection import (  # noqa: PLC0415
+            prepare_fbx_animation_export_model,
+        )
+    except ImportError:                                      # pragma: no cover - MCP path shim
+        from core.animation.fbx_animation_selection import (  # type: ignore  # noqa: PLC0415
+            prepare_fbx_animation_export_model,
+        )
+
+    base_skeleton_model = getattr(model, "_gr_fbx_base_skeleton_model", None)
+    prepared = prepare_fbx_animation_export_model(
+        model,
+        selected_names,
+        game=game,
+        resource_manager=_McpAnimationResourceAdapter(services, game_path),
+        base_skeleton_model=base_skeleton_model,
+    )
+    if base_skeleton_model is not None:
+        # Keep the already-resolved bind-pose model shared rather than retaining
+        # a second deep-copied supermodel tree on the prepared export candidate.
+        setattr(prepared, "_gr_fbx_base_skeleton_model", base_skeleton_model)
+    return prepared
 
 
 # ── Handlers ──────────────────────────────────────────────────────────────────
@@ -689,6 +871,18 @@ async def handle_export_model_for_unity(arguments: Dict[str, Any]) -> Dict[str, 
     except Exception as exc:
         return json_content({"error": f"Failed to parse MDL: {exc}"})
 
+    _resolve_fbx_base_skeleton(model, game, game_path, svc)
+    try:
+        model = _prepare_selected_fbx_animations(
+            model,
+            arguments,
+            game=str(game),
+            game_path=game_path,
+            services=svc,
+        )
+    except Exception as exc:
+        return json_content({"error": f"Animation selection failed: {exc}"})
+
     try:
         try:
             from src.core.export.unity_export_bridge import export_model_for_unity  # noqa: PLC0415
@@ -710,6 +904,83 @@ async def handle_export_model_for_unity(arguments: Dict[str, Any]) -> Dict[str, 
         return json_content(result)
     except Exception as exc:
         return json_content({"error": f"Unity export failed: {exc}"})
+
+
+async def handle_export_model_for_unreal(arguments: Dict[str, Any]) -> Dict[str, Any]:
+    """Export a KotOR model with the Unreal Engine FBX profile."""
+    resref = str(arguments.get("resref", "") or "").strip()
+    game = arguments.get("game")
+    game_path = arguments.get("game_path")
+    output_path_raw = str(arguments.get("output_path", "") or "").strip()
+    export_dir_raw = str(arguments.get("export_dir", "") or "").strip()
+    output_name = str(arguments.get("output_name", "") or "").strip()
+    export_rigging = bool(arguments.get("export_rigging", True))
+    svc = _get_services()
+
+    if not resref:
+        return json_content({"error": "resref is required."})
+    if not game:
+        return json_content({"error": "game is required."})
+    if not output_path_raw and not export_dir_raw:
+        return json_content({"error": "output_path or export_dir is required."})
+
+    try:
+        path_label, model = _locate_and_parse(resref, game, game_path, svc)
+    except FileNotFoundError as exc:
+        return json_content({"error": str(exc)})
+    except Exception as exc:
+        return json_content({"error": f"Failed to parse MDL: {exc}"})
+
+    _resolve_fbx_base_skeleton(model, game, game_path, svc)
+    try:
+        model = _prepare_selected_fbx_animations(
+            model,
+            arguments,
+            game=str(game),
+            game_path=game_path,
+            services=svc,
+        )
+    except Exception as exc:
+        return json_content({"error": f"Animation selection failed: {exc}"})
+
+    if output_path_raw:
+        output_path = Path(output_path_raw)
+        if output_path.suffix.lower() != ".fbx":
+            output_path = output_path.with_suffix(".fbx")
+    else:
+        stem = output_name or Path(resref).stem
+        output_path = Path(export_dir_raw) / f"{stem}.fbx"
+
+    try:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        if not _export_fbx_for_unreal(model, output_path, export_rigging):
+            raise RuntimeError(f"exporter returned False for {output_path}")
+        if not output_path.exists():
+            raise RuntimeError(f"exporter did not create {output_path}")
+    except Exception as exc:
+        return json_content({"error": f"Unreal export failed: {exc}"})
+
+    manifest_path = output_path.with_suffix(".ghostrigger.json")
+    animations = [
+        str(getattr(animation, "name", "") or "")
+        for animation in (getattr(model, "animations", None) or ())
+    ]
+    return json_content({
+        "status": "ok",
+        "asset": str(output_path),
+        "manifest": str(manifest_path) if manifest_path.exists() else "",
+        "compatibility_profile": "unreal",
+        "animations": animations,
+        "animation_selection": dict(
+            getattr(model, "_gr_fbx_animation_selection", None) or {}
+        ),
+        "counts": {"animations": len(animations)},
+        "source": {
+            "game": str(game).upper(),
+            "resref": resref,
+            "path": path_label,
+        },
+    })
 
 
 async def handle_validate_unity_import(arguments: Dict[str, Any]) -> Dict[str, Any]:
