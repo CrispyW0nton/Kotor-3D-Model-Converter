@@ -11,6 +11,41 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-15
 
+### [2026-07-15] T3601: modular maps Phase 2 — Add Room from Module
+
+Owner: LordVaderCW
+
+T###: T3601
+
+Subsystem: Map Studio modular authoring (Core.Scene/Core.Tools/window)
+
+Intersects: the T3601 room catalog (Phase 1) and stock-room conversion;
+foundation for doorway snapping (Phase 3).
+
+- New controller op `add_catalog_room_to_project`: overlays a chosen source
+  `.mod`/`.rim`, then bakes the picked room into editable imported-mesh
+  geometry via `convert_stock_room_to_imported_mesh` (now accepting a
+  `position` override and `extra_metadata`). The room drops at a
+  non-overlapping point just east of the current module bounds and records
+  its source module (`catalog_source_module`, `added_from_catalog`) for later
+  snapping. Re-adding a resref already in the module is refused.
+- "Add Room from Module..." File-menu action (module_editor_window.py): pick
+  a source `.mod`/`.rim`/`.kmap`, choose a room from its labeled,
+  door-hook-aware catalog, and it is added to the current project.
+- Robustness fix in the catalog (`map_studio_room_catalog.py`): PyKotor's
+  binary `read_lyt` rejects the ASCII `#MAXLAYOUT` LYTs that KOTOR ships and
+  that Map Studio itself exports, so the catalog now falls back to an ASCII
+  parser recovering room rows and door hooks — including hook names with
+  spaces (921srt's "force field sith") parsed from the row end, and the
+  w-first Aurora quaternion. Without this, exported/candidate modules indexed
+  as empty.
+- Verification: new `tests/test_map_studio_add_room_from_module.py` (ASCII LYT
+  parse incl. spaced door names + w-first quaternion; non-layout rejected;
+  east drop offset; real 921srt.mod add with provenance + re-add refusal);
+  catalog + payload suites green (30 passed); GUI.Display/Tools mirrors
+  identical; window action verified headlessly. Room positioning/overlap is
+  intentionally a drop point — Phase 3 snapping will align doorways.
+
 ### [2026-07-15] T3008: PIE door auto-open + room-to-room transitions
 
 Owner: LordVaderCW

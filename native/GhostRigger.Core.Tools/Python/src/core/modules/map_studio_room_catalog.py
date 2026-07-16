@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Iterable
 
 Vec3 = tuple[float, float, float]
@@ -134,6 +135,81 @@ def _door_hooks_by_room(lyt: Any) -> dict[str, list[RoomConnectionPoint]]:
     return grouped
 
 
+def _parse_ascii_lyt(data: bytes) -> Any | None:
+    """Parse an ASCII ``#MAXLAYOUT`` LYT into a rooms/doorhooks structure.
+
+    KOTOR ships (and Map Studio exports) rooms as ASCII LYTs that PyKotor's
+    binary ``read_lyt`` rejects, so recover the room rows and door hooks here.
+    Room row: ``model x y z``. Door hook row:
+    ``room door unknown x y z qw qx qy qz`` (Aurora quaternion is w-first).
+    """
+
+    try:
+        text = bytes(data).decode("latin-1", errors="replace")
+    except Exception:
+        return None
+    if "maxlayout" not in text[:64].lower():
+        return None
+    lines = [line.strip() for line in text.splitlines()]
+    rooms: list[SimpleNamespace] = []
+    doorhooks: list[SimpleNamespace] = []
+    index = 0
+    while index < len(lines):
+        parts = lines[index].split()
+        head = parts[0].lower() if parts else ""
+        if head == "roomcount" and len(parts) >= 2:
+            try:
+                count = int(parts[1])
+            except ValueError:
+                count = 0
+            index += 1
+            for row in lines[index:index + count]:
+                cells = row.split()
+                # Parse the trailing 3 numbers as the position; the model resref
+                # is the first token (room models never contain spaces).
+                if len(cells) >= 4:
+                    try:
+                        x, y, z = (float(cells[-3]), float(cells[-2]), float(cells[-1]))
+                    except ValueError:
+                        continue
+                    rooms.append(SimpleNamespace(model=cells[0], position=SimpleNamespace(x=x, y=y, z=z)))
+            index += count
+            continue
+        if head == "doorhookcount" and len(parts) >= 2:
+            try:
+                count = int(parts[1])
+            except ValueError:
+                count = 0
+            index += 1
+            for row in lines[index:index + count]:
+                cells = row.split()
+                # The last 8 tokens are always: unknown x y z qw qx qy qz. The
+                # first token is the room; everything between is the door name,
+                # which can contain spaces (e.g. "force field sith").
+                if len(cells) < 10:
+                    continue
+                try:
+                    x, y, z = (float(cells[-7]), float(cells[-6]), float(cells[-5]))
+                    qw, qx, qy, qz = (float(cells[-4]), float(cells[-3]), float(cells[-2]), float(cells[-1]))
+                except ValueError:
+                    continue
+                door = "_".join(cells[1:-8]) or cells[1]
+                doorhooks.append(
+                    SimpleNamespace(
+                        room=cells[0],
+                        door=door,
+                        position=SimpleNamespace(x=x, y=y, z=z),
+                        orientation=SimpleNamespace(w=qw, x=qx, y=qy, z=qz),
+                    )
+                )
+            index += count
+            continue
+        index += 1
+    if not rooms:
+        return None
+    return SimpleNamespace(rooms=rooms, doorhooks=doorhooks)
+
+
 def _read_capsule_lyt(capsule_path: Path) -> tuple[Any, str] | None:
     """Return ``(lyt, lyt_resref)`` from a module capsule, or None."""
 
@@ -158,7 +234,15 @@ def _read_capsule_lyt(capsule_path: Path) -> tuple[Any, str] | None:
             lyt_bytes = None
     if not lyt_bytes:
         return None
-    return read_lyt(bytes(lyt_bytes)), lyt_resref
+    try:
+        return read_lyt(bytes(lyt_bytes)), lyt_resref
+    except Exception:
+        # PyKotor's binary reader rejects ASCII MAXLAYOUT LYTs; recover rooms
+        # and door hooks ourselves so exported/candidate modules still index.
+        ascii_lyt = _parse_ascii_lyt(bytes(lyt_bytes))
+        if ascii_lyt is None:
+            raise
+        return ascii_lyt, lyt_resref
 
 
 def _area_name_from_capsule(capsule_path: Path, module_resref: str) -> str:

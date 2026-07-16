@@ -435,7 +435,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_ROOM_CATALOG",
             "source_path": "src/core/modules/map_studio_room_catalog.py",
             "packaged_path": "Python/src/core/modules/map_studio_room_catalog.py",
-            "sha256": "ec100fdc040057aac088e324e01857545db9eca2bb5cc2c217daaa65e7ba7948"
+            "sha256": "c7e0a9b17a336f7b1ea4095bafb9f663befdf7ea6e9a019aabefb1f232e54d5c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_STOCK_CONTENT_PREVIEW",
@@ -501,7 +501,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "0c913c2cb31767993a6d8c9e1d4aff6b527ad05e21eb5fa6c361a5f65c81d31f"
+            "sha256": "3bd6a182e944f13e4203e73daba201f72ea5d968d32bd399268e2446df4e514d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",

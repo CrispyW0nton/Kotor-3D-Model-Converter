@@ -1239,6 +1239,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.import_stock_module_action = QtGui.QAction("Import Stock Module (RIM)...", self)
         self.convert_all_stock_rooms_action = QtGui.QAction("Make All Stock Rooms Editable", self)
         self.convert_all_stock_rooms_action.setObjectName("mapStudioConvertAllStockRoomsAction")
+        self.add_room_from_module_action = QtGui.QAction("Add Room from Module...", self)
+        self.add_room_from_module_action.setObjectName("mapStudioAddRoomFromModuleAction")
+        self.add_room_from_module_action.setToolTip(
+            "Browse rooms indexed from any .mod/.rim/.kmap and add one to this module, ready to snap into place."
+        )
         self.import_library_asset_action = QtGui.QAction("Import Selected Library Asset", self)
         self.import_texture_action = QtGui.QAction("Import Texture to Project...", self)
         self.import_texture_action.setObjectName("mapStudioImportTextureAction")
@@ -1283,6 +1288,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         file_menu.addAction(self.import_module_action)
         file_menu.addAction(self.import_stock_module_action)
         file_menu.addAction(self.convert_all_stock_rooms_action)
+        file_menu.addAction(self.add_room_from_module_action)
         file_menu.addAction(self.import_library_asset_action)
         file_menu.addAction(self.import_texture_action)
         file_menu.addSeparator()
@@ -1632,6 +1638,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.import_mod_file_action.triggered.connect(self.import_module_file)
         self.import_stock_module_action.triggered.connect(self._import_stock_module)
         self.convert_all_stock_rooms_action.triggered.connect(self._convert_all_stock_rooms)
+        self.add_room_from_module_action.triggered.connect(self._add_room_from_module)
         self.import_library_asset_action.triggered.connect(self.import_selected_library_asset)
         self.import_texture_action.triggered.connect(self.import_project_texture)
         self.export_fbx_action.triggered.connect(lambda: self.export_fbx(False))
@@ -2849,6 +2856,76 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         except Exception:
             pass
         self._refresh_all(f"Imported module {resref} ({game}).")
+
+    def _add_room_from_module(self) -> None:
+        """Browse rooms indexed from a chosen module/kmap and add one to this map.
+
+        Foundation of the modular map builder: pick a source .mod/.rim/.kmap,
+        pick a room from its labeled, door-hook-aware catalog, and drop it into
+        the current project as editable geometry (ready to snap into place).
+        """
+
+        from src.core.modules.map_studio_room_catalog import (
+            build_room_catalog_from_capsule,
+            build_room_catalog_from_kmap,
+        )
+
+        start_dir = str(getattr(self, "_last_game_modules_dir", "") or "")
+        path, _selected = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Choose a source module or KMAP",
+            start_dir,
+            "Room sources (*.mod *.rim *.erf *.kmap);;All files (*)",
+        )
+        if not path:
+            return
+        source = Path(path)
+        self._last_game_modules_dir = str(source.parent)
+        if source.suffix.lower() == ".kmap":
+            result = build_room_catalog_from_kmap(source)
+        else:
+            game = self._detect_module_game(source) or str(getattr(self.project, "game", "") or "").upper()
+            result = build_room_catalog_from_capsule(source, game=game)
+        entries = result.sorted_entries()
+        if not entries:
+            reason = result.warnings[0] if result.warnings else "no rooms were indexed."
+            QtWidgets.QMessageBox.warning(self, "Add Room from Module", f"Could not index rooms from {source.name}: {reason}")
+            return
+        labels = [f"{e.label} [{e.connection_count} hook(s)]" for e in entries]
+        choice, accepted = QtWidgets.QInputDialog.getItem(
+            self, "Add Room from Module", f"Room from {source.name}:", labels, 0, False
+        )
+        if not accepted:
+            return
+        entry = entries[labels.index(str(choice))]
+        resource_manager = getattr(self, "resource_manager", None)
+        if resource_manager is None:
+            QtWidgets.QMessageBox.warning(
+                self, "Add Room from Module",
+                "Connect a KOTOR game directory first so the room's model and walkmesh can be loaded.")
+            return
+        try:
+            ok, message = self.controller.add_catalog_room_to_project(
+                room_resref=entry.room_resref,
+                source_path=entry.source_path,
+                source_module=entry.module_resref,
+                game=entry.game or str(getattr(self.project, "game", "") or "").upper(),
+                resource_manager=resource_manager,
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Add Room from Module", f"Could not add room {entry.room_resref}: {exc}")
+            return
+        if not ok:
+            QtWidgets.QMessageBox.information(self, "Add Room from Module", message)
+            return
+        self._log(f"Map Studio: {message}")
+        self.statusBar().showMessage(message, 8000)
+        try:
+            self.map_studio_workspace_combo.setCurrentIndex(
+                max(0, self.map_studio_workspace_combo.findData("geometry")))
+        except Exception:
+            pass
+        self._refresh_all(f"Added room {entry.room_resref} from {entry.module_resref}.")
 
     def _detect_module_game(self, capsule: Path) -> str:
         """Return 'K1'/'K2' from a bundled or loose room MDL pointer."""

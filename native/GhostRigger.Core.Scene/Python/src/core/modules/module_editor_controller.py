@@ -1915,12 +1915,17 @@ class ModuleEditorController:
         *,
         room_resref: str,
         resource_manager: Any = None,
+        position: Any = None,
+        extra_metadata: dict[str, Any] | None = None,
     ) -> tuple[bool, str]:
         """Bake one stock KOTOR room into editable imported-mesh authored geometry.
 
         The room keeps its LYT position and original UVs; the stock KMAP room
         row is retired so the authored copy renders instead of the read-only
-        preview.  Recorded as one undoable command.
+        preview.  Recorded as one undoable command.  ``position`` overrides the
+        placement for a newly added room (used when pulling a room in from
+        another module); ``extra_metadata`` records provenance such as the
+        source module for later snapping.
         """
 
         from dataclasses import replace as _replace
@@ -1928,6 +1933,7 @@ class ModuleEditorController:
         resref = normalise_resref(room_resref)
         if not resref:
             return False, "No room resref provided."
+        position_override = position
         extra = getattr(self.project, "extra_sections", {}) or {}
         payload = extra.get("authored_module")
         if payload is None:
@@ -1982,6 +1988,8 @@ class ModuleEditorController:
             if str(getattr(room, "model_resref", "") or getattr(room, "name", "") or "").strip().lower() == resref
         ]
         metadata = {"source": "stock_room_conversion", "source_model": resref}
+        if extra_metadata:
+            metadata.update(dict(extra_metadata))
         # Individual backdrop surfaces keep their stable surface indices and
         # are filtered only by viewport visibility/picking. A whole room is a
         # backdrop-only room only when every render surface is backdrop and its
@@ -2014,11 +2022,15 @@ class ModuleEditorController:
                 for room in authored.rooms
             )
         else:
-            if stock_rows:
+            if position_override is not None:
+                position = tuple(float(v) for v in tuple(position_override)[:3])
+            elif stock_rows:
                 transform = getattr(stock_rows[0], "transform", None)
                 position = tuple(
                     float(v) for v in tuple(getattr(transform, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))[:3]
                 )
+            else:
+                position = (0.0, 0.0, 0.0)
             rooms = tuple(authored.rooms) + (
                 AuthoredRoomSpec(room_resref=resref, primitive=primitive, position=position, metadata=metadata),
             )
@@ -2041,6 +2053,73 @@ class ModuleEditorController:
             metadata={"room_resref": resref, "surface_count": len(primitive.surfaces)},
         )
         return True, f"Room {resref} is now editable ({len(primitive.surfaces)} surfaces, {wok_note})."
+
+    def add_catalog_room_to_project(
+        self,
+        *,
+        room_resref: str,
+        source_path: str,
+        source_module: str = "",
+        game: str = "",
+        resource_manager: Any = None,
+        position: Any = None,
+    ) -> tuple[bool, str]:
+        """Add a catalog-indexed room from another module into the current project.
+
+        Overlays the room's source ``.mod``/``.rim`` so its model/WOK resolve,
+        then bakes it into editable imported-mesh geometry positioned at
+        ``position`` (defaults just past the current module's east edge so it
+        does not overlap existing rooms, ready to be snapped into place). The
+        source module is recorded on the room for later doorway snapping.
+        """
+
+        from pathlib import Path as _Path
+
+        resref = normalise_resref(room_resref)
+        if not resref:
+            return False, "No room resref provided."
+        if resource_manager is None:
+            return False, "Connect a KOTOR game directory first so the source room model can be loaded."
+        capsule = _Path(str(source_path or "").strip())
+        if capsule.suffix.lower() in {".mod", ".rim", ".erf"} and capsule.is_file():
+            add_overlay = getattr(resource_manager, "add_module_overlay", None)
+            if callable(add_overlay):
+                try:
+                    add_overlay(str(capsule))
+                    companion = capsule.with_name(f"{capsule.stem}_s.rim")
+                    if capsule.suffix.lower() == ".rim" and companion.exists():
+                        add_overlay(str(companion))
+                except Exception as exc:
+                    self.model.log(f"Could not overlay source module {capsule.name}: {exc}")
+            self._invalidate_map_studio_stock_preview_resources()
+        # A room already in this project would otherwise silently no-op; report it.
+        snapshot = self._map_studio_authored_project_snapshot()
+        if snapshot is not None and any(room.normalised_resref() == resref for room in tuple(getattr(snapshot, "rooms", ()) or ())):
+            return False, f"Room {resref} is already in this module. Rename or remove it before re-adding."
+        drop_position = position if position is not None else self._next_added_room_position()
+        return self.convert_stock_room_to_imported_mesh(
+            room_resref=resref,
+            resource_manager=resource_manager,
+            position=drop_position,
+            extra_metadata={
+                "catalog_source_path": str(capsule),
+                "catalog_source_module": normalise_resref(source_module) or normalise_resref(capsule.stem),
+                "added_from_catalog": True,
+            },
+        )
+
+    def _next_added_room_position(self) -> tuple[float, float, float]:
+        """A non-overlapping drop point just east of the current module bounds."""
+
+        snapshot = self._map_studio_authored_project_snapshot()
+        max_x = 0.0
+        found = False
+        for room in tuple(getattr(snapshot, "rooms", ()) or ()):
+            values = tuple(getattr(room, "position", ()) or ())
+            if len(values) >= 1:
+                max_x = max(max_x, float(values[0]))
+                found = True
+        return (max_x + 30.0 if found else 0.0, 0.0, 0.0)
 
     def _apply_imported_mesh_room_edit(self, *, room_resref: str, action_key: str, label: str, editor) -> tuple[bool, str]:
         from dataclasses import replace as _replace
