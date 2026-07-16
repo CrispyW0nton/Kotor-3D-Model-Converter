@@ -13,7 +13,15 @@ from src.systems.bas.attachment_alignment import normalize_bas_transform
 from src.systems.bas.model_recipe import BAS_SOCKET_BY_SLOT
 
 
-BAS_ATTACHMENT_SLOTS = ("head", "left_weapon", "right_weapon")
+BAS_ATTACHMENT_SLOTS = (
+    "head",
+    "mask",
+    "goggles",
+    "left_weapon",
+    "belt",
+    "right_weapon",
+)
+KOTOR_NODE_NAME_LIMIT = 32
 
 
 def reset_bas_model_node_traversal(model: Any) -> None:
@@ -176,3 +184,149 @@ def build_bas_preview_model(
         except Exception:
             pass
     return preview
+
+
+def prepare_bas_composed_export_model(
+    preview_model: Any,
+    *,
+    require_unique_body_names: bool = False,
+) -> tuple[Any, dict[str, Any]]:
+    """Return an export-safe copy of a composed BAS model.
+
+    KOTOR permits repeated node names in some source assets, while FBX skin,
+    hierarchy, and animation connections are globally name-addressed by the
+    GhostRigger writer and by common DCC importers.  A composed build can also
+    contain the same weapon twice.  Preserve every body name, then rename only
+    colliding attachment-layer nodes and rewrite that layer's bone map.
+    """
+
+    model = copy.deepcopy(preview_model)
+    reset_bas_model_node_traversal(model)
+    try:
+        nodes = list(model.all_nodes())
+    except Exception:
+        nodes = []
+
+    def _layer_root(node: Any):
+        root = getattr(node, "_gr_bas_attachment_root_ref", None)
+        if root is not None:
+            return root
+        current = node
+        visited: set[int] = set()
+        while current is not None and id(current) not in visited:
+            visited.add(id(current))
+            if bool(getattr(current, "_gr_bas_attachment_root", False)):
+                return current
+            current = getattr(current, "parent", None)
+        return None
+
+    body_nodes = [node for node in nodes if _layer_root(node) is None]
+    attachment_nodes = [node for node in nodes if _layer_root(node) is not None]
+    used: set[str] = set()
+    rename_by_layer: dict[int, dict[str, str]] = {}
+    renamed: list[dict[str, str]] = []
+    duplicate_body_names: list[str] = []
+
+    attachment_roots = {id(root): root for root in (_layer_root(node) for node in attachment_nodes) if root is not None}
+    scaled_layers: list[str] = []
+    for root in attachment_roots.values():
+        raw_scale = getattr(root, "scale", (1.0, 1.0, 1.0))
+        try:
+            scale = tuple(float(value) for value in list(raw_scale)[:3])
+        except Exception:
+            scale = (1.0, 1.0, 1.0)
+        if len(scale) != 3 or any(abs(value - 1.0) > 1e-6 for value in scale):
+            slot = str(getattr(root, "_gr_bas_attachment_slot", "") or "attachment")
+            scaled_layers.append(f"{slot}={scale}")
+    if scaled_layers:
+        raise ValueError(
+            "FBX/OBJ export cannot safely represent unbaked BAS layer scale; "
+            "reset it to 1,1,1 before export (" + ", ".join(scaled_layers) + ")."
+        )
+
+    def _unique_name(original: str, slot: str) -> str:
+        suffix = f"__{slot or 'attachment'}"
+        base_limit = max(1, KOTOR_NODE_NAME_LIMIT - len(suffix))
+        candidate = f"{original[:base_limit]}{suffix}"
+        serial = 2
+        while candidate.lower() in used:
+            serial_suffix = f"_{serial}"
+            keep = max(1, KOTOR_NODE_NAME_LIMIT - len(suffix) - len(serial_suffix))
+            candidate = f"{original[:keep]}{suffix}{serial_suffix}"
+            serial += 1
+        return candidate
+
+    # The native body DAG is authoritative. Preserve it byte-for-byte for MDL
+    # export; DCC callers can request a uniqueness gate instead of silently
+    # renaming a body node without identity-based bone/animation provenance.
+    for node in body_nodes:
+        original = str(getattr(node, "name", "") or "node")
+        original_key = original.lower()
+        if original_key in used:
+            duplicate_body_names.append(original)
+        used.add(original_key)
+
+    if require_unique_body_names and duplicate_body_names:
+        duplicates = ", ".join(sorted(set(duplicate_body_names), key=str.lower))
+        raise ValueError(
+            "Unity/DCC export requires unique body node names; "
+            f"the native body contains: {duplicates}."
+        )
+
+    # An old-name -> new-name bone-map rewrite is safe only when the old name
+    # identifies one node inside that attachment layer. Reject ambiguous source
+    # layers instead of binding a skin to whichever duplicate was renamed last.
+    names_by_layer: dict[int, set[str]] = {}
+    duplicate_attachment_names: list[str] = []
+    for node in attachment_nodes:
+        root = _layer_root(node)
+        layer_key = id(root)
+        original = str(getattr(node, "name", "") or "node")
+        original_key = original.lower()
+        layer_names = names_by_layer.setdefault(layer_key, set())
+        if original_key in layer_names:
+            slot = str(getattr(root, "_gr_bas_attachment_slot", "") or "attachment")
+            duplicate_attachment_names.append(f"{slot}:{original}")
+        layer_names.add(original_key)
+    if duplicate_attachment_names:
+        duplicates = ", ".join(sorted(set(duplicate_attachment_names), key=str.lower))
+        raise ValueError(
+            "Cannot safely combine an attachment with duplicate node names: "
+            f"{duplicates}."
+        )
+
+    for node in attachment_nodes:
+        original = str(getattr(node, "name", "") or "node")
+        original_key = original.lower()
+        if original_key not in used:
+            used.add(original_key)
+            continue
+        root = _layer_root(node)
+        slot = str(getattr(root, "_gr_bas_attachment_slot", "") or "attachment").strip().lower()
+        replacement = _unique_name(original, slot)
+        node.name = replacement
+        used.add(replacement.lower())
+        if root is not None:
+            rename_by_layer.setdefault(id(root), {})[original_key] = replacement
+        renamed.append({"from": original, "to": replacement, "slot": slot or "attachment"})
+
+    for node in attachment_nodes:
+        root = _layer_root(node)
+        mapping = rename_by_layer.get(id(root), {}) if root is not None else {}
+        bone_map = list(getattr(node, "bone_map", []) or [])
+        if bone_map and mapping:
+            node.bone_map = [mapping.get(str(name or "").lower(), name) for name in bone_map]
+
+    final_names = [str(getattr(node, "name", "") or "").lower() for node in nodes]
+    report = {
+        "node_count": len(nodes),
+        "renamed_count": len(renamed),
+        "renamed": renamed,
+        "duplicate_body_names": duplicate_body_names,
+        "unique_names": len(final_names) == len(set(final_names)),
+    }
+    try:
+        setattr(model, "_gr_bas_export_report", report)
+    except Exception:
+        pass
+    return model, report

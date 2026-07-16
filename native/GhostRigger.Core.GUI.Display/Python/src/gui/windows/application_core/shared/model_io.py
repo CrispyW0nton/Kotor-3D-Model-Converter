@@ -18,6 +18,25 @@ from src.gui.windows.application_core.application_core_lib.shared.workers import
 
 log = logging.getLogger(__name__)
 
+FBX_EXPORT_FILTERS = (
+    "Standard FBX (*.fbx);;"
+    "Unity-Compatible FBX (*.fbx);;"
+    "Unreal Engine-Compatible FBX (*.fbx);;"
+    "3ds Max-Compatible FBX (*.fbx);;"
+    "All files (*.*)"
+)
+
+
+def _fbx_compatibility_profile_from_filter(selected_filter: str) -> str:
+    label = str(selected_filter or "").strip().lower()
+    if "unity" in label:
+        return "unity"
+    if "unreal" in label:
+        return "unreal"
+    if "3ds max" in label or "3dsmax" in label:
+        return "3ds_max"
+    return "standard"
+
 
 # ---------------------------------------------------------------------------
 # Plain "work" functions that perform the actual blocking I/O.
@@ -124,12 +143,68 @@ def _work_export_mdl_binary(model, path: str, *, game_version, progress_callback
     return path, mdx_path
 
 
-def _work_export_fbx(model, path: str, *, tex_cache=None, progress_callback=None, is_cancelled=None):
+def _work_export_fbx(
+    model,
+    path: str,
+    *,
+    tex_cache=None,
+    base_skeleton_model=None,
+    compatibility_profile="standard",
+    selected_animation_names=None,
+    animation_resource_manager=None,
+    animation_game="",
+    supplemental_animation_models=(),
+    progress_callback=None,
+    is_cancelled=None,
+):
     from src.converters.mesh_converter import FBXExporter
+
+    try:
+        has_bas_layers = any(
+            bool(getattr(node, "_gr_bas_attachment_layer", False))
+            for node in model.all_nodes()
+        )
+    except Exception:
+        has_bas_layers = False
+    if has_bas_layers:
+        from src.systems.bas.preview_composer import prepare_bas_composed_export_model
+
+        model, _report = prepare_bas_composed_export_model(
+            model,
+            require_unique_body_names=True,
+        )
+
+    # Animation inheritance is a workflow concern, not an FBX writer concern.
+    # Materialize the exact selected local/head/supermodel takes before the IO
+    # layer serializes ``model.animations``.  ``None`` preserves the legacy
+    # local-list behavior; an empty tuple deliberately exports mesh + rig only.
+    if selected_animation_names is not None:
+        if progress_callback:
+            progress_callback("Resolving selected animation sets\u2026", 20)
+        from src.core.animation.fbx_animation_selection import (
+            prepare_fbx_animation_export_model,
+        )
+
+        model = prepare_fbx_animation_export_model(
+            model,
+            tuple(selected_animation_names),
+            game=animation_game,
+            resource_manager=animation_resource_manager,
+            base_skeleton_model=base_skeleton_model,
+            supplemental_models=tuple(supplemental_animation_models or ()),
+            require_all=True,
+        )
 
     if progress_callback:
         progress_callback("Writing FBX geometry and rigging\u2026", 40)
-    ok = FBXExporter().export(model, path, tex_cache=tex_cache, export_rigging=True)
+    ok = FBXExporter().export(
+        model,
+        path,
+        tex_cache=tex_cache,
+        export_rigging=True,
+        base_skeleton_model=base_skeleton_model,
+        compatibility_profile=compatibility_profile,
+    )
     if not ok:
         raise RuntimeError("FBX export failed. Check the export log for details.")
     if progress_callback:
@@ -238,6 +313,121 @@ class _IoGuiCallbackBridge(QtCore.QObject):
 
 class ModelIoMixin:
     """Model import, export, FBX SDK, MDLOps, and module-file command helpers."""
+
+    def _fbx_resource_context_for_export(self, model):
+        """Return the headless resource manager and strict K1/K2 game tag."""
+        manager = None
+        get_manager = getattr(self, "_get_resource_manager", None)
+        if callable(get_manager):
+            try:
+                manager = get_manager()
+            except Exception:
+                log.debug("Could not obtain the resource manager for FBX export", exc_info=True)
+        if manager is None:
+            manager = getattr(self, "_resource_manager", None) or getattr(self, "resource_manager", None)
+        game = str(
+            getattr(self, "_current_game", "")
+            or (self._infer_game_from_model(model) if hasattr(self, "_infer_game_from_model") else "")
+            or "K1"
+        ).upper()
+        return manager, game
+
+    def _fbx_base_skeleton_for_export(self, model):
+        """Resolve the model's supermodel for complete FBX bind matrices."""
+        supermodel = str(getattr(model, "supermodel", "") or "").strip()
+        if not supermodel or supermodel.lower() in {"null", "none", "****"}:
+            return None
+        manager, game = self._fbx_resource_context_for_export(model)
+        if manager is None:
+            return None
+        try:
+            # The Animation Browser commonly resolved this same supermodel
+            # while populating its inherited catalog. Reuse that strict-game
+            # cache instead of reparsing a large model immediately before the
+            # FBX selector opens. A cold lookup still uses the manager's strict
+            # loader through SuperModelResolver.
+            from src.core.animation.animation_engine import SuperModelResolver
+
+            SuperModelResolver.configure(manager)
+            return SuperModelResolver.load_supermodel(supermodel, game)
+        except Exception:
+            log.warning("Could not resolve FBX base skeleton %s (%s)", supermodel, game, exc_info=True)
+            return None
+
+    def _fbx_supplemental_animation_models(self, model):
+        """Return attached source models whose facial/accessory tracks are usable."""
+        result = []
+        seen = set()
+        try:
+            nodes = model.all_nodes()
+        except Exception:
+            nodes = []
+        for node in nodes:
+            source = getattr(node, "_gr_bas_attachment_source_model_ref", None)
+            if source is None or id(source) in seen:
+                continue
+            seen.add(id(source))
+            result.append(source)
+        return tuple(result)
+
+    def _choose_fbx_animation_sets(
+        self,
+        model,
+        compatibility_profile: str,
+        *,
+        base_skeleton_model=None,
+        supplemental_models=(),
+    ):
+        """Show the shared take selector; return tuple, or ``None`` on cancel."""
+        manager, game = self._fbx_resource_context_for_export(model)
+        try:
+            from src.core.animation.fbx_animation_selection import list_fbx_animation_sets
+            from src.gui.qt_lib.dialogs.qt_fbx_animation_selection_dialog import (
+                QtFbxAnimationSelectionDialog,
+            )
+
+            rows = list_fbx_animation_sets(
+                model,
+                game=game,
+                resource_manager=manager,
+                base_skeleton_model=base_skeleton_model,
+                supplemental_models=tuple(supplemental_models or ()),
+            )
+        except Exception as exc:
+            log.exception("Could not enumerate FBX animation sets")
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Export FBX",
+                f"Animation sets could not be enumerated:\n{exc}",
+            )
+            return None
+
+        initial = [
+            str(getattr(anim, "name", "") or "")
+            for anim in list(getattr(model, "animations", []) or [])
+            if str(getattr(anim, "name", "") or "")
+        ]
+        current_name = ""
+        panel = getattr(self, "animations_panel", None)
+        selected_getter = getattr(panel, "selected_animation", None)
+        if callable(selected_getter):
+            try:
+                current_name = str(selected_getter() or "")
+            except Exception:
+                current_name = ""
+        if current_name and current_name.lower() not in {name.lower() for name in initial}:
+            initial.append(current_name)
+
+        dialog = QtFbxAnimationSelectionDialog(
+            rows,
+            self,
+            profile=compatibility_profile,
+            initial_selected_names=tuple(initial),
+            current_animation_name=current_name,
+        )
+        if dialog.exec() != QtWidgets.QDialog.Accepted:
+            return None
+        return tuple(dialog.selected_animation_names())
 
     # ------------------------------------------------------------------
     # Async I/O routing helpers
@@ -614,15 +804,28 @@ class ModelIoMixin:
         model = self._require_model("Export FBX")
         if model is None:
             return
-        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+        path, selected_filter = QtWidgets.QFileDialog.getSaveFileName(
             self,
             "Export FBX",
             f"{getattr(model, 'name', 'model')}.fbx",
-            "FBX files (*.fbx);;All files (*.*)",
+            FBX_EXPORT_FILTERS,
         )
         if not path:
             return
         tex_cache = self._get_tex_cache_for_export()
+        compatibility_profile = _fbx_compatibility_profile_from_filter(selected_filter)
+        base_skeleton_model = self._fbx_base_skeleton_for_export(model)
+        supplemental_models = self._fbx_supplemental_animation_models(model)
+        selected_animation_names = self._choose_fbx_animation_sets(
+            model,
+            compatibility_profile,
+            base_skeleton_model=base_skeleton_model,
+            supplemental_models=supplemental_models,
+        )
+        if selected_animation_names is None:
+            self._log("FBX export cancelled before animation selection.", "info")
+            return
+        animation_resource_manager, animation_game = self._fbx_resource_context_for_export(model)
 
         def _on_complete(result, cancelled=False):
             if cancelled or result is None:
@@ -645,6 +848,12 @@ class ModelIoMixin:
             model,
             path,
             tex_cache=tex_cache,
+            base_skeleton_model=base_skeleton_model,
+            compatibility_profile=compatibility_profile,
+            selected_animation_names=selected_animation_names,
+            animation_resource_manager=animation_resource_manager,
+            animation_game=animation_game,
+            supplemental_animation_models=supplemental_models,
             on_complete=_on_complete,
             on_error=_on_error,
             error_category="export_error",
@@ -654,19 +863,41 @@ class ModelIoMixin:
         if not selected:
             QtWidgets.QMessageBox.information(self, "Export Selected FBX", "Select a scene object first.")
             return
-        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+        path, selected_filter = QtWidgets.QFileDialog.getSaveFileName(
             self,
             "Export Selected FBX",
             f"{selected[0].name if len(selected) == 1 else 'selection'}.fbx",
-            "FBX files (*.fbx);;All files (*.*)",
+            FBX_EXPORT_FILTERS,
         )
         if not path:
+            return
+        compatibility_profile = _fbx_compatibility_profile_from_filter(selected_filter)
+        if len(selected) != 1 and compatibility_profile != "standard":
+            QtWidgets.QMessageBox.information(
+                self,
+                "Export Selected FBX",
+                "Unity-, Unreal-, and 3ds Max-compatible FBX export requires one runtime model. "
+                "For a body with attached layers, use Body Attachment System > "
+                "Export Composed Model… so the rig can be normalized as one asset.",
+            )
             return
         if len(selected) == 1:
             model_getter = getattr(self, "_runtime_model_for_scene_object", None)
             model = model_getter(selected[0]) if callable(model_getter) else (getattr(selected[0], "metadata", {}) or {}).get("_runtime_model")
             if model is not None:
                 tex_cache = self._get_tex_cache_for_export()
+                base_skeleton_model = self._fbx_base_skeleton_for_export(model)
+                supplemental_models = self._fbx_supplemental_animation_models(model)
+                selected_animation_names = self._choose_fbx_animation_sets(
+                    model,
+                    compatibility_profile,
+                    base_skeleton_model=base_skeleton_model,
+                    supplemental_models=supplemental_models,
+                )
+                if selected_animation_names is None:
+                    self._log("Selected FBX export cancelled before animation selection.", "info")
+                    return
+                animation_resource_manager, animation_game = self._fbx_resource_context_for_export(model)
 
                 def _on_complete(result, cancelled=False):
                     if cancelled or result is None:
@@ -679,8 +910,22 @@ class ModelIoMixin:
                     model,
                     path,
                     tex_cache=tex_cache,
+                    base_skeleton_model=base_skeleton_model,
+                    compatibility_profile=compatibility_profile,
+                    selected_animation_names=selected_animation_names,
+                    animation_resource_manager=animation_resource_manager,
+                    animation_game=animation_game,
+                    supplemental_animation_models=supplemental_models,
                     on_complete=_on_complete,
                     error_category="export_error",
+                )
+                return
+            if compatibility_profile != "standard":
+                QtWidgets.QMessageBox.information(
+                    self,
+                    "Export Selected FBX",
+                    "The selected scene object has no runtime model to send through "
+                    "the Unity, Unreal Engine, or 3ds Max compatibility exporter.",
                 )
                 return
         try:

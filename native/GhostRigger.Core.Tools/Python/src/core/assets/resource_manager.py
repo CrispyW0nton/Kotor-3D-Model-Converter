@@ -18,8 +18,9 @@ Design principles
       Override/ > module ERF > TexturePacks ERF > streamed audio > BIF
 4. Module support: any .mod/.rim/.erf in modules/ is auto-indexed.
 5. Single unified API: one get(name, type) call handles everything.
-6. Thread-safe: all index lookups use read-only dicts (no locks needed
-   after init); file reads use per-call open() for safety.
+6. Thread-safe: immutable install indexes remain lock-free internally; manager
+   install/overlay publications are revisioned under an RLock, and file reads
+   use per-call open() for safety.
 
 Resource type constants (NWN / KotOR standard)
 ----------------------------------------------
@@ -268,8 +269,10 @@ class ResourceManager:
 
     Thread safety
     -------------
-    All dicts are populated once at init and never modified afterwards.
-    Reads are concurrent-safe (no locks needed for dict lookups or file reads).
+    Installation indexes are immutable after construction. Mutable manager
+    state (installation references and module overlays) is published under an
+    RLock and advances :attr:`revision`. Strict model loads capture MDL and MDX
+    bytes under one read lock, then release it before parsing.
     """
 
     def __init__(self):
@@ -279,7 +282,8 @@ class ResourceManager:
         self._pykotor_gff_runtime_fix_status = ensure_pykotor_gff_acquire_quiet()
         self._k1: Optional[_GameInstall] = None
         self._k2: Optional[_GameInstall] = None
-        self._lock = threading.Lock()  # protects lazy init only
+        self._lock = threading.RLock()
+        self._revision = 0
         # In-memory overlay for resources bundled inside a specific imported
         # module (custom community .mod/.rim/.erf that ships its own room
         # models, WOKs, and textures).  Checked before any game installation so
@@ -294,6 +298,13 @@ class ResourceManager:
         self._loose_overlay: Dict[Tuple[str, int], Path] = {}
         self._loose_overlay_candidates: Dict[Tuple[str, int], Tuple[Path, ...]] = {}
 
+    @property
+    def revision(self) -> int:
+        """Monotonic resource-publication revision for dependent caches."""
+
+        with self._lock:
+            return int(self._revision)
+
     # ── Setup ────────────────────────────────────────────────────────────
 
     def set_k1_dir(self, path: str) -> bool:
@@ -304,6 +315,7 @@ class ResourceManager:
             inst = _GameInstall(path, 'K1')
             with self._lock:
                 self._k1 = inst
+                self._revision += 1
             log.info(f"ResourceManager: K1 indexed {path!r} — "
                      f"{len(inst._key_map)} key entries, "
                      f"{len(inst._tex_erfs)} tex ERFs, "
@@ -323,6 +335,7 @@ class ResourceManager:
             inst = _GameInstall(path, 'K2')
             with self._lock:
                 self._k2 = inst
+                self._revision += 1
             log.info(f"ResourceManager: K2 indexed {path!r} — "
                      f"{len(inst._key_map)} key entries, "
                      f"{len(inst._tex_erfs)} tex ERFs, "
@@ -351,6 +364,7 @@ class ResourceManager:
             log.warning("ResourceManager.add_module_overlay: pykotor unavailable: %s", exc)
             return 0
         added = 0
+        updates: Dict[Tuple[str, int], bytes] = {}
         try:
             for item in LazyCapsule(capsule_path):
                 ext = str(item.restype().extension).lower()
@@ -360,11 +374,17 @@ class ResourceManager:
                 data = bytes(item.data() or b"")
                 if not data:
                     continue
-                self._overlay[(item.resref().lower(), res_type)] = data
+                updates[(item.resref().lower(), res_type)] = data
                 added += 1
         except Exception as exc:
             log.warning("ResourceManager.add_module_overlay: failed to index %r: %s", capsule_path, exc)
-            return added
+            return 0
+        if updates:
+            with self._lock:
+                published = dict(self._overlay)
+                published.update(updates)
+                self._overlay = published
+                self._revision += 1
         log.info("ResourceManager: module overlay indexed %d resources from %r", added, capsule_path)
         return added
 
@@ -407,6 +427,7 @@ class ResourceManager:
 
         added = 0
         candidates_by_key: Dict[Tuple[str, int], List[Path]] = {}
+        selected_by_key: Dict[Tuple[str, int], Path] = {}
         for path in sorted(files, key=_priority):
             extension = path.suffix.lower().lstrip(".")
             res_type = EXT_TO_TYPE.get(extension)
@@ -417,19 +438,28 @@ class ResourceManager:
                 continue
             key = (resref, res_type)
             candidates_by_key.setdefault(key, []).append(path)
-            self._loose_overlay[key] = path
+            selected_by_key[key] = path
             added += 1
-        for key, candidates in candidates_by_key.items():
-            prior = list(self._loose_overlay_candidates.get(key, ()))
-            for candidate in candidates:
-                if candidate not in prior:
-                    prior.append(candidate)
-            self._loose_overlay_candidates[key] = tuple(prior)
+        if selected_by_key:
+            with self._lock:
+                published_overlay = dict(self._loose_overlay)
+                published_overlay.update(selected_by_key)
+                published_candidates = dict(self._loose_overlay_candidates)
+                for key, candidates in candidates_by_key.items():
+                    prior = list(published_candidates.get(key, ()))
+                    for candidate in candidates:
+                        if candidate not in prior:
+                            prior.append(candidate)
+                    published_candidates[key] = tuple(prior)
+                self._loose_overlay = published_overlay
+                self._loose_overlay_candidates = published_candidates
+                self._revision += 1
         log.info("ResourceManager: loose overlay indexed %d resources from %r", added, str(root))
         return added
 
     def _get_loose_overlay(self, name: str, res_type: int) -> Optional[bytes]:
-        path = self._loose_overlay.get((str(name or "").lower(), int(res_type)))
+        with self._lock:
+            path = self._loose_overlay.get((str(name or "").lower(), int(res_type)))
         if path is None:
             return None
         try:
@@ -441,30 +471,37 @@ class ResourceManager:
     def overlay_source_path(self, name: str, res_type: int) -> str:
         """Return the physical loose-overlay source used for diagnostics."""
 
-        path = self._loose_overlay.get((str(name or "").lower(), int(res_type)))
+        with self._lock:
+            path = self._loose_overlay.get((str(name or "").lower(), int(res_type)))
         return str(path) if path is not None else ""
 
     def overlay_candidate_paths(self, name: str, res_type: int) -> Tuple[str, ...]:
         """Return every same-resref loose candidate considered for diagnostics."""
 
-        paths = self._loose_overlay_candidates.get((str(name or "").lower(), int(res_type)), ())
+        with self._lock:
+            paths = self._loose_overlay_candidates.get((str(name or "").lower(), int(res_type)), ())
         return tuple(str(path) for path in paths)
 
     def clear_module_overlay(self) -> None:
         """Drop all bundled-module overlay resources."""
-        self._overlay.clear()
-        self._loose_overlay.clear()
-        self._loose_overlay_candidates.clear()
+        with self._lock:
+            self._overlay = {}
+            self._loose_overlay = {}
+            self._loose_overlay_candidates = {}
+            self._revision += 1
 
     def get_k1(self) -> Optional['_GameInstall']:
-        return self._k1
+        with self._lock:
+            return self._k1
 
     def get_k2(self) -> Optional['_GameInstall']:
-        return self._k2
+        with self._lock:
+            return self._k2
 
     def is_ready(self) -> bool:
         """True if at least one installation is indexed."""
-        return self._k1 is not None or self._k2 is not None
+        with self._lock:
+            return self._k1 is not None or self._k2 is not None
 
     # ── Resource access ──────────────────────────────────────────────────
 
@@ -496,13 +533,8 @@ class ResourceManager:
                 return data
         return None
 
-    def get_strict(self, name: str, res_type: int, game: str = 'K1') -> Optional[bytes]:
-        """Fetch only from the requested game (plus the active module overlay).
-
-        Map Studio uses this for engine-facing template/model validation. A K1
-        fallback while authoring K2 can produce a convincing preview for a UTP
-        that does not exist in the target game.
-        """
+    def _get_strict_locked(self, name: str, res_type: int, game: str = 'K1') -> Optional[bytes]:
+        """Fetch one strict resource while the caller holds ``self._lock``."""
 
         loose = self._get_loose_overlay(name, res_type)
         if loose is not None:
@@ -513,6 +545,17 @@ class ResourceManager:
         tag = str(game or 'K1').strip().upper()
         inst = self._k2 if tag == 'K2' else self._k1
         return inst.get(name, res_type) if inst is not None else None
+
+    def get_strict(self, name: str, res_type: int, game: str = 'K1') -> Optional[bytes]:
+        """Fetch only from the requested game (plus the active module overlay).
+
+        Map Studio uses this for engine-facing template/model validation. A K1
+        fallback while authoring K2 can produce a convincing preview for a UTP
+        that does not exist in the target game.
+        """
+
+        with self._lock:
+            return self._get_strict_locked(name, res_type, game)
 
     def get_mdl(self, name: str, game: str = 'K1') -> Optional[bytes]:
         return self.get(name, RES_MDL, game)
@@ -654,27 +697,30 @@ class ResourceManager:
         tag = str(game or 'K1').strip().upper()
         if tag not in {'K1', 'K2'}:
             tag = 'K1'
-        mdl = None
-        mdx = None
-        source_layer = None
-        if prefer_base_archive:
-            inst = self._k1 if tag == 'K1' else self._k2
-            if inst is not None:
-                mdl = inst.get_bif(name, RES_MDL)
-                if mdl is not None:
-                    mdx = inst.get_bif(name, RES_MDX) or b''
-                    source_layer = 'base_game_archive'
-        if mdl is None:
-            mdl = self.get_strict(name, RES_MDL, tag)
+        # Capture the binary pair under one resource-state revision. Parsing is
+        # deliberately outside the lock because it is the expensive CPU phase.
+        with self._lock:
+            mdl = None
+            mdx = None
+            source_layer = None
+            if prefer_base_archive:
+                inst = self._k1 if tag == 'K1' else self._k2
+                if inst is not None:
+                    mdl = inst.get_bif(name, RES_MDL)
+                    if mdl is not None:
+                        mdx = inst.get_bif(name, RES_MDX) or b''
+                        source_layer = 'base_game_archive'
             if mdl is None:
-                log.warning(
-                    "ResourceManager.load_model_strict: %r not found in %s",
-                    name,
-                    tag,
-                )
-                return None
-            mdx = self.get_strict(name, RES_MDX, tag) or b''
-            source_layer = 'target_game_library'
+                mdl = self._get_strict_locked(name, RES_MDL, tag)
+                if mdl is None:
+                    log.warning(
+                        "ResourceManager.load_model_strict: %r not found in %s",
+                        name,
+                        tag,
+                    )
+                    return None
+                mdx = self._get_strict_locked(name, RES_MDX, tag) or b''
+                source_layer = 'target_game_library'
         try:
             from ..game.kotor_loader import load_model_from_bytes
 

@@ -113,7 +113,7 @@ def build_bas_model_recipe(
                 "socket": BAS_SOCKET_BY_SLOT.get(slot, ""),
                 "resref": resref or model_info.get("resref", ""),
                 "model_name": model_info.get("name", ""),
-                "game": game_tag or model_info.get("game", ""),
+                "game": model_info.get("game", "") or game_tag,
                 "transform": normalize_bas_layer_transform(attachment_transforms.get(slot)),
             }
         )

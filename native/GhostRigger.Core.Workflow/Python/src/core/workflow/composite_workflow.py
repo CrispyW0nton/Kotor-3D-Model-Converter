@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 log = logging.getLogger(__name__)
 
@@ -682,6 +682,14 @@ def _export_composite_single_format(
     label: str,
     out_dir: str,
     resref: str,
+    fbx_compatibility_profile: str = "standard",
+    base_skeleton_model: Any = None,
+    tex_cache: Any = None,
+    fbx_animation_names: Optional[Sequence[str]] = None,
+    animation_resource_manager: Any = None,
+    animation_game: str = "",
+    supplemental_animation_models: Sequence[Any] = (),
+    primary_animation_model: Any = None,
 ) -> CompositeExportFormatResult:
     primary_ext = {
         "fbx": ".fbx",
@@ -703,7 +711,33 @@ def _export_composite_single_format(
     try:
         fbx_cls, gltf_cls, _obj_cls = _import_mesh_exporters()
         if fmt_key == "fbx":
-            ok = fbx_cls().export(model, out_path)
+            fbx_model = model
+            if fbx_animation_names is not None:
+                try:
+                    from src.core.animation.fbx_animation_selection import (
+                        prepare_fbx_animation_export_model,
+                    )
+                except ImportError:  # pragma: no cover - package-relative fallback
+                    from core.animation.fbx_animation_selection import (  # type: ignore
+                        prepare_fbx_animation_export_model,
+                    )
+                fbx_model = prepare_fbx_animation_export_model(
+                    model,
+                    tuple(fbx_animation_names),
+                    game=animation_game,
+                    resource_manager=animation_resource_manager,
+                    base_skeleton_model=base_skeleton_model,
+                    supplemental_models=tuple(supplemental_animation_models or ()),
+                    primary_model=primary_animation_model,
+                    require_all=True,
+                )
+            ok = fbx_cls().export(
+                fbx_model,
+                out_path,
+                tex_cache=tex_cache,
+                base_skeleton_model=base_skeleton_model,
+                compatibility_profile=fbx_compatibility_profile,
+            )
             if ok is False:
                 raise RuntimeError("FBX exporter returned False")
         elif fmt_key == "gltf":
@@ -738,6 +772,10 @@ def export_composite_scene(
     out_dir: str = "",
     write_sidecar: bool = True,
     skip_validation: bool = False,
+    fbx_compatibility_profile: str = "standard",
+    tex_cache: Any = None,
+    fbx_animation_names: Optional[Sequence[str]] = None,
+    animation_resource_manager: Any = None,
 ) -> CompositeExportResult:
     """M10/T1003: export a snapped Supermodel body/head as FBX/glTF."""
     body, head = _slot_models(scene)
@@ -808,6 +846,14 @@ def export_composite_scene(
             label,
             out_dir,
             resref,
+            fbx_compatibility_profile,
+            getattr(body, "_gr_fbx_base_skeleton_model", None),
+            tex_cache,
+            fbx_animation_names,
+            animation_resource_manager,
+            str(getattr(scene, "game_version", "") or "K1").upper(),
+            (head,),
+            body,
         ))
 
     sidecar_path = ""
@@ -816,6 +862,12 @@ def export_composite_scene(
             scene.metadata["composite_export"] = {
                 "resref": resref,
                 "warnings": warnings,
+                "fbx_compatibility_profile": str(
+                    fbx_compatibility_profile or "standard"
+                ),
+                "fbx_animation_names": (
+                    None if fbx_animation_names is None else list(fbx_animation_names)
+                ),
                 "formats": [
                     {
                         "format": row.key,

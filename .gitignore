@@ -73,6 +73,8 @@ native/GhostRigger.Core.IO.MDL/**/*.py[cod]
 !/tests/test_prepare_grdev01_exact_stock_module_rename_script.py
 !/tests/test_record_grdev01_runtime_diagnostic_outcome_script.py
 !/tests/test_headless_body_workflow.py
+!/tests/test_bas_attachment_catalog.py
+!/tests/test_resource_manager_revision_concurrency.py
 !/tests/test_head_workflow.py
 !/tests/test_head_inspector.py
 !/tests/test_head_viseme_panel.py

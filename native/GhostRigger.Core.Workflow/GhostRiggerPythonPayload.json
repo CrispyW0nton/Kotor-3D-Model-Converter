@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Workflow",
-    "file_count": 134,
+    "file_count": 135,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -51,13 +51,19 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_ANIMATION_ENGINE",
             "source_path": "src/core/animation/animation_engine.py",
             "packaged_path": "Python/src/core/animation/animation_engine.py",
-            "sha256": "c7f03e2fac0968e8dc5d3f4f87f22eeed55e494e40041624cae066d5cb72c449"
+            "sha256": "925c78f1ab88a7fd9b8a8c19d69f0ef4413eb7ee748b8a047849b038532479e1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_ANIMATION_LIBRARY",
             "source_path": "src/core/animation/animation_library.py",
             "packaged_path": "Python/src/core/animation/animation_library.py",
-            "sha256": "ff0aae6d6fd341343e52ae02cf29bbb610ec0f166fe7eaf1362d9be86ef010e7"
+            "sha256": "e07b0ac29b2492143dc35d853ced7dfab3a093fe88be7600b6b911e07838fc94"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_FBX_ANIMATION_SELECTION",
+            "source_path": "src/core/animation/fbx_animation_selection.py",
+            "packaged_path": "Python/src/core/animation/fbx_animation_selection.py",
+            "sha256": "4d10e961c40be8df530054bf69ace271d4cbc74f53bc14b3b67fd388b75a8490"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_GPU_SKINNING",
@@ -405,7 +411,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEADLESS_BODY_WORKFLOW",
             "source_path": "src/core/characters/headless_body_workflow.py",
             "packaged_path": "Python/src/core/characters/headless_body_workflow.py",
-            "sha256": "b47bc648b54e8e3f6443c55d4a1e2fcb75d28316f018bfb0744d442f50a95815"
+            "sha256": "1dd0fede514fad962c3d0e77a00fa92d4a4436f476db6781dd27d1edf9192124"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_KOTOR_CONSTANTS",
@@ -777,7 +783,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_COMPOSITE_WORKFLOW",
             "source_path": "src/core/workflow/composite_workflow.py",
             "packaged_path": "Python/src/core/workflow/composite_workflow.py",
-            "sha256": "ef6701b0664a835ab8467e04552e776f84fc049ba3a32e1eb75ea25f7801270a"
+            "sha256": "92a955da2308fc3a01d95f3b33bcdd30612cbc6a518dfed8cdaae3fef3bf91c0"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_LEGACY_MODULE_REPAIR",

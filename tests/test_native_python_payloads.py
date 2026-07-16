@@ -74,7 +74,10 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     # ships through both, adding another two byte-identical payload rows.
     # Animated PIE door actors (map_studio_pie_doors.py) ship through both,
     # adding another two byte-identical payload rows.
-    assert len(payload_files) == 1316
+    # Unity transfer/export is owned only by Core.IO; removing the stale Tools
+    # copy and adding the Workflow selector plus its two GUI payload mirrors
+    # produces a net gain of two payload rows.
+    assert len(payload_files) == 1318
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 
@@ -155,6 +158,29 @@ def test_twoda_parser_is_owned_by_domain_core_templates_only() -> None:
         assert not (workflow_project / path).exists()
         assert path not in workflow_sources
         assert path.replace("/", "\\") not in workflow_sources
+
+
+def test_unity_export_bridge_is_owned_only_by_core_io() -> None:
+    """Embedded import order must not select a stale Tools copy of Unity export."""
+
+    owner_project = ROOT / "native" / "GhostRigger.Core.IO"
+    tools_project = ROOT / "native" / "GhostRigger.Core.Tools"
+    packaged_path = "Python/src/core/export/unity_export_bridge.py"
+    include_path = packaged_path.replace("/", "\\")
+
+    owner_payload = json.loads((owner_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    tools_payload = json.loads((tools_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    owner_paths = {str(row["packaged_path"]) for row in owner_payload["files"]}
+    tools_paths = {str(row["packaged_path"]) for row in tools_payload["files"]}
+    tools_project_text = (
+        (tools_project / "GhostRigger.Core.Tools.vcxproj").read_text(encoding="utf-8")
+        + (tools_project / "GhostRigger.Core.Tools.vcxproj.filters").read_text(encoding="utf-8")
+    )
+
+    assert packaged_path in owner_paths
+    assert packaged_path not in tools_paths
+    assert not (tools_project / packaged_path).exists()
+    assert include_path not in tools_project_text
 
 
 def test_reusable_workflow_payloads_are_owned_by_workflow_not_tools() -> None:

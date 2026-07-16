@@ -11,6 +11,59 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-16
 
+### [2026-07-16] T1210/T2404: composed BAS characters and selectable Unity/Unreal FBX takes
+
+Owner: LordVaderCW
+
+T###: T1210 / T2404
+
+Subsystem: Body Attachment System, facial animation playback, and FBX character
+handoff (Core.Rendering/Core.Tools/Core.Workflow/Core.IO/Core.GUI.Display/Core.Automation)
+
+Intersects: the existing T1210 composed-model export, T3502 rigged-FBX writer
+gate, Unity export bridge, and 3ds Max compatibility profile.
+
+- BAS now catalogs every installed K1/K2 `heads.2da` head and modeltype-B
+  headless body with strict game provenance, supports switching the active body,
+  repairs only unresolved conventional body-texture placeholders, and exports
+  the body plus every active attachment as one hierarchy-bearing MDL/MDX, OBJ,
+  or FBX character asset while preserving mesh sections, skins, UVs, materials,
+  and textures.
+- Fixed attached-head facial playback in the main ModernGL window. Head skins
+  and rigid eye/mouth descendants evaluate the head's inherited facial pose in
+  attachment-root local space while the body pose places the headhook socket,
+  so facial deformation is applied once without losing the body animation.
+- Added one shared animation-set selector to main, selected-object, composed
+  BAS, and Character Builder FBX export. It inventories local and inherited
+  clips, supports Current/Local/All/Clear presets, and treats an explicit empty
+  selection as mesh-and-rig-only export. Each chosen clip is deep-copied,
+  resolved through the strict K1/K2 supermodel chain, and gets its own inherited
+  translation scale baked without mutating source models.
+- Composed body/head takes use the body's effective motion and merge only
+  attachment-owned tracks from the head's same-named effective clip. PMHA01
+  jaw/eye tracks inherited from its head supermodel are retained without
+  importing competing pelvis, limb, or root motion.
+- Added an Unreal Engine-Compatible FBX profile beside Standard, Unity, and 3ds
+  Max. Unity receives clean take names and mesh-to-bone inverse binds; Unreal
+  receives its multi-take stack convention and native Odyssey hierarchy. Both
+  profiles use meter-scale units, linear keys, continuous Euler branches, and
+  portable PNG material references. Manifests include the exact selected clips,
+  sources, scopes, scales, contributors, and engine import recommendations.
+- Added repeatable Unity CLI `--animation`, explicit `--no-animations`, Unity
+  MCP `animation_names`, and `ghostrigger_export_model_for_unreal` with matching
+  omitted/empty/selected semantics. Updated `README.md` and `CHEETSHEET.md` with
+  complete BAS, Unity, Unreal, texture, and animation-selection instructions.
+- Verification: 84 focused FBX/animation/BAS/resource/runtime regressions
+  passed with two optional-backend skips; three payload ownership/identity
+  checks and the full Debug x64 build passed, staging all 18 payload DLLs. The
+  actual Debug app exposed 268 PMBAM animation rows in both
+  selectors. Unity 2022.3.62f1 imported PMBAM + PMHA01 with exactly `talk` and
+  `walk`, 11/11 textured material slots, five valid skins, and finite bounds.
+  Unreal Engine 5.6.1 imported the matching profile with two positive-duration
+  Animation Sequences, the populated native skeleton, 11/11 materials, both
+  textures, finite 178.28 cm height, and zero audit errors. No broad suite was
+  run.
+
 ### [2026-07-16] T2906/T3101: guarded Vul803 NWMax/KOTORMax recovery and controller-free room proof
 
 Owner: LordVaderCW

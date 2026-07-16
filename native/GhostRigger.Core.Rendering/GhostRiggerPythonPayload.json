@@ -87,7 +87,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RENDERER_IMPL",
             "source_path": "src/adapters/rendering/moderngl_renderer_impl.py",
             "packaged_path": "Python/src/adapters/rendering/moderngl_renderer_impl.py",
-            "sha256": "2b6b6ace4778b84293125387dd8a8b4903cd4bb685b16c7f56832a80665ea676"
+            "sha256": "faa11af482ca1a8275954c771b2aed48a76dff63d922228211b9d806665d1289"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RESOURCES",
@@ -615,7 +615,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_MESH_RENDER_DATA",
             "source_path": "src/core/rendering/mesh_render_data.py",
             "packaged_path": "Python/src/core/rendering/mesh_render_data.py",
-            "sha256": "8a5bbd5d20a2f0647918a64913c5945a9e61515fef619e72fcd5065d6a516fb5"
+            "sha256": "1d94d03b0496ecad4f8d7adad1efccf699d6cd14f83a473bdcb9cb2521c117b5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_PICKING",

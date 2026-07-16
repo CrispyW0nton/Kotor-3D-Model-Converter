@@ -924,7 +924,27 @@ def _node_world_transform(node, *, anim_pose=None) -> tuple[tuple[float, float, 
             wp = node.world_position()
             return tuple(float(v) for v in wp[:3]), (0.0, 0.0, 0.0, 1.0)
         except Exception:
-            return (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)
+            # Lightweight runtime/test nodes do not always implement the model
+            # convenience methods.  Compose their explicit local transform
+            # through the parent chain instead of dropping socket placement.
+            try:
+                from src.core.geometry.model_data import _quat_mul, _quat_normalize_bind, _quat_rotate
+
+                parent = getattr(node, "parent", None)
+                local_pos = tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3])
+                local_rot = tuple(float(v) for v in getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))[:4])
+                local_rot = tuple(_quat_normalize_bind(local_rot))
+                if parent is None:
+                    return local_pos, local_rot
+                parent_pos, parent_rot = _node_world_transform(parent, anim_pose=anim_pose)
+                offset = _quat_rotate(parent_rot, local_pos)
+                return (
+                    float(parent_pos[0]) + float(offset[0]),
+                    float(parent_pos[1]) + float(offset[1]),
+                    float(parent_pos[2]) + float(offset[2]),
+                ), tuple(_quat_mul(parent_rot, local_rot))
+            except Exception:
+                return (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)
 
 
 def node_world_matrix(node, *, anim_pose=None):

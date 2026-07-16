@@ -346,9 +346,11 @@ def test_moderngl_scene_animation_uses_node_scoped_skin_and_rigid_transforms():
     ).read_text(encoding="utf-8")
 
     assert "animation_pose_for_node" in source
-    assert "_node_anim_pose = animation_pose_for_node(node, anim_pose)" in source
+    assert "def _resolved_animation_pose(nd)" in source
+    assert "_effective_animation_pose_for_node(" in source
+    assert "_node_anim_pose = _resolved_animation_pose(node)" in source
     assert "_pose_node_for_transform(node, _node_anim_pose)" in source
-    assert "_acheck_pose = animation_pose_for_node(_acheck, anim_pose)" in source
+    assert "_acheck_pose = _resolved_animation_pose(_acheck)" in source
     assert "_skin_anim_base_pose = (" in source
     assert "anim_base_pose=_skin_anim_base_pose" in source
     assert "_skin_uploaders_by_scope" in source
@@ -994,6 +996,58 @@ def test_moderngl_skin_palette_cache_is_actor_local_and_pose_stamped() -> None:
     assert uploader_a.compute_calls == 2
     assert uploader_b.compute_calls == 1
 
+
+def test_moderngl_bas_head_palette_is_converted_to_attachment_root_local_space() -> None:
+    import numpy as np
+
+    from src.adapters.rendering.moderngl_renderer import ModernGLRenderer
+    from src.core.animation.gpu_skinning import MAX_BONES
+
+    root = SimpleNamespace(
+        name="head_root",
+        parent=None,
+        children=[],
+        position=(0.0, 0.0, 10.0),
+        rotation=(0.0, 0.0, 0.0, 1.0),
+        _gr_bas_attachment_layer=True,
+        _gr_bas_attachment_root=True,
+        _gr_bas_attachment_slot="head",
+    )
+    skin = SimpleNamespace(
+        name="head_skin",
+        parent=root,
+        children=[],
+        bone_map=["jaw"],
+        _gr_bas_attachment_layer=True,
+        _gr_bas_attachment_root_ref=root,
+    )
+    root.children = [skin]
+
+    class FakeUploader:
+        _skin_palette_formula = "pose_world_times_inverse_bind"
+        _skin_inverse_bind_source = "bind"
+
+        def compute_skin_node_palette(self, *_args, **_kwargs):
+            return None
+
+        def as_numpy_array(self):
+            palette = np.asarray([np.eye(4, dtype=np.float32)], dtype=np.float32)
+            palette[0, 2, 3] = 12.0
+            return palette
+
+    renderer = ModernGLRenderer()
+    count, raw, cached = renderer._skin_palette_bytes_for_draw(
+        scope_key=("bas_attachment", id(root)),
+        skin_node=skin,
+        uploader=FakeUploader(),
+        anim_pose=SimpleNamespace(time=0.0, nodes={}),
+        anim_base_pose=None,
+        skin_signature=("head_skin", 1),
+    )
+    matrices = np.frombuffer(raw, dtype=np.float32).reshape(MAX_BONES, 4, 4).transpose((0, 2, 1))
+    assert count == 1
+    assert cached is False
+    assert matrices[0, 2, 3] == pytest.approx(2.0)
 
 def test_moderngl_transformed_bounds_culling_is_conservative() -> None:
     import numpy as np

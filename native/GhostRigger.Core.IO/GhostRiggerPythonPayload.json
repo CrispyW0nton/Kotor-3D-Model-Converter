@@ -33,7 +33,7 @@
             "resource_name": "PYTHON_PAYLOAD_CONVERTERS_MESH_CONVERTER",
             "source_path": "src/converters/mesh_converter.py",
             "packaged_path": "Python/src/converters/mesh_converter.py",
-            "sha256": "97c4ac32f2805ab2fc06e9a38342fc034fb701e8d1560dacf10d8e89534ea5de"
+            "sha256": "72e4149e4504ec2e1c1ce5f23c06c5da72a8730cd9cb76c7bb88fce0950664e7"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CONVERTERS_NORMAL_MAP",
@@ -63,13 +63,13 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_KOTOR_FBX_MANIFEST",
             "source_path": "src/core/export/kotor_fbx_manifest.py",
             "packaged_path": "Python/src/core/export/kotor_fbx_manifest.py",
-            "sha256": "ee12be9e7bbe87d12eb1cdf49708bd193055ca07158968546fede0d871dc2007"
+            "sha256": "4d2f7fdfb1405054dffda34f70307510389d277548fc86869a38ba68b8eb892d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_UNITY_EXPORT_BRIDGE",
             "source_path": "src/core/export/unity_export_bridge.py",
             "packaged_path": "Python/src/core/export/unity_export_bridge.py",
-            "sha256": "ce4422490775f3109a57a554751c7326d5e4f481efc47e015541c77ed1ec6ae4"
+            "sha256": "f12088a7478fabb5377bd48af4f25d6458ec30de53435d26b455d90fc74f06f0"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_EXPORT_UNITY_IMPORT_VALIDATOR",

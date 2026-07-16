@@ -111,7 +111,7 @@
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_TOOLS_INIT",
             "source_path": "src/kotormcp/tools/__init__.py",
             "packaged_path": "Python/src/kotormcp/tools/__init__.py",
-            "sha256": "c59ef6dec85d61db918366be7f9f5cee394c5bc40ae2db6c8e08d892402a3d85"
+            "sha256": "6aaeaac4ddc8fd13e97bedee4b7a38ee4b9da2fecbda9241c1603b667b195c39"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_TOOLS_ARCHIVES",
@@ -165,7 +165,7 @@
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_TOOLS_GHOSTRIGGER",
             "source_path": "src/kotormcp/tools/ghostrigger.py",
             "packaged_path": "Python/src/kotormcp/tools/ghostrigger.py",
-            "sha256": "1783283cbd2b63d49062efb4026d308caef9c771cfd5925d53529aaa7842e44a"
+            "sha256": "4637eded5b73b857c9edb51504d654cdb81177fb967232f1b3a2ba0fca8968f6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_TOOLS_GHOSTRIGGER_TOOLS",

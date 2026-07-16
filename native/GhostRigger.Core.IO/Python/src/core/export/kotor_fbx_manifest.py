@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Mapping
+from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -116,6 +118,7 @@ def build_kotor_fbx_manifest(
     exporter_backend: str = "",
     fbx_format: str = "",
     target_engine: str = "unreal",
+    compatibility_profile: str = "standard",
 ) -> dict[str, Any]:
     """Build the sidecar preserving KOTOR semantics that FBX cannot represent."""
     target = Path(fbx_path)
@@ -132,6 +135,10 @@ def build_kotor_fbx_manifest(
     mode = _detect_mode(model)
     skin_summary = _skin_summary(mesh_nodes, node_names)
     diagnostics = fbx_diagnostics or inspect_fbx_skin_objects(target)
+    profile = str(compatibility_profile or "standard").strip().lower()
+    engine = str(target_engine or "unreal").strip().lower()
+    meter_scale_profile = profile in {"unity", "unreal", "3ds_max"}
+    animation_selection = _animation_selection_metadata(model)
     manifest = {
         "schema": "ghostrigger.kotor_fbx_manifest.v1",
         "schema_version": SCHEMA_VERSION,
@@ -151,13 +158,18 @@ def build_kotor_fbx_manifest(
             "sidecar_path": str(sidecar_path_for_fbx(target)),
             "format": fbx_format or ("FBX 7.4 ASCII" if target.exists() else ""),
             "exporter_backend": exporter_backend,
+            "compatibility_profile": profile,
             "diagnostics": diagnostics,
             **diagnostics,
         },
         "coordinate_system": {
             "source": "KOTOR object/bind space",
             "fbx_axis": "Z-up, -Y forward, +X right",
-            "unit_scale": "1 KOTOR unit exported as 1 centimeter",
+            "unit_scale": (
+                "1 KOTOR unit declared as 1 meter (100 centimeters)"
+                if meter_scale_profile else
+                "1 KOTOR unit declared as 1 centimeter (legacy standard profile)"
+            ),
             "uv_v_flipped_for_dcc": True,
             "notes": [
                 "KOTOR-specific node semantics are stored in this manifest, not inferred from FBX node type alone.",
@@ -197,8 +209,11 @@ def build_kotor_fbx_manifest(
                 "FBX can be consumed by Unreal, while this manifest preserves Odyssey-only authoring state.",
             ],
         },
-        "unreal": _unreal_handoff(target_engine),
+        "handoff": _engine_handoff(engine, profile),
     }
+    if animation_selection is not None:
+        manifest["animation_selection"] = animation_selection
+    manifest[engine] = manifest["handoff"]
     manifest["validation"] = _validation_summary(manifest)
     return manifest
 
@@ -215,6 +230,7 @@ def write_kotor_fbx_manifest(
     exporter_backend: str = "",
     fbx_format: str = "",
     target_engine: str = "unreal",
+    compatibility_profile: str = "standard",
 ) -> Path:
     """Write and return the canonical FBX sidecar path."""
     manifest = build_kotor_fbx_manifest(
@@ -228,6 +244,7 @@ def write_kotor_fbx_manifest(
         exporter_backend=exporter_backend,
         fbx_format=fbx_format,
         target_engine=target_engine,
+        compatibility_profile=compatibility_profile,
     )
     path = sidecar_path_for_fbx(fbx_path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -438,20 +455,187 @@ def _validation_summary(manifest: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _unreal_handoff(target_engine: str) -> dict[str, Any]:
+def _animation_selection_metadata(model: Any) -> dict[str, Any] | None:
+    """Normalize optional selected-take provenance for the FBX sidecar.
+
+    Animation selection belongs to the workflow layer.  Core.IO only records
+    the small, JSON-safe report stamped on the prepared export model, keeping
+    the exporter independent from supermodel/resource resolution.
+    """
+    raw = getattr(model, "_gr_fbx_animation_selection", None)
+    if raw is None:
+        return None
+    if is_dataclass(raw):
+        raw = asdict(raw)
+    elif not isinstance(raw, Mapping) and hasattr(raw, "__dict__"):
+        raw = vars(raw)
+    if not isinstance(raw, Mapping):
+        return None
+
+    payload = {str(key): _manifest_safe(value) for key, value in raw.items()}
+
+    def first(*keys: str, default: Any = None) -> Any:
+        for key in keys:
+            if key in payload:
+                return payload[key]
+        return default
+
+    selected = _selection_names(first("selected", "selected_animation_names", default=[]))
+    requested = _selection_names(
+        first("requested", "requested_animation_names", default=selected)
+    )
+    embedded = _selection_names(
+        first("embedded", "embedded_animation_names", default=selected)
+    )
+    if not selected and embedded:
+        selected = list(embedded)
+    missing = _selection_names(
+        first("missing", "missing_animation_names", default=[])
+    )
+    sources = first(
+        "sources",
+        "source_by_animation",
+        "source_models",
+        "source",
+        default={},
+    )
+    scales = first(
+        "scales",
+        "scale_by_animation",
+        "cumulative_scales",
+        "scale",
+        default={},
+    )
+    scopes = first("scopes", "source_scopes", default={})
+    contributing_models = first(
+        "contributing_models",
+        "contributors",
+        default={},
+    )
+    sets = first("sets", "animation_sets", default=[])
     return {
-        "target": target_engine,
+        "selected": selected,
+        "requested": requested,
+        "embedded": embedded,
+        "missing": missing,
+        "sources": _manifest_safe(sources),
+        "scales": _manifest_safe(scales),
+        "scopes": _manifest_safe(scopes),
+        "contributing_models": _manifest_safe(contributing_models),
+        "sets": _manifest_safe(sets),
+    }
+
+
+def _selection_names(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        values = [value]
+    elif isinstance(value, (list, tuple, set)):
+        values = list(value)
+    else:
+        values = [value]
+    return [str(item) for item in values if str(item).strip()]
+
+
+def _manifest_safe(value: Any) -> Any:
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if is_dataclass(value):
+        return _manifest_safe(asdict(value))
+    if isinstance(value, Mapping):
+        return {str(key): _manifest_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_manifest_safe(item) for item in value]
+    if hasattr(value, "__dict__"):
+        return _manifest_safe(vars(value))
+    return str(value)
+
+
+def _engine_handoff(target_engine: str, compatibility_profile: str) -> dict[str, Any]:
+    target = str(target_engine or "unreal").strip().lower()
+    if target == "unity":
+        return {
+            "target": target,
+            "compatibility_profile": compatibility_profile,
+            "recommended_import": {
+                "scale_factor": 1.0,
+                "convert_units": True,
+                "bake_axis_conversion": True,
+                "import_animations": True,
+                "animation_compression": "Off",
+                "resample_curves": False,
+                "import_materials": True,
+                "material_naming": "By Base Texture Name",
+                "normal_handling": "Import when exported tangents are present; otherwise calculate in Unity.",
+            },
+            "notes": [
+                "Keep the FBX and its textures folder together inside Assets so relative texture references resolve.",
+                "The Unity profile declares one KOTOR coordinate unit as one meter and uses linear animation curves with continuous Euler branches.",
+            ],
+        }
+    if target == "3ds_max":
+        return {
+            "target": target,
+            "compatibility_profile": compatibility_profile,
+            "recommended_import": {
+                "system_unit_conversion": "Automatic",
+                "axis_conversion": "Z-up source; no manual root rotation",
+                "animation": True,
+                "materials": True,
+            },
+            "notes": [
+                "Allow the FBX importer to convert the declared meter-scale system unit to the active 3ds Max system unit.",
+                "Texture color can vary with 3ds Max OCIO/gamma policy; the FBX carries file links but not user color-space overrides.",
+            ],
+        }
+    if target == "unreal":
+        unreal_profile = str(compatibility_profile or "standard").strip().lower() == "unreal"
+        return {
+            "target": target,
+            "compatibility_profile": compatibility_profile,
+            "recommended_import": {
+                "skeletal_mesh": True,
+                "import_mesh": True,
+                "import_animations": True,
+                "animation_take_policy": "Import each selected embedded FBX take as a separate Animation Sequence.",
+                "sample_rate_fps": 30,
+                "animation_interpolation": "Linear",
+                "import_materials": True,
+                "import_textures": True,
+                "import_meshes_in_bone_hierarchy": True,
+                "preserve_smoothing_groups": True,
+                "normal_import_method": "Import Normals and Tangents when tangents are present; otherwise let Unreal compute tangents.",
+                "convert_scene_unit": unreal_profile,
+                "use_t0_as_ref_pose": False,
+                "update_skeleton_reference_pose": False,
+                "preserve_native_kotor_skeleton": True,
+                "automatic_quinn_retarget": False,
+            },
+            "notes": [
+                "Keep the FBX and its textures folder together and enable texture import so relative PNG references resolve.",
+                "Enable Import Meshes in Bone Hierarchy so attached eyes, eyelids, teeth, tongue, and other rigid child meshes are imported as geometry instead of converted to bones.",
+                (
+                    "The Unreal profile declares one KOTOR coordinate unit as one meter and writes fixed 30 fps linear animation curves with continuous Euler branches."
+                    if unreal_profile else
+                    "The standard profile retains GhostRigger's legacy centimeter declaration; choose the Unreal profile for meter-scale units and linear engine curves."
+                ),
+                "Selected animation takes are embedded in this single FBX and import as separate Animation Sequences on the same native KOTOR skeleton.",
+                "GhostRigger preserves the Odyssey hierarchy and exact bone names; it does not silently retarget the export to Quinn or the Unreal mannequin.",
+                "Use Unreal IK Rig/Retargeter after import when Quinn or mannequin animation compatibility is required.",
+                "Enable Use T0 As Ref Pose only when the first animation frame is intentionally the model's bind/reference pose.",
+                "Keep the GhostRigger manifest with the FBX so inherited-supermodel sources and KOTOR round-trip semantics remain available.",
+            ],
+        }
+    return {
+        "target": target,
+        "compatibility_profile": compatibility_profile,
         "recommended_import": {
-            "skeletal_mesh": True,
             "import_mesh": True,
             "import_animations": True,
-            "import_materials": True,
-            "import_textures": False,
-            "normal_import_method": "Import Normals and Tangents when tangents are present; otherwise let Unreal compute tangents.",
         },
         "notes": [
-            "Use the FBX for Unreal asset creation and the GhostRigger manifest for KOTOR-specific rebuild/round-trip metadata.",
-            "If animation inheritance depends on a KOTOR supermodel, keep the manifest with the FBX so the supermodel chain is not lost.",
+            "Use the GhostRigger manifest for KOTOR-specific rebuild and round-trip metadata that FBX cannot represent.",
         ],
     }
 

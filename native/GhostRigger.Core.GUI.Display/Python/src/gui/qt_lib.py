@@ -28,6 +28,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "qt_render_frame_dialog",
         "qt_dialogs",
         "qt_export_dialog",
+        "qt_fbx_animation_selection_dialog",
         "qt_getting_started_window",
         "qt_lightmap_baker_dialog",
         "qt_settings_dialog",

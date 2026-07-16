@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 import re
 import shutil
 import sys
@@ -80,6 +81,9 @@ def test_summarize_model_records_counts_and_unity_asset_path():
     assert metadata["counts"]["animations"] == 2
     assert metadata["animations"] == ["pause1", "tlknorm"]
     assert metadata["unity"]["asset_path"] == "Assets/KotorImported/Malak/n_darthmalak.fbx"
+    assert metadata["unity"]["compatibility_profile"] == "unity"
+    assert metadata["unity"]["recommended_import"]["scale_factor"] == 1.0
+    assert metadata["unity"]["recommended_import"]["bake_axis_conversion"] is True
 
 
 def test_mcp_tool_manifest_exposes_unity_export_action():
@@ -133,6 +137,49 @@ def test_mcp_unity_export_action_writes_asset_and_metadata(monkeypatch):
         assert sidecar["source"]["path"] == "installation:n_darthmalak.mdl"
         assert sidecar["counts"]["animations"] == 2
         assert sidecar["fbx"]["checked"] is True
+    finally:
+        shutil.rmtree(out_root, ignore_errors=True)
+
+
+def test_mcp_unity_export_resolves_supermodel_for_bind_pose(monkeypatch):
+    out_root = Path(".pytest_tmp_unity_bridge") / "UnitySupermodelProject"
+    exported = {}
+
+    model = _Model()
+    model.supermodel = "S_Male02"
+    base_skeleton = _Model()
+    base_skeleton.name = "S_Male02"
+
+    class _Locator:
+        def locate(self, resref, game, game_path):
+            return f"installation:{resref}.mdl", resref.encode(), b"mdx"
+
+    class _Parser:
+        def parse(self, mdl_bytes, mdx_bytes, path_label):
+            return base_skeleton if mdl_bytes == b"S_Male02" else model
+
+    def _fake_exporter(candidate, out_path, export_rigging):
+        exported["base"] = getattr(candidate, "_gr_fbx_base_skeleton_model", None)
+        out_path.write_text("fbx", encoding="utf-8")
+        return True
+
+    services = SimpleNamespace(locator=_Locator(), parser=_Parser(), analyzer=None, registry=None)
+    monkeypatch.setattr(ghostrigger, "_get_services", lambda: services)
+    monkeypatch.setattr(ghostrigger, "_export_fbx_for_unity", _fake_exporter)
+
+    try:
+        result = asyncio.run(handle_tool(
+            "ghostrigger_export_model_for_unity",
+            {
+                "game": "k1",
+                "resref": "pmbam",
+                "unity_project": str(out_root),
+                "asset_subdir": "Assets/KotorImported/Test",
+            },
+        ))
+        payload = json.loads(result["text"])
+        assert payload["status"] == "ok"
+        assert exported["base"] is base_skeleton
     finally:
         shutil.rmtree(out_root, ignore_errors=True)
 
@@ -867,3 +914,857 @@ def test_fbx_export_writes_kotor_unreal_sidecar_manifest(tmp_path):
     assert manifest["fbx"]["checked"] is True
     assert manifest["fbx"]["exporter_backend"] == "builtin_ascii"
     assert manifest["unreal"]["recommended_import"]["skeletal_mesh"] is True
+
+
+def test_unity_compatibility_profile_declares_meters_and_continuous_linear_animation(tmp_path):
+    root = ModelNode(name="root", flags=int(NodeFlags.HEADER))
+    bone = ModelNode(name="jaw", flags=int(NodeFlags.HEADER), parent=root)
+    skin = ModelNode(
+        name="face",
+        flags=int(NodeFlags.MESH | NodeFlags.SKIN),
+        parent=root,
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+        faces=[(0, 1, 2)],
+        texture="face_diff",
+        bone_map=["jaw"],
+        skin_data=[VertexSkinData([BoneWeight(0, 1.0)]) for _ in range(3)],
+    )
+    root.children.extend([bone, skin])
+
+    def _z_quat(degrees):
+        half = math.radians(degrees) * 0.5
+        return (0.0, 0.0, math.sin(half), math.cos(half))
+
+    anim_node = ModelNode(
+        name="jaw",
+        controllers=[{
+            "type": 20,
+            "times": [0.0, 1.0],
+            "values": [_z_quat(179.0), _z_quat(-179.0)],
+        }],
+    )
+    model = KotorModel(
+        name="unity_profile_case",
+        root_node=root,
+        animations=[Animation(name="talk", length=1.0, anim_root="root", nodes=[anim_node])],
+    )
+    out_path = tmp_path / "unity_profile_case.fbx"
+
+    assert FBXExporter().export(
+        model,
+        str(out_path),
+        export_rigging=False,
+        compatibility_profile="unity",
+    )
+    text = out_path.read_text(encoding="utf-8")
+    manifest = json.loads(out_path.with_suffix(".ghostrigger.json").read_text(encoding="utf-8"))
+
+    assert 'P: "UnitScaleFactor", "double", "Number", "",100' in text
+    assert "KeyAttrFlags: *1" in text
+    assert "\n\t\t\ta: 4\n" in text
+    assert "179.000000,181.000000" in text
+    assert 'AnimationStack:' in text and '"AnimStack::talk"' in text
+    assert '"AnimStack::|talk"' not in text
+    assert manifest["fbx"]["compatibility_profile"] == "unity"
+    assert manifest["unity"]["recommended_import"]["convert_units"] is True
+    assert "1 meter" in manifest["coordinate_system"]["unit_scale"]
+
+
+def test_unreal_compatibility_profile_embeds_engine_curves_and_preserves_global_cluster_bind(tmp_path):
+    root = ModelNode(name="root", flags=int(NodeFlags.HEADER))
+    bone = ModelNode(
+        name="jaw",
+        flags=int(NodeFlags.HEADER),
+        parent=root,
+        position=(0.2, 0.3, 0.4),
+    )
+    skin = ModelNode(
+        name="face",
+        flags=int(NodeFlags.MESH | NodeFlags.SKIN),
+        parent=root,
+        position=(1.0, 2.0, 3.0),
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+        faces=[(0, 1, 2)],
+        texture="face_diff",
+        bone_map=["jaw"],
+        skin_data=[VertexSkinData([BoneWeight(0, 1.0)]) for _ in range(3)],
+    )
+    root.children.extend([bone, skin])
+    anim_node = ModelNode(
+        name="jaw",
+        controllers=[{
+            "type": 8,
+            "times": [0.0, 1.0],
+            "values": [(0.0, 0.0, 0.0), (0.0, 0.1, 0.0)],
+        }],
+    )
+    model = KotorModel(
+        name="unreal_profile_case",
+        root_node=root,
+        animations=[Animation(name="talk", length=1.0, anim_root="root", nodes=[anim_node])],
+    )
+    model._gr_fbx_animation_selection = {
+        "selected": ["talk"],
+        "requested": ["talk", "missing_clip"],
+        "embedded": ["talk"],
+        "missing": ["missing_clip"],
+        "sources": {"talk": "s_male02"},
+        "scales": {"talk": 1.25},
+    }
+    out_path = tmp_path / "unreal_profile_case.fbx"
+
+    assert FBXExporter().export(
+        model,
+        str(out_path),
+        export_rigging=False,
+        compatibility_profile="ue5",
+    )
+    text = out_path.read_text(encoding="utf-8")
+    manifest = json.loads(out_path.with_suffix(".ghostrigger.json").read_text(encoding="utf-8"))
+
+    assert "; Compatibility profile: unreal" in text
+    assert 'P: "UnitScaleFactor", "double", "Number", "",100' in text
+    assert "KeyAttrFlags: *1" in text
+    assert "\n\t\t\ta: 4\n" in text
+    assert '"AnimStack::|talk"' in text
+    cluster = re.search(
+        r'Deformer: \d+, "SubDeformer::jaw", "Cluster" \{.*?'
+        r'Transform: \*16 \{\s*a: ([^\r\n]+).*?'
+        r'TransformLink: \*16 \{\s*a: ([^\r\n]+)',
+        text,
+        re.S,
+    )
+    assert cluster is not None
+    transform = [float(value) for value in cluster.group(1).split(",")]
+    transform_link = [float(value) for value in cluster.group(2).split(",")]
+    assert transform[12:15] == [1.0, 2.0, 3.0]
+    assert transform_link[12:15] == [0.2, 0.3, 0.4]
+
+    assert manifest["fbx"]["compatibility_profile"] == "unreal"
+    assert manifest["coordinate_system"]["unit_scale"].startswith("1 KOTOR unit declared as 1 meter")
+    selection = manifest["animation_selection"]
+    assert selection["selected"] == ["talk"]
+    assert selection["requested"] == ["talk", "missing_clip"]
+    assert selection["embedded"] == ["talk"]
+    assert selection["missing"] == ["missing_clip"]
+    assert selection["sources"] == {"talk": "s_male02"}
+    assert selection["scales"] == {"talk": 1.25}
+    handoff = manifest["unreal"]
+    assert handoff["recommended_import"]["sample_rate_fps"] == 30
+    assert handoff["recommended_import"]["animation_interpolation"] == "Linear"
+    assert handoff["recommended_import"]["preserve_native_kotor_skeleton"] is True
+    assert handoff["recommended_import"]["automatic_quinn_retarget"] is False
+    assert handoff["recommended_import"]["import_textures"] is True
+    assert handoff["recommended_import"]["import_meshes_in_bone_hierarchy"] is True
+    assert any("does not silently retarget" in note for note in handoff["notes"])
+
+
+def test_unity_cluster_bind_uses_emitted_hierarchy_not_legacy_collapsed_world_transform(tmp_path):
+    root = ModelNode(name="root", flags=int(NodeFlags.HEADER))
+    # The generic viewport-oriented world_transform intentionally collapses a
+    # near-pure X 180-degree parent. FBX emits the rotation, so its bind pose
+    # must compose the exact emitted hierarchy instead.
+    parent_rotation = (
+        0.9993784703983151,
+        0.0021312797225932945,
+        0.034913866595109005,
+        0.004376353555986939,
+    )
+    parent = ModelNode(
+        name="finger_base",
+        flags=int(NodeFlags.HEADER),
+        parent=root,
+        position=(0.001277, 0.004095, -0.083374),
+        rotation=parent_rotation,
+    )
+    tip = ModelNode(
+        name="finger_tip",
+        flags=int(NodeFlags.HEADER),
+        parent=parent,
+        position=(-0.007361, 0.0, 0.060654),
+    )
+    skin = ModelNode(
+        name="arm",
+        flags=int(NodeFlags.MESH | NodeFlags.SKIN),
+        parent=root,
+        position=(0.0, 0.79, 0.0),
+        vertices=[(0.0, 0.0, 0.0), (0.1, 0.0, 0.0), (0.0, 0.1, 0.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+        faces=[(0, 1, 2)],
+        texture="arm_diff",
+        bone_map=["finger_tip"],
+        skin_data=[VertexSkinData([BoneWeight(0, 1.0)]) for _ in range(3)],
+    )
+    root.children.extend([parent, skin])
+    parent.children.append(tip)
+    model = KotorModel(name="unity_bind_hierarchy_case", root_node=root)
+    out_path = tmp_path / "unity_bind_hierarchy_case.fbx"
+
+    assert FBXExporter()._export_fbx_ascii(
+        model,
+        str(out_path),
+        compatibility_profile="unity",
+    )
+    text = out_path.read_text(encoding="utf-8")
+    cluster = re.search(
+        r'Deformer: \d+, "SubDeformer::finger_tip", "Cluster" \{.*?'
+        r'Transform: \*16 \{\s*a: ([^\r\n]+).*?'
+        r'TransformLink: \*16 \{\s*a: ([^\r\n]+)',
+        text,
+        re.S,
+    )
+    assert cluster is not None
+    values = [float(value) for value in cluster.group(1).split(",")]
+    link_values = [float(value) for value in cluster.group(2).split(",")]
+
+    def _rotate(quat, vector):
+        qx, qy, qz, qw = quat
+        vx, vy, vz = vector
+        tx = 2.0 * (qy * vz - qz * vy)
+        ty = 2.0 * (qz * vx - qx * vz)
+        tz = 2.0 * (qx * vy - qy * vx)
+        return (
+            vx + qw * tx + qy * tz - qz * ty,
+            vy + qw * ty + qz * tx - qx * tz,
+            vz + qw * tz + qx * ty - qy * tx,
+        )
+
+    tip_offset = _rotate(parent_rotation, tip.position)
+    bone_world = tuple(parent.position[index] + tip_offset[index] for index in range(3))
+    mesh_world = skin.position
+    delta = tuple(mesh_world[index] - bone_world[index] for index in range(3))
+    inverse_rotation = (
+        -parent_rotation[0],
+        -parent_rotation[1],
+        -parent_rotation[2],
+        parent_rotation[3],
+    )
+    expected_translation = _rotate(inverse_rotation, delta)
+
+    rotated_axes = [
+        _rotate(parent_rotation, axis)
+        for axis in ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0))
+    ]
+    bone_rotation = tuple(
+        tuple(rotated_axes[column][row] for column in range(3))
+        for row in range(3)
+    )
+    expected_raw_rotation = [
+        bone_rotation[row][column]
+        for row in range(3)
+        for column in range(3)
+    ]
+    actual_raw_rotation = values[0:3] + values[4:7] + values[8:11]
+    actual_link_rotation = link_values[0:3] + link_values[4:7] + link_values[8:11]
+
+    for actual, expected in zip(actual_raw_rotation, expected_raw_rotation):
+        assert math.isclose(actual, expected, rel_tol=0.0, abs_tol=2e-6)
+    for actual, expected in zip(values[12:15], expected_translation):
+        assert math.isclose(actual, expected, rel_tol=0.0, abs_tol=2e-6)
+    for actual, expected in zip(actual_link_rotation, expected_raw_rotation):
+        assert math.isclose(actual, expected, rel_tol=0.0, abs_tol=2e-6)
+    for actual, expected in zip(link_values[12:15], bone_world):
+        assert math.isclose(actual, expected, rel_tol=0.0, abs_tol=2e-6)
+
+
+def test_supermodel_synthetic_bones_include_required_ancestor_chain(tmp_path):
+    base_root = ModelNode(
+        name="s_male02",
+        flags=int(NodeFlags.HEADER),
+        position=(0.0, 0.1, 0.0),
+    )
+    neck = ModelNode(
+        name="neck_g",
+        flags=int(NodeFlags.HEADER),
+        parent=base_root,
+        position=(0.0, 1.0, 0.0),
+    )
+    jaw = ModelNode(
+        name="f_jaw_g",
+        flags=int(NodeFlags.HEADER),
+        parent=neck,
+        position=(0.0, 0.2, 0.0),
+    )
+    base_root.children.append(neck)
+    neck.children.append(jaw)
+    base = KotorModel(name="s_male02", root_node=base_root)
+
+    root = ModelNode(name="head_root", flags=int(NodeFlags.HEADER))
+    skin = ModelNode(
+        name="head_skin",
+        flags=int(NodeFlags.MESH | NodeFlags.SKIN),
+        parent=root,
+        vertices=[(0.0, 0.0, 0.0), (0.1, 0.0, 0.0), (0.0, 0.1, 0.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+        faces=[(0, 1, 2)],
+        texture="head_diff",
+        bone_map=["f_jaw_g"],
+        skin_data=[VertexSkinData([BoneWeight(0, 1.0)]) for _ in range(3)],
+    )
+    root.children.append(skin)
+    head = KotorModel(name="standalone_head", root_node=root)
+    output = tmp_path / "standalone_head.fbx"
+
+    assert FBXExporter()._export_fbx_ascii(
+        head,
+        str(output),
+        base_skeleton_model=base,
+        compatibility_profile="unity",
+    )
+    text = output.read_text(encoding="utf-8")
+
+    ids = {
+        name: int(re.search(rf'Model: (\d+), "Model::{name}"', text).group(1))
+        for name in ("head_root", "s_male02", "neck_g", "f_jaw_g")
+    }
+    assert f'C: "OO",{ids["f_jaw_g"]},{ids["neck_g"]}' in text
+    assert f'C: "OO",{ids["neck_g"]},{ids["s_male02"]}' in text
+    assert f'C: "OO",{ids["s_male02"]},{ids["head_root"]}' in text
+    jaw_block = text.split('"Model::f_jaw_g", "LimbNode" {', 1)[1].split("\n\t}", 1)[0]
+    assert 'Lcl Translation","Lcl Translation","","A",0.000000,0.200000,0.000000' in jaw_block
+
+
+def test_3ds_max_cluster_uses_autodesk_global_bind_matrices(tmp_path):
+    root = ModelNode(name="root", flags=int(NodeFlags.HEADER))
+    bone = ModelNode(
+        name="bone",
+        flags=int(NodeFlags.HEADER),
+        parent=root,
+        position=(0.2, 0.3, 0.4),
+    )
+    skin = ModelNode(
+        name="skin",
+        flags=int(NodeFlags.MESH | NodeFlags.SKIN),
+        parent=root,
+        position=(1.0, 2.0, 3.0),
+        vertices=[(0.0, 0.0, 0.0), (0.1, 0.0, 0.0), (0.0, 0.1, 0.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+        faces=[(0, 1, 2)],
+        texture="skin_diff",
+        bone_map=["bone"],
+        skin_data=[VertexSkinData([BoneWeight(0, 1.0)]) for _ in range(3)],
+    )
+    root.children.extend([bone, skin])
+    model = KotorModel(name="max_bind_contract", root_node=root)
+    output = tmp_path / "max_bind_contract.fbx"
+
+    assert FBXExporter()._export_fbx_ascii(
+        model,
+        str(output),
+        compatibility_profile="3ds_max",
+    )
+    text = output.read_text(encoding="utf-8")
+    cluster = re.search(
+        r'Deformer: \d+, "SubDeformer::bone", "Cluster" \{.*?'
+        r'Transform: \*16 \{\s*a: ([^\r\n]+).*?'
+        r'TransformLink: \*16 \{\s*a: ([^\r\n]+)',
+        text,
+        re.S,
+    )
+    assert cluster is not None
+    transform = [float(value) for value in cluster.group(1).split(",")]
+    transform_link = [float(value) for value in cluster.group(2).split(",")]
+    assert transform[12:15] == [1.0, 2.0, 3.0]
+    assert transform_link[12:15] == [0.2, 0.3, 0.4]
+
+
+def test_fbx_export_dialog_filter_maps_compatibility_profiles():
+    from src.gui.windows.application_core.shared.model_io import _fbx_compatibility_profile_from_filter
+
+    assert _fbx_compatibility_profile_from_filter("Unity-Compatible FBX (*.fbx)") == "unity"
+    assert _fbx_compatibility_profile_from_filter("Unreal Engine-Compatible FBX (*.fbx)") == "unreal"
+    assert _fbx_compatibility_profile_from_filter("3ds Max-Compatible FBX (*.fbx)") == "3ds_max"
+    assert _fbx_compatibility_profile_from_filter("Standard FBX (*.fbx)") == "standard"
+
+
+def test_model_io_resolves_base_skeleton_through_main_window_resource_manager():
+    from src.gui.windows.application_core.shared.model_io import ModelIoMixin
+
+    base_skeleton = object()
+    calls = []
+
+    class _Manager:
+        def load_model(self, resref, game):
+            calls.append((resref, game))
+            return base_skeleton
+
+    class _Harness(ModelIoMixin):
+        _current_game = "K1"
+
+        def _get_resource_manager(self):
+            return _Manager()
+
+    model = SimpleNamespace(supermodel="S_Male02")
+    assert _Harness()._fbx_base_skeleton_for_export(model) is base_skeleton
+    assert calls == [("S_Male02", "K1")]
+
+
+def test_model_io_reuses_animation_browser_supermodel_cache_before_fbx_selector():
+    from src.core.animation.animation_engine import SuperModelResolver
+    from src.gui.windows.application_core.shared.model_io import ModelIoMixin
+
+    base_skeleton = SimpleNamespace(name="S_Male02", supermodel="NULL")
+    calls = []
+
+    class _Manager:
+        revision = 1
+
+        def load_model_strict(self, resref, game):
+            calls.append((resref, game))
+            return base_skeleton
+
+    manager = _Manager()
+
+    class _Harness(ModelIoMixin):
+        _current_game = "K1"
+
+        def _get_resource_manager(self):
+            return manager
+
+    SuperModelResolver.clear_cache()
+    model = SimpleNamespace(supermodel="S_Male02")
+    harness = _Harness()
+    assert harness._fbx_base_skeleton_for_export(model) is base_skeleton
+    assert harness._fbx_base_skeleton_for_export(model) is base_skeleton
+    assert calls == [("S_Male02", "K1")]
+
+
+def test_model_io_worker_passes_unity_profile_textures_and_base_skeleton(monkeypatch, tmp_path):
+    from src.converters.mesh_converter import FBXExporter
+    from src.gui.windows.application_core.shared.model_io import _work_export_fbx
+
+    captured = {}
+    base_skeleton = object()
+    texture_cache = object()
+    out_path = tmp_path / "main_window_unity.fbx"
+
+    def _fake_export(self, model, path, **kwargs):
+        captured.update(kwargs)
+        Path(path).write_text("fbx", encoding="utf-8")
+        return True
+
+    monkeypatch.setattr(FBXExporter, "export", _fake_export)
+    result = _work_export_fbx(
+        _Model(),
+        str(out_path),
+        tex_cache=texture_cache,
+        base_skeleton_model=base_skeleton,
+        compatibility_profile="unity",
+    )
+
+    assert result == str(out_path)
+    assert captured["compatibility_profile"] == "unity"
+    assert captured["base_skeleton_model"] is base_skeleton
+    assert captured["tex_cache"] is texture_cache
+    assert captured["export_rigging"] is True
+
+
+def test_main_fbx_route_passes_unreal_selection_and_resource_context_to_worker(
+    monkeypatch,
+    tmp_path,
+):
+    from src.gui.windows.application_core.shared import model_io
+
+    model = _Model()
+    manager = object()
+    texture_cache = object()
+    base_skeleton = object()
+    head_animation_source = object()
+    captured = {}
+    output = tmp_path / "main_unreal.fbx"
+
+    class _Harness(model_io.ModelIoMixin):
+        def _require_model(self, _title):
+            return model
+
+        def _get_tex_cache_for_export(self):
+            return texture_cache
+
+        def _fbx_base_skeleton_for_export(self, candidate):
+            assert candidate is model
+            return base_skeleton
+
+        def _fbx_supplemental_animation_models(self, candidate):
+            assert candidate is model
+            return (head_animation_source,)
+
+        def _choose_fbx_animation_sets(self, candidate, profile, **kwargs):
+            captured["chooser"] = (candidate, profile, kwargs)
+            return ("walk", "tlknorm")
+
+        def _fbx_resource_context_for_export(self, candidate):
+            assert candidate is model
+            return manager, "K2"
+
+        def _run_io_async(self, *args, **kwargs):
+            captured["worker_args"] = args
+            captured["worker_kwargs"] = kwargs
+
+        def _log(self, *_args, **_kwargs):
+            pass
+
+    monkeypatch.setattr(
+        model_io.QtWidgets.QFileDialog,
+        "getSaveFileName",
+        lambda *_args, **_kwargs: (
+            str(output),
+            "Unreal Engine-Compatible FBX (*.fbx)",
+        ),
+    )
+
+    _Harness()._export_fbx()
+
+    assert captured["worker_args"][1] is model_io._work_export_fbx
+    assert captured["worker_args"][2] is model
+    assert captured["worker_args"][3] == str(output)
+    kwargs = captured["worker_kwargs"]
+    assert kwargs["compatibility_profile"] == "unreal"
+    assert kwargs["selected_animation_names"] == ("walk", "tlknorm")
+    assert isinstance(kwargs["selected_animation_names"], tuple)
+    assert kwargs["animation_resource_manager"] is manager
+    assert kwargs["animation_game"] == "K2"
+    assert kwargs["supplemental_animation_models"] == (head_animation_source,)
+    assert kwargs["base_skeleton_model"] is base_skeleton
+    assert kwargs["tex_cache"] is texture_cache
+
+
+def test_model_io_animation_selector_uses_shared_dialog_contract_and_returns_tuple(
+    monkeypatch,
+):
+    from src.core.animation import fbx_animation_selection
+    from src.gui.qt_lib.dialogs import qt_fbx_animation_selection_dialog
+    from src.gui.windows.application_core.shared import model_io
+
+    manager = object()
+    rows = (SimpleNamespace(name="walk"), SimpleNamespace(name="tlknorm"))
+    captured = {}
+
+    monkeypatch.setattr(
+        fbx_animation_selection,
+        "list_fbx_animation_sets",
+        lambda *args, **kwargs: rows,
+    )
+
+    class _Dialog:
+        def __init__(
+            self,
+            dialog_rows,
+            parent=None,
+            *,
+            profile="standard",
+            initial_selected_names=None,
+            current_animation_name="",
+        ):
+            captured.update(
+                rows=dialog_rows,
+                parent=parent,
+                profile=profile,
+                initial_selected_names=initial_selected_names,
+                current_animation_name=current_animation_name,
+            )
+
+        def exec(self):
+            return model_io.QtWidgets.QDialog.Accepted
+
+        def selected_animation_names(self):
+            return ["walk"]
+
+    monkeypatch.setattr(
+        qt_fbx_animation_selection_dialog,
+        "QtFbxAnimationSelectionDialog",
+        _Dialog,
+    )
+
+    class _AnimationPanel:
+        def selected_animation(self):
+            return "walk"
+
+    class _Harness(model_io.ModelIoMixin):
+        animations_panel = _AnimationPanel()
+
+        def _fbx_resource_context_for_export(self, _model):
+            return manager, "K1"
+
+    harness = _Harness()
+    model = SimpleNamespace(name="body", animations=[_Anim("pause1")])
+    result = harness._choose_fbx_animation_sets(
+        model,
+        "unreal",
+        base_skeleton_model="base",
+        supplemental_models=("head",),
+    )
+
+    assert result == ("walk",)
+    assert isinstance(result, tuple)
+    assert captured["rows"] is rows
+    assert captured["parent"] is harness
+    assert captured["profile"] == "unreal"
+    assert captured["initial_selected_names"] == ("pause1", "walk")
+    assert captured["current_animation_name"] == "walk"
+
+
+def test_character_workflows_pass_unity_profile_to_fbx_exporter(monkeypatch, tmp_path):
+    from src.core.characters import headless_body_workflow
+    from src.core.workflow import composite_workflow
+
+    calls = []
+
+    class _Fbx:
+        def export(self, model, path, **kwargs):
+            calls.append((model, path, kwargs))
+            Path(path).write_text("fbx", encoding="utf-8")
+            return True
+
+    class _Unused:
+        pass
+
+    monkeypatch.setattr(
+        headless_body_workflow,
+        "_import_mesh_exporters",
+        lambda: (_Fbx, _Unused, _Unused),
+    )
+    monkeypatch.setattr(
+        composite_workflow,
+        "_import_mesh_exporters",
+        lambda: (_Fbx, _Unused, _Unused),
+    )
+    body = _Model()
+    base_skeleton = object()
+    texture_cache = object()
+    body._gr_fbx_base_skeleton_model = base_skeleton
+
+    body_result = headless_body_workflow._export_single_format(
+        None,
+        body,
+        "fbx",
+        "FBX",
+        str(tmp_path),
+        "body",
+        "unity",
+        texture_cache,
+    )
+    composite_result = composite_workflow._export_composite_single_format(
+        body,
+        "fbx",
+        "FBX",
+        str(tmp_path),
+        "composite",
+        "unity",
+        base_skeleton,
+        texture_cache,
+    )
+
+    assert body_result.ok is True
+    assert composite_result.ok is True
+    assert [call[2]["compatibility_profile"] for call in calls] == ["unity", "unity"]
+    assert all(call[2]["base_skeleton_model"] is base_skeleton for call in calls)
+    assert all(call[2]["tex_cache"] is texture_cache for call in calls)
+
+
+def test_character_workflows_prepare_exact_selected_animation_sets(monkeypatch, tmp_path):
+    from src.core.animation import fbx_animation_selection
+    from src.core.characters import headless_body_workflow
+    from src.core.workflow import composite_workflow
+
+    exporter_calls = []
+    prepare_calls = []
+    manager = object()
+    base_skeleton = object()
+    head_source = object()
+    body = _Model()
+    body._gr_fbx_base_skeleton_model = base_skeleton
+    prepared_headless = SimpleNamespace(name="prepared_headless")
+    prepared_composite = SimpleNamespace(name="prepared_composite")
+
+    def _prepare(model, selected_names, **kwargs):
+        prepare_calls.append((model, selected_names, kwargs))
+        return prepared_headless if len(prepare_calls) == 1 else prepared_composite
+
+    class _Fbx:
+        def export(self, model, path, **kwargs):
+            exporter_calls.append((model, path, kwargs))
+            Path(path).write_text("fbx", encoding="utf-8")
+            return True
+
+    class _Unused:
+        pass
+
+    monkeypatch.setattr(
+        fbx_animation_selection,
+        "prepare_fbx_animation_export_model",
+        _prepare,
+    )
+    monkeypatch.setattr(
+        headless_body_workflow,
+        "_import_mesh_exporters",
+        lambda: (_Fbx, _Unused, _Unused),
+    )
+    monkeypatch.setattr(
+        composite_workflow,
+        "_import_mesh_exporters",
+        lambda: (_Fbx, _Unused, _Unused),
+    )
+
+    headless_result = headless_body_workflow._export_single_format(
+        SimpleNamespace(game_version="K2"),
+        body,
+        "fbx",
+        "FBX",
+        str(tmp_path),
+        "selected_body",
+        fbx_compatibility_profile="unreal",
+        fbx_animation_names=["walk", "tlknorm"],
+        animation_resource_manager=manager,
+    )
+    composite_result = composite_workflow._export_composite_single_format(
+        body,
+        "fbx",
+        "FBX",
+        str(tmp_path),
+        "mesh_only_composite",
+        fbx_compatibility_profile="unity",
+        base_skeleton_model=base_skeleton,
+        fbx_animation_names=(),
+        animation_resource_manager=manager,
+        animation_game="K1",
+        supplemental_animation_models=(head_source,),
+    )
+
+    assert headless_result.ok is True
+    assert composite_result.ok is True
+    assert prepare_calls[0][0] is body
+    assert prepare_calls[0][1] == ("walk", "tlknorm")
+    assert isinstance(prepare_calls[0][1], tuple)
+    assert prepare_calls[0][2]["game"] == "K2"
+    assert prepare_calls[0][2]["resource_manager"] is manager
+    assert prepare_calls[0][2]["base_skeleton_model"] is base_skeleton
+    assert prepare_calls[1][0] is body
+    assert prepare_calls[1][1] == ()
+    assert isinstance(prepare_calls[1][1], tuple)
+    assert prepare_calls[1][2]["game"] == "K1"
+    assert prepare_calls[1][2]["resource_manager"] is manager
+    assert prepare_calls[1][2]["base_skeleton_model"] is base_skeleton
+    assert prepare_calls[1][2]["supplemental_models"] == (head_source,)
+    assert exporter_calls[0][0] is prepared_headless
+    assert exporter_calls[0][2]["compatibility_profile"] == "unreal"
+    assert exporter_calls[1][0] is prepared_composite
+    assert exporter_calls[1][2]["compatibility_profile"] == "unity"
+
+
+def test_character_export_dialog_exposes_unity_compatibility_mode():
+    gui_path = ROOT / "native/GhostRigger.Core.GUI.Display/Python/src/gui/dialogs/qt_export_dialog.py"
+    tools_path = ROOT / "native/GhostRigger.Core.Tools/Python/src/gui/dialogs/qt_export_dialog.py"
+    source = gui_path.read_text(encoding="utf-8")
+
+    assert '"unity", "Unity-Compatible FBX"' in source
+    assert "def fbx_compatibility_profile" in source
+    assert gui_path.read_bytes() == tools_path.read_bytes()
+
+
+def test_character_export_dialog_exposes_unreal_profile_and_animation_selector_contract():
+    export_gui = ROOT / "native/GhostRigger.Core.GUI.Display/Python/src/gui/dialogs/qt_export_dialog.py"
+    export_tools = ROOT / "native/GhostRigger.Core.Tools/Python/src/gui/dialogs/qt_export_dialog.py"
+    selector_gui = ROOT / "native/GhostRigger.Core.GUI.Display/Python/src/gui/dialogs/qt_fbx_animation_selection_dialog.py"
+    selector_tools = ROOT / "native/GhostRigger.Core.Tools/Python/src/gui/dialogs/qt_fbx_animation_selection_dialog.py"
+    qt_lib = ROOT / "native/GhostRigger.Core.GUI.Display/Python/src/gui/qt_lib.py"
+
+    export_source = export_gui.read_text(encoding="utf-8")
+    selector_source = selector_gui.read_text(encoding="utf-8")
+
+    assert '("unreal", "Unreal Engine-Compatible FBX")' in export_source
+    assert 'setObjectName("fbxProfileCombo")' in export_source
+    assert "class QtFbxAnimationSelectionDialog" in selector_source
+    assert 'setHeaderLabels(("Animation", "Source", "Scope", "Duration"))' in selector_source
+    assert 'setObjectName("fbxAnimationSetList")' in selector_source
+    assert 'setObjectName("fbxAnimationSelectCurrentButton")' in selector_source
+    assert 'setObjectName("fbxAnimationSelectLocalButton")' in selector_source
+    assert 'setObjectName("fbxAnimationSelectAllButton")' in selector_source
+    assert 'setObjectName("fbxAnimationSelectNoneButton")' in selector_source
+    assert "mesh and rig only" in selector_source
+    assert '"qt_fbx_animation_selection_dialog"' in qt_lib.read_text(encoding="utf-8")
+    assert export_gui.read_bytes() == export_tools.read_bytes()
+    assert selector_gui.read_bytes() == selector_tools.read_bytes()
+
+
+def test_character_builder_routes_selected_fbx_animation_sets_in_both_payloads():
+    gui_path = ROOT / "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/qt_character_builder_panel.py"
+    tools_path = ROOT / "native/GhostRigger.Core.Tools/Python/src/gui/panels/qt_character_builder_panel.py"
+    gui_source = gui_path.read_text(encoding="utf-8")
+
+    required_contracts = (
+        "fbx_animation_names = None",
+        "QtFbxAnimationSelectionDialog(",
+        "profile=fbx_compatibility_profile",
+        "fbx_animation_names=fbx_animation_names",
+        "animation_resource_manager=animation_resource_manager",
+        '"fbx_animation_names": (',
+    )
+    for contract in required_contracts:
+        assert contract in gui_source
+    assert gui_path.read_bytes() == tools_path.read_bytes()
+
+
+def test_mcp_engine_export_schemas_expose_explicit_animation_selection():
+    tools = {tool["name"]: tool for tool in get_all_tools()}
+
+    unity_properties = tools["ghostrigger_export_model_for_unity"]["inputSchema"]["properties"]
+    unreal = tools["ghostrigger_export_model_for_unreal"]
+    unreal_properties = unreal["inputSchema"]["properties"]
+
+    assert unity_properties["animation_names"]["type"] == "array"
+    assert unity_properties["animation_names"]["items"] == {"type": "string"}
+    assert unreal_properties["animation_names"]["type"] == "array"
+    assert {"output_path", "export_dir"} <= set(unreal_properties)
+
+
+def test_mcp_unreal_export_materializes_only_selected_animation_sets(monkeypatch):
+    out_root = Path(".pytest_tmp_unity_bridge") / "UnrealSelectedAnimations"
+    exported = {}
+
+    class _Locator:
+        def locate(self, resref, game, game_path):
+            return f"installation:{resref}.mdl", b"mdl", b"mdx"
+
+    class _Parser:
+        def parse(self, mdl_bytes, mdx_bytes, path_label):
+            model = _Model()
+            model.anim_scale = 1.0
+            return model
+
+    def _fake_exporter(model, out_path, export_rigging):
+        exported["animations"] = [animation.name for animation in model.animations]
+        out_path.write_text("fbx", encoding="utf-8")
+        return True
+
+    services = SimpleNamespace(locator=_Locator(), parser=_Parser(), analyzer=None, registry=None)
+    monkeypatch.setattr(ghostrigger, "_get_services", lambda: services)
+    monkeypatch.setattr(ghostrigger, "_export_fbx_for_unreal", _fake_exporter)
+
+    try:
+        result = asyncio.run(handle_tool(
+            "ghostrigger_export_model_for_unreal",
+            {
+                "game": "k1",
+                "resref": "n_darthmalak",
+                "export_dir": str(out_root),
+                "animation_names": ["tlknorm"],
+            },
+        ))
+        payload = json.loads(result["text"])
+
+        assert payload["status"] == "ok"
+        assert payload["compatibility_profile"] == "unreal"
+        assert payload["animations"] == ["tlknorm"]
+        assert payload["animation_selection"]["requested"] == ["tlknorm"]
+        assert payload["animation_selection"]["embedded"] == ["tlknorm"]
+        assert exported["animations"] == ["tlknorm"]
+        assert Path(payload["asset"]).exists()
+    finally:
+        shutil.rmtree(out_root, ignore_errors=True)

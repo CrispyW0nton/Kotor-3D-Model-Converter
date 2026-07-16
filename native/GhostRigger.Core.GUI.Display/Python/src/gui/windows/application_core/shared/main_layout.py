@@ -138,6 +138,8 @@ class MainWindowLayoutMixin:
         # Populate the slot combos with every attachable game model once the
         # game library is configured; the first slot click resolves it lazily.
         self.body_attachment_panel.slotSelected.connect(self._ensure_bas_attachment_catalog)
+        self.body_attachment_panel.catalogRefreshRequested.connect(self._ensure_bas_attachment_catalog)
+        QtCore.QTimer.singleShot(0, self._ensure_bas_attachment_catalog)
         self.animation_library_panel = self.content_browser_panel
         self._retarget_workbench_controls_connected = False
         self._unreal_source_row: Optional[dict] = None

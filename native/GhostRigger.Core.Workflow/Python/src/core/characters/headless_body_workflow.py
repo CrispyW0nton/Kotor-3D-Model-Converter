@@ -12974,6 +12974,10 @@ def _export_single_format(
     label: str,
     out_dir: str,
     resref: str,
+    fbx_compatibility_profile: str = "standard",
+    tex_cache: Any = None,
+    fbx_animation_names: Optional[Sequence[str]] = None,
+    animation_resource_manager: Any = None,
 ) -> ExportFormatResult:
     """Dispatch one format.  Returns a structured per-format row.
 
@@ -13034,7 +13038,32 @@ def _export_single_format(
                 raise RuntimeError("; ".join(messages) or "Character export transaction failed")
         elif fmt_key == "fbx":
             fbx_cls, _gltf_cls, _obj_cls = _import_mesh_exporters()
-            ok = fbx_cls().export(body, out_path)
+            fbx_model = body
+            base_skeleton_model = getattr(body, "_gr_fbx_base_skeleton_model", None)
+            if fbx_animation_names is not None:
+                try:
+                    from src.core.animation.fbx_animation_selection import (
+                        prepare_fbx_animation_export_model,
+                    )
+                except ImportError:  # pragma: no cover - package-relative fallback
+                    from core.animation.fbx_animation_selection import (  # type: ignore
+                        prepare_fbx_animation_export_model,
+                    )
+                fbx_model = prepare_fbx_animation_export_model(
+                    body,
+                    tuple(fbx_animation_names),
+                    game=normalize_kotor_game_tag(getattr(scene, "game_version", "K1")),
+                    resource_manager=animation_resource_manager,
+                    base_skeleton_model=base_skeleton_model,
+                    require_all=True,
+                )
+            ok = fbx_cls().export(
+                fbx_model,
+                out_path,
+                tex_cache=tex_cache,
+                base_skeleton_model=base_skeleton_model,
+                compatibility_profile=fbx_compatibility_profile,
+            )
             if ok is False:
                 raise RuntimeError("FBX exporter returned False")
         elif fmt_key == "gltf":
@@ -13044,7 +13073,7 @@ def _export_single_format(
                 raise RuntimeError("glTF exporter returned False")
         elif fmt_key == "obj":
             _fbx_cls, _gltf_cls, obj_cls = _import_mesh_exporters()
-            ok = obj_cls().export(body, out_path)
+            ok = obj_cls().export(body, out_path, tex_cache=tex_cache)
             if ok is False:
                 raise RuntimeError("OBJ exporter returned False")
     except Exception as exc:
@@ -13069,6 +13098,10 @@ def export_scene(
     out_dir: str = "",
     write_sidecar: bool = True,
     skip_validation: bool = False,
+    fbx_compatibility_profile: str = "standard",
+    tex_cache: Any = None,
+    fbx_animation_names: Optional[Sequence[str]] = None,
+    animation_resource_manager: Any = None,
 ) -> ExportResult:
     """Workflow Step 6b — write the scene to disk in the requested formats.
 
@@ -13181,6 +13214,10 @@ def export_scene(
                 _export_single_format(
                     scene, body, fmt_key,
                     label_by_key[fmt_key], out_dir, resref,
+                    fbx_compatibility_profile,
+                    tex_cache,
+                    fbx_animation_names,
+                    animation_resource_manager,
                 )
             )
 
@@ -13221,6 +13258,12 @@ def export_scene(
             }
             for row in rows
         ]
+        metadata["fbx_compatibility_profile"] = str(
+            fbx_compatibility_profile or "standard"
+        )
+        metadata["fbx_animation_names"] = (
+            None if fbx_animation_names is None else list(fbx_animation_names)
+        )
         metadata["export_timestamps"] = {
             **dict(metadata.get("export_timestamps", {}) or {}),
             "last_export_at": export_stamp,

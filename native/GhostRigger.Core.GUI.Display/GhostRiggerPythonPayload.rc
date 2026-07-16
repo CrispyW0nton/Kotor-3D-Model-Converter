@@ -25,6 +25,7 @@ PYTHON_PAYLOAD_GUI_DIALOGS_LIGHTMAP_BAKE_WORKER RCDATA "Python/src/gui/dialogs/l
 PYTHON_PAYLOAD_GUI_DIALOGS_LIGHTMAP_PREVIEW_WINDOW RCDATA "Python/src/gui/dialogs/lightmap_preview_window.py"
 PYTHON_PAYLOAD_GUI_DIALOGS_QT_DIALOGS RCDATA "Python/src/gui/dialogs/qt_dialogs.py"
 PYTHON_PAYLOAD_GUI_DIALOGS_QT_EXPORT_DIALOG RCDATA "Python/src/gui/dialogs/qt_export_dialog.py"
+PYTHON_PAYLOAD_GUI_DIALOGS_QT_FBX_ANIMATION_SELECTION_DIALOG RCDATA "Python/src/gui/dialogs/qt_fbx_animation_selection_dialog.py"
 PYTHON_PAYLOAD_GUI_DIALOGS_QT_GETTING_STARTED_WINDOW RCDATA "Python/src/gui/dialogs/qt_getting_started_window.py"
 PYTHON_PAYLOAD_GUI_DIALOGS_QT_LIGHTMAP_BAKER_DIALOG RCDATA "Python/src/gui/dialogs/qt_lightmap_baker_dialog.py"
 PYTHON_PAYLOAD_GUI_DIALOGS_QT_RENDER_FRAME_DIALOG RCDATA "Python/src/gui/dialogs/qt_render_frame_dialog.py"

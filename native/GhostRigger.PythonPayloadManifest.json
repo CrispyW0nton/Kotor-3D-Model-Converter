@@ -50,7 +50,7 @@
     },
     {
         "project": "GhostRigger.Core.GUI.Display",
-        "python_file_count": 314,
+        "python_file_count": 315,
         "files": [
             "src\\gui\\__init__.py",
             "src\\gui\\assets\\__init__.py",
@@ -77,6 +77,7 @@
             "src\\gui\\dialogs\\lightmap_preview_window.py",
             "src\\gui\\dialogs\\qt_dialogs.py",
             "src\\gui\\dialogs\\qt_export_dialog.py",
+            "src\\gui\\dialogs\\qt_fbx_animation_selection_dialog.py",
             "src\\gui\\dialogs\\qt_getting_started_window.py",
             "src\\gui\\dialogs\\qt_lightmap_baker_dialog.py",
             "src\\gui\\dialogs\\qt_render_frame_dialog.py",
@@ -824,7 +825,6 @@
             "src\\core\\export\\__init__.py",
             "src\\core\\export\\export_job.py",
             "src\\core\\export\\gltf_importer.py",
-            "src\\core\\export\\unity_export_bridge.py",
             "src\\core\\export\\unity_import_validator.py",
             "src\\core\\game\\game_library_ext.py",
             "src\\core\\gizmo\\transform_controller.py",
@@ -1028,6 +1028,7 @@
             "src\\gui\\camera\\render_manifest.py",
             "src\\gui\\camera\\render_output.py",
             "src\\gui\\dialogs\\qt_export_dialog.py",
+            "src\\gui\\dialogs\\qt_fbx_animation_selection_dialog.py",
             "src\\gui\\lighting\\__init__.py",
             "src\\gui\\lighting\\aurora_light_adapter.py",
             "src\\gui\\lighting\\light_export_bridge.py",
@@ -1211,7 +1212,7 @@
     },
     {
         "project": "GhostRigger.Core.Workflow",
-        "python_file_count": 134,
+        "python_file_count": 135,
         "files": [
             "src\\autorig\\__init__.py",
             "src\\autorig\\accurig.py",
@@ -1222,6 +1223,7 @@
             "src\\core\\animation\\__init__.py",
             "src\\core\\animation\\animation_engine.py",
             "src\\core\\animation\\animation_library.py",
+            "src\\core\\animation\\fbx_animation_selection.py",
             "src\\core\\animation\\gpu_skinning.py",
             "src\\core\\animation\\skinning_profiles\\__init__.py",
             "src\\core\\animation\\skinning_profiles\\animation_supermodel_skinning.py",

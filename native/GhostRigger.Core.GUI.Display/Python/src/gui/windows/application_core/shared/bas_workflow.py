@@ -13,12 +13,17 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
     raise RuntimeError("PySide6 is required for the Qt shell") from exc
 
 from src.systems.bas.attachment_alignment import default_bas_attachment_transform
+from src.systems.bas.attachment_catalog import repair_bas_body_texture_references
 from src.systems.bas.head_resolution import normalize_bas_model_resref, resolve_bas_head_resref
 from src.systems.bas.model_recipe import (
     BAS_SLOT_ORDER,
     BAS_SOCKET_BY_SLOT,
     build_bas_model_recipe,
     save_bas_model_recipe,
+)
+from src.systems.bas.preview_composer import (
+    build_bas_preview_model,
+    prepare_bas_composed_export_model,
 )
 
 log = logging.getLogger(__name__)
@@ -33,10 +38,14 @@ class BasWorkflowMixin:
         panel = getattr(self, "body_attachment_panel", None)
         if panel is None or not hasattr(panel, "set_attachment_catalog"):
             return
-        if panel.attachment_catalog() is not None:
-            return
         manager = self._get_resource_manager()
         if manager is None:
+            return
+        revision = getattr(manager, "revision", None)
+        current_catalog = panel.attachment_catalog()
+        current_revision_getter = getattr(panel, "attachment_catalog_revision", None)
+        current_revision = current_revision_getter() if callable(current_revision_getter) else None
+        if current_catalog is not None and (revision is None or current_revision == int(revision)):
             return
         try:
             from src.systems.bas.attachment_catalog import build_bas_attachment_catalog
@@ -46,9 +55,12 @@ class BasWorkflowMixin:
             log.debug("BAS attachment catalog build failed", exc_info=True)
             return
         if not catalog.empty:
-            panel.set_attachment_catalog(catalog)
-            slot_count = sum(len(rows) for rows in catalog.entries_by_slot.values())
-            panel.set_status(f"BAS catalog ready: {slot_count} attachable game models across all slots.")
+            panel.set_attachment_catalog(catalog, revision=revision)
+            panel.set_status(
+                "BAS catalog ready: "
+                f"{len(catalog.entries('head'))} K1/K2 head choices and "
+                f"{len(catalog.entries('body'))} headless body choices."
+            )
 
     def _handle_bas_mode_changed(self, mode: str) -> None:
         mode_key = str(mode or "headless_body").strip().lower()
@@ -75,9 +87,6 @@ class BasWorkflowMixin:
     def _handle_bas_attach_requested(self, slot: str, resref: str) -> None:
         slot = str(slot or "").strip().lower()
         resref = str(resref or "").strip()
-        if slot == "body":
-            self._show_workspace_dock("content_browser")
-            return
         if slot in {"left_hand", "right_hand"}:
             if hasattr(self, "body_attachment_panel"):
                 self.body_attachment_panel.set_status("Hand slots are sockets; attach items through L. Weapon or R. Weapon.")
@@ -87,17 +96,43 @@ class BasWorkflowMixin:
                 self.body_attachment_panel.set_status("Full Body BAS mode uses the existing head hooks; attach masks or goggles instead.")
             return
         body = getattr(self, "_bas_body_model", None) or getattr(self, "_current_model", None)
+        selected_game = self._selected_bas_catalog_game(resref)
+        current_game = str(
+            getattr(self, "_current_game", "")
+            or (self._infer_game_from_model(body) if body is not None else "")
+            or "K1"
+        ).upper()
+        game = selected_game or current_game
+        load_resref = normalize_bas_model_resref(resref)
+        if slot == "body":
+            if not load_resref:
+                self.body_attachment_panel.set_status("No headless body model selected.")
+                return
+            model = self._load_bas_attachment_model(
+                load_resref,
+                game=game,
+                strict=bool(selected_game),
+            )
+            if model is None:
+                self.body_attachment_panel.set_status(f"Could not load {game}:{load_resref}.")
+                return
+            repair_bas_body_texture_references(
+                model,
+                manager=self._get_resource_manager(),
+                game=game,
+                resref=load_resref,
+            )
+            self._adopt_bas_body_model(model, load_resref, game)
+            return
         if body is None:
             self.body_attachment_panel.set_status("No body model loaded.")
             return
         if not resref and slot != "head":
             self.body_attachment_panel.set_status("No attachment model selected.")
             return
-        load_resref = normalize_bas_model_resref(resref)
         resolution = None
         if slot == "head":
             manager = self._get_resource_manager()
-            game = (getattr(self, "_current_game", "") or self._infer_game_from_model(body) or "K1").upper()
             resolution = resolve_bas_head_resref(
                 requested=resref,
                 body_model=body,
@@ -108,7 +143,11 @@ class BasWorkflowMixin:
         if not load_resref:
             self.body_attachment_panel.set_status("No attachment model selected.")
             return
-        model = self._load_bas_attachment_model(load_resref)
+        model = self._load_bas_attachment_model(
+            load_resref,
+            game=game,
+            strict=bool(selected_game),
+        )
         if model is None:
             details = ""
             if resolution is not None and resolution.candidates:
@@ -131,8 +170,56 @@ class BasWorkflowMixin:
             suffix = ""
             if resolution is not None and resolution.source and resolution.source != "requested":
                 suffix = f" Head resolved from {resolution.source}: {load_resref}."
+            elif selected_game:
+                suffix = f" Loaded from {selected_game}."
             self.body_attachment_panel.set_status(f"{result}{suffix}")
             self._refresh_bas_animation_panel_after_layer_change(slot)
+
+    def _selected_bas_catalog_game(self, resref: str) -> str:
+        panel = getattr(self, "body_attachment_panel", None)
+        getter = getattr(panel, "selected_model_game", None)
+        selected_getter = getattr(panel, "selected_model_resref", None)
+        if not callable(getter) or not callable(selected_getter):
+            return ""
+        if normalize_bas_model_resref(selected_getter()) != normalize_bas_model_resref(resref):
+            return ""
+        game = str(getter() or "").strip().upper()
+        return game if game in {"K1", "K2"} else ""
+
+    def _adopt_bas_body_model(self, model, resref: str, game: str) -> None:
+        """Switch BAS to a loaded body only after strict loading succeeds."""
+
+        self._bas_body_model = model
+        self._current_model = model
+        self._current_game = str(game or "K1").upper()
+        self._model_path = f"{self._current_game}:{resref}"
+        self._bas_preview_model = None
+        self._bas_active_build_name = ""
+        self._bas_mode = self._bas_mode_for_model(model)
+        timer = getattr(self, "_animation_timer", None)
+        if timer is not None and hasattr(timer, "stop"):
+            timer.stop()
+        self._animation_engine = None
+        self._animation_last_tick = None
+        panel = getattr(self, "body_attachment_panel", None)
+        if panel is not None:
+            panel.set_mode(self._bas_mode)
+            panel.set_body_model(model, resref=resref, game=self._current_game)
+        if hasattr(self, "_configure_viewport_resources"):
+            self._configure_viewport_resources()
+        result = self._rebuild_bas_preview()
+        if hasattr(self, "properties_panel"):
+            self.properties_panel.show_model(model)
+        if hasattr(self, "animations_panel"):
+            self._load_animation_panel_model(model)
+        if hasattr(self, "_populate_animation_library_from_current_model"):
+            self._populate_animation_library_from_current_model()
+        if hasattr(self, "_update_scene_chrome"):
+            self._update_scene_chrome()
+        if panel is not None:
+            panel.set_status(
+                f"Using {self._current_game}:{resref} as the BAS body. {result}"
+            )
     def _handle_bas_clear_requested(self, slot: str) -> None:
         slot = str(slot or "").strip().lower()
         if slot in {"body", "left_hand", "right_hand"}:
@@ -163,15 +250,22 @@ class BasWorkflowMixin:
         if (source == "head" and slot == "head") or (source == "attachment" and slot != "head"):
             model = getattr(self, "_bas_body_model", None) or getattr(self, "_current_model", None)
             self._load_animation_panel_model(model, select_name=selected)
-    def _load_bas_attachment_model(self, resref: str):
+    def _load_bas_attachment_model(self, resref: str, *, game: str = "", strict: bool = False):
         resref = normalize_bas_model_resref(resref)
         if not resref:
             return None
-        game = (getattr(self, "_current_game", "") or self._infer_game_from_model(self._bas_body_model or self._current_model) or "K1").upper()
+        game = str(
+            game
+            or getattr(self, "_current_game", "")
+            or self._infer_game_from_model(self._bas_body_model or self._current_model)
+            or "K1"
+        ).upper()
         manager = self._get_resource_manager()
         if manager is None:
             return None
         try:
+            if strict and hasattr(manager, "load_model_strict"):
+                return manager.load_model_strict(resref, game)
             return manager.load_model(resref, game)
         except Exception:
             log.debug("BAS attachment load failed for %s:%s", game, resref, exc_info=True)
@@ -182,27 +276,15 @@ class BasWorkflowMixin:
             return "No body model loaded."
         try:
             previous_preview = getattr(self, "_bas_preview_model", None)
-            preview = copy.deepcopy(body)
-            self._reset_bas_model_node_traversal(preview)
-            head = self._bas_attachments.get("head")
-            if head is not None:
-                if not self._attach_bas_item_to_preview(preview, head, "headhook", slot="head", transform=self._bas_attachment_transforms.get("head")):
-                    return "Head attachment failed: body has no headhook socket."
-            for slot in ("mask", "goggles", "left_weapon", "belt", "right_weapon"):
-                item = self._bas_attachments.get(slot)
-                if item is None:
-                    continue
-                socket_name = self._bas_socket_for_slot(slot)
-                if not self._attach_bas_item_to_preview(
-                    preview,
-                    item,
-                    socket_name,
-                    slot=slot,
-                    transform=self._bas_attachment_transforms.get(slot),
-                ):
-                    label = slot.replace("_", " ")
-                    return f"{label.title()} attachment failed: model has no {socket_name} socket."
-            preview.name = str(getattr(self, "_bas_active_build_name", "") or f"{getattr(body, 'name', 'body')}_bas")
+            preview = build_bas_preview_model(
+                body_model=body,
+                attachment_models=dict(getattr(self, "_bas_attachments", {}) or {}),
+                attachment_transforms=dict(getattr(self, "_bas_attachment_transforms", {}) or {}),
+                name=str(
+                    getattr(self, "_bas_active_build_name", "")
+                    or f"{getattr(body, 'name', 'body')}_bas"
+                ),
+            )
             self._apply_bas_preview_to_viewport(preview, previous_preview=previous_preview)
             attached = ", ".join(self._bas_attachment_resrefs.get(key, key) for key in self._bas_attachments)
             return f"BAS preview updated: {attached or 'body only'}."
@@ -258,39 +340,107 @@ class BasWorkflowMixin:
             if panel is not None:
                 panel.set_status(rebuild_status or "BAS preview is unavailable.")
             return
-        export_model = copy.deepcopy(preview)
-        try:
-            export_model.name = str(
-                getattr(self, "_bas_active_build_name", "") or f"{getattr(body, 'name', 'body')}_bas"
-            )
-        except Exception:
-            pass
-        path, _selected = QtWidgets.QFileDialog.getSaveFileName(
+        export_name = str(
+            getattr(self, "_bas_active_build_name", "")
+            or f"{getattr(body, 'name', 'body')}_bas"
+        )
+        path, selected_filter = QtWidgets.QFileDialog.getSaveFileName(
             self,
             "Export Composed BAS Model",
-            f"{export_model.name}.mdl",
-            "Binary MDL + MDX (*.mdl);;OBJ + MTL (*.obj);;FBX (*.fbx)",
+            f"{export_name}.mdl",
+            "Binary MDL + MDX (*.mdl);;"
+            "OBJ + MTL (*.obj);;"
+            "Standard FBX (*.fbx);;"
+            "Unity-Compatible FBX (*.fbx);;"
+            "Unreal Engine-Compatible FBX (*.fbx);;"
+            "3ds Max-Compatible FBX (*.fbx)",
         )
         if not path:
             return
         from src.gui.windows.application_core.shared.model_io import (
+            _fbx_compatibility_profile_from_filter,
             _work_export_fbx,
             _work_export_mdl_binary,
             _work_export_obj,
         )
 
-        suffix = Path(path).suffix.lower()
+        filter_label = str(selected_filter or "").strip().lower()
+        if "fbx" in filter_label:
+            export_kind = "fbx"
+            path = str(Path(path).with_suffix(".fbx"))
+        elif "obj" in filter_label:
+            export_kind = "obj"
+            path = str(Path(path).with_suffix(".obj"))
+        else:
+            export_kind = "mdl"
+            path = str(Path(path).with_suffix(".mdl"))
+        try:
+            if export_kind == "mdl":
+                # Native MDL preserves the Odyssey DAG exactly, including any
+                # legal repeated names. DCC-only global-name normalization must
+                # never mutate that game-ready structure.
+                export_model = copy.deepcopy(preview)
+                self._reset_bas_model_node_traversal(export_model)
+                export_report = {"renamed_count": 0, "renamed": []}
+            else:
+                export_model, export_report = prepare_bas_composed_export_model(
+                    preview,
+                    require_unique_body_names=True,
+                )
+            export_model.name = export_name
+        except ValueError as exc:
+            message = f"Composed export blocked: {exc}"
+            if panel is not None:
+                panel.set_status(message)
+            QtWidgets.QMessageBox.warning(self, "Export Composed BAS Model", message)
+            return
+        compatibility_profile = _fbx_compatibility_profile_from_filter(selected_filter)
+        base_skeleton_model = None
+        selected_animation_names = None
+        animation_resource_manager = None
+        animation_game = ""
+        supplemental_animation_models = tuple(
+            model
+            for model in (getattr(self, "_bas_attachments", {}) or {}).values()
+            if model is not None
+        )
+        if export_kind == "fbx":
+            base_resolver = getattr(self, "_fbx_base_skeleton_for_export", None)
+            if callable(base_resolver):
+                base_skeleton_model = base_resolver(export_model)
+            chooser = getattr(self, "_choose_fbx_animation_sets", None)
+            if callable(chooser):
+                selected_animation_names = chooser(
+                    export_model,
+                    compatibility_profile,
+                    base_skeleton_model=base_skeleton_model,
+                    supplemental_models=supplemental_animation_models,
+                )
+                if selected_animation_names is None:
+                    if panel is not None:
+                        panel.set_status("Composed FBX export cancelled.")
+                    return
+            context_getter = getattr(self, "_fbx_resource_context_for_export", None)
+            if callable(context_getter):
+                animation_resource_manager, animation_game = context_getter(export_model)
         attached = ", ".join(self._bas_attachment_resrefs.get(key, key) for key in self._bas_attachments)
 
         def _on_complete(result, cancelled=False):
             if cancelled or result is None:
                 return
-            message = f"Exported composed model ({attached or 'body only'}) -> {Path(path).name}"
+            profile_label = (
+                f"{compatibility_profile.replace('_', ' ')} FBX"
+                if export_kind == "fbx" else export_kind.upper()
+            )
+            message = f"Exported composed {profile_label} model ({attached or 'body only'}) -> {Path(path).name}"
+            renamed_count = int(export_report.get("renamed_count", 0) or 0)
+            if renamed_count:
+                message += f"; normalized {renamed_count} colliding attachment node name(s)"
             if panel is not None:
                 panel.set_status(message)
             self._log(message, "success")
 
-        if suffix == ".obj":
+        if export_kind == "obj":
             self._run_io_async(
                 f"Exporting composed OBJ — {Path(path).name}",
                 _work_export_obj,
@@ -300,13 +450,19 @@ class BasWorkflowMixin:
                 on_complete=_on_complete,
                 error_category="export_error",
             )
-        elif suffix == ".fbx":
+        elif export_kind == "fbx":
             self._run_io_async(
                 f"Exporting composed FBX — {Path(path).name}",
                 _work_export_fbx,
                 export_model,
                 path,
                 tex_cache=self._get_tex_cache_for_export(),
+                base_skeleton_model=base_skeleton_model,
+                compatibility_profile=compatibility_profile,
+                selected_animation_names=selected_animation_names,
+                animation_resource_manager=animation_resource_manager,
+                animation_game=animation_game,
+                supplemental_animation_models=supplemental_animation_models,
                 on_complete=_on_complete,
                 error_category="export_error",
             )
@@ -316,7 +472,7 @@ class BasWorkflowMixin:
                 f"Exporting composed binary MDL — {Path(path).name}",
                 _work_export_mdl_binary,
                 export_model,
-                path if suffix == ".mdl" else str(Path(path).with_suffix(".mdl")),
+                path,
                 game_version=game,
                 on_complete=_on_complete,
                 error_category="export_error",

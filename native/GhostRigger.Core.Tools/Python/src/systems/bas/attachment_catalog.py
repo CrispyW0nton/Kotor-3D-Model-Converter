@@ -86,6 +86,10 @@ WEAPON_FAMILY_LABELS: dict[str, str] = {
 _WEAPON_EXCLUDED_FAMILIES = re.compile(r"^w_(laserfire|lfire|null$|notready)")
 
 _VARIATION_PATTERN = re.compile(r"^([a-z0-9_]+?)_(\d{2,3})$")
+_BODY_MODEL_COLUMN_PATTERN = re.compile(r"^model[a-z]$")
+_DETACHABLE_HEAD_NAME_PATTERN = re.compile(r"^(?:p[fm]h[a-z0-9_]+|c_twohead)$")
+_PLAYER_BODY_NAME_PATTERN = re.compile(r"^p[fm]b[a-n](?:[lms])?$")
+_GAME_TAGS = ("K1", "K2")
 
 
 @dataclass(frozen=True)
@@ -95,6 +99,7 @@ class BasCatalogEntry:
     label: str
     resref: str
     games: tuple[str, ...] = ()
+    game: str = ""
     family: str = ""
     color: str = ""
 
@@ -171,40 +176,238 @@ def _classified_models(manager: Any) -> list[tuple[str, str]]:
     return [(str(name or "").strip().lower(), str(game or "").strip().upper()) for name, game in rows]
 
 
-def _head_entries(manager: Any) -> tuple[BasCatalogEntry, ...]:
-    """Read heads.2da from each installed game for the authoritative head list."""
+def _available_models_by_game(rows: list[tuple[str, str]]) -> dict[str, set[str]]:
+    available = {game: set() for game in _GAME_TAGS}
+    for resref, game in rows:
+        if resref and game in available:
+            available[game].add(resref)
+    return available
 
-    heads: dict[str, set[str]] = {}
+
+def _read_twoda(manager: Any, resref: str, game: str):
     try:
         from src.core.assets.resource_manager import RES_2DA
         from src.core.templates.twoda import TwoDA
     except Exception:
-        return ()
-    for game in ("K1", "K2"):
-        try:
-            data = manager.get_strict("heads", RES_2DA, game)
-        except Exception:
-            data = None
-        if not data:
-            continue
-        try:
-            table = TwoDA.from_bytes(data, "heads")
-        except Exception:
-            log.debug("BAS catalog: heads.2da parse failed for %s", game, exc_info=True)
-            continue
-        for row in table:
-            head = str(row.get("head", "") or "").strip().lower()
-            if head and head != TwoDA.BLANK.lower():
-                heads.setdefault(head, set()).add(game)
-    entries = [
-        BasCatalogEntry(
-            label=f"Head {resref}",
-            resref=resref,
-            games=tuple(sorted(games)),
+        return None
+    try:
+        data = manager.get_strict(resref, RES_2DA, game)
+    except Exception:
+        data = None
+    if not data:
+        return None
+    try:
+        return TwoDA.from_bytes(data, resref)
+    except Exception:
+        log.debug("BAS catalog: %s.2da parse failed for %s", resref, game, exc_info=True)
+        return None
+
+
+def _clean_table_resref(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    return "" if text in {"", "****", "none", "null"} else text
+
+
+def _strict_texture_exists(manager: Any, texture: str, game: str) -> bool:
+    """Return whether *texture* exists in the explicitly selected game.
+
+    Body-slot MDLs occasionally carry an engine placeholder texture.  BAS
+    must not let the ResourceManager's legacy cross-game fallback hide that
+    condition, because the replacement must travel with the selected K1/K2
+    body into composed exports.
+    """
+
+    name = _clean_table_resref(texture)
+    tag = str(game or "").strip().upper()
+    if not name or tag not in _GAME_TAGS or manager is None:
+        return False
+    try:
+        from src.core.assets.resource_manager import RES_TGA, RES_TPC
+
+        return bool(
+            manager.get_strict(name, RES_TPC, tag)
+            or manager.get_strict(name, RES_TGA, tag)
         )
-        for resref, games in heads.items()
-    ]
-    return tuple(sorted(entries, key=lambda entry: entry.resref))
+    except Exception:
+        return False
+
+
+def repair_bas_body_texture_references(
+    model: Any,
+    *,
+    manager: Any,
+    game: str,
+    resref: str,
+) -> dict[str, str]:
+    """Repair unresolved skin textures on a catalog-selected body model.
+
+    A small number of shipped headless-body templates (notably K2 ``PMBD``)
+    reference an authoring placeholder such as ``PMBMV_01`` that is absent
+    from both games.  The game normally supplies the body-slot texture from
+    appearance/item state; selecting the bare MDL in BAS has no UTC/UTI row
+    from which to obtain that override.  Use the installed conventional
+    ``<body-resref>01`` texture only when the authored skin texture cannot be
+    resolved in the selected game.  Valid authored textures are never
+    replaced.
+
+    The loaded model is a fresh ResourceManager parse, so updating its skin
+    material fields is isolated to this BAS build and is intentionally kept in
+    the composed MDL/OBJ/FBX output.  The returned mapping is
+    ``{missing_texture: replacement_texture}`` for diagnostics/tests.
+    """
+
+    tag = str(game or "").strip().upper()
+    body = str(resref or "").strip().lower()
+    if model is None or manager is None or tag not in _GAME_TAGS or not body:
+        return {}
+
+    candidates: list[str] = [f"{body}01"]
+    size_match = re.fullmatch(r"(p[fm]b[a-n])[lms]", body)
+    if size_match:
+        candidates.append(f"{size_match.group(1)}01")
+    replacement = next(
+        (candidate for candidate in candidates if _strict_texture_exists(manager, candidate, tag)),
+        "",
+    )
+    if not replacement:
+        return {}
+
+    try:
+        nodes = list(model.all_nodes())
+    except Exception:
+        nodes = list(getattr(model, "nodes", []) or [])
+
+    repairs: dict[str, str] = {}
+    for node in nodes:
+        if not bool(getattr(node, "is_skin", False)):
+            continue
+        if not list(getattr(node, "vertices", []) or []):
+            continue
+        current = _clean_table_resref(getattr(node, "texture", ""))
+        if current and _strict_texture_exists(manager, current, tag):
+            continue
+        setattr(node, "texture", replacement)
+        texture_names = list(getattr(node, "texture_names", []) or [])
+        if texture_names:
+            texture_names[0] = replacement
+        else:
+            texture_names = [replacement]
+        setattr(node, "texture_names", texture_names)
+        if hasattr(node, "tex_count"):
+            setattr(node, "tex_count", max(1, int(getattr(node, "tex_count", 0) or 0)))
+        repairs[current or "<empty>"] = replacement
+
+    if repairs:
+        setattr(model, "_gr_bas_texture_repairs", dict(repairs))
+        log.info(
+            "BAS body texture repair for %s:%s: %s",
+            tag,
+            body,
+            repairs,
+        )
+    return repairs
+
+
+def _head_entries(
+    manager: Any,
+    available_models: dict[str, set[str]],
+) -> tuple[BasCatalogEntry, ...]:
+    """Return every installed detachable head, preserving K1/K2 provenance."""
+
+    entries: list[BasCatalogEntry] = []
+    for game in _GAME_TAGS:
+        table = _read_twoda(manager, "heads", game)
+        if table is None:
+            continue
+        seen: set[str] = set()
+        for row in table:
+            head = _clean_table_resref(row.get("head", ""))
+            if not head or head in seen or head not in available_models.get(game, set()):
+                continue
+            seen.add(head)
+            entries.append(
+                BasCatalogEntry(
+                    label=f"Head {head}",
+                    resref=head,
+                    games=(game,),
+                    game=game,
+                )
+            )
+        # A few shipped player-head variations and c_twohead are valid,
+        # detachable HEAD models but are not referenced by stock heads.2da.
+        # The narrow Odyssey naming contract includes them without scanning all
+        # 6,000+ installed MDLs synchronously when the panel first opens.
+        for head in sorted(available_models.get(game, set())):
+            if head in seen or not _DETACHABLE_HEAD_NAME_PATTERN.fullmatch(head):
+                continue
+            seen.add(head)
+            entries.append(
+                BasCatalogEntry(
+                    label=f"Head {head}",
+                    resref=head,
+                    games=(game,),
+                    game=game,
+                )
+            )
+    return tuple(sorted(entries, key=lambda entry: (entry.resref, entry.game)))
+
+
+def _headless_body_entries(
+    manager: Any,
+    available_models: dict[str, set[str]],
+) -> tuple[BasCatalogEntry, ...]:
+    """Return installed ``appearance.2da`` modeltype-B body models.
+
+    Odyssey composes ``modeltype=B`` appearances from one of the armor/body
+    columns plus a detachable ``heads.2da`` head.  Reading those tables avoids
+    parsing thousands of unrelated MDLs when the BAS panel opens, while the
+    installed-model intersection removes stale cross-game table references.
+    """
+
+    entries: list[BasCatalogEntry] = []
+    for game in _GAME_TAGS:
+        table = _read_twoda(manager, "appearance", game)
+        if table is None:
+            continue
+        model_columns = [
+            column
+            for column in table.columns
+            if _BODY_MODEL_COLUMN_PATTERN.fullmatch(str(column or "").strip().lower())
+        ]
+        seen: set[str] = set()
+        for row in table:
+            if str(row.get("modeltype", "") or "").strip().upper() != "B":
+                continue
+            for column in model_columns:
+                body = _clean_table_resref(row.get(column, ""))
+                if not body or body in seen or body not in available_models.get(game, set()):
+                    continue
+                seen.add(body)
+                entries.append(
+                    BasCatalogEntry(
+                        label=f"Body {body}",
+                        resref=body,
+                        games=(game,),
+                        game=game,
+                    )
+                )
+        # Some shipped player armor/size variants are real headless body MDLs
+        # even though no stock appearance row currently selects them.  Their
+        # p[f/m]b<armor> naming is an Odyssey engine convention; keep the
+        # fallback deliberately narrow so creatures/full-body models stay out.
+        for body in sorted(available_models.get(game, set())):
+            if body in seen or not _PLAYER_BODY_NAME_PATTERN.fullmatch(body):
+                continue
+            seen.add(body)
+            entries.append(
+                BasCatalogEntry(
+                    label=f"Body {body}",
+                    resref=body,
+                    games=(game,),
+                    game=game,
+                )
+            )
+    return tuple(sorted(entries, key=lambda entry: (entry.resref, entry.game)))
 
 
 def build_bas_attachment_catalog(manager: Any) -> BasAttachmentCatalog:
@@ -212,10 +415,12 @@ def build_bas_attachment_catalog(manager: Any) -> BasAttachmentCatalog:
 
     if manager is None:
         return BasAttachmentCatalog()
+    classified_models = _classified_models(manager)
+    available_models = _available_models_by_game(classified_models)
     weapons: dict[str, set[str]] = {}
     masks: dict[str, set[str]] = {}
     belts: dict[str, set[str]] = {}
-    for name, game in _classified_models(manager):
+    for name, game in classified_models:
         if not name or not game:
             continue
         if name.startswith("w_"):
@@ -236,6 +441,7 @@ def build_bas_attachment_catalog(manager: Any) -> BasAttachmentCatalog:
             label=_weapon_label(family, variation, color),
             resref=resref,
             games=tuple(sorted(games)),
+            game=next(iter(games)) if len(games) == 1 else "",
             family=family,
             color=color,
         )
@@ -245,15 +451,17 @@ def build_bas_attachment_catalog(manager: Any) -> BasAttachmentCatalog:
 
     weapon_entries = _sorted([_weapon_entry(resref, games) for resref, games in weapons.items()])
     mask_entries = _sorted(
-        [BasCatalogEntry(label=_item_label("i_mask", resref), resref=resref, games=tuple(sorted(games)), family="i_mask") for resref, games in masks.items()]
+        [BasCatalogEntry(label=_item_label("i_mask", resref), resref=resref, games=tuple(sorted(games)), game=next(iter(games)) if len(games) == 1 else "", family="i_mask") for resref, games in masks.items()]
     )
     belt_entries = _sorted(
-        [BasCatalogEntry(label=_item_label("i_belt", resref), resref=resref, games=tuple(sorted(games)), family="i_belt") for resref, games in belts.items()]
+        [BasCatalogEntry(label=_item_label("i_belt", resref), resref=resref, games=tuple(sorted(games)), game=next(iter(games)) if len(games) == 1 else "", family="i_belt") for resref, games in belts.items()]
     )
-    head_entries = _head_entries(manager)
+    head_entries = _head_entries(manager, available_models)
+    body_entries = _headless_body_entries(manager, available_models)
 
     return BasAttachmentCatalog(
         entries_by_slot={
+            "body": body_entries,
             "head": head_entries,
             "mask": mask_entries,
             "goggles": mask_entries,
@@ -299,6 +507,7 @@ __all__ = [
     "SABER_VARIATION_COLORS",
     "WEAPON_FAMILY_LABELS",
     "build_bas_attachment_catalog",
+    "repair_bas_body_texture_references",
     "saber_color_label",
     "saber_color_variants",
     "saber_family",

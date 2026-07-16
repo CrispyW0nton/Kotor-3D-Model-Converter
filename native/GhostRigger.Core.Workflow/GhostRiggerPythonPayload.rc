@@ -9,6 +9,7 @@ PYTHON_PAYLOAD_AUTORIG_RETARGET_ENGINE RCDATA "Python/src/autorig/retarget_engin
 PYTHON_PAYLOAD_CORE_ANIMATION_INIT RCDATA "Python/src/core/animation/__init__.py"
 PYTHON_PAYLOAD_CORE_ANIMATION_ANIMATION_ENGINE RCDATA "Python/src/core/animation/animation_engine.py"
 PYTHON_PAYLOAD_CORE_ANIMATION_ANIMATION_LIBRARY RCDATA "Python/src/core/animation/animation_library.py"
+PYTHON_PAYLOAD_CORE_ANIMATION_FBX_ANIMATION_SELECTION RCDATA "Python/src/core/animation/fbx_animation_selection.py"
 PYTHON_PAYLOAD_CORE_ANIMATION_GPU_SKINNING RCDATA "Python/src/core/animation/gpu_skinning.py"
 PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_INIT RCDATA "Python/src/core/animation/skinning_profiles/__init__.py"
 PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_ANIMATION_SUPERMODEL_SKINNING RCDATA "Python/src/core/animation/skinning_profiles/animation_supermodel_skinning.py"
