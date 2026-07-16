@@ -423,7 +423,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE_CREATURES",
             "source_path": "src/core/modules/map_studio_pie_creatures.py",
             "packaged_path": "Python/src/core/modules/map_studio_pie_creatures.py",
-            "sha256": "8dafccf0ecc9bfb2076001e09005e5e17e726d8cf2c2600fa74fae8f8d22e04c"
+            "sha256": "b0488a10c50d026873e1272759cd22658204604b27c4bf432647d42b8d4f961b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE_ENTITIES",
@@ -513,7 +513,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "5890ea539fc455e7abe91aac430025050ad73ca3aef591c3ab2b2c30d691880d"
+            "sha256": "cf2b8561de978ef34cc4ee980b81f47a6791638f8cb32f3b0c79fb0bffbfc374"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",

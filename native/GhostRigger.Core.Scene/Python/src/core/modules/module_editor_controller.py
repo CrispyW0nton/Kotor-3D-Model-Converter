@@ -622,6 +622,57 @@ class ModuleEditorController:
         placements = getattr(authored, "placements", None) if authored is not None else None
         return deepcopy(placements) if placements is not None else None
 
+    def map_studio_scene_animation_map(self, resource_manager: Any) -> dict[str, tuple[str, ...]]:
+        """Tag -> candidate animation clips from the module's OnEnter NCS script.
+
+        207TEL and similar ambient scenes assign creature animations by tag in
+        their OnEnter script; this reads that intent so PIE can pose each
+        creature. Returns an empty map when there is no script, no game
+        resources, or the script assigns nothing.
+        """
+
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None or resource_manager is None:
+            return {}
+        from .map_studio_scene_animations import (
+            build_module_scene_animations,
+            module_onenter_script_resref,
+        )
+
+        module_root = normalise_resref(getattr(authored, "module_root", "") or getattr(self.project, "name", ""))
+        game = str(getattr(authored, "game", "") or self.project.game or "K1").upper()
+        script_resref = ""
+        # Prefer the preserved stock IFO's Mod_OnClientEntr, else the k_<root>_enter convention.
+        extra = dict(getattr(authored, "extra", {}) or {})
+        ifo_record = dict((extra.get("stock_resources") or {}).get("ifo") or {})
+        if ifo_record.get("data"):
+            try:
+                import base64
+
+                from pykotor.resource.formats.gff import read_gff
+
+                ifo_bytes = base64.b64decode(str(ifo_record.get("data") or ""), validate=True)
+                script_resref = module_onenter_script_resref(read_gff(bytes(ifo_bytes)).root)
+            except Exception:
+                script_resref = ""
+        if not script_resref and module_root:
+            script_resref = f"k_{module_root}_enter"
+        if not script_resref:
+            return {}
+        try:
+            from pykotor.resource.type import ResourceType as RT
+
+            getter = getattr(resource_manager, "get_strict", None) or getattr(resource_manager, "get", None)
+            ncs_bytes = getter(script_resref, int(RT.NCS), game) if callable(getter) else None
+        except Exception:
+            ncs_bytes = None
+        if not ncs_bytes:
+            return {}
+        try:
+            return build_module_scene_animations(onenter_ncs_bytes=bytes(ncs_bytes))
+        except Exception:
+            return {}
+
     def _map_studio_cached_authored_query(self, key: tuple[Any, ...], builder):
         """Reuse an immutable/read-only projection for the current revision."""
 

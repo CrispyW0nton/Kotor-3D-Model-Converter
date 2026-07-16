@@ -10373,12 +10373,17 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     game,
                     template_resources=template_resources,
                 )
+            try:
+                scene_animations = controller.map_studio_scene_animation_map(manager)
+            except Exception:
+                scene_animations = {}
             plan = build_map_studio_pie_creature_plan(
                 placements,
                 resolver,
                 game=game,
                 utc_reader=lambda resref, _game: resolver._template_bytes(resref, RES_UTC),
                 template_resources=template_resources,
+                scene_animations=scene_animations,
             )
             for warning in tuple(plan.warnings):
                 self._log(f"Simulation creatures: {warning}")

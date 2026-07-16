@@ -169,6 +169,25 @@ def play_map_studio_pie_safe_idle(engine: Any) -> str:
     return ""
 
 
+def play_map_studio_pie_scene_animation(engine: Any, candidates: tuple[str, ...]) -> str:
+    """Play the first authored scene-animation clip that resolves, else safe idle.
+
+    ``candidates`` come from the module's OnEnter script (a seated NPC's sit
+    clip, a talker's talk clip); they vary by model, so the first that the
+    creature's own model/supermodel actually contains is played. When none
+    resolve (or none were authored), fall back to the neutral safe idle so a
+    creature is never left unposed.
+    """
+
+    for candidate in tuple(candidates or ()):
+        clean = str(candidate or "").strip().lower()
+        if clean and clean not in ("pause1", "walk", "run") and engine.play(clean, loop=True, blend=False):
+            return str(
+                getattr(getattr(engine, "current_animation", None), "name", clean) or clean
+            ).lower()
+    return play_map_studio_pie_safe_idle(engine)
+
+
 def apply_map_studio_pie_actor_texture_override(
     prepared_root: Any,
     texture_resref: str,
@@ -355,7 +374,11 @@ def prepare_map_studio_pie_creature_actor_artifacts(
 
             phase_started = perf_counter()
             engine = animation_engine_factory(actor_model)
-            animation_name = play_map_studio_pie_safe_idle(engine)
+            # Authored scene animation (seated/talking from the OnEnter script)
+            # first; a neutral safe idle only when none resolves.
+            animation_name = play_map_studio_pie_scene_animation(
+                engine, tuple(getattr(spec.render, "animation_candidates", ()) or ())
+            )
             if not animation_name:
                 animation_seconds += perf_counter() - phase_started
                 failures.append(f"{spec.tag}: no pause1/cpause1/listen safe idle clip resolved")
@@ -507,6 +530,7 @@ def build_map_studio_pie_creature_plan(
     game: str | None = None,
     utc_reader: UTCReader | None = None,
     template_resources: Iterable[Any] = (),
+    scene_animations: dict[str, tuple[str, ...]] | None = None,
 ) -> MapStudioPIECreaturePlan:
     """Resolve safe PIE creature recipes without executing game behavior.
 
@@ -520,6 +544,8 @@ def build_map_studio_pie_creature_plan(
     creatures, behavior_records, inferred_game = _creatures_and_metadata(project_or_rows)
     game_tag = str(game or inferred_game or "K1").strip().upper()
     overrides = _template_overrides(template_resources)
+    scene_map = {str(k).strip().lower(): tuple(v) for k, v in dict(scene_animations or {}).items()}
+    scene_matched = 0
     specs: list[MapStudioPIECreatureSpec] = []
     plan_warnings: list[str] = []
 
@@ -623,19 +649,27 @@ def build_map_studio_pie_creature_plan(
             scripts_suppressed=scripts_suppressed,
             conversation_suppressed=conversation_suppressed,
         )
+        creature_tag = str(getattr(row, "tag", "") or runtime_template or source_template)
+        scene_clips = scene_map.get(creature_tag.strip().lower())
+        if scene_clips:
+            scene_matched += 1
+            animation_candidates = tuple(scene_clips)
+        else:
+            animation_candidates = ("pause1", "walk", "run")
         render = MapStudioPIECreatureRenderRecipe(
             actor_id=f"__map_studio_pie_creature__:{placement_id}",
             body_model_resref=body,
             head_model_resref=head,
             body_texture_resref=body_texture,
             visible_in_game=visible,
+            animation_candidates=animation_candidates,
         )
         specs.append(
             MapStudioPIECreatureSpec(
                 placement_id=placement_id,
                 runtime_template_resref=runtime_template,
                 source_template_resref=source_template,
-                tag=str(getattr(row, "tag", "") or runtime_template or source_template),
+                tag=creature_tag,
                 position=_vec3(getattr(row, "position", (0.0, 0.0, 0.0))),
                 facing_radians=float(getattr(row, "bearing", 0.0) or 0.0),
                 render=render,
@@ -657,6 +691,11 @@ def build_map_studio_pie_creature_plan(
         )
     if unresolved_count:
         plan_warnings.append(f"{unresolved_count} visible creature actor recipe(s) have no resolved body model.")
+    if scene_map:
+        plan_warnings.append(
+            f"Authored scene animations from the module OnEnter script matched {scene_matched} of {len(specs)} "
+            "creature(s) by tag; the rest use a neutral idle."
+        )
     return MapStudioPIECreaturePlan(
         game=game_tag,
         specs=tuple(specs),
@@ -675,5 +714,6 @@ __all__ = [
     "apply_map_studio_pie_actor_texture_override",
     "build_map_studio_pie_creature_plan",
     "play_map_studio_pie_safe_idle",
+    "play_map_studio_pie_scene_animation",
     "prepare_map_studio_pie_creature_actor_artifacts",
 ]

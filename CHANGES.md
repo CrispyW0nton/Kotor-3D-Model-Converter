@@ -11,6 +11,40 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-15
 
+### [2026-07-15] T3008: PIE plays authored scene animations per creature (207TEL)
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE creature actors (Core.Scene/Core.Tools, root mirror)
+
+Intersects: the T3008 scene-animation NCS extractor and the PIE creature
+plan/actor pipeline.
+
+- Wired the OnEnter-script scene animations into PIE playback. New controller
+  `map_studio_scene_animation_map` builds the tag->clip map from the module's
+  OnEnter NCS (script resref from the preserved IFO's Mod_OnClientEntr, else
+  the k_<root>_enter convention; NCS loaded from game resources).
+- `build_map_studio_pie_creature_plan` gains a `scene_animations` argument and
+  sets each creature's `render.animation_candidates` from its tag match (else
+  the idle default), reporting "matched N of M" coverage.
+- `prepare_map_studio_pie_creature_actor_artifacts` now plays the authored
+  clips via the new `play_map_studio_pie_scene_animation` (first clip the
+  model actually contains wins; neutral safe idle when none resolve), so a
+  seated NPC sits and a talker talks instead of every creature idling.
+- End-to-end verified: importing stock 207TEL, the controller resolves
+  k_207tel_enter and builds an 8-tag sit map. Honest caveat: a module must be
+  internally tag-consistent — the stock install's k_207tel_enter targets
+  Sitting* tags while its stock creature UTCs are tagged otherwise
+  (Walrusman, CommM), so stock 207TEL matches 0; the user's 207TEL mod (which
+  ships the matching Sitting* enter script) is the consistent case that poses
+  correctly.
+- Verification: new `tests/test_map_studio_pie_scene_playback.py` (first
+  available clip played; idle fallback; plan assigns clips by tag with
+  coverage; unmatched stays idle); creature-plan + payload suites green (38
+  passed). Editor-side; not a KOTOR runtime claim.
+
 ### [2026-07-15] T3008: read authored scene animations from OnEnter NCS (207TEL)
 
 Owner: LordVaderCW
