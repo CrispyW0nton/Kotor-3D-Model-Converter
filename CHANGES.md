@@ -11,6 +11,42 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-15
 
+### [2026-07-15] T3008: PIE door auto-open + room-to-room transitions
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio Play-in-Editor (Core.Scene/Core.Tools, root src mirror)
+
+Intersects: the T3008 PIE entity registry (doors come from it) and the
+combined-walkmesh island structure.
+
+- `MapStudioPIESession` now tracks per-door open/closed state from the
+  attached entity registry: a door opens when the player's planar distance is
+  within its open radius and re-closes past a hysteresis margin, emitting
+  `door_opened`/`door_closed` events (the window already logs frame events, so
+  they surface in the sim log). Exposed as `session.door_states()` and a new
+  `MapStudioPIEFrame.door_states` field / `MapStudioPIEDoorState` dataclass.
+- Room transitions: because the combined module walkmesh keeps each room as
+  its own island, `move_disc` stops the player at a room boundary. When
+  movement stalls next to an open door, PIE probes just past the door along
+  the travel direction and, if the far side is a walkable face on a different
+  island, steps the player across (`room_transition` event) — an editor
+  stand-in for the engine's room transition. Inter-module doors (with a
+  transition target) are reported (`module_transition_blocked`), never
+  teleported, since PIE simulates a single module.
+- Verification: new `tests/test_map_studio_pie_doors.py` (doors detected;
+  door opens on approach and the player crosses a two-island gap; door closes
+  after leaving; inter-module door reported not teleported; real 921srt smoke
+  — 33 doors, nearest opens on approach). Full PIE suite green (41 passed).
+  On 921srt the player now reaches y50 (vs y40) crossing door-connected
+  seams; the remaining center archway gap has no door placement, so it stays
+  a map-design connection (add a door there or rely on the in-game trigger).
+- Not yet done (follow-up): swinging/hiding the door MESH in the viewport
+  needs the runtime-frame render path (actors-only today) extended to
+  placements; the open state, transitions, and log feedback are live now.
+
 ### [2026-07-15] T2801: preserve stock room lights on export (921srt.mod ships)
 
 Owner: LordVaderCW

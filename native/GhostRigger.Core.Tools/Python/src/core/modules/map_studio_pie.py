@@ -71,6 +71,31 @@ class MapStudioPIEConfig:
     minimum_camera_distance: float = 0.35
     camera_return_speed: float = 8.0
     path_block_timeout: float = 0.75
+    # Doors auto-open when the player's planar distance to the door is within
+    # this radius (approx. door width plus reach), and re-close past it plus a
+    # small hysteresis margin so a player lingering on the threshold does not
+    # flicker the door.
+    door_open_radius: float = 2.75
+    door_close_hysteresis: float = 0.6
+    # When movement stalls at an open doorway between two disconnected room
+    # walkmesh islands, PIE probes this far past the door for the far-side
+    # floor and steps the player across (an editor stand-in for the engine's
+    # room-to-room transition, which PIE does not otherwise simulate).
+    door_transition_reach: float = 2.75
+
+
+@dataclass
+class MapStudioPIEDoorState:
+    """Runtime open/closed state for one authored door in the simulation."""
+
+    entity_id: str
+    tag: str
+    position: Vec3
+    facing: float = 0.0
+    open_radius: float = 2.75
+    is_open: bool = False
+    transition_module: str = ""
+    transition_target: str = ""
 
 
 @dataclass(frozen=True)
@@ -119,6 +144,7 @@ class MapStudioPIEFrame:
     destination: Vec3 | None
     path: tuple[Vec3, ...]
     events: tuple[MapStudioPIEEvent, ...] = ()
+    door_states: tuple[MapStudioPIEDoorState, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -643,10 +669,110 @@ class MapStudioPIESession:
         self._simulation_time = 0.0
         self._events: list[MapStudioPIEEvent] = []
         self._resolved_camera_distance: float | None = None
+        self.entity_registry: Any = None
+        self._doors: list[MapStudioPIEDoorState] | None = None
 
     @property
     def simulation_time(self) -> float:
         return float(self._simulation_time)
+
+    def _ensure_doors(self) -> list[MapStudioPIEDoorState]:
+        """Build the door-state list once from the attached entity registry."""
+
+        if self._doors is not None:
+            return self._doors
+        doors: list[MapStudioPIEDoorState] = []
+        registry = getattr(self, "entity_registry", None)
+        of_kind = getattr(registry, "of_kind", None)
+        if callable(of_kind):
+            for entity in of_kind("door"):
+                position = tuple(float(v) for v in tuple(getattr(entity, "position", ()) or ())[:3])
+                if len(position) < 3:
+                    continue
+                doors.append(
+                    MapStudioPIEDoorState(
+                        entity_id=str(getattr(entity, "entity_id", "")),
+                        tag=str(getattr(entity, "tag", "")),
+                        position=position,  # type: ignore[arg-type]
+                        facing=float(getattr(entity, "facing", 0.0) or 0.0),
+                        open_radius=max(1.0, float(getattr(entity, "target_radius", 1.0) or 1.0) + self.config.door_open_radius),
+                        transition_module=str(getattr(entity, "transition_module", "") or ""),
+                        transition_target=str(getattr(entity, "transition_target", "") or ""),
+                    )
+                )
+        self._doors = doors
+        return doors
+
+    def door_states(self) -> tuple[MapStudioPIEDoorState, ...]:
+        return tuple(self._ensure_doors())
+
+    def _update_doors(self) -> None:
+        """Open doors the player is near; close them past the hysteresis band."""
+
+        px, py = self.state.position[0], self.state.position[1]
+        for door in self._ensure_doors():
+            distance = math.hypot(door.position[0] - px, door.position[1] - py)
+            if not door.is_open and distance <= door.open_radius:
+                door.is_open = True
+                self._events.append(
+                    MapStudioPIEEvent("door_opened", f"Door {door.tag or door.entity_id} opened as the player approached.", door.position)
+                )
+            elif door.is_open and distance > door.open_radius + self.config.door_close_hysteresis:
+                door.is_open = False
+                self._events.append(
+                    MapStudioPIEEvent("door_closed", f"Door {door.tag or door.entity_id} closed behind the player.", door.position)
+                )
+
+    def _try_room_transition(self, direction: tuple[float, float]) -> bool:
+        """Step the player across an open doorway between two walkmesh islands.
+
+        The combined module walkmesh keeps each room as its own island, so
+        ``move_disc`` stops the player at a room boundary. When movement stalls
+        next to an open door, probe just past the door along the travel
+        direction; if the far side is a walkable face on a different island,
+        move the player onto it. Inter-module doors (with a transition target)
+        cannot be simulated, so PIE reports the intended destination instead.
+        """
+
+        px, py, pz = self.state.position
+        reach = self.config.player_radius + self.config.door_transition_reach
+        for door in self._ensure_doors():
+            if not door.is_open:
+                continue
+            if math.hypot(door.position[0] - px, door.position[1] - py) > door.open_radius:
+                continue
+            if door.transition_target or door.transition_module:
+                self._events.append(
+                    MapStudioPIEEvent(
+                        "module_transition_blocked",
+                        f"Door {door.tag or door.entity_id} transitions to "
+                        f"{door.transition_module or 'another area'}/{door.transition_target or '(entry)'}; "
+                        "PIE simulates a single module and cannot follow module transitions.",
+                        door.position,
+                    )
+                )
+                continue
+            probe = (px + direction[0] * reach, py + direction[1] * reach, pz)
+            sample = self.walkmesh.validate_disc(
+                probe,
+                radius=self.config.player_radius,
+                max_step_up=math.inf,
+                max_step_down=math.inf,
+            )
+            if sample is None or sample.face_index < 0 or sample.face_index == self.state.face_index:
+                continue
+            self.state.position = sample.position
+            self.state.face_index = sample.face_index
+            self.state.blocked = False
+            self._events.append(
+                MapStudioPIEEvent(
+                    "room_transition",
+                    f"Player stepped through door {door.tag or door.entity_id} into the adjoining room.",
+                    sample.position,
+                )
+            )
+            return True
+        return False
 
     def set_move_input(
         self,
@@ -740,6 +866,7 @@ class MapStudioPIESession:
     def _step(self, delta_time: float) -> None:
         if not self.validation.ok:
             return
+        self._update_doors()
         direction = self._manual_direction()
         speed = kotor_player_run_speed(self.game) if self._run_input else kotor_player_walk_speed(self.game)
         path_driven = direction is None and bool(self.state.path)
@@ -761,6 +888,17 @@ class MapStudioPIESession:
             max_step_up=self.config.max_step_up,
             max_step_down=self.config.max_step_down,
         )
+        # If the walkmesh stopped the player at a room boundary (little or no
+        # forward progress) and an open door is right there, step across into
+        # the adjoining room's island.
+        forward_progress = ((move.position[0] - before[0]) * direction[0]) + ((move.position[1] - before[1]) * direction[1])
+        if move.blocked and forward_progress <= self.config.player_radius * 0.25 and self._try_room_transition(direction):
+            self._update_doors()
+            self.state.velocity = tuple((self.state.position[index] - before[index]) / delta_time for index in range(3))  # type: ignore[assignment]
+            self.state.moving = True
+            self.state.facing_radians = math.atan2(direction[1], direction[0])
+            self._blocked_time = 0.0
+            return
         self.state.position = move.position
         self.state.face_index = move.face_index
         self.state.blocked = move.blocked
@@ -816,6 +954,7 @@ class MapStudioPIESession:
             destination=self.state.destination,
             path=self.state.path[self._path_index :],
             events=events,
+            door_states=tuple(self._ensure_doors()),
         )
 
     def resolve_camera_distance(
@@ -990,6 +1129,7 @@ __all__ = [
     "MapStudioPIEActorAttachment",
     "MapStudioPIEActorGrounding",
     "MapStudioPIEConfig",
+    "MapStudioPIEDoorState",
     "MapStudioPIEEvent",
     "MapStudioPIEFrame",
     "MapStudioPIEPlayerState",

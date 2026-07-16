@@ -807,7 +807,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE",
             "source_path": "src/core/modules/map_studio_pie.py",
             "packaged_path": "Python/src/core/modules/map_studio_pie.py",
-            "sha256": "4345910b8ceb89815b333e4a5ea6620ac96d4e3607009a786702ed019a30c1da"
+            "sha256": "0afafcd215c06a5215437434007b08f47054d1e38c7778a34864cf9ee54976e6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE_AUDIO",
