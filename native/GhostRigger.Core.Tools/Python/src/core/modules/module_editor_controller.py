@@ -2332,6 +2332,61 @@ class ModuleEditorController:
         )
         return True, label
 
+    def auto_generate_map_studio_walkmesh(self, *, slope_max_degrees: float = 45.0) -> tuple[bool, str]:
+        """Derive every room's walkmesh from its geometry in one undoable step.
+
+        The robust "Auto Generate Walkmesh" one-button path: for every imported
+        room, replace its WOK with a fresh one built from the room's render
+        geometry using the studied KOTOR conventions (walkable up-facing floors
+        <= slope, NON_WALK walls, dropped ceilings). Works on any loaded map
+        whose rooms are editable imported meshes; primitive/terrain rooms keep
+        their compiled WOK. Records one undo command.
+        """
+
+        from dataclasses import replace as _replace
+
+        from .authored_imported_mesh import generate_room_walkmesh_from_geometry
+
+        authored = self._load_authored_project_or_raise()
+        before = self._capture_map_studio_command_state()
+        rooms = list(authored.rooms)
+        total_floor = 0
+        total_wall = 0
+        regenerated = 0
+        skipped: list[str] = []
+        for index, room in enumerate(rooms):
+            if not isinstance(getattr(room, "primitive", None), ImportedMeshRoomPrimitive):
+                skipped.append(room.normalised_resref())
+                continue
+            updated_primitive, report = generate_room_walkmesh_from_geometry(
+                room.primitive, slope_max_degrees=float(slope_max_degrees)
+            )
+            if updated_primitive is room.primitive:
+                skipped.append(room.normalised_resref())
+                continue
+            rooms[index] = _replace(room, primitive=updated_primitive)
+            regenerated += 1
+            total_floor += int(report.get("floor_faces", 0) or 0)
+            total_wall += int(report.get("wall_faces", 0) or 0)
+        if regenerated <= 0:
+            hint = " (rooms are not editable imported meshes; convert stock rooms first)" if skipped else ""
+            return False, f"Auto Generate Walkmesh made no changes{hint}."
+        self._store_authored_project(_replace(authored, rooms=tuple(rooms)))
+        message = (
+            f"Auto-generated walkmesh for {regenerated} room(s): {total_floor} walkable floor face(s), "
+            f"{total_wall} NON_WALK wall face(s) from room geometry."
+        )
+        if skipped:
+            message = f"{message} {len(skipped)} non-imported room(s) kept their compiled walkmesh."
+        self.model.log(f"Map Studio: {message}")
+        self._record_map_studio_command(
+            action_key="map_studio.walkmesh.auto_generate",
+            label=f"Auto Generate Walkmesh ({regenerated} room(s))",
+            before=before,
+            metadata={"rooms": regenerated, "floor_faces": total_floor, "wall_faces": total_wall},
+        )
+        return True, message
+
     def fill_authored_room_wok_from_floors(
         self,
         *,

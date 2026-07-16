@@ -11748,6 +11748,27 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 self._log(f"Map Studio: {message} -> {path}")
                 self.statusBar().showMessage(message, 6000)
             return
+        if action == "Auto Generate Walkmesh":
+            try:
+                ok, message = self.controller.auto_generate_map_studio_walkmesh()
+            except Exception as exc:
+                QtWidgets.QMessageBox.warning(self, "Auto Generate Walkmesh", str(exc))
+                return
+            if not ok:
+                QtWidgets.QMessageBox.information(self, "Auto Generate Walkmesh", message)
+                return
+            # Re-audit and show the freshly generated walkmesh overlay.
+            try:
+                status = self.controller.authored_walkmesh_status()
+                self.walkmesh_tab.set_walkmesh_status(status)
+                self.walkmesh_tab.set_room_surface_choices(self.controller.authored_walkmesh_room_surface_choices())
+            except Exception:
+                pass
+            self._select_map_studio_component_mode("walkmesh")
+            self.statusBar().showMessage(message, 8000)
+            self._log(f"Map Studio: {message}")
+            self._refresh_all(message)
+            return
         if action == "Fill Floor Faces":
             room = str(self.walkmesh_tab._current_room_resref() or "").strip()
             rooms = [room] if room else [

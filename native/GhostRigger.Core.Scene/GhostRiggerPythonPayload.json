@@ -123,7 +123,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_IMPORTED_MESH",
             "source_path": "src/core/modules/authored_imported_mesh.py",
             "packaged_path": "Python/src/core/modules/authored_imported_mesh.py",
-            "sha256": "29192f3640745e4a40626b243a75cacc16622cf1d0dbd9685baf02edb9b6d00d"
+            "sha256": "9d2edf59ed1370bcb358013ad7b536dde7755bf3c57747cb33b9567346d775a0"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_EXPORT",
@@ -519,7 +519,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "cf2b8561de978ef34cc4ee980b81f47a6791638f8cb32f3b0c79fb0bffbfc374"
+            "sha256": "cce4e4c045d25155581cc8e04066654b259c59d1da38b4e8658cf62c1ff57c72"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",

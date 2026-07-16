@@ -11,6 +11,44 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-15
 
+### [2026-07-15] T2801: Auto Generate Walkmesh — one button, any loaded map
+
+Owner: LordVaderCW
+
+T###: T2801
+
+Subsystem: Map Studio walkmesh authoring (Core.Scene/Core.Tools/GUI.Display)
+
+Intersects: the T2801 Fill Floor Faces + WOK alignment work and module export.
+
+- Study: analysed 1121 stock K2 room WOKs (74 areas, 144,377 faces) via the
+  ResourceManager (stock LYT/WOK live in chitin.key BIFs, not the module
+  .rim). Findings: 57% of faces are NON_WALK(7); 94% of rooms keep their walls
+  in the WOK (only 6% floor-only); walkable faces are near-horizontal (76%
+  within 5 deg of flat, 99% within 45 deg); no DOOR(18) faces in room WOKs;
+  ceilings never appear (a down-facing face over the floor collapses the
+  perimeter loop -> frozen player). Recorded in
+  `memory/kotor-walkmesh-generation-rules.md`.
+- New `generate_room_walkmesh_from_geometry` (authored_imported_mesh.py,
+  Scene+Tools): classifies every non-backdrop render triangle by its normal —
+  up-facing and <= 45 deg from flat -> WALKABLE floor (stone material),
+  steeper -> NON_WALK wall, down-facing near-horizontal -> dropped — welds
+  vertices, rebuilds adjacency, and marks the fresh WOK room-local. Works on
+  any editable imported room.
+- Controller `auto_generate_map_studio_walkmesh` regenerates every imported
+  room's WOK in one undoable command (primitive/terrain rooms keep their
+  compiled WOK); a new "Auto Generate Walkmesh" button on the Walkmesh tab
+  (GUI.Display+Tools) runs it and shows the audited overlay.
+- Verified end-to-end on 921srt: one button regenerates all 10 rooms (4,837
+  walkable floor + 11,676 NON_WALK wall faces), status ready=True, PIE builds
+  and the player spawns and walks. (The generated WOK is render-resolution, so
+  denser than a hand-authored one; Fill Floor Faces remains the lighter
+  floor-only patch.)
+- Verification: new `tests/test_map_studio_auto_walkmesh.py` (floor/wall/ceiling
+  classification; 45-deg slope threshold; no-floor no-op; controller all-rooms
+  undoable); WOK/export suites green (86 passed); payloads regenerated.
+  Editor-side; the in-game warp test remains the user's.
+
 ### [2026-07-15] T3008: animated PIE door actors (doors swing open on approach)
 
 Owner: LordVaderCW

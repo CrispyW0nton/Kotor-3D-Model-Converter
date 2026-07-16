@@ -30,7 +30,7 @@ from src.core.geometry.solid_boolean import difference_closed_solid_meshes
 
 from .authored_room_geometry import AuthoredRoomGeometry, PrimitiveMesh
 from .authored_walkmesh_surfaces import is_walkable_walkmesh_surface
-from .module_format import WOKData, WOKFace
+from .module_format import NON_WALK_ID, WOKData, WOKFace
 
 Vec2 = tuple[float, float]
 Vec3 = tuple[float, float, float]
@@ -475,6 +475,118 @@ def _fallback_floor_wok(primitive: ImportedMeshRoomPrimitive) -> WOKData:
             WOKFace(0, 2, 3, surface=4, adj1=0, adj2=-1, adj3=-1),
         ],
     )
+
+
+def generate_room_walkmesh_from_geometry(
+    primitive: ImportedMeshRoomPrimitive,
+    *,
+    slope_max_degrees: float = 45.0,
+    weld_epsilon: float = 0.05,
+) -> tuple[ImportedMeshRoomPrimitive, dict[str, Any]]:
+    """Derive a complete room walkmesh from the room's render geometry.
+
+    Built from an empirical study of 1121 stock K2 room WOKs (144k faces):
+    real rooms keep their walls in the walkmesh (94% carry NON_WALK faces),
+    walkable faces are near-horizontal (99% within 45 deg of flat), and
+    ceilings never appear (a down-facing face over the floor would collapse
+    the perimeter loop and freeze the player). So every non-backdrop render
+    triangle is classified by its normal:
+
+    * up-facing, within ``slope_max_degrees`` of flat -> WALKABLE floor,
+    * steeper than that (a wall) -> NON_WALK (kept for camera/LOS blocking),
+    * down-facing and near-horizontal (a ceiling) -> dropped.
+
+    The result is a fresh room-local WOK with welded vertices and rebuilt
+    adjacency, replacing whatever WOK the room had. Deterministic and
+    dependency-free so "Auto Generate Walkmesh" works on any loaded room.
+    """
+
+    import math as _math
+
+    min_floor_normal_z = _math.cos(_math.radians(max(1.0, min(89.0, float(slope_max_degrees)))))
+    verts: list[Vec3] = []
+    faces: list[WOKFace] = []
+    lookup: dict[tuple[int, int, int], int] = {}
+    scale = 1.0 / max(1.0e-9, float(weld_epsilon))
+
+    def _index(point: Vec3) -> int:
+        key = (round(point[0] * scale), round(point[1] * scale), round(point[2] * scale))
+        existing = lookup.get(key)
+        if existing is not None:
+            return existing
+        verts.append((float(point[0]), float(point[1]), float(point[2])))
+        lookup[key] = len(verts) - 1
+        return len(verts) - 1
+
+    floor_faces = wall_faces = dropped_ceiling = degenerate = 0
+    for surface in primitive.surfaces:
+        if bool(getattr(surface, "backdrop", False)) or bool(getattr(surface, "background_geometry", False)):
+            continue
+        if not bool(getattr(surface, "render", True)):
+            continue
+        surface_verts = tuple(surface.vertices)
+        for face in tuple(surface.faces):
+            try:
+                a = surface_verts[int(face[0])]
+                b = surface_verts[int(face[1])]
+                c = surface_verts[int(face[2])]
+            except (IndexError, TypeError, ValueError):
+                continue
+            ux, uy, uz = b[0] - a[0], b[1] - a[1], b[2] - a[2]
+            vx, vy, vz = c[0] - a[0], c[1] - a[1], c[2] - a[2]
+            nx, ny, nz = (uy * vz) - (uz * vy), (uz * vx) - (ux * vz), (ux * vy) - (uy * vx)
+            length = _math.sqrt((nx * nx) + (ny * ny) + (nz * nz))
+            if length < 1.0e-9:
+                degenerate += 1
+                continue
+            unit_nz = nz / length
+            if unit_nz >= min_floor_normal_z:
+                # Up-facing floor: keep upward winding so engine floor tests pass.
+                corners = (a, b, c)
+                material = 4  # stone: a neutral, always-walkable material
+                floor_faces += 1
+            elif unit_nz <= -min_floor_normal_z:
+                dropped_ceiling += 1
+                continue
+            else:
+                corners = (a, b, c)
+                material = NON_WALK_ID
+                wall_faces += 1
+            faces.append(
+                WOKFace(
+                    _index(corners[0]),
+                    _index(corners[1]),
+                    _index(corners[2]),
+                    material,
+                    -1,
+                    -1,
+                    -1,
+                )
+            )
+
+    report: dict[str, Any] = {
+        "floor_faces": floor_faces,
+        "wall_faces": wall_faces,
+        "dropped_ceiling_faces": dropped_ceiling,
+        "degenerate_faces": degenerate,
+        "total_faces": len(faces),
+    }
+    if floor_faces <= 0:
+        # No walkable floor could be derived; leave the room's WOK untouched.
+        return primitive, report
+
+    wok = WOKData(name=str(primitive.room_resref or ""), verts=verts, faces=faces)
+    wok.rebuild_adjacencies()
+    from dataclasses import replace as _replace
+
+    metadata = dict(primitive.metadata or {})
+    metadata["wok_floor_fill"] = report
+    metadata["wok_auto_generated"] = report
+    # The generated WOK is room-local (built from room-local render surfaces);
+    # correct the coordinate-space contract so the combiner applies the room
+    # position rather than treating it as module-space.
+    metadata["wok_coordinate_space"] = "room_local"
+    return _replace(primitive, wok=wok, metadata=metadata), report
 
 
 def _triangle_contains_xy(px: float, py: float, a: Vec3, b: Vec3, c: Vec3) -> tuple[bool, float]:
