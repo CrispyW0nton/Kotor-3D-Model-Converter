@@ -66,7 +66,9 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     # and topology-budget policy through both Scene and Tools.
     # The PIE gameplay entity registry (map_studio_pie_entities.py) ships
     # through both Scene and Tools.
-    assert len(payload_files) == 1308
+    # The modular-map room catalog (map_studio_room_catalog.py) ships through
+    # both Scene and Tools, adding two byte-identical payload rows.
+    assert len(payload_files) == 1310
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 

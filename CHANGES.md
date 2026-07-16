@@ -11,6 +11,38 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-15
 
+### [2026-07-15] T3601: modular maps Phase 1 — indexed room catalog
+
+Owner: LordVaderCW
+
+T###: T3601
+
+Subsystem: Map Studio modular authoring (Core.Scene/Core.Tools)
+
+Intersects: stock_module_importer LYT parsing and the authored-module KMAP
+schema; foundation for the "Add Room from Module" browser (Phase 2) and
+doorway snapping (Phase 3).
+
+- New `map_studio_room_catalog.py` (Scene canonical + Tools mirror): a
+  headless, dependency-light index of rooms across every source a modder
+  pulls geometry from — installed game modules, exported `.mod`/`.rim`
+  capsules, and authored `.kmap` projects. Each `RoomCatalogEntry` carries a
+  human label (`module / room (game, N doors)`), the room's source-module
+  position, and its doorway connection points.
+- Connection points come from the module LYT's door-hooks (room, door name,
+  world position, orientation) re-expressed in room-local coordinates via
+  `RoomConnectionPoint`, so they stay valid when the room is re-placed in a
+  new module — this is the alignment data doorway snapping will consume.
+- Builders: `build_room_catalog_from_capsule`, `build_room_catalog_from_kmap`,
+  and `scan_room_catalog_sources` (aggregates module directories + loose
+  KMAPs, dedupes `_s` gameplay companions, degrades missing sources to
+  warnings).
+- Verification: `tests/test_map_studio_room_catalog.py` (door-hook grouping
+  into room-local coords + quaternion facing; KMAP room enumeration;
+  deterministic sort; missing-source warnings; real-file smoke on 921srt.mod
+  finding 921srtb + the 903MAL rooms with door hooks). Payload pin bumped
+  1308 -> 1310 for the Scene/Tools rows; suites green.
+
 ### [2026-07-15] T1210: export the composed BAS build as one .mdl/.obj/.fbx
 
 Owner: LordVaderCW

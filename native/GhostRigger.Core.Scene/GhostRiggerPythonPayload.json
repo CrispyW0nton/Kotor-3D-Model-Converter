@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Scene",
-    "file_count": 113,
+    "file_count": 114,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -430,6 +430,12 @@
             "source_path": "src/core/modules/map_studio_pie_entities.py",
             "packaged_path": "Python/src/core/modules/map_studio_pie_entities.py",
             "sha256": "78b6bc0230c9f889cd7360e226d9846daacdae2670f458132aa286e97f81751e"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_ROOM_CATALOG",
+            "source_path": "src/core/modules/map_studio_room_catalog.py",
+            "packaged_path": "Python/src/core/modules/map_studio_room_catalog.py",
+            "sha256": "ec100fdc040057aac088e324e01857545db9eca2bb5cc2c217daaa65e7ba7948"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_STOCK_CONTENT_PREVIEW",
