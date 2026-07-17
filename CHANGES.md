@@ -9,6 +9,60 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-07-17
+
+### [2026-07-17] T3101: 921srt walkmesh repair — room WOK coordinate-space fix plus reviewed regeneration tooling
+
+Owner: LordVaderCW
+
+T###: T3101
+
+Subsystem: converted-module walkmesh repair and Map Studio auto-walkmesh
+tooling scripts (Core.Scene services consumed by scripts)
+
+Intersects: the 2026-07-16 walkmesh slice (`5e524858`) whose parity audit and
+overlay this repair extends; 921srt remains classified retail_donor_overlay.
+
+- Root cause of "cannot walk/run through 921srt": the custom central room
+  `921srtb` serialized its WOK room-local while Odyssey ships room WOKs in
+  module coordinates, so in game its collision sat 21 m north of the rendered
+  floor and the module entry point had no walkable face under it. The audits
+  passed only because `resolve_room_wok_module_offset` auto-corrects the
+  mislabel; the retail engine does not. The nine Malachor donor rooms'
+  module-space WOKs (and their 14 live door-transition edges backed by 22 LYT
+  doorhooks and 33 GIT doors) were already correct.
+- Added `scripts/repair_room_wok_coordinate_space.py`: translates a named
+  room's WOK by its LYT offset inside both the packaged MOD and the editable
+  KMAP, sets the header position vector to the vanilla `-room_position`
+  convention, rebuilds only derived tables, and blocks on any indexed
+  topology/surface/transition drift. Every other MOD resource byte is
+  preserved. Output: `Converted/Candidates/921srt/K2/WokSpaceRepair/`.
+- Added `scripts/regenerate_kmap_walkmesh_candidate.py`: drives Map Studio's
+  census-derived auto walkmesh generator over a whole KMAP with explicit
+  `--source-wok-policy replace`, `--island-policy`, and a reviewed
+  `--floor-texture` allowlist that becomes each room's persisted
+  `walkmesh_generation_intent`, then rebuilds room MDLs through the binary
+  route and repackages/proves the MOD. For 921srt the full replacement was
+  deliberately not shipped: the generator's safety gates refused it because
+  the donor rooms' live door-transition edges cannot yet be uniquely remapped
+  onto render-derived boundaries and the trim-fragmented floors form
+  22-75 disconnected islands per room; the surgical space repair achieves the
+  traversal goal without discarding working transitions.
+- Affected: `scripts/repair_room_wok_coordinate_space.py` (new),
+  `scripts/regenerate_kmap_walkmesh_candidate.py` (new),
+  `Converted/Candidates/921srt/K2/WokSpaceRepair/*`, and the repaired
+  `Converted/Candidates/921srt/K2/MapStudio/921srt.k2.kmap`
+  (backup: `921srt.k2.kmap.pre-walkmesh-regen-20260717.bak`).
+- Verification: translation proof (counts, surface distribution, face-index/
+  material/transition fingerprints identical; max translated vertex delta 0);
+  repaired MOD walkmesh audit passes with the entry point on a walkable face
+  without auto-correction; Map Studio import/convert/save/reopen roundtrip
+  passes; MOD<->KMAP parity all_match against the user's repaired KMAP
+  (10/10 rooms). The repaired candidate is staged for a manual warp
+  (`Saved/KotorManualWarpEvidence/20260717T162057698300Z_921srt`).
+- Retail proof remains pending: warp `921srt`, traverse every room and every
+  door transition, and save/reload before calling the map walkable in game.
+
 ## 2026-07-16
 
 ### [2026-07-16] T2906/T3101: binary MDL room-compile route, MOD/KMAP parity closure, and K2 candidate overlay
