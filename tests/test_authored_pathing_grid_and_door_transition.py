@@ -74,6 +74,24 @@ def test_face_grid_matches_linear_scan_and_is_fast() -> None:
     assert grid_time < 0.5  # 2000 dense-mesh queries in well under a second
 
 
+def test_face_grid_matches_linear_scan_for_non_finite_and_epsilon_boundary_queries() -> None:
+    _configure_native_python_roots()
+    from src.core.modules.authored_module_pathing import _WalkmeshFaceGrid
+    from src.core.modules.authored_walkmesh_sampling import walkmesh_face_at_xy
+    from src.core.modules.module_format import WOKData, WOKFace
+
+    wok = WOKData(
+        name="epsilon",
+        verts=[(1.0, 0.0, 0.0), (2.0, 0.0, 0.0), (1.0, 1.0, 0.0)],
+        faces=[WOKFace(0, 1, 2, 1, -1, -1, -1)],
+    )
+    grid = _WalkmeshFaceGrid(wok)
+    for x, y in ((float("nan"), 0.2), (float("inf"), 0.2), (1.2, float("-inf"))):
+        assert grid.face_at(x, y) == walkmesh_face_at_xy(wok, x, y) == -1
+    x, y = 1.0 - 1.0e-8, 0.2
+    assert grid.face_at(x, y) == walkmesh_face_at_xy(wok, x, y) == 0
+
+
 def test_path_graph_generation_on_dense_walkmesh_is_quick() -> None:
     _configure_native_python_roots()
     from src.core.modules.authored_module_pathing import build_authored_path_graph_from_walkmesh
@@ -84,6 +102,60 @@ def test_path_graph_generation_on_dense_walkmesh_is_quick() -> None:
     elapsed = time.perf_counter() - t0
     assert graph.points  # one connected walkable component -> at least one center
     assert elapsed < 10.0, f"path graph took {elapsed:.1f}s on a dense walkmesh"
+
+
+def test_path_graph_never_links_overlapping_xy_walkmesh_components_at_different_heights() -> None:
+    _configure_native_python_roots()
+    from src.core.modules.authored_module_pathing import build_authored_path_graph_from_walkmesh
+    from src.core.modules.module_format import WOKData, WOKFace
+
+    wok = WOKData(name="stacked")
+    for z, x0, x1 in ((0.0, 0.0, 10.0), (5.0, 5.0, 15.0)):
+        base = len(wok.verts)
+        wok.verts.extend(((x0, 0.0, z), (x1, 0.0, z), (x1, 10.0, z), (x0, 10.0, z)))
+        wok.faces.extend(
+            (
+                WOKFace(base, base + 1, base + 2, 1, -1, -1, -1),
+                WOKFace(base, base + 2, base + 3, 1, -1, -1, -1),
+            )
+        )
+    wok.rebuild_adjacencies()
+
+    graph = build_authored_path_graph_from_walkmesh(wok)
+    assert graph.metadata["walkmesh_component_count"] == 2
+    assert len(graph.points) == 2
+    assert graph.connections == ()
+
+
+def test_path_graph_keeps_coincident_coordinate_index_seams_disconnected() -> None:
+    """A visual seam is not a traversable WOK/PTH connection."""
+
+    _configure_native_python_roots()
+    from src.core.modules.authored_module_pathing import build_authored_path_graph_from_walkmesh
+    from src.core.modules.module_format import WOKData, WOKFace
+
+    # The two triangles occupy the two halves of one square and their diagonal
+    # endpoints are coordinate-identical.  Distinct vertex indices make that
+    # diagonal an intentional Odyssey collision seam.
+    wok = WOKData(
+        name="index_seam",
+        verts=[
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ],
+        faces=[WOKFace(0, 1, 2, 1), WOKFace(3, 4, 5, 1)],
+    )
+
+    graph = build_authored_path_graph_from_walkmesh(wok)
+
+    assert graph.metadata["walkmesh_component_count"] == 2
+    assert len(graph.points) == 2
+    assert {point.metadata["component_index"] for point in graph.points} == {0, 1}
+    assert graph.connections == ()
 
 
 def _door(*, transition_destination: int, linked_to: str = "", linked_to_flags: int = 0):

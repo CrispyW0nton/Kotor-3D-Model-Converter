@@ -41,7 +41,10 @@ def test_t2604_walkmesh_surface_palette_resolves_modder_names() -> None:
     assert resolve_walkmesh_surface_id("door transition") == 18
     assert walkmesh_surface_name(10) == "METAL"
     assert is_walkable_walkmesh_surface("metal") is True
+    assert is_walkable_walkmesh_surface("water") is True
     assert is_walkable_walkmesh_surface("non_walk") is False
+    assert is_walkable_walkmesh_surface("non_walk_grass") is False
+    assert is_walkable_walkmesh_surface(20) is False
     assert is_walkable_walkmesh_surface("visual_only") is False
     assert is_walkable_walkmesh_surface("door_transition") is True
     assert {surface.authoring_name for surface in palette} >= {
@@ -53,6 +56,9 @@ def test_t2604_walkmesh_surface_palette_resolves_modder_names() -> None:
         "visual_only",
         "door_transition",
     }
+    assert walkmesh_surface_name(19) == "NON_WALK_GRASS"
+    assert walkmesh_surface_name(20) == "SURFACE_MATERIAL_20"
+    assert walkmesh_surface_name(30) == "TRIGGER"
 
 
 def test_t2604_unknown_walkmesh_surface_is_rejected() -> None:

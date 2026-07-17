@@ -119,6 +119,64 @@ def test_mislabeled_room_local_wok_is_rebased_with_warning() -> None:
     assert snapped is not None and snapped.inside_face
 
 
+def test_alignment_ignores_non_render_and_background_surfaces() -> None:
+    _configure_native_python_roots()
+    from dataclasses import replace
+
+    from src.core.modules.authored_imported_mesh import ImportedMeshSurface
+    from src.core.modules.authored_module_walkmesh import resolve_room_wok_module_offset
+
+    position = (100.0, 0.0, 0.0)
+    room = _square_room(resref="filtered", position=position, wok_verts_offset=position)
+
+    def distractor(name: str, **flags):
+        return ImportedMeshSurface(
+            name=name,
+            texture="ignored",
+            vertices=((195.0, -5.0, 0.0), (205.0, -5.0, 0.0), (205.0, 5.0, 0.0), (195.0, 5.0, 0.0)),
+            faces=((0, 1, 2), (0, 2, 3)),
+            **flags,
+        )
+
+    primitive = replace(
+        room.primitive,
+        surfaces=room.primitive.surfaces + (
+            distractor("backdrop", backdrop=True),
+            distractor("background", background_geometry=True),
+            distractor("hidden", render=False),
+        ),
+    )
+    room = replace(room, primitive=primitive)
+    offset, warning = resolve_room_wok_module_offset(room)
+    assert offset == (0.0, 0.0, 0.0)
+    assert warning is None
+
+
+def test_export_rebases_correctly_labeled_room_local_generated_wok() -> None:
+    _configure_native_python_roots()
+    from dataclasses import replace
+
+    from src.core.modules.authored_imported_mesh import generate_room_walkmesh_from_geometry
+    from src.core.modules.authored_module_export import build_authored_module
+
+    position = (30.0, 40.0, 0.0)
+    room = _square_room(resref="generated", position=position, wok_verts_offset=(0.0, 0.0, 0.0))
+    generated, report = generate_room_walkmesh_from_geometry(
+        room.primitive,
+        source_wok_policy="replace",
+    )
+    assert report["floor_faces"] == 2
+    assert generated.metadata["wok_coordinate_space"] == "room_local"
+    room = replace(room, primitive=generated)
+
+    build = build_authored_module(_project([room]))
+    exported_wok = build.module.room_woks["generated"]
+    assert sorted({round(vertex[0], 3) for vertex in exported_wok.verts}) == [25.0, 35.0]
+    assert sorted({round(vertex[1], 3) for vertex in exported_wok.verts}) == [35.0, 45.0]
+    # Export rebases a copy; the undo/project snapshot remains room-local.
+    assert sorted({round(vertex[0], 3) for vertex in generated.wok.verts}) == [-5.0, 5.0]
+
+
 def test_walkmesh_status_reports_the_alignment_repair() -> None:
     _configure_native_python_roots()
     from src.core.modules.authored_walkmesh_status import authored_walkmesh_status_for_project

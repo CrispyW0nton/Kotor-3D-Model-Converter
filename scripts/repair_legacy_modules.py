@@ -63,6 +63,8 @@ def _module(args: argparse.Namespace) -> int:
             source_pth=args.pth,
             extra_resource_paths=tuple(args.extra or ()),
             extra_resource_dirs=tuple(args.extra_dir or ()),
+            visual_only_room_resrefs=tuple(args.visual_only_room or ()),
+            regenerate_pth=bool(args.regenerate_pth),
             wok_coordinate_space=args.wok_space,
             overwrite=args.overwrite,
         )
@@ -114,6 +116,17 @@ def main() -> int:
     module.add_argument("--pth", default="")
     module.add_argument("--extra", action="append", default=[])
     module.add_argument("--extra-dir", action="append", default=[])
+    module.add_argument(
+        "--visual-only-room",
+        action="append",
+        default=[],
+        help="LYT room using the vanilla no-AABB/empty-WOK visual-partition contract; repeat as needed",
+    )
+    module.add_argument(
+        "--regenerate-pth",
+        action="store_true",
+        help="Ignore any source PTH and rebuild pathing from the final repaired room WOK set",
+    )
     module.add_argument("--wok-space", choices=("room_local", "module"), default="room_local")
     module.add_argument("--overwrite", action="store_true")
     module.set_defaults(handler=_module)

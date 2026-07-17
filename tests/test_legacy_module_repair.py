@@ -52,6 +52,7 @@ def test_legacy_candidate_preserves_core_metadata_and_generates_missing_pth(tmp_
     source.set_data("module", ResourceType.IFO, bytes_gff(source_ifo))
     source.set_data("legacy01", ResourceType.LYT, build.resources[("legacy01", "lyt")].data)
     source.set_data("legacy01", ResourceType.VIS, build.resources[("legacy01", "vis")].data)
+    source.set_data("legacy01", ResourceType.PTH, build.resources[("legacy01", "pth")].data)
     source_mod = tmp_path / "source.mod"
     write_erf(source, source_mod)
 
@@ -62,6 +63,7 @@ def test_legacy_candidate_preserves_core_metadata_and_generates_missing_pth(tmp_
             repaired_rooms_dir=str(rooms_dir),
             output_dir=str(tmp_path / "candidate"),
             source_mod=str(source_mod),
+            regenerate_pth=True,
         )
     )
 
@@ -69,6 +71,7 @@ def test_legacy_candidate_preserves_core_metadata_and_generates_missing_pth(tmp_
     assert result.engine_contract["export_ready"] is True
     assert result.readback_contract["export_ready"] is True
     assert "legacy01.pth" in result.generated_resources
+    assert any("deliberately replaced" in warning for warning in result.warnings)
     assert Path(result.module_path).is_file()
     assert Path(result.manifest_path).is_file()
 

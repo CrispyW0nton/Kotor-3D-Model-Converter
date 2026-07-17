@@ -50,7 +50,7 @@ from .authored_room_primitives import (
     build_torus_mesh,
     build_wall_mesh,
 )
-from .module_format import WOKData, WOKFace
+from .module_format import WALKABLE_IDS, WOKData, WOKFace
 
 
 DOOR_TRANSITION_SURFACE_ID = 18
@@ -594,27 +594,241 @@ def _primitive_render_meshes(primitive: RoomPrimitive) -> tuple[PrimitiveMesh, .
     return tuple(result)
 
 
-def _append_wok(base: WOKData, extra: WOKData) -> WOKData:
-    """Append one primitive WOK to another while preserving local adjacency."""
+_WOK_SEAM_EPSILON = 1.0e-5
 
-    vertex_offset = len(base.verts)
-    face_offset = len(base.faces)
-    base.verts.extend(tuple(vertex) for vertex in extra.verts)
-    for face in extra.faces:
-        base.faces.append(
+
+def _segment_parameter(
+    point: tuple[float, float, float],
+    start: tuple[float, float, float],
+    end: tuple[float, float, float],
+    *,
+    epsilon: float = _WOK_SEAM_EPSILON,
+) -> float | None:
+    """Return a point's parameter on a 3-D segment when it is truly collinear."""
+
+    delta = tuple(float(end[axis]) - float(start[axis]) for axis in range(3))
+    length_sq = sum(value * value for value in delta)
+    if length_sq <= epsilon * epsilon:
+        return None
+    relative = tuple(float(point[axis]) - float(start[axis]) for axis in range(3))
+    parameter = sum(relative[axis] * delta[axis] for axis in range(3)) / length_sq
+    projected = tuple(float(start[axis]) + parameter * delta[axis] for axis in range(3))
+    if math.dist(tuple(float(value) for value in point), projected) > epsilon:
+        return None
+    parameter_epsilon = epsilon / math.sqrt(length_sq)
+    if parameter < -parameter_epsilon or parameter > 1.0 + parameter_epsilon:
+        return None
+    return min(1.0, max(0.0, parameter))
+
+
+def _walkable_component_count(wok: WOKData) -> int:
+    """Count raw-index connected walkable face components."""
+
+    wok.rebuild_adjacencies()
+    walkable = {index for index, face in enumerate(wok.faces) if face.surface in WALKABLE_IDS}
+    components = 0
+    while walkable:
+        components += 1
+        pending = [walkable.pop()]
+        while pending:
+            face_index = pending.pop()
+            face = wok.faces[face_index]
+            for adjacent in (face.adj1, face.adj2, face.adj3):
+                if adjacent in walkable:
+                    walkable.remove(adjacent)
+                    pending.append(adjacent)
+    return components
+
+
+def _find_boundary_seam(
+    base: WOKData,
+    extra: WOKData,
+) -> tuple[tuple[int, int, int, int], tuple[int, int, int, int]] | None:
+    """Find an oppositely wound low edge contained by a base boundary edge.
+
+    Requiring containment and opposite winding prevents an interior ramp which
+    merely overlaps the floor from being mistaken for a valid connection.  A
+    ramp or stair may only extend from a real room-WOK boundary; open space is
+    never bridged automatically.
+    """
+
+    base.rebuild_adjacencies()
+    extra.rebuild_adjacencies()
+    extra_boundaries = extra.boundary_edges()
+    if not extra_boundaries:
+        return None
+    horizontal = [
+        row
+        for row in extra_boundaries
+        if abs(float(extra.verts[row[0]][2]) - float(extra.verts[row[1]][2])) <= _WOK_SEAM_EPSILON
+    ]
+    if not horizontal:
+        return None
+    minimum_height = min(
+        (float(extra.verts[row[0]][2]) + float(extra.verts[row[1]][2])) * 0.5
+        for row in horizontal
+    )
+    low_edges = [
+        row
+        for row in horizontal
+        if abs(
+            (float(extra.verts[row[0]][2]) + float(extra.verts[row[1]][2])) * 0.5
+            - minimum_height
+        )
+        <= _WOK_SEAM_EPSILON
+    ]
+    best: tuple[float, tuple[int, int, int, int], tuple[int, int, int, int]] | None = None
+    for base_edge in base.boundary_edges():
+        base_start = base.verts[base_edge[0]]
+        base_end = base.verts[base_edge[1]]
+        base_delta = tuple(float(base_end[axis]) - float(base_start[axis]) for axis in range(3))
+        base_length = math.sqrt(sum(value * value for value in base_delta))
+        if base_length <= _WOK_SEAM_EPSILON:
+            continue
+        for extra_edge in low_edges:
+            extra_start = extra.verts[extra_edge[0]]
+            extra_end = extra.verts[extra_edge[1]]
+            start_parameter = _segment_parameter(extra_start, base_start, base_end)
+            end_parameter = _segment_parameter(extra_end, base_start, base_end)
+            if start_parameter is None or end_parameter is None:
+                continue
+            extra_delta = tuple(float(extra_end[axis]) - float(extra_start[axis]) for axis in range(3))
+            extra_length = math.sqrt(sum(value * value for value in extra_delta))
+            if extra_length <= _WOK_SEAM_EPSILON:
+                continue
+            direction_dot = sum(base_delta[axis] * extra_delta[axis] for axis in range(3))
+            direction_cosine = direction_dot / (base_length * extra_length)
+            if direction_cosine > -1.0 + _WOK_SEAM_EPSILON:
+                continue
+            overlap = abs(end_parameter - start_parameter) * base_length
+            candidate = (overlap, base_edge, extra_edge)
+            if best is None or candidate[0] > best[0]:
+                best = candidate
+    return None if best is None else (best[1], best[2])
+
+
+def _split_boundary_face_for_seam(
+    base: WOKData,
+    base_edge: tuple[int, int, int, int],
+    extra: WOKData,
+    extra_edge: tuple[int, int, int, int],
+) -> dict[int, int]:
+    """Split a longer base boundary and return extra-to-base seam vertices."""
+
+    base_start_index, base_end_index, face_index, local_edge = base_edge
+    base_start = base.verts[base_start_index]
+    base_end = base.verts[base_end_index]
+    seam_vertices: dict[int, int] = {}
+    chain: list[tuple[float, int]] = [(0.0, base_start_index), (1.0, base_end_index)]
+    for extra_index in (extra_edge[0], extra_edge[1]):
+        point = tuple(float(value) for value in extra.verts[extra_index])
+        parameter = _segment_parameter(point, base_start, base_end)
+        if parameter is None:
+            raise ValueError("Walkmesh seam endpoints stopped matching their selected boundary edge.")
+        if parameter <= _WOK_SEAM_EPSILON:
+            mapped_index = base_start_index
+        elif parameter >= 1.0 - _WOK_SEAM_EPSILON:
+            mapped_index = base_end_index
+        else:
+            # Raw indices, not coordinate equality, define WOK topology.  Do
+            # not reuse a coordinate-equal vertex from another shell here.
+            mapped_index = len(base.verts)
+            base.verts.append(point)
+            chain.append((parameter, mapped_index))
+        seam_vertices[extra_index] = mapped_index
+
+    deduplicated_chain: list[tuple[float, int]] = []
+    for parameter, vertex_index in sorted(chain, key=lambda row: row[0]):
+        if deduplicated_chain and vertex_index == deduplicated_chain[-1][1]:
+            continue
+        deduplicated_chain.append((parameter, vertex_index))
+    if len(deduplicated_chain) <= 2:
+        setattr(base.faces[face_index], f"trans{local_edge + 1}", -1)
+        return seam_vertices
+
+    source = base.faces[face_index]
+    triangle = (source.v1, source.v2, source.v3)
+    transitions = (source.trans1, source.trans2, source.trans3)
+    third_index = triangle[(local_edge + 2) % 3]
+    boundary_transition = transitions[local_edge]
+    trailing_transition = transitions[(local_edge + 1) % 3]
+    leading_transition = transitions[(local_edge + 2) % 3]
+    seam_key = tuple(sorted(seam_vertices.values()))
+    replacement: list[WOKFace] = []
+    for chain_index in range(len(deduplicated_chain) - 1):
+        left = deduplicated_chain[chain_index][1]
+        right = deduplicated_chain[chain_index + 1][1]
+        segment_transition = -1 if tuple(sorted((left, right))) == seam_key else boundary_transition
+        replacement.append(
             WOKFace(
-                face.v1 + vertex_offset,
-                face.v2 + vertex_offset,
-                face.v3 + vertex_offset,
+                left,
+                right,
+                third_index,
+                source.surface,
+                trans1=segment_transition,
+                trans2=trailing_transition if right == base_end_index else -1,
+                trans3=leading_transition if left == base_start_index else -1,
+            )
+        )
+    base.faces[face_index] = replacement[0]
+    base.faces.extend(replacement[1:])
+    return seam_vertices
+
+
+def _append_wok(base: WOKData, extra: WOKData) -> WOKData:
+    """Append a WOK, stitching only a genuine coincident low boundary seam."""
+
+    if not base.faces:
+        base.verts.extend(tuple(vertex) for vertex in extra.verts)
+        base.faces.extend(
+            WOKFace(
+                face.v1,
+                face.v2,
+                face.v3,
                 face.surface,
-                face.adj1 + face_offset if face.adj1 >= 0 else -1,
-                face.adj2 + face_offset if face.adj2 >= 0 else -1,
-                face.adj3 + face_offset if face.adj3 >= 0 else -1,
+                face.adj1,
+                face.adj2,
+                face.adj3,
                 face.trans1,
                 face.trans2,
                 face.trans3,
             )
+            for face in extra.faces
         )
+        base.rebuild_adjacencies()
+        return base
+
+    seam = _find_boundary_seam(base, extra)
+    seam_vertices = (
+        _split_boundary_face_for_seam(base, seam[0], extra, seam[1])
+        if seam is not None
+        else {}
+    )
+    vertex_remap: dict[int, int] = dict(seam_vertices)
+    for extra_index, vertex in enumerate(extra.verts):
+        if extra_index in vertex_remap:
+            continue
+        vertex_remap[extra_index] = len(base.verts)
+        base.verts.append(tuple(vertex))
+    for extra_face_index, face in enumerate(extra.faces):
+        transitions = [face.trans1, face.trans2, face.trans3]
+        if seam is not None and extra_face_index == seam[1][2]:
+            # A transition belongs to a perimeter edge.  Once the edge is a
+            # stitched internal seam, retaining it would create an engine-
+            # invalid orphan transition record.
+            transitions[seam[1][3]] = -1
+        base.faces.append(
+            WOKFace(
+                vertex_remap[face.v1],
+                vertex_remap[face.v2],
+                vertex_remap[face.v3],
+                face.surface,
+                trans1=transitions[0],
+                trans2=transitions[1],
+                trans3=transitions[2],
+            )
+        )
+    base.rebuild_adjacencies()
     return base
 
 
@@ -693,13 +907,29 @@ def _build_floor_wok_for_composition(composition: AuthoredRoomComposition) -> WO
 
 
 def build_composition_wok(composition: AuthoredRoomComposition) -> WOKData:
-    """Build the room WOK from the floor plus walkable authored primitives."""
+    """Build one connected room WOK from floor plus authored primitives.
+
+    Disconnected walkable islands are blocked for new authoring unless the
+    composition explicitly records that a designer reviewed and accepted them.
+    That override preserves islands; it never invents a bridge across space.
+    """
 
     wok = _build_floor_wok_for_composition(composition)
+    allow_islands = bool(dict(composition.metadata or {}).get("allow_disconnected_walkmesh_islands", False))
     for primitive in composition.primitives:
         primitive_wok = primitive_to_wok(primitive)
         if primitive_wok is not None:
             _append_wok(wok, primitive_wok)
+            component_count = _walkable_component_count(wok)
+            if component_count > 1 and not allow_islands:
+                primitive_name = _primitive_name(primitive) or "(unnamed)"
+                raise ValueError(
+                    f"Walkmesh primitive {primitive_name} is disconnected from the room floor. "
+                    "Snap its low boundary edge to an existing walkmesh boundary; Ghost Studio will not "
+                    "bridge open space. Set composition metadata allow_disconnected_walkmesh_islands=true "
+                    "only after reviewing an intentional island."
+                )
+    wok.rebuild_adjacencies()
     return wok
 
 
@@ -838,6 +1068,20 @@ def validate_authored_room_composition(composition: AuthoredRoomComposition) -> 
                 blocking.append(f"Door frame primitive {base_name} must leave a positive doorway opening height.")
     if not composition.primitives and not composition.helper_meshes:
         warnings.append("Authored room composition has only a floor; add walls or helpers before game-facing export.")
+    if not blocking:
+        try:
+            validated_wok = build_composition_wok(composition)
+            component_count = _walkable_component_count(validated_wok)
+            if component_count > 1:
+                warnings.append(
+                    f"Authored room composition explicitly preserves {component_count} disconnected walkmesh islands; "
+                    "verify every island in KOTOR 2 before shipping."
+                )
+            # Compile/export must not discover a malformed perimeter or AABB
+            # after the editor has already declared the composition ready.
+            validated_wok.to_bytes()
+        except ValueError as exc:
+            blocking.append(str(exc))
     return AuthoredRoomCompositionValidation(
         ok=not blocking,
         warnings=tuple(warnings),

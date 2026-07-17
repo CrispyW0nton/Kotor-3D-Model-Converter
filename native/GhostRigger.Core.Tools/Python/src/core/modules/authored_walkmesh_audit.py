@@ -12,6 +12,7 @@ from .authored_walkmesh_surfaces import is_walkable_walkmesh_surface
 
 MAX_WALKABLE_SLOPE_DEGREES = 45.0
 DOOR_TRANSITION_SURFACE_ID = 18
+EMPIRICAL_STOCK_WOK_FACE_MAX = 2_136
 
 
 @dataclass(frozen=True)
@@ -51,15 +52,16 @@ def _is_walkable(face: Any) -> bool:
     return is_walkable_walkmesh_surface(int(getattr(face, "surface", -1)))
 
 
-def _vertex_key(vertex: Any, *, precision: int = 5) -> tuple[float, float, float]:
-    x, y, z = vertex
-    return (round(float(x), precision), round(float(y), precision), round(float(z), precision))
+def _edge_key(a: int, b: int) -> tuple[int, int]:
+    """Return an edge key in the WOK's explicit vertex-index topology.
 
+    Coincident coordinates are not sufficient evidence that two Odyssey WOK
+    vertices are connected. Vanilla rooms intentionally duplicate vertices at
+    collision seams, so coordinate keys invent adjacencies and hide real
+    perimeter edges.
+    """
 
-def _edge_key(verts: tuple[Any, ...], a: int, b: int) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
-    left = _vertex_key(verts[a])
-    right = _vertex_key(verts[b])
-    return (left, right) if left <= right else (right, left)
+    return (a, b) if a <= b else (b, a)
 
 
 def _triangle_area(verts: tuple[Any, ...], face: Any) -> float:
@@ -124,10 +126,7 @@ def audit_authored_wok(room_resref: str, wok: Any) -> AuthoredWalkmeshAudit:
     walkable_faces: set[int] = set()
     transition_surface_face_count = 0
     max_walkable_slope = 0.0
-    edge_faces: dict[
-        tuple[tuple[float, float, float], tuple[float, float, float]],
-        list[int],
-    ] = defaultdict(list)
+    edge_faces: dict[tuple[int, int], list[int]] = defaultdict(list)
 
     for face_index, face in enumerate(faces):
         if not _face_is_valid(verts, face):
@@ -147,7 +146,7 @@ def audit_authored_wok(room_resref: str, wok: Any) -> AuthoredWalkmeshAudit:
             steep_walkable_faces.add(face_index)
         a_idx, b_idx, c_idx = _face_vertices(face)
         for edge in ((a_idx, b_idx), (b_idx, c_idx), (c_idx, a_idx)):
-            edge_faces[_edge_key(verts, edge[0], edge[1])].append(face_index)
+            edge_faces[_edge_key(edge[0], edge[1])].append(face_index)
 
     adjacency: dict[int, set[int]] = {face_index: set() for face_index in walkable_faces}
     non_manifold_edge_count = 0
@@ -221,6 +220,11 @@ def audit_authored_wok(room_resref: str, wok: Any) -> AuthoredWalkmeshAudit:
             f"Room {label} generated WOK has {component_count} disconnected walkable island(s); "
             "bridge/weld/snap room floors if they should be one navigable area."
         )
+    if face_count > EMPIRICAL_STOCK_WOK_FACE_MAX:
+        warnings.append(
+            f"Room {label} WOK has {face_count} faces, above the empirical stock-room maximum of "
+            f"{EMPIRICAL_STOCK_WOK_FACE_MAX}; this render-resolution walkmesh was not decimated."
+        )
     if face_count > 0 and walkable_face_count == face_count:
         warnings.append(f"Room {label} WOK is fully walkable; paint blockers for walls, pits, or out-of-bounds floor if needed.")
 
@@ -247,6 +251,7 @@ def audit_authored_wok(room_resref: str, wok: Any) -> AuthoredWalkmeshAudit:
 __all__ = [
     "AuthoredWalkmeshAudit",
     "DOOR_TRANSITION_SURFACE_ID",
+    "EMPIRICAL_STOCK_WOK_FACE_MAX",
     "MAX_WALKABLE_SLOPE_DEGREES",
     "audit_authored_wok",
 ]

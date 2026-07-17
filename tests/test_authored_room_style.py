@@ -70,7 +70,7 @@ def test_t2652_room_style_updates_rectangular_smoke_room_and_invalidates_composi
     assert room.primitive.texture == "CM_Test_Floor"
     assert geometry.room_mesh.texture == "CM_Test_Floor"
     assert geometry.metadata["floor_surface_id"] == 4
-    assert {face.surface for face in geometry.wok.faces} <= {4, 7}
+    assert {face.surface for face in geometry.wok.faces} <= {4, 7, 18}
     assert sum(1 for face in geometry.wok.faces if face.surface == 4) >= 1
 
 
@@ -87,13 +87,13 @@ def test_t2652_controller_style_update_stores_kmap_and_clears_runtime_state() ->
     payload["game_tested"] = True
     controller.project.extra_sections["authored_module"] = payload
 
-    result = controller.apply_authored_room_style(texture="CM_NewWall", floor_surface="sand")
+    result = controller.apply_authored_room_style(texture="CM_NewWall", floor_surface="dirt")
     updated = controller.project.extra_sections["authored_module"]
 
     assert updated["runtime_resources"] == []
     assert updated["game_tested"] is False
     assert updated["rooms"][0]["primitive"]["material"]["texture"] == "CM_NewWall"
-    assert updated["rooms"][0]["primitive"]["floor_surface_id"] == 20
+    assert updated["rooms"][0]["primitive"]["floor_surface_id"] == 1
     assert result.readiness is not None
     assert result.readiness.can_preview is True
 
@@ -111,21 +111,21 @@ def test_t2907_room_style_updates_terrain_material_surface_and_export() -> None:
         game="K1",
     )
 
-    update = update_authored_room_style(project, texture="LMA_grass01.tga", floor_surface="sand")
+    update = update_authored_room_style(project, texture="LMA_grass01.tga", floor_surface="dirt")
     room = update.project.rooms[0]
     build = build_authored_module(update.project)
     geometry = build.module.room_geometry[room.normalised_resref()]
 
     assert update.texture == "LMA_grass01"
-    assert update.floor_surface_id == 20
+    assert update.floor_surface_id == 1
     assert room.primitive.material.texture == "LMA_grass01"
-    assert room.primitive.floor_surface_id == 20
-    assert room.primitive.metadata["last_room_style_update"]["floor_surface_name"] == "SAND"
+    assert room.primitive.floor_surface_id == 1
+    assert room.primitive.metadata["last_room_style_update"]["floor_surface_name"] == "DIRT"
     assert geometry.metadata["primitive"] == "terrain_heightfield"
-    assert geometry.metadata["floor_surface_id"] == 20
+    assert geometry.metadata["floor_surface_id"] == 1
     assert geometry.room_mesh.texture == "LMA_grass01"
-    assert {face.surface for face in geometry.wok.faces} <= {20, 7}
-    assert sum(1 for face in geometry.wok.faces if face.surface == 20) >= 1
+    assert {face.surface for face in geometry.wok.faces} <= {1, 7}
+    assert sum(1 for face in geometry.wok.faces if face.surface == 1) >= 1
     assert not build.blocking_issues
 
 

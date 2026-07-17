@@ -9,13 +9,13 @@ class WalkmeshTab(QtWidgets.QWidget):
     actionRequested = QtCore.Signal(str)
     roomSurfaceRequested = QtCore.Signal(str, str)
 
-    ACTIONS = ("Load WOK", "Save WOK", "Auto Generate Walkmesh", "Generate Walkmesh", "Generate Walls", "Fill Floor Faces", "Paint Face", "Assign Face Type", "Validate Walkmesh", "Show Face Types", "Show Walkable/Non-walkable", "Show Edges", "Show Normals")
+    ACTIONS = ("Load WOK", "Save WOK", "Generate from Selected Floor Faces", "Auto Generate Walkmesh", "Generate Walkmesh", "Fill Floor Faces", "Paint Face", "Assign Face Type", "Validate Walkmesh", "Show Face Types", "Show Walkable/Non-walkable", "Show Edges", "Show Normals")
     ACTION_OBJECT_NAMES = {
         "Load WOK": "mapStudioWalkmeshLoadWokButton",
         "Save WOK": "mapStudioWalkmeshSaveWokButton",
+        "Generate from Selected Floor Faces": "mapStudioWalkmeshGenerateSelectedFloorButton",
         "Auto Generate Walkmesh": "mapStudioWalkmeshAutoGenerateButton",
         "Generate Walkmesh": "mapStudioWalkmeshGenerateButton",
-        "Generate Walls": "mapStudioWalkmeshGenerateWallsButton",
         "Fill Floor Faces": "mapStudioWalkmeshFillFloorFacesButton",
         "Paint Face": "mapStudioWalkmeshPaintFaceButton",
         "Assign Face Type": "mapStudioWalkmeshAssignFaceTypeButton",
@@ -25,12 +25,25 @@ class WalkmeshTab(QtWidgets.QWidget):
         "Show Edges": "mapStudioWalkmeshShowEdgesButton",
         "Show Normals": "mapStudioWalkmeshShowNormalsButton",
     }
+    ACTION_TOOLTIPS = {
+        "Generate from Selected Floor Faces": (
+            "For an imported room with no source WOK: switch to Face mode, select only the real floor faces, "
+            "then generate a floor-only engine walkmesh. Roofs, furniture, walls, and ceilings must not be selected."
+        ),
+        "Auto Generate Walkmesh": (
+            "Preserve every imported source WOK. New authored geometry generates normally; imported geometry "
+            "without a WOK requires a reviewed floor-face selection first."
+        ),
+    }
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QtWidgets.QVBoxLayout(self)
         self.workflow_label = QtWidgets.QLabel(
-            "Walkmesh workflow: create or load room geometry, generate WOK faces, paint surface types, validate, then use Walkmesh Preview before staging."
+            "Walkmesh workflow: create or load room geometry, generate WOK faces from authored geometry; "
+            "for imported rooms without WOK, select the true "
+            "floor faces and generate from that reviewed selection; paint surface types, validate, then use "
+            "Walkmesh Preview before staging."
         )
         self.workflow_label.setObjectName("mapStudioWalkmeshWorkflowLabel")
         self.workflow_label.setWordWrap(True)
@@ -80,6 +93,9 @@ class WalkmeshTab(QtWidgets.QWidget):
         for label in self.ACTIONS:
             button = QtWidgets.QPushButton(label)
             button.setObjectName(self.ACTION_OBJECT_NAMES.get(label, ""))
+            tooltip = self.ACTION_TOOLTIPS.get(label, "")
+            if tooltip:
+                button.setToolTip(tooltip)
             button.clicked.connect(lambda _checked=False, text=label: self.actionRequested.emit(text))
             layout.addWidget(button)
         layout.addStretch(1)

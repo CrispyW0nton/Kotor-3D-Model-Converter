@@ -138,8 +138,21 @@ class _WalkmeshFaceGrid:
     def face_at(self, x: float, y: float, *, epsilon: float = POINT_IN_TRIANGLE_EPSILON) -> int:
         if not self._ready:
             return -1
-        for face_index in self._buckets.get((self._col(x), self._row(y)), ()):
-            if _face_contains_xy(self._verts, self._faces[face_index], float(x), float(y), epsilon=epsilon):
+        x = float(x)
+        y = float(y)
+        if not (isfinite(x) and isfinite(y)):
+            return -1
+        col = self._col(x)
+        row = self._row(y)
+        # Point-in-triangle admits a small epsilon outside a triangle.  Query
+        # neighboring cells too so a sample just across a bucket boundary has
+        # the same first-face result as the canonical linear scan.
+        candidates: set[int] = set()
+        for col_offset in (-1, 0, 1):
+            for row_offset in (-1, 0, 1):
+                candidates.update(self._buckets.get((col + col_offset, row + row_offset), ()))
+        for face_index in sorted(candidates):
+            if _face_contains_xy(self._verts, self._faces[face_index], x, y, epsilon=epsilon):
                 return face_index
         return -1
 
@@ -206,7 +219,11 @@ def _walkable_components(wok: Any) -> tuple[tuple[int, ...], ...]:
     faces = list(getattr(wok, "faces", ()) or ())
     verts = list(getattr(wok, "verts", ()) or ())
     walkable: set[int] = set()
-    edge_faces: dict[tuple[tuple[float, float, float], tuple[float, float, float]], list[int]] = {}
+    # Odyssey topology is defined by vertex indices.  Retail WOKs often keep
+    # duplicate-coordinate vertices to form intentional collision seams; a
+    # coordinate-rounded key falsely welds those seams and produces one PTH
+    # component spanning two disconnected regions.
+    edge_faces: dict[tuple[int, int], list[tuple[int, int]]] = {}
     for face_index, face in enumerate(faces):
         if int(getattr(face, "surface", -1)) not in WALKABLE_SURFACE_IDS:
             continue
@@ -214,22 +231,39 @@ def _walkable_components(wok: Any) -> tuple[tuple[int, ...], ...]:
         if any(index < 0 or index >= len(verts) for index in indices):
             continue
         walkable.add(face_index)
-        for left, right in ((indices[0], indices[1]), (indices[1], indices[2]), (indices[2], indices[0])):
-            a = tuple(round(float(value), 5) for value in verts[left])
-            b = tuple(round(float(value), 5) for value in verts[right])
-            key = (a, b) if a <= b else (b, a)
-            edge_faces.setdefault(key, []).append(face_index)
+        for local_edge, (left, right) in enumerate(
+            ((indices[0], indices[1]), (indices[1], indices[2]), (indices[2], indices[0]))
+        ):
+            key = (left, right) if left <= right else (right, left)
+            edge_faces.setdefault(key, []).append((face_index, local_edge))
 
     adjacency: dict[int, set[int]] = {face_index: set() for face_index in walkable}
-    for linked in edge_faces.values():
-        unique = sorted(set(linked))
+    for owners in edge_faces.values():
+        unique = sorted({face_index for face_index, _local_edge in owners})
         for left in unique:
             for right in unique:
                 if left != right:
                     adjacency[left].add(right)
+
+    # Honour an imported/serialized adjacency row only when it agrees with the
+    # exact indexed edge.  This retains valid BWM adjacency while refusing a
+    # stale coordinate-welded row that would bridge a deliberate index seam.
     for face_index in walkable:
         face = faces[face_index]
-        for adjacent in (int(getattr(face, "adj1", -1)), int(getattr(face, "adj2", -1)), int(getattr(face, "adj3", -1))):
+        indices = _face_indices(face)
+        for local_edge, adjacent_value in enumerate(
+            (int(getattr(face, "adj1", -1)), int(getattr(face, "adj2", -1)), int(getattr(face, "adj3", -1)))
+        ):
+            if adjacent_value < 0:
+                continue
+            edge = tuple(sorted((indices[local_edge], indices[(local_edge + 1) % 3])))
+            owners = edge_faces.get(edge, ())
+            owner_faces = {owner_face for owner_face, _owner_edge in owners if owner_face != face_index}
+            # WOKData normally stores adjacent face indices.  Its fallback raw
+            # parser can expose Odyssey's face*3+edge row, so accept that form
+            # too, but only after the shared raw-index edge proves the link.
+            candidates = (adjacent_value, adjacent_value // 3)
+            adjacent = next((candidate for candidate in candidates if candidate in owner_faces), -1)
             if adjacent in walkable:
                 adjacency[face_index].add(adjacent)
                 adjacency[adjacent].add(face_index)
@@ -263,6 +297,11 @@ def build_authored_path_graph_from_walkmesh(
     points: list[AuthoredPathPoint] = []
     seen: set[tuple[int, int]] = set()
     components = _walkable_components(wok)
+    component_by_face = {
+        face_index: component_index
+        for component_index, component in enumerate(components)
+        for face_index in component
+    }
     for component_index, component in enumerate(components):
         centers = [_face_centroid(wok, face_index) for face_index in component]
         valid_centers = [center for center in centers if center is not None]
@@ -320,6 +359,7 @@ def build_authored_path_graph_from_walkmesh(
                     "walkmesh_face": face_index,
                     "on_walkmesh": ok,
                     **dict(anchor.metadata),
+                    "component_index": component_by_face.get(face_index, -1),
                 },
             )
         )
@@ -329,6 +369,10 @@ def build_authored_path_graph_from_walkmesh(
     for source in range(len(points)):
         for target in range(len(points)):
             if source != target:
+                source_component = int(points[source].metadata.get("component_index", -1))
+                target_component = int(points[target].metadata.get("component_index", -1))
+                if source_component >= 0 and target_component >= 0 and source_component != target_component:
+                    continue
                 ok, _failed = _connection_on_walkmesh(wok, points[source], points[target], sample_interval=0.5, grid=grid)
                 if ok:
                     connections.append(AuthoredPathConnection(source=source, target=target))

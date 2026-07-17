@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.compile_nwmax_room_candidate import prepare_room_ascii
+from scripts.compile_nwmax_room_candidate import merge_render_ascii_models, prepare_room_ascii
 
 
 _RENDER_ASCII = """\
@@ -130,3 +130,27 @@ def test_prepare_room_ascii_removes_stacked_nonwalk_ceiling() -> None:
     )
     assert len(wok.faces) == 2
     assert metadata["walkmesh"]["rejected_stacked_face_count"] == 2
+
+
+def test_merge_render_ascii_models_reparents_disjoint_shell() -> None:
+    exterior = _RENDER_ASCII.replace("old_room", "exterior_room").replace(
+        "floor_visual", "lava_shell"
+    )
+
+    merged = merge_render_ascii_models(
+        (_RENDER_ASCII, exterior),
+        room="test_room",
+    )
+
+    assert merged.lower().count("newmodel ") == 1
+    assert merged.lower().count("node dummy test_room") == 1
+    assert "node trimesh floor_visual" in merged
+    assert "node trimesh lava_shell" in merged
+    assert "parent test_room" in merged
+
+
+def test_merge_render_ascii_models_rejects_duplicate_node_names() -> None:
+    exterior = _RENDER_ASCII.replace("old_room", "exterior_room")
+
+    with pytest.raises(ValueError, match="duplicates node name 'floor_visual'"):
+        merge_render_ascii_models((_RENDER_ASCII, exterior), room="test_room")

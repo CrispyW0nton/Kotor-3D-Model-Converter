@@ -91,6 +91,16 @@ class LegacyModuleCandidateRequest:
     source_pth: str = ""
     extra_resource_paths: tuple[str, ...] = ()
     extra_resource_dirs: tuple[str, ...] = ()
+    # Vanilla modules may split one area into a playable collision room plus
+    # visual-only LYT partitions.  Those partitions still require an
+    # MDL/MDX/WOK triplet, but retail examples use no embedded AABB and the
+    # canonical empty 136-byte WOK.  Keep the exception explicit per room so a
+    # playable room can never silently bypass the strict collision contract.
+    visual_only_room_resrefs: tuple[str, ...] = ()
+    # Recovered source capsules often contain a stale PTH for a smaller room
+    # set.  Callers changing the LYT/WOK set must be able to rebuild it from
+    # the final combined walkmesh instead of preserving incompatible bytes.
+    regenerate_pth: bool = False
     wok_coordinate_space: str = "room_local"
     overwrite: bool = False
 
@@ -848,6 +858,19 @@ def build_legacy_module_candidate(request: LegacyModuleCandidateRequest) -> Lega
             raise ValueError("The recovered layout contains no room rows.")
         if len(set(room_resrefs)) != len(room_resrefs):
             raise ValueError("The recovered LYT contains duplicate room resrefs.")
+        visual_only_room_resrefs = tuple(
+            dict.fromkeys(
+                _normalise_resref(room)
+                for room in request.visual_only_room_resrefs
+                if _normalise_resref(room)
+            )
+        )
+        unknown_visual_only_rooms = sorted(set(visual_only_room_resrefs) - set(room_resrefs))
+        if unknown_visual_only_rooms:
+            raise ValueError(
+                "Visual-only room exceptions are absent from the recovered LYT: "
+                + ", ".join(unknown_visual_only_rooms)
+            )
 
         room_woks: dict[str, Any] = {}
         final_resources: dict[tuple[str, str], bytes] = {
@@ -974,7 +997,7 @@ def build_legacy_module_candidate(request: LegacyModuleCandidateRequest) -> Lega
             module_resref,
             "pth",
         )
-        if explicit_pth is not None or capsule_pth is not None:
+        if not request.regenerate_pth and (explicit_pth is not None or capsule_pth is not None):
             pth_bytes = explicit_pth if explicit_pth is not None else capsule_pth
             result.preserved_resources.append(
                 source_pth.name if source_pth is not None else f"{capsule_pth_resref}.pth"
@@ -988,6 +1011,10 @@ def build_legacy_module_candidate(request: LegacyModuleCandidateRequest) -> Lega
             pathing = compile_authored_pathing_for_module(combined_wok)
             pth_bytes = pathing.pth_bytes
             result.generated_resources.append(f"{module_resref}.pth")
+            if request.regenerate_pth and (explicit_pth is not None or capsule_pth is not None):
+                result.warnings.append(
+                    "Source PTH was deliberately replaced because the recovered room/walkmesh set changed."
+                )
             if int(pathing.metadata.get("walkmesh_component_count", 0) or 0) > 1:
                 result.warnings.append(
                     f"Generated PTH covers {pathing.metadata['walkmesh_component_count']} disconnected walkmesh components; "
@@ -1060,6 +1087,7 @@ def build_legacy_module_candidate(request: LegacyModuleCandidateRequest) -> Lega
                 module_resref=module_resref,
                 resources=final_resources,
                 expected_room_resrefs=room_resrefs,
+                visual_only_room_resrefs=visual_only_room_resrefs,
             )
         )
         result.engine_contract = contract.to_dict()
@@ -1081,6 +1109,7 @@ def build_legacy_module_candidate(request: LegacyModuleCandidateRequest) -> Lega
                 module_resref=module_resref,
                 resources=readback_resources,
                 expected_room_resrefs=room_resrefs,
+                visual_only_room_resrefs=visual_only_room_resrefs,
             )
         )
         result.readback_contract = readback.to_dict()

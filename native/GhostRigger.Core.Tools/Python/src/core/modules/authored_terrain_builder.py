@@ -25,6 +25,12 @@ class TerrainHeightfieldPrimitive:
     (a cell is the quad between sample rows/columns ``n`` and ``n + 1``).
     Holed cells emit no render or WOK faces, so the serialized walkmesh
     perimeter gains one interior loop per hole region.
+
+    Terrain carving must keep one edge-connected walkable floor by default.
+    A deliberately disconnected terrain may opt in only with the explicit
+    boolean metadata key ``allow_disconnected_walkmesh_islands=True`` (or the
+    matching argument to :func:`carve_terrain_hole`) after every island has
+    been reviewed as intentional game collision.
     """
 
     room_resref: str
@@ -46,6 +52,7 @@ class TerrainHeightfieldValidation:
     ok: bool
     row_count: int = 0
     column_count: int = 0
+    walkable_component_count: int = 0
     warnings: tuple[str, ...] = ()
     blocking_issues: tuple[str, ...] = ()
 
@@ -227,13 +234,44 @@ def validate_terrain_heightfield_primitive(primitive: TerrainHeightfieldPrimitiv
         blocking.append("Terrain max walkable slope must be greater than 0 and less than 90 degrees.")
     if not str(primitive.room_resref or "").strip():
         blocking.append("Terrain heightfield requires a room resref.")
+    holes: tuple[tuple[int, int], ...] = ()
+    rectangular_grid = bool(rows) and all(len(row) == column_count for row in rows)
+    if row_count >= 2 and column_count >= 2 and rectangular_grid:
+        holes, hole_issues = _normalise_terrain_holes_with_issues(
+            primitive.holes,
+            row_count=row_count,
+            column_count=column_count,
+        )
+        blocking.extend(hole_issues)
+    walkable_component_count = 0
     if not blocking:
         report = analyse_terrain_slopes(primitive)
         warnings.extend(report.warnings)
+        # The graph walk is only needed after topology carving.  The common
+        # live-sculpt path has no holes and already knows whether at least one
+        # triangle is walkable from the slope pass, avoiding a second full-grid
+        # traversal on every terrain brush frame.
+        walkable_component_count = (
+            _terrain_walkable_component_count(primitive, holes=holes)
+            if holes
+            else int(report.walkable_triangle_count > 0)
+        )
+        allow_islands = dict(primitive.metadata or {}).get("allow_disconnected_walkmesh_islands") is True
+        if walkable_component_count > 1 and not allow_islands:
+            blocking.append(
+                f"Terrain carving produces {walkable_component_count} disconnected walkable WOK islands. "
+                "Connect the floor or set terrain metadata allow_disconnected_walkmesh_islands=true only "
+                "after explicit collision review."
+            )
+        elif walkable_component_count > 1:
+            warnings.append(
+                f"Terrain preserves {walkable_component_count} explicitly reviewed disconnected walkable WOK islands."
+            )
     return TerrainHeightfieldValidation(
         ok=not blocking,
         row_count=row_count,
         column_count=column_count,
+        walkable_component_count=walkable_component_count,
         warnings=tuple(warnings),
         blocking_issues=tuple(blocking),
     )
@@ -1122,23 +1160,71 @@ def terrain_triangle_slope_degrees(a: Vec3, b: Vec3, c: Vec3) -> float:
     return _triangle_slope_degrees(a, b, c)
 
 
+def _normalise_terrain_holes_with_issues(
+    holes: tuple[tuple[int, int], ...] | list[Any] | None,
+    *,
+    row_count: int,
+    column_count: int,
+) -> tuple[tuple[tuple[int, int], ...], tuple[str, ...]]:
+    """Return stable hole cells plus every malformed/out-of-range issue.
+
+    Hole coordinates are topology, not a UI hint.  Silently coercing ``1.7``
+    to cell ``1`` or dropping an out-of-range cell changes the authored floor
+    and can close a deliberate pit in the exported WOK.  Only two-element
+    integer pairs are accepted.
+    """
+
+    import operator
+
+    valid: set[tuple[int, int]] = set()
+    issues: list[str] = []
+    for cell_index, cell in enumerate(holes or ()):
+        if not isinstance(cell, (tuple, list)) or len(cell) != 2:
+            issues.append(
+                f"Terrain hole {cell_index} must be a two-integer (row, column) cell; got {cell!r}."
+            )
+            continue
+        row_value, column_value = cell
+        try:
+            if isinstance(row_value, bool) or isinstance(column_value, bool):
+                raise TypeError
+            row_index = operator.index(row_value)
+            column_index = operator.index(column_value)
+        except TypeError:
+            issues.append(
+                f"Terrain hole {cell_index} must use integer row/column coordinates; got {cell!r}."
+            )
+            continue
+        if not (0 <= row_index < row_count - 1 and 0 <= column_index < column_count - 1):
+            issues.append(
+                f"Terrain hole {cell_index} cell ({row_index}, {column_index}) is outside the valid cell range "
+                f"rows 0..{max(0, row_count - 2)}, columns 0..{max(0, column_count - 2)}."
+            )
+            continue
+        valid.add((row_index, column_index))
+    return tuple(sorted(valid)), tuple(issues)
+
+
 def normalised_terrain_holes(
     holes: tuple[tuple[int, int], ...] | list[Any] | None,
     *,
     row_count: int,
     column_count: int,
 ) -> tuple[tuple[int, int], ...]:
-    """Return in-range, deduplicated hole cells sorted for stable output."""
+    """Return validated, deduplicated hole cells sorted for stable output.
 
-    valid: set[tuple[int, int]] = set()
-    for cell in holes or ():
-        try:
-            row_index, column_index = int(cell[0]), int(cell[1])
-        except (IndexError, TypeError, ValueError):
-            continue
-        if 0 <= row_index < row_count - 1 and 0 <= column_index < column_count - 1:
-            valid.add((row_index, column_index))
-    return tuple(sorted(valid))
+    Malformed or out-of-range authoring data raises instead of disappearing
+    from the generated mesh/WOK.
+    """
+
+    normalised, issues = _normalise_terrain_holes_with_issues(
+        holes,
+        row_count=row_count,
+        column_count=column_count,
+    )
+    if issues:
+        raise ValueError("; ".join(issues))
+    return normalised
 
 
 def _terrain_faces(
@@ -1161,20 +1247,96 @@ def _terrain_faces(
     return tuple(faces)
 
 
+def _terrain_walkable_component_count(
+    primitive: TerrainHeightfieldPrimitive,
+    *,
+    holes: tuple[tuple[int, int], ...],
+) -> int:
+    """Count edge-connected walkable face components in the authored floor.
+
+    Vertex-only contact is not traversable Odyssey topology, so diagonal
+    point contacts remain separate components.  Ordinary diagonal/notched hole
+    patterns that still have an edge-connected path remain one component.
+    """
+
+    rows = _height_rows(primitive)
+    if len(rows) < 2 or not rows or len(rows[0]) < 2:
+        return 0
+    vertices = _grid_vertices(primitive)
+    faces = _terrain_faces(len(rows), len(rows[0]), holes)
+    max_walkable_slope = float(primitive.max_walkable_slope_degrees)
+    walkable_faces = {
+        face_index
+        for face_index, face in enumerate(faces)
+        if _triangle_slope_degrees(vertices[face[0]], vertices[face[1]], vertices[face[2]])
+        <= max_walkable_slope
+    }
+    if not walkable_faces:
+        return 0
+
+    neighbours: dict[int, set[int]] = {face_index: set() for face_index in walkable_faces}
+    edge_owners: dict[tuple[int, int], int] = {}
+    for face_index in sorted(walkable_faces):
+        face = faces[face_index]
+        for edge_index in range(3):
+            a = int(face[edge_index])
+            b = int(face[(edge_index + 1) % 3])
+            key = (min(a, b), max(a, b))
+            other_face_index = edge_owners.get(key)
+            if other_face_index is None:
+                edge_owners[key] = face_index
+                continue
+            neighbours[face_index].add(other_face_index)
+            neighbours[other_face_index].add(face_index)
+
+    remaining = set(walkable_faces)
+    component_count = 0
+    while remaining:
+        component_count += 1
+        pending = [remaining.pop()]
+        while pending:
+            face_index = pending.pop()
+            for neighbour in neighbours[face_index]:
+                if neighbour in remaining:
+                    remaining.remove(neighbour)
+                    pending.append(neighbour)
+    return component_count
+
+
 def carve_terrain_hole(
     primitive: TerrainHeightfieldPrimitive,
     *,
     row_index: int,
     column_index: int,
     radius: int = 0,
+    allow_disconnected_walkmesh_islands: bool | None = None,
 ) -> TerrainHeightfieldPrimitive:
-    """Remove the grid cells within a Chebyshev radius from the terrain floor."""
+    """Remove grid cells while preserving one walkable floor by default.
+
+    Pass ``allow_disconnected_walkmesh_islands=True`` only after deliberately
+    reviewing each separated floor island.  The explicit choice is persisted
+    in terrain metadata so later validation and export cannot lose it.
+    """
+
+    import operator
 
     rows = _height_rows(primitive)
     row_count, column_count = len(rows), len(rows[0]) if rows else 0
-    span = max(0, int(radius))
+    if allow_disconnected_walkmesh_islands is not None and not isinstance(
+        allow_disconnected_walkmesh_islands,
+        bool,
+    ):
+        raise ValueError("allow_disconnected_walkmesh_islands must be true, false, or omitted.")
+    try:
+        if isinstance(row_index, bool) or isinstance(column_index, bool) or isinstance(radius, bool):
+            raise TypeError
+        authored_row = operator.index(row_index)
+        authored_column = operator.index(column_index)
+        span = max(0, operator.index(radius))
+    except TypeError as exc:
+        raise ValueError("Terrain carve row, column, and radius must be integers.") from exc
     requested = {
-        (int(row_index) + dr, int(column_index) + dc)
+        (authored_row + dr, authored_column + dc)
         for dr in range(-span, span + 1)
         for dc in range(-span, span + 1)
     }
@@ -1186,7 +1348,14 @@ def carve_terrain_hole(
     total_cells = max(0, (row_count - 1) * (column_count - 1))
     if len(combined) >= total_cells:
         raise ValueError("Terrain hole would remove every walkable cell; leave at least one floor cell.")
-    return replace(primitive, holes=combined)
+    metadata = dict(primitive.metadata or {})
+    if allow_disconnected_walkmesh_islands is not None:
+        metadata["allow_disconnected_walkmesh_islands"] = allow_disconnected_walkmesh_islands
+    candidate = replace(primitive, holes=combined, metadata=metadata)
+    validation = validate_terrain_heightfield_primitive(candidate)
+    if not validation.ok:
+        raise ValueError("; ".join(validation.blocking_issues))
+    return candidate
 
 
 def fill_terrain_hole(
@@ -1198,14 +1367,41 @@ def fill_terrain_hole(
 ) -> TerrainHeightfieldPrimitive:
     """Restore previously carved grid cells within a Chebyshev radius."""
 
-    span = max(0, int(radius))
+    import operator
+
+    rows = _height_rows(primitive)
+    row_count, column_count = len(rows), len(rows[0]) if rows else 0
+    try:
+        if isinstance(row_index, bool) or isinstance(column_index, bool) or isinstance(radius, bool):
+            raise TypeError
+        authored_row = operator.index(row_index)
+        authored_column = operator.index(column_index)
+        span = max(0, operator.index(radius))
+    except TypeError as exc:
+        raise ValueError("Terrain fill row, column, and radius must be integers.") from exc
     restored = {
-        (int(row_index) + dr, int(column_index) + dc)
+        (authored_row + dr, authored_column + dc)
         for dr in range(-span, span + 1)
         for dc in range(-span, span + 1)
     }
-    remaining = tuple(cell for cell in primitive.holes if tuple(cell) not in restored)
-    return replace(primitive, holes=remaining)
+    # A fill brush is also an authored cell operation; reject a stroke that
+    # falls outside the terrain instead of partially clipping it.
+    normalised_terrain_holes(
+        tuple(sorted(restored)),
+        row_count=row_count,
+        column_count=column_count,
+    )
+    existing = normalised_terrain_holes(
+        primitive.holes,
+        row_count=row_count,
+        column_count=column_count,
+    )
+    remaining = tuple(cell for cell in existing if cell not in restored)
+    candidate = replace(primitive, holes=remaining)
+    validation = validate_terrain_heightfield_primitive(candidate)
+    if not validation.ok:
+        raise ValueError("; ".join(validation.blocking_issues))
+    return candidate
 
 
 def _set_face_adjacent(face: WOKFace, edge_index: int, adjacent: int) -> None:
@@ -1218,20 +1414,27 @@ def _set_face_adjacent(face: WOKFace, edge_index: int, adjacent: int) -> None:
 
 
 def _assign_wok_adjacency(faces: list[WOKFace]) -> None:
-    edge_owner: dict[tuple[int, int], tuple[int, int]] = {}
+    edge_owners: dict[tuple[int, int], list[tuple[int, int]]] = {}
     for face_index, face in enumerate(faces):
         vertices = (face.v1, face.v2, face.v3)
         for edge_index in range(3):
             a = vertices[edge_index]
             b = vertices[(edge_index + 1) % 3]
             key = (min(a, b), max(a, b))
-            other = edge_owner.get(key)
-            if other is None:
-                edge_owner[key] = (face_index, edge_index)
+            owners = edge_owners.setdefault(key, [])
+            if len(owners) >= 2:
+                owner_faces = ", ".join(str(owner[0]) for owner in owners)
+                raise ValueError(
+                    f"Terrain WOK edge {key} is non-manifold: faces {owner_faces}, and {face_index} "
+                    "all claim the same edge."
+                )
+            if not owners:
+                owners.append((face_index, edge_index))
                 continue
-            other_face_index, other_edge_index = other
+            other_face_index, other_edge_index = owners[0]
             _set_face_adjacent(face, edge_index, other_face_index)
             _set_face_adjacent(faces[other_face_index], other_edge_index, face_index)
+            owners.append((face_index, edge_index))
 
 
 def analyse_terrain_slopes(primitive: TerrainHeightfieldPrimitive) -> TerrainSlopeReport:
@@ -1331,6 +1534,10 @@ def build_terrain_mesh(primitive: TerrainHeightfieldPrimitive) -> PrimitiveMesh:
             "walkable_triangle_count": report.walkable_triangle_count,
             "non_walk_triangle_count": report.non_walk_triangle_count,
             "hole_cell_count": len(holes),
+            "walkable_component_count": validation.walkable_component_count,
+            "allow_disconnected_walkmesh_islands": (
+                dict(primitive.metadata or {}).get("allow_disconnected_walkmesh_islands") is True
+            ),
             "height_samples": rows,
             **dict(primitive.metadata),
         },
@@ -1386,6 +1593,10 @@ def compile_terrain_room_geometry(primitive: TerrainHeightfieldPrimitive) -> Aut
             "max_slope_degrees": report.max_slope_degrees,
             "walkable_triangle_count": report.walkable_triangle_count,
             "non_walk_triangle_count": report.non_walk_triangle_count,
+            "walkable_component_count": validation.walkable_component_count,
+            "allow_disconnected_walkmesh_islands": (
+                dict(primitive.metadata or {}).get("allow_disconnected_walkmesh_islands") is True
+            ),
             "warnings": report.warnings,
         },
     )

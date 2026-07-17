@@ -11,6 +11,93 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-16
 
+### [2026-07-16] T2906/T3101: binary MDL room-compile route, MOD/KMAP parity closure, and K2 candidate overlay
+
+Owner: LordVaderCW
+
+T###: T2906 / T3101
+
+Subsystem: converted-module walkmesh audit, legacy room recovery scripts, and
+K2 module candidate packaging (Core.Workflow/Core.Validation tooling scripts)
+
+Intersects: the 2026-07-16 3ds Max MCP / Vul recovery slice and the earlier
+Gra/RNV recovery work on `ghost-studio`; the uncommitted Map Studio PIE slice
+shares the regenerated native Python payload manifests, which stay uncommitted
+with that slice.
+
+- `compare_mod_kmap_walkmeshes()` in `scripts/audit_walkmesh_library.py` now
+  treats vertex-count drift as a diagnostic (`diagnostic_count_mismatches`)
+  instead of a blocking parity failure. A source WOK may carry an unreferenced
+  legacy vertex (774qgm_01a, cor_m56ag) while face geometry, materials,
+  adjacency, perimeters, and transitions still match exactly. Face count,
+  walkable/non-walk counts, adjacency-domain count, semantic hash, surface
+  distribution, adjacency, perimeter, and transition mismatches still block.
+- Regenerated the seven stale K2 KMAPs (500qgm, 901mal, 921srt, cor_m56aa,
+  corq_merc, koq200, narstr) through the updated Map Studio roundtrip prover;
+  every module reopened with exact per-room WOK semantic/header parity. The
+  base MOD/KMAP parity report improved from 14/24 to 22/24 pairs; the two
+  remaining REVIEW rows (undclb, vul801) are stale base-status paths that the
+  new overlay supersedes.
+- Added `_compile_static_binary_room()` to
+  `scripts/generate_legacy_room_walkmesh_candidates.py`: compiles a raw-valid
+  source room binary directly through Ghost Studio's parser and controller-free
+  K2 writer, with blocking source-parity gates (exact non-AABB node
+  names/order/hierarchy, per-node face/vertex counts, textures, lightmaps, and
+  sign-normalized bind transforms), a WOK-derived embedded AABB
+  (`<room>_wg`, identity XYZW quaternion, render/shadow off), zero controllers,
+  and the vanilla-derived structural/readback gates. MDLOps ASCII decompilation
+  drops duplicate-named visual nodes (Gra802 `Cylinder01`, 176 faces,
+  `LKO_dor01`), which this route makes impossible to lose silently.
+- Routed `scripts/package_gra_k2_candidates.py` through the binary route by
+  default (`--compile-route`, `--area`, `--extra-texture-dir` added). Rebuilt
+  all three Gra areas end to end: gra802 (148 nodes/9,793 visual faces, both
+  Cylinder01 nodes, 166-face central AABB), gra803 (4 rooms, 237-face central
+  AABB), and gra801 (recovers 4 visual nodes/833 faces the ASCII route lost;
+  the prior candidate is preserved at `gra801.mdlops-route-backup-20260716`).
+  Each passes the full K2 engine contract, Map Studio KMAP roundtrip, and
+  MOD/KMAP walkmesh parity.
+- Added `scripts/build_rnv_k2_full_candidates.py`. `rnvcanyon` is an honest
+  partial: seven surviving playable rooms with their authoritative WOKs, the
+  evidence-verified visual-only `koq200_02`/`valsky` (no embedded AABB, empty
+  canonical WOKs), omitted LYT-only rooms `koq200_01l/01m/01n`, MDLOps junk
+  resources dropped, symmetric nine-room VIS, regenerated PTH, and 28 K1 stock
+  texture ports. `rnvcity` is the full K2 room rebuild: all nine koq201 rooms
+  rewritten from raw binaries (K1 function pointers replaced, node `+8` zero,
+  zero controllers), four WOK AABB tables rebuilt with proven zero semantic
+  drift, embedded AABBs derived from each room's repaired WOK, symmetric VIS,
+  regenerated PTH, five Korriban City custom textures recovered from the
+  Marius bundle, and 17 K1 stock texture ports. Both report
+  `structural_candidate_ready` with 9/9 Map Studio WOK parity. The recovered
+  RNV IFO entry (0,0,0) was verified to sit on a walkable face before being
+  preserved.
+- Added `scripts/build_k2_candidate_overlay.py`, writing
+  `Converted/K2_CANDIDATE_OVERLAY.json`: the final K2 candidate MOD/KMAP per
+  module (505qgm, koq202, gra801/802/803, vul801/803, undclb, rnvcanyon,
+  rnvcity) with hashes, visual-only room lists, staging commands, and
+  classification warnings (771qgm/yav501 scaffolds, 773qgm/775qgm WOK-derived
+  proxies, 901mal/921srt retail-donor overlays). The base
+  `CONVERSION_STATUS.json` is preserved unmodified.
+- Affected: `scripts/audit_walkmesh_library.py`,
+  `scripts/generate_legacy_room_walkmesh_candidates.py`,
+  `scripts/package_gra_k2_candidates.py`,
+  `scripts/build_rnv_k2_full_candidates.py` (new),
+  `scripts/build_k2_candidate_overlay.py` (new),
+  `tests/test_audit_walkmesh_library.py`,
+  `tests/test_generate_legacy_room_walkmesh_candidates.py`.
+- Verification: focused groups passed — audit/staging/generator slice
+  (25 passed), walkmesh regression slice (90 passed), native payload identity
+  (22 passed) after regenerating the Scene/Tools/GUI.Display/Workflow payloads;
+  base parity audit rerun reports 22/24 MOD/KMAP pairs and 44/48 artifact
+  gates; every rebuilt candidate passed the serialized K2 engine contract,
+  Map Studio import/convert/save/reopen roundtrip, and exact MOD<->KMAP WOK
+  parity.
+- Retail KOTOR 2 proof remains pending for every candidate above. Structural
+  and editor-roundtrip acceptance is not game proof: the user must manually
+  warp, traverse every room/seam/ramp, test camera containment, doors,
+  transitions, and save/reload before any module is marked
+  `retail_game_proven`.
+
+
 ### [2026-07-16] T2906/T3101: guarded Vul803 NWMax/KOTORMax recovery and controller-free room proof
 
 Owner: LordVaderCW

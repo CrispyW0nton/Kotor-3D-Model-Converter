@@ -323,28 +323,32 @@ def _world_lighting_preview_state(project: AuthoredModuleProject) -> dict[str, o
     """Adapt authored ARE colors to an explicitly approximate viewport rig.
 
     Odyssey applies these fields differently to static, dynamic, and baked
-    geometry.  Map Studio cannot reproduce those categories yet, so the live
-    preview blends the two ambient channels and uses a fixed downward editor
-    sun.  Fog and sun-shadow controls remain ARE/export-only and are called out
-    as unsupported in the state consumed by the UI.
+    geometry.  Imported room surfaces already take the baked-lightmap branch,
+    so the remaining scene-lit meshes are predominantly dynamic actors and
+    must use ``DynAmbientColor`` without averaging it down against
+    ``SunAmbientColor``.  A fixed downward editor sun remains an approximation;
+    fog and sun-shadow controls remain ARE/export-only and are called out as
+    unsupported in the state consumed by the UI.
     """
 
     settings = authored_world_lighting_settings(project)
     sun_ambient = _preview_rgb(settings.get("sun_ambient"), (64, 64, 64))
     sun_diffuse = _preview_rgb(settings.get("sun_diffuse"), (255, 255, 255))
     dynamic_ambient = _preview_rgb(settings.get("dynamic_ambient"), sun_ambient)
-    ambient_blend = tuple(
-        ((float(sun_ambient[index]) + float(dynamic_ambient[index])) * 0.5) / 255.0
-        for index in range(3)
-    )
-    diffuse_headroom = max(0.0, 1.0 - max(ambient_blend))
+    dynamic_ambient_rgb = tuple(float(channel) / 255.0 for channel in dynamic_ambient)
+    diffuse_headroom = max(0.0, 1.0 - max(dynamic_ambient_rgb))
     return {
         "schema": "ghostrigger.map_studio_world_lighting_preview.v1",
         "profile": str(settings.get("profile") or "standard"),
         "sun_ambient": list(sun_ambient),
         "sun_diffuse": list(sun_diffuse),
         "dynamic_ambient": list(dynamic_ambient),
-        "ambient_blend_rgb": [round(channel, 7) for channel in ambient_blend],
+        # Keep the original key for project/UI compatibility.  Its value now
+        # follows Odyssey's dynamic-object ambient channel instead of an
+        # editor-authored average that halved 207TEL's (45, 43, 34) ambient.
+        "ambient_blend_rgb": [round(channel, 7) for channel in dynamic_ambient_rgb],
+        "dynamic_ambient_rgb": [round(channel, 7) for channel in dynamic_ambient_rgb],
+        "ambient_preview_source": "dynamic_ambient",
         "sun_diffuse_rgb": [round(float(channel) / 255.0, 7) for channel in sun_diffuse],
         "sun_diffuse_intensity": round(diffuse_headroom, 7),
         "sun_direction": [0.0, 0.0, -1.0],

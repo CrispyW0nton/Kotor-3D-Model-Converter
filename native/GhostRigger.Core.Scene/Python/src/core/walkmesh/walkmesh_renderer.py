@@ -63,22 +63,28 @@ SURFACE_BOTTOMLESS   = 16
 SURFACE_DEEP_WATER   = 17
 SURFACE_DOOR         = 18   # walkable door surface
 SURFACE_NON_WALK_GRASS = 19
-SURFACE_SNOW         = 20   # KotOR 2 extra materials
-SURFACE_SAND         = 21
-SURFACE_BAREBONES    = 22
+SURFACE_MATERIAL_20  = 20   # reserved/non-walk in Odyssey
+SURFACE_MATERIAL_21  = 21
+SURFACE_MATERIAL_22  = 22
+SURFACE_MATERIAL_23  = 23
+SURFACE_MATERIAL_24  = 24
+SURFACE_MATERIAL_25  = 25
+SURFACE_MATERIAL_26  = 26
+SURFACE_MATERIAL_27  = 27
+SURFACE_MATERIAL_28  = 28
+SURFACE_MATERIAL_29  = 29
+SURFACE_TRIGGER      = 30
 
 # Set of walkable surface IDs (characters can traverse these)
 # Ref: module_format.py WALKABLE_IDS
 WALKABLE_SURFACES = frozenset({
     SURFACE_DIRT, SURFACE_GRASS, SURFACE_STONE, SURFACE_WOOD,
-    SURFACE_CARPET, SURFACE_METAL, SURFACE_PUDDLES, SURFACE_SWAMP,
-    SURFACE_MUD, SURFACE_LEAVES, SURFACE_SNOW, SURFACE_SAND,
-    SURFACE_BAREBONES, SURFACE_DOOR,
+    SURFACE_WATER, SURFACE_CARPET, SURFACE_METAL, SURFACE_PUDDLES,
+    SURFACE_SWAMP, SURFACE_MUD, SURFACE_LEAVES, SURFACE_DOOR,
+    SURFACE_TRIGGER,
 })
 
-NON_WALKABLE_SURFACES = frozenset({
-    SURFACE_NON_WALK, SURFACE_BOTTOMLESS, SURFACE_NON_WALK_GRASS,
-})
+NON_WALKABLE_SURFACES = frozenset(set(range(31)) - set(WALKABLE_SURFACES))
 
 # ── Color table (RGBA floats 0-1) ────────────────────────────────────────────
 # Sourced from KotOR.js OdysseyWalkMesh.ts walkSurfaceColors array
@@ -106,9 +112,7 @@ SURFACE_COLORS: Dict[int, Tuple[float,float,float,float]] = {
     SURFACE_DEEP_WATER:   (0.10, 0.20, 0.60, 0.80),  # deep blue
     SURFACE_DOOR:         (0.80, 0.80, 0.20, 0.55),  # yellow
     SURFACE_NON_WALK_GRASS: (0.60, 0.20, 0.20, 0.75),  # dark red
-    SURFACE_SNOW:         (0.85, 0.90, 0.95, 0.55),  # white-blue
-    SURFACE_SAND:         (0.85, 0.75, 0.45, 0.55),  # sandy yellow
-    SURFACE_BAREBONES:    (0.55, 0.45, 0.35, 0.55),  # neutral brown
+    SURFACE_TRIGGER:      (0.95, 0.55, 0.10, 0.55),  # orange
 }
 
 _DEFAULT_COLOR = (0.60, 0.60, 0.60, 0.45)  # fallback for unknown material IDs
@@ -128,8 +132,12 @@ def surface_name(material_id: int) -> str:
         9:  'CARPET',      10: 'METAL',       11: 'PUDDLES',
         12: 'SWAMP',       13: 'MUD',         14: 'LEAVES',
         15: 'LAVA',        16: 'BOTTOMLESS',  17: 'DEEP_WATER',
-        18: 'DOOR',        19: 'NON_WALK_GRASS', 20: 'SNOW',
-        21: 'SAND',        22: 'BAREBONES',
+        18: 'DOOR',        19: 'NON_WALK_GRASS', 20: 'SURFACE_MATERIAL_20',
+        21: 'SURFACE_MATERIAL_21', 22: 'SURFACE_MATERIAL_22',
+        23: 'SURFACE_MATERIAL_23', 24: 'SURFACE_MATERIAL_24',
+        25: 'SURFACE_MATERIAL_25', 26: 'SURFACE_MATERIAL_26',
+        27: 'SURFACE_MATERIAL_27', 28: 'SURFACE_MATERIAL_28',
+        29: 'SURFACE_MATERIAL_29', 30: 'TRIGGER',
     }
     return _NAMES.get(material_id, f'SURFACE_{material_id}')
 
@@ -858,9 +866,7 @@ WALKMESH_FBX_MATERIALS: Dict[int, Dict[str, Any]] = {
     SURFACE_DEEP_WATER:     {'name': 'WOK_DeepWater',     'diffuse': (0.10, 0.20, 0.60)},
     SURFACE_DOOR:           {'name': 'WOK_Door',          'diffuse': (0.80, 0.80, 0.20)},
     SURFACE_NON_WALK_GRASS: {'name': 'WOK_NonWalkGrass',  'diffuse': (0.60, 0.20, 0.20)},
-    SURFACE_SNOW:           {'name': 'WOK_Snow',          'diffuse': (0.85, 0.90, 0.95)},
-    SURFACE_SAND:           {'name': 'WOK_Sand',          'diffuse': (0.85, 0.75, 0.45)},
-    SURFACE_BAREBONES:      {'name': 'WOK_Barebones',     'diffuse': (0.55, 0.45, 0.35)},
+    SURFACE_TRIGGER:        {'name': 'WOK_Trigger',       'diffuse': (0.95, 0.55, 0.10)},
 }
 
 

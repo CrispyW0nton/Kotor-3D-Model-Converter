@@ -30,6 +30,7 @@ from .authored_imported_mesh import (
     authored_room_uses_unresolved_stock_geometry,
     imported_mesh_has_explicit_static_runtime_rebuild,
     imported_mesh_room_is_backdrop,
+    imported_mesh_room_is_visual_only,
 )
 from .authored_module_layout import compile_authored_module_layout
 from .authored_module_lighting import authored_room_light_payload
@@ -293,6 +294,105 @@ def _preserved_stock_resource(project: AuthoredModuleProject, restype: str) -> b
     return raw or None
 
 
+def _import_source_capsule_resources(
+    project: AuthoredModuleProject,
+) -> tuple[dict[tuple[str, str], bytes], list[str], str, list[dict[str, Any]]]:
+    """Read the complete imported capsule for lossless source-resource overlay.
+
+    Stock-module editing must not silently discard ancillary templates,
+    scripts, sounds, or resource types Map Studio does not actively author.
+    Every addressable capsule entry is retained by key; generated/authored
+    resources overlay this mapping later. Unsupported/ambiguous source entries
+    block export instead of being omitted.
+    """
+
+    source = str((getattr(project, "extra", {}) or {}).get("import_source") or "").strip()
+    if not source:
+        return {}, [], "", []
+    capsule_path = Path(source)
+    if not capsule_path.is_file():
+        return {}, [f"Imported source capsule is unavailable; ancillary resources cannot be preserved: {capsule_path}"], source, []
+
+    capsule_layers: list[tuple[str, Path]] = []
+    if capsule_path.suffix.lower() == ".rim" and not capsule_path.stem.lower().endswith("_s"):
+        companion = capsule_path.with_name(f"{capsule_path.stem}_s.rim")
+        if companion.is_file():
+            # The sibling template/script RIM is the lower-precedence stock
+            # layer. The explicitly selected main RIM wins source collisions.
+            capsule_layers.append(("companion_s_rim", companion))
+    capsule_layers.append(("main_import_source", capsule_path))
+
+    resources: dict[tuple[str, str], bytes] = {}
+    blocking: list[str] = []
+    layer_metadata: list[dict[str, Any]] = []
+    try:
+        from pykotor.extract.capsule import LazyCapsule
+        from pykotor.resource.type import ResourceType
+    except Exception as exc:
+        return {}, [f"Imported source capsule reader is unavailable: {exc}"], source, []
+    for layer_name, layer_path in capsule_layers:
+        try:
+            capsule_rows = tuple(LazyCapsule(str(layer_path)).resources())
+        except Exception as exc:
+            blocking.append(f"Imported source layer {layer_path} could not be inventoried safely: {exc}")
+            continue
+        layer_resources: dict[tuple[str, str], bytes] = {}
+        layer_issue_count = 0
+        for row in capsule_rows:
+            resref = normalise_resource_resref(str(row.resname() or ""))
+            resource_type = row.restype()
+            restype = str(getattr(resource_type, "extension", "") or "").strip().lower().lstrip(".")
+            raw_type_id = getattr(resource_type, "type_id", None)
+            type_id = int(resource_type if raw_type_id is None else raw_type_id)
+            writable_type = ResourceType.from_extension(restype) if restype else None
+            writable_type_id = int(writable_type) if writable_type is not None else -1
+            if not resref or not restype or type_id <= 0 or writable_type_id <= 0 or writable_type_id != type_id:
+                blocking.append(
+                    f"Imported source layer {layer_path} contains a resource that is not writable through the "
+                    f"MOD/RIM archive path ({row.resname()!r}, extension {restype!r}, type id {type_id}, "
+                    f"writer type id {writable_type_id}); export cannot preserve it safely."
+                )
+                layer_issue_count += 1
+                continue
+            try:
+                data = bytes(row.data())
+            except Exception as exc:
+                blocking.append(f"Imported source resource {resref}.{restype} could not be read from {layer_path}: {exc}")
+                layer_issue_count += 1
+                continue
+            if not data:
+                blocking.append(f"Imported source resource {resref}.{restype} in {layer_path} is empty and cannot be preserved safely.")
+                layer_issue_count += 1
+                continue
+            key = (resref, restype)
+            previous = layer_resources.get(key)
+            if previous is not None and previous != data:
+                blocking.append(
+                    f"Imported source layer {layer_path} contains conflicting duplicate resource key "
+                    f"{resref}.{restype}; export cannot choose one without data loss."
+                )
+                layer_issue_count += 1
+                continue
+            layer_resources.setdefault(key, data)
+        overrode_lower_precedence = 0
+        for key, data in sorted(layer_resources.items()):
+            previous = resources.get(key)
+            if previous is not None and previous != data:
+                overrode_lower_precedence += 1
+            resources[key] = data
+        layer_metadata.append(
+            {
+                "name": layer_name,
+                "path": str(layer_path),
+                "resource_count": len(layer_resources),
+                "resource_bytes": sum(len(data) for data in layer_resources.values()),
+                "overrode_lower_precedence_count": overrode_lower_precedence,
+                "blocking_issue_count": layer_issue_count,
+            }
+        )
+    return resources, blocking, source, layer_metadata
+
+
 def _room_render_geometry_edited(room: Any) -> bool:
     """Return whether a room's visual geometry has been edited since import.
 
@@ -305,6 +405,20 @@ def _room_render_geometry_edited(room: Any) -> bool:
     primitive = getattr(room, "primitive", None)
     metadata = dict(getattr(primitive, "metadata", {}) or {})
     return bool(metadata.get("render_geometry_edited", False))
+
+
+def _room_is_eligible_for_stock_model_preservation(room: Any) -> bool:
+    """Return whether an imported stock room should keep its source MDL/MDX."""
+
+    primitive = getattr(room, "primitive", None)
+    if not isinstance(primitive, ImportedMeshRoomPrimitive):
+        return False
+    if _room_render_geometry_edited(room) or imported_mesh_has_explicit_static_runtime_rebuild(primitive):
+        return False
+    room_metadata = dict(getattr(room, "metadata", {}) or {})
+    primitive_metadata = dict(getattr(primitive, "metadata", {}) or {})
+    source_kind = str(room_metadata.get("source") or primitive_metadata.get("source") or "").strip().lower()
+    return source_kind in {"stock_room_conversion", "stock_module_import"}
 
 
 def _preserved_stock_room_model(project: Any, room_resref: str) -> tuple[bytes, bytes] | None:
@@ -528,7 +642,16 @@ def _walkmesh_walkable_only(wok: Any) -> Any:
         )
         for f in kept
     ]
-    return _WOKData(name=getattr(wok, "name", "") or "", verts=new_verts, faces=new_faces)
+    return _WOKData(
+        name=getattr(wok, "name", "") or "",
+        verts=new_verts,
+        faces=new_faces,
+        relative_hook1=tuple(getattr(wok, "relative_hook1", (0.0, 0.0, 0.0))),
+        relative_hook2=tuple(getattr(wok, "relative_hook2", (0.0, 0.0, 0.0))),
+        absolute_hook1=tuple(getattr(wok, "absolute_hook1", (0.0, 0.0, 0.0))),
+        absolute_hook2=tuple(getattr(wok, "absolute_hook2", (0.0, 0.0, 0.0))),
+        position=tuple(getattr(wok, "position", (0.0, 0.0, 0.0))),
+    )
 
 
 def _apply_default_transform_controllers(node: Any) -> None:
@@ -569,7 +692,11 @@ def _make_room_model_bytes(game: str, geometry: AuthoredRoomGeometry, *, lightin
     # Playable rooms need the engine's <room>a lookup target. Vanilla pure
     # visual sky rooms (m02aa_sky/m13aa_99z/352narsb) intentionally omit both
     # this synthetic detail dummy and the embedded AABB/WOK node.
-    if not bool(dict(getattr(geometry, "metadata", {}) or {}).get("backdrop_only", False)):
+    geometry_metadata = dict(getattr(geometry, "metadata", {}) or {})
+    if not bool(
+        geometry_metadata.get("backdrop_only", False)
+        or geometry_metadata.get("visual_only", False)
+    ):
         detail_root = md.ModelNode(name=f"{geometry.room_resref}a", flags=int(md.NodeFlags.HEADER))
         detail_root.parent = root
         root.children.append(detail_root)
@@ -725,11 +852,15 @@ def _merge_authored_extra_resources(
 ) -> dict[str, Any]:
     """Merge extras without ever replacing an existing final module key."""
 
-    generated_keys = set(build.resources)
+    source_resource_name = "map_studio:stock:import_source"
+    generated_keys = {
+        key for key, value in build.resources.items() if str(value.record.source or "") != source_resource_name
+    }
     collisions: list[dict[str, Any]] = []
     requested_count = 0
     accepted_count = 0
     skipped_count = 0
+    replaced_source_keys: list[tuple[str, str]] = []
     for index, (resref, restype, data) in enumerate(tuple(extra_resources or ()), start=1):
         requested_count += 1
         clean_ref = str(resref or "").strip().lower()
@@ -740,6 +871,14 @@ def _merge_authored_extra_resources(
         record = _make_packaged(clean_ref, clean_type, bytes(data), "map_studio:authored:extra_resource")
         key = record.key
         existing = build.resources.get(key)
+        if existing is not None and str(existing.record.source or "") == source_resource_name:
+            # Authored extras deliberately overlay their stock source entry.
+            # Remove the source package row so the final packager sees one
+            # deterministic replacement for this resource key.
+            build.packaged_resources = [item for item in build.packaged_resources if item.key != key]
+            build.resources.pop(key, None)
+            existing = None
+            replaced_source_keys.append(key)
         if existing is not None:
             collision_kind = "generated_resource" if key in generated_keys else "duplicate_extra_resource"
             existing_source = str(existing.record.source or "unknown")
@@ -770,6 +909,28 @@ def _merge_authored_extra_resources(
         accepted_count += 1
 
     build.resource_summaries = _resource_summary(build.resources)
+    if replaced_source_keys:
+        overlay = dict(build.metadata.get("import_source_overlay") or {})
+        preserved_keys = {
+            str(value)
+            for value in tuple(overlay.get("preserved_resource_keys", ()) or ())
+        }
+        generated_replaced_keys = {
+            str(value)
+            for value in tuple(overlay.get("generated_replaced_resource_keys", ()) or ())
+        }
+        authored_replaced = {f"{resref}.{restype}" for resref, restype in replaced_source_keys}
+        preserved_keys.difference_update(authored_replaced)
+        overlay.update(
+            {
+                "preserved_resource_keys": sorted(preserved_keys),
+                "preserved_resource_count": len(preserved_keys),
+                "authored_extra_replaced_resource_keys": sorted(authored_replaced),
+                "authored_extra_replaced_resource_count": len(authored_replaced),
+                "replaced_resource_count": len(generated_replaced_keys | authored_replaced),
+            }
+        )
+        build.metadata["import_source_overlay"] = overlay
     gate = {
         "schema": "ghostrigger.map_studio_resource_collision_gate.v1",
         "game": str(build.game or "").upper(),
@@ -778,6 +939,7 @@ def _merge_authored_extra_resources(
         "requested_extra_resource_count": requested_count,
         "accepted_extra_resource_count": accepted_count,
         "skipped_extra_resource_count": skipped_count,
+        "replaced_import_source_resource_count": len(replaced_source_keys),
         "collision_count": len(collisions),
         "collisions": collisions,
         "final_resource_count": len(build.resources),
@@ -812,7 +974,11 @@ def _validate_final_authored_resource_map(
                 module_resref=build.module_root,
                 resources={key: value.data for key, value in build.resources.items()},
                 expected_room_resrefs=tuple(sorted(build.module.room_geometry)),
-                visual_only_room_resrefs=tuple(build.metadata.get("backdrop_room_resrefs", ()) or ()),
+                visual_only_room_resrefs=tuple(
+                    build.metadata.get("visual_only_room_resrefs", ())
+                    or build.metadata.get("backdrop_room_resrefs", ())
+                    or ()
+                ),
             )
         )
         engine_contract_metadata = engine_contract.to_dict()
@@ -1707,6 +1873,8 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
     pathing = None
     packaged: list[PackagedModuleResource] = []
     resources: dict[tuple[str, str], _HydratedResource] = {}
+    import_source_resources, import_source_issues, import_source_path, import_source_layers = _import_source_capsule_resources(project)
+    blocking.extend(import_source_issues)
     lighting_profile = authored_lighting_profile(project.metadata)
     fullbright_lighting = authored_lighting_is_fullbright(project.metadata)
     mdl_light_sanitizer_rows: list[dict[str, Any]] = []
@@ -1750,9 +1918,12 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
             continue
         if isinstance(getattr(room, "primitive", None), ImportedMeshRoomPrimitive):
             backdrop_only = imported_mesh_room_is_backdrop(room.primitive)
+            visual_only = imported_mesh_room_is_visual_only(room.primitive)
         else:
             backdrop_only = bool(room_metadata.get("backdrop_only", room_metadata.get("is_backdrop", False)))
-        if backdrop_only:
+            visual_only = bool(room_metadata.get("visual_only", False))
+        visual_only = bool(visual_only or backdrop_only)
+        if visual_only:
             backdrop_rooms.add(room_resref)
         primitive_metadata = dict(getattr(getattr(room, "primitive", None), "metadata", {}) or {})
         runtime_graph = dict(primitive_metadata.get("source_runtime_graph") or {})
@@ -1765,13 +1936,7 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
         # its runtime graph (lights/anims/emitters) is retained byte-for-byte
         # rather than flattened. Resolve that before the gate.
         preserved_room_model: tuple[bytes, bytes] | None = None
-        if (
-            lost_runtime
-            and isinstance(getattr(room, "primitive", None), ImportedMeshRoomPrimitive)
-            and not _room_render_geometry_edited(room)
-            and str(room_metadata.get("source") or "").strip().lower()
-            in {"stock_room_conversion", "stock_module_import"}
-        ):
+        if _room_is_eligible_for_stock_model_preservation(room):
             preserved_room_model = _preserved_stock_room_model(project, room_resref)
         if preserved_room_model is not None:
             preserved_model_rooms[room_resref] = preserved_room_model
@@ -1818,6 +1983,7 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
                 alignment_offset, alignment_warning = resolve_room_wok_module_offset(room, geometry.wok)
                 if alignment_warning:
                     warnings.append(alignment_warning)
+                if alignment_offset != (0.0, 0.0, 0.0):
                     geometry = replace(geometry, wok=offset_wok_data(geometry.wok, alignment_offset))
         except Exception as exc:
             blocking.append(f"Room {room_resref or '(unnamed)'} geometry could not be compiled: {exc}")
@@ -1825,7 +1991,7 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
         room_geometries[room_resref] = geometry
         room_woks[room_resref] = geometry.wok
         audit = audit_authored_wok(room_resref, geometry.wok)
-        if backdrop_only and audit.face_count == 0:
+        if visual_only and audit.face_count == 0:
             audit = replace(
                 audit,
                 ready=True,
@@ -2027,6 +2193,43 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
     for item in packaged:
         resources[item.key] = _HydratedResource(_ResourceRecord(item.key[0], item.key[1], item.source), bytes(item.data))
 
+    # Source capsule is the base layer; authored/generated resources already
+    # assembled above win by key. Ancillary source resources are copied
+    # byte-for-byte and also staged as explicit package replacements.
+    preserved_source_keys: list[tuple[str, str]] = []
+    generated_replaced_source_keys: list[tuple[str, str]] = []
+    for key, data in sorted(import_source_resources.items()):
+        if key in resources:
+            generated_replaced_source_keys.append(key)
+            continue
+        source_record = _make_packaged(key[0], key[1], data, "map_studio:stock:import_source")
+        packaged.append(source_record)
+        resources[key] = _HydratedResource(
+            _ResourceRecord(key[0], key[1], source_record.source),
+            data,
+        )
+        preserved_source_keys.append(key)
+    import_source_overlay = {
+        "schema": "ghostrigger.map_studio_import_source_overlay.v1",
+        "source_path": import_source_path,
+        "source_layers": import_source_layers,
+        "source_layer_count": len(import_source_layers),
+        "source_layer_resource_count": sum(int(row.get("resource_count", 0) or 0) for row in import_source_layers),
+        "source_resource_count": len(import_source_resources),
+        "source_resource_bytes": sum(len(data) for data in import_source_resources.values()),
+        "preserved_resource_count": len(preserved_source_keys),
+        "preserved_resource_keys": [f"{resref}.{restype}" for resref, restype in preserved_source_keys],
+        "generated_replaced_resource_count": len(generated_replaced_source_keys),
+        "generated_replaced_resource_keys": [
+            f"{resref}.{restype}" for resref, restype in generated_replaced_source_keys
+        ],
+        "authored_extra_replaced_resource_count": 0,
+        "authored_extra_replaced_resource_keys": [],
+        "replaced_resource_count": len(generated_replaced_source_keys),
+        "blocking_issues": list(import_source_issues),
+        "ready": not import_source_issues,
+    }
+
     engine_contract_metadata: dict[str, Any] = {
         "schema": "ghostrigger.map_studio_engine_contract.v1",
         "export_ready": False,
@@ -2125,7 +2328,9 @@ def build_authored_module(project: AuthoredModuleProject, *, game_root_dir: str 
             "entry_room": entry_room,
             "room_count": len(room_geometries),
             "backdrop_room_resrefs": tuple(sorted(backdrop_rooms)),
+            "visual_only_room_resrefs": tuple(sorted(backdrop_rooms)),
             "resource_count": len(resources),
+            "import_source_overlay": import_source_overlay,
             "gameplay_counts": _placement_counts(project.placements),
             "gameplay_template_dependencies": template_dependencies,
             "gameplay_template_dependency_count": len(template_dependencies),

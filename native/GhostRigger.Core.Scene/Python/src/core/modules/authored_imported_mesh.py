@@ -29,6 +29,7 @@ from src.core.geometry.polygon_mesh_operations import AttributeChannel, IndexedP
 from src.core.geometry.solid_boolean import difference_closed_solid_meshes
 
 from .authored_room_geometry import AuthoredRoomGeometry, PrimitiveMesh
+from .authored_walkmesh_audit import audit_authored_wok
 from .authored_walkmesh_surfaces import is_walkable_walkmesh_surface
 from .module_format import NON_WALK_ID, WOKData, WOKFace
 
@@ -37,6 +38,12 @@ Vec3 = tuple[float, float, float]
 Face = tuple[int, int, int]
 
 IMPORTED_MESH_PRIMITIVE_KIND = "imported_mesh"
+
+#: Largest face count observed across the complete installed K1/K2 vanilla WOK
+#: census (1,202 K1 + 1,236 K2 resources).  The
+#: generator deliberately does not decimate, but reports when render-resolution
+#: output exceeds this empirical stock envelope.
+EMPIRICAL_STOCK_WOK_FACE_MAX = 2_136
 
 #: Versioned KMAP metadata written by Quad Draw.  Imported Odyssey room meshes
 #: are triangulated, so a triangle pair alone cannot prove that it was authored
@@ -58,6 +65,13 @@ _SOURCE_RUNTIME_GRAPH_COUNT_KEYS = (
     "emitter_count",
     "reference_count",
 )
+
+#: Versioned proof that a creator reviewed which imported render surfaces are
+#: genuine floor candidates.  A missing source WOK cannot tell us whether an
+#: upward-facing triangle is a floor, roof, table, or decorative ledge, so the
+#: generic generator refuses stock-import geometry until this intent exists.
+IMPORTED_WALKMESH_GENERATION_INTENT_POLICY = "reviewed_render_floor_selection"
+IMPORTED_WALKMESH_GENERATION_INTENT_VERSION = 1
 
 #: Mesh role of the first surface (the preview model names the room mesh
 #: "render"); remaining surfaces use ``imported_srf_<index>``.
@@ -224,6 +238,116 @@ def prepare_imported_mesh_for_static_runtime_rebuild(
     return replace(primitive, metadata=metadata)
 
 
+def prepare_imported_mesh_walkmesh_generation_intent(
+    primitive: ImportedMeshRoomPrimitive,
+    *,
+    surface_faces: dict[int, tuple[int, ...] | None],
+    reason: str,
+) -> ImportedMeshRoomPrimitive:
+    """Record an explicit, KMAP-persistent render-to-WOK floor selection.
+
+    ``None`` selects every face on a reviewed surface; a tuple selects only the
+    named face indices.  Slope/normal filtering still runs afterwards.  This
+    helper never generates collision and deliberately rejects empty, stale, or
+    out-of-range selections before they can be persisted.
+    """
+
+    clean_reason = str(reason or "").strip()
+    if not clean_reason:
+        raise ValueError("Imported walkmesh generation intent requires a written review reason.")
+    if not isinstance(surface_faces, dict) or not surface_faces:
+        raise ValueError("Imported walkmesh generation intent requires at least one reviewed surface.")
+
+    rows: list[dict[str, Any]] = []
+    for raw_surface_index, raw_face_indices in sorted(surface_faces.items(), key=lambda item: int(item[0])):
+        if isinstance(raw_surface_index, bool):
+            raise ValueError("Walkmesh surface indices must be integers, not booleans.")
+        surface_index = int(raw_surface_index)
+        if surface_index < 0 or surface_index >= len(primitive.surfaces):
+            raise ValueError(
+                f"Walkmesh surface index {surface_index} is outside the imported room's "
+                f"{len(primitive.surfaces)} surfaces."
+            )
+        surface = primitive.surfaces[surface_index]
+        row: dict[str, Any] = {
+            "surface_index": surface_index,
+            "surface_name": str(surface.name or ""),
+        }
+        if raw_face_indices is not None:
+            if isinstance(raw_face_indices, (str, bytes)):
+                raise ValueError("Walkmesh face selections must be integer sequences or null for all faces.")
+            face_indices: list[int] = []
+            for raw_face_index in raw_face_indices:
+                if isinstance(raw_face_index, bool):
+                    raise ValueError("Walkmesh face indices must be integers, not booleans.")
+                face_index = int(raw_face_index)
+                if face_index < 0 or face_index >= len(surface.faces):
+                    raise ValueError(
+                        f"Walkmesh face index {face_index} is outside surface {surface_index}'s "
+                        f"{len(surface.faces)} faces."
+                    )
+                face_indices.append(face_index)
+            unique_faces = sorted(set(face_indices))
+            if not unique_faces:
+                raise ValueError(f"Walkmesh surface {surface_index} has an empty reviewed face selection.")
+            row["face_indices"] = unique_faces
+        rows.append(row)
+
+    metadata = dict(primitive.metadata or {})
+    metadata["walkmesh_generation_intent"] = {
+        "policy": IMPORTED_WALKMESH_GENERATION_INTENT_POLICY,
+        "version": IMPORTED_WALKMESH_GENERATION_INTENT_VERSION,
+        "reason": clean_reason,
+        "surfaces": rows,
+    }
+    return replace(primitive, metadata=metadata)
+
+
+def _imported_walkmesh_generation_selection(
+    primitive: ImportedMeshRoomPrimitive,
+) -> dict[int, frozenset[int] | None] | None:
+    """Validate and decode persisted floor intent for the generator."""
+
+    metadata = dict(primitive.metadata or {})
+    raw_intent = metadata.get("walkmesh_generation_intent")
+    if not isinstance(raw_intent, dict):
+        return None
+    if (
+        str(raw_intent.get("policy") or "") != IMPORTED_WALKMESH_GENERATION_INTENT_POLICY
+        or int(raw_intent.get("version", 0) or 0) != IMPORTED_WALKMESH_GENERATION_INTENT_VERSION
+        or not str(raw_intent.get("reason") or "").strip()
+    ):
+        raise ValueError("Imported walkmesh generation intent has an unsupported or incomplete policy header.")
+    rows = raw_intent.get("surfaces")
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("Imported walkmesh generation intent has no reviewed surfaces.")
+
+    selection: dict[int, frozenset[int] | None] = {}
+    for row in rows:
+        if not isinstance(row, dict) or isinstance(row.get("surface_index"), bool):
+            raise ValueError("Imported walkmesh generation intent contains an invalid surface row.")
+        surface_index = int(row.get("surface_index", -1))
+        if surface_index < 0 or surface_index >= len(primitive.surfaces) or surface_index in selection:
+            raise ValueError("Imported walkmesh generation intent contains a stale or duplicate surface index.")
+        surface = primitive.surfaces[surface_index]
+        raw_faces = row.get("face_indices")
+        if raw_faces is None:
+            selection[surface_index] = None
+            continue
+        if not isinstance(raw_faces, list) or not raw_faces:
+            raise ValueError("Imported walkmesh generation intent contains an empty face selection.")
+        face_indices: set[int] = set()
+        for raw_face_index in raw_faces:
+            if isinstance(raw_face_index, bool):
+                raise ValueError("Imported walkmesh generation intent contains a boolean face index.")
+            face_index = int(raw_face_index)
+            if face_index < 0 or face_index >= len(surface.faces):
+                raise ValueError("Imported walkmesh generation intent contains a stale face index.")
+            face_indices.add(face_index)
+        selection[surface_index] = frozenset(face_indices)
+    return selection
+
+
 @dataclass(frozen=True)
 class ImportedMeshBevelOptions:
     """Persistent operator state for a Maya-style imported-mesh edge bevel."""
@@ -305,6 +429,25 @@ def imported_mesh_room_is_backdrop(
         is_walkable_walkmesh_surface(int(getattr(face, "surface", -1)))
         for face in tuple(getattr(wok, "faces", ()) or ())
     )
+
+
+def imported_mesh_room_is_visual_only(primitive: ImportedMeshRoomPrimitive) -> bool:
+    """Return True when an imported room intentionally has no collision.
+
+    A present, zero-face WOK is source data, not a missing walkmesh. Retail
+    modules use that exact 136-byte BWM form for sky/backdrop partitions, and
+    legacy modules also use it for ordinary-looking visual partitions whose
+    textures/names carry no sky hint. Treating it as missing made compile fall
+    through to the bounds-derived two-face NON_WALK placeholder, so a KMAP
+    round-trip silently invented collision that was absent from the MOD.
+
+    The distinction is deliberately presence-based: ``wok is None`` still
+    means collision is unresolved and may require authored generation, while
+    ``wok is not None and not wok.faces`` is an explicit visual-only contract.
+    """
+
+    wok = getattr(primitive, "wok", None)
+    return wok is not None and not tuple(getattr(wok, "faces", ()) or ())
 
 
 def imported_mesh_surface_index_for_role(primitive: ImportedMeshRoomPrimitive, role: str) -> int:
@@ -391,7 +534,8 @@ def validate_imported_mesh_room_primitive(primitive: ImportedMeshRoomPrimitive) 
             warnings.append(f"Imported room {primitive.room_resref} surface {role} has no texture assigned.")
     if primitive.wok is None:
         warnings.append(
-            f"Imported room {primitive.room_resref} has no imported WOK; a flat floor walkmesh is derived from mesh bounds."
+            f"Imported room {primitive.room_resref} has no imported WOK; Map Studio can show a red bounds-derived "
+            "preview plane, but it is NON_WALK and export remains blocked until a real floor walkmesh is generated."
         )
     return ImportedMeshValidation(ok=not blocking, warnings=tuple(warnings), blocking_issues=tuple(blocking))
 
@@ -464,73 +608,389 @@ def _mesh_bounds(primitive: ImportedMeshRoomPrimitive) -> tuple[Vec3, Vec3]:
 
 
 def _fallback_floor_wok(primitive: ImportedMeshRoomPrimitive) -> WOKData:
-    """Two walkable triangles across the room footprint at the lowest Z."""
+    """Return a red/non-walk preview plane across the render bounds.
+
+    Render bounds cannot reveal real floor topology, pits, stairs, portals, or
+    disconnected islands.  Treating this rectangle as authored collision used
+    to let rooms with no source WOK pass readiness and export silently.  It is
+    now deliberately NON_WALK and carries explicit preview provenance; the
+    normal walkmesh audit therefore blocks export until the room receives an
+    imported or generated, structurally validated floor WOK.
+    """
 
     (x0, y0, z0), (x1, y1, _z1) = _mesh_bounds(primitive)
-    return WOKData(
+    wok = WOKData(
         name=str(primitive.room_resref or ""),
         verts=[(x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0)],
         faces=[
-            WOKFace(0, 1, 2, surface=4, adj1=-1, adj2=-1, adj3=1),
-            WOKFace(0, 2, 3, surface=4, adj1=0, adj2=-1, adj3=-1),
+            WOKFace(0, 1, 2, surface=NON_WALK_ID, adj1=-1, adj2=-1, adj3=1),
+            WOKFace(0, 2, 3, surface=NON_WALK_ID, adj1=0, adj2=-1, adj3=-1),
         ],
     )
+    # WOKData intentionally remains a format-focused dataclass.  These runtime
+    # annotations let preview/readiness callers identify the synthetic plane
+    # without changing the binary format or KMAP schema.
+    wok.preview_only = True
+    wok.readiness_blocking = True
+    wok.provenance = "render_bounds_preview_only"
+    wok.readiness_blocking_reason = (
+        f"Imported room {primitive.room_resref} has no authored WOK; its bounds-derived plane is preview-only. "
+        "Import or generate and validate a floor walkmesh before export."
+    )
+    return wok
+
+
+def _point_key(point: Vec3, *, epsilon: float) -> tuple[int, int, int]:
+    scale = 1.0 / max(1.0e-9, float(epsilon))
+    return (round(point[0] * scale), round(point[1] * scale), round(point[2] * scale))
+
+
+def _edge_key(a: Vec3, b: Vec3, *, epsilon: float) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
+    left = _point_key(a, epsilon=epsilon)
+    right = _point_key(b, epsilon=epsilon)
+    return (left, right) if left <= right else (right, left)
+
+
+def _triangle_overlap_area_xy(first: tuple[Vec3, Vec3, Vec3], second: tuple[Vec3, Vec3, Vec3]) -> float:
+    """Return the positive XY intersection area of two triangles."""
+
+    subject = [(float(point[0]), float(point[1])) for point in first]
+    clip = [(float(point[0]), float(point[1])) for point in second]
+
+    def cross(a: Vec2, b: Vec2, c: Vec2) -> float:
+        return ((b[0] - a[0]) * (c[1] - a[1])) - ((b[1] - a[1]) * (c[0] - a[0]))
+
+    orientation = cross(clip[0], clip[1], clip[2])
+    if abs(orientation) <= 1.0e-12:
+        return 0.0
+    sign = 1.0 if orientation > 0.0 else -1.0
+
+    def inside(point: Vec2, edge_a: Vec2, edge_b: Vec2) -> bool:
+        return sign * cross(edge_a, edge_b, point) >= -1.0e-12
+
+    def intersection(start: Vec2, end: Vec2, edge_a: Vec2, edge_b: Vec2) -> Vec2:
+        segment = (end[0] - start[0], end[1] - start[1])
+        clip_line = (edge_b[0] - edge_a[0], edge_b[1] - edge_a[1])
+        denominator = (segment[0] * clip_line[1]) - (segment[1] * clip_line[0])
+        if abs(denominator) <= 1.0e-12:
+            return end
+        offset = (edge_a[0] - start[0], edge_a[1] - start[1])
+        fraction = ((offset[0] * clip_line[1]) - (offset[1] * clip_line[0])) / denominator
+        fraction = min(1.0, max(0.0, fraction))
+        return (start[0] + segment[0] * fraction, start[1] + segment[1] * fraction)
+
+    output = subject
+    for edge_index in range(3):
+        edge_a = clip[edge_index]
+        edge_b = clip[(edge_index + 1) % 3]
+        source = output
+        output = []
+        if not source:
+            break
+        start = source[-1]
+        for end in source:
+            end_inside = inside(end, edge_a, edge_b)
+            start_inside = inside(start, edge_a, edge_b)
+            if end_inside:
+                if not start_inside:
+                    output.append(intersection(start, end, edge_a, edge_b))
+                output.append(end)
+            elif start_inside:
+                output.append(intersection(start, end, edge_a, edge_b))
+            start = end
+    if len(output) < 3:
+        return 0.0
+    twice_area = sum(
+        output[index][0] * output[(index + 1) % len(output)][1]
+        - output[(index + 1) % len(output)][0] * output[index][1]
+        for index in range(len(output))
+    )
+    return abs(twice_area) * 0.5
 
 
 def generate_room_walkmesh_from_geometry(
     primitive: ImportedMeshRoomPrimitive,
     *,
     slope_max_degrees: float = 45.0,
-    weld_epsilon: float = 0.05,
+    weld_epsilon: float = 1.0e-4,
+    source_wok_to_render_offset: Vec3 = (0.0, 0.0, 0.0),
+    source_material_z_tolerance: float = 1.5,
+    disconnected_island_policy: str = "reject",
+    source_wok_policy: str = "preserve",
 ) -> tuple[ImportedMeshRoomPrimitive, dict[str, Any]]:
     """Derive a complete room walkmesh from the room's render geometry.
 
-    Built from an empirical study of 1121 stock K2 room WOKs (144k faces):
-    real rooms keep their walls in the walkmesh (94% carry NON_WALK faces),
-    walkable faces are near-horizontal (99% within 45 deg of flat), and
-    ceilings never appear (a down-facing face over the floor would collapse
-    the perimeter loop and freeze the player). So every non-backdrop render
-    triangle is classified by its normal:
+    Built from the complete installed K1/K2 vanilla WOK census: walkable faces
+    are overwhelmingly near-horizontal, while blindly copying render walls or
+    a down-facing ceiling into a generated WOK can enclose the floor and leave
+    the engine without a usable perimeter.  Render geometry is therefore only
+    a *floor candidate* source; it is not copied wholesale into collision.
+    Every non-backdrop render triangle is classified by its normal:
 
     * up-facing, within ``slope_max_degrees`` of flat -> WALKABLE floor,
-    * steeper than that (a wall) -> NON_WALK (kept for camera/LOS blocking),
+    * steeper than that (a wall or unsafe ramp) -> omitted from the WOK,
     * down-facing and near-horizontal (a ceiling) -> dropped.
 
-    The result is a fresh room-local WOK with welded vertices and rebuilt
-    adjacency, replacing whatever WOK the room had. Deterministic and
-    dependency-free so "Auto Generate Walkmesh" works on any loaded room.
+    Up-facing faces covered by an imported source WOK retain their original
+    surface material, so explicit horizontal blockers survive.  The result is
+    a fresh room-local, floor-only WOK with welded vertices and rebuilt
+    adjacency, replacing whatever WOK the room had.  New generation rejects
+    disconnected walkable islands by default: islands are valid in studied
+    retail rooms, but inventing that intent from arbitrary render geometry is
+    unsafe.  Recovery tooling may pass ``disconnected_island_policy="preserve"``
+    only when the separate islands have been reviewed deliberately.
+
+    An imported source WOK is preserved by default.  Render triangles cannot
+    reveal whether an uncovered region is a deliberate pit/hole, table top, or
+    roof, so destructive replacement requires ``source_wok_policy="replace"``.
+    The separate floor-fill operation is the safe, source-seeded way to extend
+    a partial imported WOK.
+
+    Before replacement, the generated WOK is serialized and read back through
+    Ghost Studio's engine writer.  This proves that complete AABB, adjacency,
+    boundary-edge, and perimeter-loop tables can actually be emitted; a parser-
+    only success is not accepted as generation proof.
     """
 
     import math as _math
 
+    island_policy = str(disconnected_island_policy or "reject").strip().lower()
+    if island_policy not in {"reject", "preserve"}:
+        raise ValueError(
+            "Disconnected walkmesh island policy must be 'reject' or 'preserve'."
+        )
+    source_policy = str(source_wok_policy or "preserve").strip().lower()
+    if source_policy not in {"preserve", "replace"}:
+        raise ValueError("Source WOK policy must be 'preserve' or 'replace'.")
+
+    if source_policy == "preserve" and primitive.wok is not None and primitive.wok.faces:
+        source_topology = audit_authored_wok(str(primitive.room_resref or ""), primitive.wok)
+        report: dict[str, Any] = {
+            "floor_faces": 0,
+            "walkable_floor_faces": int(source_topology.walkable_face_count),
+            "wall_faces": 0,
+            "dropped_wall_faces": 0,
+            "dropped_ceiling_faces": 0,
+            "degenerate_faces": 0,
+            "non_finite_faces": 0,
+            "weld_collapsed_faces": 0,
+            "total_faces": len(primitive.wok.faces),
+            "projected_material_faces": 0,
+            "source_transition_edges": sum(
+                int(value) >= 0
+                for face in primitive.wok.faces
+                for value in (face.trans1, face.trans2, face.trans3)
+            ),
+            "mapped_transition_edges": 0,
+            "unmapped_transition_edges": 0,
+            "disconnected_island_policy": island_policy,
+            "source_wok_policy": source_policy,
+            "source_wok_preserved": True,
+            "weld_policy_version": 2,
+            "weld_epsilon": max(1.0e-9, float(weld_epsilon)),
+            "walkable_component_count": int(source_topology.walkable_component_count),
+            "disconnected_component_count": int(source_topology.disconnected_component_count),
+            "non_manifold_edge_count": int(source_topology.non_manifold_edge_count),
+            "invalid_face_count": int(source_topology.invalid_face_count),
+            "generated_degenerate_face_count": 0,
+            "density_warning_threshold": EMPIRICAL_STOCK_WOK_FACE_MAX,
+            "density_warning": "",
+        }
+        try:
+            raw_source = primitive.wok.to_bytes()
+            if len(raw_source) < 136 or raw_source[:8] != b"BWM V1.0":
+                raise ValueError("source WOK has no complete BWM V1.0 header")
+            raw_counts = struct.unpack_from("<16I", raw_source, 72)
+            raw_vertex_count = int(raw_counts[0])
+            raw_face_count = int(raw_counts[2])
+            raw_aabb_count = int(raw_counts[7])
+            raw_aabb_root = int(raw_counts[9])
+            raw_adjacency_count = int(raw_counts[10])
+            raw_boundary_edge_count = int(raw_counts[12])
+            raw_perimeter_count = int(raw_counts[14])
+            if raw_face_count <= 0 or raw_vertex_count <= 0:
+                raise ValueError("source WOK has no collision geometry")
+            if raw_aabb_count <= 0 or raw_aabb_root >= raw_aabb_count:
+                raise ValueError("source WOK has no valid AABB root")
+            if raw_perimeter_count < max(1, source_topology.walkable_component_count):
+                raise ValueError("source WOK has no closed perimeter for every walkable component")
+            if raw_boundary_edge_count < raw_perimeter_count:
+                raise ValueError("source WOK perimeter edge table is incomplete")
+            report.update(
+                {
+                    "structural_validation": "passed",
+                    "serialized_vertex_count": raw_vertex_count,
+                    "serialized_face_count": raw_face_count,
+                    "serialized_aabb_count": raw_aabb_count,
+                    "serialized_adjacency_face_count": raw_adjacency_count,
+                    "serialized_boundary_edge_count": raw_boundary_edge_count,
+                    "serialized_perimeter_loop_count": raw_perimeter_count,
+                    "interior_boundary_loop_count": max(
+                        0,
+                        raw_perimeter_count - int(source_topology.walkable_component_count),
+                    ),
+                    "serialized_readback_face_count": len(WOKData.from_bytes(raw_source).faces),
+                }
+            )
+        except (IndexError, TypeError, ValueError, struct.error) as exc:
+            report["structural_validation"] = "blocked"
+            report["blocked_reason"] = (
+                f"Auto Generate Walkmesh preserved {primitive.room_resref}'s imported WOK but found an engine-structure "
+                f"problem ({exc}). Repair the source topology or choose an explicit reviewed replacement."
+            )
+        return primitive, report
+
+    try:
+        reviewed_selection = _imported_walkmesh_generation_selection(primitive)
+    except (TypeError, ValueError) as exc:
+        return primitive, {
+            "floor_faces": 0,
+            "walkable_floor_faces": 0,
+            "wall_faces": 0,
+            "dropped_wall_faces": 0,
+            "dropped_ceiling_faces": 0,
+            "degenerate_faces": 0,
+            "non_finite_faces": 0,
+            "weld_collapsed_faces": 0,
+            "total_faces": 0,
+            "source_wok_policy": source_policy,
+            "source_wok_preserved": False,
+            "structural_validation": "blocked",
+            "blocked_reason": f"Imported walkmesh floor selection is invalid: {exc}",
+        }
+    imported_from = str(dict(primitive.metadata or {}).get("imported_from") or "").strip()
+    if imported_from and reviewed_selection is None:
+        return primitive, {
+            "floor_faces": 0,
+            "walkable_floor_faces": 0,
+            "wall_faces": 0,
+            "dropped_wall_faces": 0,
+            "dropped_ceiling_faces": 0,
+            "degenerate_faces": 0,
+            "non_finite_faces": 0,
+            "weld_collapsed_faces": 0,
+            "total_faces": 0,
+            "source_wok_policy": source_policy,
+            "source_wok_preserved": False,
+            "structural_validation": "blocked",
+            "blocked_reason": (
+                f"Auto Generate Walkmesh refused imported room {primitive.room_resref}: upward-facing render "
+                "triangles may be roofs, tables, or decorative ledges. Review floor surfaces/faces and record "
+                "walkmesh_generation_intent before generating collision."
+            ),
+        }
+
     min_floor_normal_z = _math.cos(_math.radians(max(1.0, min(89.0, float(slope_max_degrees)))))
+    source_offset = tuple(float(value) for value in tuple(source_wok_to_render_offset or (0.0, 0.0, 0.0))[:3])
+    source_samples: list[tuple[Vec3, Vec3, Vec3, int]] = []
+    source_transitions: dict[tuple[tuple[int, int, int], tuple[int, int, int]], int] = {}
+    transition_conflicts = 0
+    if primitive.wok is not None:
+        source_verts = tuple(
+            (
+                float(vertex[0]) + source_offset[0],
+                float(vertex[1]) + source_offset[1],
+                float(vertex[2]) + source_offset[2],
+            )
+            for vertex in tuple(primitive.wok.verts or ())
+        )
+        for source_face in tuple(primitive.wok.faces or ()):
+            indices = (int(source_face.v1), int(source_face.v2), int(source_face.v3))
+            if any(index < 0 or index >= len(source_verts) for index in indices):
+                continue
+            corners = tuple(source_verts[index] for index in indices)
+            source_samples.append((corners[0], corners[1], corners[2], int(source_face.surface)))
+            for edge_index, transition in enumerate(
+                (int(getattr(source_face, "trans1", -1)), int(getattr(source_face, "trans2", -1)), int(getattr(source_face, "trans3", -1)))
+            ):
+                if transition < 0:
+                    continue
+                key = _edge_key(corners[edge_index], corners[(edge_index + 1) % 3], epsilon=weld_epsilon)
+                previous = source_transitions.get(key)
+                if previous is not None and previous != transition:
+                    transition_conflicts += 1
+                source_transitions[key] = transition
+
+    def _project_source_material(a: Vec3, b: Vec3, c: Vec3) -> tuple[int, bool]:
+        cx = (a[0] + b[0] + c[0]) / 3.0
+        cy = (a[1] + b[1] + c[1]) / 3.0
+        cz = (a[2] + b[2] + c[2]) / 3.0
+        best: tuple[float, int] | None = None
+        for source_a, source_b, source_c, material in source_samples:
+            inside, source_z = _triangle_contains_xy(cx, cy, source_a, source_b, source_c)
+            if not inside:
+                continue
+            delta = abs(source_z - cz)
+            if delta <= float(source_material_z_tolerance) and (best is None or delta < best[0]):
+                best = (delta, material)
+        return (best[1], True) if best is not None else (4, False)
+
     verts: list[Vec3] = []
     faces: list[WOKFace] = []
-    lookup: dict[tuple[int, int, int], int] = {}
-    scale = 1.0 / max(1.0e-9, float(weld_epsilon))
+    weld_distance = max(1.0e-9, float(weld_epsilon))
+    weld_distance_squared = weld_distance * weld_distance
+    spatial_buckets: dict[tuple[int, int, int], list[int]] = {}
+
+    def _weld_key(point: Vec3) -> tuple[int, int, int]:
+        return (
+            _math.floor(float(point[0]) / weld_distance),
+            _math.floor(float(point[1]) / weld_distance),
+            _math.floor(float(point[2]) / weld_distance),
+        )
+
+    def _find_welded_index(point: Vec3) -> int | None:
+        bucket = _weld_key(point)
+        matches: list[int] = []
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for dz in (-1, 0, 1):
+                    for candidate in spatial_buckets.get((bucket[0] + dx, bucket[1] + dy, bucket[2] + dz), ()):
+                        existing = verts[candidate]
+                        distance_squared = sum(
+                            (float(existing[axis]) - float(point[axis])) ** 2
+                            for axis in range(3)
+                        )
+                        if distance_squared <= weld_distance_squared:
+                            matches.append(candidate)
+        return min(matches) if matches else None
 
     def _index(point: Vec3) -> int:
-        key = (round(point[0] * scale), round(point[1] * scale), round(point[2] * scale))
-        existing = lookup.get(key)
+        existing = _find_welded_index(point)
         if existing is not None:
             return existing
         verts.append((float(point[0]), float(point[1]), float(point[2])))
-        lookup[key] = len(verts) - 1
-        return len(verts) - 1
+        index = len(verts) - 1
+        spatial_buckets.setdefault(_weld_key(point), []).append(index)
+        return index
 
-    floor_faces = wall_faces = dropped_ceiling = degenerate = 0
-    for surface in primitive.surfaces:
+    floor_faces = walkable_floor_faces = wall_faces = dropped_ceiling = degenerate = 0
+    non_finite_faces = 0
+    weld_collapsed_faces = 0
+    projected_material_faces = 0
+    selected_surface_names: list[str] = []
+    selected_face_intent_count = 0
+    for surface_index, surface in enumerate(primitive.surfaces):
+        if reviewed_selection is not None and surface_index not in reviewed_selection:
+            continue
+        reviewed_faces = None if reviewed_selection is None else reviewed_selection[surface_index]
+        selected_surface_names.append(str(surface.name or f"surface_{surface_index}"))
+        selected_face_intent_count += len(surface.faces) if reviewed_faces is None else len(reviewed_faces)
         if bool(getattr(surface, "backdrop", False)) or bool(getattr(surface, "background_geometry", False)):
             continue
         if not bool(getattr(surface, "render", True)):
             continue
         surface_verts = tuple(surface.vertices)
-        for face in tuple(surface.faces):
+        for face_index, face in enumerate(tuple(surface.faces)):
+            if reviewed_faces is not None and face_index not in reviewed_faces:
+                continue
             try:
                 a = surface_verts[int(face[0])]
                 b = surface_verts[int(face[1])]
                 c = surface_verts[int(face[2])]
             except (IndexError, TypeError, ValueError):
+                continue
+            if not all(_math.isfinite(float(value)) for corner in (a, b, c) for value in corner[:3]):
+                non_finite_faces += 1
                 continue
             ux, uy, uz = b[0] - a[0], b[1] - a[1], b[2] - a[2]
             vx, vy, vz = c[0] - a[0], c[1] - a[1], c[2] - a[2]
@@ -543,20 +1003,36 @@ def generate_room_walkmesh_from_geometry(
             if unit_nz >= min_floor_normal_z:
                 # Up-facing floor: keep upward winding so engine floor tests pass.
                 corners = (a, b, c)
-                material = 4  # stone: a neutral, always-walkable material
-                floor_faces += 1
+                material, projected = _project_source_material(a, b, c)
             elif unit_nz <= -min_floor_normal_z:
                 dropped_ceiling += 1
                 continue
             else:
-                corners = (a, b, c)
-                material = NON_WALK_ID
                 wall_faces += 1
+                # A render wall is not a walkmesh wall.  Omitting it leaves the
+                # walkable floor's boundary explicit; copying it as NON_WALK
+                # can seal the floor and freeze Odyssey movement.
+                continue
+            if any(
+                sum((float(corners[left][axis]) - float(corners[right][axis])) ** 2 for axis in range(3))
+                <= weld_distance_squared
+                for left, right in ((0, 1), (1, 2), (2, 0))
+            ):
+                # The source triangle can have positive area yet collapse when
+                # two near-coincident corners enter the same weld bucket.
+                # Never emit a repeated-index floor face into Odyssey.
+                degenerate += 1
+                weld_collapsed_faces += 1
+                continue
+            indices = tuple(_index(corner) for corner in corners)
+            projected_material_faces += int(projected)
+            floor_faces += 1
+            walkable_floor_faces += int(is_walkable_walkmesh_surface(material))
             faces.append(
                 WOKFace(
-                    _index(corners[0]),
-                    _index(corners[1]),
-                    _index(corners[2]),
+                    indices[0],
+                    indices[1],
+                    indices[2],
                     material,
                     -1,
                     -1,
@@ -566,21 +1042,173 @@ def generate_room_walkmesh_from_geometry(
 
     report: dict[str, Any] = {
         "floor_faces": floor_faces,
+        "walkable_floor_faces": walkable_floor_faces,
         "wall_faces": wall_faces,
+        "dropped_wall_faces": wall_faces,
         "dropped_ceiling_faces": dropped_ceiling,
         "degenerate_faces": degenerate,
+        "non_finite_faces": non_finite_faces,
+        "weld_collapsed_faces": weld_collapsed_faces,
         "total_faces": len(faces),
+        "projected_material_faces": projected_material_faces,
+        "source_transition_edges": len(source_transitions),
+        "mapped_transition_edges": 0,
+        "unmapped_transition_edges": 0,
+        "disconnected_island_policy": island_policy,
+        "source_wok_policy": source_policy,
+        "source_wok_preserved": False,
+        "walkmesh_generation_intent_policy": (
+            IMPORTED_WALKMESH_GENERATION_INTENT_POLICY if reviewed_selection is not None else "authored_geometry"
+        ),
+        "reviewed_surface_count": len(selected_surface_names),
+        "reviewed_surface_names": selected_surface_names,
+        "reviewed_face_intent_count": selected_face_intent_count,
+        "weld_policy_version": 2,
+        "weld_epsilon": weld_distance,
+        "density_warning_threshold": EMPIRICAL_STOCK_WOK_FACE_MAX,
+        "density_warning": (
+            f"Generated render-resolution WOK has {len(faces)} faces, above the empirical stock-room maximum "
+            f"of {EMPIRICAL_STOCK_WOK_FACE_MAX}; no decimation was applied."
+            if len(faces) > EMPIRICAL_STOCK_WOK_FACE_MAX
+            else ""
+        ),
     }
-    if floor_faces <= 0:
+    if walkable_floor_faces <= 0:
         # No walkable floor could be derived; leave the room's WOK untouched.
         return primitive, report
 
-    wok = WOKData(name=str(primitive.room_resref or ""), verts=verts, faces=faces)
+    source_wok = primitive.wok
+    wok = WOKData(
+        name=str(primitive.room_resref or ""),
+        verts=verts,
+        faces=faces,
+        relative_hook1=tuple(getattr(source_wok, "relative_hook1", (0.0, 0.0, 0.0))),
+        relative_hook2=tuple(getattr(source_wok, "relative_hook2", (0.0, 0.0, 0.0))),
+        absolute_hook1=tuple(getattr(source_wok, "absolute_hook1", (0.0, 0.0, 0.0))),
+        absolute_hook2=tuple(getattr(source_wok, "absolute_hook2", (0.0, 0.0, 0.0))),
+        position=tuple(getattr(source_wok, "position", (0.0, 0.0, 0.0))),
+    )
     wok.rebuild_adjacencies()
+    generated_boundaries: dict[
+        tuple[tuple[int, int, int], tuple[int, int, int]],
+        list[tuple[int, int]],
+    ] = {}
+    for vertex_a, vertex_b, face_index, edge_index in wok.boundary_edges():
+        key = _edge_key(wok.verts[vertex_a], wok.verts[vertex_b], epsilon=weld_epsilon)
+        generated_boundaries.setdefault(key, []).append((face_index, edge_index))
+    transition_assignments: list[tuple[int, int, int]] = []
+    unmapped = transition_conflicts
+    for key, transition in source_transitions.items():
+        matches = generated_boundaries.get(key, ())
+        if len(matches) != 1:
+            unmapped += 1
+            continue
+        face_index, edge_index = matches[0]
+        transition_assignments.append((face_index, edge_index, transition))
+    report["mapped_transition_edges"] = len(transition_assignments)
+    report["unmapped_transition_edges"] = unmapped
+    if unmapped:
+        report["blocked_reason"] = (
+            f"Auto Generate Walkmesh refused to replace {primitive.room_resref}: {unmapped} source perimeter "
+            "transition edge(s) could not be mapped uniquely to the generated boundary."
+        )
+        return primitive, report
+    for face_index, edge_index, transition in transition_assignments:
+        setattr(wok.faces[face_index], f"trans{edge_index + 1}", transition)
+
+    topology = audit_authored_wok(str(primitive.room_resref or ""), wok)
+    report.update(
+        {
+            "walkable_component_count": int(topology.walkable_component_count),
+            "disconnected_component_count": int(topology.disconnected_component_count),
+            "non_manifold_edge_count": int(topology.non_manifold_edge_count),
+            "invalid_face_count": int(topology.invalid_face_count),
+            "generated_degenerate_face_count": int(topology.degenerate_face_count),
+        }
+    )
+    strict_faults: list[str] = []
+    if topology.invalid_face_count:
+        strict_faults.append(f"{topology.invalid_face_count} face(s) reference invalid vertices")
+    if topology.degenerate_face_count:
+        strict_faults.append(f"{topology.degenerate_face_count} generated face(s) are degenerate")
+    if topology.non_manifold_edge_count:
+        strict_faults.append(f"{topology.non_manifold_edge_count} walkable edge(s) are non-manifold")
+    if topology.walkable_component_count > 1 and island_policy == "reject":
+        strict_faults.append(
+            f"{topology.walkable_component_count} disconnected walkable islands require explicit review"
+        )
+    if strict_faults:
+        report["blocked_reason"] = (
+            f"Auto Generate Walkmesh refused to replace {primitive.room_resref}: "
+            + "; ".join(strict_faults)
+            + "."
+        )
+        return primitive, report
+
+    try:
+        raw_wok = wok.to_bytes()
+        (
+            raw_vertex_count,
+            _raw_vertex_offset,
+            raw_face_count,
+            _raw_face_offset,
+            _raw_material_offset,
+            _raw_normal_offset,
+            _raw_plane_offset,
+            raw_aabb_count,
+            _raw_aabb_offset,
+            raw_aabb_root,
+            raw_adjacency_count,
+            _raw_adjacency_offset,
+            raw_boundary_edge_count,
+            _raw_boundary_edge_offset,
+            raw_perimeter_count,
+            _raw_perimeter_offset,
+        ) = struct.unpack_from("<16I", raw_wok, 72)
+        reopened = WOKData.from_bytes(raw_wok)
+        expected_aabb_count = (2 * raw_face_count) - 1 if raw_face_count else 0
+        structural_faults: list[str] = []
+        if raw_vertex_count != len(wok.verts) or raw_face_count != len(wok.faces):
+            structural_faults.append("serialized vertex/face counts changed")
+        if len(reopened.faces) != raw_face_count:
+            structural_faults.append("serialized WOK did not read back with every face")
+        if raw_aabb_count != expected_aabb_count or (raw_aabb_count and raw_aabb_root >= raw_aabb_count):
+            structural_faults.append("serialized AABB tree is incomplete")
+        if raw_adjacency_count != topology.walkable_face_count:
+            structural_faults.append("serialized adjacency domain does not match walkable faces")
+        if raw_perimeter_count < max(1, topology.walkable_component_count):
+            structural_faults.append("serialized perimeter loops do not cover every walkable component")
+        if raw_boundary_edge_count < raw_perimeter_count:
+            structural_faults.append("serialized perimeter edge table is incomplete")
+        if structural_faults:
+            raise ValueError("; ".join(structural_faults))
+    except (IndexError, TypeError, ValueError, struct.error) as exc:
+        report["structural_validation"] = "blocked"
+        report["blocked_reason"] = (
+            f"Auto Generate Walkmesh refused to replace {primitive.room_resref}: "
+            f"engine-structure serialization failed ({exc})."
+        )
+        return primitive, report
+
+    report.update(
+        {
+            "structural_validation": "passed",
+            "serialized_vertex_count": int(raw_vertex_count),
+            "serialized_face_count": int(raw_face_count),
+            "serialized_aabb_count": int(raw_aabb_count),
+            "serialized_adjacency_face_count": int(raw_adjacency_count),
+            "serialized_boundary_edge_count": int(raw_boundary_edge_count),
+            "serialized_perimeter_loop_count": int(raw_perimeter_count),
+            "interior_boundary_loop_count": max(
+                0,
+                int(raw_perimeter_count) - int(topology.walkable_component_count),
+            ),
+            "serialized_readback_face_count": len(reopened.faces),
+        }
+    )
     from dataclasses import replace as _replace
 
     metadata = dict(primitive.metadata or {})
-    metadata["wok_floor_fill"] = report
     metadata["wok_auto_generated"] = report
     # The generated WOK is room-local (built from room-local render surfaces);
     # correct the coordinate-space contract so the combiner applies the room
@@ -608,7 +1236,7 @@ def fill_imported_wok_from_floor_surfaces(
     *,
     slope_max_degrees: float = 35.0,
     z_tolerance: float = 1.5,
-    weld_epsilon: float = 0.05,
+    weld_epsilon: float = 1.0e-4,
     render_to_wok_offset: Vec3 = (0.0, 0.0, 0.0),
 ) -> tuple[ImportedMeshRoomPrimitive, dict[str, Any]]:
     """Append walkable WOK faces under visible floor faces that lack coverage.
@@ -617,11 +1245,12 @@ def fill_imported_wok_from_floor_surfaces(
     the rendered floor (921srt's custom throne room: the corridor to the next
     room has visible floor but no walkmesh, so the player stops at an
     invisible cliff).  Every near-horizontal, non-backdrop render triangle
-    whose centroid has no WOK face within ``z_tolerance`` becomes a new
-    walkable face.  Patch vertices weld onto existing WOK vertex positions so
-    the BWM writer can derive adjacency across the seam where positions
-    coincide; PIE never needs the adjacency, but the exported .wok benefits.
-    Areas covered by NON_WALK faces are respected as intentional blockers.
+    with no positive-area WOK overlap may become a new walkable face. A
+    candidate must share one complete welded edge with the existing walkable
+    topology (or another accepted candidate), preventing disconnected islands
+    and centroid-only partial-overlap patches. Down-facing ceilings are never
+    flipped into floors. Areas covered by NON_WALK faces remain intentional
+    blockers.
 
     ``render_to_wok_offset`` maps room-local render coordinates into the
     WOK's own frame: (0, 0, 0) for a room-local WOK, the room's world
@@ -640,11 +1269,18 @@ def fill_imported_wok_from_floor_surfaces(
     min_normal_z = _math.cos(_math.radians(max(1.0, min(89.0, float(slope_max_degrees)))))
 
     coverage_faces: list[tuple[Vec3, Vec3, Vec3]] = []
+    walkable_edges: set[tuple[tuple[int, int, int], tuple[int, int, int]]] = set()
     for face in wok.faces:
         try:
-            coverage_faces.append((wok.verts[face.v1], wok.verts[face.v2], wok.verts[face.v3]))
+            corners = (wok.verts[face.v1], wok.verts[face.v2], wok.verts[face.v3])
         except IndexError:
             continue
+        coverage_faces.append(corners)
+        if is_walkable_walkmesh_surface(face.surface):
+            for edge_index in range(3):
+                walkable_edges.add(
+                    _edge_key(corners[edge_index], corners[(edge_index + 1) % 3], epsilon=weld_epsilon)
+                )
 
     def covered(px: float, py: float, pz: float) -> bool:
         for a, b, c in coverage_faces:
@@ -653,29 +1289,66 @@ def fill_imported_wok_from_floor_surfaces(
                 return True
         return False
 
+    def overlaps(triangle: tuple[Vec3, Vec3, Vec3]) -> bool:
+        triangle_min_z = min(point[2] for point in triangle)
+        triangle_max_z = max(point[2] for point in triangle)
+        for existing in coverage_faces:
+            existing_min_z = min(point[2] for point in existing)
+            existing_max_z = max(point[2] for point in existing)
+            if triangle_min_z > existing_max_z + float(z_tolerance):
+                continue
+            if existing_min_z > triangle_max_z + float(z_tolerance):
+                continue
+            if _triangle_overlap_area_xy(triangle, existing) > 1.0e-8:
+                return True
+        return False
+
     new_verts: list[Vec3] = list(wok.verts)
-    vertex_lookup: dict[tuple[int, int, int], int] = {}
+    weld_distance = max(1.0e-9, float(weld_epsilon))
+    weld_distance_squared = weld_distance * weld_distance
+    vertex_buckets: dict[tuple[int, int, int], list[int]] = {}
 
     def _key(point: Vec3) -> tuple[int, int, int]:
-        scale = 1.0 / max(1.0e-9, float(weld_epsilon))
-        return (round(point[0] * scale), round(point[1] * scale), round(point[2] * scale))
+        return (
+            _math.floor(float(point[0]) / weld_distance),
+            _math.floor(float(point[1]) / weld_distance),
+            _math.floor(float(point[2]) / weld_distance),
+        )
 
     for index, vertex in enumerate(new_verts):
-        vertex_lookup.setdefault(_key(vertex), index)
+        vertex_buckets.setdefault(_key(vertex), []).append(index)
+
+    def _existing_vertex_index(point: Vec3) -> int | None:
+        bucket = _key(point)
+        matches: list[int] = []
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for dz in (-1, 0, 1):
+                    for candidate in vertex_buckets.get((bucket[0] + dx, bucket[1] + dy, bucket[2] + dz), ()):
+                        existing = new_verts[candidate]
+                        if sum(
+                            (float(existing[axis]) - float(point[axis])) ** 2
+                            for axis in range(3)
+                        ) <= weld_distance_squared:
+                            matches.append(candidate)
+        return min(matches) if matches else None
 
     def _vertex_index(point: Vec3) -> int:
-        key = _key(point)
-        existing = vertex_lookup.get(key)
+        existing = _existing_vertex_index(point)
         if existing is not None:
             return existing
         new_verts.append((float(point[0]), float(point[1]), float(point[2])))
-        vertex_lookup[key] = len(new_verts) - 1
-        return len(new_verts) - 1
+        index = len(new_verts) - 1
+        vertex_buckets.setdefault(_key(point), []).append(index)
+        return index
 
     new_faces: list[WOKFace] = []
+    pending: list[tuple[Vec3, Vec3, Vec3]] = []
     considered = 0
     skipped_covered = 0
+    skipped_partial_overlap = 0
     skipped_steep = 0
+    skipped_downward = 0
     for surface in primitive.surfaces:
         if bool(getattr(surface, "backdrop", False)) or bool(getattr(surface, "background_geometry", False)):
             continue
@@ -699,17 +1372,48 @@ def fill_imported_wok_from_floor_surfaces(
             if length < 1.0e-9:
                 continue
             considered += 1
-            if abs(nz) / length < min_normal_z:
+            unit_nz = nz / length
+            if unit_nz <= -min_normal_z:
+                skipped_downward += 1
+                continue
+            if unit_nz < min_normal_z:
                 skipped_steep += 1
                 continue
             cx = (a[0] + b[0] + c[0]) / 3.0
             cy = (a[1] + b[1] + c[1]) / 3.0
             cz = (a[2] + b[2] + c[2]) / 3.0
-            if covered(cx, cy, cz):
-                skipped_covered += 1
+            corners = (a, b, c)
+            if overlaps(corners):
+                if covered(cx, cy, cz):
+                    skipped_covered += 1
+                else:
+                    skipped_partial_overlap += 1
                 continue
-            # Winding must face up so the engine's floor tests agree.
-            corners = (a, b, c) if nz > 0 else (a, c, b)
+            pending.append(corners)
+
+    # Accept only a welded continuation of current walkable topology. Iterate
+    # because a candidate can be connected through another candidate that is
+    # accepted earlier in this operation.
+    while pending:
+        remaining: list[tuple[Vec3, Vec3, Vec3]] = []
+        progress = False
+        for corners in pending:
+            edge_keys = tuple(
+                _edge_key(corners[edge_index], corners[(edge_index + 1) % 3], epsilon=weld_epsilon)
+                for edge_index in range(3)
+            )
+            if not any(key in walkable_edges for key in edge_keys):
+                remaining.append(corners)
+                continue
+            cx = sum(point[0] for point in corners) / 3.0
+            cy = sum(point[1] for point in corners) / 3.0
+            cz = sum(point[2] for point in corners) / 3.0
+            if overlaps(corners):
+                if covered(cx, cy, cz):
+                    skipped_covered += 1
+                else:
+                    skipped_partial_overlap += 1
+                continue
             new_faces.append(
                 WOKFace(
                     _vertex_index(corners[0]),
@@ -722,12 +1426,23 @@ def fill_imported_wok_from_floor_surfaces(
                 )
             )
             coverage_faces.append(corners)
+            walkable_edges.update(edge_keys)
+            progress = True
+        if not progress:
+            pending = remaining
+            break
+        pending = remaining
 
     report: dict[str, Any] = {
         "faces_added": len(new_faces),
         "faces_considered": considered,
         "faces_already_covered": skipped_covered,
+        "faces_partial_overlap": skipped_partial_overlap,
         "faces_too_steep": skipped_steep,
+        "faces_downward": skipped_downward,
+        "faces_unstitched": len(pending),
+        "weld_policy_version": 2,
+        "weld_epsilon": weld_distance,
     }
     if not new_faces:
         return primitive, report
@@ -746,6 +1461,11 @@ def fill_imported_wok_from_floor_surfaces(
         name=str(wok.name or primitive.room_resref or ""),
         verts=new_verts,
         faces=copied_faces + new_faces,
+        relative_hook1=tuple(wok.relative_hook1),
+        relative_hook2=tuple(wok.relative_hook2),
+        absolute_hook1=tuple(wok.absolute_hook1),
+        absolute_hook2=tuple(wok.absolute_hook2),
+        position=tuple(wok.position),
     )
     patched.rebuild_adjacencies()
     from dataclasses import replace as _replace
@@ -763,10 +1483,26 @@ def compile_imported_mesh_room_geometry(primitive: ImportedMeshRoomPrimitive) ->
         raise ValueError("; ".join(validation.blocking_issues))
     meshes = tuple(_surface_primitive_mesh(primitive, index) for index in range(len(primitive.surfaces)))
     backdrop_only = imported_mesh_room_is_backdrop(primitive)
-    wok = (
-        primitive.wok
-        if primitive.wok is not None and (primitive.wok.faces or backdrop_only)
-        else _fallback_floor_wok(primitive)
+    visual_only = imported_mesh_room_is_visual_only(primitive)
+    # Preserve every explicit imported WOK, including a canonical zero-face
+    # visual-only WOK. Only ``None`` means no source WOK was supplied.
+    imported_wok = primitive.wok is not None
+    if imported_wok:
+        wok = primitive.wok
+    elif backdrop_only:
+        # A visual-only sky/backdrop room deliberately has no collision and
+        # must not receive a bounds-derived rectangle.
+        wok = WOKData(name=str(primitive.room_resref or ""))
+    else:
+        wok = _fallback_floor_wok(primitive)
+    preview_only = bool(getattr(wok, "preview_only", False))
+    readiness_blocking = bool(getattr(wok, "readiness_blocking", False))
+    wok_provenance = str(
+        getattr(
+            wok,
+            "provenance",
+            "imported_exact" if imported_wok else ("visual_backdrop_empty" if backdrop_only else "authored"),
+        )
     )
     return AuthoredRoomGeometry(
         room_resref=str(primitive.room_resref or ""),
@@ -777,8 +1513,14 @@ def compile_imported_mesh_room_geometry(primitive: ImportedMeshRoomPrimitive) ->
             "primitive": IMPORTED_MESH_PRIMITIVE_KIND,
             "source_model": str(primitive.source_model or ""),
             "surface_count": len(meshes),
-            "imported_wok": primitive.wok is not None,
+            "imported_wok": imported_wok,
             "backdrop_only": backdrop_only,
+            "visual_only": visual_only,
+            "explicit_empty_wok": visual_only,
+            "walkmesh_provenance": wok_provenance,
+            "walkmesh_preview_only": preview_only,
+            "walkmesh_readiness_blocking": readiness_blocking,
+            "walkmesh_readiness_blocking_reason": str(getattr(wok, "readiness_blocking_reason", "")),
             "warnings": validation.warnings,
         },
     )
@@ -6473,6 +7215,17 @@ def imported_mesh_primitive_payload(primitive: ImportedMeshRoomPrimitive) -> dic
     }
     if primitive.wok is not None:
         payload["wok"] = {
+            "header_version": 2,
+            "relative_hook1": [float(value) for value in primitive.wok.relative_hook1],
+            "relative_hook2": [float(value) for value in primitive.wok.relative_hook2],
+            "absolute_hook1": [float(value) for value in primitive.wok.absolute_hook1],
+            "absolute_hook2": [float(value) for value in primitive.wok.absolute_hook2],
+            "position": [float(value) for value in primitive.wok.position],
+            "adjacency_domain_count": (
+                None
+                if primitive.wok.adjacency_domain_count is None
+                else int(primitive.wok.adjacency_domain_count)
+            ),
             "verts_b64": _pack_floats(primitive.wok.verts, 3),
             "face_stride": 10,
             "faces_b64": _pack_ints(
@@ -6550,11 +7303,25 @@ def imported_mesh_primitive_from_payload(data: dict[str, Any], room_resref: str)
     wok = None
     wok_data = data.get("wok")
     if isinstance(wok_data, dict):
+        def _header_vec3(key: str) -> tuple[float, float, float]:
+            values = tuple(wok_data.get(key) or (0.0, 0.0, 0.0))
+            return tuple(float(values[index]) if index < len(values) else 0.0 for index in range(3))  # type: ignore[return-value]
+
         verts = [tuple(v) for v in _unpack_floats(wok_data.get("verts_b64") or "", 3)]
         face_stride = 10 if int(wok_data.get("face_stride") or 7) >= 10 else 7
         wok = WOKData(
             name=str(room_resref or ""),
             verts=verts,
+            relative_hook1=_header_vec3("relative_hook1"),
+            relative_hook2=_header_vec3("relative_hook2"),
+            absolute_hook1=_header_vec3("absolute_hook1"),
+            absolute_hook2=_header_vec3("absolute_hook2"),
+            position=_header_vec3("position"),
+            adjacency_domain_count=(
+                None
+                if wok_data.get("adjacency_domain_count") is None
+                else int(wok_data.get("adjacency_domain_count"))
+            ),
             faces=[
                 WOKFace(
                     int(row[0]),
@@ -6583,6 +7350,7 @@ def imported_mesh_primitive_from_payload(data: dict[str, Any], room_resref: str)
 
 __all__ = [
     "DEFAULT_UV_TILE_SIZE",
+    "EMPIRICAL_STOCK_WOK_FACE_MAX",
     "IMPORTED_MESH_PRIMITIVE_KIND",
     "LOGICAL_QUAD_PROVENANCE_KEY",
     "LOGICAL_QUAD_PROVENANCE_VERSION",
@@ -6616,6 +7384,7 @@ __all__ = [
     "imported_mesh_primitive_from_payload",
     "imported_mesh_primitive_payload",
     "imported_mesh_room_is_backdrop",
+    "imported_mesh_room_is_visual_only",
     "imported_mesh_has_explicit_static_runtime_rebuild",
     "imported_mesh_source_runtime_counts",
     "imported_mesh_surface_is_backdrop",

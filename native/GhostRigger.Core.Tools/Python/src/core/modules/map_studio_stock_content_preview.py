@@ -33,17 +33,25 @@ log = logging.getLogger("map_studio_stock_preview")
 RES_2DA = 2017
 RES_MDL = 2002
 RES_MDX = 3008
+RES_UTI = 2025
 RES_UTC = 2027
+RES_DLG = 2029
+RES_UTT = 2032
 RES_UTP = 2044
 RES_UTD = 2042
+RES_UTM = 2051
 
 _RESOURCE_TYPE_NAMES = {
     RES_2DA: "2da",
     RES_MDL: "mdl",
     RES_MDX: "mdx",
+    RES_UTI: "uti",
     RES_UTC: "utc",
+    RES_DLG: "dlg",
+    RES_UTT: "utt",
     RES_UTP: "utp",
     RES_UTD: "utd",
+    RES_UTM: "utm",
 }
 
 

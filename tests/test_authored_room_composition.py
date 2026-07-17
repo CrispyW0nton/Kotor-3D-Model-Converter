@@ -54,7 +54,7 @@ def test_t2603_rectangular_room_composition_compiles_to_floor_walls_and_wok() ->
     assert geometry.room_mesh.name == "grdev01_room01_mesh"
     assert geometry.room_mesh.texture == "metal_floor"
     assert geometry.room_mesh.metadata["primitive"] == "floor"
-    assert geometry.wok.walkable_face_count() == 2
+    assert geometry.wok.walkable_face_count() == 4
     assert geometry.metadata["primitive"] == "authored_room_composition"
     assert geometry.metadata["primitive_count"] == 4
     assert geometry.metadata["compiled_mesh_count"] == 6
@@ -118,7 +118,10 @@ def test_t2620_composition_adds_walkable_ramp_faces_to_wok() -> None:
                 width=2.0,
                 length=3.0,
                 height=1.0,
-                center=(2.5, 0.0, 0.0),
+                # The low edge sits on the north floor boundary.  The ramp
+                # extends outward, so it shares a real seam instead of
+                # overlapping the floor's interior walkmesh.
+                center=(0.0, 5.5, 0.0),
                 surface_id="metal",
             ),
         ),
@@ -129,10 +132,100 @@ def test_t2620_composition_adds_walkable_ramp_faces_to_wok() -> None:
 
     assert validation.ok is True
     assert geometry.metadata["walkmesh_primitive_count"] == 1
-    assert geometry.wok.walkable_face_count() == 4
+    assert geometry.wok.walkable_face_count() == 6
     assert len(geometry.wok.verts) == 8
-    assert [face.surface for face in geometry.wok.faces] == [4, 4, 10, 10]
-    assert geometry.wok.verts[4:] == [(1.5, -1.5, 0.0), (3.5, -1.5, 0.0), (3.5, 1.5, 1.0), (1.5, 1.5, 1.0)]
+    assert [face.surface for face in geometry.wok.faces] == [4, 4, 4, 4, 10, 10]
+    assert geometry.wok.verts[4:] == [(-1.0, 4.0, 0.0), (1.0, 4.0, 0.0), (1.0, 7.0, 1.0), (-1.0, 7.0, 1.0)]
+    assert _walkable_component_count(geometry.wok) == 1
+    from src.core.modules.module_format import WOKData
+
+    assert _walkable_component_count(WOKData.from_bytes(geometry.wok.to_bytes())) == 1
+
+
+def test_t2620_composition_blocks_unsnapped_walkmesh_primitive() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_composition import AuthoredRoomComposition, validate_authored_room_composition
+    from src.core.modules.authored_room_primitives import FloorPrimitive, RampPrimitive
+
+    composition = AuthoredRoomComposition(
+        room_resref="unsnapped_ramp",
+        floor=FloorPrimitive(name="unsnapped_floor", width=8.0, depth=8.0),
+        # This low edge touches the south boundary but the ramp points inward
+        # and overlaps the floor.  Equal coordinates must not create a seam.
+        primitives=(RampPrimitive(name="floating_ramp", length=3.0, center=(0.0, -2.5, 0.0)),),
+    )
+
+    validation = validate_authored_room_composition(composition)
+
+    assert validation.ok is False
+    assert any(
+        "Walkmesh primitive floating_ramp is disconnected from the room floor" in issue
+        and "will not bridge open space" in issue
+        for issue in validation.blocking_issues
+    )
+
+
+def test_t2620_composition_preserves_explicitly_reviewed_walkmesh_islands() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_composition import AuthoredRoomComposition, compile_authored_room_composition, validate_authored_room_composition
+    from src.core.modules.authored_room_primitives import FloorPrimitive, RampPrimitive
+    from src.core.modules.module_format import WOKData
+
+    composition = AuthoredRoomComposition(
+        room_resref="reviewed_island",
+        floor=FloorPrimitive(name="reviewed_floor", width=8.0, depth=8.0),
+        primitives=(RampPrimitive(name="reviewed_ramp", center=(0.0, 0.0, 0.0)),),
+        metadata={"allow_disconnected_walkmesh_islands": True},
+    )
+
+    validation = validate_authored_room_composition(composition)
+    geometry = compile_authored_room_composition(composition)
+
+    assert validation.ok is True
+    assert any("explicitly preserves 2 disconnected walkmesh islands" in warning for warning in validation.warnings)
+    assert _walkable_component_count(geometry.wok) == 2
+    assert _walkable_component_count(WOKData.from_bytes(geometry.wok.to_bytes())) == 2
+
+
+def test_t2620_wok_seam_split_preserves_surface_transition_and_winding() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_room_composition import _append_wok
+    from src.core.modules.module_format import WOKData, WOKFace
+
+    base = WOKData(
+        verts=[(-4.0, -4.0, 0.0), (4.0, -4.0, 0.0), (4.0, 4.0, 0.0), (-4.0, 4.0, 0.0)],
+        faces=[
+            WOKFace(0, 1, 2, surface=4),
+            WOKFace(0, 2, 3, surface=4, trans2=37),
+        ],
+    )
+    ramp = WOKData(
+        verts=[(-1.0, 4.0, 0.0), (1.0, 4.0, 0.0), (1.0, 7.0, 1.0), (-1.0, 7.0, 1.0)],
+        faces=[WOKFace(0, 1, 2, surface=10, trans1=53), WOKFace(0, 2, 3, surface=10)],
+    )
+
+    _append_wok(base, ramp)
+
+    assert [face.surface for face in base.faces] == [4, 4, 4, 4, 10, 10]
+    assert [base.faces[index].trans1 for index in (1, 2, 3)] == [37, -1, 37]
+    assert base.faces[4].trans1 == -1
+    seam_owners: list[tuple[int, int]] = []
+    for face_index, face in enumerate(base.faces):
+        triangle = (face.v1, face.v2, face.v3)
+        for edge_index in range(3):
+            directed = (triangle[edge_index], triangle[(edge_index + 1) % 3])
+            if set(directed) == {4, 5}:
+                seam_owners.append(directed)
+        a, b, c = (base.verts[index] for index in triangle)
+        signed_area_xy = (float(b[0]) - float(a[0])) * (float(c[1]) - float(a[1])) - (
+            float(b[1]) - float(a[1])
+        ) * (float(c[0]) - float(a[0]))
+        assert signed_area_xy > 0.0
+    assert seam_owners == [(5, 4), (4, 5)]
+    assert base.to_bytes().startswith(b"BWM V1.0")
 
 
 def test_t2620_composition_rejects_non_walkable_ramp_surface() -> None:
@@ -156,20 +249,23 @@ def test_t2620_composition_rejects_non_walkable_ramp_surface() -> None:
 def test_t2624_composition_adds_walkable_stair_faces_to_wok() -> None:
     _install_native_payload_paths()
 
-    from src.core.modules.authored_room_composition import AuthoredRoomComposition, compile_authored_room_composition, validate_authored_room_composition
+    from src.core.modules.authored_room_composition import AuthoredRoomComposition, PlacedRoomPrimitive, PrimitiveTransform, compile_authored_room_composition, validate_authored_room_composition
     from src.core.modules.authored_room_primitives import FloorPrimitive, StairsPrimitive
 
     composition = AuthoredRoomComposition(
         room_resref="stair_room",
         floor=FloorPrimitive(name="stair_room_floor", width=8.0, depth=8.0, surface_id="stone"),
         primitives=(
-            StairsPrimitive(
-                name="stair_room_steps",
-                width=2.0,
-                depth=3.0,
-                height=1.25,
-                steps=5,
-                surface_id="metal",
+            PlacedRoomPrimitive(
+                primitive=StairsPrimitive(
+                    name="stair_room_steps",
+                    width=2.0,
+                    depth=3.0,
+                    height=1.25,
+                    steps=5,
+                    surface_id="metal",
+                ),
+                transform=PrimitiveTransform(translation=(0.0, 5.5, 0.0)),
             ),
         ),
     )
@@ -179,10 +275,12 @@ def test_t2624_composition_adds_walkable_stair_faces_to_wok() -> None:
 
     assert validation.ok is True
     assert geometry.metadata["walkmesh_primitive_count"] == 1
-    assert geometry.wok.walkable_face_count() == 4
+    assert geometry.wok.walkable_face_count() == 6
     assert len(geometry.wok.verts) == 8
-    assert [face.surface for face in geometry.wok.faces] == [4, 4, 10, 10]
-    assert geometry.wok.verts[4:] == [(-1.0, -1.5, 0.0), (1.0, -1.5, 0.0), (1.0, 1.5, 1.25), (-1.0, 1.5, 1.25)]
+    assert [face.surface for face in geometry.wok.faces] == [4, 4, 4, 4, 10, 10]
+    assert geometry.wok.verts[4:] == [(-1.0, 4.0, 0.0), (1.0, 4.0, 0.0), (1.0, 7.0, 1.25), (-1.0, 7.0, 1.25)]
+    assert _walkable_component_count(geometry.wok) == 1
+    assert geometry.wok.to_bytes().startswith(b"BWM V1.0")
     assert geometry.helper_meshes[0].metadata["primitive"] == "stairs"
     assert geometry.helper_meshes[0].metadata["steps"] == 5
 
@@ -273,7 +371,7 @@ def test_t2637_composition_transforms_placed_ramp_mesh_and_wok_together() -> Non
 
     composition = AuthoredRoomComposition(
         room_resref="move_ramp",
-        floor=FloorPrimitive(name="move_ramp_floor", width=8.0, depth=8.0),
+        floor=FloorPrimitive(name="move_ramp_floor", width=8.0, depth=8.0, z=0.5),
         primitives=(
             PlacedRoomPrimitive(
                 primitive=RampPrimitive(
@@ -284,8 +382,8 @@ def test_t2637_composition_transforms_placed_ramp_mesh_and_wok_together() -> Non
                     surface_id="metal",
                 ),
                 transform=PrimitiveTransform(
-                    translation=(1.0, 2.0, 0.5),
-                    rotation_degrees_z=90.0,
+                    translation=(5.0, 0.0, 0.5),
+                    rotation_degrees_z=-90.0,
                 ),
             ),
         ),
@@ -299,21 +397,19 @@ def test_t2637_composition_transforms_placed_ramp_mesh_and_wok_together() -> Non
     assert geometry.metadata["walkmesh_primitive_count"] == 1
     ramp_mesh = geometry.helper_meshes[0]
     assert ramp_mesh.name == "move_ramp_slope"
-    assert ramp_mesh.metadata["transform"]["translation"] == [1.0, 2.0, 0.5]
-    assert ramp_mesh.metadata["transform"]["rotation_degrees_z"] == 90.0
+    assert ramp_mesh.metadata["transform"]["translation"] == [5.0, 0.0, 0.5]
+    assert ramp_mesh.metadata["transform"]["rotation_degrees_z"] == -90.0
     assert _rounded_points(ramp_mesh.vertices[:4]) == [
-        (2.0, 1.0, 0.5),
-        (2.0, 3.0, 0.5),
-        (0.0, 3.0, 1.5),
-        (0.0, 1.0, 1.5),
+        (4.0, 1.0, 0.5),
+        (4.0, -1.0, 0.5),
+        (6.0, -1.0, 1.5),
+        (6.0, 1.0, 1.5),
     ]
-    assert _rounded_points(geometry.wok.verts[4:]) == [
-        (2.0, 1.0, 0.5),
-        (2.0, 3.0, 0.5),
-        (0.0, 3.0, 1.5),
-        (0.0, 1.0, 1.5),
-    ]
-    assert [face.surface for face in geometry.wok.faces] == [4, 4, 10, 10]
+    assert {(4.0, 1.0, 0.5), (4.0, -1.0, 0.5), (6.0, -1.0, 1.5), (6.0, 1.0, 1.5)} <= set(
+        _rounded_points(geometry.wok.verts)
+    )
+    assert [face.surface for face in geometry.wok.faces] == [4, 4, 4, 4, 10, 10]
+    assert _walkable_component_count(geometry.wok) == 1
 
 
 def test_t2637_composition_rejects_invalid_placed_primitive_scale() -> None:
@@ -412,3 +508,21 @@ def _rounded_points(points: object) -> list[tuple[float, float, float]]:
         (round(float(point[0]), 6), round(float(point[1]), 6), round(float(point[2]), 6))
         for point in points
     ]
+
+
+def _walkable_component_count(wok: object) -> int:
+    from src.core.modules.module_format import WALKABLE_IDS
+
+    wok.rebuild_adjacencies()
+    remaining = {index for index, face in enumerate(wok.faces) if face.surface in WALKABLE_IDS}
+    components = 0
+    while remaining:
+        components += 1
+        pending = [remaining.pop()]
+        while pending:
+            face = wok.faces[pending.pop()]
+            for adjacent in (face.adj1, face.adj2, face.adj3):
+                if adjacent in remaining:
+                    remaining.remove(adjacent)
+                    pending.append(adjacent)
+    return components

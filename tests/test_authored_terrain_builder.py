@@ -95,6 +95,185 @@ def test_t2907_flat_terrain_heightfield_builds_mesh_and_walkable_wok() -> None:
     assert len(geometry.wok.boundary_edges()) == 8
 
 
+def test_t2907_carved_terrain_hole_serializes_inner_perimeter_and_complete_aabb() -> None:
+    _install_native_payload_paths()
+    import struct
+
+    from src.core.modules.authored_terrain_builder import (
+        TerrainHeightfieldPrimitive,
+        build_terrain_mesh,
+        build_terrain_wok,
+        carve_terrain_hole,
+    )
+    from src.core.modules.module_format import WOKData
+    from src.core.validation.kotor_module_engine_contract import inspect_raw_wok_structure
+
+    terrain = TerrainHeightfieldPrimitive(
+        room_resref="grdev01_hole",
+        width=8.0,
+        depth=8.0,
+        heights=tuple(tuple(0.0 for _column in range(5)) for _row in range(5)),
+    )
+    carved = carve_terrain_hole(terrain, row_index=1, column_index=1)
+    mesh = build_terrain_mesh(carved)
+    wok = build_terrain_wok(carved)
+    raw = wok.to_bytes()
+    fingerprint, report = inspect_raw_wok_structure(carved.room_resref, raw)
+
+    assert len(mesh.faces) == 30
+    assert len(wok.faces) == 30
+    assert struct.unpack_from("<I", raw, 128)[0] == 2
+    assert fingerprint.perimeter_count == 2
+    assert fingerprint.closed_perimeter_count == 2
+    assert fingerprint.aabb_count == 59
+    assert fingerprint.aabb_leaf_count == 30
+    assert fingerprint.aabb_covered_face_count == 30
+    assert fingerprint.aabb_missing_face_count == 0
+    assert not report.has_errors
+    assert len(WOKData.from_bytes(raw).faces) == 30
+
+    boundary_notch = carve_terrain_hole(terrain, row_index=0, column_index=1)
+    assert struct.unpack_from("<I", build_terrain_wok(boundary_notch).to_bytes(), 128)[0] == 1
+
+
+def test_t2907_terrain_holes_reject_malformed_and_out_of_range_cells() -> None:
+    _install_native_payload_paths()
+    import pytest
+
+    from src.core.modules.authored_terrain_builder import (
+        TerrainHeightfieldPrimitive,
+        build_terrain_wok,
+        carve_terrain_hole,
+        normalised_terrain_holes,
+        validate_terrain_heightfield_primitive,
+    )
+
+    heights = tuple(tuple(0.0 for _column in range(4)) for _row in range(4))
+    malformed = TerrainHeightfieldPrimitive(
+        room_resref="grdev01_bad_hole",
+        heights=heights,
+        holes=((1, 1), ("2", 1), (0, 1, 2), (-1, 0)),
+    )
+    validation = validate_terrain_heightfield_primitive(malformed)
+
+    assert validation.ok is False
+    assert any("must use integer" in issue for issue in validation.blocking_issues)
+    assert any("two-integer" in issue for issue in validation.blocking_issues)
+    assert any("outside the valid cell range" in issue for issue in validation.blocking_issues)
+    with pytest.raises(ValueError, match="outside the valid cell range"):
+        build_terrain_wok(malformed)
+    with pytest.raises(ValueError, match="must use integer"):
+        normalised_terrain_holes(((1.5, 1),), row_count=4, column_count=4)
+    with pytest.raises(ValueError, match="outside the valid cell range"):
+        carve_terrain_hole(
+            TerrainHeightfieldPrimitive(room_resref="grdev01_edge", heights=heights),
+            row_index=3,
+            column_index=0,
+        )
+    with pytest.raises(ValueError, match="must be integers"):
+        carve_terrain_hole(
+            TerrainHeightfieldPrimitive(room_resref="grdev01_fraction", heights=heights),
+            row_index=1.25,
+            column_index=1,
+        )
+
+
+def test_t2907_contiguous_diagonal_and_notched_holes_keep_one_walkable_component() -> None:
+    _install_native_payload_paths()
+    import struct
+
+    from src.core.modules.authored_terrain_builder import (
+        TerrainHeightfieldPrimitive,
+        build_terrain_wok,
+        validate_terrain_heightfield_primitive,
+    )
+
+    heights = tuple(tuple(0.0 for _column in range(6)) for _row in range(6))
+    patterns = {
+        "contiguous": ((2, 2), (2, 3)),
+        "diagonal": ((1, 1), (2, 2)),
+        "notched": ((0, 1), (0, 2)),
+    }
+    perimeter_counts: dict[str, int] = {}
+    for label, holes in patterns.items():
+        terrain = TerrainHeightfieldPrimitive(
+            room_resref=f"grdev01_{label}",
+            heights=heights,
+            holes=holes,
+        )
+        validation = validate_terrain_heightfield_primitive(terrain)
+        wok = build_terrain_wok(terrain)
+        raw = wok.to_bytes()
+
+        assert validation.ok is True
+        assert validation.walkable_component_count == 1
+        assert wok.walkable_face_count() == (25 - len(holes)) * 2
+        perimeter_counts[label] = struct.unpack_from("<I", raw, 128)[0]
+
+    assert perimeter_counts["contiguous"] == 2
+    # Diagonal holes meet at one vertex.  The perimeter writer may serialize
+    # that point-touching interior boundary as one closed loop or two; it must
+    # never be rejected as a disconnected walkable floor.
+    assert perimeter_counts["diagonal"] >= 2
+    assert perimeter_counts["notched"] == 1
+
+
+def test_t2907_terrain_carve_rejects_disconnected_islands_without_explicit_review() -> None:
+    _install_native_payload_paths()
+    import pytest
+
+    from src.core.modules.authored_terrain_builder import (
+        TerrainHeightfieldPrimitive,
+        build_terrain_wok,
+        carve_terrain_hole,
+        compile_terrain_room_geometry,
+        validate_terrain_heightfield_primitive,
+    )
+
+    heights = tuple(tuple(0.0 for _column in range(5)) for _row in range(5))
+    nearly_split = TerrainHeightfieldPrimitive(
+        room_resref="grdev01_split",
+        heights=heights,
+        holes=((0, 1), (1, 1), (2, 1)),
+    )
+    with pytest.raises(ValueError, match="2 disconnected walkable WOK islands"):
+        carve_terrain_hole(nearly_split, row_index=3, column_index=1)
+
+    reviewed = carve_terrain_hole(
+        nearly_split,
+        row_index=3,
+        column_index=1,
+        allow_disconnected_walkmesh_islands=True,
+    )
+    validation = validate_terrain_heightfield_primitive(reviewed)
+    geometry = compile_terrain_room_geometry(reviewed)
+
+    assert reviewed.metadata["allow_disconnected_walkmesh_islands"] is True
+    assert validation.ok is True
+    assert validation.walkable_component_count == 2
+    assert any("explicitly reviewed" in warning for warning in validation.warnings)
+    assert geometry.metadata["walkable_component_count"] == 2
+    assert geometry.metadata["allow_disconnected_walkmesh_islands"] is True
+    assert len(build_terrain_wok(reviewed).faces) == 24
+
+
+def test_t2907_terrain_adjacency_rejects_third_owner_nonmanifold_edge() -> None:
+    _install_native_payload_paths()
+    import pytest
+
+    from src.core.modules.authored_terrain_builder import _assign_wok_adjacency
+    from src.core.modules.module_format import WOKFace
+
+    faces = [
+        WOKFace(0, 1, 2, surface=4),
+        WOKFace(1, 0, 3, surface=4),
+        WOKFace(0, 1, 4, surface=4),
+    ]
+
+    with pytest.raises(ValueError, match="non-manifold"):
+        _assign_wok_adjacency(faces)
+
+
 def test_t2907_steep_terrain_triangles_export_as_non_walk() -> None:
     _install_native_payload_paths()
 
@@ -160,8 +339,12 @@ def test_t2907_terrain_project_compiles_through_authored_room_spec() -> None:
     assert project.rooms[0].metadata["primitive"] == "terrain_heightfield"
     assert geometry.metadata["source"] == "src.core.modules.authored_terrain_builder"
     assert geometry.wok.walkable_face_count() == 8
-    assert with_boundaries.wok.non_walk_face_count() == 16
+    assert with_boundaries.wok is geometry.wok
+    assert with_boundaries.wok.walkable_face_count() == 8
+    assert with_boundaries.wok.non_walk_face_count() == 0
     assert with_boundaries.metadata["walkmesh_boundary_wall_faces"] == 16
+    assert with_boundaries.metadata["walkmesh_boundary_helper_faces"] == 16
+    assert with_boundaries.metadata["walkmesh_game_wok_face_policy"] == "floor_only"
 
 
 def test_t2908_terrain_heightfield_sample_edit_operations() -> None:

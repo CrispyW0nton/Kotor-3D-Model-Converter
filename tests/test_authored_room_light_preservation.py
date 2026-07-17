@@ -39,6 +39,28 @@ def test_render_geometry_edited_flag_gates_preservation() -> None:
     assert _room_render_geometry_edited(edited) is True
 
 
+def test_unedited_stock_room_is_preservation_eligible_even_without_runtime_graph_counts() -> None:
+    _configure_native_python_roots()
+    from dataclasses import replace
+
+    from src.core.modules.authored_imported_mesh import ImportedMeshRoomPrimitive
+    from src.core.modules.authored_module_export import _room_is_eligible_for_stock_model_preservation
+
+    primitive = ImportedMeshRoomPrimitive(
+        room_resref="plainroom",
+        surfaces=(),
+        source_model="plainroom",
+        metadata={"source_runtime_graph": {"light_count": 0}},
+    )
+    room = SimpleNamespace(primitive=primitive, metadata={"source": "stock_room_conversion"})
+    assert _room_is_eligible_for_stock_model_preservation(room) is True
+    edited = SimpleNamespace(
+        primitive=replace(primitive, metadata={**primitive.metadata, "render_geometry_edited": True}),
+        metadata=room.metadata,
+    )
+    assert _room_is_eligible_for_stock_model_preservation(edited) is False
+
+
 def test_preserved_stock_room_model_reads_import_source(tmp_path) -> None:
     _configure_native_python_roots()
     from src.core.modules.authored_module_export import _preserved_stock_room_model

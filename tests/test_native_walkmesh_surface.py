@@ -11,8 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DLL = ROOT / "build" / "vs" / "x64" / "Release" / "GhostRigger.Core.Scene.dll"
 PROJECT = ROOT / "native" / "GhostRigger.Core.Scene" / "GhostRigger.Core.Scene.vcxproj"
 FILTERS = ROOT / "native" / "GhostRigger.Core.Scene" / "GhostRigger.Core.Scene.vcxproj.filters"
-HEADER = ROOT / "native" / "GhostRigger.Core.Scene" / "Public" / "WalkmeshSurface.h"
-SOURCE = ROOT / "native" / "GhostRigger.Core.Scene" / "Private" / "WalkmeshSurface.cpp"
+HEADER = ROOT / "native" / "GhostRigger.Core.Scene" / "Public" / "Scene_Walkmesh" / "WalkmeshSurface.h"
+SOURCE = ROOT / "native" / "GhostRigger.Core.Scene" / "Private" / "Scene_Walkmesh" / "WalkmeshSurface.cpp"
 
 
 def _dll() -> ctypes.CDLL:
@@ -62,7 +62,7 @@ def _fbx_diffuse(lib: ctypes.CDLL, surface_id: int) -> tuple[float, float, float
 def test_walkmesh_surface_contracts_match_python_renderer() -> None:
     lib = _dll()
 
-    for surface_id in [*range(23), 99, -1]:
+    for surface_id in [*range(31), 99, -1]:
         assert lib.gr_walkmesh_surface_name(surface_id).decode("utf-8") == walkmesh_renderer.surface_name(surface_id)
         assert _surface_color(lib, surface_id) == walkmesh_renderer.surface_color(surface_id)
         assert bool(lib.gr_walkmesh_surface_is_walkable(surface_id)) == (
@@ -83,8 +83,8 @@ def test_walkmesh_surface_contracts_are_explicit_in_visual_studio_project() -> N
     source_text = SOURCE.read_text(encoding="utf-8")
     header_text = HEADER.read_text(encoding="utf-8")
 
-    assert 'ClCompile Include="Private\\WalkmeshSurface.cpp"' in project_text
-    assert 'ClInclude Include="Public\\WalkmeshSurface.h"' in project_text
+    assert 'ClCompile Include="Private\\Scene_Walkmesh\\WalkmeshSurface.cpp"' in project_text
+    assert 'ClInclude Include="Public\\Scene_Walkmesh\\WalkmeshSurface.h"' in project_text
     assert "<Filter>Private</Filter>" in filters_text
     assert "<Filter>Public</Filter>" in filters_text
     assert "namespace ghostrigger::core::walkmesh::core::walkmesh::surface" in source_text

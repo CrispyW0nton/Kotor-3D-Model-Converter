@@ -30,7 +30,7 @@ SURFACE_DESCRIPTIONS: dict[int, str] = {
     3: "Walkable grass floor.",
     4: "Walkable stone or generic hard floor.",
     5: "Walkable wood floor.",
-    6: "Water surface; not currently treated as normal walkable floor.",
+    6: "Walkable water surface.",
     7: "Blocking/non-walk surface for walls, pits, or barriers.",
     8: "Transparent/visual-only surface. Use for faces that should carry visual intent without normal walkable-floor meaning.",
     10: "Walkable metal floor.",
@@ -38,8 +38,10 @@ SURFACE_DESCRIPTIONS: dict[int, str] = {
     16: "Bottomless pit surface; not walkable.",
     17: "Deep water surface; not normal walkable floor.",
     18: "Door transition surface. Use only for authored doorway/transition WOK faces.",
-    20: "Walkable sand floor.",
-    21: "Walkable barebones/debug floor.",
+    19: "Non-walk grass blocker surface.",
+    20: "Reserved non-walk Odyssey surface material 20.",
+    21: "Reserved non-walk Odyssey surface material 21.",
+    22: "Reserved non-walk Odyssey surface material 22.",
 }
 
 SURFACE_AUTHORING_NAMES: dict[int, str] = {
@@ -83,10 +85,11 @@ SURFACE_ALIASES: dict[str, int] = {
     "door": 18,
     "transition": 18,
     "door_transition": 18,
-    "snow": 19,
-    "sand": 20,
-    "barebones": 21,
-    "debug": 21,
+    "non_walk_grass": 19,
+    "nonwalk_grass": 19,
+    "surface_material_20": 20,
+    "surface_material_21": 21,
+    "surface_material_22": 22,
 }
 
 

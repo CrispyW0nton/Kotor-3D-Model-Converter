@@ -23,6 +23,7 @@ from .authored_imported_mesh import (
     ImportedMeshRoomPrimitive,
     authored_room_uses_unresolved_stock_geometry,
     imported_mesh_room_is_backdrop,
+    imported_mesh_room_is_visual_only,
 )
 from .authored_room_floorplan import FloorPlanRoomPrimitive, polygon_signed_area, validate_floor_plan_room_primitive
 from .map_studio_export_objects import map_studio_export_object_boundaries
@@ -1832,11 +1833,14 @@ def _room_readiness(project: AuthoredModuleProject) -> tuple[AuthoredRoomReadine
                 )
             )
             continue
-        backdrop_only = (
-            imported_mesh_room_is_backdrop(room.primitive)
-            if isinstance(room.primitive, ImportedMeshRoomPrimitive)
-            else bool(dict(getattr(room, "metadata", {}) or {}).get("backdrop_only", False))
-        )
+        if isinstance(room.primitive, ImportedMeshRoomPrimitive):
+            backdrop_only = imported_mesh_room_is_backdrop(room.primitive)
+            visual_only = imported_mesh_room_is_visual_only(room.primitive)
+        else:
+            room_metadata = dict(getattr(room, "metadata", {}) or {})
+            backdrop_only = bool(room_metadata.get("backdrop_only", False))
+            visual_only = bool(room_metadata.get("visual_only", False))
+        visual_only = bool(visual_only or backdrop_only)
         try:
             geometry = compile_authored_room_spec(room)
         except Exception as exc:
@@ -1856,9 +1860,9 @@ def _room_readiness(project: AuthoredModuleProject) -> tuple[AuthoredRoomReadine
         blockers: list[str] = []
         if not getattr(geometry.room_mesh, "faces", ()):
             blockers.append(f"Room {room_resref} has no renderable room mesh faces.")
-        if walkable_faces <= 0 and not backdrop_only:
+        if walkable_faces <= 0 and not visual_only:
             blockers.append(f"Room {room_resref} has no walkable WOK faces.")
-        if not backdrop_only:
+        if not visual_only:
             blockers.extend(walkmesh_audit.blocking_messages)
         rooms.append(
             AuthoredRoomReadiness(

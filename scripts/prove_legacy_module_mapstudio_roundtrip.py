@@ -3,28 +3,43 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, dataclass, field
+import hashlib
 import json
-from pathlib import Path
 import sys
 import time
 import traceback
-
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from scripts.mcp.start_kotormcp_stdio import _python_roots
+from scripts.mcp.start_kotormcp_stdio import _python_roots  # noqa: E402
 
 for item in reversed(_python_roots(ROOT)):
     text = str(item)
     if text not in sys.path:
         sys.path.insert(0, text)
 
-from src.core.assets.resource_manager import ResourceManager
-from src.core.level.kmap_serializer import KMapSerializer
-from src.core.modules.authored_imported_mesh import ImportedMeshRoomPrimitive
-from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
-from src.core.modules.module_editor_controller import ModuleEditorController
+from pykotor.extract.capsule import Capsule  # noqa: E402
+from pykotor.resource.type import ResourceType  # noqa: E402
+from src.core.assets.resource_manager import ResourceManager  # noqa: E402
+from src.core.level.kmap_serializer import KMapSerializer  # noqa: E402
+from src.core.modules.authored_imported_mesh import ImportedMeshRoomPrimitive  # noqa: E402
+from src.core.modules.authored_module_kmap_bridge import (  # noqa: E402
+    authored_project_from_kmap_payload,
+)
+from src.core.modules.authored_module_project import compile_authored_room_spec  # noqa: E402
+from src.core.modules.module_editor_controller import ModuleEditorController  # noqa: E402
+
+from scripts.audit_walkmesh_library import audit_bwm_bytes  # noqa: E402
+
+_WOK_FINGERPRINT_FIELDS = (
+    "semantic",
+    "face_indices",
+    "material_order",
+    "adjacency",
+    "transition_records",
+)
 
 
 @dataclass
@@ -32,7 +47,11 @@ class ProofResult:
     ok: bool = False
     game: str = ""
     module_path: str = ""
+    module_size: int = 0
+    module_sha256: str = ""
     kmap_path: str = ""
+    kmap_size: int = 0
+    kmap_sha256: str = ""
     import_ok: bool = False
     import_message: str = ""
     import_ms: float = 0.0
@@ -46,10 +65,88 @@ class ProofResult:
     walkmesh_face_count: int = 0
     reopened_room_count: int = 0
     reopened_editable_room_count: int = 0
+    wok_parity_room_count: int = 0
+    wok_parity_match_count: int = 0
+    visual_only_empty_wok_rooms: list[str] = field(default_factory=list)
+    wok_parity: list[dict[str, object]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     blocking_issues: list[str] = field(default_factory=list)
     exception: str = ""
     retail_game_tested: bool = False
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _module_woks(module_path: Path) -> dict[str, bytes]:
+    woks: dict[str, bytes] = {}
+    for resource in Capsule(module_path):
+        if resource.restype() != ResourceType.WOK:
+            continue
+        resref = str(resource.resname()).strip().lower()
+        if resref in woks:
+            raise ValueError(f"Module contains duplicate WOK resource {resref}.wok.")
+        woks[resref] = bytes(resource.data())
+    return woks
+
+
+def _wok_parity_row(room_resref: str, source_bytes: bytes, compiled_bytes: bytes) -> dict[str, object]:
+    _source_parsed, source = audit_bwm_bytes(
+        source_bytes,
+        source="source MOD",
+        resref=room_resref,
+    )
+    _compiled_parsed, compiled = audit_bwm_bytes(
+        compiled_bytes,
+        source="reopened KMAP compile",
+        resref=room_resref,
+    )
+    fingerprint_match = {
+        field: source.get("fingerprints", {}).get(field)
+        == compiled.get("fingerprints", {}).get(field)
+        for field in _WOK_FINGERPRINT_FIELDS
+    }
+    header_vectors_match = source.get("header_vectors") == compiled.get("header_vectors")
+    source_counts = dict(source.get("counts", {}) or {})
+    compiled_counts = dict(compiled.get("counts", {}) or {})
+    counts_match = source_counts == compiled_counts
+    source_face_count = int(source_counts.get("faces", 0) or 0)
+    canonical_empty_preserved = source_face_count != 0 or (
+        len(source_bytes) == 136 and len(compiled_bytes) == 136
+    )
+    semantic_match = bool(
+        all(fingerprint_match.values())
+        and header_vectors_match
+        and counts_match
+        and canonical_empty_preserved
+    )
+    return {
+        "room_resref": room_resref,
+        "semantic_match": semantic_match,
+        "fingerprint_match": fingerprint_match,
+        "header_vectors_match": header_vectors_match,
+        "counts_match": counts_match,
+        "canonical_empty_preserved": canonical_empty_preserved,
+        "source": {
+            "byte_size": len(source_bytes),
+            "sha256": hashlib.sha256(source_bytes).hexdigest(),
+            "counts": source_counts,
+            "fingerprints": dict(source.get("fingerprints", {}) or {}),
+            "header_vectors": dict(source.get("header_vectors", {}) or {}),
+        },
+        "reopened_kmap_compile": {
+            "byte_size": len(compiled_bytes),
+            "sha256": hashlib.sha256(compiled_bytes).hexdigest(),
+            "counts": compiled_counts,
+            "fingerprints": dict(compiled.get("fingerprints", {}) or {}),
+            "header_vectors": dict(compiled.get("header_vectors", {}) or {}),
+        },
+    }
 
 
 def prove(module_path: Path, game: str, game_root: Path, kmap_path: Path) -> ProofResult:
@@ -61,6 +158,8 @@ def prove(module_path: Path, game: str, game_root: Path, kmap_path: Path) -> Pro
     try:
         if not module_path.is_file():
             raise FileNotFoundError(module_path)
+        result.module_size = module_path.stat().st_size
+        result.module_sha256 = _sha256(module_path)
         if not (game_root / "chitin.key").is_file():
             raise FileNotFoundError(f"Invalid {game} installation: {game_root}")
         manager = ResourceManager()
@@ -111,6 +210,8 @@ def prove(module_path: Path, game: str, game_root: Path, kmap_path: Path) -> Pro
 
         kmap_path.parent.mkdir(parents=True, exist_ok=True)
         controller.save_project(kmap_path)
+        result.kmap_size = kmap_path.stat().st_size
+        result.kmap_sha256 = _sha256(kmap_path)
         reopened = KMapSerializer.load(kmap_path)
         restored = authored_project_from_kmap_payload(
             reopened.extra_sections["authored_module"],
@@ -129,6 +230,37 @@ def prove(module_path: Path, game: str, game_root: Path, kmap_path: Path) -> Pro
         if result.reopened_editable_room_count != result.editable_room_count:
             result.blocking_issues.append(
                 "KMAP reopen did not preserve every editable imported room."
+            )
+
+        source_woks = _module_woks(module_path)
+        restored_by_resref = {
+            room.normalised_resref(): room
+            for room in restored.rooms
+        }
+        result.wok_parity_room_count = len(restored_by_resref)
+        for room_resref in sorted(restored_by_resref):
+            source_wok = source_woks.get(room_resref)
+            if source_wok is None:
+                result.blocking_issues.append(
+                    f"Source MOD has no {room_resref}.wok for KMAP parity proof."
+                )
+                continue
+            geometry = compile_authored_room_spec(restored_by_resref[room_resref])
+            compiled_wok = geometry.wok.to_bytes()
+            row = _wok_parity_row(room_resref, source_wok, compiled_wok)
+            result.wok_parity.append(row)
+            if int(dict(row["source"]).get("counts", {}).get("faces", 0) or 0) == 0:
+                result.visual_only_empty_wok_rooms.append(room_resref)
+            if bool(row["semantic_match"]):
+                result.wok_parity_match_count += 1
+            else:
+                result.blocking_issues.append(
+                    f"KMAP compile changed {room_resref}.wok semantics from the source MOD."
+                )
+        if result.wok_parity_match_count != result.wok_parity_room_count:
+            result.blocking_issues.append(
+                "KMAP WOK parity is incomplete: "
+                f"{result.wok_parity_match_count}/{result.wok_parity_room_count} room(s) match."
             )
         result.ok = not result.blocking_issues
         return result

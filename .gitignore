@@ -54,6 +54,15 @@ native/GhostRigger.Core.IO.MDL/**/*.py[cod]
 !/tests/test_core_contracts.py
 !/tests/test_content_browser_panel.py
 !/tests/test_regression.py
+!/tests/test_authored_import_source_overlay.py
+!/tests/test_audit_converted_module_library.py
+!/tests/test_audit_walkmesh_library.py
+!/tests/test_generate_legacy_room_walkmesh_candidates.py
+!/tests/test_generate_rnv_walkmesh_candidates.py
+!/tests/test_stage_k2_manual_warp_candidate.py
+!/tests/test_restore_k2_manual_warp_candidate.py
+!/tests/test_wok_engine_contract_topology.py
+!/tests/test_wok_index_topology.py
 !/tests/test_mcp_full_scan.py
 !/tests/test_mcp_resource_exposure.py
 !/tests/test_mcp_textures.py

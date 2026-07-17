@@ -96,7 +96,9 @@ def _room_visual_center_xy(room: Any) -> tuple[float, float] | None:
     primitive = getattr(room, "primitive", None)
     points: list[Any] = []
     for surface in tuple(getattr(primitive, "surfaces", ()) or ()):
-        if bool(getattr(surface, "backdrop", False)):
+        if bool(getattr(surface, "backdrop", False)) or bool(getattr(surface, "background_geometry", False)):
+            continue
+        if not bool(getattr(surface, "render", True)):
             continue
         points.extend(tuple(getattr(surface, "vertices", ()) or ()))
     center = _bounds_center_xy(points)
@@ -167,6 +169,12 @@ def offset_wok_data(wok: Any, offset: tuple[float, float, float]) -> Any:
         name=str(getattr(wok, "name", "") or ""),
         verts=[_offset_vertex(vertex, offset) for vertex in tuple(getattr(wok, "verts", ()) or ())],
         faces=list(getattr(wok, "faces", ()) or ()),
+        relative_hook1=tuple(getattr(wok, "relative_hook1", (0.0, 0.0, 0.0))),
+        relative_hook2=tuple(getattr(wok, "relative_hook2", (0.0, 0.0, 0.0))),
+        absolute_hook1=tuple(getattr(wok, "absolute_hook1", (0.0, 0.0, 0.0))),
+        absolute_hook2=tuple(getattr(wok, "absolute_hook2", (0.0, 0.0, 0.0))),
+        position=tuple(getattr(wok, "position", (0.0, 0.0, 0.0))),
+        adjacency_domain_count=getattr(wok, "adjacency_domain_count", None),
     )
 
 

@@ -26,7 +26,7 @@ import re
 import subprocess
 import sys
 import tempfile
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -450,6 +450,72 @@ def _rename_model(text: str, room: str) -> str:
     return "\n".join(output) + "\n"
 
 
+def merge_render_ascii_models(render_texts: Sequence[str], *, room: str) -> str:
+    """Merge disjoint NWMax render shells under one engine room root.
+
+    Legacy area projects sometimes kept scenery, sky, or exterior terrain in a
+    second visual-only model while a third model held the only authoritative
+    AABB.  Odyssey room loading is more robust when those disjoint render
+    shells share one root and one validated walkmesh.  This merge keeps every
+    source node block intact, drops only each additional model's duplicate root
+    dummy, and rejects ambiguous node names instead of guessing.
+    """
+
+    texts = tuple(str(text or "") for text in render_texts)
+    if not texts:
+        raise ValueError("At least one render ASCII model is required.")
+
+    renamed_models = [
+        _rename_model(_without_node_type(text, "aabb"), room)
+        for text in texts
+    ]
+    primary = renamed_models[0]
+    primary_lines = primary.splitlines()
+    insert_at = next(
+        (
+            index
+            for index, line in enumerate(primary_lines)
+            if line.strip().lower().startswith("endmodelgeom")
+        ),
+        None,
+    )
+    if insert_at is None:
+        raise ValueError("Primary render ASCII has no endmodelgeom declaration.")
+
+    seen_names: set[str] = set()
+    for block in _node_blocks(primary):
+        header = block[0].strip().split()
+        if len(header) >= 3:
+            seen_names.add(header[2].lower())
+
+    additions: list[str] = []
+    for source_index, model in enumerate(renamed_models[1:], start=2):
+        blocks = _node_blocks(model)
+        if not blocks:
+            raise ValueError(f"Render ASCII source {source_index} contains no node blocks.")
+        for block in blocks:
+            header = block[0].strip().split()
+            if len(header) < 3:
+                continue
+            node_name = header[2]
+            lowered = node_name.lower()
+            if lowered == room.lower():
+                # The additional model root is replaced by the primary root;
+                # _rename_model already retargeted child parent references.
+                continue
+            if lowered in seen_names:
+                raise ValueError(
+                    f"Render ASCII source {source_index} duplicates node name {node_name!r}."
+                )
+            seen_names.add(lowered)
+            additions.extend(block)
+            additions.append("")
+
+    if additions:
+        primary_lines[insert_at:insert_at] = additions
+    return "\n".join(primary_lines) + "\n"
+
+
 def prepare_room_ascii(
     render_text: str,
     walkmesh_text: str | None,
@@ -600,12 +666,21 @@ def compile_candidate(args: argparse.Namespace) -> dict[str, Any]:
     game = str(args.game).strip().upper()
     if game not in {"K1", "K2"}:
         raise ValueError("Target game must be K1 or K2.")
-    render_path = Path(args.render_ascii).expanduser().resolve()
+    render_values = args.render_ascii
+    if isinstance(render_values, (str, Path)):
+        render_values = [render_values]
+    render_paths = tuple(Path(value).expanduser().resolve() for value in render_values)
+    if not render_paths:
+        raise ValueError("At least one render ASCII path is required.")
+    render_path = render_paths[0]
     walkmesh_path = Path(args.walkmesh_ascii).expanduser().resolve() if args.walkmesh_ascii else None
     mdlops_path = Path(args.mdlops).expanduser().resolve()
     output_dir = Path(args.output).expanduser().resolve()
-    if not render_path.is_file():
-        raise FileNotFoundError(f"Render ASCII does not exist: {render_path}")
+    missing_render_paths = [path for path in render_paths if not path.is_file()]
+    if missing_render_paths:
+        raise FileNotFoundError(
+            "Render ASCII does not exist: " + ", ".join(str(path) for path in missing_render_paths)
+        )
     if walkmesh_path is not None and not walkmesh_path.is_file():
         raise FileNotFoundError(f"Walkmesh ASCII does not exist: {walkmesh_path}")
     if not mdlops_path.is_file():
@@ -624,7 +699,12 @@ def compile_candidate(args: argparse.Namespace) -> dict[str, Any]:
         names = ", ".join(str(path) for path in existing)
         raise FileExistsError(f"Candidate output exists and overwrite is disabled: {names}")
 
-    render_text = _read_ascii(render_path)
+    render_texts = tuple(_read_ascii(path) for path in render_paths)
+    render_text = (
+        render_texts[0]
+        if len(render_texts) == 1
+        else merge_render_ascii_models(render_texts, room=room)
+    )
     walkmesh_text = _read_ascii(walkmesh_path) if walkmesh_path is not None else None
     prepared_ascii, wok, preparation = prepare_room_ascii(
         render_text,
@@ -641,9 +721,14 @@ def compile_candidate(args: argparse.Namespace) -> dict[str, Any]:
         "room_resref": room,
         "target_game": game,
         "source_render_ascii": str(render_path),
+        "source_render_asciis": [str(path) for path in render_paths],
         "source_walkmesh_ascii": str(walkmesh_path) if walkmesh_path else str(render_path),
         "source_hashes": {
             "render_ascii": _hash_file(render_path),
+            "render_asciis": {
+                str(path): _hash_file(path)
+                for path in render_paths
+            },
             "walkmesh_ascii": _hash_file(walkmesh_path) if walkmesh_path else _hash_file(render_path),
         },
         "prepared_ascii_sha256": _hash_bytes(prepared_ascii.encode("latin-1", errors="replace")),
@@ -858,7 +943,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--room", required=True, help="Output room resref (16 characters maximum).")
     parser.add_argument("--game", choices=("K1", "K2"), required=True)
-    parser.add_argument("--render-ascii", required=True, help="NWMax/KOTORMax visual ASCII MDL.")
+    parser.add_argument(
+        "--render-ascii",
+        required=True,
+        action="append",
+        help="NWMax/KOTORMax visual ASCII MDL; repeat to merge disjoint render shells.",
+    )
     parser.add_argument(
         "--walkmesh-ascii",
         default="",

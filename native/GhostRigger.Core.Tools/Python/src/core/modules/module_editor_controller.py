@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
 from types import SimpleNamespace
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from src.core.level import (
     KMapProject,
@@ -67,12 +67,26 @@ from .authored_primitive_topology_policy import (
     enforce_primitive_topology_budget,
 )
 from .map_studio_pie import build_map_studio_pie_session
+from .map_studio_pie_dialogue import (
+    MapStudioPIEDialogueContextEvaluator,
+    MapStudioPIEDialogueSession,
+    build_map_studio_pie_dialogue_catalog,
+)
+from .map_studio_pie_entities import build_pie_entity_registry
 from .map_studio_stock_content_preview import (
+    RES_DLG,
+    RES_UTC,
+    RES_UTD,
+    RES_UTI,
+    RES_UTM,
+    RES_UTP,
+    RES_UTT,
     TemplateModelResolver,
     build_map_studio_combined_preview_model,
     load_kotor_model_from_bytes,
     load_stock_kotor_model,
 )
+from .map_studio_pie_resources import inspect_map_studio_pie_resource
 from .stock_module_importer import import_stock_module
 from .authored_imported_mesh import (
     ImportedMeshRoomPrimitive,
@@ -88,6 +102,7 @@ from .authored_imported_mesh import (
     fill_imported_wok_from_floor_surfaces,
     imported_mesh_room_is_backdrop,
     prepare_imported_mesh_for_static_runtime_rebuild,
+    prepare_imported_mesh_walkmesh_generation_intent,
     collapse_imported_mesh_edge,
     delete_imported_mesh_edge_faces,
     delete_imported_mesh_faces,
@@ -537,6 +552,7 @@ class ModuleEditorController:
         self._authored_scripting_resources: tuple[tuple[str, str, bytes], ...] = ()
         self._authored_placeable_preview_rows: tuple[dict[str, Any], ...] = ()
         self._authored_placeable_preview_revision = 0
+        self._map_studio_pie_context_resource_revision = 0
         self.last_map_studio_resolved_placement_ids: tuple[str, ...] = ()
         self.last_map_studio_unresolved_placement_ids: tuple[str, ...] = ()
         self.last_map_studio_preview_cache_hit = False
@@ -622,22 +638,28 @@ class ModuleEditorController:
         placements = getattr(authored, "placements", None) if authored is not None else None
         return deepcopy(placements) if placements is not None else None
 
-    def map_studio_scene_animation_map(self, resource_manager: Any) -> dict[str, tuple[str, ...]]:
-        """Tag -> candidate animation clips from the module's OnEnter NCS script.
+    def map_studio_scene_animation_map(self, resource_manager: Any):
+        """Tag-occurrence animation clips from the module's own OnEnter NCS.
 
         207TEL and similar ambient scenes assign creature animations by tag in
         their OnEnter script; this reads that intent so PIE can pose each
-        creature. Returns an empty map when there is no script, no game
-        resources, or the script assigns nothing.
+        creature. The imported MOD/RIM is authoritative and is checked before
+        Override/game-library resources. The returned mapping reports its
+        script resref, source, SHA-256, and raw constants for diagnostics.
         """
 
         authored = self._map_studio_authored_project_snapshot()
-        if authored is None or resource_manager is None:
-            return {}
         from .map_studio_scene_animations import (
+            MapStudioSceneAnimationMap,
             build_module_scene_animations,
             module_onenter_script_resref,
         )
+
+        self.last_map_studio_scene_animation_source = ""
+        self.last_map_studio_scene_animation_sha256 = ""
+        self.last_map_studio_scene_animation_script = ""
+        if authored is None:
+            return MapStudioSceneAnimationMap()
 
         module_root = normalise_resref(getattr(authored, "module_root", "") or getattr(self.project, "name", ""))
         game = str(getattr(authored, "game", "") or self.project.game or "K1").upper()
@@ -657,21 +679,71 @@ class ModuleEditorController:
                 script_resref = ""
         if not script_resref and module_root:
             script_resref = f"k_{module_root}_enter"
+        self.last_map_studio_scene_animation_script = script_resref
         if not script_resref:
-            return {}
+            return MapStudioSceneAnimationMap()
+
+        ncs_bytes = None
+        ncs_source = ""
         try:
+            from pykotor.extract.capsule import LazyCapsule
             from pykotor.resource.type import ResourceType as RT
 
-            getter = getattr(resource_manager, "get_strict", None) or getattr(resource_manager, "get", None)
-            ncs_bytes = getter(script_resref, int(RT.NCS), game) if callable(getter) else None
+            import_source = str(extra.get("import_source") or "").strip()
+            source_paths: list[Path] = []
+            if import_source:
+                primary = Path(import_source)
+                source_paths.append(primary)
+                if primary.suffix.lower() == ".rim":
+                    if primary.stem.lower().endswith("_s"):
+                        source_paths.append(primary.with_name(f"{primary.stem[:-2]}.rim"))
+                    else:
+                        source_paths.append(primary.with_name(f"{primary.stem}_s.rim"))
+            for source_path in tuple(dict.fromkeys(source_paths)):
+                if not source_path.is_file():
+                    continue
+                try:
+                    data = LazyCapsule(str(source_path)).resource(script_resref, RT.NCS)
+                except Exception:
+                    data = None
+                if data:
+                    ncs_bytes = bytes(data)
+                    ncs_source = f"capsule:{source_path.resolve()}"
+                    break
         except Exception:
             ncs_bytes = None
+
+        if not ncs_bytes and resource_manager is not None:
+            try:
+                from pykotor.resource.type import ResourceType as RT
+
+                getter = getattr(resource_manager, "get_strict", None) or getattr(resource_manager, "get", None)
+                data = getter(script_resref, int(RT.NCS), game) if callable(getter) else None
+                if data:
+                    ncs_bytes = bytes(data)
+                    ncs_source = f"resource_manager:{game}"
+            except Exception:
+                ncs_bytes = None
         if not ncs_bytes:
-            return {}
+            return MapStudioSceneAnimationMap(script_resref=script_resref)
+
+        source_sha256 = hashlib.sha256(bytes(ncs_bytes)).hexdigest()
         try:
-            return build_module_scene_animations(onenter_ncs_bytes=bytes(ncs_bytes))
+            result = build_module_scene_animations(
+                onenter_ncs_bytes=bytes(ncs_bytes),
+                script_resref=script_resref,
+                source=ncs_source,
+                source_sha256=source_sha256,
+            )
         except Exception:
-            return {}
+            result = MapStudioSceneAnimationMap(
+                script_resref=script_resref,
+                source=ncs_source,
+                source_sha256=source_sha256,
+            )
+        self.last_map_studio_scene_animation_source = ncs_source
+        self.last_map_studio_scene_animation_sha256 = source_sha256
+        return result
 
     def _map_studio_cached_authored_query(self, key: tuple[Any, ...], builder):
         """Reuse an immutable/read-only projection for the current revision."""
@@ -978,7 +1050,75 @@ class ModuleEditorController:
         self.model.log(f"Created new Map Studio KMAP project {project_name} for {game_key}.")
         return self.model.project
 
-    def open_project(self, path: str | Path) -> KMapProject:
+    def _index_import_source_capsules(
+        self,
+        resource_manager: Any,
+        source_path: str | Path,
+        *,
+        clear_existing: bool = True,
+    ) -> tuple[Path, ...]:
+        """Publish the active KMAP's preserved module capsules to resources.
+
+        ``import_source`` is project provenance, not authored content. Reopening
+        a KMAP must therefore restore the ResourceManager overlay without
+        rewriting the serialized authored-module payload or marking the project
+        dirty. RIM modules may split templates into a sibling ``_s.rim``; use
+        the same primary-then-companion order as the live import path.
+        """
+
+        if resource_manager is None:
+            return ()
+        clear_overlay = getattr(resource_manager, "clear_module_overlay", None)
+        if clear_existing and callable(clear_overlay):
+            clear_overlay()
+
+        raw_source = str(source_path or "").strip()
+        if not raw_source:
+            return ()
+        source = Path(raw_source).expanduser()
+        if not source.is_absolute() and str(getattr(self.project, "path", "") or "").strip():
+            source = Path(self.project.path).resolve().parent / source
+        if not source.is_file():
+            self.model.log(f"Could not restore bundled module resources; import source is missing: {source}")
+            return ()
+
+        add_overlay = getattr(resource_manager, "add_module_overlay", None)
+        if not callable(add_overlay):
+            self.model.log("Could not restore bundled module resources; the active resource manager has no capsule overlay API.")
+            return ()
+
+        overlay_paths = [source]
+        if source.suffix.lower() == ".rim":
+            if source.stem.lower().endswith("_s"):
+                companion = source.with_name(f"{source.stem[:-2]}.rim")
+            else:
+                companion = source.with_name(f"{source.stem}_s.rim")
+            if companion.is_file():
+                overlay_paths.append(companion)
+
+        indexed: list[Path] = []
+        for overlay_path in overlay_paths:
+            try:
+                resource_count = int(add_overlay(str(overlay_path)) or 0)
+            except Exception as exc:
+                self.model.log(f"Could not index bundled module resources from {overlay_path.name}: {exc}")
+                continue
+            indexed.append(overlay_path)
+            if resource_count:
+                self.model.log(f"Indexed {resource_count} bundled resource(s) from {overlay_path.name} for editing.")
+        if indexed:
+            self._invalidate_map_studio_stock_preview_resources()
+        return tuple(indexed)
+
+    def restore_project_import_source_overlay(self, resource_manager: Any) -> tuple[Path, ...]:
+        """Restore the saved authored module's source-capsule resource layer."""
+
+        payload = (getattr(self.project, "extra_sections", {}) or {}).get("authored_module")
+        authored_extra = payload.get("extra") if isinstance(payload, dict) else None
+        source = str(authored_extra.get("import_source") or "") if isinstance(authored_extra, dict) else ""
+        return self._index_import_source_capsules(resource_manager, source, clear_existing=True)
+
+    def open_project(self, path: str | Path, *, resource_manager: Any = None) -> KMapProject:
         project = KMapSerializer.load(path)
         self.discard_project_texture_sidecar_changes()
         self.model.set_project(project)
@@ -990,6 +1130,8 @@ class ModuleEditorController:
         self._terrain_sculpt_command_before = None
         self._terrain_sculpt_session = None
         self._authored_creature_resources = ()
+        if resource_manager is not None:
+            self.restore_project_import_source_overlay(resource_manager)
         self.model.log(f"Opened KMAP {Path(path).name}.")
         return project
 
@@ -1250,10 +1392,13 @@ class ModuleEditorController:
                     f"Scripting Studio resource collision for {clean_ref}.{clean_type}."
                 )
             normalized[key] = payload
-        self._authored_scripting_resources = tuple(
+        next_resources = tuple(
             (resref, restype, data)
             for (resref, restype), data in sorted(normalized.items())
         )
+        if next_resources != self._authored_scripting_resources:
+            self._authored_scripting_resources = next_resources
+            self._map_studio_pie_context_resource_revision += 1
 
     def authored_scripting_resource(self, resref: Any, restype: Any) -> bytes | None:
         """Return one staged workbench resource for contextual export resolution."""
@@ -1779,21 +1924,7 @@ class ModuleEditorController:
         # "_s.rim" companion, so overlay that too when it exists; without it,
         # creatures/doors/placeables render as markers instead of real models.
         if resource_manager is not None and hasattr(resource_manager, "add_module_overlay"):
-            clear_overlay = getattr(resource_manager, "clear_module_overlay", None)
-            if callable(clear_overlay):
-                clear_overlay()
-            overlay_paths = [rim_path]
-            if rim_path.suffix.lower() == ".rim":
-                companion = rim_path.with_name(f"{rim_path.stem}_s.rim")
-                if companion.exists():
-                    overlay_paths.append(companion)
-            for overlay_path in overlay_paths:
-                try:
-                    overlaid = resource_manager.add_module_overlay(str(overlay_path))
-                    if overlaid:
-                        self.model.log(f"Indexed {overlaid} bundled resource(s) from {overlay_path.name} for editing.")
-                except Exception as exc:
-                    self.model.log(f"Could not index bundled module resources from {overlay_path.name}: {exc}")
+            self._index_import_source_capsules(resource_manager, rim_path, clear_existing=True)
 
             # Classic module releases put only ARE/GIT/IFO in Modules/*.mod
             # and ship the actual LYT/VIS/MDL/MDX/WOK/textures loose beside it
@@ -2332,60 +2463,158 @@ class ModuleEditorController:
         )
         return True, label
 
-    def auto_generate_map_studio_walkmesh(self, *, slope_max_degrees: float = 45.0) -> tuple[bool, str]:
+    def auto_generate_map_studio_walkmesh(
+        self,
+        *,
+        slope_max_degrees: float = 45.0,
+        disconnected_island_policy: str = "reject",
+        source_wok_policy: str = "preserve",
+    ) -> tuple[bool, str]:
         """Derive every room's walkmesh from its geometry in one undoable step.
 
         The robust "Auto Generate Walkmesh" one-button path: for every imported
         room, replace its WOK with a fresh one built from the room's render
         geometry using the studied KOTOR conventions (walkable up-facing floors
-        <= slope, NON_WALK walls, dropped ceilings). Works on any loaded map
-        whose rooms are editable imported meshes; primitive/terrain rooms keep
-        their compiled WOK. Records one undo command.
+        <= slope, omitted walls/unsafe slopes, dropped ceilings).  The default
+        rejects disconnected generated islands; recovery tooling can request
+        ``preserve`` only after reviewing that topology explicitly. Existing
+        imported WOKs are preserved unless a caller explicitly requests
+        destructive replacement. Primitive and terrain rooms keep their
+        compiled WOK. Records one undo command when geometry changes.
         """
 
         from dataclasses import replace as _replace
 
         from .authored_imported_mesh import generate_room_walkmesh_from_geometry
+        from .authored_module_walkmesh import resolve_room_wok_module_offset
 
         authored = self._load_authored_project_or_raise()
         before = self._capture_map_studio_command_state()
         rooms = list(authored.rooms)
         total_floor = 0
         total_wall = 0
+        total_transitions = 0
         regenerated = 0
-        skipped: list[str] = []
+        non_imported_skipped: list[str] = []
+        no_floor_skipped: list[str] = []
+        source_wok_preserved: list[str] = []
+        generation_blocked: list[str] = []
+        density_warnings: list[str] = []
         for index, room in enumerate(rooms):
             if not isinstance(getattr(room, "primitive", None), ImportedMeshRoomPrimitive):
-                skipped.append(room.normalised_resref())
+                non_imported_skipped.append(room.normalised_resref())
                 continue
+            position = tuple(float(value) for value in tuple(room.position or (0.0, 0.0, 0.0))[:3])
+            wok_offset, _alignment_warning = resolve_room_wok_module_offset(room)
+            source_wok_to_render_offset = tuple(wok_offset[axis] - position[axis] for axis in range(3))
             updated_primitive, report = generate_room_walkmesh_from_geometry(
-                room.primitive, slope_max_degrees=float(slope_max_degrees)
+                room.primitive,
+                slope_max_degrees=float(slope_max_degrees),
+                source_wok_to_render_offset=source_wok_to_render_offset,
+                disconnected_island_policy=disconnected_island_policy,
+                source_wok_policy=source_wok_policy,
             )
             if updated_primitive is room.primitive:
-                skipped.append(room.normalised_resref())
+                blocked_reason = str(report.get("blocked_reason") or "").strip()
+                if blocked_reason:
+                    generation_blocked.append(blocked_reason)
+                elif bool(report.get("source_wok_preserved", False)):
+                    source_wok_preserved.append(room.normalised_resref())
+                else:
+                    no_floor_skipped.append(room.normalised_resref())
                 continue
             rooms[index] = _replace(room, primitive=updated_primitive)
             regenerated += 1
-            total_floor += int(report.get("floor_faces", 0) or 0)
+            total_floor += int(report.get("walkable_floor_faces", report.get("floor_faces", 0)) or 0)
             total_wall += int(report.get("wall_faces", 0) or 0)
+            total_transitions += int(report.get("mapped_transition_edges", 0) or 0)
+            density_warning = str(report.get("density_warning") or "").strip()
+            if density_warning:
+                density_warnings.append(f"{room.normalised_resref()}: {density_warning}")
         if regenerated <= 0:
-            hint = " (rooms are not editable imported meshes; convert stock rooms first)" if skipped else ""
-            return False, f"Auto Generate Walkmesh made no changes{hint}."
+            if generation_blocked:
+                return False, " ".join(generation_blocked)
+            if source_wok_preserved:
+                return True, (
+                    f"Preserved {len(source_wok_preserved)} imported room WOK(s) without destructive render-derived "
+                    "replacement. Use Fill Floor Faces for a source-seeded extension, or explicitly choose Replace "
+                    "Source WOK after reviewing holes, blockers, transitions, and islands."
+                )
+            details: list[str] = []
+            if non_imported_skipped:
+                details.append(f"{len(non_imported_skipped)} room(s) are not editable imported meshes")
+            if no_floor_skipped:
+                details.append(f"{len(no_floor_skipped)} imported room(s) had no derivable walkable floor")
+            suffix = f" ({'; '.join(details)})" if details else ""
+            return False, f"Auto Generate Walkmesh made no changes{suffix}."
         self._store_authored_project(_replace(authored, rooms=tuple(rooms)))
         message = (
             f"Auto-generated walkmesh for {regenerated} room(s): {total_floor} walkable floor face(s), "
-            f"{total_wall} NON_WALK wall face(s) from room geometry."
+            f"{total_wall} wall/unsafe-slope face(s) omitted from collision."
         )
-        if skipped:
-            message = f"{message} {len(skipped)} non-imported room(s) kept their compiled walkmesh."
+        if non_imported_skipped:
+            message = f"{message} {len(non_imported_skipped)} non-imported room(s) kept their compiled walkmesh."
+        if no_floor_skipped:
+            message = f"{message} {len(no_floor_skipped)} imported room(s) had no derivable walkable floor and were unchanged."
+        if source_wok_preserved:
+            message = f"{message} Preserved {len(source_wok_preserved)} imported source WOK(s)."
+        if total_transitions:
+            message = f"{message} Preserved {total_transitions} source perimeter transition edge(s)."
+        if generation_blocked:
+            message = f"{message} {len(generation_blocked)} room(s) were refused by transition or structural topology checks."
+        if density_warnings:
+            message = f"{message} Density warning: {' '.join(density_warnings)}"
         self.model.log(f"Map Studio: {message}")
         self._record_map_studio_command(
             action_key="map_studio.walkmesh.auto_generate",
             label=f"Auto Generate Walkmesh ({regenerated} room(s))",
             before=before,
-            metadata={"rooms": regenerated, "floor_faces": total_floor, "wall_faces": total_wall},
+            metadata={
+                "rooms": regenerated,
+                "floor_faces": total_floor,
+                "wall_faces": total_wall,
+                "mapped_transition_edges": total_transitions,
+                "generation_blocked_rooms": len(generation_blocked),
+                "disconnected_island_policy": str(disconnected_island_policy),
+                "source_wok_policy": str(source_wok_policy),
+                "density_warning_rooms": len(density_warnings),
+                "non_imported_rooms": len(non_imported_skipped),
+                "no_floor_rooms": len(no_floor_skipped),
+                "source_wok_preserved_rooms": len(source_wok_preserved),
+            },
         )
         return True, message
+
+    def prepare_imported_room_walkmesh_generation_intent(
+        self,
+        *,
+        room_resref: str,
+        surface_faces: dict[int, tuple[int, ...] | None],
+        reason: str,
+    ) -> tuple[bool, str]:
+        """Persist a reviewed floor-surface/face selection before generation.
+
+        Imported render geometry with no source WOK is intentionally not safe
+        for one-click inference: roofs and furniture can be upward-facing too.
+        This records the creator's explicit selection as one undoable KMAP
+        operation; ``auto_generate_map_studio_walkmesh`` then applies the
+        normal slope, topology, perimeter, and island gates to that selection.
+        """
+
+        resref = normalise_resref(room_resref)
+        clean_reason = str(reason or "").strip()
+        if not clean_reason:
+            return False, "Walkmesh floor review requires a written reason."
+        return self._apply_imported_mesh_room_edit(
+            room_resref=resref,
+            action_key="map_studio.imported_mesh.walkmesh_generation_intent",
+            label=f"Review floor geometry for {resref} walkmesh generation",
+            editor=lambda primitive: prepare_imported_mesh_walkmesh_generation_intent(
+                primitive,
+                surface_faces=surface_faces,
+                reason=clean_reason,
+            ),
+        )
 
     def fill_authored_room_wok_from_floors(
         self,
@@ -2439,6 +2668,15 @@ class ModuleEditorController:
             return ok, message
         added = int(outcome.get("faces_added", 0) or 0)
         if added <= 0:
+            partial = int(outcome.get("faces_partial_overlap", 0) or 0)
+            unstitched = int(outcome.get("faces_unstitched", 0) or 0)
+            downward = int(outcome.get("faces_downward", 0) or 0)
+            if partial or unstitched or downward:
+                return True, (
+                    f"Room {resref}: no topology-safe floor faces were added "
+                    f"({partial} partial-overlap, {unstitched} unstitched, {downward} downward-facing). "
+                    "Use Auto Generate Walkmesh for a deliberate full-room replacement."
+                )
             return True, (
                 f"Room {resref} walkmesh already covers its visible floor "
                 f"({int(outcome.get('faces_already_covered', 0) or 0)} floor face(s) checked)."
@@ -2446,7 +2684,10 @@ class ModuleEditorController:
         return True, (
             f"Room {resref}: added {added} walkable face(s) from visible floor geometry "
             f"({int(outcome.get('faces_already_covered', 0) or 0)} already covered, "
-            f"{int(outcome.get('faces_too_steep', 0) or 0)} too steep)."
+            f"{int(outcome.get('faces_too_steep', 0) or 0)} too steep, "
+            f"{int(outcome.get('faces_partial_overlap', 0) or 0)} partial-overlap, "
+            f"{int(outcome.get('faces_unstitched', 0) or 0)} unstitched, "
+            f"{int(outcome.get('faces_downward', 0) or 0)} downward-facing)."
         )
 
     def prepare_imported_room_for_static_runtime_rebuild(
@@ -4183,6 +4424,304 @@ class ModuleEditorController:
         self.last_map_studio_preview_elapsed_ms = (perf_counter() - started) * 1000.0
         return model
 
+    def map_studio_pie_context_settings(self) -> dict[str, Any]:
+        """Return the normalized, preview-only dialogue sandbox stored in KMAP."""
+
+        raw = dict((getattr(self.project, "extra_sections", {}) or {}).get("map_studio_pie_context") or {})
+        role = str(raw.get("player_role") or "normal_pc").strip().lower().replace("-", "_")
+        if role not in {"normal_pc", "b4d4"}:
+            role = "normal_pc"
+        gender = str(raw.get("player_gender") or "male").strip().lower()
+        if gender not in {"male", "female"}:
+            gender = "male"
+
+        global_numbers: dict[str, int] = {}
+        for key, value in dict(raw.get("global_numbers") or {}).items():
+            name = str(key or "").strip()
+            if not name:
+                continue
+            try:
+                global_numbers[name] = int(value)
+            except (TypeError, ValueError):
+                continue
+        global_booleans = {
+            str(key).strip(): bool(value)
+            for key, value in dict(raw.get("global_booleans") or {}).items()
+            if str(key or "").strip()
+        }
+        local_booleans = {
+            str(key).strip(): bool(value)
+            for key, value in dict(raw.get("local_booleans") or {}).items()
+            if str(key or "").strip()
+        }
+        dialogue_start_overrides: dict[str, dict[str, str]] = {}
+        for resref, value in dict(raw.get("dialogue_start_overrides") or {}).items():
+            clean_resref = str(resref or "").strip().lower()[:16]
+            if not clean_resref or not isinstance(value, Mapping):
+                continue
+            starter_link_id = str(value.get("starter_link_id") or "").strip().lower()
+            resource_sha256 = str(value.get("resource_sha256") or "").strip().lower()
+            if starter_link_id:
+                dialogue_start_overrides[clean_resref] = {
+                    "starter_link_id": starter_link_id,
+                    "resource_sha256": resource_sha256,
+                }
+        return {
+            "player_role": role,
+            "player_gender": gender,
+            "global_numbers": global_numbers,
+            "global_booleans": global_booleans,
+            "local_booleans": local_booleans,
+            "dialogue_start_overrides": dialogue_start_overrides,
+        }
+
+    def update_map_studio_pie_context(self, **changes: Any) -> dict[str, Any]:
+        """Persist preview context without invalidating authored export geometry."""
+
+        current = self.map_studio_pie_context_settings()
+        current.update(changes)
+        # Normalize through the same read contract before committing the section.
+        prior_section = (getattr(self.project, "extra_sections", {}) or {}).get("map_studio_pie_context")
+        if not isinstance(getattr(self.project, "extra_sections", None), dict):
+            self.project.extra_sections = {}
+        self.project.extra_sections["map_studio_pie_context"] = current
+        normalized = self.map_studio_pie_context_settings()
+        self.project.extra_sections["map_studio_pie_context"] = normalized
+        if prior_section != normalized:
+            self.project.mark_dirty()
+        return deepcopy(normalized)
+
+    def update_map_studio_pie_context_settings(self, **changes: Any) -> dict[str, Any]:
+        """Compatibility spelling used by the compact PIE context panel."""
+
+        return self.update_map_studio_pie_context(**changes)
+
+    def _map_studio_pie_resource_context(self) -> SimpleNamespace:
+        """Build shared template, DLG, item, and TLK readers for PIE surfaces."""
+
+        resolver = getattr(self, "_map_studio_stock_template_resolver", None)
+        game = str(getattr(self.project, "game", "K1") or "K1").strip().upper()
+        resource_types = {
+            "creature": RES_UTC,
+            "door": RES_UTD,
+            "placeable": RES_UTP,
+            "trigger": RES_UTT,
+            "store": RES_UTM,
+            "item": RES_UTI,
+        }
+        reader = getattr(resolver, "_template_bytes", None) if resolver is not None else None
+
+        def _tlk_lookup(strref: int) -> str:
+            if resolver is None:
+                return ""
+            manager = getattr(resolver, "_manager", None)
+            game_tag = str(getattr(resolver, "_game", game) or game).strip().upper()
+            revision = int(getattr(manager, "revision", 0) or 0) if manager is not None else 0
+            cache = getattr(self, "_map_studio_pie_tlk_cache", None)
+            if not isinstance(cache, dict):
+                cache = {}
+                self._map_studio_pie_tlk_cache = cache
+            key = (id(manager), revision, game_tag)
+            if key not in cache:
+                talk_table = None
+                installation_getter = getattr(manager, "get_k2" if game_tag == "K2" else "get_k1", None)
+                installation = installation_getter() if callable(installation_getter) else None
+                game_dir = str(getattr(installation, "game_dir", "") or "")
+                tlk_path = Path(game_dir) / "dialog.tlk" if game_dir else None
+                if tlk_path is not None and tlk_path.is_file():
+                    try:
+                        from pykotor.resource.formats.tlk import read_tlk
+
+                        talk_table = read_tlk(tlk_path)
+                    except Exception:
+                        talk_table = None
+                cache.clear()
+                cache[key] = talk_table
+            talk_table = cache.get(key)
+            if talk_table is None:
+                return ""
+            try:
+                entry = talk_table.get(int(strref))
+                return str(getattr(entry, "text", entry) or "")
+            except Exception:
+                return ""
+
+        def _resource_bytes(kind: str, resref: str) -> bytes | None:
+            restype = resource_types.get(str(kind or "").strip().lower())
+            if restype is None or not callable(reader):
+                return None
+            raw = reader(resref, restype)
+            return bytes(raw) if raw else None
+
+        def _template_inspector(kind: str, resref: str) -> dict[str, Any]:
+            raw = _resource_bytes(kind, resref)
+            if raw is None:
+                raise FileNotFoundError(f"{str(kind or 'template').upper()} {resref} was unavailable for PIE inspection")
+            try:
+                return inspect_map_studio_pie_resource(kind, resref, raw, tlk_lookup=_tlk_lookup)
+            except Exception as exc:
+                raise ValueError(f"{kind} {resref} could not be decoded for PIE: {exc}") from exc
+
+        def _dialogue_loader(resref: str) -> bytes | None:
+            staged = self.authored_scripting_resource(resref, "dlg")
+            if staged:
+                return bytes(staged)
+            if not callable(reader):
+                return None
+            raw = reader(resref, RES_DLG)
+            return bytes(raw) if raw else None
+
+        def _item_inspector(resref: str) -> dict[str, Any]:
+            return _template_inspector("item", resref)
+
+        return SimpleNamespace(
+            resolver=resolver,
+            game=game,
+            template_inspector=_template_inspector,
+            dialogue_loader=_dialogue_loader,
+            item_inspector=_item_inspector,
+            tlk_lookup=_tlk_lookup,
+        )
+
+    def map_studio_pie_dialogue_catalog(self):
+        """Return conversations actually referenced by the loaded module entities.
+
+        A standalone LYT has rooms and door hooks but no GIT templates or DLG
+        resources, so it intentionally returns an empty catalog until a module
+        source is attached or the project is hydrated into an authored KMAP.
+        """
+
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None:
+            return ()
+        context = self._map_studio_pie_resource_context()
+        manager = getattr(context.resolver, "_manager", None) if context.resolver is not None else None
+        manager_revision = int(getattr(manager, "revision", 0) or 0) if manager is not None else 0
+        cache_key = (
+            "pie_dialogue_catalog",
+            id(manager),
+            manager_revision,
+            int(self._authored_placeable_preview_revision),
+            int(self._map_studio_pie_context_resource_revision),
+        )
+
+        def _build(source):
+            registry = build_pie_entity_registry(source, template_inspector=context.template_inspector)
+            source_path = str(
+                dict(getattr(source, "extra", {}) or {}).get("import_source")
+                or getattr(self.project, "path", "")
+                or ""
+            ).strip()
+            source_name = Path(source_path).name if source_path else "loaded KMAP"
+            return build_map_studio_pie_dialogue_catalog(
+                registry,
+                dialogue_loader=context.dialogue_loader,
+                game=context.game,
+                tlk_lookup=context.tlk_lookup,
+                dialogue_source_label=lambda resref: f"{source_name} / {resref}.dlg",
+            )
+
+        return self._map_studio_cached_authored_query(cache_key, _build)
+
+    def _map_studio_pie_condition_evaluator(self, settings: dict[str, Any]) -> MapStudioPIEDialogueContextEvaluator:
+        """Build the bounded PIE dialogue condition evaluator from context settings.
+
+        Shared by live PIE session construction and the compact panel's opening
+        line preview so both evaluate authored Active conditions identically.
+        """
+
+        local_booleans: dict[tuple[str, int], bool] = {}
+        for key, value in dict(settings.get("local_booleans") or {}).items():
+            owner, separator, index = str(key or "").rpartition(":")
+            if not separator or not owner:
+                continue
+            try:
+                local_booleans[(owner, int(index))] = bool(value)
+            except (TypeError, ValueError):
+                continue
+        return MapStudioPIEDialogueContextEvaluator(
+            player_role=str(settings.get("player_role") or "normal_pc"),
+            player_gender=str(settings.get("player_gender") or "male"),
+            global_numbers=dict(settings.get("global_numbers") or {}),
+            global_booleans=dict(settings.get("global_booleans") or {}),
+            local_booleans=local_booleans,
+        )
+
+    def map_studio_pie_dialogue_preview(self, resref: str, *, starter_link_id: str = "") -> dict[str, Any]:
+        """Resolve the opening NPC line a conversation shows under current PIE context.
+
+        Runs the identical production dialogue classes the live PIE runtime uses
+        (the same DLG loader, TLK, and ``MapStudioPIEDialogueContextEvaluator``),
+        so the compact PIE panel can display which authored line a conversation
+        opens with: canonical ``Auto (clean PIE state)`` selection, or a forced
+        preview-override starting link.  It never mutates persisted settings and
+        never raises for missing/undecodable resources.
+        """
+
+        clean_resref = str(resref or "").strip().lower()
+        result: dict[str, Any] = {
+            "resref": clean_resref,
+            "resolved": False,
+            "forced": False,
+            "starter_link_id": "",
+            "speaker_tag": "",
+            "text": "",
+            "blocked": False,
+            "warning": "",
+        }
+        if not clean_resref:
+            return result
+        context = self._map_studio_pie_resource_context()
+        loader = getattr(context, "dialogue_loader", None)
+        if not callable(loader):
+            result["warning"] = "No dialogue loader is available for the current project."
+            return result
+        try:
+            payload = loader(clean_resref)
+        except Exception as exc:  # resource IO must never crash the panel preview
+            result["warning"] = f"DLG {clean_resref} could not be read: {exc}"
+            return result
+        if not payload:
+            result["warning"] = f"DLG {clean_resref} was not found in the active {context.game} resources."
+            return result
+        payload = bytes(payload)
+        settings = self.map_studio_pie_context_settings()
+        forced_link = str(starter_link_id or "").strip().lower()
+        if not forced_link:
+            override = dict(settings.get("dialogue_start_overrides") or {}).get(clean_resref)
+            if isinstance(override, Mapping):
+                candidate = str(override.get("starter_link_id") or "").strip().lower()
+                expected_sha = str(override.get("resource_sha256") or "").strip().lower()
+                actual_sha = hashlib.sha256(payload).hexdigest()
+                if candidate and (not expected_sha or expected_sha == actual_sha):
+                    forced_link = candidate
+        try:
+            session = MapStudioPIEDialogueSession(
+                payload,
+                game=context.game,
+                resref=clean_resref,
+                owner_id="pie:preview",
+                listener_id="pie:player",
+                tlk_lookup=context.tlk_lookup,
+                condition_evaluator=self._map_studio_pie_condition_evaluator(settings),
+                starter_link_id=forced_link,
+                allow_unknown_starter_assumption=False,
+            )
+            snapshot = session.start()
+        except Exception as exc:  # malformed DLG must not crash the panel preview
+            result["warning"] = f"DLG {clean_resref} could not be previewed: {exc}"
+            return result
+        result["resolved"] = not bool(getattr(snapshot, "blocked", False))
+        result["forced"] = bool(forced_link)
+        result["starter_link_id"] = forced_link
+        result["speaker_tag"] = str(getattr(snapshot, "speaker_tag", "") or "")
+        result["text"] = str(getattr(snapshot, "text", "") or "")
+        result["blocked"] = bool(getattr(snapshot, "blocked", False))
+        if result["blocked"]:
+            warnings = tuple(getattr(snapshot, "warnings", ()) or ())
+            result["warning"] = str(warnings[-1]) if warnings else "Dialogue has no valid starting NPC entry."
+        return result
+
     def create_map_studio_pie_session(self, *, preview_model=None):
         """Build one read-only PIE session from the current authored snapshot.
 
@@ -4199,10 +4738,19 @@ class ModuleEditorController:
         combined_walkmesh = self._map_studio_cached_authored_query(
             ("pie_combined_walkmesh",), combine_authored_module_walkmesh
         )
+        context = self._map_studio_pie_resource_context()
+        settings = self.map_studio_pie_context_settings()
+        condition_evaluator = self._map_studio_pie_condition_evaluator(settings)
         return build_map_studio_pie_session(
             authored,
             preview_model=preview_model,
             combined_walkmesh=combined_walkmesh,
+            template_inspector=context.template_inspector,
+            dialogue_loader=context.dialogue_loader,
+            item_inspector=context.item_inspector,
+            tlk_lookup=context.tlk_lookup,
+            dialogue_condition_evaluator=condition_evaluator,
+            dialogue_start_overrides=dict(settings.get("dialogue_start_overrides") or {}),
         )
 
     def authored_room_primitive_transforms(self):

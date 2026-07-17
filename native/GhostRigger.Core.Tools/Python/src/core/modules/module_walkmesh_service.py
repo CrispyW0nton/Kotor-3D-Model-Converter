@@ -47,8 +47,17 @@ class ModuleWalkmeshService:
         return walkmesh_editor.validate_walkmesh(wok, room=room)
 
     def generate_walls(self, wok: Any) -> Any:
-        generator = _import_module_format().WalkmeshWallGenerator()
-        return generator.generate(wok)
+        """Keep the compatibility action non-destructive and floor-only.
+
+        Earlier builds appended vertical NON_WALK quads to the external WOK.
+        Retail KOTOR 2 proof showed that those slabs can seal the floor
+        perimeter and freeze movement.  Boundary walls now belong to viewport
+        helper/overlay metadata; the game-facing WOK is returned byte-for-byte
+        unchanged.  The method remains for older callers until the UI action is
+        renamed to boundary preview.
+        """
+
+        return wok
 
     def save_wok(self, wok: Any, path: str | Path) -> None:
         if hasattr(wok, "write_binary"):

@@ -770,7 +770,13 @@ def patch_preserved_stock_are_bytes(
         }
         patched_rooms = _empty_gff_list()
         for room_name in target_rooms:
-            room = existing_by_name.get(room_name) or candidate_by_name.get(room_name)
+            # GFFStruct implements collection-like truthiness, so a valid
+            # imported room struct may evaluate false and must not be selected
+            # with ``existing or generated``.  Preserve it by identity unless
+            # it is genuinely absent.
+            room = existing_by_name.get(room_name)
+            if room is None:
+                room = candidate_by_name.get(room_name)
             if room is not None:
                 patched_rooms.append(room)
         source.root.set_list("Rooms", patched_rooms)

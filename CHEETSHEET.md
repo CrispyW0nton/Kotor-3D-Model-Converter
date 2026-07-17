@@ -486,3 +486,51 @@ py -3.14 scripts/inject_animation.py --source-fbx "C:\Path\To\UnrealAnimation.fb
 Use `--game K2` with the KOTOR 2 installation for TSL targets. A successful
 headless readback is still not an in-game animation proof; trigger the exact
 written slot in the target game before shipping it.
+
+## K2 Manual Warp Candidate Staging
+
+The final K2 candidate per converted module (MOD/KMAP paths, hashes,
+visual-only room lists, and ready-made staging commands) lives in the derived
+overlay; never trust the older paths in the base `CONVERSION_STATUS.json`:
+
+```text
+C:\Users\NewAdmin\Documents\KotorMods\Modules\Converted\K2_CANDIDATE_OVERLAY.json
+```
+
+Regenerate the overlay after producing a new final candidate:
+
+```powershell
+py -3.14 scripts/build_k2_candidate_overlay.py
+```
+
+Stage exactly one candidate into the game (only while `swkotor2.exe` is NOT
+running). Repeat `--visual-only-room` for each explicitly verified visual
+partition, for example gra802:
+
+```powershell
+py -3.14 scripts/stage_k2_manual_warp_candidate.py --module-root gra802 --candidate "C:\Users\NewAdmin\Documents\KotorMods\Modules\Converted\WalkmeshAudit\GeneratedCandidates\GraCentralCollisionVerified\EndToEndK2Verified\gra802\K2\Modules\gra802.mod" --visual-only-room gra802_01b --visual-only-room gra802_01d
+```
+
+After the manual warp/traversal test, restore from the staging manifest the
+stage command printed:
+
+```powershell
+py -3.14 scripts/restore_k2_manual_warp_candidate.py --manifest "<staging_manifest.json>"
+```
+
+Rebuild a Gra area candidate through the binary MDL route (exact source node
+parity; MDLOps route remains available with `--compile-route mdlops`):
+
+```powershell
+py -3.14 scripts/package_gra_k2_candidates.py --area gra802 --compile-route binary --extra-texture-dir "C:\Users\NewAdmin\Documents\KotorMods\Modules\Q_SellOut\Extracted\NarShadda\NarShadda\Q_Textures" --collision-dir "C:\Users\NewAdmin\Documents\KotorMods\Modules\Converted\WalkmeshAudit\GeneratedCandidates\GraCentralCollisionVerified" --output-dir "C:\Users\NewAdmin\Documents\KotorMods\Modules\Converted\WalkmeshAudit\GeneratedCandidates\GraCentralCollisionVerified\EndToEndK2Verified"
+```
+
+Rebuild the honest RNV candidates (rnvcanyon partial, rnvcity full K2 rebuild):
+
+```powershell
+py -3.14 scripts/build_rnv_k2_full_candidates.py --module rnvcanyon
+py -3.14 scripts/build_rnv_k2_full_candidates.py --module rnvcity
+```
+
+Structural/parity acceptance is not retail proof: each staged module still
+needs the manual warp, movement, camera, transition, and save/reload pass.
