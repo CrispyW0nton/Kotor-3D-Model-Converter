@@ -63,7 +63,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_FBX_ANIMATION_SELECTION",
             "source_path": "src/core/animation/fbx_animation_selection.py",
             "packaged_path": "Python/src/core/animation/fbx_animation_selection.py",
-            "sha256": "4d10e961c40be8df530054bf69ace271d4cbc74f53bc14b3b67fd388b75a8490"
+            "sha256": "544ae6cb536cc6f5e4e5158cec7595c4d01338a5053484f6370e53584caa33f3"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_GPU_SKINNING",

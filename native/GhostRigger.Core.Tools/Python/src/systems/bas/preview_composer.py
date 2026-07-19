@@ -24,6 +24,32 @@ BAS_ATTACHMENT_SLOTS = (
 KOTOR_NODE_NAME_LIMIT = 32
 
 
+def bas_runtime_source_copy_memo(root: Any) -> dict[int, Any]:
+    """Keep BAS source models identity-stable while copying scene geometry.
+
+    A BAS layer stores both a runtime source-model reference and its ``id`` so
+    renderers can evaluate a matching local attachment pose.  Ordinary
+    ``deepcopy`` duplicates that referenced model but preserves the old numeric
+    ID, causing the copied scene layer to reject every head-local pose.  Source
+    models are resource/runtime owners rather than scene geometry, so scene
+    copies must retain those references by identity.
+    """
+
+    memo: dict[int, Any] = {}
+    stack = [root]
+    visited: set[int] = set()
+    while stack:
+        current = stack.pop()
+        if current is None or id(current) in visited:
+            continue
+        visited.add(id(current))
+        source_model = getattr(current, "_gr_bas_attachment_source_model_ref", None)
+        if source_model is not None:
+            memo[id(source_model)] = source_model
+        stack.extend(getattr(current, "children", []) or [])
+    return memo
+
+
 def reset_bas_model_node_traversal(model: Any) -> None:
     """Remove stale runtime traversal shims from a copied BAS preview model."""
     if model is None:
@@ -228,6 +254,29 @@ def prepare_bas_composed_export_model(
     duplicate_body_names: list[str] = []
 
     attachment_roots = {id(root): root for root in (_layer_root(node) for node in attachment_nodes) if root is not None}
+    # Some full-body/NPC MDLs carry a hidden copy of their compatible head's
+    # rigid inner geometry (eyes, lids, and teeth). Once BAS supplies the real
+    # head, exporting both copies creates the detached second face reported by
+    # Unity users. Preserve the body nodes as skeleton/bind nodes, but mark only
+    # their replaced hidden geometry for the FBX/OBJ writers to omit.
+    head_replacement_names = {
+        str(getattr(node, "name", "") or "").casefold()
+        for node in attachment_nodes
+        if str(
+            getattr(_layer_root(node), "_gr_bas_attachment_slot", "") or ""
+        ).casefold() == "head"
+        and bool(getattr(node, "vertices", None))
+    }
+    suppressed_body_geometry: list[str] = []
+    for node in body_nodes:
+        name = str(getattr(node, "name", "") or "")
+        if (
+            name.casefold() in head_replacement_names
+            and getattr(node, "render", True) is False
+            and bool(getattr(node, "vertices", None))
+        ):
+            setattr(node, "_gr_bas_geometry_replaced_by_attachment", True)
+            suppressed_body_geometry.append(name)
     scaled_layers: list[str] = []
     for root in attachment_roots.values():
         raw_scale = getattr(root, "scale", (1.0, 1.0, 1.0))
@@ -308,7 +357,14 @@ def prepare_bas_composed_export_model(
         used.add(replacement.lower())
         if root is not None:
             rename_by_layer.setdefault(id(root), {})[original_key] = replacement
-        renamed.append({"from": original, "to": replacement, "slot": slot or "attachment"})
+        renamed.append({
+            "from": original,
+            "to": replacement,
+            "slot": slot or "attachment",
+            "source_model": str(
+                getattr(root, "_gr_bas_attachment_source_model_name", "") or ""
+            ),
+        })
 
     for node in attachment_nodes:
         root = _layer_root(node)
@@ -318,10 +374,22 @@ def prepare_bas_composed_export_model(
             node.bone_map = [mapping.get(str(name or "").lower(), name) for name in bone_map]
 
     final_names = [str(getattr(node, "name", "") or "").lower() for node in nodes]
+    attachment_layers = []
+    for root in attachment_roots.values():
+        layer_key = id(root)
+        attachment_layers.append({
+            "slot": str(getattr(root, "_gr_bas_attachment_slot", "") or "attachment"),
+            "source_model": str(
+                getattr(root, "_gr_bas_attachment_source_model_name", "") or ""
+            ),
+            "renamed_nodes": dict(rename_by_layer.get(layer_key, {})),
+        })
     report = {
         "node_count": len(nodes),
         "renamed_count": len(renamed),
         "renamed": renamed,
+        "attachment_layers": attachment_layers,
+        "suppressed_body_geometry": suppressed_body_geometry,
         "duplicate_body_names": duplicate_body_names,
         "unique_names": len(final_names) == len(set(final_names)),
     }

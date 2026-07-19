@@ -1353,7 +1353,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_QT_FBX_ANIMATION_SELECTION_DIALOG",
             "source_path": "src/gui/dialogs/qt_fbx_animation_selection_dialog.py",
             "packaged_path": "Python/src/gui/dialogs/qt_fbx_animation_selection_dialog.py",
-            "sha256": "e96fa1ffa1f49a9e109223787f0bf01250a4206f30839dca3edeb72ace2e7bad"
+            "sha256": "a19bca5ce5a074a8707e6286d9680abb81e669fad97d601e0077112cbcebcc66"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_LIGHTING_INIT",
@@ -2271,7 +2271,7 @@
             "resource_name": "PYTHON_PAYLOAD_SYSTEMS_BAS_PREVIEW_COMPOSER",
             "source_path": "src/systems/bas/preview_composer.py",
             "packaged_path": "Python/src/systems/bas/preview_composer.py",
-            "sha256": "388531f848148a420c7b31718535c12816a00c06d8f68a1b0f260d092d53d32f"
+            "sha256": "8c4d05fd3fc968707e736d80481b9b86a0ea4133297fa55705aa834ccc1c85be"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_WORKBENCH_INIT",

@@ -234,6 +234,64 @@ def _supplemental_node_names(model: KotorModel) -> set[str]:
         return set()
 
 
+def _head_facial_node_names(model: KotorModel) -> set[str]:
+    """Return head-local controls below ``head_g``, excluding the socket bone.
+
+    A BAS head is already socketed to the animated body head. Replaying the
+    head supermodel's root/torso/neck tracks on its nested attachment hierarchy
+    would double-transform it. Facial controls and rigid inner geometry live
+    below ``head_g`` and are the only supplemental tracks the composed export
+    needs.
+    """
+    try:
+        nodes = list(model.all_nodes())
+    except Exception:
+        return set()
+    facial_names: set[str] = set()
+    for node in nodes:
+        if str(getattr(node, "name", "") or "").strip().casefold() != "head_g":
+            continue
+        pending = list(getattr(node, "children", None) or ())
+        visited: set[int] = set()
+        while pending:
+            child = pending.pop()
+            if id(child) in visited:
+                continue
+            visited.add(id(child))
+            name = str(getattr(child, "name", "") or "").strip().casefold()
+            if name:
+                facial_names.add(name)
+            pending.extend(getattr(child, "children", None) or ())
+    return facial_names
+
+
+def _bas_supplemental_animation_contexts(
+    primary_model: KotorModel,
+    supplemental_model: KotorModel,
+) -> tuple[tuple[str, Dict[str, str]], ...]:
+    """Resolve BAS slot-specific node renames for one supplemental source."""
+    report = getattr(primary_model, "_gr_bas_export_report", None)
+    if not isinstance(report, dict):
+        return ()
+    source_name = _model_name(supplemental_model).casefold()
+    contexts: list[tuple[str, Dict[str, str]]] = []
+    for layer in report.get("attachment_layers", ()) or ():
+        if not isinstance(layer, dict):
+            continue
+        layer_source = str(layer.get("source_model", "") or "").strip().casefold()
+        if source_name and layer_source != source_name:
+            continue
+        slot = str(layer.get("slot", "") or "attachment").strip().casefold()
+        raw_mapping = layer.get("renamed_nodes", {}) or {}
+        mapping = {
+            str(old_name or "").strip().casefold(): str(new_name or "").strip()
+            for old_name, new_name in raw_mapping.items()
+            if str(old_name or "").strip() and str(new_name or "").strip()
+        }
+        contexts.append((slot, mapping))
+    return tuple(contexts)
+
+
 def _primary_owned_node_names(model: KotorModel) -> set[str]:
     """Return body-owned names, excluding tagged BAS attachment subtrees."""
     try:
@@ -260,6 +318,7 @@ def _filtered_supplemental_animation(
     allowed_node_names: set[str],
     cumulative_scale: float,
     *,
+    node_name_map: Optional[Dict[str, str]] = None,
     allow_empty: bool = False,
 ) -> Optional[Animation]:
     """Copy one head/accessory clip, retaining only attachment-owned tracks."""
@@ -269,6 +328,11 @@ def _filtered_supplemental_animation(
         nodes = [node for node in nodes if _animation_node_key(node) in allowed_node_names]
     if not nodes and not allow_empty:
         return None
+    if node_name_map:
+        for node in nodes:
+            replacement = node_name_map.get(_animation_node_key(node))
+            if replacement:
+                node.name = replacement
     filtered.nodes = nodes
     _bake_position_scale(filtered, cumulative_scale)
     return filtered
@@ -340,58 +404,72 @@ def _collect_animation_candidates(
     # stores zero clips locally and inherits its jaw/eye tracks. Resolve that
     # chain, then keep only controller nodes present in the attachment's own
     # hierarchy so its supermodel cannot inject competing body locomotion.
+    processed_bas_contexts: set[tuple[str, str]] = set()
     for supplemental_model in supplemental_models or ():
         if supplemental_model is None:
             continue
         supplemental_name = _model_name(supplemental_model, _model_name(model))
-        allowed_node_names = _supplemental_node_names(supplemental_model)
-        for name, source_name, cumulative_scale in SuperModelResolver.list_all_animations(
-            supplemental_model,
-            game,
-        ):
-            animation, resolved_scale = SuperModelResolver.resolve_animation(
+        bas_contexts = _bas_supplemental_animation_contexts(model, supplemental_model)
+        contexts = bas_contexts or (("", {}),)
+        for slot, node_name_map in contexts:
+            context_key = (supplemental_name.casefold(), slot)
+            if bas_contexts and context_key in processed_bas_contexts:
+                continue
+            if bas_contexts:
+                processed_bas_contexts.add(context_key)
+            allowed_node_names = _supplemental_node_names(supplemental_model)
+            if slot == "head":
+                facial_names = _head_facial_node_names(supplemental_model)
+                if facial_names:
+                    allowed_node_names = facial_names
+            for name, source_name, cumulative_scale in SuperModelResolver.list_all_animations(
                 supplemental_model,
-                name,
                 game,
-            )
-            if animation is None:
-                continue
-            filtered_animation = _filtered_supplemental_animation(
-                animation,
-                allowed_node_names,
-                _safe_float(resolved_scale, cumulative_scale),
-                allow_empty=(source_name.casefold() == supplemental_name.casefold()),
-            )
-            if filtered_animation is None:
-                continue
-            name = str(getattr(filtered_animation, "name", "") or name or "").strip()
-            key = name.casefold()
-            if not key:
-                continue
-            existing = candidates.get(key)
-            if existing is not None:
-                candidates[key] = _with_supplemental_animation(
-                    existing,
-                    supplemental_name,
-                    filtered_animation,
+            ):
+                animation, resolved_scale = SuperModelResolver.resolve_animation(
+                    supplemental_model,
+                    name,
+                    game,
                 )
-                continue
-            row = _row_for(
-                filtered_animation,
-                source_model_name=source_name,
-                source_scope=(
-                    "supplemental"
-                    if source_name.casefold() == supplemental_name.casefold()
-                    else "supplemental_inherited"
-                ),
-                cumulative_scale=_safe_float(resolved_scale, cumulative_scale),
-            )
-            # The cumulative scale is already baked into the filtered copy.
-            candidates[key] = _AnimationCandidate(
-                row=row,
-                animation=filtered_animation,
-                animation_scale_baked=True,
-            )
+                if animation is None:
+                    continue
+                filtered_animation = _filtered_supplemental_animation(
+                    animation,
+                    allowed_node_names,
+                    _safe_float(resolved_scale, cumulative_scale),
+                    node_name_map=node_name_map,
+                    allow_empty=(source_name.casefold() == supplemental_name.casefold()),
+                )
+                if filtered_animation is None:
+                    continue
+                name = str(getattr(filtered_animation, "name", "") or name or "").strip()
+                key = name.casefold()
+                if not key:
+                    continue
+                existing = candidates.get(key)
+                if existing is not None:
+                    candidates[key] = _with_supplemental_animation(
+                        existing,
+                        supplemental_name,
+                        filtered_animation,
+                    )
+                    continue
+                row = _row_for(
+                    filtered_animation,
+                    source_model_name=source_name,
+                    source_scope=(
+                        "supplemental"
+                        if source_name.casefold() == supplemental_name.casefold()
+                        else "supplemental_inherited"
+                    ),
+                    cumulative_scale=_safe_float(resolved_scale, cumulative_scale),
+                )
+                # The cumulative scale is already baked into the filtered copy.
+                candidates[key] = _AnimationCandidate(
+                    row=row,
+                    animation=filtered_animation,
+                    animation_scale_baked=True,
+                )
 
     return candidates
 

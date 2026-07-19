@@ -169,7 +169,9 @@ class QtFbxAnimationSelectionDialog(QtWidgets.QDialog):
 
         self._select_all_button = QtWidgets.QPushButton("Select All")
         self._select_all_button.setObjectName("fbxAnimationSelectAllButton")
-        self._select_all_button.setToolTip("Check every animation in the resolved catalog.")
+        self._select_all_button.setToolTip(
+            "Check every animation visible under the current filter and clear hidden rows."
+        )
         selection_row.addWidget(self._select_all_button)
 
         self._select_none_button = QtWidgets.QPushButton("Clear")
@@ -253,7 +255,10 @@ class QtFbxAnimationSelectionDialog(QtWidgets.QDialog):
 
     @QtCore.Slot()
     def _select_all(self) -> None:
-        self._set_checked(lambda _item: True)
+        # Filtering is an export-selection tool, not merely a visual search.
+        # Clear hidden rows so a user can filter to one supermodel/source and
+        # export exactly that visible subset with a single click.
+        self._set_checked(lambda item: not item.isHidden())
 
     @QtCore.Slot()
     def _select_none(self) -> None:

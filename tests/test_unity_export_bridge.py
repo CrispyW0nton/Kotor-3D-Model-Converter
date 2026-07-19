@@ -1,6 +1,7 @@
 import asyncio
 import json
 import math
+import os
 import re
 import shutil
 import sys
@@ -1691,6 +1692,36 @@ def test_character_export_dialog_exposes_unreal_profile_and_animation_selector_c
     assert '"qt_fbx_animation_selection_dialog"' in qt_lib.read_text(encoding="utf-8")
     assert export_gui.read_bytes() == export_tools.read_bytes()
     assert selector_gui.read_bytes() == selector_tools.read_bytes()
+
+
+def test_fbx_animation_select_all_checks_only_rows_visible_under_filter():
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6 import QtWidgets
+
+    from src.gui.qt_lib.dialogs.qt_fbx_animation_selection_dialog import (
+        QtFbxAnimationSelectionDialog,
+    )
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    dialog = QtFbxAnimationSelectionDialog(
+        (
+            {"name": "walk", "source_model_name": "S_Male02", "scope": "inherited"},
+            {"name": "run", "source_model_name": "S_Male02", "scope": "inherited"},
+            {"name": "blink", "source_model_name": "P_CarthH", "scope": "supplemental"},
+        ),
+        profile="unity",
+        initial_selected_names=("blink",),
+    )
+
+    dialog._search_edit.setText("s_male02")
+    app.processEvents()
+    dialog._select_all()
+
+    assert dialog.selected_animation_names() == ("walk", "run")
+    assert dialog._tree.topLevelItem(0).isHidden() is False
+    assert dialog._tree.topLevelItem(1).isHidden() is False
+    assert dialog._tree.topLevelItem(2).isHidden() is True
+    dialog.close()
 
 
 def test_character_builder_routes_selected_fbx_animation_sets_in_both_payloads():

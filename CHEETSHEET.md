@@ -88,6 +88,16 @@ python scripts/export_kotor_model_for_unity.py --game k1 --game-dir "C:\Games\KO
 Use `--no-animations` instead to export only the mesh and rig. Omitting both
 options preserves the model's existing local animation blocks.
 
+Re-run the exact Peragus main-viewport head-follow proof, the Carth/Darth
+Bandon attached-head facial export and Unity import proof, or the real
+main-window filtered `Select All` dialog proof:
+
+```powershell
+py -3.14 scripts/capture_peragus_main_viewport_bas_proof.py
+py -3.14 scripts/capture_carth_bandon_unity_fbx_proof.py
+py -3.14 scripts/capture_fbx_animation_filter_proof.py
+```
+
 Export the same selected takes with the Unreal Engine compatibility profile
 through the embedded KotorMCP bridge:
 

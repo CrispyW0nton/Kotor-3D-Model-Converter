@@ -9,6 +9,100 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-07-19
+
+### [2026-07-19] T2404/T2505/T3506: preserve attached-head facial animation in Unity FBX exports
+
+Owner: LordVaderCW
+
+T###: T2404, T2505, T3506
+
+Subsystem: BAS DCC composition, FBX animation selection/materialization, facial
+geometry export, and the shared FBX animation-selection dialog
+(Core.Tools/Core.Workflow/Core.IO/Core.GUI.Display).
+
+- Fixed BAS DCC export composition so hidden rigid face geometry embedded in a
+  full body (eyes, eyelids, and teeth) is omitted when the selected head
+  supplies its same-name replacement. The nodes remain available for hierarchy
+  and bind references, avoiding destructive changes to the native DAG.
+- Preserved facial animation after collision-safe attachment renaming by
+  mapping only the attached head's descendants below `head_g` into their final
+  export names. Structural root/torso/neck/head tracks are deliberately not
+  duplicated beneath `headhook`, preventing double transforms.
+- Fixed `Select All` in the FBX animation dialog to check only rows visible
+  under the current supermodel/text filter and clear hidden rows.
+- Added reusable exact-model proof scripts for Carth (`P_CarthBB` +
+  `P_CarthH`) and Darth Bandon (`N_DarthBand` + `darthband_h`) in Unity, plus
+  an actual main-window dialog proof for filtered animation selection.
+
+Affected files: Core.Tools `systems/bas/preview_composer.py` and dialog payload,
+Core.Workflow `core/animation/fbx_animation_selection.py`, Core.IO
+`converters/mesh_converter.py`, Core.GUI.Display dialog payload,
+`tests/test_bas_composed_export.py`, `tests/test_unity_export_bridge.py`, proof
+scripts, and regenerated native payload metadata/resources.
+
+Verification:
+
+- Focused BAS composition, inherited/local animation materialization, rigid
+  facial mesh, Unity FBX, and dialog checks passed; Python compilation passed
+  for all changed runtime and proof files. Every payload row changed by this
+  fix matches its packaged file hash, and the mirrored dialogs are byte-exact.
+- Unity 2022.3.62f1 imported and sampled exact `tlknorm` exports for Carth and
+  Darth Bandon. Both had 96 facial curve bindings, six attached eyes/lids/teeth
+  renderers, zero unattached duplicate face renderers, measurable facial motion
+  (16.078 degrees maximum rotation), and passed bind/animated image capture.
+- The actual Ghost Studio main-window FBX selector filtered to `S_Male02`, then
+  `Select All` selected only the two visible clips (`tlknorm`, `walk`) and left
+  no hidden clip checked.
+- Core.Tools, Core.Workflow, Core.IO, and Core.GUI.Display rebuilt in Debug x64;
+  the full Debug x64 host then rebuilt and staged `GhostStudio.exe` plus all 18
+  manifest-owned native payload DLLs successfully.
+- On the clean publishing integration, the full repository-wide payload test
+  remains blocked later in the manifest by pre-existing Scene/Validation
+  source-copy drift on `ghost-studio`; this fix does not publish those unrelated
+  source differences.
+
+### [2026-07-19] T1210/T2505/T3506: keep attached heads animated in KMAX main-viewport scenes
+
+Owner: LordVaderCW
+
+T###: T1210, T2505, T3506
+
+Subsystem: Body Attachment System scene composition, main-viewport animation,
+and Peragus uniform visual proof (Core.Tools/Core.GUI.Display).
+
+- Fixed the main viewport's KMAX scene-composite copy so detachable BAS layers
+  retain their original runtime source-model reference. A normal deep copy had
+  cloned the attached head model but preserved its old numeric source ID; the
+  renderer therefore rejected every generated head-local pose while the body
+  and `headhook` continued animating, leaving the head floating at bind height.
+- Added a focused regression that copies a BAS head through the KMAX scene path,
+  proves the source reference/ID remain identical, and verifies an inherited
+  `b11a3` head-local pose keeps the body pose as its animated socket.
+- Added a reusable actual-main-window proof for PFBC09/PFHC01 and
+  PMBC09/PMHC01 on the ModernGL backend. It captures requested side views and
+  records exact animated `headhook`/head-root world-coordinate parity without
+  writing to KOTOR 2's Override directory.
+
+Affected files: Core.Tools `systems/bas/preview_composer.py`, Core.GUI.Display
+`viewport_core/widgets/scene_models.py`, `tests/test_core_contracts.py`, and
+`scripts/capture_peragus_main_viewport_bas_proof.py`.
+
+Verification:
+
+- MCP-backed stock baseline `compare_model_pipelines(K2, PFBCM)` matched all 76
+  nodes with no missing, extra, or discrepant nodes.
+- Focused KMAX/BAS source-identity and head-pose regression passed.
+- Actual Ghost Studio main-window ModernGL proof passed for both custom bodies
+  with inherited K2 `b11a3`: head root equaled animated `headhook` exactly
+  (`0.0 m` maximum error), head-local source IDs matched, and the generated
+  head pose retained the live body pose as its socket. Side-view screenshots
+  and JSON evidence are under the Peragus proof artifact's `VisualProof`
+  directory; `override_modified` is `false`.
+- The focused Core.Tools and Core.GUI.Display Debug x64 projects rebuilt, then
+  the full Debug x64 native host rebuilt in one process and staged the updated
+  `GhostStudio.exe` plus all 18 payload DLLs successfully.
+
 ## 2026-07-17
 
 ### [2026-07-17] T3101: 921srt walkmesh repair — room WOK coordinate-space fix plus reviewed regeneration tooling

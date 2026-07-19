@@ -3904,7 +3904,8 @@ def test_scene_root_transform_evicts_child_gpu_nodes() -> None:
 
 def test_kmax_scene_composite_keeps_bas_layers_out_of_body_dfs_indices() -> None:
     from src.core.animation.gpu_skinning import MatrixPaletteUploader
-    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.geometry.model_data import Animation, KotorModel, ModelNode, NodeFlags
+    from src.core.rendering.mesh_render_data import _effective_animation_pose_for_node
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
@@ -3926,7 +3927,11 @@ def test_kmax_scene_composite_keeps_bas_layers_out_of_body_dfs_indices() -> None
         parent=head_root,
     )
     head_root.children.append(head_mesh)
-    head = KotorModel(name="pmha01", root_node=head_root)
+    head = KotorModel(
+        name="pmha01",
+        root_node=head_root,
+        animations=[Animation(name="b11a3", length=1.0)],
+    )
 
     window = SimpleNamespace()
     window._find_model_node = MethodType(QtGhostRiggerMainWindow._find_model_node, window)
@@ -3966,6 +3971,26 @@ def test_kmax_scene_composite_keeps_bas_layers_out_of_body_dfs_indices() -> None
     assert getattr(placed_nodes["headhook"], "_gr_source_dfs_index") == 2
     assert getattr(placed_nodes["rhand"], "_gr_source_dfs_index") == 3
     assert getattr(placed_nodes["torso"], "_gr_source_dfs_index") == 4
+
+    placed_head_root = next(
+        node
+        for node in placed_root_nodes
+        if bool(getattr(node, "_gr_bas_attachment_root", False))
+    )
+    assert placed_head_root._gr_bas_attachment_source_model_ref is head
+    assert placed_head_root._gr_bas_attachment_source_model_id == id(head)
+
+    body_pose = SimpleNamespace(
+        nodes={},
+        time=0.5,
+        _gr_animation_source_model_id=id(body),
+        _gr_animation_source_model_name=body.name,
+        _gr_animation_name="b11a3",
+    )
+    placed_head_pose = _effective_animation_pose_for_node(placed_head_root, body_pose)
+    assert placed_head_pose is not None
+    assert placed_head_pose._gr_animation_source_model_id == id(head)
+    assert placed_head_pose._gr_bas_socket_pose is body_pose
 
     uploader = MatrixPaletteUploader(max_bones=8)
     uploader.build_inverse_bind_pose(composite)

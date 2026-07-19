@@ -33,7 +33,7 @@
             "resource_name": "PYTHON_PAYLOAD_CONVERTERS_MESH_CONVERTER",
             "source_path": "src/converters/mesh_converter.py",
             "packaged_path": "Python/src/converters/mesh_converter.py",
-            "sha256": "72e4149e4504ec2e1c1ce5f23c06c5da72a8730cd9cb76c7bb88fce0950664e7"
+            "sha256": "a1e21bfd99ccf0ef99e02d5aad6aa8af5d0e2285f71469e46d15eab737cb0cb5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CONVERTERS_NORMAL_MAP",

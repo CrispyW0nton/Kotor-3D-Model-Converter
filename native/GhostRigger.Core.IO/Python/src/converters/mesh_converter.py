@@ -632,6 +632,8 @@ class OBJExporter:
           3. Not a deformation helper.
           4. Not an emitter or light node.
         """
+        if bool(getattr(node, '_gr_bas_geometry_replaced_by_attachment', False)):
+            return False
         if not getattr(node, 'vertices', None):
             return False
         # Facial geometry nodes bypass the render=False gate entirely

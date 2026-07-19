@@ -11,6 +11,8 @@ try:
 except Exception:  # pragma: no cover - compatibility for direct package execution
     from core.scene.node_identity import classify_scene_model, classify_scene_node  # type: ignore
 
+from src.systems.bas.preview_composer import bas_runtime_source_copy_memo
+
 
 class ViewportSceneModelMixin:
     def load_model(
@@ -238,7 +240,7 @@ class ViewportSceneModelMixin:
             first_model = first_model or runtime_model
             prebuilt_mesh_count += int(getattr(runtime_model, "_gr_gpu_prebuilt_mesh_count", 0) or 0)
             try:
-                node = copy.deepcopy(model_root)
+                node = copy.deepcopy(model_root, bas_runtime_source_copy_memo(model_root))
             except Exception:
                 node = model_root.clone_shallow()
                 node.children = []

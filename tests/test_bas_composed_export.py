@@ -255,6 +255,119 @@ def test_composed_export_normalizes_duplicate_attachment_nodes_and_bone_maps() -
     assert right_skin.bone_map == ["weapon_root__right_weapon"]
 
 
+def test_composed_head_export_replaces_hidden_body_face_and_remaps_facial_tracks(
+    tmp_path,
+) -> None:
+    _configure_native_python_roots()
+    from src.converters.mesh_converter import FBXExporter, OBJExporter
+    from src.core.animation.fbx_animation_selection import (
+        prepare_fbx_animation_export_model,
+    )
+    from src.core.geometry import model_data as md
+    from src.systems.bas.preview_composer import (
+        build_bas_preview_model,
+        prepare_bas_composed_export_model,
+    )
+
+    body = _body_with_headhook()
+    body_head = md.ModelNode(name="head_g", flags=int(md.NodeFlags.HEADER), parent=body.root_node)
+    body_jaw = md.ModelNode(name="f_jaw_g", flags=int(md.NodeFlags.HEADER), parent=body_head)
+    body_eye = md.ModelNode(
+        name="eyeLA",
+        flags=int(md.NodeFlags.HEADER) | int(md.NodeFlags.MESH),
+        parent=body_head,
+        render=False,
+        vertices=[(0.0, 0.0, 0.0), (0.1, 0.0, 0.0), (0.0, 0.1, 0.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+        faces=[(0, 1, 2)],
+        texture="hidden_body_eye",
+    )
+    body.root_node.children.append(body_head)
+    body_head.children.extend([body_jaw, body_eye])
+    body.animations = [
+        md.Animation(
+            name="talk",
+            length=1.0,
+            nodes=[md.ModelNode(name="headhook")],
+        )
+    ]
+
+    head_root = md.ModelNode(name="head_source", flags=int(md.NodeFlags.HEADER))
+    head_bone = md.ModelNode(name="head_g", flags=int(md.NodeFlags.HEADER), parent=head_root)
+    head_jaw = md.ModelNode(name="f_jaw_g", flags=int(md.NodeFlags.HEADER), parent=head_bone)
+    head_eye = md.ModelNode(
+        name="eyeLA",
+        flags=int(md.NodeFlags.HEADER) | int(md.NodeFlags.MESH),
+        parent=head_bone,
+        # Several stock KotOR heads mark valid eye/teeth meshes render=0.  The
+        # exporter intentionally recognizes those facial meshes by their data
+        # and name, so they must still replace the body's hidden duplicate.
+        render=False,
+        vertices=[(0.0, 0.0, 0.0), (0.1, 0.0, 0.0), (0.0, 0.1, 0.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)],
+        faces=[(0, 1, 2)],
+        texture="visible_head_eye",
+    )
+    head_root.children.append(head_bone)
+    head_bone.children.extend([head_jaw, head_eye])
+    head = md.KotorModel(name="head_source", root_node=head_root)
+    head.animations = [
+        md.Animation(
+            name="talk",
+            length=1.0,
+            nodes=[
+                md.ModelNode(name="head_g"),
+                md.ModelNode(name="f_jaw_g"),
+                md.ModelNode(name="eyeLA"),
+            ],
+        )
+    ]
+
+    preview = build_bas_preview_model(
+        body_model=body,
+        attachment_models={"head": head},
+    )
+    composed, report = prepare_bas_composed_export_model(
+        preview,
+        require_unique_body_names=True,
+    )
+    prepared = prepare_fbx_animation_export_model(
+        composed,
+        ("talk",),
+        game="K1",
+        supplemental_models=(head,),
+    )
+
+    assert report["suppressed_body_geometry"] == ["eyeLA"]
+    head_layer = next(row for row in report["attachment_layers"] if row["slot"] == "head")
+    assert head_layer["source_model"] == "head_source"
+    assert head_layer["renamed_nodes"]["f_jaw_g"] == "f_jaw_g__head"
+    assert head_layer["renamed_nodes"]["eyela"] == "eyeLA__head"
+    track_names = [node.name for node in prepared.animations[0].nodes]
+    assert track_names == ["headhook", "f_jaw_g__head", "eyeLA__head"]
+    assert "head_g__head" not in track_names
+
+    hidden_eye = next(
+        node for node in prepared.all_nodes()
+        if node.name == "eyeLA" and not bool(getattr(node, "_gr_bas_attachment_layer", False))
+    )
+    attached_eye = next(node for node in prepared.all_nodes() if node.name == "eyeLA__head")
+    assert OBJExporter._is_renderable(hidden_eye) is False
+    assert OBJExporter._is_renderable(attached_eye) is True
+
+    output = tmp_path / "facial_replacement.fbx"
+    assert FBXExporter()._export_fbx_ascii(
+        prepared,
+        str(output),
+        compatibility_profile="unity",
+    )
+    text = output.read_text(encoding="utf-8")
+    assert '"Geometry::eyeLA__head", "Mesh"' in text
+    assert '"Geometry::eyeLA", "Mesh"' not in text
+
+
 def test_all_attachable_bas_slots_export_in_one_unity_fbx(tmp_path) -> None:
     _configure_native_python_roots()
     from src.converters.mesh_converter import FBXExporter
