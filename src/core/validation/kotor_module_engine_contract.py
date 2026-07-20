@@ -1164,6 +1164,25 @@ def inspect_raw_wok_structure(
                 },
             )
 
+    if edge_rows and expected_boundary_ids:
+        serialized_boundary_ids = [edge_id for edge_id, _transition in edge_rows]
+        duplicate_boundary_count = len(serialized_boundary_ids) - len(set(serialized_boundary_ids))
+        missing_boundary_ids = expected_boundary_ids - set(serialized_boundary_ids)
+        extra_boundary_ids = set(serialized_boundary_ids) - expected_boundary_ids
+        if duplicate_boundary_count or missing_boundary_ids or extra_boundary_ids:
+            _add_issue(
+                report,
+                ValidationSeverity.BLOCKING,
+                "map.engine.wok.boundary_edge_table_mismatch",
+                f"{resource} boundary edge table disagrees with its raw-index adjacency boundary.",
+                resource=resource,
+                details={
+                    "duplicate_edge_rows": duplicate_boundary_count,
+                    "missing_edge_rows": len(missing_boundary_ids),
+                    "extra_edge_rows": len(extra_boundary_ids),
+                },
+            )
+
     closed_perimeters = 0
     endpoints: list[int] = []
     if perimeter_count <= 0 and not visual_collision_only:
