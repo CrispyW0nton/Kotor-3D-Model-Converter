@@ -14,6 +14,7 @@ def test_custom_project_defaults_to_the_independent_builder_mode() -> None:
         BUILDER_MODE_CUSTOM_RIGGED,
         CUSTOM_RIGGED_WORKFLOW_STEPS,
         CustomRiggedCharacterProject,
+        MaterialAssignment,
     )
 
     project = CustomRiggedCharacterProject(creature_name="Borhek", resource_name="kpm_borhek")
@@ -23,6 +24,8 @@ def test_custom_project_defaults_to_the_independent_builder_mode() -> None:
     assert tuple(project.workflow_steps) == CUSTOM_RIGGED_WORKFLOW_STEPS
     assert project.animation_mappings == []
     assert project.target_game == "K2"
+    assert MaterialAssignment().flip_vertical_for_kotor is True
+    assert MaterialAssignment.from_dict({}).flip_vertical_for_kotor is True
 
 
 def test_character_builder_entry_offers_native_and_custom_cards() -> None:
@@ -121,6 +124,8 @@ def test_custom_ui_uses_real_previews_and_reversible_install_services() -> None:
     assert "Automatic KOTOR height correction" in window_source
     assert "Replace the creature already at the requested test spot" in window_source
     assert "keeps every other module resource and placement" in window_source
+    assert "Orient imported image for KOTOR (recommended)" in window_source
+    assert "Ghost Studio adds the standard KOTOR settings automatically" in window_source
     assert "CustomRiggedCharacterPackagingService" in controller_source
     assert "confirmed_preview_id=preview.preview_id" in controller_source
     assert "set_animation_pose" in controller_source

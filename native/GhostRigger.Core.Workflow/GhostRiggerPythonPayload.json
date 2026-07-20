@@ -423,7 +423,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CUSTOM_RIGGED_CHARACTER_PACKAGING_SERVICE",
             "source_path": "src/core/characters/custom_rigged_character_packaging_service.py",
             "packaged_path": "Python/src/core/characters/custom_rigged_character_packaging_service.py",
-            "sha256": "d536957e26c47d59a6021f2508e927d4b55a793110b052481e6769aa1f14eed7"
+            "sha256": "a1e7abceebbd9a164a6b5228c9451a53f934b11dd36c1ab342ba9da052ce98c3"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEAD_WORKFLOW",

@@ -1863,7 +1863,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_CUSTOM_RIGGED_CHARACTER_BUILDER_WINDOW",
             "source_path": "src/gui/windows/qt_custom_rigged_character_builder_window.py",
             "packaged_path": "Python/src/gui/windows/qt_custom_rigged_character_builder_window.py",
-            "sha256": "d4651752fd48223bf7049f5eadf0b728eaea588810bb5c18e316794c67b5658c"
+            "sha256": "cf104352b21d8c128054fdb4ad0afc5eef5551a212dfba25f0ae2e25c33d7c2e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_GUI_EDITOR_WINDOW",

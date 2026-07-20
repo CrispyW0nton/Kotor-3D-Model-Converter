@@ -583,21 +583,35 @@ class CustomRiggedCharacterPackagingService:
         if not resref or len(resref) > 16:
             raise ValueError(f"Texture resource name is not KOTOR-safe: {resref!r}")
         output_format = str(assignment.output_format or "TGA").upper()
+        authored_txi = str(assignment.txi or "").strip()
+        if authored_txi:
+            txi_text = authored_txi
+            txi_source = "authored"
+        elif str(assignment.alpha_mode or "").casefold() == "cutout":
+            txi_text = "blending punchthrough\nalphatest 0.5"
+            txi_source = "generated_cutout"
+        else:
+            txi_text = ""
+            txi_source = "none"
         outputs: list[Path] = []
         width = height = 0
         has_alpha = False
+        vertical_flip_applied = False
         if source.suffix.casefold() == ".tpc" and output_format == "TPC":
             output = destination / f"{resref}.tpc"
             _write_atomic(output, source.read_bytes())
             outputs.append(output)
         else:
-            from PIL import Image
+            from PIL import Image, ImageOps
 
             with Image.open(source) as opened:
                 opened.load()
                 width, height = opened.size
                 has_alpha = "A" in opened.getbands() and opened.getchannel("A").getextrema()[0] < 255
                 image = opened.convert("RGBA" if has_alpha or assignment.alpha_mode != "opaque" else "RGB")
+                if assignment.flip_vertical_for_kotor:
+                    image = ImageOps.flip(image)
+                    vertical_flip_applied = True
                 buffer = BytesIO()
                 image.save(buffer, format="TGA", compression=None)
                 tga_bytes = buffer.getvalue()
@@ -612,14 +626,13 @@ class CustomRiggedCharacterPackagingService:
                 output = destination / f"{resref}.tpc"
                 _write_atomic(temporary_tga, tga_bytes)
                 try:
-                    if not tga_to_tpc(str(temporary_tga), str(output), assignment.txi, mipmaps=True):
+                    if not tga_to_tpc(str(temporary_tga), str(output), txi_text, mipmaps=True):
                         raise ValueError(f"Could not convert {source.name} to TPC.")
                 finally:
                     temporary_tga.unlink(missing_ok=True)
                 outputs.append(output)
             else:
                 raise ValueError(f"Unsupported KOTOR texture output format: {output_format}")
-        txi_text = str(assignment.txi or "").strip()
         if output_format == "TGA" and txi_text:
             txi_path = destination / f"{resref}.txi"
             _write_atomic(txi_path, (txi_text.rstrip() + "\n").encode("ascii", "strict"))
@@ -635,7 +648,10 @@ class CustomRiggedCharacterPackagingService:
             "dimensions": [width, height],
             "has_alpha": has_alpha,
             "wrap_mode": assignment.wrap_mode,
-            "txi_preserved": bool(txi_text),
+            "vertical_flip_applied": vertical_flip_applied,
+            "txi_preserved": bool(authored_txi),
+            "txi_generated": txi_source == "generated_cutout",
+            "txi_source": txi_source,
         }, outputs)
 
     def _appearance_patch(self, project: CustomRiggedCharacterProject) -> dict[str, Any]:

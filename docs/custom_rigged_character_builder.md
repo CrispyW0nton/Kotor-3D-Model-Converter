@@ -40,8 +40,13 @@ while matching the root layout used by working custom creatures.
   speed, retiming, loop, root-motion, and sampling decisions. A different
   source skeleton is blocked until an explicit retarget mapping is reviewed.
 - **Materials, textures, and UVs** shows the source image, KOTOR approximation,
-  and UV checker. It preserves repeated UVs, performs one DCC-to-KOTOR V
-  conversion, and writes TGA/TPC/TXI copies only inside the build package.
+  and UV checker. **Orient imported image for KOTOR (recommended)** performs
+  the one DCC-to-Odyssey row conversion needed by imported images and shows the
+  result before building; turn it off only for an image already authored in
+  KOTOR orientation. Choosing **Cutout / punch-through** automatically adds the
+  standard KOTOR edge-transparency settings, while Advanced TXI text remains an
+  explicit override. Repeated UVs are preserved, and TGA/TPC/TXI copies are
+  written only inside the build package.
 
 ## Give the creature game behavior
 

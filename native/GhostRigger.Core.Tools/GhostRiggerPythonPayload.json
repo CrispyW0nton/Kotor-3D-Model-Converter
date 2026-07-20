@@ -834,12 +834,6 @@
             "sha256": "eb9b56a2ce7c3b42e9cac9008d904e44c5816a766404521c24e05d41d7bb8c34"
         },
         {
-            "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE_DIALOGUE",
-            "source_path": "src/core/modules/map_studio_pie_dialogue.py",
-            "packaged_path": "Python/src/core/modules/map_studio_pie_dialogue.py",
-            "sha256": "90bf32279c83539d6689fde1774561a009080d9f8768f77963966b1e4d8494f3"
-        },
-        {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE_DOORS",
             "source_path": "src/core/modules/map_studio_pie_doors.py",
             "packaged_path": "Python/src/core/modules/map_studio_pie_doors.py",
@@ -904,12 +898,6 @@
             "source_path": "src/core/modules/map_studio_pie_triggers.py",
             "packaged_path": "Python/src/core/modules/map_studio_pie_triggers.py",
             "sha256": "25edfa2251e583cbc2c1654055d99b24962507c33cbfefe09aa745007be66a19"
-        },
-        {
-            "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE_RESOURCES",
-            "source_path": "src/core/modules/map_studio_pie_resources.py",
-            "packaged_path": "Python/src/core/modules/map_studio_pie_resources.py",
-            "sha256": "c36e7233c0a96cd5ab137f5ec570b14b0df4c61601fc9b7ab669407fc83f78f3"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_ROOM_CATALOG",

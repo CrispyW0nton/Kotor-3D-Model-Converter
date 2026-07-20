@@ -4,7 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from src.core.characters.custom_rigged_character_packaging_service import (
     APPEARANCE_ROW_TOKEN,
@@ -61,7 +61,12 @@ def _project(tmp_path: Path) -> tuple[CustomRiggedCharacterProject, Path, Path]:
     source = tmp_path / "foreign.fbx"
     source.write_bytes(b"read-only-fbx-evidence")
     texture = tmp_path / "foreign_diffuse.png"
-    Image.new("RGBA", (4, 4), (90, 130, 180, 192)).save(texture)
+    image = Image.new("RGBA", (2, 2))
+    image.putdata((
+        (255, 0, 0, 255), (0, 255, 0, 255),
+        (0, 0, 255, 128), (255, 255, 0, 0),
+    ))
+    image.save(texture)
     project = CustomRiggedCharacterProject(
         creature_name="Foreign Creature",
         resource_name="c_foreign",
@@ -112,6 +117,8 @@ def test_package_is_portable_merge_safe_and_preserves_sources(tmp_path: Path) ->
     assert (package / "additional" / "c_foreign.utc.template").is_file()
     assert (package / "additional" / "foreign_tex.tga").is_file()
     assert (package / "additional" / "foreign_tex.txi").is_file()
+    with Image.open(texture) as source_image, Image.open(package / "additional" / "foreign_tex.tga") as output_image:
+        assert output_image.convert("RGBA").tobytes() == ImageOps.flip(source_image.convert("RGBA")).tobytes()
     plan = json.loads((package / "additional" / "install-plan.json").read_text(encoding="utf-8"))
     assert plan["source_paths_in_package"] is False
     assert plan["requires_custom_animation_patch"] is False
@@ -133,6 +140,29 @@ def test_package_is_portable_merge_safe_and_preserves_sources(tmp_path: Path) ->
     )
     assert not refused.ok
     assert "changed after the prior build" in refused.error
+
+
+def test_texture_orientation_can_be_disabled_and_cutout_txi_is_generated(tmp_path: Path) -> None:
+    project, _source, texture = _project(tmp_path)
+    assignment = project.material_assignments[0]
+    assignment.flip_vertical_for_kotor = False
+    assignment.alpha_mode = "cutout"
+    assignment.txi = ""
+    destination = tmp_path / "converted"
+    destination.mkdir()
+
+    report, outputs = CustomRiggedCharacterPackagingService(
+        process_is_running=lambda _name: False
+    )._convert_texture(project, assignment, destination)
+
+    with Image.open(texture) as source_image, Image.open(destination / "foreign_tex.tga") as output_image:
+        assert output_image.convert("RGBA").tobytes() == source_image.convert("RGBA").tobytes()
+    assert (destination / "foreign_tex.txi").read_text(encoding="ascii") == (
+        "blending punchthrough\nalphatest 0.5\n"
+    )
+    assert {path.name for path in outputs} == {"foreign_tex.tga", "foreign_tex.txi"}
+    assert report["vertical_flip_applied"] is False
+    assert report["txi_source"] == "generated_cutout"
 
 
 def test_preview_install_merge_backup_and_restore_are_reversible(tmp_path: Path) -> None:

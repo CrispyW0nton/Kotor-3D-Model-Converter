@@ -50,7 +50,8 @@ The custom window owns these stable step IDs:
 5. `animation_preparation` — trim, loop, retime, sampling, root motion,
    continuity, contact, and explicit retargeting controls.
 6. `materials_uvs` — material assignment, source/KOTOR/checker previews, UV
-   wrapping, alpha, TGA/TPC conversion, and advanced TXI settings.
+   wrapping, explicit DCC-to-KOTOR image-row orientation, alpha, TGA/TPC
+   conversion, generated cutout TXI defaults, and advanced TXI overrides.
 7. `gameplay` — installed UTC template catalog, behavior inheritance,
    appearance, UTC, collision, sound, per-event scripts, compiled custom hooks,
    optional compiled advanced spawn helper, verified temporary PLCaa placement,
@@ -96,6 +97,15 @@ that attacks, deaths, hooks, sounds, or scripted actions exist.
 `cpause1`, `cwalk`, and `crun` are vanilla behavior aliases. New actions are
 additive namespaced registrations allocated through the Custom Animation Patch;
 the builder never replaces unrelated vanilla animation slots.
+
+Imported DCC images are vertically reoriented once when their build copies are
+encoded because Odyssey MDX texture coordinates use the opposite row
+orientation from the source image convention used by this workflow. The
+project stores an explicit per-material opt-out for images already authored in
+KOTOR orientation, and the UI previews the result. Source bytes are never
+rewritten. A material marked `cutout` receives `blending punchthrough` and
+`alphatest 0.5` when no authored TXI is present; authored TXI text always takes
+precedence.
 
 KOTOR runtime-height correction is authored once on the base model's
 `heightdummy`. Odyssey animation position controllers are local deltas added to

@@ -15,7 +15,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_PROJECT_CUSTOM_RIGGED_CHARACTER_PROJECT",
             "source_path": "src/core/project/custom_rigged_character_project.py",
             "packaged_path": "Python/src/core/project/custom_rigged_character_project.py",
-            "sha256": "2f31cd791b26c8ceb357710a1b08288b9bbeadb934e1873aca91d67cee7dd3b6"
+            "sha256": "d826ca6a2e748343dfac2805b9baa596e365df8ab2580b09cb9c486d96810cdb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_PROJECT_GHOSTRIGGER_PROJECT",

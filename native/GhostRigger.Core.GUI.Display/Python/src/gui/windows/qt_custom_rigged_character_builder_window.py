@@ -699,11 +699,24 @@ class QtCustomRiggedCharacterBuilderWindow(QtWidgets.QMainWindow):
         self.output_tga.setChecked(True)
         self.preserve_repeat = QtWidgets.QCheckBox("Preserve repeat wrapping")
         self.preserve_repeat.setChecked(True)
+        self.orient_for_kotor = QtWidgets.QCheckBox("Orient imported image for KOTOR (recommended)")
+        self.orient_for_kotor.setChecked(True)
+        self.orient_for_kotor.setToolTip(
+            "Matches imported image rows to Odyssey MDX texture coordinates. "
+            "Turn this off only when the image was already authored in KOTOR orientation."
+        )
         output_layout.addWidget(self.output_tga)
         output_layout.addWidget(self.output_tpc)
         output_layout.addWidget(self.preserve_repeat)
+        output_layout.addWidget(self.orient_for_kotor)
         output_layout.addStretch(1)
         page.layout.addWidget(output)
+        cutout_help = QtWidgets.QLabel(
+            "Choose Cutout / punch-through in the Alpha column for hair, leaves, or other hard-edged transparency. "
+            "Ghost Studio adds the standard KOTOR settings automatically."
+        )
+        cutout_help.setWordWrap(True)
+        page.layout.addWidget(cutout_help)
         advanced = QtWidgets.QGroupBox("Advanced TXI settings")
         advanced.setCheckable(True)
         advanced.setChecked(False)
@@ -715,6 +728,7 @@ class QtCustomRiggedCharacterBuilderWindow(QtWidgets.QMainWindow):
         self.output_tga.toggled.connect(self._material_controls_changed)
         self.output_tpc.toggled.connect(self._material_controls_changed)
         self.preserve_repeat.toggled.connect(self._material_controls_changed)
+        self.orient_for_kotor.toggled.connect(self._material_controls_changed)
         page.layout.addWidget(advanced)
         return page
 
@@ -1575,6 +1589,7 @@ class QtCustomRiggedCharacterBuilderWindow(QtWidgets.QMainWindow):
                 self.output_tga.setChecked(assignment.output_format.upper() == "TGA")
                 self.output_tpc.setChecked(assignment.output_format.upper() == "TPC")
                 self.preserve_repeat.setChecked(assignment.wrap_mode == "repeat")
+                self.orient_for_kotor.setChecked(assignment.flip_vertical_for_kotor)
                 self.txi_editor.setPlainText(assignment.txi)
         finally:
             self._loading = False
@@ -1596,7 +1611,9 @@ class QtCustomRiggedCharacterBuilderWindow(QtWidgets.QMainWindow):
         assignment = next((value for value in self.project.material_assignments if value.material_name == name), None)
         if assignment:
             assignment.txi = self.txi_editor.toPlainText()
+            assignment.flip_vertical_for_kotor = self.orient_for_kotor.isChecked()
         self._sync_material_row(row)
+        self._update_material_previews(row)
 
     def _update_material_previews(self, row: int) -> None:
         snapshot = self._material_snapshots[row]
@@ -1615,10 +1632,13 @@ class QtCustomRiggedCharacterBuilderWindow(QtWidgets.QMainWindow):
             except Exception:
                 pixmap = QtGui.QPixmap()
         if not pixmap.isNull():
-            scaled = pixmap.scaled(320, 180, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
-            self.material_preview_labels["source"].setPixmap(scaled)
+            source_scaled = pixmap.scaled(320, 180, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+            kotor_pixmap = pixmap.transformed(QtGui.QTransform().scale(1.0, -1.0)) \
+                if self.orient_for_kotor.isChecked() else pixmap
+            kotor_scaled = kotor_pixmap.scaled(320, 180, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+            self.material_preview_labels["source"].setPixmap(source_scaled)
             self.material_preview_labels["source"].setText("")
-            self.material_preview_labels["kotor"].setPixmap(scaled)
+            self.material_preview_labels["kotor"].setPixmap(kotor_scaled)
             self.material_preview_labels["kotor"].setText("")
         else:
             self.material_preview_labels["source"].setText("Choose a readable source texture")

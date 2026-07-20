@@ -177,6 +177,7 @@ class MaterialAssignment:
     alpha_mode: str = "opaque"
     txi: str = ""
     uv_channel: int = 0
+    flip_vertical_for_kotor: bool = True
 
     def to_dict(self, project_file: str | Path | None = None) -> dict[str, Any]:
         payload = asdict(self)
@@ -198,6 +199,7 @@ class MaterialAssignment:
             alpha_mode=str(data.get("alpha_mode") or "opaque"),
             txi=str(data.get("txi") or ""),
             uv_channel=int(data.get("uv_channel") or 0),
+            flip_vertical_for_kotor=bool(data.get("flip_vertical_for_kotor", True)),
         )
 
 

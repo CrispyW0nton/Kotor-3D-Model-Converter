@@ -11,6 +11,34 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-19
 
+### [2026-07-19] preserve KOTOR texture orientation during custom-character packaging
+
+Owner: LordVaderCW
+
+Intersects: the Custom Rigged Character packaging and material-preview work
+captured during the canonical `ghost-studio` publication sync.
+
+Subsystem: Custom Rigged Character project data, packaging workflow, Character
+Builder material controls, native payload metadata, and focused tests.
+
+- Added an explicit, project-persisted option to orient imported image rows for
+  Odyssey/KOTOR MDX texture coordinates, enabled by default and previewed in
+  the material page before packaging.
+- Applied the selected vertical orientation consistently to TGA and TPC-bound
+  image conversion while leaving already-authored KOTOR textures opt-out safe.
+- Generated punch-through TXI metadata for cutout materials when no authored
+  TXI text is present, and recorded the orientation/TXI source in packaging
+  reports.
+
+Verification:
+
+- The focused Custom Rigged Character packaging suite passed, including exact
+  pixel-order checks for enabled and disabled orientation and generated cutout
+  TXI output.
+- Changed Python sources and regenerated payload metadata passed compilation
+  and payload identity checks. This publication sync does not claim a new
+  visible Debug-app acceptance pass for the material-page control.
+
 ### [2026-07-19] publish the canonical Ghost Studio working tree
 
 Owner: LordVaderCW
@@ -2810,6 +2838,8 @@ Subsystem: GUI Editor product shell and KOTOR `.gui` preview contracts
   `maininterface`, resolution-specific `mipc*`, dialogue, container, inventory,
   and pause surfaces. Final Debug DLL regeneration/build and visible launcher
   acceptance are intentionally left to the enclosing PIE quality pass.
+
+### [2026-07-16] T1210/T2404: composed BAS characters and selectable Unity/Unreal FBX takes
 
 Owner: LordVaderCW
 
