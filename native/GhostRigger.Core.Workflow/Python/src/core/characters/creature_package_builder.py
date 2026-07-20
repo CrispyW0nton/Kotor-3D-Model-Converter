@@ -315,10 +315,10 @@ def _generate_appearance_2da(
 def _generate_utc(out_dir: Path, spec: CreatureSpec, appearance_row: int) -> Path:
     """Generate a binary UTC creature template file."""
     try:
-        from src.formats.gff_types import GffFile, GffFieldType, GffStruct
+        from src.formats.gff_types import GffField, GffFile, GffFieldType, GffStruct
         from src.formats.gff_writer import GffWriter
     except ImportError:
-        from formats.gff_types import GffFile, GffFieldType, GffStruct  # type: ignore
+        from formats.gff_types import GffField, GffFile, GffFieldType, GffStruct  # type: ignore
         from formats.gff_writer import GffWriter  # type: ignore
 
     utc = GffFile()
@@ -339,6 +339,7 @@ def _generate_utc(out_dir: Path, spec: CreatureSpec, appearance_row: int) -> Pat
     # GffField with type CEXOLOCSTRING stores this as a dict:
     #   {str_ref: int, strings: {lang_id: "text"}}
     first_name_field = GffField(
+        label="FirstName",
         type=GffFieldType.CEXOLOCSTRING,
         value={"str_ref": -1, "strings": {0: spec.display_name}},
     )
@@ -369,7 +370,10 @@ def _generate_utc(out_dir: Path, spec: CreatureSpec, appearance_row: int) -> Pat
     root.set("CurrentFP", GffFieldType.INT16, 0)
 
     # Faction — hostile for enemies
-    root.set("FactionID", GffFieldType.UINT32, spec.faction_id)
+    # Stock K1/K2 UTC templates store FactionID as a WORD.  A DWORD field can
+    # be ignored by the engine and make a nominally hostile creature appear
+    # friendly in the target health bar.
+    root.set("FactionID", GffFieldType.UINT16, spec.faction_id)
 
     # Scripts — reference KOTOR's built-in default scripts
     for event_name, script_ref in spec.scripts.items():

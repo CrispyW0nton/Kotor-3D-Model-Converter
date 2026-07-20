@@ -165,7 +165,7 @@
             "resource_name": "PYTHON_PAYLOAD_FORMATS_GFF_TYPES",
             "source_path": "src/formats/gff_types.py",
             "packaged_path": "Python/src/formats/gff_types.py",
-            "sha256": "fa2c7fbbf4d579f226d4841bdf4537edf8b1d874595e4fe39ae779887e362938"
+            "sha256": "6853280006d821967f93337e2ad4643cd984698102be44480e68e34f8e74f741"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_FORMATS_GFF_WRITER",

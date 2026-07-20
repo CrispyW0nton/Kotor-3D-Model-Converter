@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import wave
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -8,6 +10,7 @@ import pytest
 
 from pykotor.common.language import LocalizedString
 from pykotor.resource.formats.gff import GFF, GFFContent, GFFList, bytes_gff, read_gff
+from pykotor.resource.formats.ssf import SSFSound
 from pykotor.resource.type import ResourceType
 
 from src.core.characters.custom_rigged_character_behavior_service import (
@@ -19,9 +22,12 @@ from src.core.characters.custom_rigged_character_behavior_service import (
 from src.core.characters.custom_rigged_character_packaging_service import (
     CustomRiggedCharacterPackagingService,
 )
+from src.core.scripting.data_authoring import SoundSetDocument, TalkTableDocument
+from src.core.templates.twoda import TwoDA
 from src.core.project.custom_rigged_character_project import (
     CURRENT_CUSTOM_RIGGED_CHARACTER_SCHEMA_VERSION,
     CUSTOM_CREATURE_BEHAVIOR_PROFILE_SCHEMA,
+    CreatureSoundCue,
     CustomRiggedCharacterProject,
     migrate_custom_rigged_character_payload,
 )
@@ -174,9 +180,10 @@ def test_schema_v1_migrates_to_a_versioned_behavior_profile() -> None:
 
     migrated = migrate_custom_rigged_character_payload(raw)
 
-    assert migrated["schema_version"] == CURRENT_CUSTOM_RIGGED_CHARACTER_SCHEMA_VERSION == 2
+    assert migrated["schema_version"] == CURRENT_CUSTOM_RIGGED_CHARACTER_SCHEMA_VERSION == 3
     assert migrated["gameplay"]["behavior_profile"]["schema"] == CUSTOM_CREATURE_BEHAVIOR_PROFILE_SCHEMA
     assert migrated["gameplay"]["behavior_profile"]["script_hooks"] == {}
+    assert migrated["gameplay"]["creature_sounds"] == []
 
 
 def test_catalog_indexes_every_effective_utc_and_flags_module_only_hooks(tmp_path: Path) -> None:
@@ -255,6 +262,119 @@ def test_zakkeg_template_clone_preserves_combat_data_and_packages_compiled_hook(
     report = json.loads(Path(package.report_path).read_text(encoding="utf-8"))
     assert report["behavior"]["template"]["resref"] == "c_zakkeg01"
     assert report["behavior"]["custom_hooks"][0]["hook"] == "ScriptAttacked"
+
+
+def test_creature_sound_uses_native_ssf_without_wrapping_zakkeg_ai_hooks(tmp_path: Path) -> None:
+    sound = tmp_path / "A1_AN_Borhek_GetHit01.wav"
+    with wave.open(str(sound), "wb") as stream:
+        stream.setnchannels(1)
+        stream.setsampwidth(2)
+        stream.setframerate(22050)
+        stream.writeframes(b"\0\0" * 2205)
+
+    catalog = _catalog(tmp_path)
+    template = next(row for row in catalog.scan() if row.resref == "c_zakkeg01")
+    project = CustomRiggedCharacterProject(
+        creature_name="Borhek",
+        resource_name="c_borhek",
+        target_game="K2",
+        output_project_folder=str(tmp_path),
+        appearance_settings={"donor_row": 0},
+        utc_settings={"resref": "c_borhek", "display_name": "Borhek", "faction_id": 1},
+        creature_sound_cues=[CreatureSoundCue(
+            cue="hurt",
+            source_path=str(sound),
+            source_sha256=hashlib.sha256(sound.read_bytes()).hexdigest(),
+            output_resref="c_borhek_hurt",
+        )],
+    )
+    service = CustomRiggedCharacterBehaviorService()
+    service.apply_template(project, template)
+
+    prepared = service.prepare_build(project, catalog)
+
+    assert prepared.ok, prepared.error
+    resources = {(resref, restype): data for resref, restype, data in prepared.resources}
+    assert resources[("c_borhek_hurt", "wav")].startswith(b"RIFF")
+    assert prepared.utc_hook_overrides == {}
+    assert set(resources) == {("c_borhek_hurt", "wav")}
+    assert prepared.report["creature_sounds"]["delivery"] == "native_ssf_soundset"
+    assert prepared.report["creature_sounds"]["preserves_direct_utc_event_hooks"] is True
+    assert prepared.report["creature_sounds"]["cues"][0]["ssf_slots"] == ["PAIN_GRUNT_1"]
+
+    model = tmp_path / "sound-model"
+    model.mkdir()
+    (model / "c_borhek.mdl").write_bytes(b"mdl")
+    (model / "c_borhek.mdx").write_bytes(b"mdx")
+    package = CustomRiggedCharacterPackagingService(process_is_running=lambda _name: False).build_package(
+        project,
+        {"mdl": str(model / "c_borhek.mdl"), "mdx": str(model / "c_borhek.mdx")},
+        tmp_path / "sound-package",
+        utc_template_bytes=prepared.utc_template_bytes,
+        behavior_resources=prepared.resources,
+        utc_hook_overrides=prepared.utc_hook_overrides,
+        behavior_report=prepared.report,
+    )
+    assert package.ok, package.error
+    additional = Path(package.package_directory) / "additional"
+    utc = read_gff((additional / "c_borhek.utc.template").read_bytes()).root
+    assert int(utc.acquire("SoundSetFile", -1)) == 31
+    assert str(utc.acquire("ScriptHeartbeat", "")) == "k_def_heartbt01"
+    assert str(utc.acquire("ScriptAttacked", "")) == "k_def_attacked01"
+    assert str(utc.acquire("ScriptSpawn", "")) == "k_def_ambmob"
+    plan = json.loads((additional / "install-plan.json").read_text(encoding="utf-8"))
+    assert "c_borhek_hurt.wav" in plan["runtime_files"]
+    assert plan["soundset_patch"] == "soundset.2da.patch.json"
+    assert plan["requires_dialog_tlk_patch"] is True
+
+    game = tmp_path / "KOTOR2"
+    override = game / "Override"
+    override.mkdir(parents=True)
+    (game / "swkotor2.exe").write_bytes(b"fake-test-executable")
+    (game / "dialog.tlk").write_bytes(TalkTableDocument().to_bytes())
+    (override / "appearance.2da").write_bytes((
+        "2DA V2.0\n\n"
+        "          label             race              walkdist          rundist           perspace          creperspace       cameraspace       targetheight      hitdist           prefatckdist\n"
+        "0         Creature_Donor    c_donor           1.0               2.0               0.5               0.5               0.5               0.5               0.5               0.5\n"
+    ).encode("ascii"))
+    (override / "soundset.2da").write_bytes((
+        "2DA V2.0\n\n"
+        "          label             resref            strref            gender            type\n"
+        "0         None              ****              ****              ****              ****\n"
+    ).encode("ascii"))
+    before_dialog = (game / "dialog.tlk").read_bytes()
+
+    preview = CustomRiggedCharacterPackagingService(
+        process_is_running=lambda _name: False
+    ).preview_install(package.package_directory, game)
+
+    assert preview.ok, preview.error
+    assert preview.soundset_row == 1
+    assert {row["name"] for row in preview.files} >= {
+        "soundset.2da",
+        "c_borhek.ssf",
+        "game-root/dialog.tlk",
+    }
+    candidate = Path(preview.candidate_directory)
+    merged_utc = read_gff((candidate / "c_borhek.utc").read_bytes()).root
+    assert int(merged_utc.acquire("SoundSetFile", -1)) == 1
+    assert str(merged_utc.acquire("ScriptHeartbeat", "")) == "k_def_heartbt01"
+    assert str(merged_utc.acquire("ScriptAttacked", "")) == "k_def_attacked01"
+    merged_soundsets = TwoDA.from_bytes((candidate / "soundset.2da").read_bytes())
+    assert merged_soundsets.get(1, "resref") == "c_borhek"
+    merged_dialog = TalkTableDocument.load(candidate / ".global" / "dialog.tlk")
+    merged_ssf = SoundSetDocument.load(candidate / "c_borhek.ssf")
+    pain_strref = merged_ssf.get_slot(SSFSound.PAIN_GRUNT_1.name)
+    assert pain_strref >= 0
+    assert merged_dialog.entry(pain_strref).voiceover == "c_borhek_hurt"
+
+    service = CustomRiggedCharacterPackagingService(process_is_running=lambda _name: False)
+    installed = service.install(preview, confirmed_preview_id=preview.preview_id)
+    assert installed.ok, installed.error
+    assert (game / "dialog.tlk").read_bytes() != before_dialog
+    restored = service.restore(installed.session_manifest)
+    assert restored.ok, restored.error
+    assert (game / "dialog.tlk").read_bytes() == before_dialog
 
 
 def test_invalid_custom_hook_cannot_enter_the_project(tmp_path: Path) -> None:

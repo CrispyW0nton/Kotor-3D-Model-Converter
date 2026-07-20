@@ -21,7 +21,7 @@ from .ghostrigger_project import stable_project_id, utc_now_iso
 
 CUSTOM_RIGGED_CHARACTER_FILE_TYPE = "ghostrigger.custom_rigged_character"
 CUSTOM_RIGGED_CHARACTER_FILE_SUFFIX = ".ghostcharacter.json"
-CURRENT_CUSTOM_RIGGED_CHARACTER_SCHEMA_VERSION = 2
+CURRENT_CUSTOM_RIGGED_CHARACTER_SCHEMA_VERSION = 3
 CUSTOM_CREATURE_BEHAVIOR_PROFILE_SCHEMA = "ghostrigger.custom_creature_behavior_profile.v1"
 BUILDER_MODE_CUSTOM_RIGGED = "custom_rigged_character"
 BUILDER_MODE_NATIVE_KOTOR = "native_kotor_character"
@@ -204,6 +204,34 @@ class MaterialAssignment:
 
 
 @dataclass
+class CreatureSoundCue:
+    """One authoring WAV mapped to a user-facing creature event."""
+
+    cue: str = ""
+    source_path: str = ""
+    source_sha256: str = ""
+    output_resref: str = ""
+
+    def to_dict(self, project_file: str | Path | None = None) -> dict[str, Any]:
+        return {
+            "cue": str(self.cue or "").strip().lower(),
+            "source_path": portable_path(self.source_path, project_file),
+            "source_sha256": _clean_hash(self.source_sha256),
+            "output_resref": _clean_resref(self.output_resref),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any] | None) -> "CreatureSoundCue":
+        data = data or {}
+        return cls(
+            cue=str(data.get("cue") or "").strip().lower(),
+            source_path=str(data.get("source_path") or ""),
+            source_sha256=_clean_hash(data.get("source_sha256")),
+            output_resref=_clean_resref(data.get("output_resref")),
+        )
+
+
+@dataclass
 class CustomAnimationRegistration:
     name: str = ""
     animation_id: int | None = None
@@ -267,6 +295,7 @@ class CustomRiggedCharacterProject:
     )
     animation_mappings: list[AnimationMapping] = field(default_factory=list)
     material_assignments: list[MaterialAssignment] = field(default_factory=list)
+    creature_sound_cues: list[CreatureSoundCue] = field(default_factory=list)
     appearance_settings: dict[str, Any] = field(default_factory=dict)
     utc_settings: dict[str, Any] = field(default_factory=dict)
     gameplay_settings: dict[str, Any] = field(
@@ -357,6 +386,7 @@ class CustomRiggedCharacterProject:
                 "utc": dict(self.utc_settings),
                 "behavior": dict(self.gameplay_settings),
                 "behavior_profile": dict(self.behavior_profile),
+                "creature_sounds": [value.to_dict(project_file) for value in self.creature_sound_cues],
             },
             "custom_animation_registrations": [asdict(value) for value in self.custom_animation_registrations],
             "build": {
@@ -422,6 +452,10 @@ class CustomRiggedCharacterProject:
             native_template_model=str(rig.get("native_template_model") or ""),
             animation_mappings=[AnimationMapping.from_dict(value) for value in data.get("animation_mappings") or ()],
             material_assignments=[MaterialAssignment.from_dict(value) for value in data.get("material_assignments") or ()],
+            creature_sound_cues=[
+                CreatureSoundCue.from_dict(value)
+                for value in gameplay.get("creature_sounds") or ()
+            ],
             appearance_settings=dict(gameplay.get("appearance") or {}),
             utc_settings=dict(gameplay.get("utc") or {}),
             gameplay_settings={
@@ -489,6 +523,24 @@ class CustomRiggedCharacterProject:
                 "expected_sha256": asset.sha256,
                 "actual_sha256": actual_hash,
             })
+        for cue in self.creature_sound_cues:
+            if not cue.source_path:
+                continue
+            resolved = resolve_project_path(cue.source_path, project_file)
+            status = "available" if resolved.is_file() else "missing"
+            actual_hash = ""
+            if status == "available" and cue.source_sha256:
+                actual_hash = sha256_file(resolved)
+                if actual_hash != cue.source_sha256:
+                    status = "hash_changed"
+            result.append({
+                "role": f"creature_sound:{cue.cue}",
+                "path": cue.source_path,
+                "resolved_path": str(resolved),
+                "status": status,
+                "expected_sha256": cue.source_sha256,
+                "actual_sha256": actual_hash,
+            })
         return result
 
 
@@ -544,6 +596,10 @@ def migrate_custom_rigged_character_payload(raw: Mapping[str, Any]) -> dict[str,
             "script_hooks": {},
         })
         data["schema_version"] = 2
+        version = 2
+    if version == 2:
+        data.setdefault("gameplay", {}).setdefault("creature_sounds", [])
+        data["schema_version"] = 3
     if data.get("file_type") != CUSTOM_RIGGED_CHARACTER_FILE_TYPE:
         raise ValueError("File is not a GhostRigger custom-rigged character project.")
     if int(data.get("schema_version") or 0) != CURRENT_CUSTOM_RIGGED_CHARACTER_SCHEMA_VERSION:
@@ -604,6 +660,7 @@ __all__ = [
     "CUSTOM_RIGGED_CHARACTER_FILE_TYPE",
     "CUSTOM_RIGGED_WORKFLOW_STEPS",
     "CustomAnimationRegistration",
+    "CreatureSoundCue",
     "CustomRiggedCharacterProject",
     "MaterialAssignment",
     "SourceAsset",

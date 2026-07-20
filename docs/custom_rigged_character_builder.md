@@ -75,6 +75,26 @@ runtime bytecode. Borhek's attacked hook first runs `k_def_attacked01`, then
 explicitly attacks `GetLastAttacker()`. The optional advanced spawn helper is
 also compiled and verified; for this fixture it is `spawn_c_borhek.ncs`.
 
+### Add creature sounds
+
+Use **Choose a sound folder and match cues** to assign ordinary mono 16-bit PCM
+WAVs. Ghost Studio recognizes battle roar, attack, pain, defensive, impact,
+low-health breathing, and death filenames, and each row can also be chosen
+manually. Borhek uses its seven original Star Wars: Bounty Hunter recordings.
+
+Creature audio uses KOTOR's native soundset path. Build records battle-cry,
+attack-grunt, pain, low-health, and death SSF slots without changing the UTC's
+AI scripts. During **Preview exact install**, Ghost Studio shows one merged
+`soundset.2da` row, one generated `.ssf`, the selected WAVs, and the exact
+`dialog.tlk` candidate containing only the required voiceover rows. The global
+talk table is never changed by Build or Preview; **Install with backup** backs
+it up in the same restore session as every Override and module target.
+
+Do not replace inherited UTC hooks merely to play sound. KOTOR event values such
+as the last attacker or perceived target belong to the direct event invocation
+and are not safely preserved through a nested `ExecuteScript` wrapper. Native
+SSF playback keeps the Zakkeg combat scripts direct and avoids that regression.
+
 For beginner testing, enable **Place one temporary test creature in PLCaa
 DevRoom (no console needed)**. Ghost Studio clones one existing placement,
 changes only the clone's UTC reference, tag, position, and facing, and verifies
@@ -107,7 +127,11 @@ On **Install and test**:
 3. Close KOTOR before selecting **Install with backup**. Installation stops
    safely if Ghost Studio cannot prove the game is closed.
 4. Select **Install with backup** only if the list is correct.
-5. Use **Restore previous files** with the recorded install session to undo the
+5. For a clean runtime test, load a save made outside `plcaa`, then enter or
+   warp into `plcaa`. Do not start from a save already inside the DevRoom:
+   KOTOR serializes live creature instances into the save and can retain an
+   older model, faction, or health-bar color even after the UTC is replaced.
+6. Use **Restore previous files** with the recorded install session to undo the
    operation, including the prior live/cached PLCaa modules. Restore stops if a
    file changed after installation.
 
@@ -122,8 +146,11 @@ Confirm visibility, ground height, texture wrapping, idle, walking while
 moving, running while moving quickly, turning and skin stability, module
 reload, and any explicitly requested custom action. For a hostile creature,
 also confirm target perception, combat start, both attacks, damage reaction,
-round-end behavior, death, and a second spawn after restarting the game. A
-successful file build is not runtime proof.
+round-end behavior, native battle/attack/pain/death sounds, death, and a second
+spawn after restarting the game. A
+hostile health bar should be red. KOTOR II keeps the target name cyan even for
+hostile creatures, so the name color is not a faction failure. A successful
+file build is not runtime proof.
 
 ## Portable project and reports
 

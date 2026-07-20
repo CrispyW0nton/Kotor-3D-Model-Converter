@@ -140,10 +140,47 @@ the selected template's class, statistics, equipment, sounds, faction, and
 inherited event scripts while using the custom model's merge-resolved
 appearance row.
 
+`FactionID` is serialized as the `UInt16` used by stock K1/K2 UTC templates.
+The blank-creature contract and the donor-template path share that type; using
+`UInt32` can make the engine ignore the requested faction and display a
+friendly/neutral health bar.
+
 The Borhek fixture starts from global K2 `c_zakkeg01`, not the module-bound
 `c_zakkeg002`. Its custom attacked hook delegates to `k_def_attacked01` and
 then queues an explicit attack on the last attacker. Other hooks retain the
 Zakkeg baseline unless the user changes them in the visible event-hook editor.
+
+## Native creature-sound contract
+
+Custom creature audio must use KOTOR's SSF/TLK/soundset route, not wrappers
+around UTC AI hooks. Retail testing rejected the initial wrapper design:
+`ExecuteScript` starts another script invocation and does not safely preserve
+event-specific values such as the last attacker or perceived target. Wrapping
+`ScriptAttacked` therefore prevented the Zakkeg-derived combat script from
+retaining a target even though the MDL still contained `m0a1` and `m0a2`.
+
+The accepted build contract is symbolic until exact-install preview:
+
+1. Project data stores each cue, portable source WAV, SHA-256, and output
+   ResRef. Validation accepts only readable mono 16-bit PCM at 11025, 22050, or
+   44100 Hz.
+2. Behavior preparation packages WAVs and maps cues to native SSF slots:
+   battle cries, attack grunts, pain grunts, low health, and death. It never
+   emits a sound wrapper or UTC hook override.
+3. Build writes a merge instruction rather than hardcoding live StrRefs or a
+   `soundset.2da` row.
+4. Preview reads the selected installation, appends or reuses only
+   Ghost-Studio-owned `dialog.tlk` entries for the WAV ResRefs, emits a
+   readback-validated 40-entry SSF, upserts one `soundset.2da` row, and patches
+   the UTC `SoundSetFile` UInt16 to the resolved row.
+5. Exact preview includes the game-root `dialog.tlk` target. Install backs up
+   that global file before replacement, hashes every candidate and target, and
+   Restore returns the prior TLK/2DA/SSF/WAV/UTC bytes or fails closed if a
+   target changed later.
+
+This route deliberately leaves spawn, notice, attacked, damaged, heartbeat,
+end-round, blocked, and death hooks direct. Sound selection cannot silently
+change faction logic or combat behavior.
 
 The beginner runtime route does not require a console command. When selected,
 the install plan names a K2 test module, unique Ghost Studio placement tag,
@@ -158,6 +195,10 @@ identical, and every non-creature GIT field is structurally identical. Install
 backs up the live module and cached `currentgame/plcaa.mod`, clears the cache,
 and records both operations in the same guarded restore session as the Override
 files. A live-module or cache change after preview stops installation.
+The visible test checklist requires loading a save outside the test module
+before entering it. A save made inside `plcaa` contains a serialized creature
+instance and can preserve an older model or faction independently of the newly
+installed UTC.
 
 ## Persistence and safety contract
 
@@ -206,7 +247,10 @@ texture-corrected build must be byte-identical. Completion requires structural
 and behavioral equivalence, source byte identity, merge-safe appearance and UTC
 generation, a non-colliding registry, and visible KOTOR II proof in `plcaa` of
 ground height, texture wrapping, idle, walk, run, turning, reload safety, and
-stable skinning.
+stable skinning. Hostile proof also requires a red target health bar on a fresh
+module instance; KOTOR II's cyan target-name text is normal for hostile targets.
+Audio proof additionally requires audible native battle/attack/pain/death cues
+without losing either `m0a1` or `m0a2` combat playback.
 
 The first 2026-07-19 Ghost Studio UI build was installed for comparison but did
 not pass visible runtime acceptance. Its reloaded model contained 59 Odyssey

@@ -36,10 +36,12 @@ PACKAGE_SCHEMA = "ghostrigger.custom_rigged_character_package.v1"
 INSTALL_PLAN_SCHEMA = "ghostrigger.custom_rigged_character_install_plan.v1"
 INSTALL_SESSION_SCHEMA = "ghostrigger.custom_rigged_character_install_session.v1"
 APPEARANCE_PATCH_SCHEMA = "ghostrigger.merge_safe_2da_row.v1"
+SOUNDSET_PATCH_SCHEMA = "ghostrigger.merge_safe_creature_soundset.v1"
 ANIMATION_REGISTRY_SCHEMA = "kotor_patch_manager.custom_animation_registry.v1"
 APPEARANCE_ROW_TOKEN = "2DAMEMORY_GHOSTRIGGER_CUSTOM_APPEARANCE"
+SOUNDSET_ROW_TOKEN = "2DAMEMORY_GHOSTRIGGER_CUSTOM_SOUNDSET"
 
-_RUNTIME_SUFFIXES = {".mdl", ".mdx", ".tga", ".tpc", ".txi", ".utc", ".ncs"}
+_RUNTIME_SUFFIXES = {".mdl", ".mdx", ".tga", ".tpc", ".txi", ".utc", ".ncs", ".wav", ".ssf"}
 _KNOWN_K2_STEAM_ASPYR = "306f3cf9c45b8d9a086afe10964a3512fc202477d7f8398511b297550990ae51"
 
 
@@ -101,7 +103,7 @@ def _twoda_to_binary_v2b(table: Any) -> bytes:
                 data += value.encode("cp1252", "replace") + b"\0"
             offsets.append(offset)
     if len(data) >= 65536:
-        raise ValueError("The merged appearance.2da exceeds the V2.b data-block limit.")
+        raise ValueError("The merged 2DA exceeds the V2.b data-block limit.")
     for offset in offsets:
         output += struct.pack("<H", offset)
     output += struct.pack("<H", len(data))
@@ -127,7 +129,11 @@ def _source_texture(project: CustomRiggedCharacterProject, assignment: MaterialA
     return Path()
 
 
-def _build_utc_template(project: CustomRiggedCharacterProject, source: bytes | None = None) -> bytes:
+def _build_utc_template(
+    project: CustomRiggedCharacterProject,
+    source: bytes | None = None,
+    hook_overrides: Mapping[str, str] | None = None,
+) -> bytes:
     from src.formats.gff_reader import read_gff
     from src.formats.gff_types import GffFieldType, GffFile, GffStruct, LocString, ResRef
     from src.formats.gff_writer import write_gff
@@ -217,6 +223,10 @@ def _build_utc_template(project: CustomRiggedCharacterProject, source: bytes | N
         script_resref = str(row.get("resref") or "").strip().lower()
         if script_resref:
             set_field(label, GffFieldType.RESREF, ResRef(script_resref))
+    for label, script_resref in sorted(dict(hook_overrides or {}).items()):
+        clean = str(script_resref or "").strip().lower()
+        if clean:
+            set_field(label, GffFieldType.RESREF, ResRef(clean))
     result = write_gff(utc)
     check = read_gff(result)
     if str(check.file_type).strip().upper() != "UTC":
@@ -224,7 +234,11 @@ def _build_utc_template(project: CustomRiggedCharacterProject, source: bytes | N
     return result
 
 
-def _patch_utc_appearance(value: bytes, appearance_row: int) -> bytes:
+def _patch_utc_runtime_rows(
+    value: bytes,
+    appearance_row: int,
+    soundset_row: int | None = None,
+) -> bytes:
     from src.formats.gff_reader import read_gff
     from src.formats.gff_types import GffFieldType
     from src.formats.gff_writer import write_gff
@@ -235,10 +249,18 @@ def _patch_utc_appearance(value: bytes, appearance_row: int) -> bytes:
         field.value = type(field.value)(appearance_row)
     else:
         utc.root.set("Appearance_Type", GffFieldType.UINT16, int(appearance_row))
+    if soundset_row is not None:
+        if "SoundSetFile" in utc.root.fields:
+            field = utc.root.fields["SoundSetFile"]
+            field.value = type(field.value)(soundset_row)
+        else:
+            utc.root.set("SoundSetFile", GffFieldType.UINT16, int(soundset_row))
     result = write_gff(utc)
     check = read_gff(result)
     if int(check.root.get("Appearance_Type", -1)) != int(appearance_row):
         raise ValueError("UTC appearance token did not survive GFF reload.")
+    if soundset_row is not None and int(check.root.get("SoundSetFile", -1)) != int(soundset_row):
+        raise ValueError("UTC soundset token did not survive GFF reload.")
     return result
 
 
@@ -274,6 +296,7 @@ class InstallPreview:
     executable_path: str = ""
     executable_sha256: str = ""
     appearance_row: int = -1
+    soundset_row: int = -1
     files: list[dict[str, Any]] = field(default_factory=list)
     candidate_directory: str = ""
     requires_patch_manager: bool = False
@@ -288,6 +311,7 @@ class InstallPreview:
             "executable_path": self.executable_path,
             "executable_sha256": self.executable_sha256,
             "appearance_row": self.appearance_row,
+            "soundset_row": self.soundset_row,
             "files": list(self.files),
             "candidate_directory": self.candidate_directory,
             "requires_patch_manager": self.requires_patch_manager,
@@ -322,6 +346,7 @@ class CustomRiggedCharacterPackagingService:
         *,
         utc_template_bytes: bytes | None = None,
         behavior_resources: Iterable[tuple[str, str, bytes]] = (),
+        utc_hook_overrides: Mapping[str, str] | None = None,
         behavior_report: Mapping[str, Any] | None = None,
         allow_overwrite: bool = False,
     ) -> CustomRiggedPackageResult:
@@ -362,7 +387,7 @@ class CustomRiggedCharacterPackagingService:
                     written[path.relative_to(package_root).as_posix()] = path
 
             utc_resref = str(project.utc_settings.get("resref") or resref)[:16].lower()
-            utc_template = _build_utc_template(project, utc_template_bytes)
+            utc_template = _build_utc_template(project, utc_template_bytes, utc_hook_overrides)
             utc_path = additional / f"{utc_resref}.utc.template"
             _write_atomic(utc_path, utc_template)
             written[utc_path.relative_to(package_root).as_posix()] = utc_path
@@ -374,14 +399,14 @@ class CustomRiggedCharacterPackagingService:
                     value.isalnum() or value == "_" for value in script_resref
                 ):
                     raise ValueError(f"Behavior script has an unsafe KOTOR resource name: {script_resref!r}")
-                if script_type not in {"nss", "ncs"}:
-                    raise ValueError(f"Unsupported behavior script resource type: {script_type!r}")
+                if script_type not in {"nss", "ncs", "wav"}:
+                    raise ValueError(f"Unsupported behavior resource type: {script_type!r}")
                 target = additional / f"{script_resref}.{script_type}"
                 payload = bytes(script_data or b"")
                 if not payload:
-                    raise ValueError(f"Behavior script is empty: {target.name}")
+                    raise ValueError(f"Behavior resource is empty: {target.name}")
                 if target.exists() and target.read_bytes() != payload:
-                    raise ValueError(f"Behavior script output collides with different data: {target.name}")
+                    raise ValueError(f"Behavior resource output collides with different data: {target.name}")
                 _write_atomic(target, payload)
                 written[target.relative_to(package_root).as_posix()] = target
 
@@ -389,6 +414,14 @@ class CustomRiggedCharacterPackagingService:
             appearance_path = additional / "appearance.2da.patch.json"
             _write_atomic(appearance_path, _stable_json(appearance_patch))
             written[appearance_path.relative_to(package_root).as_posix()] = appearance_path
+
+            soundset_patch: dict[str, Any] | None = None
+            soundset_path: Path | None = None
+            if project.creature_sound_cues:
+                soundset_patch = self._soundset_patch(project, behavior_report or {})
+                soundset_path = additional / "soundset.2da.patch.json"
+                _write_atomic(soundset_path, _stable_json(soundset_patch))
+                written[soundset_path.relative_to(package_root).as_posix()] = soundset_path
 
             registrations = self._animation_registry(project)
             registry_path = additional / f"{resref}.animation-registry.json"
@@ -433,6 +466,10 @@ class CustomRiggedCharacterPackagingService:
                 "utc_resref": utc_resref,
                 "appearance_patch": appearance_path.name,
                 "appearance_row_token": APPEARANCE_ROW_TOKEN,
+                "soundset_patch": soundset_path.name if soundset_path is not None else "",
+                "soundset_row_token": SOUNDSET_ROW_TOKEN if soundset_path is not None else "",
+                "soundset_resref": str(soundset_patch["resref"]) if soundset_patch else "",
+                "requires_dialog_tlk_patch": bool(soundset_patch),
                 "utc_template": utc_path.name,
                 "runtime_files": runtime_files,
                 "requires_custom_animation_patch": requires_patch,
@@ -487,7 +524,12 @@ class CustomRiggedCharacterPackagingService:
                 "output_hashes": hashes,
                 "texture_conversions": conversions,
                 "appearance_patch": appearance_patch,
-                "utc": {"resref": utc_resref, "appearance_row": APPEARANCE_ROW_TOKEN},
+                "soundset_patch": soundset_patch,
+                "utc": {
+                    "resref": utc_resref,
+                    "appearance_row": APPEARANCE_ROW_TOKEN,
+                    "soundset_row": SOUNDSET_ROW_TOKEN if soundset_patch else None,
+                },
                 "behavior": dict(behavior_report or {}),
                 "animation_registry": registrations,
                 "install_plan": install_plan,
@@ -562,6 +604,12 @@ class CustomRiggedCharacterPackagingService:
             path = _source_texture(project, assignment)
             if path.is_file():
                 rows[f"texture_assignment:{index}:{path.name}"] = sha256_file(path)
+        for index, cue in enumerate(project.creature_sound_cues):
+            if not cue.source_path:
+                continue
+            path = project.resolve_path(cue.source_path)
+            if path.is_file():
+                rows[f"creature_sound:{cue.cue}:{index}:{path.name}"] = sha256_file(path)
         return dict(sorted(rows.items()))
 
     def _convert_texture(
@@ -680,6 +728,59 @@ class CustomRiggedCharacterPackagingService:
             "updates": dict(sorted(updates.items())),
             "result_row_token": APPEARANCE_ROW_TOKEN,
             "hardcoded_result_row": False,
+        }
+
+    def _soundset_patch(
+        self,
+        project: CustomRiggedCharacterProject,
+        behavior_report: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """Describe a native SSF/TLK/2DA soundset without assigning live rows yet."""
+
+        sound_report = dict(behavior_report.get("creature_sounds") or {})
+        cue_rows = [dict(value) for value in sound_report.get("cues") or ()]
+        by_cue = {str(value.get("cue") or "").casefold(): value for value in cue_rows}
+        expected = {str(value.cue or "").casefold() for value in project.creature_sound_cues}
+        if not expected or set(by_cue) != expected:
+            raise ValueError(
+                "Creature sound metadata is incomplete. Run the behavior preflight again before packaging."
+            )
+        resref = _safe_name(project.resource_name)[:16]
+        if not resref or len(resref) > 16:
+            raise ValueError("The creature soundset needs a KOTOR-safe resource name.")
+        cues: list[dict[str, Any]] = []
+        seen_audio: set[str] = set()
+        for cue_name in sorted(expected):
+            row = by_cue[cue_name]
+            audio_resref = str(row.get("resref") or "").strip().lower()
+            slots = [str(value or "").strip().upper() for value in row.get("ssf_slots") or ()]
+            if not audio_resref or len(audio_resref) > 16 or not slots:
+                raise ValueError(f"Creature sound cue '{cue_name}' has incomplete native soundset metadata.")
+            if audio_resref in seen_audio:
+                raise ValueError(f"Creature sound resource '{audio_resref}' is assigned more than once.")
+            seen_audio.add(audio_resref)
+            cues.append({
+                "cue": cue_name,
+                "label": str(row.get("label") or cue_name),
+                "resref": audio_resref,
+                "ssf_slots": slots,
+                "duration_seconds": float(row.get("duration_seconds") or 0.0),
+                "sha256": str(row.get("sha256") or "").lower(),
+            })
+        return {
+            "schema": SOUNDSET_PATCH_SCHEMA,
+            "table": "soundset.2da",
+            "operation": "upsert_native_creature_soundset",
+            "match": {"column": "resref", "value": resref, "case_insensitive": True},
+            "resref": resref,
+            "label": f"GhostStudio_{project.creature_name or resref}",
+            "gender": "0",
+            "type": "",
+            "cues": cues,
+            "result_row_token": SOUNDSET_ROW_TOKEN,
+            "hardcoded_result_row": False,
+            "dialog_tlk_policy": "append_or_reuse_owned_voiceover_entries_with_backup",
+            "preserves_utc_event_hooks": True,
         }
 
     def _animation_registry(self, project: CustomRiggedCharacterProject) -> dict[str, Any]:
@@ -1056,12 +1157,41 @@ class CustomRiggedCharacterPackagingService:
             candidate_root.mkdir(parents=True, exist_ok=True)
             appearance_blob, appearance_row = self._merge_live_appearance(package_root, game_root)
             _write_atomic(candidate_root / "appearance.2da", appearance_blob)
+            soundset_row = -1
+            soundset_resref = ""
+            dialog_candidate: Path | None = None
+            soundset_report: dict[str, Any] | None = None
+            if str(plan.get("soundset_patch") or ""):
+                (
+                    soundset_blob,
+                    soundset_row,
+                    soundset_resref,
+                    ssf_blob,
+                    dialog_blob,
+                    soundset_report,
+                ) = self._merge_live_soundset(package_root, game_root, str(plan["soundset_patch"]))
+                _write_atomic(candidate_root / "soundset.2da", soundset_blob)
+                _write_atomic(candidate_root / f"{soundset_resref}.ssf", ssf_blob)
+                dialog_candidate = candidate_root / ".global" / "dialog.tlk"
+                _write_atomic(dialog_candidate, dialog_blob)
             utc_template = package_root / "additional" / str(plan["utc_template"])
             utc_name = f"{plan['utc_resref']}.utc"
-            _write_atomic(candidate_root / utc_name, _patch_utc_appearance(utc_template.read_bytes(), appearance_row))
+            _write_atomic(
+                candidate_root / utc_name,
+                _patch_utc_runtime_rows(
+                    utc_template.read_bytes(),
+                    appearance_row,
+                    soundset_row if soundset_row >= 0 else None,
+                ),
+            )
             for name in plan.get("runtime_files") or ():
                 name = Path(str(name)).name
-                if name.casefold() in {"appearance.2da", utc_name.casefold()}:
+                if name.casefold() in {
+                    "appearance.2da",
+                    "soundset.2da",
+                    utc_name.casefold(),
+                    f"{soundset_resref}.ssf".casefold(),
+                }:
                     continue
                 source = package_root / "additional" / name
                 if source.is_file() and source.suffix.casefold() in _RUNTIME_SUFFIXES:
@@ -1087,6 +1217,23 @@ class CustomRiggedCharacterPackagingService:
                     "current_sha256": current_hash,
                     "candidate_sha256": sha256_file(candidate),
                     "size": candidate.stat().st_size,
+                })
+            if dialog_candidate is not None:
+                dialog_target = game_root / "dialog.tlk"
+                if not dialog_target.is_file():
+                    raise FileNotFoundError(f"Expected KOTOR talk table was not found: {dialog_target}")
+                current_hash = sha256_file(dialog_target)
+                candidate_hash = sha256_file(dialog_candidate)
+                files.append({
+                    "name": "game-root/dialog.tlk",
+                    "target": str(dialog_target),
+                    "status": "unchanged" if current_hash == candidate_hash else "replace_with_backup",
+                    "action": "write",
+                    "candidate_relative": dialog_candidate.relative_to(candidate_root).as_posix(),
+                    "current_sha256": current_hash,
+                    "candidate_sha256": candidate_hash,
+                    "size": dialog_candidate.stat().st_size,
+                    "soundset": soundset_report,
                 })
             if module_candidate is not None:
                 module_path, module_report = module_candidate
@@ -1123,6 +1270,7 @@ class CustomRiggedCharacterPackagingService:
             files.sort(key=lambda item: str(item["name"]).casefold())
             identity_payload = {
                 "game": str(game_root), "exe": exe_hash, "row": appearance_row,
+                "soundset_row": soundset_row,
                 "files": files, "package_report": package_report_hash,
             }
             preview_id = _sha256_bytes(_stable_json(identity_payload))
@@ -1133,11 +1281,20 @@ class CustomRiggedCharacterPackagingService:
                 executable_path=str(exe_path),
                 executable_sha256=exe_hash,
                 appearance_row=appearance_row,
+                soundset_row=soundset_row,
                 files=files,
                 candidate_directory=str(candidate_root),
                 requires_patch_manager=requires_patch,
                 messages=[
                     "No files have been installed. Confirm this exact preview to continue.",
+                    *(
+                        [
+                            "The custom creature uses KOTOR's native SSF soundset. Preview appends or reuses only "
+                            "its owned dialog.tlk voice rows, merges one soundset.2da row, and includes both in Backup and Restore."
+                        ]
+                        if dialog_candidate is not None
+                        else []
+                    ),
                     *(
                         [
                             "PLCaa DevRoom will receive one temporary custom-creature placement; "
@@ -1211,6 +1368,152 @@ class CustomRiggedCharacterPackagingService:
             raise ValueError("Merged appearance row did not survive the 2DA round trip.")
         return result, row
 
+    def _merge_live_soundset(
+        self,
+        package_root: Path,
+        game_root: Path,
+        patch_name: str,
+    ) -> tuple[bytes, int, str, bytes, bytes, dict[str, Any]]:
+        """Merge one SSF row and its owned TLK voice entries without touching UTC hooks."""
+
+        from src.core.scripting.data_authoring import SoundSetDocument, TalkTableDocument
+        from src.core.templates.twoda import TwoDA
+
+        patch_path = package_root / "additional" / Path(patch_name).name
+        patch = json.loads(patch_path.read_text(encoding="utf-8"))
+        if patch.get("schema") != SOUNDSET_PATCH_SCHEMA:
+            raise ValueError("Creature soundset patch schema is not supported.")
+        soundset_resref = str(patch.get("resref") or "").strip().lower()
+        if not soundset_resref or len(soundset_resref) > 16:
+            raise ValueError("Creature soundset has an unsafe KOTOR resource name.")
+
+        override = game_root / "Override" / "soundset.2da"
+        if override.is_file():
+            table_blob = override.read_bytes()
+        else:
+            from pykotor.extract.installation import Installation
+            from pykotor.resource.type import ResourceType
+
+            resource = Installation(game_root).resource("soundset", ResourceType.TwoDA)
+            if resource is None:
+                raise FileNotFoundError("Could not load the game's soundset.2da.")
+            table_blob = bytes(resource.data)
+        table = TwoDA.from_bytes(table_blob)
+        if "resref" not in table.columns:
+            raise ValueError("The live soundset.2da has no resref column.")
+        matches = [
+            index
+            for index in range(len(table))
+            if str(table.get(index, "resref") or "").casefold() == soundset_resref.casefold()
+        ]
+        if len(matches) > 1:
+            raise ValueError(f"Live soundset.2da contains duplicate rows for {soundset_resref}: {matches}")
+        if matches:
+            soundset_row = matches[0]
+        else:
+            soundset_row = len(table)
+            table._rows.append(["" for _column in table.columns])
+            table._labels.append(str(soundset_row))
+        updates = {
+            "label": str(patch.get("label") or f"GhostStudio_{soundset_resref}"),
+            "resref": soundset_resref,
+            "strref": "",
+            "gender": str(patch.get("gender") or "0"),
+            "type": str(patch.get("type") or ""),
+        }
+        for column, value in updates.items():
+            if column in table.columns:
+                table._rows[soundset_row][table.col_index(column)] = value
+        soundset_blob = _twoda_to_binary_v2b(table)
+        table_check = TwoDA.from_bytes(soundset_blob)
+        if str(table_check.get(soundset_row, "resref") or "").casefold() != soundset_resref:
+            raise ValueError("Merged creature soundset row did not survive the 2DA round trip.")
+
+        dialog_path = game_root / "dialog.tlk"
+        if not dialog_path.is_file():
+            raise FileNotFoundError(f"Expected KOTOR talk table was not found: {dialog_path}")
+        dialog = TalkTableDocument.load(dialog_path)
+        soundset = SoundSetDocument()
+        valid_slots = set(SoundSetDocument.slot_names())
+        occupied_slots: set[str] = set()
+        tlk_rows: list[dict[str, Any]] = []
+        for cue in [dict(value) for value in patch.get("cues") or ()]:
+            cue_name = str(cue.get("cue") or "").strip().lower()
+            audio_resref = str(cue.get("resref") or "").strip().lower()
+            duration = max(0.0, float(cue.get("duration_seconds") or 0.0))
+            wanted_text = f"DO NOT TRANSLATE - Ghost Studio {soundset_resref} {cue_name}"
+            wav_path = package_root / "additional" / f"{audio_resref}.wav"
+            if not wav_path.is_file():
+                raise FileNotFoundError(f"Creature sound WAV is missing from the package: {wav_path.name}")
+            expected_hash = str(cue.get("sha256") or "").lower()
+            if expected_hash and sha256_file(wav_path) != expected_hash:
+                raise ValueError(f"Creature sound WAV changed after build: {wav_path.name}")
+            matching_entries = [
+                entry
+                for entry in dialog.entries
+                if str(entry.voiceover or "").casefold() == audio_resref.casefold()
+            ]
+            if len(matching_entries) > 1:
+                raise ValueError(f"dialog.tlk contains duplicate voiceover rows for {audio_resref}.")
+            if matching_entries:
+                current = matching_entries[0]
+                if current.text != wanted_text:
+                    raise ValueError(
+                        f"dialog.tlk already uses voiceover {audio_resref} for unrelated text; choose another sound resource name."
+                    )
+                strref = int(current.strref)
+                dialog.update_entry(strref, sound_length=duration)
+                action = "reuse_owned_entry"
+            else:
+                strref = dialog.add_entry(
+                    wanted_text,
+                    voiceover=audio_resref,
+                    sound_length=duration,
+                )
+                action = "append_owned_entry"
+            slots = [str(value or "").strip().upper() for value in cue.get("ssf_slots") or ()]
+            if not slots:
+                raise ValueError(f"Creature sound cue '{cue_name}' has no native SSF slot.")
+            for slot in slots:
+                if slot not in valid_slots:
+                    raise ValueError(f"Creature sound cue '{cue_name}' uses unknown SSF slot '{slot}'.")
+                if slot in occupied_slots:
+                    raise ValueError(f"Native SSF slot '{slot}' is assigned more than once.")
+                occupied_slots.add(slot)
+                soundset.set_slot(slot, strref)
+            tlk_rows.append({
+                "cue": cue_name,
+                "resref": audio_resref,
+                "strref": strref,
+                "slots": slots,
+                "action": action,
+                "duration_seconds": duration,
+            })
+
+        dialog_blob = dialog.to_bytes()
+        dialog_check = TalkTableDocument.load(dialog_blob)
+        for row in tlk_rows:
+            entry = dialog_check.entry(int(row["strref"]))
+            if str(entry.voiceover).casefold() != str(row["resref"]).casefold():
+                raise ValueError("Generated dialog.tlk voiceover mapping did not survive readback.")
+        ssf_blob = soundset.to_bytes()
+        ssf_check = SoundSetDocument.load(ssf_blob)
+        for row in tlk_rows:
+            for slot in row["slots"]:
+                if ssf_check.get_slot(slot) != int(row["strref"]):
+                    raise ValueError("Generated SSF mapping did not survive readback.")
+        report = {
+            "schema": SOUNDSET_PATCH_SCHEMA,
+            "soundset_row": soundset_row,
+            "soundset_resref": soundset_resref,
+            "dialog_tlk_entries": tlk_rows,
+            "direct_utc_event_hooks_preserved": True,
+            "dialog_tlk_source_sha256": sha256_file(dialog_path),
+            "dialog_tlk_candidate_sha256": _sha256_bytes(dialog_blob),
+            "ssf_sha256": _sha256_bytes(ssf_blob),
+        }
+        return soundset_blob, soundset_row, soundset_resref, ssf_blob, dialog_blob, report
+
     def install(self, preview: InstallPreview, *, confirmed_preview_id: str) -> InstallResult:
         if not preview.ok or not preview.preview_id or confirmed_preview_id != preview.preview_id:
             return InstallResult(ok=False, error="The exact install preview was not confirmed.")
@@ -1271,6 +1574,7 @@ class CustomRiggedCharacterPackagingService:
                 "executable_path": str(exe_path),
                 "executable_sha256": preview.executable_sha256,
                 "appearance_row": preview.appearance_row,
+                "soundset_row": preview.soundset_row,
                 "files": records,
             }
             manifest_path = session / "install-session.json"
@@ -1405,4 +1709,6 @@ __all__ = [
     "InstallPreview",
     "InstallResult",
     "PACKAGE_SCHEMA",
+    "SOUNDSET_PATCH_SCHEMA",
+    "SOUNDSET_ROW_TOKEN",
 ]

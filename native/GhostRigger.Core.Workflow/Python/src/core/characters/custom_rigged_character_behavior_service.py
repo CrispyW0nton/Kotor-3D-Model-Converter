@@ -10,12 +10,15 @@ smoke test.
 from __future__ import annotations
 
 import hashlib
+import io
 import re
+import wave
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
 from src.core.project.custom_rigged_character_project import (
     CUSTOM_CREATURE_BEHAVIOR_PROFILE_SCHEMA,
+    CreatureSoundCue,
     CustomRiggedCharacterProject,
 )
 from src.resources.kotor_utc_template_catalog import (
@@ -27,6 +30,51 @@ from src.resources.kotor_utc_template_catalog import (
 
 BEHAVIOR_BUILD_SCHEMA = "ghostrigger.custom_creature_behavior_build.v1"
 _RESREF = re.compile(r"^[a-z0-9_]{1,16}$")
+
+CREATURE_SOUND_CUE_DEFINITIONS: dict[str, dict[str, Any]] = {
+    "roar": {
+        "label": "Combat roar",
+        "ssf_slots": ("BATTLE_CRY_1",),
+        "patterns": ("roar", "combatyell", "battlecry"),
+        "resref_suffix": "roar",
+    },
+    "attack": {
+        "label": "Attack vocal",
+        "ssf_slots": ("ATTACK_GRUNT_1", "ATTACK_GRUNT_2", "ATTACK_GRUNT_3"),
+        "patterns": ("runattack", "attack", "headbutt"),
+        "resref_suffix": "vatk",
+    },
+    "hurt": {
+        "label": "Pain / damage",
+        "ssf_slots": ("PAIN_GRUNT_1",),
+        "patterns": ("gethit", "hurt", "pain"),
+        "resref_suffix": "hurt",
+    },
+    "guard": {
+        "label": "Defensive combat vocal",
+        "ssf_slots": ("BATTLE_CRY_2",),
+        "patterns": ("defensemode", "guard", "defense"),
+        "resref_suffix": "guard",
+    },
+    "blocked": {
+        "label": "Blocked / wall impact",
+        "ssf_slots": ("PAIN_GRUNT_2",),
+        "patterns": ("hitwall", "blocked", "impact"),
+        "resref_suffix": "wall",
+    },
+    "idle": {
+        "label": "Low-health breathing",
+        "ssf_slots": ("LOW_HEALTH",),
+        "patterns": ("breathe", "breath", "idle"),
+        "resref_suffix": "breath",
+    },
+    "death": {
+        "label": "Death vocal",
+        "ssf_slots": ("DEAD",),
+        "patterns": ("death", "die", "dead"),
+        "resref_suffix": "death",
+    },
+}
 
 UTC_SCRIPT_HOOK_LABELS = {
     "ScriptHeartbeat": "Heartbeat",
@@ -53,6 +101,40 @@ def _clean_resref(value: Any, label: str = "Script") -> str:
     if not _RESREF.fullmatch(text):
         raise ValueError(f"{label} name must use 1-16 lowercase letters, numbers, or underscores.")
     return text
+
+
+def creature_sound_resref(project: CustomRiggedCharacterProject, cue: str) -> str:
+    definition = CREATURE_SOUND_CUE_DEFINITIONS.get(str(cue or "").strip().lower())
+    if definition is None:
+        raise ValueError(f"Unknown creature sound cue: {cue}")
+    base = _clean_resref(project.resource_name, "Creature resource")
+    suffix = str(definition["resref_suffix"])
+    return _clean_resref(f"{base[:16 - len(suffix) - 1]}_{suffix}", "Creature sound")
+
+
+def _wav_summary(data: bytes, label: str) -> dict[str, Any]:
+    try:
+        with wave.open(io.BytesIO(data), "rb") as stream:
+            channels = int(stream.getnchannels())
+            sample_width = int(stream.getsampwidth())
+            sample_rate = int(stream.getframerate())
+            frame_count = int(stream.getnframes())
+            compression = str(stream.getcomptype())
+    except (EOFError, wave.Error) as exc:
+        raise ValueError(f"{label} is not a readable PCM WAV file: {exc}") from exc
+    if compression != "NONE" or channels != 1 or sample_width != 2:
+        raise ValueError(f"{label} must be an uncompressed mono 16-bit PCM WAV file for KOTOR.")
+    if sample_rate not in {11025, 22050, 44100}:
+        raise ValueError(f"{label} uses unsupported sample rate {sample_rate}; use 11025, 22050, or 44100 Hz.")
+    if frame_count <= 0:
+        raise ValueError(f"{label} contains no audio frames.")
+    return {
+        "sample_rate": sample_rate,
+        "channels": channels,
+        "bits_per_sample": sample_width * 8,
+        "frame_count": frame_count,
+        "duration_seconds": frame_count / float(sample_rate),
+    }
 
 
 def behavior_starter_source(hook: str, inherited_script: str = "") -> str:
@@ -128,6 +210,7 @@ class BehaviorBuildPreparation:
     ok: bool
     utc_template_bytes: bytes = b""
     resources: tuple[tuple[str, str, bytes], ...] = ()
+    utc_hook_overrides: Mapping[str, str] = field(default_factory=dict)
     report: Mapping[str, Any] = field(default_factory=dict)
     error: str = ""
 
@@ -272,6 +355,7 @@ class CustomRiggedCharacterBehaviorService:
                     raise ValueError("Selected UTC template belongs to the other KOTOR game.")
 
             resources: dict[tuple[str, str], bytes] = {}
+            utc_hook_overrides: dict[str, str] = {}
             compile_rows: list[dict[str, Any]] = []
             custom_source_by_resref: dict[str, str] = {}
             for hook, row_value in sorted(dict(profile.get("script_hooks") or {}).items()):
@@ -307,6 +391,40 @@ class CustomRiggedCharacterBehaviorService:
                     raise ValueError(f"{UTC_SCRIPT_HOOK_LABELS.get(hook, hook)}: {message}")
                 resources[(resref, "nss")] = source_text.encode("utf-8")
                 resources[(resref, "ncs")] = result.ncs_bytes
+
+            sound_rows: list[dict[str, Any]] = []
+            seen_cues: set[str] = set()
+            for cue_value in project.creature_sound_cues:
+                cue = cue_value if isinstance(cue_value, CreatureSoundCue) else CreatureSoundCue.from_dict(cue_value)
+                cue_name = str(cue.cue or "").strip().lower()
+                definition = CREATURE_SOUND_CUE_DEFINITIONS.get(cue_name)
+                if definition is None:
+                    raise ValueError(f"Project contains unknown creature sound cue '{cue_name}'.")
+                if cue_name in seen_cues:
+                    raise ValueError(f"Creature sound cue '{cue_name}' is assigned more than once.")
+                seen_cues.add(cue_name)
+                source_path = project.resolve_path(cue.source_path)
+                if not source_path.is_file():
+                    raise ValueError(f"{definition['label']} sound file was not found: {source_path}")
+                payload = source_path.read_bytes()
+                actual_hash = hashlib.sha256(payload).hexdigest()
+                if cue.source_sha256 and cue.source_sha256 != actual_hash:
+                    raise ValueError(f"{definition['label']} sound changed since it was selected. Choose it again.")
+                audio_resref = _clean_resref(
+                    cue.output_resref or creature_sound_resref(project, cue_name),
+                    "Creature sound",
+                )
+                wav = _wav_summary(payload, str(definition["label"]))
+                resources[(audio_resref, "wav")] = payload
+                sound_rows.append({
+                    "cue": cue_name,
+                    "label": definition["label"],
+                    "ssf_slots": list(definition["ssf_slots"]),
+                    "resref": audio_resref,
+                    "sha256": actual_hash,
+                    "size": len(payload),
+                    **wav,
+                })
 
             spawn_report: dict[str, Any] | None = None
             if bool(project.gameplay_settings.get("generate_spawn_script")):
@@ -344,6 +462,14 @@ class CustomRiggedCharacterBehaviorService:
                 } if template is not None else None),
                 "inherit_template_combat_stats": bool(profile.get("inherit_template_combat_stats", True)),
                 "custom_hooks": compile_rows,
+                "creature_sounds": {
+                    "cues": sound_rows,
+                    "delivery": "native_ssf_soundset",
+                    "hook_wrappers": [],
+                    "preserves_direct_utc_event_hooks": True,
+                    "requires_merge_safe_dialog_tlk_append": bool(sound_rows),
+                    "requires_merge_safe_soundset_2da_row": bool(sound_rows),
+                },
                 "test_spawn_script": spawn_report,
                 "retail_game_proof_required": True,
             }
@@ -351,6 +477,7 @@ class CustomRiggedCharacterBehaviorService:
                 ok=True,
                 utc_template_bytes=source,
                 resources=tuple((resref, restype, value) for (resref, restype), value in sorted(resources.items())),
+                utc_hook_overrides=utc_hook_overrides,
                 report=report,
             )
         except Exception as exc:
@@ -361,9 +488,11 @@ __all__ = [
     "BEHAVIOR_BUILD_SCHEMA",
     "BehaviorBuildPreparation",
     "BehaviorHookCompileResult",
+    "CREATURE_SOUND_CUE_DEFINITIONS",
     "CustomRiggedCharacterBehaviorService",
     "UTC_SCRIPT_HOOK_LABELS",
     "behavior_starter_source",
+    "creature_sound_resref",
     "spawn_test_script_resref",
     "spawn_test_script_source",
 ]

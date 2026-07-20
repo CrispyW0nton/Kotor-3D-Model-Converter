@@ -399,13 +399,13 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CREATURE_PACKAGE_BUILDER",
             "source_path": "src/core/characters/creature_package_builder.py",
             "packaged_path": "Python/src/core/characters/creature_package_builder.py",
-            "sha256": "be85affd9fee80fbe594fe603291ad2e90f9f2584a9f510a41090ab469fae168"
+            "sha256": "84b55985b3c79021ec6a06cfcfd37f7c564abd5357af85f0bfe525e0f7b19f94"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CUSTOM_RIGGED_CHARACTER_BEHAVIOR_SERVICE",
             "source_path": "src/core/characters/custom_rigged_character_behavior_service.py",
             "packaged_path": "Python/src/core/characters/custom_rigged_character_behavior_service.py",
-            "sha256": "70a7d2cf286e27ac980e20b0831880422432b27cff9407bb393cd2ad6d4f5920"
+            "sha256": "827451391f7040269c84c8707f62e82a66d95e474f93a0cf988a7e214bd1ff10"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CUSTOM_RIGGED_CHARACTER_BUILD_SERVICE",
@@ -423,7 +423,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CUSTOM_RIGGED_CHARACTER_PACKAGING_SERVICE",
             "source_path": "src/core/characters/custom_rigged_character_packaging_service.py",
             "packaged_path": "Python/src/core/characters/custom_rigged_character_packaging_service.py",
-            "sha256": "a1e7abceebbd9a164a6b5228c9451a53f934b11dd36c1ab342ba9da052ce98c3"
+            "sha256": "4630c1495f91f367f686b0e79393ac55af927aef03d04021bfffb5552ffa105a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEAD_WORKFLOW",

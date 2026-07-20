@@ -1857,13 +1857,13 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_CUSTOM_RIGGED_CHARACTER_BUILDER_CONTROLLER",
             "source_path": "src/gui/windows/qt_custom_rigged_character_builder_controller.py",
             "packaged_path": "Python/src/gui/windows/qt_custom_rigged_character_builder_controller.py",
-            "sha256": "2757a6aed0e6fa4a0bb758212d0c185727288c352f09496a2437bc0f5879addd"
+            "sha256": "c8b38d9d307612dad614cd8be1b7056fa7deeb8756149ced80177326afc731fb"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_CUSTOM_RIGGED_CHARACTER_BUILDER_WINDOW",
             "source_path": "src/gui/windows/qt_custom_rigged_character_builder_window.py",
             "packaged_path": "Python/src/gui/windows/qt_custom_rigged_character_builder_window.py",
-            "sha256": "cf104352b21d8c128054fdb4ad0afc5eef5551a212dfba25f0ae2e25c33d7c2e"
+            "sha256": "dd267fbecd689f7151c0552afd710de57d1fe273166368a8eee0434dcb4a7e0d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_GUI_EDITOR_WINDOW",

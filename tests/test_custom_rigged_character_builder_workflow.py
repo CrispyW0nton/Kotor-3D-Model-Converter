@@ -118,6 +118,9 @@ def test_custom_ui_uses_real_previews_and_reversible_install_services() -> None:
 
     assert 'self.animation_preview_viewports: dict[str, QtMainViewportWidget]' in window_source
     assert "Preview exact install" in window_source
+    assert "Load a save outside the test module" in window_source
+    assert "A hostile creature has a red health bar" in window_source
+    assert "KOTOR II keeps its name text cyan by design" in window_source
     assert "Install with backup" in window_source
     assert "Restore previous files" in window_source
     assert "Place one temporary test creature in PLCaa DevRoom (no console needed)" in window_source
@@ -126,6 +129,9 @@ def test_custom_ui_uses_real_previews_and_reversible_install_services() -> None:
     assert "keeps every other module resource and placement" in window_source
     assert "Orient imported image for KOTOR (recommended)" in window_source
     assert "Ghost Studio adds the standard KOTOR settings automatically" in window_source
+    assert 'background: {color("table.background")}' in window_source
+    assert 'color: {color("table.text")}' in window_source
+    assert 'background: {color("input.background")}' in window_source
     assert "CustomRiggedCharacterPackagingService" in controller_source
     assert "confirmed_preview_id=preview.preview_id" in controller_source
     assert "set_animation_pose" in controller_source
@@ -147,6 +153,11 @@ def test_custom_ui_exposes_installed_utc_templates_and_compiled_behavior_hooks()
         "customCharacterBehaviorHookTable",
         "customCharacterBehaviorSourceEditor",
         "Compile, check, and use this hook",
+        "customCharacterCreatureSounds",
+        "Choose a sound folder and match cues",
+        "customCharacterCreatureSoundTable",
+        "builds a native KOTOR SSF soundset",
+        "direct AI event scripts are not wrapped or replaced",
     ):
         assert text in window_source
     assert "merge-safe row resolved at install" in window_source
@@ -155,8 +166,10 @@ def test_custom_ui_exposes_installed_utc_templates_and_compiled_behavior_hooks()
     assert "behaviorTemplateRequested" in window_source
     assert "behaviorHookApplyRequested" in window_source
     assert "InstalledUtcTemplateCatalog" in controller_source
+    assert "A save already inside the test module can keep the previous creature's model, faction, and health-bar color" in controller_source
     assert "CustomRiggedCharacterBehaviorService" in controller_source
     assert "behavior_resources=behavior.resources" in controller_source
+    assert "utc_hook_overrides=behavior.utc_hook_overrides" in controller_source
     assert "utc_template_bytes=behavior.utc_template_bytes or None" in controller_source
     assert "resolve_path(self.window.project.texture_folder)" in controller_source
     assert "resolve_path(after_project.texture_folder)" in controller_source

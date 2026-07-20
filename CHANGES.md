@@ -9,7 +9,104 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-07-20
+
+### [2026-07-20] T2705/T3501: preserve creature AI while authoring native KOTOR soundsets
+
+Owner: LordVaderCW
+
+T###: T2705, T3501
+
+Intersects: the working `Kotor-Patch-Manager` Borhek prototype at
+`Patches/CustomCreatureK2Borhek`, the 2026-07-19 Ghost Studio Borhek installs,
+and the live KOTOR II `plcaa` regression report.
+
+Subsystem: Custom Rigged Character project/validation/workflow/UI, native SSF
+and merge-safe 2DA/TLK packaging, reversible install sessions, native Python
+payloads, focused tests, and user/architecture documentation.
+
+- Added a nontechnical creature-sound picker that can match the seven original
+  Star Wars: Bounty Hunter Borhek WAVs (roar, attack, pain, defense, impact,
+  breathing, and death), persists portable source references and hashes, and
+  validates uncompressed mono 16-bit PCM input.
+- Rejected the first scripted-audio implementation after retail testing showed
+  that replacing direct UTC hooks with `ExecuteScript` wrappers lost KOTOR's
+  event context. That prevented the Zakkeg-derived AI from retaining its
+  attacker and stopped Borhek's otherwise-present `m0a1`/`m0a2` attacks.
+- Replaced those wrappers with a native KOTOR soundset transaction. Build now
+  records symbolic SSF slots; exact-install preview appends or reuses only
+  project-owned `dialog.tlk` voice rows, writes a 40-entry SSF, merge-upserts a
+  `soundset.2da` row, patches `SoundSetFile` to the resolved live row, and backs
+  up/restores every global or Override target.
+- Preserved the selected Zakkeg UTC hooks directly, including Borhek's explicit
+  attacked hook, so sound authoring cannot replace spawn, perception, damage,
+  heartbeat, combat-round, blocked, or death AI scripts.
+
+Verification:
+
+- Eight focused behavior tests passed, including native SSF slot readback,
+  `dialog.tlk` voice lookup, dynamic `soundset.2da` row resolution, direct UTC
+  hook preservation, exact install, and byte-for-byte global-TLK restore.
+- Seven focused packaging tests, thirty-eight validation tests, and eight
+  Character Builder workflow/source-contract tests passed; changed Python
+  sources compiled successfully.
+- Core.IO, Core.Project, Core.Workflow, Core.Validation, and GUI.Display
+  payloads regenerated and built successfully as Debug|x64 DLLs; the focused
+  native payload byte-identity check passed.
+- MCP-backed model comparison of the installed `c_borhek` matched both model
+  pipelines and reported 58 nodes, 15 skins, 2,302 vertices, 3,058 faces, and
+  both `m0a1` and `m0a2`, confirming the reported missing attack was not an MDL
+  animation omission.
+- The replacement native-soundset build has not yet been installed or replayed
+  in KOTOR II. Visible UI build/install plus audible combat and attack-animation
+  confirmation remain required and are intentionally not claimed in this
+  checkpoint.
+
 ## 2026-07-19
+
+### [2026-07-19] T2705/T3501: make hostile UTC output engine-compatible and fresh-testable
+
+Owner: LordVaderCW
+
+T###: T2705, T3501
+
+Intersects: the working `Kotor-Patch-Manager` Borhek prototype at
+`Patches/CustomCreatureK2Borhek` and the live KOTOR II `plcaa` Borhek test.
+
+Subsystem: Core.IO UTC field contracts, Core.Workflow legacy creature package
+generation, Custom Rigged Character install guidance, native embedded-Python
+payloads, focused tests, and user/architecture documentation.
+
+- Corrected the blank-creature `FactionID` field from `UInt32` to the `UInt16`
+  used by stock K1/K2 UTC templates, and repaired the legacy UTC generator's
+  missing `GffField` import/label so that path produces a readable creature.
+- Added visible, nontechnical guidance to load a save outside the selected test
+  module before entering it. KOTOR serializes live creature instances inside a
+  save, so starting in `plcaa` can retain an older model, faction, or health-bar
+  color after a safe package replacement.
+- Clarified the KOTOR II runtime contract: hostility is proven by the red target
+  health bar; cyan target-name text is normal and is not a faction failure.
+
+Verification:
+
+- Twenty-two focused Custom Rigged Character packaging, workflow, and behavior
+  tests passed; thirty-seven focused native payload and package-registry checks
+  passed; changed Python sources compiled successfully.
+- Core.IO, Core.Workflow, and GUI.Display payloads were regenerated and all
+  three native Debug|x64 projects built successfully through the active Visual
+  Studio instance.
+- The rebuilt Custom Rigged Character Builder was opened through the actual
+  Ghost Studio UI, the portable Borhek project was loaded, and the exact install
+  preview and new runtime checklist were visibly reviewed before selecting
+  **Install with backup**.
+- Ghost Studio installed all 15 reviewed files and recorded restore session
+  `20260719T215458`. Every live file matches the recorded installed hash and has
+  its expected backup. The installed UTC has `FactionID` `UInt16` value 1,
+  appearance row 724, and the compiled attacked hook; `plcaa.mod` contains one
+  `gs_c_borhek` placement at `(26, 30, 0)`.
+- The installed `appearance.2da` Borhek row uses the same simple-creature model
+  mode as stock Zakkeg. Fresh-module KOTOR II proof of the corrected red health
+  bar and combat remains the final runtime gate and is not claimed here.
 
 ### [2026-07-19] preserve KOTOR texture orientation during custom-character packaging
 
@@ -36,8 +133,13 @@ Verification:
   pixel-order checks for enabled and disabled orientation and generated cutout
   TXI output.
 - Changed Python sources and regenerated payload metadata passed compilation
-  and payload identity checks. This publication sync does not claim a new
-  visible Debug-app acceptance pass for the material-page control.
+  and payload identity checks.
+- The material page was visibly reviewed in the rebuilt Ghost Studio Debug
+  application with readable themed table rows and the explicit KOTOR-orientation
+  control. After installation through the actual UI, all seven live Borhek TGA
+  files decode to the exact pixel dimensions and RGBA rows of the working Kotor
+  Patch Manager prototype; the hair TXI contains the generated punch-through
+  settings. Fresh in-game visual confirmation remains required.
 
 ### [2026-07-19] publish the canonical Ghost Studio working tree
 
@@ -119,8 +221,11 @@ Verification:
   is exactly 231,700 bytes instead of the rejected candidate's 918,900 bytes.
 - The five focused Custom Rigged Character suites passed (62 tests), plus four
   focused native payload checks; changed Python sources passed compilation.
-- Visible Debug-app rebuild/install and KOTOR II playback remain required and
-  are intentionally not claimed by this entry yet.
+- The corrected package was rebuilt, previewed, and installed with backups
+  through the actual Ghost Studio Debug UI. Prior KOTOR II testing visibly
+  confirmed the corrected root/skin model now loads upright and animates; the
+  newly installed texture/faction build still requires the fresh `plcaa`
+  runtime pass and is intentionally not claimed complete here.
 
 ### [2026-07-19] document the Python 3.13 native-host prerequisite
 

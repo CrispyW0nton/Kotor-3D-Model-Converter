@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import math
 import re
+import wave
 from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -28,6 +30,7 @@ _VERIFIED_CREATURE_ALIASES = {
     "creadyr", "creadyrtw", "cwalkinj", "ckdbck", "ckdbcklp",
     "cgustandb", "cdie", "cdead", "ctaunt", "cvictory",
 }
+_CREATURE_SOUND_CUES = {"roar", "attack", "hurt", "guard", "blocked", "idle", "death"}
 
 
 @dataclass(frozen=True)
@@ -382,6 +385,66 @@ class CustomRiggedCharacterValidator:
                            fix_effect="Changes only this additive registry ID and generated metadata.")
             else:
                 local.add(registration.animation_id)
+        sound_cues: set[str] = set()
+        sound_resrefs: set[str] = set()
+        for index, cue in enumerate(project.creature_sound_cues):
+            field_prefix = f"gameplay.creature_sounds.{index}"
+            cue_name = str(cue.cue or "").strip().casefold()
+            if cue_name not in _CREATURE_SOUND_CUES:
+                report.add(
+                    "error", "unknown_creature_sound_cue", f"Creature sound cue '{cue_name}' is not supported.",
+                    "Each sound must map to a known native SSF slot so it cannot replace an unrelated AI event hook.",
+                    field=f"{field_prefix}.cue",
+                )
+            elif cue_name in sound_cues:
+                report.add(
+                    "error", "duplicate_creature_sound_cue", f"Creature sound cue '{cue_name}' is assigned more than once.",
+                    "One deterministic WAV must be selected for each native creature sound cue.", field=f"{field_prefix}.cue",
+                )
+            sound_cues.add(cue_name)
+            if cue.output_resref and not validate_resource_name(cue.output_resref):
+                report.add(
+                    "error", "invalid_creature_sound_resref", "A creature sound has an invalid KOTOR resource name.",
+                    "KOTOR sound lookups require 1–16 lowercase letters, numbers, or underscores.",
+                    field=f"{field_prefix}.output_resref",
+                )
+            elif cue.output_resref and cue.output_resref in sound_resrefs:
+                report.add(
+                    "error", "duplicate_creature_sound_resref", f"Sound resource '{cue.output_resref}' is reused.",
+                    "Each event needs an unambiguous packaged WAV resource.", field=f"{field_prefix}.output_resref",
+                )
+            sound_resrefs.add(cue.output_resref)
+            source = project.resolve_path(cue.source_path)
+            if not cue.source_path or not source.is_file():
+                report.add(
+                    "error", "missing_creature_sound", f"Choose an existing WAV for the {cue_name or 'creature'} sound.",
+                    "The build will not silently omit an assigned creature sound.", field=f"{field_prefix}.source_path",
+                )
+                continue
+            payload = source.read_bytes()
+            actual_hash = hashlib.sha256(payload).hexdigest()
+            if cue.source_sha256 and cue.source_sha256 != actual_hash:
+                report.add(
+                    "error", "changed_creature_sound", f"The selected {cue_name} WAV changed after it was chosen.",
+                    "Review the changed source before it enters a distributable package.", field=f"{field_prefix}.source_sha256",
+                )
+            try:
+                with wave.open(io.BytesIO(payload), "rb") as stream:
+                    valid_pcm = (
+                        stream.getcomptype() == "NONE"
+                        and stream.getnchannels() == 1
+                        and stream.getsampwidth() == 2
+                        and stream.getframerate() in {11025, 22050, 44100}
+                        and stream.getnframes() > 0
+                    )
+            except (EOFError, wave.Error):
+                valid_pcm = False
+            if not valid_pcm:
+                report.add(
+                    "error", "unsupported_creature_sound", f"The {cue_name} sound is not a KOTOR-ready PCM WAV.",
+                    "Use an uncompressed mono 16-bit WAV at 11025, 22050, or 44100 Hz.",
+                    field=f"{field_prefix}.source_path",
+                )
 
     def _validate_hierarchy(self, snapshot: CustomRiggedCharacterSnapshot, report: CustomRigValidationReport) -> None:
         if snapshot.skeleton_selection_required:

@@ -10,6 +10,7 @@ from src.core.characters.custom_rigged_character_packaging_service import (
     APPEARANCE_ROW_TOKEN,
     CustomRiggedCharacterPackagingService,
 )
+from src.core.characters.creature_package_builder import CreatureSpec, _generate_utc
 from src.core.project.custom_rigged_character_project import (
     CustomRiggedCharacterProject,
     MaterialAssignment,
@@ -23,6 +24,18 @@ from src.formats.gff_writer import write_gff
 
 def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_blank_creature_utc_uses_kotor_faction_word(tmp_path: Path) -> None:
+    utc_path = _generate_utc(
+        tmp_path,
+        CreatureSpec(resref="c_hostile", display_name="Hostile Creature", faction_id=1),
+        1,
+    )
+
+    utc = read_gff(utc_path.read_bytes())
+    assert utc.root.fields["FactionID"].type is GffFieldType.UINT16
+    assert int(utc.root.get("FactionID", -1)) == 1
 
 
 def _appearance_bytes() -> bytes:

@@ -9,6 +9,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.core.project.custom_rigged_character_project import (
     AnimationMapping,
+    CreatureSoundCue,
     CustomAnimationRegistration,
     CustomRiggedCharacterProject,
     MaterialAssignment,
@@ -26,7 +27,9 @@ from src.core.characters.custom_rigged_character_build_service import (
     suggest_semantic_mapping,
 )
 from src.core.characters.custom_rigged_character_behavior_service import (
+    CREATURE_SOUND_CUE_DEFINITIONS,
     UTC_SCRIPT_HOOK_LABELS,
+    creature_sound_resref,
 )
 from src.resources.kotor_utc_template_catalog import UTC_SCRIPT_HOOK_FIELDS
 
@@ -44,6 +47,7 @@ WORKFLOW_PAGES = (
 )
 
 RUNTIME_TEST_CHECKLIST = (
+    "Load a save outside the test module, then enter or warp into it so KOTOR creates a fresh creature instance.",
     "Creature is visible.",
     "Creature is at the correct height.",
     "Textures are correctly wrapped.",
@@ -53,6 +57,7 @@ RUNTIME_TEST_CHECKLIST = (
     "Turning does not distort the skeleton.",
     "No vertices remain behind or explode.",
     "The creature notices a hostile target and starts combat.",
+    "A hostile creature has a red health bar; KOTOR II keeps its name text cyan by design.",
     "Attack and damage reactions run without script errors.",
     "Round-end and death behavior match the chosen template.",
     "The generated UTC can be spawned again after restarting the game.",
@@ -693,7 +698,8 @@ class QtCustomRiggedCharacterBuilderWindow(QtWidgets.QMainWindow):
             self.material_preview_labels[key] = view
         page.layout.addLayout(previews)
         output = QtWidgets.QGroupBox("Generated texture copies")
-        output_layout = QtWidgets.QHBoxLayout(output)
+        output_layout = QtWidgets.QVBoxLayout(output)
+        format_row = QtWidgets.QHBoxLayout()
         self.output_tga = QtWidgets.QRadioButton("TGA + TXI")
         self.output_tpc = QtWidgets.QRadioButton("TPC")
         self.output_tga.setChecked(True)
@@ -705,11 +711,12 @@ class QtCustomRiggedCharacterBuilderWindow(QtWidgets.QMainWindow):
             "Matches imported image rows to Odyssey MDX texture coordinates. "
             "Turn this off only when the image was already authored in KOTOR orientation."
         )
-        output_layout.addWidget(self.output_tga)
-        output_layout.addWidget(self.output_tpc)
-        output_layout.addWidget(self.preserve_repeat)
+        format_row.addWidget(self.output_tga)
+        format_row.addWidget(self.output_tpc)
+        format_row.addWidget(self.preserve_repeat)
+        format_row.addStretch(1)
+        output_layout.addLayout(format_row)
         output_layout.addWidget(self.orient_for_kotor)
-        output_layout.addStretch(1)
         page.layout.addWidget(output)
         cutout_help = QtWidgets.QLabel(
             "Choose Cutout / punch-through in the Alpha column for hair, leaves, or other hard-edged transparency. "
@@ -840,7 +847,7 @@ class QtCustomRiggedCharacterBuilderWindow(QtWidgets.QMainWindow):
         form.addRow("Base behavior", self.behavior_preset)
         form.addRow("Faction", self.faction)
         form.addRow("Movement rate", self.movement_rate)
-        form.addRow("Soundset", self.soundset)
+        form.addRow("Template soundset row", self.soundset)
         form.addRow("Personal space / collision size", self.collision_size)
         form.addRow("Perception range", self.perception_range)
         form.addRow("Creature level", self.level)
@@ -848,7 +855,44 @@ class QtCustomRiggedCharacterBuilderWindow(QtWidgets.QMainWindow):
         inherited_layout.addLayout(form)
         page.layout.addWidget(inherited)
 
-        hooks = QtWidgets.QGroupBox("3. Review the UTC behavior hooks")
+        sounds = QtWidgets.QGroupBox("3. Add creature sounds")
+        sounds.setObjectName("customCharacterCreatureSounds")
+        sounds_layout = QtWidgets.QVBoxLayout(sounds)
+        sounds_help = QtWidgets.QLabel(
+            "Choose ordinary mono 16-bit PCM WAV files. Ghost Studio builds a native KOTOR SSF soundset, "
+            "adds one merge-safe soundset.2da row, and appends only the required voice rows to dialog.tlk. "
+            "The exact global changes are previewed, backed up, and restorable; the creature's direct AI event scripts are not wrapped or replaced."
+        )
+        sounds_help.setWordWrap(True)
+        sounds_layout.addWidget(sounds_help)
+        sound_actions = QtWidgets.QHBoxLayout()
+        self.choose_creature_sound_folder = QtWidgets.QPushButton("Choose a sound folder and match cues…")
+        self.choose_creature_sound_file = QtWidgets.QPushButton("Choose WAV for selected cue…")
+        self.clear_creature_sounds = QtWidgets.QPushButton("Clear creature sounds")
+        sound_actions.addWidget(self.choose_creature_sound_folder)
+        sound_actions.addWidget(self.choose_creature_sound_file)
+        sound_actions.addWidget(self.clear_creature_sounds)
+        sound_actions.addStretch(1)
+        sounds_layout.addLayout(sound_actions)
+        self.creature_sound_table = QtWidgets.QTreeWidget()
+        self.creature_sound_table.setObjectName("customCharacterCreatureSoundTable")
+        self.creature_sound_table.setHeaderLabels(("Native sound cue", "Selected WAV", "KOTOR resource", "Status"))
+        self.creature_sound_table.setRootIsDecorated(False)
+        self.creature_sound_table.setAlternatingRowColors(True)
+        self.creature_sound_table.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.creature_sound_table.setMinimumHeight(210)
+        self.creature_sound_table.header().setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        self.creature_sound_table.header().setSectionResizeMode(1, QtWidgets.QHeaderView.Stretch)
+        self.creature_sound_table.header().setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeToContents)
+        self.creature_sound_table.header().setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeToContents)
+        sounds_layout.addWidget(self.creature_sound_table)
+        self.creature_sound_status = QtWidgets.QLabel("No custom creature sounds selected; the installed template soundset remains available.")
+        self.creature_sound_status.setWordWrap(True)
+        self.creature_sound_status.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        sounds_layout.addWidget(self.creature_sound_status)
+        page.layout.addWidget(sounds)
+
+        hooks = QtWidgets.QGroupBox("4. Review the UTC behavior hooks")
         hooks_layout = QtWidgets.QVBoxLayout(hooks)
         hook_help = QtWidgets.QLabel(
             "KOTOR calls these scripts when the creature sees someone, is attacked, takes damage, finishes a combat round, spawns, dies, or becomes blocked. "
@@ -980,10 +1024,146 @@ class QtCustomRiggedCharacterBuilderWindow(QtWidgets.QMainWindow):
             lambda: self.behaviorStarterRequested.emit(str(self.behavior_hook_combo.currentData() or ""))
         )
         self.apply_behavior_hook.clicked.connect(self._request_behavior_hook_apply)
+        self.choose_creature_sound_folder.clicked.connect(self._choose_creature_sound_folder)
+        self.choose_creature_sound_file.clicked.connect(self._choose_selected_creature_sound)
+        self.clear_creature_sounds.clicked.connect(self._clear_creature_sounds)
+        self.creature_sound_table.itemDoubleClicked.connect(
+            lambda _item, _column: self._choose_selected_creature_sound()
+        )
+        self._refresh_creature_sound_table()
         self._refresh_behavior_hook_table()
         self._behavior_hook_mode_changed()
         self._behavior_inheritance_changed()
         return page
+
+    def _refresh_creature_sound_table(self) -> None:
+        if not hasattr(self, "creature_sound_table"):
+            return
+        selected = str(
+            self.creature_sound_table.currentItem().data(0, QtCore.Qt.UserRole)
+            if self.creature_sound_table.currentItem() is not None else ""
+        )
+        by_cue = {str(value.cue).casefold(): value for value in self.project.creature_sound_cues}
+        self.creature_sound_table.clear()
+        selected_item: QtWidgets.QTreeWidgetItem | None = None
+        ready = 0
+        missing = 0
+        for cue, definition in CREATURE_SOUND_CUE_DEFINITIONS.items():
+            value = by_cue.get(cue)
+            path = self.project.resolve_path(value.source_path) if value and value.source_path else Path()
+            exists = bool(value and value.source_path and path.is_file())
+            if exists:
+                ready += 1
+            elif value and value.source_path:
+                missing += 1
+            item = QtWidgets.QTreeWidgetItem((
+                str(definition["label"]),
+                path.name if value and value.source_path else "—",
+                str(value.output_resref or "Build assigns it") if value else "—",
+                "Ready" if exists else ("File not found" if value and value.source_path else "Optional"),
+            ))
+            item.setData(0, QtCore.Qt.UserRole, cue)
+            if value and value.source_path:
+                item.setToolTip(1, str(path))
+            self.creature_sound_table.addTopLevelItem(item)
+            if cue == selected:
+                selected_item = item
+        if selected_item is not None:
+            self.creature_sound_table.setCurrentItem(selected_item)
+        if ready:
+            detail = f"{ready} creature sound cue(s) ready"
+            if missing:
+                detail += f"; {missing} source file(s) need to be chosen again"
+            self.creature_sound_status.setText(
+                detail + ". Build will preserve every selected UTC script and route these WAVs through a native SSF soundset."
+            )
+        else:
+            self.creature_sound_status.setText(
+                "No custom creature sounds selected; the installed template soundset remains available."
+            )
+
+    def _choose_creature_sound_folder(self) -> None:
+        start = str(self._settings.value("last_creature_sound_folder", "") or "")
+        folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Choose creature sound folder", start)
+        if not folder:
+            return
+        self._sync_project_from_form()
+        wav_files = sorted(
+            (path for path in Path(folder).rglob("*") if path.is_file() and path.suffix.casefold() == ".wav"),
+            key=lambda path: path.name.casefold(),
+        )
+        matched: list[CreatureSoundCue] = []
+        used: set[Path] = set()
+        for cue, definition in CREATURE_SOUND_CUE_DEFINITIONS.items():
+            chosen = next(
+                (
+                    path for path in wav_files
+                    if path not in used
+                    and any(pattern in path.stem.casefold() for pattern in definition["patterns"])
+                ),
+                None,
+            )
+            if chosen is None:
+                continue
+            used.add(chosen)
+            try:
+                output_resref = creature_sound_resref(self.project, cue)
+                digest = sha256_file(chosen)
+            except (OSError, ValueError) as exc:
+                QtWidgets.QMessageBox.warning(self, "Could not use creature sound", str(exc))
+                return
+            matched.append(CreatureSoundCue(cue, str(chosen), digest, output_resref))
+        if not matched:
+            QtWidgets.QMessageBox.information(
+                self,
+                "No recognizable creature sounds",
+                "No WAV filename matched roar, attack, get-hit or hurt, defense, hit-wall, breathing or idle, and death cues. "
+                "Select a row and use Choose WAV for selected cue to assign files manually.",
+            )
+            return
+        self.project.creature_sound_cues = matched
+        self._settings.setValue("last_creature_sound_folder", folder)
+        self._refresh_creature_sound_table()
+        self._form_changed()
+
+    def _choose_selected_creature_sound(self) -> None:
+        item = self.creature_sound_table.currentItem()
+        if item is None:
+            QtWidgets.QMessageBox.information(self, "Choose a sound cue", "Select one creature sound row first.")
+            return
+        cue = str(item.data(0, QtCore.Qt.UserRole) or "")
+        existing = next((value for value in self.project.creature_sound_cues if value.cue == cue), None)
+        start = str(self.project.resolve_path(existing.source_path)) if existing and existing.source_path else str(
+            self._settings.value("last_creature_sound_folder", "") or ""
+        )
+        source, _selected = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            f"Choose {CREATURE_SOUND_CUE_DEFINITIONS[cue]['label']} WAV",
+            start,
+            "PCM WAV audio (*.wav);;All files (*)",
+        )
+        if not source:
+            return
+        self._sync_project_from_form()
+        path = Path(source)
+        try:
+            value = CreatureSoundCue(cue, str(path), sha256_file(path), creature_sound_resref(self.project, cue))
+        except (OSError, ValueError) as exc:
+            QtWidgets.QMessageBox.warning(self, "Could not use creature sound", str(exc))
+            return
+        self.project.creature_sound_cues = [
+            row for row in self.project.creature_sound_cues if row.cue != cue
+        ] + [value]
+        self._settings.setValue("last_creature_sound_folder", str(path.parent))
+        self._refresh_creature_sound_table()
+        self._form_changed()
+
+    def _clear_creature_sounds(self) -> None:
+        if not self.project.creature_sound_cues:
+            return
+        self.project.creature_sound_cues = []
+        self._refresh_creature_sound_table()
+        self._form_changed()
 
     def _behavior_inheritance_changed(self, *_args: Any) -> None:
         if not hasattr(self, "inherit_template_stats"):
@@ -1799,6 +1979,11 @@ class QtCustomRiggedCharacterBuilderWindow(QtWidgets.QMainWindow):
         recent = [
             source_path, self.animation_folder.path(), self.texture_folder.path(),
             self.output_folder.path(), self.game_directory.path(),
+            *[
+                str(self.project.resolve_path(value.source_path).parent)
+                for value in self.project.creature_sound_cues
+                if value.source_path
+            ],
         ]
         self.project.recent_paths = list(dict.fromkeys(
             [value for value in recent if value] + list(self.project.recent_paths)
@@ -1900,6 +2085,7 @@ class QtCustomRiggedCharacterBuilderWindow(QtWidgets.QMainWindow):
                 selection_required=bool(self.project.last_import_summary.get("skeleton_selection_required")),
             )
             self._apply_import_summary(self.project.last_import_summary)
+            self._refresh_creature_sound_table()
             self._refresh_behavior_hook_table()
             self._load_behavior_hook_editor()
             template = dict(self.project.behavior_profile.get("template_snapshot") or {})
@@ -2347,7 +2533,32 @@ class QtCustomRiggedCharacterBuilderWindow(QtWidgets.QMainWindow):
         self._save_automatically()
         event.accept()
 
-    def apply_ghost_theme(self, _theme: object) -> None:
+    def apply_ghost_theme(self, theme: object) -> None:
+        color = getattr(theme, "color", None)
+        if callable(color):
+            selector = "QMainWindow#customRiggedCharacterBuilderWindow"
+            self.setStyleSheet(f"""
+                {selector} QTableWidget {{
+                    background: {color("table.background")};
+                    color: {color("table.text")};
+                    gridline-color: {color("table.grid")};
+                    alternate-background-color: {color("panel.alternate", color("table.background"))};
+                }}
+                {selector} QTableWidget::item:selected {{
+                    background: {color("selection.background")};
+                    color: {color("selection.text")};
+                }}
+                {selector} QTableWidget QComboBox {{
+                    background: {color("input.background")};
+                    color: {color("input.text")};
+                    border: 1px solid {color("input.border", color("panel.border"))};
+                }}
+                {selector} QHeaderView::section {{
+                    background: {color("table.headerBackground")};
+                    color: {color("table.headerText")};
+                    border: 1px solid {color("table.grid")};
+                }}
+            """)
         self.update()
 
     def apply_ghost_layout(self, _layout: object) -> None:

@@ -39,7 +39,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_CUSTOM_RIGGED_CHARACTER_VALIDATOR",
             "source_path": "src/core/validation/custom_rigged_character_validator.py",
             "packaged_path": "Python/src/core/validation/custom_rigged_character_validator.py",
-            "sha256": "ea37222f03f8e29891c01c76e03d07140ea97f8c9981139ad8203c08383b3ec8"
+            "sha256": "8cc57689c012010f32b14f0bd312096aa0429f4dd5e8c005f2f3d2c2ab48430a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_KOTOR_MODULE_ENGINE_CONTRACT",

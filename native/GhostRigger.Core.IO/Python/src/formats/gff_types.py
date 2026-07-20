@@ -240,7 +240,7 @@ UTC_FIELDS = {
     "Repair":           ("Repair",               GffFieldType.BYTE,          0),
     "SecuritySkill":    ("Security",             GffFieldType.BYTE,          0),
     "TreatInjury":      ("Treat Injury",         GffFieldType.BYTE,          0),
-    "FactionID":        ("Faction",              GffFieldType.UINT32,        1),
+    "FactionID":        ("Faction",              GffFieldType.UINT16,        1),
     "SoundSetFile":     ("Sound Set (2DA)",      GffFieldType.UINT16,        0),
     "Conversation":     ("Conversation ResRef",  GffFieldType.RESREF,       ""),
     "OnSpawn":          ("On Spawn Script",      GffFieldType.RESREF,       ""),

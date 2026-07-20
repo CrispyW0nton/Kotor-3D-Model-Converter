@@ -462,6 +462,7 @@ class QtCustomRiggedCharacterBuilderController(QtCore.QObject):
             package_destination,
             utc_template_bytes=behavior.utc_template_bytes or None,
             behavior_resources=behavior.resources,
+            utc_hook_overrides=behavior.utc_hook_overrides,
             behavior_report=behavior.report,
             allow_overwrite=False,
         )
@@ -597,7 +598,7 @@ class QtCustomRiggedCharacterBuilderController(QtCore.QObject):
         self.window.set_install_preview(preview.to_dict())
 
     @QtCore.Slot(object)
-    def install_package(self, _project: CustomRiggedCharacterProject) -> None:
+    def install_package(self, project: CustomRiggedCharacterProject) -> None:
         preview = self._install_preview
         if preview is None or not preview.ok:
             QtWidgets.QMessageBox.information(self.window, "Preview required", "Preview the exact installation again before continuing.")
@@ -623,8 +624,12 @@ class QtCustomRiggedCharacterBuilderController(QtCore.QObject):
         self._last_install_session = result.session_manifest
         self._install_preview = None
         self.window.install_button.setEnabled(False)
+        test_module = str(project.gameplay_settings.get("test_module_resref") or "plcaa")
         self.window.install_status.setText(
-            f"Installed {len(result.installed_files)} file(s) with backups. Restore session: {result.session_manifest}"
+            f"Installed {len(result.installed_files)} file(s) with backups. "
+            f"For a clean test, load a save outside {test_module}, then enter or warp into it. "
+            "A save already inside the test module can keep the previous creature's model, faction, and health-bar color. "
+            f"Restore session: {result.session_manifest}"
         )
 
     @QtCore.Slot(object)
