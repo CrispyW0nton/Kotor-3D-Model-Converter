@@ -304,6 +304,12 @@ class QtGhostRiggerMainWindow(
         self._auto_detect_worker: Optional[QtCore.QObject] = None
         self._animation_scan_thread: Optional[QtCore.QThread] = None
         self._animation_scan_worker: Optional[QtCore.QObject] = None
+        self._animation_model_load_thread: Optional[QtCore.QThread] = None
+        self._animation_model_load_worker: Optional[QtCore.QObject] = None
+        self._animation_model_load_request_id = 0
+        self._animation_model_load_model_id = 0
+        self._pending_animation_model_load: Optional[tuple] = None
+        self._defer_inherited_animation_loading = True
         self._batch_thread: Optional[QtCore.QThread] = None
         self._batch_worker: Optional[QtCore.QObject] = None
         self._floating_dock_hosts: dict[str, QtFloatingDockHost] = {}

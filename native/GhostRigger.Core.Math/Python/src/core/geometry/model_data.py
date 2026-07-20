@@ -1457,13 +1457,20 @@ class KotorModel:
             visited.add(nid)
             result.append(n)
             # Push children in reverse so first child is processed first
-            for c in reversed(n.children):
+            for c in reversed(getattr(n, "children", []) or []):
                 if id(c) not in visited:
                     stack.append(c)
         return result
 
     def mesh_nodes(self) -> List[ModelNode]:
-        return [n for n in self.all_nodes() if n.is_mesh]
+        """Return mesh nodes while ignoring renderer/editor helper records.
+
+        Lighting and camera workbenches may append lightweight runtime helper
+        objects to ``all_nodes()``.  Those records deliberately are not full
+        :class:`ModelNode` instances, so model inspection must treat a missing
+        mesh flag as ``False`` instead of aborting the whole model load.
+        """
+        return [n for n in self.all_nodes() if bool(getattr(n, "is_mesh", False))]
 
     def bone_nodes(self) -> List[ModelNode]:
         """Return all skeleton/joint nodes (non-mesh dummy nodes).
@@ -1475,7 +1482,7 @@ class KotorModel:
         Previously this only returned nodes where is_dummy=True (flags==HEADER),
         silently omitting all flags=0 bone nodes from the skeleton list.
         """
-        return [n for n in self.all_nodes() if n.type_label == 'dummy']
+        return [n for n in self.all_nodes() if getattr(n, "type_label", "") == 'dummy']
 
     def find_node(self, name: str) -> Optional[ModelNode]:
         nl = name.lower()

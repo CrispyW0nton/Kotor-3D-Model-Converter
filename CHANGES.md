@@ -11,6 +11,44 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-19
 
+### [2026-07-19] prevent automatic KOTOR MDL file-open stalls
+
+Owner: LordVaderCW
+
+T###: N/A
+
+Subsystem: Core.IO automatic KOTOR model routing, Core.GUI.Display file-load
+and animation handoff, Core.Math model queries, and Core.Rendering preview
+lights.
+
+- Added one automatic MDL import service that detects binary versus ASCII,
+  pairs a sibling MDX, identifies K1/K2 from model evidence, and routes the
+  detected character, area, door, placeable, effect, or lightsaber type.
+- Replaced the separate binary/ASCII file actions with the shared automatic
+  workflow and moved worker progress/completion callbacks through a queued
+  main-thread QObject relay.
+- Kept inherited-supermodel discovery out of the initial file-open path. Local
+  clips appear immediately, while an explicit `Load Inherited` action performs
+  slower game-library lookup on a dedicated worker with stale-request guards.
+- Hardened model traversal and generated preview-light nodes so editor-owned
+  helper records cannot abort mesh queries during the viewport handoff.
+
+Affected files: `src/io/mdl_auto_import.py`, its Core.IO payload and project
+metadata, Core.GUI.Display animation panel/workflow/resource-loading/window
+worker payloads, Core.Math `model_data.py`, Core.Rendering `light_manager.py`,
+focused importer/core contracts, and regenerated native payload metadata.
+
+Verification:
+
+- Changed Python files compiled successfully; 11 focused automatic-import,
+  UI-relay, animation-deferral, helper-node, core-worker, and payload contracts
+  passed.
+- The supplied `pfbc09.mdl` resolved as an exact-signature K2 character,
+  paired `pfbc09.mdx`, and loaded 79 nodes/61 meshes in 0.201 seconds.
+- Existing visible Debug-app proof under
+  `Saved/VisualProofs/mdl_auto_import_20260718/` confirms File > Open KOTOR
+  Model (Automatic) remains responsive and reaches the textured viewport.
+
 ### [2026-07-19] T2906/T3101: restore embedded payload parity for clean builds
 
 Owner: LordVaderCW

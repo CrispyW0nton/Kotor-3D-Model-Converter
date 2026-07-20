@@ -387,7 +387,7 @@
     },
     {
         "project": "GhostRigger.Core.IO",
-        "python_file_count": 37,
+        "python_file_count": 38,
         "files": [
             "src\\adapters\\files\\__init__.py",
             "src\\adapters\\files\\local_file_writer.py",
@@ -425,7 +425,8 @@
             "src\\io\\fbx\\fbx_scene_adapter.py",
             "src\\io\\fbx\\fbx_sdk_loader.py",
             "src\\io\\fbx\\fbx_sdk_paths.py",
-            "src\\io\\fbx\\fbx_sdk_setup.py"
+            "src\\io\\fbx\\fbx_sdk_setup.py",
+            "src\\io\\mdl_auto_import.py"
         ]
     },
     {

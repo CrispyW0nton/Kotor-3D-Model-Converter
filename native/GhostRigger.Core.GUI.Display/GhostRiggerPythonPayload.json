@@ -771,7 +771,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_ANIMATION_PANEL",
             "source_path": "src/gui/panels/qt_animation_panel.py",
             "packaged_path": "Python/src/gui/panels/qt_animation_panel.py",
-            "sha256": "b22fcee1e3c17be0c8bd60517757176a717271adcac4ac3e7e85126b486d182b"
+            "sha256": "2a88cc2fe379ac71a84e3c408c463d083eb5e8966d3fdd574faecdb6b5a52a24"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_QT_BODY_ATTACHMENT_PANEL",
@@ -1683,7 +1683,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_ANIMATION_WORKFLOW",
             "source_path": "src/gui/windows/application_core/shared/animation_workflow.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/animation_workflow.py",
-            "sha256": "8f339ae8671663b9d380853253266d69c738d260ade313b3d8b3cb7ec257c389"
+            "sha256": "646dccf9ab2c215769316fe89d04a3f09999b8290f4db6289ab84168c2f0d034"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_BAS_WORKFLOW",
@@ -1737,7 +1737,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_RESOURCE_LOADING",
             "source_path": "src/gui/windows/application_core/shared/resource_loading.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/resource_loading.py",
-            "sha256": "2b9528551f4c3421969be87a168942e9e531585cf1a498d888748354284b0b41"
+            "sha256": "57f3dabb9b3251f6461d21c5af8d298274653d57947ac5036ff2c13342453bec"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_RESOURCE_PANELS",
@@ -1803,7 +1803,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WINDOW_CHROME",
             "source_path": "src/gui/windows/application_core/shared/window_chrome.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/window_chrome.py",
-            "sha256": "25c5aea520ba88d23b14dce4e272ba6815ed8447470ce0c2feee3d29559494cb"
+            "sha256": "13afc6e5223c0325e7d574d840d9752ca783648f04c2da4f1e8038e0e01ed636"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WINDOW_LIFECYCLE",
@@ -1815,7 +1815,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WORKERS",
             "source_path": "src/gui/windows/application_core/shared/workers.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/workers.py",
-            "sha256": "a4fa5c83c4d36195b68cd1875f48dc443fce31e449c85e19802ae79bfdedff47"
+            "sha256": "ec2a9ee2cede28f55a2bbc0adc928f2bd30db0c04d5b400231d555dd3fd4cb41"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WORKSPACE_PRESETS",
@@ -1845,7 +1845,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_MAIN_WINDOW",
             "source_path": "src/gui/windows/qt_main_window.py",
             "packaged_path": "Python/src/gui/windows/qt_main_window.py",
-            "sha256": "bc0ac1f72f95c78a5ece44181f7e4a5b0f6981881752863db9cd12a1e8bb6c7c"
+            "sha256": "394994a578d16a4beff6ab7e357651ea5e2e3819107d681751cdbedb3eac8ea1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_SCRIPTING_BLUEPRINT_PAGE",

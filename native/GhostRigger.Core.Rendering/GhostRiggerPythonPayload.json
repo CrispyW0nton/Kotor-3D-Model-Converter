@@ -243,7 +243,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHT_MANAGER",
             "source_path": "src/core/lighting/light_manager.py",
             "packaged_path": "Python/src/core/lighting/light_manager.py",
-            "sha256": "117a60dda03835b821f472d04dc71b592215e31fe5939c3d70f94e025cc3c2cc"
+            "sha256": "692e5a3656e0a98d616da5eb3971beda6bbe2d7db44348bab4bae24182ef7bc1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHT_MODEL",

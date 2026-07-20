@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.IO",
-    "file_count": 37,
+    "file_count": 38,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -226,6 +226,12 @@
             "source_path": "src/io/fbx/fbx_sdk_setup.py",
             "packaged_path": "Python/src/io/fbx/fbx_sdk_setup.py",
             "sha256": "1b4a6ea2c515cfdf0cef629bf43c09d64bf7839a85c2d7a181cd5332c249ac7b"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_IO_MDL_AUTO_IMPORT",
+            "source_path": "src/io/mdl_auto_import.py",
+            "packaged_path": "Python/src/io/mdl_auto_import.py",
+            "sha256": "19867f181e2d7906c49290530e5f664a7f3f8eda8582897806c7e3505cf83fa4"
         }
     ]
 }

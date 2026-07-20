@@ -168,6 +168,8 @@ class LightManager:
         node = SimpleNamespace(
             name=light.name,
             is_light=True,
+            is_mesh=False,
+            type_label="light",
             position=light.position,
             rotation=light.rotation,
             children=[],

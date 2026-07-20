@@ -16,7 +16,10 @@ except ImportError as exc:  # pragma: no cover - import gate for Qt runtime
     raise RuntimeError("PySide6 is required for the Qt shell") from exc
 
 from src.gui.qt_lib.panels.qt_animation_panel import animation_row_label
-from src.gui.windows.application_core.application_core_lib.shared.workers import AnimationLibraryScanWorker
+from src.gui.windows.application_core.application_core_lib.shared.workers import (
+    AnimationLibraryScanWorker,
+    AnimationModelLoadWorker,
+)
 from src.sequence.animation_preview import build_preview_target, iter_scene_preview_targets, tag_pose_for_preview_target
 
 log = logging.getLogger(__name__)
@@ -333,6 +336,13 @@ class AnimationWorkflowMixin:
         model_game = self._animation_model_game(model)
         inheritance_game = self._animation_inheritance_game(model)
         inheritance_supermodel = self._animation_inheritance_supermodel(model)
+        if action == "Load Inherited":
+            self._defer_inherited_animation_loading = False
+            try:
+                self._load_animation_panel_model(model, select_name=anim_name)
+            finally:
+                self._defer_inherited_animation_loading = True
+            return
         if action == "Export Binary MDL":
             self._export_mdl_binary()
             return
@@ -397,20 +407,43 @@ class AnimationWorkflowMixin:
             self.animations_panel.load_model(None)
             source = self._animation_source_label()
             self.animations_panel.info.setPlainText(f"No suitable {source.lower()} model selected.")
-            self._apply_viewport_animation_pose(None)
+            clear_pose = getattr(self, "_apply_viewport_animation_pose", None)
+            if callable(clear_pose):
+                clear_pose(None)
+            else:
+                viewport_clear = getattr(getattr(self, "viewport", None), "clear_animation_pose", None)
+                if callable(viewport_clear):
+                    viewport_clear()
             return
         model = source_model
         model_game = self._animation_model_game(model)
         inheritance_game = self._animation_inheritance_game(model)
         inheritance_supermodel = self._animation_inheritance_supermodel(model)
-        self.animations_panel.load_model(None)
         self.animations_panel.set_inheritance_game(model_game, emit=False)
-        if model is None:
-            return
+        # Local clips are cheap and useful immediately.  Show them before any
+        # game-library lookup so opening a skinned body never stalls the UI.
+        self.animations_panel.load_model(model, select_name=select_name, game=model_game)
         try:
             from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
 
             mgr = self._get_resource_manager()
+            has_inheritance = str(inheritance_supermodel or "").strip().lower() not in {"", "null", "none"}
+            if mgr is not None and has_inheritance:
+                if bool(getattr(self, "_defer_inherited_animation_loading", False)):
+                    self._animation_engine = AnimationEngine(model)
+                    self.animations_panel.info.setPlainText(
+                        f"{self.animations_panel.listbox.count()} local animation(s) for {getattr(model, 'name', 'selected model')}\n"
+                        "Inherited animations will be resolved when requested."
+                    )
+                    return
+                self._start_animation_model_load(
+                    model,
+                    model_game=model_game,
+                    inheritance_game=inheritance_game,
+                    inheritance_supermodel=inheritance_supermodel,
+                    select_name=select_name,
+                )
+                return
             if mgr is not None:
                 SuperModelResolver.configure(mgr)
             with self._animation_resolution_context(model, inheritance_game, inheritance_supermodel):
@@ -418,8 +451,27 @@ class AnimationWorkflowMixin:
                 entries = self._filter_animation_browser_entries(model, engine.list_all_animations())
         except Exception:
             log.debug("Inherited animation panel load failed", exc_info=True)
-            self.animations_panel.load_model(model, select_name=select_name, game=model_game)
             return
+        self._animation_engine = engine
+        self._apply_animation_panel_entries(
+            model,
+            entries,
+            model_game=model_game,
+            inheritance_game=inheritance_game,
+            select_name=select_name,
+        )
+
+    def _apply_animation_panel_entries(
+        self,
+        model,
+        entries: list[dict],
+        *,
+        model_game: str,
+        inheritance_game: str,
+        select_name: str = "",
+    ) -> None:
+        self.animations_panel.load_model(None)
+        self.animations_panel.set_inheritance_game(model_game, emit=False)
         existing = set()
         inherited_count = 0
         local_count = 0
@@ -449,6 +501,114 @@ class AnimationWorkflowMixin:
             )
         if select_name:
             self.animations_panel.select_animation(select_name)
+
+    def _animation_model_load_worker_is_running(self) -> bool:
+        thread = getattr(self, "_animation_model_load_thread", None)
+        if thread is None:
+            return False
+        try:
+            return bool(thread.isRunning())
+        except RuntimeError:
+            self._animation_model_load_thread = None
+            self._animation_model_load_worker = None
+            return False
+
+    def _start_animation_model_load(
+        self,
+        model,
+        *,
+        model_game: str,
+        inheritance_game: str,
+        inheritance_supermodel: str,
+        select_name: str = "",
+    ) -> None:
+        request = (model, model_game, inheritance_game, inheritance_supermodel, select_name)
+        if self._animation_model_load_worker_is_running():
+            if int(getattr(self, "_animation_model_load_model_id", 0) or 0) == id(model):
+                self._animation_model_load_select_name = str(select_name or "")
+                return
+            self._pending_animation_model_load = request
+            return
+
+        request_id = int(getattr(self, "_animation_model_load_request_id", 0) or 0) + 1
+        self._animation_model_load_request_id = request_id
+        self._animation_model_load_model_id = id(model)
+        self._animation_model_load_select_name = str(select_name or "")
+        self._pending_animation_model_load = None
+        try:
+            k1_dir, k2_dir = self._configured_game_dirs()
+        except Exception:
+            k1_dir, k2_dir = "", ""
+
+        worker = AnimationModelLoadWorker(
+            request_id,
+            model,
+            inheritance_game,
+            inheritance_supermodel,
+            k1_dir,
+            k2_dir,
+        )
+        thread = QtCore.QThread(self)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.finished.connect(self._on_animation_model_loaded)
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(self._on_animation_model_load_thread_finished)
+        self._animation_model_load_thread = thread
+        self._animation_model_load_worker = worker
+        self.animations_panel.info.setPlainText(
+            f"{self.animations_panel.listbox.count()} local animation(s) for {getattr(model, 'name', 'selected model')}\n"
+            "Loading inherited animations in the background..."
+        )
+        thread.start()
+
+    @QtCore.Slot(int, object, list, str)
+    def _on_animation_model_loaded(self, request_id: int, model, entries: list, error: str) -> None:
+        if int(request_id) != int(getattr(self, "_animation_model_load_request_id", 0) or 0):
+            return
+        current_source = self._animation_source_model(getattr(self, "_current_model", None))
+        if current_source is not model:
+            return
+        if error:
+            log.warning("Inherited animation lookup failed for %s", getattr(model, "name", "model"))
+            log.debug("Inherited animation lookup traceback:\n%s", error)
+            self.animations_panel.info.setPlainText(
+                f"{self.animations_panel.listbox.count()} local animation(s) for {getattr(model, 'name', 'selected model')}\n"
+                "Inherited animations could not be loaded."
+            )
+            return
+        from src.core.animation.animation_engine import AnimationEngine
+
+        self._animation_engine = AnimationEngine(model)
+        model_game = self._animation_model_game(model)
+        inheritance_game = self._animation_inheritance_game(model)
+        filtered = self._filter_animation_browser_entries(model, list(entries or []))
+        self._apply_animation_panel_entries(
+            model,
+            filtered,
+            model_game=model_game,
+            inheritance_game=inheritance_game,
+            select_name=str(getattr(self, "_animation_model_load_select_name", "") or ""),
+        )
+
+    @QtCore.Slot()
+    def _on_animation_model_load_thread_finished(self) -> None:
+        self._animation_model_load_thread = None
+        self._animation_model_load_worker = None
+        self._animation_model_load_model_id = 0
+        pending = getattr(self, "_pending_animation_model_load", None)
+        self._pending_animation_model_load = None
+        if pending:
+            model, model_game, inheritance_game, inheritance_supermodel, select_name = pending
+            self._start_animation_model_load(
+                model,
+                model_game=model_game,
+                inheritance_game=inheritance_game,
+                inheritance_supermodel=inheritance_supermodel,
+                select_name=select_name,
+            )
     def _handle_animation_inheritance_game_changed(self, _game: str) -> None:
         model = getattr(self, "_current_model", None)
         if model is None:

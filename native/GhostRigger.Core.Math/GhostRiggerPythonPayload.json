@@ -123,7 +123,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_MODEL_DATA",
             "source_path": "src/core/geometry/model_data.py",
             "packaged_path": "Python/src/core/geometry/model_data.py",
-            "sha256": "fc0d91c982b3b19b5b1e283a6726eda503435fd90f097390f49bbf97691f7dbd"
+            "sha256": "1807508158ac1c5d98e2bd8eaae987747876ed69c2152723c6848bd5b33379e6"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GEOMETRY_POLYGON_MESH_OPERATIONS",

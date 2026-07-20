@@ -41,6 +41,26 @@ from src.systems.bas.model_recipe import BAS_SLOT_ORDER, load_bas_model_recipe
 log = logging.getLogger(__name__)
 
 
+class _ModelLoadUiRelay(QtCore.QObject):
+    """Deliver model-worker callbacks through a QObject owned by the UI thread."""
+
+    def __init__(self, owner):
+        super().__init__(owner)
+        self._owner = owner
+
+    @QtCore.Slot(str, int, int)
+    def report_progress(self, detail: str, value: int, total: int) -> None:
+        self._owner._on_model_load_progress(detail, value, total)
+
+    @QtCore.Slot(object, str, str)
+    def finish(self, model, path: str, error: str) -> None:
+        owner = self._owner
+        owner._on_model_loaded(model, path, error)
+        if getattr(owner, "_model_ui_relay", None) is self:
+            owner._model_ui_relay = None
+        self.deleteLater()
+
+
 class ResourceLoadingMixin:
     """Game-library scans, model loads, scene import choices, resources, and walkmesh co-load behavior."""
 
@@ -635,17 +655,24 @@ class ResourceLoadingMixin:
         except Exception:
             self._on_model_loaded(None, f"{str(game or '').upper()}:{resref}", traceback.format_exc())
     def _open_model(self, _checked: bool = False, *, ascii_only: bool = False):
+        # ``ascii_only`` remains in the callable surface for old shortcuts and
+        # saved command bindings.  The shared IO service now detects ASCII vs
+        # binary itself, so both routes intentionally open the same picker.
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self,
-            "Open ASCII MDL" if ascii_only else "Open KotOR MDL",
+            "Open KOTOR Model (Automatic)",
             str(Path(self.settings_data.get("last_import") or self.app_root)),
-            "ASCII MDL (*.mdl);;All files (*.*)" if ascii_only else "KotOR MDL or BAS Build (*.mdl *.json);;KotOR MDL (*.mdl);;BAS Build JSON (*.json);;All files (*.*)",
+            "KOTOR Model or BAS Build (*.mdl *.json);;KOTOR Model (*.mdl);;BAS Build JSON (*.json);;All files (*.*)",
         )
         if not path:
             return
         self._start_model_load(path)
     def _open_startup_inputs(self):
-        mdl_path = str(self.startup_input.get("mdl") or "").strip()
+        # The native host's positional CLI argument is named ``model`` while
+        # older IPC/startup callers use ``mdl``.  Accept both so Explorer
+        # "Open with" and direct command-line launches reach the same automatic
+        # importer as File > Open KOTOR Model.
+        mdl_path = str(self.startup_input.get("mdl") or self.startup_input.get("model") or "").strip()
         if not mdl_path:
             return
         texture_dir = str(self.startup_input.get("texture_dir") or "").strip()
@@ -791,17 +818,43 @@ class ResourceLoadingMixin:
             self._log(f"MDX file not found, using sibling lookup: {mdx_path}", "warning")
             mdx_path = ""
         self._texture_dir = texture_dir or str(mdl.parent)
-        self._log(f"Loading {mdl} ...")
-        self.statusBar().showMessage("Loading model...")
-        self._show_progress_toast("Loading model", f"Loading {mdl.name}...")
-        self._current_game = game.upper()
+        self._log(f"Inspecting and loading {mdl} ...")
+        self.statusBar().showMessage("Detecting KOTOR model type...")
+        self._show_progress_toast("Loading model", f"Detecting {mdl.name} and choosing its importer...")
+        explicit_game = str(game or "").upper()
+        if explicit_game:
+            self._current_game = explicit_game
+        fallback_game = str(
+            getattr(self.scene_manager.active_scene, "game", "")
+            or self.settings_data.get("default_game")
+            or self._current_game
+            or "K1"
+        ).upper()
+        k1_root, k2_root = self._configured_game_dirs()
 
-        worker = ModelLoadWorker(str(mdl), mdx_path, self._current_game)
+        worker = ModelLoadWorker(
+            str(mdl),
+            mdx_path,
+            explicit_game,
+            fallback_game=fallback_game,
+            k1_root=k1_root,
+            k2_root=k2_root,
+        )
         thread = QtCore.QThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
-        worker.progress.connect(self._on_model_load_progress)
-        worker.finished.connect(self._on_model_loaded)
+        # A concrete QObject relay is required here.  PySide can treat a
+        # mixin-bound Python callable as a direct callback even when the sender
+        # lives on another QThread, which deadlocks the progress-toast widgets.
+        relay = _ModelLoadUiRelay(self)
+        worker.progress.connect(
+            relay.report_progress,
+            QtCore.Qt.ConnectionType.QueuedConnection,
+        )
+        worker.finished.connect(
+            relay.finish,
+            QtCore.Qt.ConnectionType.QueuedConnection,
+        )
         worker.finished.connect(thread.quit)
         worker.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
@@ -809,6 +862,7 @@ class ResourceLoadingMixin:
         thread.finished.connect(lambda: setattr(self, "_model_worker", None))
         self._worker_thread = thread
         self._model_worker = worker
+        self._model_ui_relay = relay
         thread.start()
     def _choose_model_import_action(self, model_label: str) -> str:
         objects = self.scene_manager.get_scene_objects()
@@ -1028,6 +1082,7 @@ class ResourceLoadingMixin:
             return (0.0, 0.0, 0.0)
     @QtCore.Slot(object, str, str)
     def _on_model_loaded(self, model, path: str, error: str):
+        log.info("Automatic MDL import GUI handoff started: %s", path)
         if error:
             self._log(f"Model load failed:\n{error}", "error")
             self.statusBar().showMessage("Model load failed")
@@ -1067,9 +1122,14 @@ class ResourceLoadingMixin:
         node_count = model.node_count() if hasattr(model, "node_count") else 0
         anim_count = len(getattr(model, "animations", []) or [])
         name = getattr(model, "name", Path(path).stem)
+        import_decision = getattr(model, "_gr_import_decision", {})
+        if not isinstance(import_decision, dict):
+            import_decision = {}
         scene_before_count = len(getattr(self.scene_manager.active_scene, "objects", []) or [])
         import_action = str(self._pending_scene_import_action or "add")
+        log.info("Automatic MDL import adding model to scene: %s", path)
         scene_instance = self._add_loaded_model_to_scene(model, path)
+        log.info("Automatic MDL import scene object ready: %s", path)
         if hasattr(self, "viewport"):
             self._configure_viewport_resources()
             appended_scene_instance = False
@@ -1093,7 +1153,9 @@ class ResourceLoadingMixin:
                 self._refresh_scene_animation_entries()
                 self._refresh_adjust_pivot_panel()
             else:
+                log.info("Automatic MDL import refreshing viewport scene: %s", path)
                 self._refresh_scene_view()
+                log.info("Automatic MDL import viewport scene refreshed: %s", path)
             self._try_coload_walkmesh()
         else:
             self.viewport_label.setText(f"{name}\n\nQt viewport host\n{mesh_count} mesh | {node_count} nodes")
@@ -1140,20 +1202,39 @@ class ResourceLoadingMixin:
         if hasattr(self, "retarget_preview_controller"):
             self._sync_retarget_preview_target()
         if hasattr(self, "diagnostics_panel"):
+            log.info("Automatic MDL import running visible diagnostics: %s", path)
             self.diagnostics_panel.run_diagnostics(model)
-        self.props_text.setPlainText(
-            "\n".join(
+            log.info("Automatic MDL import visible diagnostics complete: %s", path)
+        property_rows = [
+            f"Name: {name}",
+            f"Path: {path}",
+            f"Game: {self._current_game or self._infer_game_from_model(model)}",
+            f"Model type: {getattr(model, 'classification', '')}",
+            f"Meshes: {mesh_count}",
+            f"Nodes: {node_count}",
+            f"Animations: {anim_count}",
+            f"Supermodel: {getattr(model, 'supermodel', '')}",
+        ]
+        if import_decision:
+            property_rows.extend(
                 [
-                    f"Name: {name}",
-                    f"Path: {path}",
-                    f"Meshes: {mesh_count}",
-                    f"Nodes: {node_count}",
-                    f"Animations: {anim_count}",
-                    f"Supermodel: {getattr(model, 'supermodel', '')}",
+                    f"Import format: {import_decision.get('source_format', '')}",
+                    f"Import method: {import_decision.get('import_method', '')}",
+                    f"Game detection: {import_decision.get('game_confidence', '')} — {import_decision.get('game_evidence', '')}",
+                    f"Workflow: {import_decision.get('model_workflow', '')}",
                 ]
             )
-        )
+        self.props_text.setPlainText("\n".join(property_rows))
         prebuilt_meshes = int(getattr(model, "_gr_gpu_prebuilt_mesh_count", 0) or 0)
+        if import_decision:
+            self._log(
+                "Automatic MDL import: "
+                f"{import_decision.get('game', self._current_game)} "
+                f"{import_decision.get('model_type', 'model')} via "
+                f"{import_decision.get('import_method', 'automatic loader')} "
+                f"[{import_decision.get('game_evidence', 'model metadata')}]",
+                "success",
+            )
         if prebuilt_meshes:
             self._pending_gpu_upload_model_id = id(model)
             self._pending_gpu_upload_total = prebuilt_meshes
@@ -1178,7 +1259,13 @@ class ResourceLoadingMixin:
             )
         else:
             self._log(f"Loaded {name} ({mesh_count} mesh, {node_count} nodes)", "success")
-        self.statusBar().showMessage(f"Loaded {name}")
+        if import_decision:
+            self.statusBar().showMessage(
+                f"Loaded {name} — {import_decision.get('game', self._current_game)} "
+                f"{import_decision.get('model_type', 'model')} ({import_decision.get('source_format', 'MDL')})"
+            )
+        else:
+            self.statusBar().showMessage(f"Loaded {name}")
         bus = getattr(self, "integration_event_bus", None)
         if bus is not None:
             bus.record_scene_update("model_imported", model)

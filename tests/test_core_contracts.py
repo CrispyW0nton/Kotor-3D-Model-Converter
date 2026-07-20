@@ -4135,8 +4135,10 @@ def test_model_load_worker_uses_single_read_and_gpu_prebuild() -> None:
         load_module_room_models_from_game_resources,
         load_resource_model_from_game_resources,
     )
+    from src.io.mdl_auto_import import load_mdl_auto
 
     file_source = inspect.getsource(ModelLoadWorker.run)
+    auto_import_source = inspect.getsource(load_mdl_auto)
     toast_source = inspect.getsource(QtProgressToast)
     window_source = inspect.getsource(QtGhostRiggerMainWindow)
     start_resource_source = inspect.getsource(QtGhostRiggerMainWindow._start_resource_load)
@@ -4152,9 +4154,10 @@ def test_model_load_worker_uses_single_read_and_gpu_prebuild() -> None:
 
     assert "progress = QtCore.Signal(str, int, int)" in inspect.getsource(ModelLoadWorker)
     assert "progress = QtCore.Signal(str, int, int)" in inspect.getsource(ResourceModelLoadWorker)
-    assert "raw = path.read_bytes()" in file_source
-    assert 'raw.decode("utf-8", errors="replace")' in file_source
-    assert "load_model_from_bytes" in file_source
+    assert "load_mdl_auto" in file_source
+    assert "raw = path.read_bytes()" in auto_import_source
+    assert 'raw.decode("utf-8", errors="replace")' in auto_import_source
+    assert "load_model_from_bytes" in auto_import_source
     assert "load_model_from_file" not in file_source
     assert "self.progress.emit" in file_source
     assert "_prebuild_gpu_mesh_data_for_model(model)" in file_source
