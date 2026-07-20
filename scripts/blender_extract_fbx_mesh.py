@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import re
 import sys
 
 import bpy
@@ -26,10 +27,34 @@ def _vector3(vector):
     return [float(vector.x), float(vector.y), float(vector.z)]
 
 
+_POSE_BONE_PATH = re.compile(r'pose\.bones\["([^"]+)"\]')
+
+
+def _action_info(action, *, fps, root_names):
+    paths = [str(getattr(curve, "data_path", "") or "") for curve in list(getattr(action, "fcurves", ()) or ())]
+    bone_names = sorted({match.group(1) for path in paths if (match := _POSE_BONE_PATH.search(path))})
+    frame_start = float(action.frame_range[0])
+    frame_end = float(action.frame_range[1])
+    return {
+        "name": action.name,
+        "frame_start": frame_start,
+        "frame_end": frame_end,
+        "frame_count": int(round(frame_end - frame_start + 1)),
+        "fps": float(fps),
+        "duration_seconds": max(0.0, (frame_end - frame_start) / max(float(fps), 1.0e-6)),
+        "animated_bone_count": len(bone_names),
+        "root_motion": any(
+            'location' in path and any(f'pose.bones["{root}"]' in path for root in root_names)
+            for path in paths
+        ),
+    }
+
+
 def _material_info(material):
     if material is None:
-        return {"name": "", "texture": "", "diffuse": [0.8, 0.8, 0.8]}
+        return {"name": "", "texture": "", "texture_path": "", "diffuse": [0.8, 0.8, 0.8]}
     texture = ""
+    texture_path = ""
     if material.use_nodes and material.node_tree is not None:
         for node in material.node_tree.nodes:
             if getattr(node, "type", "") != "TEX_IMAGE":
@@ -41,7 +66,9 @@ def _material_info(material):
             if filepath:
                 # FBX embedded media lands in ``<model>.fbm/``; Blender stores a
                 # relative ``//`` path here.  Resolve to the actual file stem.
-                texture = Path(bpy.path.abspath(filepath)).stem
+                resolved = Path(bpy.path.abspath(filepath))
+                texture = resolved.stem
+                texture_path = str(resolved)
             else:
                 texture = Path(str(image.name)).stem
             if texture:
@@ -50,6 +77,7 @@ def _material_info(material):
     return {
         "name": material.name,
         "texture": texture or material.name,
+        "texture_path": texture_path,
         "diffuse": [float(value) for value in diffuse],
     }
 
@@ -113,6 +141,7 @@ def _extract_mesh_object(obj, depsgraph):
         faces = []
         face_mats = []
         skin_data = []
+        source_vertex_indices = []
         for tri in mesh.loop_triangles:
             face = []
             for loop_index in tri.loops:
@@ -132,6 +161,12 @@ def _extract_mesh_object(obj, depsgraph):
                     uvs.append([0.0, 0.0])
                 if is_skin:
                     skin_data.append(_vertex_skin(vertex, group_to_bone))
+                # Keep the FBX/Blender control-point identity even though the
+                # preview payload is flattened per loop for UVs and normals.
+                # The Odyssey skin exporter uses this to restore indexed
+                # vertices instead of writing three redundant skin records per
+                # triangle corner.
+                source_vertex_indices.append(int(loop.vertex_index))
                 face.append(len(vertices) - 1)
             faces.append(face)
             face_mats.append(int(tri.material_index))
@@ -141,6 +176,7 @@ def _extract_mesh_object(obj, depsgraph):
             "is_skin": bool(is_skin),
             "bone_map": bone_map,
             "skin_data": skin_data,
+            "source_vertex_indices": source_vertex_indices,
             "vertices": vertices,
             "normals": normals,
             "uvs": uvs,
@@ -192,15 +228,15 @@ def main():
     meshes = [_extract_mesh_object(obj, depsgraph) for obj in bpy.data.objects if obj.type == "MESH"]
     armatures = [obj for obj in bpy.data.objects if obj.type == "ARMATURE"]
     armature_payloads = [_extract_armature_object(obj) for obj in armatures]
-    actions = [
-        {
-            "name": action.name,
-            "frame_start": float(action.frame_range[0]),
-            "frame_end": float(action.frame_range[1]),
-            "frame_count": int(round(action.frame_range[1] - action.frame_range[0] + 1)),
-        }
-        for action in bpy.data.actions
-    ]
+    scene = bpy.context.scene
+    fps = float(scene.render.fps) / max(float(scene.render.fps_base), 1.0e-6)
+    root_names = {
+        str(bone.get("name") or "")
+        for armature in armature_payloads
+        for bone in armature.get("bones", ())
+        if not bone.get("parent")
+    }
+    actions = [_action_info(action, fps=fps, root_names=root_names) for action in bpy.data.actions]
     payload = {
         "success": True,
         "source_fbx": str(args.fbx),

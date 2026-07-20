@@ -24,6 +24,8 @@ KNOWN_PANELS = {
     "resources",
     "outputLog",
     "pythonTerminal",
+    "guiEditorCatalog",
+    "guiEditorInspector",
 }
 
 KNOWN_DOCKS = {
@@ -40,6 +42,8 @@ KNOWN_DOCKS = {
     "adjust_pivot",
     "2das",
     "resources",
+    "output_log",
+    "python_terminal",
 }
 
 VALID_DOCK_AREAS = {"left", "right", "bottom", "top"}

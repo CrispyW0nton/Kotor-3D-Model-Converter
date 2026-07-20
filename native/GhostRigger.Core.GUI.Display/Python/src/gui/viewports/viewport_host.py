@@ -83,6 +83,12 @@ class RendererSurfaceHost(QtWidgets.QWidget):
         self._surface_live = bool(live_surface)
         self._bridge_installed = False
         surface_widget.setParent(self)
+        if isinstance(surface_widget, QtWidgets.QLabel) and not self._surface_live:
+            # The retained software-presented frame is fully opaque. Marking
+            # that contract on the scene surface is essential when PIE child
+            # HUD layers repaint: Qt must propagate this QLabel's cached
+            # pixmap, not the RendererSurfaceHost palette behind it.
+            surface_widget.setAttribute(QtCore.Qt.WA_OpaquePaintEvent, True)
         surface_widget.setMouseTracking(True)
         surface_widget.setFocusPolicy(QtCore.Qt.StrongFocus)
         surface_widget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
@@ -163,6 +169,21 @@ class RendererSurfaceHost(QtWidgets.QWidget):
             label.setText("")
             label.show()
         self.clear_overlay()
+
+    def present_pixmap(self, pixmap: QtGui.QPixmap, *, immediate: bool = False) -> None:
+        """Publish a retained frame, optionally completing its paint before return."""
+
+        self.setPixmap(pixmap)
+        if not immediate:
+            return
+        label = self._surface_label()
+        if label is not None and label.isVisible():
+            # PIE renders synchronously on the GUI thread.  A queued QLabel
+            # UpdateRequest can otherwise remain behind the next precise
+            # simulation/render timer, so the world appears frozen even though
+            # new pixmaps have already been produced.  repaint() commits this
+            # one completed runtime frame before another timer can block Qt.
+            label.repaint()
 
     def setText(self, text: str) -> None:  # noqa: N802 - QLabel compatibility
         label = self._surface_label()

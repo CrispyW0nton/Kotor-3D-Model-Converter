@@ -234,6 +234,61 @@ def test_visual_only_backdrop_preserves_empty_wok_and_scoped_no_aabb_contract() 
     assert visual_wok_report.has_errors is False
 
 
+def test_generic_imported_empty_wok_is_preserved_without_fallback_collision() -> None:
+    """A zero-face source WOK is explicit even without sky naming hints."""
+
+    _configure_native_python_roots()
+    from src.core.modules.authored_imported_mesh import (
+        ImportedMeshRoomPrimitive,
+        compile_imported_mesh_room_geometry,
+        imported_mesh_primitive_from_payload,
+        imported_mesh_primitive_payload,
+        imported_mesh_room_is_backdrop,
+        imported_mesh_room_is_visual_only,
+    )
+    from src.core.modules.authored_module_export import _make_room_model_bytes
+    from src.core.modules.module_format import WOKData
+    from src.core.validation.kotor_module_engine_contract import (
+        inspect_raw_mdl_structure,
+        inspect_raw_wok_structure,
+    )
+
+    visual_partition = _quad("ordinary_partition", "lko_wal01", size=10.0)
+    primitive = ImportedMeshRoomPrimitive(
+        room_resref="proof_visual",
+        surfaces=(visual_partition,),
+        game="K2",
+        wok=WOKData(name="proof_visual", verts=[], faces=[]),
+    )
+    reopened = imported_mesh_primitive_from_payload(
+        imported_mesh_primitive_payload(primitive),
+        "proof_visual",
+    )
+    geometry = compile_imported_mesh_room_geometry(reopened)
+    mdl, mdx = _make_room_model_bytes("K2", geometry)
+    wok_bytes = geometry.wok.to_bytes()
+
+    assert imported_mesh_room_is_backdrop(reopened) is False
+    assert imported_mesh_room_is_visual_only(reopened) is True
+    assert geometry.metadata["imported_wok"] is True
+    assert geometry.metadata["backdrop_only"] is False
+    assert geometry.metadata["visual_only"] is True
+    assert geometry.metadata["explicit_empty_wok"] is True
+    assert geometry.wok.faces == []
+    assert len(wok_bytes) == 136
+
+    mdl_fingerprint, mdl_report = inspect_raw_mdl_structure(
+        "proof_visual", mdl, mdx, game="K2", allow_missing_aabb=True
+    )
+    wok_fingerprint, wok_report = inspect_raw_wok_structure(
+        "proof_visual", wok_bytes, allow_empty_visual=True
+    )
+    assert mdl_fingerprint.aabb_node_count == 0
+    assert wok_fingerprint.face_count == 0
+    assert mdl_report.has_errors is False
+    assert wok_report.has_errors is False
+
+
 @pytest.mark.skipif(not (K1_ROOT / "chitin.key").is_file(), reason="K1 installation fixture unavailable")
 def test_installed_k1_taris_sky_conversion_keeps_vanilla_empty_wok() -> None:
     _configure_native_python_roots()

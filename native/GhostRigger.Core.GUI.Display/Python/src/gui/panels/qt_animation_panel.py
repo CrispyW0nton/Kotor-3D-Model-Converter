@@ -338,7 +338,7 @@ class QtAnimationsPanel(QtWidgets.QWidget):
         self.seek.valueChanged.connect(self.seekRequested.emit)
         root.addWidget(self.seek)
         controls = QtWidgets.QHBoxLayout()
-        for label in ("Play", "Stop", "Loop", "Export"):
+        for label in ("Load Inherited", "Play", "Stop", "Loop", "Export"):
             button = self._action_button(label)
             button.clicked.connect(lambda _checked=False, text=label: self._emit_action(text))
             controls.addWidget(button)

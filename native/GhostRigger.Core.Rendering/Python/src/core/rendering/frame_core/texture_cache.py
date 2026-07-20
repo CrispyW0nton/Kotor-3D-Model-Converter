@@ -775,7 +775,13 @@ class TextureCache:
             # preserved the bottom-up layout), causing them to remain top-down
             # and render upside-down.
             img = img.transpose(Image.FLIP_TOP_BOTTOM)
-            img._gr_gpu_uv_v_flip = False  # type: ignore[attr-defined]
+            # The uploaded rows now follow OpenGL's bottom-up convention, so
+            # KOTOR/D3D UVs (V=0 at the top) still require the shader's V
+            # conversion.  Imported DCC nodes opt out with uv_v_flip=False.
+            # Marking normalized TGA/PNG images False here inverted custom
+            # character atlases such as PFBC09 after otherwise-correct UV and
+            # anatomy splitting.
+            img._gr_gpu_uv_v_flip = True  # type: ignore[attr-defined]
             return img
         except Exception:
             return None
@@ -816,7 +822,9 @@ class TextureCache:
                 # TGA variants to top-down during Image.open().  Flip ALL images
                 # to bottom-up so the renderer's V-flip formula works correctly.
                 img = img.transpose(Image.FLIP_TOP_BOTTOM)
-                img._gr_gpu_uv_v_flip = False  # type: ignore[attr-defined]
+                # Bottom-up GPU rows need the per-node KOTOR/D3D V conversion;
+                # DCC/OpenGL UV nodes explicitly disable it with uv_v_flip=False.
+                img._gr_gpu_uv_v_flip = True  # type: ignore[attr-defined]
                 return img
             except Exception:
                 pass

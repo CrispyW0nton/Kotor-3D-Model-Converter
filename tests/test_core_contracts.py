@@ -12,23 +12,24 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+_GUI_DISPLAY_PAYLOAD_ROOT = "native/GhostRigger.Core.GUI.Display/Python"
 _VIEWPORT_WIDGET_SOURCE_FILES = (
-    "src/gui/viewports/viewport_core/widgets/viewport_widget.py",
-    "src/gui/viewports/viewport_core/widgets/state_helpers.py",
-    "src/gui/viewports/viewport_core/widgets/construction.py",
-    "src/gui/viewports/viewport_core/widgets/scene_models.py",
-    "src/gui/viewports/viewport_core/widgets/display_controls.py",
-    "src/gui/viewports/viewport_core/widgets/camera_workflow.py",
-    "src/gui/viewports/viewport_core/widgets/measurement_controls.py",
-    "src/gui/viewports/viewport_core/widgets/transform_camera.py",
-    "src/gui/viewports/viewport_core/widgets/selection_mesh.py",
-    "src/gui/viewports/viewport_core/widgets/history_animation.py",
-    "src/gui/viewports/viewport_core/widgets/event_navigation.py",
-    "src/gui/viewports/viewport_core/widgets/rendering_pipeline.py",
-    "src/gui/viewports/viewport_core/widgets/overlay_layers.py",
-    "src/gui/viewports/viewport_core/widgets/picking_hover.py",
-    "src/gui/viewports/viewport_core/widgets/drag_interactions.py",
-    "src/gui/viewports/viewport_core/widgets/resource_cache.py",
+    f"{_GUI_DISPLAY_PAYLOAD_ROOT}/src/gui/viewports/viewport_core/widgets/viewport_widget.py",
+    f"{_GUI_DISPLAY_PAYLOAD_ROOT}/src/gui/viewports/viewport_core/widgets/state_helpers.py",
+    f"{_GUI_DISPLAY_PAYLOAD_ROOT}/src/gui/viewports/viewport_core/widgets/construction.py",
+    f"{_GUI_DISPLAY_PAYLOAD_ROOT}/src/gui/viewports/viewport_core/widgets/scene_models.py",
+    f"{_GUI_DISPLAY_PAYLOAD_ROOT}/src/gui/viewports/viewport_core/widgets/display_controls.py",
+    f"{_GUI_DISPLAY_PAYLOAD_ROOT}/src/gui/viewports/viewport_core/widgets/camera_workflow.py",
+    f"{_GUI_DISPLAY_PAYLOAD_ROOT}/src/gui/viewports/viewport_core/widgets/measurement_controls.py",
+    f"{_GUI_DISPLAY_PAYLOAD_ROOT}/src/gui/viewports/viewport_core/widgets/transform_camera.py",
+    f"{_GUI_DISPLAY_PAYLOAD_ROOT}/src/gui/viewports/viewport_core/widgets/selection_mesh.py",
+    f"{_GUI_DISPLAY_PAYLOAD_ROOT}/src/gui/viewports/viewport_core/widgets/history_animation.py",
+    f"{_GUI_DISPLAY_PAYLOAD_ROOT}/src/gui/viewports/viewport_core/widgets/event_navigation.py",
+    f"{_GUI_DISPLAY_PAYLOAD_ROOT}/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py",
+    f"{_GUI_DISPLAY_PAYLOAD_ROOT}/src/gui/viewports/viewport_core/widgets/overlay_layers.py",
+    f"{_GUI_DISPLAY_PAYLOAD_ROOT}/src/gui/viewports/viewport_core/widgets/picking_hover.py",
+    f"{_GUI_DISPLAY_PAYLOAD_ROOT}/src/gui/viewports/viewport_core/widgets/drag_interactions.py",
+    f"{_GUI_DISPLAY_PAYLOAD_ROOT}/src/gui/viewports/viewport_core/widgets/resource_cache.py",
 )
 
 
@@ -3904,7 +3905,8 @@ def test_scene_root_transform_evicts_child_gpu_nodes() -> None:
 
 def test_kmax_scene_composite_keeps_bas_layers_out_of_body_dfs_indices() -> None:
     from src.core.animation.gpu_skinning import MatrixPaletteUploader
-    from src.core.geometry.model_data import KotorModel, ModelNode, NodeFlags
+    from src.core.geometry.model_data import Animation, KotorModel, ModelNode, NodeFlags
+    from src.core.rendering.mesh_render_data import _effective_animation_pose_for_node
     from src.gui.qt_lib.viewports.qt_viewport import QtViewportWidget
     from src.gui.qt_lib.windows.qt_main_window import QtGhostRiggerMainWindow
 
@@ -3926,7 +3928,11 @@ def test_kmax_scene_composite_keeps_bas_layers_out_of_body_dfs_indices() -> None
         parent=head_root,
     )
     head_root.children.append(head_mesh)
-    head = KotorModel(name="pmha01", root_node=head_root)
+    head = KotorModel(
+        name="pmha01",
+        root_node=head_root,
+        animations=[Animation(name="b11a3", length=1.0)],
+    )
 
     window = SimpleNamespace()
     window._find_model_node = MethodType(QtGhostRiggerMainWindow._find_model_node, window)
@@ -3966,6 +3972,26 @@ def test_kmax_scene_composite_keeps_bas_layers_out_of_body_dfs_indices() -> None
     assert getattr(placed_nodes["headhook"], "_gr_source_dfs_index") == 2
     assert getattr(placed_nodes["rhand"], "_gr_source_dfs_index") == 3
     assert getattr(placed_nodes["torso"], "_gr_source_dfs_index") == 4
+
+    placed_head_root = next(
+        node
+        for node in placed_root_nodes
+        if bool(getattr(node, "_gr_bas_attachment_root", False))
+    )
+    assert placed_head_root._gr_bas_attachment_source_model_ref is head
+    assert placed_head_root._gr_bas_attachment_source_model_id == id(head)
+
+    body_pose = SimpleNamespace(
+        nodes={},
+        time=0.5,
+        _gr_animation_source_model_id=id(body),
+        _gr_animation_source_model_name=body.name,
+        _gr_animation_name="b11a3",
+    )
+    placed_head_pose = _effective_animation_pose_for_node(placed_head_root, body_pose)
+    assert placed_head_pose is not None
+    assert placed_head_pose._gr_animation_source_model_id == id(head)
+    assert placed_head_pose._gr_bas_socket_pose is body_pose
 
     uploader = MatrixPaletteUploader(max_bones=8)
     uploader.build_inverse_bind_pose(composite)
@@ -4110,8 +4136,10 @@ def test_model_load_worker_uses_single_read_and_gpu_prebuild() -> None:
         load_module_room_models_from_game_resources,
         load_resource_model_from_game_resources,
     )
+    from src.io.mdl_auto_import import load_mdl_auto
 
     file_source = inspect.getsource(ModelLoadWorker.run)
+    auto_import_source = inspect.getsource(load_mdl_auto)
     toast_source = inspect.getsource(QtProgressToast)
     window_source = inspect.getsource(QtGhostRiggerMainWindow)
     start_resource_source = inspect.getsource(QtGhostRiggerMainWindow._start_resource_load)
@@ -4127,9 +4155,10 @@ def test_model_load_worker_uses_single_read_and_gpu_prebuild() -> None:
 
     assert "progress = QtCore.Signal(str, int, int)" in inspect.getsource(ModelLoadWorker)
     assert "progress = QtCore.Signal(str, int, int)" in inspect.getsource(ResourceModelLoadWorker)
-    assert "raw = path.read_bytes()" in file_source
-    assert 'raw.decode("utf-8", errors="replace")' in file_source
-    assert "load_model_from_bytes" in file_source
+    assert "load_mdl_auto" in file_source
+    assert "raw = path.read_bytes()" in auto_import_source
+    assert 'raw.decode("utf-8", errors="replace")' in auto_import_source
+    assert "load_model_from_bytes" in auto_import_source
     assert "load_model_from_file" not in file_source
     assert "self.progress.emit" in file_source
     assert "_prebuild_gpu_mesh_data_for_model(model)" in file_source
@@ -7068,7 +7097,8 @@ def test_qt_viewport_exposes_animation_playback_governor_and_live_overlay_skip()
     assert 'dirty_flags.get("scene", False)' in viewport_source
     assert "self._skip_overlay_pixmap_update = True" in viewport_source
     assert "governor is not None and governor.animation_playing" in viewport_source
-    assert "and not governor.animation_playing" in viewport_source
+    assert "and not governor.animation_playing" not in viewport_source
+    assert "if governor is not None and not governor.should_render_now(now):" in viewport_source
     assert "self.canvas.is_live_surface()" in viewport_source
     assert 'getattr(self._renderer, "_anim_pose", None) is not None' in viewport_source
     assert "self._render_timer.setTimerType(QtCore.Qt.PreciseTimer)" in viewport_source

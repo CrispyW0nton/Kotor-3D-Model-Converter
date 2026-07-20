@@ -310,7 +310,13 @@ class RendererSetupMixin:
 
             if dt > 0.0:
                 for n in self.model.all_nodes():
-                    if not n.is_dangly or not n.vertices:
+                    # Retained scene composition may include lightweight
+                    # helper/wrapper nodes (for example ``SimpleNamespace``
+                    # roots) alongside full ``ModelNode`` instances.  Dangly
+                    # simulation is optional, so only opt in nodes that
+                    # explicitly expose both the flag and geometry instead of
+                    # aborting the entire animation tick on a helper node.
+                    if not bool(getattr(n, "is_dangly", False)) or not getattr(n, "vertices", None):
                         continue
                     nid = id(n)
                     if nid not in self._dangly_sims:

@@ -207,6 +207,27 @@ def test_imported_001ebo_are_patch_preserves_unknown_fields_and_vanilla_field_pr
     assert [room.get("EnvAudio") for room in patched_rooms] == [room.get("EnvAudio") for room in source_rooms]
     assert [room.get("AmbientScale") for room in patched_rooms] == [room.get("AmbientScale") for room in source_rooms]
 
+    expanded = read_gff(
+        patch_preserved_stock_are_bytes(
+            source_bytes,
+            module,
+            area,
+            room_resrefs=(*rooms, "proof_visual"),
+            update_world_lighting=False,
+        )
+    ).root
+    expanded_rooms = tuple(expanded.acquire("Rooms", ()) or ())
+    assert len(expanded_rooms) == len(source_rooms) + 1
+    assert [room.get("EnvAudio") for room in expanded_rooms[:-1]] == [
+        room.get("EnvAudio") for room in source_rooms
+    ]
+    assert [room.get("AmbientScale") for room in expanded_rooms[:-1]] == [
+        room.get("AmbientScale") for room in source_rooms
+    ]
+    assert str(expanded_rooms[-1].acquire("RoomName", "")) == "proof_visual"
+    assert expanded_rooms[-1].get("EnvAudio") == 0
+    assert expanded_rooms[-1].get("AmbientScale") == 1.0
+
 
 def test_controller_records_are_only_undo_and_kmap_roundtrip(tmp_path: Path) -> None:
     _install_native_payload_paths()
@@ -306,9 +327,11 @@ def test_world_settings_drive_renderer_preview_nodes_and_change_preview_key() ->
     assert state["fog_previewed"] is False
     assert state["sun_shadows_previewed"] is False
     assert state["preview_scope"] == "non_lightmapped_scene_surfaces"
+    assert state["ambient_preview_source"] == "dynamic_ambient"
     assert tuple(state["ambient_blend_rgb"]) == tuple(
-        round(value / 255.0, 7) for value in (22.0, 41.0, 60.0)
+        round(value / 255.0, 7) for value in (32.0, 48.0, 64.0)
     )
+    assert tuple(state["dynamic_ambient_rgb"]) == tuple(state["ambient_blend_rgb"])
 
     world_nodes = [node for node in custom.all_nodes() if bool(getattr(node, "_gr_map_studio_world_light", False))]
     assert len(world_nodes) == 2
@@ -323,7 +346,7 @@ def test_world_settings_drive_renderer_preview_nodes_and_change_preview_key() ->
     assert sun.light_kind == "directional"
     assert sun.light_ambient_only is False
     assert sun.light_color == tuple(state["sun_diffuse_rgb"])
-    assert math.isclose(sun.light_multiplier, 1.0 - (60.0 / 255.0), rel_tol=0.0, abs_tol=1.0e-6)
+    assert math.isclose(sun.light_multiplier, 1.0 - (64.0 / 255.0), rel_tol=0.0, abs_tol=1.0e-6)
     assert all(node.light_shadow is False for node in world_nodes)
     assert all(bool(getattr(node, "_gr_light_helper_hidden", False)) for node in world_nodes)
 
@@ -344,6 +367,64 @@ def test_world_settings_drive_renderer_preview_nodes_and_change_preview_key() ->
     assert len(records) == 2
     assert {record["ambient_only"] for record in records} == {0, 1}
     assert any(record["color"] == tuple(state["sun_diffuse_rgb"]) for record in records)
+
+
+def test_renderer_light_cap_keeps_camera_relevant_207tel_like_lights() -> None:
+    _install_native_payload_paths()
+
+    from types import SimpleNamespace
+
+    from src.adapters.rendering.moderngl_renderer_impl import GpuRenderer
+
+    def light(name: str, position, radius: float, color=(0.78, 1.0, 0.99), *, kind="point"):
+        node = SimpleNamespace(
+            name=name,
+            is_light=True,
+            light_enabled=True,
+            light_kind=kind,
+            light_ambient_only=kind == "directional",
+            light_color=color,
+            light_radius=radius,
+            light_multiplier=1.0,
+            light_cone_degrees=45.0,
+            light_area_size=1.0,
+        )
+        node.world_transform = lambda: (tuple(position), (0.0, 0.0, 0.0, 1.0))
+        return node
+
+    # ModernGL uploads 16 lights.  The old radius-only sort filled that array
+    # with these distant 10m lights and discarded the smaller cantina lights
+    # that actually contain the camera/player focus.
+    nodes = [light("world_ambient", (0.0, 0.0, 0.0), 1_000_000.0, kind="directional")]
+    nodes.extend(light(f"far_{index}", (40.0 + index, 0.0, 0.0), 10.0) for index in range(18))
+    near_positions = ((1.0, 0.0, 0.0), (2.0, 0.0, 0.0), (3.0, 0.0, 0.0))
+    nodes.extend(light(f"near_{index}", position, 5.0) for index, position in enumerate(near_positions))
+
+    renderer = object.__new__(GpuRenderer)
+    selected = renderer._scene_light_records(
+        nodes,
+        lambda node: node.world_transform(),
+        reference_position=(0.0, 0.0, 0.0),
+    )
+    repeated = renderer._scene_light_records(
+        nodes,
+        lambda node: node.world_transform(),
+        reference_position=(0.0, 0.0, 0.0),
+    )
+
+    assert len(selected) == 16
+    assert [row["pos"] for row in selected] == [row["pos"] for row in repeated]
+    assert selected[0]["kind"] == 1  # global directional ambient survives
+    assert set(near_positions).issubset({row["pos"] for row in selected})
+
+
+def test_moderngl_baked_lightmap_target_restores_overbright_and_floor() -> None:
+    _install_native_payload_paths()
+
+    from src.core.rendering.gpu_shaders import _FRAG_SRC
+
+    assert _FRAG_SRC.count("lm_samp.rgb * 2.5 + vec3(0.03)") == 2
+    assert "mix(vec3(1.0), baked_target, clamp(lm_strength, 0.0, 1.0))" in _FRAG_SRC
 
 
 def test_map_studio_viewport_owns_world_preview_renderer_state() -> None:

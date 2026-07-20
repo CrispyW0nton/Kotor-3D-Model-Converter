@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import struct
 import sys
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -140,3 +141,35 @@ def test_texture_cache_uses_authored_mip_and_preserves_alpha_metadata(installati
     assert processed._tpc_mip_level == 1
     assert processed._tpc_raw == raw
     assert processed._txi_alpha_test == pytest.approx(1.0)
+
+
+def test_texture_cache_normalizes_loose_tga_for_kotor_uv_sampling() -> None:
+    from PIL import Image
+    from src.core.rendering.frame_core.texture_cache import TextureCache
+
+    # Source/Pillow row order is top-down: red+green above blue+yellow.
+    source = Image.new("RGBA", (2, 2))
+    source.putdata(
+        (
+            (255, 0, 0, 255),
+            (0, 255, 0, 255),
+            (0, 0, 255, 255),
+            (255, 255, 0, 255),
+        )
+    )
+    encoded = BytesIO()
+    source.save(encoded, format="TGA")
+
+    image = TextureCache()._load_bytes(encoded.getvalue())
+
+    assert image is not None
+    # GPU upload rows are bottom-up after normalization.
+    assert tuple(image.get_flattened_data()) == (
+        (0, 0, 255, 255),
+        (255, 255, 0, 255),
+        (255, 0, 0, 255),
+        (0, 255, 0, 255),
+    )
+    # KOTOR binary UV V=0 means top, so the shader must convert it to GL V=1.
+    # Imported DCC nodes remain correct because they carry uv_v_flip=False.
+    assert image._gr_gpu_uv_v_flip is True

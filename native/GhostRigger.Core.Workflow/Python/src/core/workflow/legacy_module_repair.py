@@ -102,7 +102,23 @@ class LegacyModuleCandidateRequest:
     # the final combined walkmesh instead of preserving incompatible bytes.
     regenerate_pth: bool = False
     wok_coordinate_space: str = "room_local"
+    # A WOK transition stores an integer index into the LYT room ordering that
+    # existed when the walkmesh was authored.  When a recovery deliberately
+    # trims that source layout, retained destinations must be remapped to the
+    # new ordering and destinations for omitted rooms must be removed.  Leave
+    # this empty when the input WOKs were already authored against the final
+    # LYT supplied to this request.
+    source_transition_room_resrefs: tuple[str, ...] = ()
+    # A recovered community module may have been cloned from a stock shell and
+    # still carry that donor's 16-byte Mod_ID.  Reusing it lets two installed
+    # modules claim the same runtime/save identity.  Keep stock preservation
+    # available for same-module repairs, but make regeneration an explicit
+    # policy for renamed or recovered community candidates.
+    regenerate_module_id: bool = False
     overwrite: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass
@@ -116,9 +132,13 @@ class LegacyModuleCandidateResult:
     resources_dir: str = ""
     manifest_path: str = ""
     room_resrefs: list[str] = field(default_factory=list)
+    source_transition_room_resrefs: list[str] = field(default_factory=list)
     generated_resources: list[str] = field(default_factory=list)
     preserved_resources: list[str] = field(default_factory=list)
     bundled_resources: list[dict[str, Any]] = field(default_factory=list)
+    walkmesh_transition_repairs: list[dict[str, Any]] = field(default_factory=list)
+    pathing_metadata: dict[str, Any] = field(default_factory=dict)
+    module_identity: dict[str, Any] = field(default_factory=dict)
     engine_contract: dict[str, Any] = field(default_factory=dict)
     readback_contract: dict[str, Any] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
@@ -143,6 +163,65 @@ def _normalise_game(value: Any) -> str:
     if game not in _SUPPORTED_GAMES:
         raise ValueError(f"Unsupported target game {game or '(missing)'!r}; use K1 or K2.")
     return game
+
+
+def remap_walkmesh_transition_destinations(
+    wok: Any,
+    *,
+    source_room_resrefs: Iterable[str],
+    target_room_resrefs: Iterable[str],
+) -> list[dict[str, Any]]:
+    """Remap WOK edge transitions from one LYT room ordering to another.
+
+    Odyssey serializes a transition destination as a zero-based LYT room
+    index, not a room resref.  A filtered recovery therefore cannot copy those
+    integers blindly.  Existing destinations retained by the target layout are
+    translated to the target index; transitions to omitted rooms are cleared.
+    Invalid source indices are rejected because guessing would create a portal
+    into an unrelated room.
+    """
+
+    source_rooms = tuple(_normalise_resref(room) for room in source_room_resrefs)
+    target_rooms = tuple(_normalise_resref(room) for room in target_room_resrefs)
+    if not source_rooms or any(not room for room in source_rooms):
+        raise ValueError("Source transition room ordering contains an empty room resref.")
+    if not target_rooms or any(not room for room in target_rooms):
+        raise ValueError("Target transition room ordering contains an empty room resref.")
+    if len(set(source_rooms)) != len(source_rooms):
+        raise ValueError("Source transition room ordering contains duplicate room resrefs.")
+    if len(set(target_rooms)) != len(target_rooms):
+        raise ValueError("Target transition room ordering contains duplicate room resrefs.")
+
+    target_indices = {room: index for index, room in enumerate(target_rooms)}
+    rows: list[dict[str, Any]] = []
+    for face_index, face in enumerate(tuple(getattr(wok, "faces", ()) or ())):
+        for local_edge in range(3):
+            attribute = f"trans{local_edge + 1}"
+            source_index = int(getattr(face, attribute, -1))
+            if source_index < 0:
+                continue
+            if source_index >= len(source_rooms):
+                raise ValueError(
+                    f"WOK face {face_index} edge {local_edge} transition index {source_index} "
+                    f"is outside the {len(source_rooms)}-room source LYT ordering."
+                )
+            source_target = source_rooms[source_index]
+            target_index = target_indices.get(source_target, -1)
+            action = "preserved" if target_index == source_index else ("remapped" if target_index >= 0 else "dropped")
+            if target_index != source_index:
+                setattr(face, attribute, target_index)
+            rows.append(
+                {
+                    "face_index": face_index,
+                    "local_edge": local_edge,
+                    "directed_edge": face_index * 3 + local_edge,
+                    "source_index": source_index,
+                    "source_target": source_target,
+                    "target_index": target_index,
+                    "action": action,
+                }
+            )
+    return rows
 
 
 def _hash_file(path: Path) -> str:
@@ -655,6 +734,26 @@ def _normalised_vis_bytes(source: bytes | None, rooms: tuple[str, ...]) -> tuple
     return output, output != bytes(source or b"")
 
 
+def _room_wok_module_offset(room: Any, coordinate_space: str) -> tuple[float, float, float]:
+    """Return the one allowed WOK-to-module translation for a LYT room row."""
+
+    module_space_names = {
+        "module",
+        "module_space",
+        "area",
+        "area_space",
+        "world",
+        "world_space",
+    }
+    if str(coordinate_space or "room_local").strip().lower() in module_space_names:
+        return (0.0, 0.0, 0.0)
+    return (
+        float(getattr(room, "x", 0.0)),
+        float(getattr(room, "y", 0.0)),
+        float(getattr(room, "z", 0.0)),
+    )
+
+
 def _combined_room_wok(
     rooms: tuple[Any, ...],
     room_woks: dict[str, Any],
@@ -664,18 +763,11 @@ def _combined_room_wok(
     from src.core.modules.module_format import WOKData, WOKFace
 
     combined = WOKData(name="legacy_module_combined")
-    use_room_offset = str(coordinate_space or "room_local").strip().lower() not in {
-        "module", "module_space", "area", "area_space", "world", "world_space"
-    }
     for room in rooms:
         room_name = _normalise_resref(getattr(room, "model", ""))
         source = room_woks[room_name]
         vertex_offset = len(combined.verts)
-        offset = (
-            float(getattr(room, "x", 0.0)),
-            float(getattr(room, "y", 0.0)),
-            float(getattr(room, "z", 0.0)),
-        ) if use_room_offset else (0.0, 0.0, 0.0)
+        offset = _room_wok_module_offset(room, coordinate_space)
         combined.verts.extend(
             (
                 float(vertex[0]) + offset[0],
@@ -741,6 +833,47 @@ def _source_entry_point(source_ifo: bytes | None, fallback: Any, module_resref: 
     )
 
 
+def _patch_legacy_ifo_module_id(
+    data: bytes,
+    module_resref: str,
+    *,
+    regenerate: bool,
+) -> tuple[bytes, dict[str, Any]]:
+    """Apply the explicit legacy-candidate module identity policy.
+
+    Entry routing and script hooks are handled separately.  This helper
+    changes only ``Mod_ID`` when regeneration is requested, which prevents a
+    recovered/renamed module from retaining a stock donor's runtime identity.
+    """
+
+    from pykotor.resource.formats.gff import bytes_gff, read_gff
+    from src.core.modules.authored_module_metadata import authored_module_id_bytes
+
+    raw = bytes(data or b"")
+    if not raw:
+        raise ValueError("A serialized IFO is required before applying module identity policy.")
+    gff = read_gff(raw)
+    current = bytes(gff.root.get("Mod_ID") or b"")
+    expected = authored_module_id_bytes(module_resref)
+    changed = bool(regenerate and current != expected)
+    if changed:
+        gff.root.set_binary("Mod_ID", expected)
+        raw = bytes_gff(gff)
+    final = expected if regenerate else current
+    if len(final) != 16:
+        raise ValueError(
+            f"module.ifo Mod_ID must be 16 bytes after identity policy; found {len(final)}."
+        )
+    return raw, {
+        "policy": "regenerate_for_module_resref" if regenerate else "preserve_source",
+        "module_resref": _normalise_resref(module_resref),
+        "source_mod_id_hex": current.hex(),
+        "expected_authored_mod_id_hex": expected.hex(),
+        "final_mod_id_hex": final.hex(),
+        "changed": changed,
+    }
+
+
 def _stage_resource_bytes(resources_dir: Path, resources: dict[tuple[str, str], bytes]) -> None:
     resources_dir.mkdir(parents=True, exist_ok=True)
     for (resref, restype), data in sorted(resources.items()):
@@ -800,7 +933,10 @@ def build_legacy_module_candidate(request: LegacyModuleCandidateRequest) -> Lega
             patch_preserved_stock_ifo_bytes,
         )
         from src.core.modules.authored_module_objects import AuthoredGameplayPlacement, build_git_bytes
-        from src.core.modules.authored_module_pathing import compile_authored_pathing_for_module
+        from src.core.modules.authored_module_pathing import (
+            AuthoredPathingRoom,
+            compile_authored_pathing_for_rooms,
+        )
         from src.core.modules.authored_module_project import AuthoredModuleMetadata
         from src.core.modules.module_format import LYTLayout, LYTRoom, WOKData
         from src.core.validation.kotor_module_engine_contract import (
@@ -886,6 +1022,54 @@ def build_legacy_module_candidate(request: LegacyModuleCandidateRequest) -> Lega
                 final_resources[(room, restype)] = path.read_bytes()
             room_woks[room] = WOKData.from_bytes(final_resources[(room, "wok")])
 
+        transition_source_rooms = tuple(
+            _normalise_resref(room)
+            for room in request.source_transition_room_resrefs
+            if _normalise_resref(room)
+        )
+        result.source_transition_room_resrefs = list(transition_source_rooms)
+        if transition_source_rooms:
+            for room in room_resrefs:
+                wok = room_woks[room]
+                transition_rows = remap_walkmesh_transition_destinations(
+                    wok,
+                    source_room_resrefs=transition_source_rooms,
+                    target_room_resrefs=room_resrefs,
+                )
+                for row in transition_rows:
+                    result.walkmesh_transition_repairs.append({"room_resref": room, **row})
+                changed_rows = [row for row in transition_rows if row["action"] != "preserved"]
+                if not changed_rows:
+                    continue
+                remapped_wok_bytes = wok.to_bytes()
+                remapped_wok = WOKData.from_bytes(remapped_wok_bytes)
+                invalid_targets = [
+                    int(transition)
+                    for face in tuple(remapped_wok.faces or ())
+                    for transition in (face.trans1, face.trans2, face.trans3)
+                    if int(transition) >= len(room_resrefs)
+                ]
+                if invalid_targets:
+                    raise ValueError(
+                        f"Room {room} still contains out-of-range transition destinations after remap: "
+                        f"{sorted(set(invalid_targets))}."
+                    )
+                final_resources[(room, "wok")] = remapped_wok_bytes
+                room_woks[room] = remapped_wok
+                result.generated_resources.append(f"{room}.wok transition destination repair")
+
+            remapped_count = sum(
+                row["action"] == "remapped" for row in result.walkmesh_transition_repairs
+            )
+            dropped_count = sum(
+                row["action"] == "dropped" for row in result.walkmesh_transition_repairs
+            )
+            if remapped_count or dropped_count:
+                result.warnings.append(
+                    f"Walkmesh transition repair remapped {remapped_count} retained destination(s) "
+                    f"and removed {dropped_count} destination(s) for rooms omitted from the recovered LYT."
+                )
+
         combined_wok = _combined_room_wok(
             rooms,
             room_woks,
@@ -968,6 +1152,13 @@ def build_legacy_module_candidate(request: LegacyModuleCandidateRequest) -> Lega
         else:
             ifo_bytes = build_authored_ifo_bytes(metadata, entry_point, area_resrefs=(module_resref,))
             result.generated_resources.append("module.ifo")
+        ifo_bytes, result.module_identity = _patch_legacy_ifo_module_id(
+            ifo_bytes,
+            module_resref,
+            regenerate=bool(request.regenerate_module_id),
+        )
+        if result.module_identity.get("changed"):
+            result.generated_resources.append("module.ifo module identity regeneration")
 
         explicit_vis, source_vis = _explicit_resource(request.source_vis, label="VIS")
         capsule_vis, capsule_vis_resref, capsule_vis_fallback = _module_resource(
@@ -1008,17 +1199,40 @@ def build_legacy_module_candidate(request: LegacyModuleCandidateRequest) -> Lega
                     "the candidate normalizes it to the module resref."
                 )
         else:
-            pathing = compile_authored_pathing_for_module(combined_wok)
+            pathing_rooms = tuple(
+                AuthoredPathingRoom(
+                    room_resref=_normalise_resref(getattr(room, "model", "")),
+                    wok=room_woks[_normalise_resref(getattr(room, "model", ""))],
+                    position=_room_wok_module_offset(room, request.wok_coordinate_space),
+                )
+                for room in rooms
+            )
+            pathing = compile_authored_pathing_for_rooms(pathing_rooms)
+            result.pathing_metadata = dict(pathing.metadata)
+            missing_portal_pairs = [
+                pair
+                for pair in pathing.metadata.get("reciprocal_transition_pairs", ())
+                if int(pair.get("bidirectional_bridge_count", 0) or 0) < 1
+            ]
+            if missing_portal_pairs:
+                labels = ", ".join(
+                    f"{pair.get('room_a_resref', pair.get('room_a'))}<->"
+                    f"{pair.get('room_b_resref', pair.get('room_b'))}"
+                    for pair in missing_portal_pairs
+                )
+                raise ValueError(
+                    "Generated PTH is missing bidirectional bridges for reciprocal WOK transitions: " + labels
+                )
             pth_bytes = pathing.pth_bytes
             result.generated_resources.append(f"{module_resref}.pth")
             if request.regenerate_pth and (explicit_pth is not None or capsule_pth is not None):
                 result.warnings.append(
                     "Source PTH was deliberately replaced because the recovered room/walkmesh set changed."
                 )
-            if int(pathing.metadata.get("walkmesh_component_count", 0) or 0) > 1:
+            if int(pathing.metadata.get("path_graph_component_count", 0) or 0) > 1:
                 result.warnings.append(
-                    f"Generated PTH covers {pathing.metadata['walkmesh_component_count']} disconnected walkmesh components; "
-                    "room-to-room transitions require manual pathing proof."
+                    f"Generated PTH preserves {pathing.metadata['path_graph_component_count']} disconnected walkable "
+                    "network(s) after reciprocal room transitions were linked."
                 )
 
         final_resources[(module_resref, "are")] = are_bytes
@@ -1157,6 +1371,7 @@ __all__ = [
     "LegacyRoomRepairResult",
     "LegacyModuleCandidateRequest",
     "LegacyModuleCandidateResult",
+    "remap_walkmesh_transition_destinations",
     "build_legacy_module_candidate",
     "repair_legacy_room_with_mdlops",
 ]

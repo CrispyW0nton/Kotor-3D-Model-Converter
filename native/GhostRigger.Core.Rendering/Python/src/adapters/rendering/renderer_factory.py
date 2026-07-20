@@ -314,13 +314,19 @@ class FallbackViewportRenderer(ViewportRendererPort):
         if active is not None and hasattr(active, "invalidate_node_cache"):
             active.invalidate_node_cache()
 
-    def invalidate_transform_cache(self, reason: str = "transforms changed") -> None:
+    def invalidate_transform_cache(self, reason: str = "transforms changed", node=None) -> None:
         active = object.__getattribute__(self, "_active")
         if active is None:
             return
         invalidate = getattr(active, "invalidate_transform_cache", None)
         if callable(invalidate):
-            invalidate(reason)
+            try:
+                invalidate(reason, node=node)
+            except TypeError:
+                # Older renderer ports invalidate their complete transform queue
+                # and accept only the reason.  Keep those backends compatible
+                # while allowing retained renderers to evict one actor subtree.
+                invalidate(reason)
         elif hasattr(active, "invalidate_node_cache"):
             active.invalidate_node_cache()
 

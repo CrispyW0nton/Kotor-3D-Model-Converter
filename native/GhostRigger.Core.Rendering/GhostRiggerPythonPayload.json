@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Rendering",
-    "file_count": 124,
+    "file_count": 125,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -87,7 +87,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RENDERER_IMPL",
             "source_path": "src/adapters/rendering/moderngl_renderer_impl.py",
             "packaged_path": "Python/src/adapters/rendering/moderngl_renderer_impl.py",
-            "sha256": "2b6b6ace4778b84293125387dd8a8b4903cd4bb685b16c7f56832a80665ea676"
+            "sha256": "ae99fcb5535c81b7d3faf82e08804f9793072c76d5808c1512eb24584236e0e2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RESOURCES",
@@ -123,7 +123,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_PYGFX_CORE_MESH_CACHE",
             "source_path": "src/adapters/rendering/pygfx_core/mesh_cache.py",
             "packaged_path": "Python/src/adapters/rendering/pygfx_core/mesh_cache.py",
-            "sha256": "2fa43143f7fffbc9973c55362d7ab95962cd62474a446cc3caa502422df976a2"
+            "sha256": "23fb8533069e4ed7bdd068c74b4ed609e9da4c39b02b1b122d0d4be3d0314f57"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_PYGFX_CORE_RENDERER",
@@ -147,7 +147,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_RENDERER_FACTORY",
             "source_path": "src/adapters/rendering/renderer_factory.py",
             "packaged_path": "Python/src/adapters/rendering/renderer_factory.py",
-            "sha256": "b7b3a048914eeca46dbb5fe5f150841a422d6ebc4194144b562f6269da49c598"
+            "sha256": "fec91e91c112d0542aebd46404c9d03eda1d8a69314c1bf70495e2054473dabc"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_CORE_INIT",
@@ -159,7 +159,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_CORE_RENDERER",
             "source_path": "src/adapters/rendering/wgpu_core/renderer.py",
             "packaged_path": "Python/src/adapters/rendering/wgpu_core/renderer.py",
-            "sha256": "e4224f4be5a1a2e6036efacdcc620be6df62924ca4c535b648a0ba8864bba8e9"
+            "sha256": "88247fa7a01b26d89ca00f6580cc7199d2d759c629e623f4cd549879cb85d5d4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_CORE_RESOURCES",
@@ -243,7 +243,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHT_MANAGER",
             "source_path": "src/core/lighting/light_manager.py",
             "packaged_path": "Python/src/core/lighting/light_manager.py",
-            "sha256": "117a60dda03835b821f472d04dc71b592215e31fe5939c3d70f94e025cc3c2cc"
+            "sha256": "692e5a3656e0a98d616da5eb3971beda6bbe2d7db44348bab4bae24182ef7bc1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_LIGHT_MODEL",
@@ -393,7 +393,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_RENDER_DATA",
             "source_path": "src/core/lighting/render_data.py",
             "packaged_path": "Python/src/core/lighting/render_data.py",
-            "sha256": "47025e8799e8535f751cbe2cde44e73987a610288eae441adf059e4b5cedeece"
+            "sha256": "ed04a09eeb79f0e232f4fea7eb1f808aaca9d38635acbd250b27c652995a47a2"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_LIGHTING_SETTINGS",
@@ -555,7 +555,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER_SETUP",
             "source_path": "src/core/rendering/frame_core/renderer_setup.py",
             "packaged_path": "Python/src/core/rendering/frame_core/renderer_setup.py",
-            "sha256": "78deee844a4d46ebfacd2f59228f9310b0d659e5fd7ca44bf6eca4f9bdb1d8ec"
+            "sha256": "27e1977cc8089e472ede6d03b80c17ed1cca29338fd31c235ac6321d5f410f83"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER_TEXTURES",
@@ -567,7 +567,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_TEXTURE_CACHE",
             "source_path": "src/core/rendering/frame_core/texture_cache.py",
             "packaged_path": "Python/src/core/rendering/frame_core/texture_cache.py",
-            "sha256": "35839064ca47bb145dba060c655f9f226180f6425312052646c213d4129aee0d"
+            "sha256": "821fbd0d9663a05b229f2b86895de646daebb9627da3fcd84d4b58fd604d0f10"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_GPU_DEBUG_TABLES",
@@ -597,7 +597,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_GPU_SHADERS",
             "source_path": "src/core/rendering/gpu_shaders.py",
             "packaged_path": "Python/src/core/rendering/gpu_shaders.py",
-            "sha256": "c5912475b0e2c772b51fc447d08d21c4a88cb83d6c6b49f87f9bc551fee63075"
+            "sha256": "d3a450c913e39205d9677f0c8e9857ce3468763b7ee5fadd677a02f37c335058"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_GPU_VBO_LAYOUT",
@@ -612,10 +612,16 @@
             "sha256": "d822e4c1cb8c264ce5e8f83040805ac7ccead454be87d2de6956ce8d4851c10a"
         },
         {
+            "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_KOTOR_GUI_PREVIEW",
+            "source_path": "src/core/rendering/kotor_gui_preview.py",
+            "packaged_path": "Python/src/core/rendering/kotor_gui_preview.py",
+            "sha256": "dba54f9528f17981c25f9b8e0a6483c2ffa96c99dbfdf9776aea5115fb67561c"
+        },
+        {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_MESH_RENDER_DATA",
             "source_path": "src/core/rendering/mesh_render_data.py",
             "packaged_path": "Python/src/core/rendering/mesh_render_data.py",
-            "sha256": "8a5bbd5d20a2f0647918a64913c5945a9e61515fef619e72fcd5065d6a516fb5"
+            "sha256": "5099af2ff97ae4d50262af938d7d2b06a19b002858e27a18814522953fc341af"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_PICKING",

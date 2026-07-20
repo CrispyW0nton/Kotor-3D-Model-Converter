@@ -17,6 +17,17 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+# The application is split across native package payload roots rather than a
+# single root ``src`` tree. Make the standalone CLI reproduce the same import
+# layout as the MCP host so it works from a normal terminal without a custom
+# PYTHONPATH.
+from scripts.mcp.start_kotormcp_stdio import _python_roots
+
+for _root in reversed(_python_roots(ROOT)):
+    _text = str(_root)
+    if _root.exists() and _text not in sys.path:
+        sys.path.insert(0, _text)
+
 from src.converters.mesh_converter import FBXExporter
 from src.core.assets.resource_manager import ResourceManager
 from src.core.export.unity_export_bridge import export_model_for_unity
@@ -49,12 +60,34 @@ def export_model(args: argparse.Namespace) -> dict[str, Any]:
     if not indexed:
         raise SystemExit(f"could not index {args.game} game directory: {game_dir}")
 
-    model = manager.load_model(args.resref, args.game)
+    model = manager.load_model_strict(args.resref, args.game)
     if model is None:
         raise SystemExit(f"could not load {args.resref} from {args.game}")
 
     if args.format != "fbx":
         raise SystemExit(f"unsupported format: {args.format}")
+
+    base_skeleton_model = None
+    supermodel = str(getattr(model, "supermodel", "") or "").strip()
+    if supermodel and supermodel.lower() not in {"null", "none", "****"}:
+        base_skeleton_model = manager.load_model_strict(supermodel, args.game)
+
+    selected_animation_names = (
+        ()
+        if bool(getattr(args, "no_animations", False))
+        else getattr(args, "animation", None)
+    )
+    from src.core.animation.fbx_animation_selection import (  # noqa: PLC0415
+        prepare_fbx_animation_export_model,
+    )
+
+    model = prepare_fbx_animation_export_model(
+        model,
+        selected_animation_names,
+        game=args.game,
+        resource_manager=manager,
+        base_skeleton_model=base_skeleton_model,
+    )
 
     return export_model_for_unity(
         model,
@@ -70,6 +103,8 @@ def export_model(args: argparse.Namespace) -> dict[str, Any]:
             str(out_path),
             tex_cache=_ResourceTextureCache(manager, args.game),
             export_rigging=rigging,
+            base_skeleton_model=base_skeleton_model,
+            compatibility_profile="unity",
         ),
     )
 
@@ -90,6 +125,22 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--format", choices=["fbx"], default="fbx")
     parser.add_argument("--no-rigging", action="store_true", help="Do not write rigging sidecar JSON files")
+    animation_group = parser.add_mutually_exclusive_group()
+    animation_group.add_argument(
+        "--animation",
+        action="append",
+        metavar="NAME",
+        help=(
+            "Embed this effective local or inherited animation set in the FBX. "
+            "Repeat the option to select multiple sets. When omitted, the model's "
+            "legacy local animation blocks are preserved."
+        ),
+    )
+    animation_group.add_argument(
+        "--no-animations",
+        action="store_true",
+        help="Export only the mesh and rig, with no embedded animation takes.",
+    )
     return parser.parse_args()
 
 

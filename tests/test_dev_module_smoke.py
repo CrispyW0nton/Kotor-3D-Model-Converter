@@ -71,7 +71,7 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
     assert ("grdev01_room01", "wok") in keys
     assert "grdev01_room01" in authored.module.lyt.to_text()
     assert authored.module.room_woks["grdev01_room01"].walkable_face_count() == 4  # 2 floor + 2 door transition
-    assert authored.module.room_woks["grdev01_room01"].non_walk_face_count() == 12
+    assert authored.module.room_woks["grdev01_room01"].non_walk_face_count() == 0
     assert authored.module.room_geometry is not None
     assert authored.module.room_geometry.room_mesh.name == "grdev01_room01_mesh"
     assert authored.module.room_geometry.room_mesh.texture == "CM_Baremetal"
@@ -87,7 +87,7 @@ def test_t2601_builds_from_scratch_dev_module_resources() -> None:
         "grdev01_room01_door_marker",
     }
     assert authored.module.room_geometry.wok.walkable_face_count() == primitive_geometry.wok.walkable_face_count()
-    assert authored.module.room_geometry.wok.non_walk_face_count() == 12
+    assert authored.module.room_geometry.wok.non_walk_face_count() == 0
     assert authored.module.room_geometry.metadata["walkmesh_boundary_wall_faces"] == 12
     # LYT/VIS are CRLF and never self-reference visibility (engine contract).
     assert lyt_text.startswith("#MAXLAYOUT ASCII\r\n")
@@ -211,7 +211,7 @@ def test_t2614_builds_floor_plan_smoke_room_with_wall_opening() -> None:
         "grdev01_room01_wall_03_right",
     } <= helper_names
     assert authored.module.room_geometry.wok.walkable_face_count() == 2
-    assert authored.module.room_geometry.wok.non_walk_face_count() == 8
+    assert authored.module.room_geometry.wok.non_walk_face_count() == 0
     assert authored.module.room_geometry.metadata["walkmesh_boundary_wall_faces"] == 8
     assert authored.blocking_issues == []
     checks = {check.label: check for check in authored.walkability_checks}
@@ -294,7 +294,7 @@ def test_t2614_exports_floor_plan_smoke_manifest_with_opening_metadata(tmp_path:
     assert smoke["authored_geometry"]["metadata"]["opening_count"] == 1
     assert smoke["authored_geometry"]["metadata"]["wall_count"] == 6
     assert smoke["authored_geometry"]["wok_walkable_faces"] == 2
-    assert smoke["authored_geometry"]["wok_non_walk_faces"] == 8
+    assert smoke["authored_geometry"]["wok_non_walk_faces"] == 0
     assert smoke["authored_geometry"]["walkmesh_boundary_wall_faces"] == 8
     assert "grdev01_room01_wall_03_lintel" in smoke["authored_geometry"]["helper_meshes"]
     assert smoke["package_verification"]["ok"] is True
@@ -405,7 +405,7 @@ def test_t2601_exports_staged_mod_and_manifest(tmp_path: Path) -> None:
     assert smoke["authored_geometry"]["metadata"]["compiled_mesh_count"] == 6
     assert smoke["authored_geometry"]["derived_wok"] is True
     assert smoke["authored_geometry"]["wok_walkable_faces"] == 4  # 2 floor + 2 door transition
-    assert smoke["authored_geometry"]["wok_non_walk_faces"] == 12
+    assert smoke["authored_geometry"]["wok_non_walk_faces"] == 0
     assert smoke["authored_geometry"]["walkmesh_boundary_wall_faces"] == 12
     assert smoke["authored_geometry"]["metadata"]["walkmesh_boundary_walls"]["source"] == "src.core.modules.authored_walkmesh_boundaries"
     assert smoke["authored_materials"]["source"] == "src.core.modules.authored_room_materials"

@@ -468,7 +468,7 @@ def test_gpu_renderer_clamps_single_tile_character_atlases_like_cpu_renderer() -
     assert "_node_uses_single_tile_atlas(node)" in gpu
     assert "gl_diff.repeat_x = not _node_clamp_s" in gpu
     assert "_gr_gpu_uv_v_flip" in gpu
-    assert "img._gr_gpu_uv_v_flip = False" in viewport
+    assert "img._gr_gpu_uv_v_flip = True" in viewport
 
 
 def test_manual_v_key_bone_snap_is_wired_without_auto_snap() -> None:
@@ -496,4 +496,3 @@ def test_gimbal_translation_uses_projected_visible_axis_direction() -> None:
     assert "pixels_along = (float(dx_screen) * sx + float(dy_screen) * sy) / length" in viewport
     assert "return self._projected_axis_delta(" in viewport
     assert "origin_world" in viewport
-

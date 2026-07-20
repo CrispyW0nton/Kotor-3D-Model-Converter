@@ -186,8 +186,12 @@ def _validate_map_studio_pie_visual_proof_payload(payload: object) -> tuple[dict
     if isinstance(movement_ms, bool) or not isinstance(movement_ms, int) or not 100 <= movement_ms <= 5000:
         return None, "movement_ms must be an integer between 100 and 5000"
     sample_count = payload.get("sample_count", 12)
-    if isinstance(sample_count, bool) or not isinstance(sample_count, int) or not 2 <= sample_count <= 24:
-        return None, "sample_count must be an integer between 2 and 24"
+    # Each proof also captures one post-movement frame.  Keep the stationary
+    # sequence at the proven twelve-frame bound: an extended 24-frame request
+    # exhausted the native ModernGL/QPixmap capture path on a real Debug run
+    # while the default 12 + motion sequence completed continuously.
+    if isinstance(sample_count, bool) or not isinstance(sample_count, int) or not 2 <= sample_count <= 12:
+        return None, "sample_count must be an integer between 2 and 12"
 
     motion: dict[str, float] = {}
     for key, default in (("forward", 1.0), ("strafe", 0.0)):
@@ -879,7 +883,11 @@ class GhostRiggerIPCServer:
             cb = self.callbacks.get("map_studio_pie_visual_proof")
             if cb is None:
                 return jsonify({"status": "error", "message": "map_studio_pie_visual_proof callback unavailable"}), 503
-            ok, result = self._invoke_callback_sync(cb, payload, timeout=90.0)
+            # Cold-opening an editable stock module can legitimately cross the
+            # 90-second mark while the UI remains responsive.  Match the
+            # bounded Map Studio proof timeout so the synchronous IPC caller
+            # can receive that completed proof instead of a false timeout.
+            ok, result = self._invoke_callback_sync(cb, payload, timeout=180.0)
             if not ok:
                 return jsonify({"status": "error", "message": str(result)}), 504
             proof = result if isinstance(result, dict) else {"status": "blocked", "value": result}

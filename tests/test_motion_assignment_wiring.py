@@ -79,6 +79,17 @@ def test_t1205_character_builder_preview_sets_gpu_skinning_base_pose():
     assert "viewport.set_animation_pose(" in block
 
 
+def test_t1205_character_builder_tags_body_pose_for_bas_head_local_animation():
+    source = _read("src/gui/panels/qt_character_builder_panel.py")
+    start_block = _method_block(source, "_start_preview_animation")
+    tick_block = _method_block(source, "_tick_preview_animation")
+
+    for block in (start_block, tick_block):
+        assert '"_gr_animation_source_model_id"' in block
+        assert '"_gr_animation_source_model_name"' in block
+        assert '"_gr_animation_name"' in block
+
+
 def test_t1205_character_builder_preview_fallback_uses_live_viewport():
     source = _read("src/gui/panels/qt_character_builder_panel.py")
     block = _method_block(source, "_on_play_preview_animation_requested")

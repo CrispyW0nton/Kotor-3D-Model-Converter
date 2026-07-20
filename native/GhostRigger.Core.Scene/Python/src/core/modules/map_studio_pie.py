@@ -27,6 +27,7 @@ from .authored_gameplay_marker_geometry import (
 )
 from .authored_imported_mesh import authored_room_uses_unresolved_stock_geometry
 from .authored_module_walkmesh import combine_authored_module_walkmesh
+from .map_studio_pie_party import party_follow_positions
 
 
 Vec3 = tuple[float, float, float]
@@ -93,9 +94,14 @@ class MapStudioPIEDoorState:
     position: Vec3
     facing: float = 0.0
     open_radius: float = 2.75
+    half_width: float = 1.0
+    vertical_reach: float = 1.75
+    locked: bool = False
     is_open: bool = False
     transition_module: str = ""
     transition_target: str = ""
+    external_contact_reported: bool = False
+    locked_contact_reported: bool = False
 
 
 @dataclass(frozen=True)
@@ -114,6 +120,11 @@ class MapStudioPIEEvent:
     kind: str
     message: str
     position: Vec3 = (0.0, 0.0, 0.0)
+    entity_id: str = ""
+    target_id: str = ""
+    animation_role: str = ""
+    animation_candidates: tuple[str, ...] = ()
+    value: int | float | str | None = None
 
 
 @dataclass
@@ -145,6 +156,7 @@ class MapStudioPIEFrame:
     path: tuple[Vec3, ...]
     events: tuple[MapStudioPIEEvent, ...] = ()
     door_states: tuple[MapStudioPIEDoorState, ...] = ()
+    gameplay: Any = None
 
 
 @dataclass(frozen=True)
@@ -168,6 +180,7 @@ class MapStudioPIEActorAttachment:
     actor_id: str = "__map_studio_pie_player__"
     support_plane_z: float = 0.0
     surface_position: Vec3 = (0.0, 0.0, 0.0)
+    model_yaw_offset_radians: float = -(math.pi * 0.5)
 
     def set_transform(self, position: Vec3, facing_radians: float) -> None:
         """Place the actor's support plane without touching authored KMAP transforms.
@@ -181,7 +194,7 @@ class MapStudioPIEActorAttachment:
         point = tuple(float(value) for value in tuple(position)[:3])
         if len(point) < 3:
             return
-        half = kotor_actor_yaw_for_world_facing(facing_radians) * 0.5
+        half = (float(facing_radians) + float(self.model_yaw_offset_radians)) * 0.5
         self.surface_position = point  # type: ignore[assignment]
         self.root_node.position = (
             point[0],
@@ -279,6 +292,7 @@ def attach_map_studio_pie_actor(
     prepared_root: Any = None,
     append_to_preview: bool = True,
     support_plane_z: float | None = None,
+    model_yaw_offset_radians: float = -(math.pi * 0.5),
 ) -> MapStudioPIEActorAttachment | None:
     """Attach one preserved, animatable MDL hierarchy to a map preview.
 
@@ -345,6 +359,7 @@ def attach_map_studio_pie_actor(
             if support_plane_z is None
             else float(support_plane_z)
         ),
+        model_yaw_offset_radians=float(model_yaw_offset_radians),
     )
     attachment.set_transform(position, facing_radians)
     if recompute_bounds:
@@ -670,7 +685,9 @@ class MapStudioPIESession:
         self._events: list[MapStudioPIEEvent] = []
         self._resolved_camera_distance: float | None = None
         self.entity_registry: Any = None
+        self.gameplay: Any = None
         self._doors: list[MapStudioPIEDoorState] | None = None
+        self._walkmesh_face_components: dict[int, int] | None = None
 
     @property
     def simulation_time(self) -> float:
@@ -696,6 +713,14 @@ class MapStudioPIESession:
                         position=position,  # type: ignore[arg-type]
                         facing=float(getattr(entity, "facing", 0.0) or 0.0),
                         open_radius=max(1.0, float(getattr(entity, "target_radius", 1.0) or 1.0) + self.config.door_open_radius),
+                        half_width=max(0.25, float(getattr(entity, "target_radius", 1.0) or 1.0)),
+                        vertical_reach=max(
+                            0.75,
+                            float(getattr(entity, "target_radius", 1.0) or 1.0) * 0.5
+                            + self.config.player_radius
+                            + self.config.max_step_up,
+                        ),
+                        locked=bool(getattr(entity, "locked", False)),
                         transition_module=str(getattr(entity, "transition_module", "") or ""),
                         transition_target=str(getattr(entity, "transition_target", "") or ""),
                     )
@@ -706,22 +731,257 @@ class MapStudioPIESession:
     def door_states(self) -> tuple[MapStudioPIEDoorState, ...]:
         return tuple(self._ensure_doors())
 
+    def configure_gameplay(
+        self,
+        entity_registry: Any,
+        *,
+        dialogue_loader: Any = None,
+        item_inspector: Any = None,
+        tlk_lookup: Any = None,
+        dialogue_condition_evaluator: Any = None,
+        dialogue_start_overrides: Any = None,
+        journal_seed: Any = None,
+        script_loader: Any = None,
+        party_combatants: Any = None,
+        player_combat_stats: Any = None,
+    ) -> Any:
+        """Attach one runtime-only gameplay coordinator to this PIE session."""
+
+        from .map_studio_pie_gameplay import MapStudioPIEGameplayRuntime
+
+        self.entity_registry = entity_registry
+        self._doors = None
+        self.gameplay = MapStudioPIEGameplayRuntime(
+            entity_registry,
+            game=self.game,
+            dialogue_loader=dialogue_loader,
+            item_inspector=item_inspector,
+            tlk_lookup=tlk_lookup,
+            dialogue_condition_evaluator=dialogue_condition_evaluator,
+            dialogue_start_overrides=dialogue_start_overrides,
+            journal_seed=journal_seed,
+            script_loader=script_loader,
+            party_combatants=party_combatants,
+            player_combat_stats=player_combat_stats,
+        )
+        self.gameplay.advance(
+            0.0,
+            player_position=self.state.position,
+            player_facing_radians=self.state.facing_radians,
+            camera_forward=self._gameplay_camera_forward(),
+        )
+        self._append_gameplay_events()
+        return self.gameplay
+
+    def _gameplay_camera_forward(self) -> Vec3:
+        azimuth = math.radians(self._camera_azimuth_degrees)
+        return (-math.cos(azimuth), -math.sin(azimuth), 0.0)
+
+    def _append_gameplay_events(self) -> None:
+        gameplay = self.gameplay
+        if gameplay is None:
+            return
+        for event in gameplay.drain_events():
+            entity = self.entity_registry.by_id(event.entity_id) if self.entity_registry is not None else None
+            position = tuple(getattr(entity, "position", self.state.position) or self.state.position)
+            self._events.append(
+                MapStudioPIEEvent(
+                    kind=event.kind,
+                    message=event.message,
+                    position=position,  # type: ignore[arg-type]
+                    entity_id=event.entity_id,
+                    target_id=event.target_id,
+                    animation_role=event.animation_role,
+                    animation_candidates=event.animation_candidates,
+                    value=event.value,
+                )
+            )
+
+    def gameplay_snapshot(self) -> Any:
+        return self.gameplay.snapshot() if self.gameplay is not None else None
+
+    def cycle_gameplay_focus(self, direction: int = 1) -> Any:
+        if self.gameplay is None:
+            return None
+        result = self.gameplay.cycle_focus(direction)
+        self._append_gameplay_events()
+        return result
+
+    def focus_gameplay_entity(self, entity_id: str) -> Any:
+        """Focus one world-picked entity without running its primary action."""
+
+        if self.gameplay is None:
+            return None
+        result = self.gameplay.focus_entity(entity_id)
+        self._append_gameplay_events()
+        return result
+
+    def activate_gameplay_focus(self, command: str | None = None) -> Any:
+        if self.gameplay is None:
+            return None
+        result = self.gameplay.activate_focused(command)
+        self._sync_gameplay_door_states()
+        self._append_gameplay_events()
+        return result
+
+    def activate_gameplay_entity(self, entity_id: str, command: str | None = None) -> Any:
+        if self.gameplay is None:
+            return None
+        result = self.gameplay.activate_entity(entity_id, command)
+        self._sync_gameplay_door_states()
+        self._append_gameplay_events()
+        return result
+
+    def continue_gameplay_dialogue(self) -> Any:
+        if self.gameplay is None:
+            return None
+        result = self.gameplay.continue_dialogue()
+        self._append_gameplay_events()
+        return result
+
+    def choose_gameplay_dialogue(self, number: int) -> Any:
+        if self.gameplay is None:
+            return None
+        result = self.gameplay.choose_dialogue(number)
+        self._append_gameplay_events()
+        return result
+
+    def take_gameplay_item(self, entity_id: str, resref: str, quantity: int = 1) -> Any:
+        if self.gameplay is None:
+            return None
+        result = self.gameplay.take_item(entity_id, resref, quantity)
+        self._append_gameplay_events()
+        return result
+
+    def take_all_gameplay_items(self, entity_id: str) -> Any:
+        if self.gameplay is None:
+            return None
+        result = self.gameplay.take_all(entity_id)
+        self._append_gameplay_events()
+        return result
+
+    def toggle_gameplay_combat_pause(self) -> Any:
+        if self.gameplay is None:
+            return None
+        result = self.gameplay.toggle_combat_pause()
+        self._append_gameplay_events()
+        return result
+
+    def clear_gameplay_combat_queue(self) -> Any:
+        if self.gameplay is None:
+            return None
+        result = self.gameplay.clear_combat_queue()
+        self._append_gameplay_events()
+        return result
+
+    def close_gameplay_modal(self) -> bool:
+        if self.gameplay is None:
+            return False
+        closed = bool(self.gameplay.close_modal())
+        self._append_gameplay_events()
+        return closed
+
+    def _sync_gameplay_door_states(self) -> None:
+        if self.gameplay is None:
+            return
+        interaction = self.gameplay.snapshot().interaction
+        open_doors = set(interaction.open_doors)
+        unlocked = set(interaction.unlocked_entities)
+        for door in self._ensure_doors():
+            if door.entity_id in unlocked:
+                door.locked = False
+            if door.entity_id in open_doors:
+                door.is_open = True
+
     def _update_doors(self) -> None:
         """Open doors the player is near; close them past the hysteresis band."""
 
-        px, py = self.state.position[0], self.state.position[1]
+        self._sync_gameplay_door_states()
+        px, py, pz = self.state.position
         for door in self._ensure_doors():
             distance = math.hypot(door.position[0] - px, door.position[1] - py)
-            if not door.is_open and distance <= door.open_radius:
+            vertical_distance = abs(door.position[2] - pz)
+            in_open_reach = distance <= door.open_radius and vertical_distance <= door.vertical_reach
+            outside_close_reach = (
+                distance > door.open_radius + self.config.door_close_hysteresis
+                or vertical_distance > door.vertical_reach
+            )
+            if outside_close_reach:
+                door.external_contact_reported = False
+                door.locked_contact_reported = False
+            if door.locked:
+                if door.is_open:
+                    door.is_open = False
+                if in_open_reach and not door.locked_contact_reported:
+                    door.locked_contact_reported = True
+                    self._events.append(
+                        MapStudioPIEEvent(
+                            "door_locked",
+                            f"Door {door.tag or door.entity_id} is locked and stays closed in PIE.",
+                            door.position,
+                        )
+                    )
+                continue
+            if not door.is_open and in_open_reach:
                 door.is_open = True
                 self._events.append(
                     MapStudioPIEEvent("door_opened", f"Door {door.tag or door.entity_id} opened as the player approached.", door.position)
                 )
-            elif door.is_open and distance > door.open_radius + self.config.door_close_hysteresis:
+            elif door.is_open and outside_close_reach:
                 door.is_open = False
                 self._events.append(
                     MapStudioPIEEvent("door_closed", f"Door {door.tag or door.entity_id} closed behind the player.", door.position)
                 )
+
+    def _walkmesh_component(self, face_index: int) -> int:
+        """Return the connected walkmesh-island id for one walkable face."""
+
+        if self._walkmesh_face_components is None:
+            adjacency = dict(getattr(self.walkmesh, "_adjacency", {}) or {})
+            components: dict[int, int] = {}
+            component_id = 0
+            for root in sorted(int(index) for index in adjacency):
+                if root in components:
+                    continue
+                stack = [root]
+                components[root] = component_id
+                while stack:
+                    current = stack.pop()
+                    for neighbour in adjacency.get(current, ()):
+                        neighbour = int(neighbour)
+                        if neighbour not in components:
+                            components[neighbour] = component_id
+                            stack.append(neighbour)
+                component_id += 1
+            self._walkmesh_face_components = components
+        return self._walkmesh_face_components.get(int(face_index), -1)
+
+    def _door_side_sample(
+        self,
+        door: MapStudioPIEDoorState,
+        normal: tuple[float, float],
+        side: float,
+        reference_z: float,
+    ):
+        """Find the nearest valid floor on one intended side of a door plane."""
+
+        minimum = max(0.5, self.config.player_radius * 2.1)
+        offsets = tuple(dict.fromkeys((minimum, min(1.25, self.config.door_transition_reach), self.config.door_transition_reach)))
+        for offset in offsets:
+            probe = (
+                door.position[0] + normal[0] * side * offset,
+                door.position[1] + normal[1] * side * offset,
+                reference_z,
+            )
+            sample = self.walkmesh.validate_disc(
+                probe,
+                radius=self.config.player_radius,
+                max_step_up=math.inf,
+                max_step_down=math.inf,
+            )
+            if sample is not None and sample.face_index >= 0:
+                return sample
+        return None
 
     def _try_room_transition(self, direction: tuple[float, float]) -> bool:
         """Step the player across an open doorway between two walkmesh islands.
@@ -735,40 +995,67 @@ class MapStudioPIESession:
         """
 
         px, py, pz = self.state.position
-        reach = self.config.player_radius + self.config.door_transition_reach
+        direction_length = math.hypot(float(direction[0]), float(direction[1]))
+        if direction_length <= 1.0e-8:
+            return False
+        travel = (float(direction[0]) / direction_length, float(direction[1]) / direction_length)
+        current_component = self._walkmesh_component(self.state.face_index)
         for door in self._ensure_doors():
-            if not door.is_open:
+            if not door.is_open or door.locked:
                 continue
             if math.hypot(door.position[0] - px, door.position[1] - py) > door.open_radius:
                 continue
+            if abs(door.position[2] - pz) > door.vertical_reach:
+                continue
+            normal = (math.cos(door.facing), math.sin(door.facing))
+            tangent = (-normal[1], normal[0])
+            forward_dot = (travel[0] * normal[0]) + (travel[1] * normal[1])
+            if abs(forward_dot) < 0.5:
+                continue
+            relative = (px - door.position[0], py - door.position[1])
+            signed_plane_distance = (relative[0] * normal[0]) + (relative[1] * normal[1])
+            lateral_distance = abs((relative[0] * tangent[0]) + (relative[1] * tangent[1]))
+            if lateral_distance > door.half_width + self.config.player_radius:
+                continue
+            # The player must be moving toward/across the plane, not away from
+            # a nearby door or parallel to it.
+            if signed_plane_distance * forward_dot > 1.0e-6:
+                continue
+            travel_side = 1.0 if forward_dot > 0.0 else -1.0
+            source_sample = self._door_side_sample(door, normal, -travel_side, pz)
+            destination_sample = self._door_side_sample(door, normal, travel_side, pz)
+            if source_sample is None or destination_sample is None:
+                continue
+            source_component = self._walkmesh_component(source_sample.face_index)
+            destination_component = self._walkmesh_component(destination_sample.face_index)
+            if (
+                current_component < 0
+                or source_component != current_component
+                or destination_component < 0
+                or destination_component == current_component
+            ):
+                continue
             if door.transition_target or door.transition_module:
-                self._events.append(
-                    MapStudioPIEEvent(
-                        "module_transition_blocked",
-                        f"Door {door.tag or door.entity_id} transitions to "
-                        f"{door.transition_module or 'another area'}/{door.transition_target or '(entry)'}; "
-                        "PIE simulates a single module and cannot follow module transitions.",
-                        door.position,
+                if not door.external_contact_reported:
+                    door.external_contact_reported = True
+                    self._events.append(
+                        MapStudioPIEEvent(
+                            "module_transition_blocked",
+                            f"Door {door.tag or door.entity_id} transitions to "
+                            f"{door.transition_module or 'another area'}/{door.transition_target or '(entry)'}; "
+                            "PIE simulates a single module and cannot follow module transitions.",
+                            door.position,
+                        )
                     )
-                )
                 continue
-            probe = (px + direction[0] * reach, py + direction[1] * reach, pz)
-            sample = self.walkmesh.validate_disc(
-                probe,
-                radius=self.config.player_radius,
-                max_step_up=math.inf,
-                max_step_down=math.inf,
-            )
-            if sample is None or sample.face_index < 0 or sample.face_index == self.state.face_index:
-                continue
-            self.state.position = sample.position
-            self.state.face_index = sample.face_index
+            self.state.position = destination_sample.position
+            self.state.face_index = destination_sample.face_index
             self.state.blocked = False
             self._events.append(
                 MapStudioPIEEvent(
                     "room_transition",
                     f"Player stepped through door {door.tag or door.entity_id} into the adjoining room.",
-                    sample.position,
+                    destination_sample.position,
                 )
             )
             return True
@@ -803,6 +1090,16 @@ class MapStudioPIESession:
         self._blocked_time = 0.0
 
     def set_destination(self, position: Vec3, *, run: bool = True) -> bool:
+        gameplay = self.gameplay_snapshot()
+        if gameplay is not None and bool(getattr(gameplay, "movement_locked", False)):
+            self._events.append(
+                MapStudioPIEEvent(
+                    "destination_rejected",
+                    f"Movement is paused while PIE is presenting {getattr(gameplay, 'mode', 'gameplay')} state.",
+                    self.state.position,
+                )
+            )
+            return False
         if self.state.face_index < 0:
             return False
         target = tuple(float(value) for value in tuple(position)[:3])
@@ -865,6 +1162,13 @@ class MapStudioPIESession:
 
     def _step(self, delta_time: float) -> None:
         if not self.validation.ok:
+            return
+        gameplay = self.gameplay_snapshot()
+        if gameplay is not None and bool(getattr(gameplay, "movement_locked", False)):
+            self.state.velocity = (0.0, 0.0, 0.0)
+            self.state.moving = False
+            self.state.blocked = False
+            self._blocked_time = 0.0
             return
         self._update_doors()
         direction = self._manual_direction()
@@ -941,6 +1245,16 @@ class MapStudioPIESession:
                     self.state.position,
                 )
             )
+        if self.gameplay is not None:
+            self.gameplay.advance(
+                delta,
+                player_position=self.state.position,
+                player_facing_radians=self.state.facing_radians,
+                camera_forward=self._gameplay_camera_forward(),
+            )
+            self._sync_gameplay_door_states()
+            self._append_gameplay_events()
+        gameplay_snapshot = self.gameplay_snapshot()
         events = tuple(self._events)
         self._events.clear()
         return MapStudioPIEFrame(
@@ -955,6 +1269,7 @@ class MapStudioPIESession:
             path=self.state.path[self._path_index :],
             events=events,
             door_states=tuple(self._ensure_doors()),
+            gameplay=gameplay_snapshot,
         )
 
     def resolve_camera_distance(
@@ -990,6 +1305,27 @@ class MapStudioPIESession:
             self.state.position[0],
             self.state.position[1],
             self.state.position[2] + self.config.eye_height,
+        )
+
+    def party_follow_targets(self, follower_count: int) -> tuple[Vec3, ...]:
+        """Walkmesh-snapped trailing formation slots for PIE party followers.
+
+        The leader is the player; followers trail behind the player's current
+        facing, each slot projected onto the walkmesh floor near the player's
+        height so companions stay on walkable ground.
+        """
+
+        reference_z = float(self.state.position[2])
+
+        def _sampler(point: Vec3) -> Vec3 | None:
+            sample = self.walkmesh.sample_at(float(point[0]), float(point[1]), reference_z)
+            return sample.position if sample is not None else None
+
+        return party_follow_positions(
+            self.state.position,
+            self.state.facing_radians,
+            int(follower_count),
+            walkmesh_sampler=_sampler,
         )
 
     def overlay_geometry(self) -> AuthoredGameplayMarkerGeometry:
@@ -1030,20 +1366,70 @@ class MapStudioPIESession:
                     role="pie_path",
                 )
             )
-        return AuthoredGameplayMarkerGeometry(
-            marker_count=1,
-            footprints=(
-                AuthoredGameplayMarkerFootprint(
+        footprints: list[AuthoredGameplayMarkerFootprint] = [
+            AuthoredGameplayMarkerFootprint(
                     placement_id="__map_studio_pie_player__",
                     kind="pie_player",
                     label="PIE Player",
                     points=points,
                     color=color,
                     role="pie_player",
-                ),
-            ),
+                )
+        ]
+        focus = getattr(self.gameplay_snapshot(), "focus", None)
+        if focus is not None:
+            fx, fy, fz = focus.position
+            focus_radius = max(0.35, float(focus.target_radius) + 0.12)
+            focus_points = tuple(
+                (
+                    fx + math.cos((math.tau * index) / 24.0) * focus_radius,
+                    fy + math.sin((math.tau * index) / 24.0) * focus_radius,
+                    fz + 0.04,
+                )
+                for index in range(24)
+            )
+            footprints.append(
+                AuthoredGameplayMarkerFootprint(
+                    placement_id=focus.entity_id,
+                    kind="pie_focus",
+                    label=focus.display_name,
+                    points=focus_points,
+                    color="#ffd54f" if focus.in_range else "#ff8a65",
+                    role="pie_focus",
+                )
+            )
+        follower_count = int(getattr(self, "_party_follower_count", 0) or 0)
+        if follower_count > 0:
+            for slot_index, target in enumerate(self.party_follow_targets(follower_count), start=1):
+                tx, ty, tz = target
+                slot_points = tuple(
+                    (
+                        tx + math.cos((math.tau * index) / 20.0) * 0.4,
+                        ty + math.sin((math.tau * index) / 20.0) * 0.4,
+                        tz + 0.03,
+                    )
+                    for index in range(20)
+                )
+                footprints.append(
+                    AuthoredGameplayMarkerFootprint(
+                        placement_id=f"__map_studio_pie_party_{slot_index}__",
+                        kind="pie_party",
+                        label=f"Party {slot_index}",
+                        points=slot_points,
+                        color="#66bb6a",
+                        role="pie_party",
+                    )
+                )
+        return AuthoredGameplayMarkerGeometry(
+            marker_count=len(footprints),
+            footprints=tuple(footprints),
             lines=tuple(lines),
         )
+
+    def set_party_follower_count(self, count: int) -> None:
+        """Set how many trailing party follow-slot markers PIE previews (0 hides)."""
+
+        self._party_follower_count = max(0, min(2, int(count)))
 
 
 def build_map_studio_pie_session(
@@ -1052,6 +1438,16 @@ def build_map_studio_pie_session(
     preview_model: Any = None,
     config: MapStudioPIEConfig | None = None,
     combined_walkmesh: Any = None,
+    template_inspector: Any = None,
+    dialogue_loader: Any = None,
+    item_inspector: Any = None,
+    tlk_lookup: Any = None,
+    dialogue_condition_evaluator: Any = None,
+    dialogue_start_overrides: Any = None,
+    journal_seed: Any = None,
+    script_loader: Any = None,
+    party_combatants: Any = None,
+    player_combat_stats: Any = None,
 ) -> MapStudioPIEBuildResult:
     """Build one immutable-derived simulation session from an authored project.
 
@@ -1106,7 +1502,7 @@ def build_map_studio_pie_session(
     warnings.extend(session.validation.warnings)
     from .map_studio_pie_entities import build_pie_entity_registry
 
-    entity_registry = build_pie_entity_registry(project)
+    entity_registry = build_pie_entity_registry(project, template_inspector=template_inspector)
     warnings.extend(entity_registry.coverage_warnings)
     validation = MapStudioPIEValidation(
         ok=not blocking,
@@ -1114,7 +1510,18 @@ def build_map_studio_pie_session(
         warnings=tuple(dict.fromkeys(warnings)),
     )
     session.validation = validation
-    session.entity_registry = entity_registry
+    session.configure_gameplay(
+        entity_registry,
+        dialogue_loader=dialogue_loader,
+        item_inspector=item_inspector,
+        tlk_lookup=tlk_lookup,
+        dialogue_condition_evaluator=dialogue_condition_evaluator,
+        dialogue_start_overrides=dialogue_start_overrides,
+        journal_seed=journal_seed,
+        script_loader=script_loader,
+        party_combatants=party_combatants,
+        player_combat_stats=player_combat_stats,
+    )
     return MapStudioPIEBuildResult(
         session=session if validation.ok else None,
         validation=validation,

@@ -1,19 +1,27 @@
-"""QtMultimedia playback for Map Studio's approximate PIE ambient audio.
+"""QtMultimedia playback for Map Studio's approximate PIE audio.
 
-This adapter consumes the headless UTS plan from
+The ambient adapter consumes the headless UTS plan from
 ``src.core.modules.map_studio_pie_audio``.  It intentionally previews the
 parts an editor can reproduce safely: active clips, deterministic random
 selection, looping/intermittent scheduling, pitch/volume variation, and
 listener-distance attenuation.  KOTOR still owns authoritative mixing,
 occlusion, room acoustics, priority stealing, and script-triggered sounds.
+
+The dialogue adapter owns two bounded one-shot channels for the Voice and
+Sound ResRefs authored on a DLG node.  It shares the same read-only resource
+resolution and PyKotor WAV decode boundary without claiming retail timing,
+mixing, or lip-sync parity.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 import hashlib
+from io import BytesIO
 import math
 import random
+import wave
 from typing import Any
 
 from PySide6 import QtCore, QtMultimedia
@@ -28,6 +36,21 @@ from src.core.modules.map_studio_pie_audio import (
 
 
 Vec3 = tuple[float, float, float]
+
+
+def _playable_duration_seconds(payload: bytes) -> float | None:
+    """Read a PCM WAV duration without depending on Qt's async metadata."""
+
+    try:
+        with wave.open(BytesIO(payload), "rb") as reader:
+            rate = int(reader.getframerate())
+            frames = int(reader.getnframes())
+    except (EOFError, OSError, wave.Error):
+        return None
+    if rate <= 0 or frames < 0:
+        return None
+    result = frames / rate
+    return result if math.isfinite(result) and result > 0.0 else None
 
 
 @dataclass(slots=True)
@@ -49,6 +72,22 @@ class MapStudioPIEAudioDebugCounters:
     listener_updates: int = 0
     volume_updates: int = 0
     active_players: int = 0
+
+
+@dataclass(slots=True)
+class MapStudioPIEDialogueAudioDebugCounters:
+    """Inspectable lifecycle totals for dialogue one-shot playback."""
+
+    line_requests: int = 0
+    resrefs_requested: int = 0
+    duplicate_resrefs: int = 0
+    clips_loaded: int = 0
+    channels_started: int = 0
+    missing_clips: int = 0
+    decode_failures: int = 0
+    playback_errors: int = 0
+    stop_calls: int = 0
+    finished_runs: int = 0
 
 
 def _position3(value: Any) -> Vec3:
@@ -445,8 +484,384 @@ class MapStudioPIEAmbientAudio(QtCore.QObject):
         self._clip_cache.clear()
 
 
+class _DialogueVoice(QtCore.QObject):
+    """Own one bounded, non-looping dialogue playback channel."""
+
+    def __init__(
+        self,
+        owner: "MapStudioPIEDialogueAudio",
+        index: int,
+        player_factory: Callable[[QtCore.QObject], Any] | None,
+        audio_output_factory: Callable[[QtCore.QObject], Any] | None,
+    ) -> None:
+        super().__init__(owner)
+        self.owner = owner
+        self.index = int(index)
+        self.player = (
+            player_factory(self)
+            if player_factory is not None
+            else QtMultimedia.QMediaPlayer(self)
+        )
+        self.output = (
+            audio_output_factory(self)
+            if audio_output_factory is not None
+            else QtMultimedia.QAudioOutput(self)
+        )
+        set_output = getattr(self.player, "setAudioOutput", None)
+        if callable(set_output):
+            set_output(self.output)
+        set_volume = getattr(self.output, "setVolume", None)
+        if callable(set_volume):
+            set_volume(1.0)
+        self._connect_player_signal("mediaStatusChanged", self._media_status_changed)
+        self._connect_player_signal("playbackStateChanged", self._playback_state_changed)
+        self._connect_player_signal("errorOccurred", self._playback_error)
+        self.buffer: QtCore.QBuffer | None = None
+        self.resref = ""
+        self.roles: tuple[str, ...] = ()
+        self.active = False
+        self._duration_seconds: float | None = None
+
+    @property
+    def duration_seconds(self) -> float | None:
+        duration = self._duration_seconds
+        getter = getattr(self.player, "duration", None)
+        if callable(getter):
+            try:
+                qt_duration = float(getter()) / 1000.0
+            except (TypeError, ValueError, OverflowError):
+                qt_duration = 0.0
+            if math.isfinite(qt_duration) and qt_duration > 0.0:
+                duration = max(float(duration or 0.0), qt_duration)
+        return duration
+
+    def _connect_player_signal(self, name: str, callback: Any) -> None:
+        signal = getattr(self.player, name, None)
+        connect = getattr(signal, "connect", None)
+        if callable(connect):
+            connect(callback)
+
+    def start(self, playable: bytes, resref: str, roles: tuple[str, ...]) -> bool:
+        self.stop()
+        self.buffer = QtCore.QBuffer(self)
+        self.buffer.setData(QtCore.QByteArray(playable))
+        if not self.buffer.open(QtCore.QIODevice.ReadOnly):
+            self._release_buffer()
+            return False
+        suffix = "wav" if playable.startswith(b"RIFF") else "mp3"
+        try:
+            self.player.setSourceDevice(
+                self.buffer,
+                QtCore.QUrl(f"memory://pie/dialogue/{resref}.{suffix}"),
+            )
+            self.resref = str(resref)
+            self.roles = tuple(roles)
+            self._duration_seconds = _playable_duration_seconds(playable)
+            self.active = True
+            self.player.play()
+        except Exception:
+            self.active = False
+            self._reset_source()
+            self._release_buffer()
+            self.resref = ""
+            self.roles = ()
+            self._duration_seconds = None
+            return False
+        return True
+
+    def stop(self) -> None:
+        self.active = False
+        try:
+            stop = getattr(self.player, "stop", None)
+            if callable(stop):
+                stop()
+            self._reset_source()
+        finally:
+            self._release_buffer()
+            self.resref = ""
+            self.roles = ()
+            self._duration_seconds = None
+
+    def _reset_source(self) -> None:
+        set_source = getattr(self.player, "setSource", None)
+        if callable(set_source):
+            set_source(QtCore.QUrl())
+
+    def _release_buffer(self) -> None:
+        if self.buffer is None:
+            return
+        self.buffer.close()
+        self.buffer.deleteLater()
+        self.buffer = None
+
+    def _media_status_changed(self, status: Any) -> None:
+        if self.active and status == QtMultimedia.QMediaPlayer.EndOfMedia:
+            self.owner._voice_finished(self)
+
+    def _playback_state_changed(self, state: Any) -> None:
+        if self.active and state == QtMultimedia.QMediaPlayer.StoppedState:
+            self.owner._voice_finished(self)
+
+    def _playback_error(self, error: Any, message: str = "") -> None:
+        if not self.active or error == QtMultimedia.QMediaPlayer.NoError:
+            return
+        self.owner._voice_failed(
+            self,
+            str(message or getattr(error, "name", "") or "QtMultimedia playback failed."),
+        )
+
+
+class MapStudioPIEDialogueAudio(QtCore.QObject):
+    """Play one authored PIE dialogue line through at most two Qt channels.
+
+    KOTOR dialogue nodes may name both a voice-over and a sound effect.  The
+    adapter resolves those WAV ResRefs against the selected game, decodes the
+    Odyssey wrapper through PyKotor, and starts the distinct clips together.
+    Repeated ResRefs are deliberately collapsed to one channel so a node that
+    uses the same value for Sound and Voice does not double its gain.
+    """
+
+    warningRaised = QtCore.Signal(str)
+    finished = QtCore.Signal()
+
+    _MAX_CHANNELS = 2
+
+    def __init__(
+        self,
+        resource_manager: Any,
+        game: str,
+        parent: QtCore.QObject | None = None,
+        *,
+        player_factory: Callable[[QtCore.QObject], Any] | None = None,
+        audio_output_factory: Callable[[QtCore.QObject], Any] | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.resource_manager = resource_manager
+        self.game = str(game or "K1").strip().upper()
+        self._voices = tuple(
+            _DialogueVoice(self, index, player_factory, audio_output_factory)
+            for index in range(self._MAX_CHANNELS)
+        )
+        self._clip_cache: dict[str, bytes | None] = {}
+        self._runtime_warnings: list[str] = []
+        self._runtime_warning_set: set[str] = set()
+        self._counters = MapStudioPIEDialogueAudioDebugCounters()
+        self._run_active = False
+        self._line_duration_seconds: float | None = None
+
+    @property
+    def approximation_note(self) -> str:
+        return (
+            "PIE plays authored dialogue WAVs as an editor preview; retail KOTOR "
+            "remains authoritative for mixing, lip sync, timing, and script-driven audio."
+        )
+
+    @property
+    def active(self) -> bool:
+        return any(voice.active for voice in self._voices)
+
+    @property
+    def current_resrefs(self) -> tuple[str, ...]:
+        return tuple(voice.resref for voice in self._voices if voice.active and voice.resref)
+
+    @property
+    def current_voice_resref(self) -> str:
+        return self._current_resref_for_role("voice")
+
+    @property
+    def current_sound_resref(self) -> str:
+        return self._current_resref_for_role("sound")
+
+    @property
+    def current_duration_seconds(self) -> float | None:
+        """Longest active line channel duration known to WAV/Qt metadata."""
+
+        durations = tuple(
+            value
+            for voice in self._voices
+            if voice.active and (value := voice.duration_seconds) is not None
+        )
+        return max(durations) if durations else self._line_duration_seconds
+
+    @property
+    def runtime_warnings(self) -> tuple[str, ...]:
+        return tuple(self._runtime_warnings)
+
+    @property
+    def counters(self) -> MapStudioPIEDialogueAudioDebugCounters:
+        return MapStudioPIEDialogueAudioDebugCounters(**asdict(self._counters))
+
+    def debug_snapshot(self) -> dict[str, Any]:
+        return {
+            **asdict(self._counters),
+            "game": self.game,
+            "active": self.active,
+            "max_channels": self._MAX_CHANNELS,
+            "current_resrefs": self.current_resrefs,
+            "voice_resref": self.current_voice_resref,
+            "sound_resref": self.current_sound_resref,
+            "duration_seconds": self.current_duration_seconds,
+            "channels": tuple(
+                {
+                    "index": voice.index,
+                    "active": voice.active,
+                    "resref": voice.resref,
+                    "roles": voice.roles,
+                    "buffer_open": bool(voice.buffer is not None and voice.buffer.isOpen()),
+                }
+                for voice in self._voices
+            ),
+            "cached_clips": len(self._clip_cache),
+            "runtime_warnings": self.runtime_warnings,
+            "approximation": self.approximation_note,
+        }
+
+    def set_resource_source(self, resource_manager: Any, game: str | None = None) -> None:
+        """Retarget a later PIE run and invalidate source-dependent decode state."""
+
+        self.stop()
+        self.resource_manager = resource_manager
+        if game is not None:
+            self.game = str(game or "K1").strip().upper()
+        self._clip_cache.clear()
+        self._runtime_warnings.clear()
+        self._runtime_warning_set.clear()
+
+    def play_line(self, voice_resref: str = "", sound_resref: str = "") -> bool:
+        """Start the distinct audio authored on one dialogue node together."""
+
+        self.stop()
+        requested = (
+            ("voice", str(voice_resref or "").strip().lower()),
+            ("sound", str(sound_resref or "").strip().lower()),
+        )
+        requested = tuple((role, resref) for role, resref in requested if resref)
+        if not requested:
+            return False
+        self._counters.line_requests += 1
+        self._counters.resrefs_requested += len(requested)
+        if QtCore.QCoreApplication.instance() is None:
+            self._add_runtime_warning("PIE dialogue audio requires an active GhostStudio Qt session.")
+            self._counters.finished_runs += 1
+            self.finished.emit()
+            return False
+
+        distinct: dict[str, list[str]] = {}
+        for role, resref in requested:
+            roles = distinct.setdefault(resref, [])
+            if roles:
+                self._counters.duplicate_resrefs += 1
+            roles.append(role)
+
+        self._run_active = True
+        started = 0
+        for voice, (resref, roles) in zip(self._voices, distinct.items(), strict=False):
+            playable = self._playable_clip(resref)
+            if not playable:
+                continue
+            if not voice.start(playable, resref, tuple(roles)):
+                self._counters.playback_errors += 1
+                self._add_runtime_warning(
+                    f"Dialogue WAV resource {resref!r} could not start in QtMultimedia."
+                )
+                continue
+            started += 1
+            self._counters.channels_started += 1
+
+        if not started:
+            self._finish_run()
+            return False
+        durations = tuple(
+            value for voice in self._voices if (value := voice.duration_seconds) is not None
+        )
+        self._line_duration_seconds = max(durations) if durations else None
+        return True
+
+    def stop(self) -> None:
+        self._counters.stop_calls += 1
+        self._run_active = False
+        self._line_duration_seconds = None
+        for voice in self._voices:
+            voice.stop()
+
+    def close(self) -> None:
+        self.stop()
+        self._clip_cache.clear()
+
+    def _current_resref_for_role(self, role: str) -> str:
+        for voice in self._voices:
+            if voice.active and role in voice.roles:
+                return voice.resref
+        return ""
+
+    def _playable_clip(self, resref: str) -> bytes | None:
+        if resref in self._clip_cache:
+            return self._clip_cache[resref]
+        raw = _resource_bytes(self.resource_manager, resref, self.game)
+        if not raw:
+            self._clip_cache[resref] = None
+            self._counters.missing_clips += 1
+            self._add_runtime_warning(
+                f"Dialogue WAV resource {resref!r} could not be resolved for {self.game}."
+            )
+            return None
+        try:
+            playable = bytes(get_playable_bytes(read_wav(raw)))
+        except Exception as exc:
+            self._clip_cache[resref] = None
+            self._counters.decode_failures += 1
+            self._add_runtime_warning(
+                f"Dialogue WAV resource {resref!r} could not be decoded: {exc}"
+            )
+            return None
+        if not playable:
+            self._clip_cache[resref] = None
+            self._counters.decode_failures += 1
+            self._add_runtime_warning(
+                f"Dialogue WAV resource {resref!r} decoded to no playable bytes."
+            )
+            return None
+        self._clip_cache[resref] = playable
+        self._counters.clips_loaded += 1
+        return playable
+
+    def _voice_finished(self, voice: _DialogueVoice) -> None:
+        if not voice.active:
+            return
+        voice.stop()
+        if not self.active:
+            self._finish_run()
+
+    def _voice_failed(self, voice: _DialogueVoice, message: str) -> None:
+        if not voice.active:
+            return
+        resref = voice.resref
+        self._counters.playback_errors += 1
+        self._add_runtime_warning(
+            f"Dialogue WAV resource {resref!r} playback failed: {message}"
+        )
+        self._voice_finished(voice)
+
+    def _finish_run(self) -> None:
+        if not self._run_active:
+            return
+        self._run_active = False
+        self._counters.finished_runs += 1
+        self.finished.emit()
+
+    def _add_runtime_warning(self, message: str) -> None:
+        text = str(message or "").strip()
+        if not text or text in self._runtime_warning_set:
+            return
+        self._runtime_warning_set.add(text)
+        self._runtime_warnings.append(text)
+        self.warningRaised.emit(text)
+
+
 __all__ = [
     "MapStudioPIEAmbientAudio",
     "MapStudioPIEAudioDebugCounters",
+    "MapStudioPIEDialogueAudio",
+    "MapStudioPIEDialogueAudioDebugCounters",
     "map_studio_pie_distance_gain",
 ]

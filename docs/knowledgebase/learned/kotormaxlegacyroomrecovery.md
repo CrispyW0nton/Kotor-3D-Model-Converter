@@ -53,6 +53,18 @@ manifest partition, but it must:
 - delete the temporary base and restore any temporarily renamed saved root;
 - never call `saveMaxFile`, `loadMaxFile`, or `mergeMaxFile`.
 
+When a pinned legacy sanity report identifies non-unit-scale static nodes, an
+isolated batch recipe may explicitly list those exact node names for an
+in-memory `resetXForm` repair. Refuse ambiguous names, keyed or unknown/
+procedural transform controllers, non-leaf nodes, and shared object pipelines.
+Snapshot the evaluated world-state TriMesh—not a second application of the
+node transform—including vertices, topology, material IDs, smoothing groups,
+edge visibility, and every supported map channel. Require all export channels,
+unit post-reset scale, independently recomputed world bounds, and every
+non-target room node to remain unchanged. Publish and hash-validate the exact
+ordered normalization report, then exit the run-owned Max process without
+saving the staged scene. Never make this an unbounded whole-scene cleanup.
+
 The source `.max` hash before and after a batch run is mandatory evidence.
 
 ## Vul803 evidence map
@@ -95,7 +107,28 @@ The compiler must prove:
 - stacked ceiling-like non-walk components are removed, while ambiguous stacked
   walkable layers block compilation.
 
-Current Vul803 K1/K2 structural proof: 292 visual meshes, 11,362 visual
-vertices, 17,301 visual faces, 11 textures, 127 WOK vertices, 145 floor faces,
+Live 3ds Max 2019/NWMax recovery now exists. The final run-owned compatibility
+profile patches exactly three Max-2019-incompatible NWMax statements in the
+staged copy while leaving the pinned original tree unchanged. Its final staged
+tree hash is
+`808977a31868f202cf38778a3a4f9b1c23477bbc89a75a03465f99d09136147f`.
+The four typed `vul803_01a`, `vul803_01c`, `vul801_01a`, and `vul801_01c`
+exports passed real `3dsmaxbatch.exe` execution, NWMax sanity, post-run input
+integrity, and immutable publication.
+
+Current merged Vul803 K1/K2 structural proof (`01a + 01c` visual shells plus
+authoritative collision-only `01b`): 370 visual meshes, 17,113 visual vertices,
+27,792 visual faces, 17 textures, 127 WOK vertices, 145 walkable floor faces,
 11 closed perimeter loops, zero controllers, and zero nonzero node `+8` values.
-Retail game proof remains outstanding.
+Current merged Vul801 proof is 287 visual meshes, 12,754 vertices, 18,010 faces,
+17 textures, 314 WOK vertices, 336 walkable faces, three closed perimeter
+loops, zero controllers, and zero nonzero node `+8` values. Retail game proof
+remains outstanding. Vul801's three loops are also three disconnected walkable
+components; do not confuse closed/perimeter-valid structure with proof that the
+intended playable regions connect or that AI can traverse them in retail.
+
+Treat the WOK writer and the arbitrary-geometry auto-generator as separate
+readiness claims. The writer has multi-loop, adjacency, AABB, and perimeter
+proof. The render-derived generator has floor/wall/ceiling, slope, alignment,
+and transition-edge tests, but imported/terrain hole derivation, disconnected-
+island policy, and floor/ramp seam welding remain explicit gaps.

@@ -194,6 +194,14 @@ class KotorLogStartInput(BaseModel):
     duration_seconds: int = Field(default=900)
     asset_resrefs: Optional[List[str]] = Field(default=None)
     session_root: Optional[str] = Field(None)
+    expected_warp_target: Optional[str] = Field(
+        None,
+        description="Optional module resref expected to be entered with the warp console command",
+    )
+    expected_module_sha256: Optional[str] = Field(
+        None,
+        description="Optional required SHA-256 for Modules/<expected_warp_target>.mod",
+    )
 
 
 class KotorLogStatusInput(BaseModel):

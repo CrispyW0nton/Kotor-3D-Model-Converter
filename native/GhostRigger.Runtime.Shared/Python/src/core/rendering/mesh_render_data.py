@@ -924,7 +924,27 @@ def _node_world_transform(node, *, anim_pose=None) -> tuple[tuple[float, float, 
             wp = node.world_position()
             return tuple(float(v) for v in wp[:3]), (0.0, 0.0, 0.0, 1.0)
         except Exception:
-            return (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)
+            # Lightweight runtime/test nodes do not always implement the model
+            # convenience methods.  Compose their explicit local transform
+            # through the parent chain instead of dropping socket placement.
+            try:
+                from src.core.geometry.model_data import _quat_mul, _quat_normalize_bind, _quat_rotate
+
+                parent = getattr(node, "parent", None)
+                local_pos = tuple(float(v) for v in getattr(node, "position", (0.0, 0.0, 0.0))[:3])
+                local_rot = tuple(float(v) for v in getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))[:4])
+                local_rot = tuple(_quat_normalize_bind(local_rot))
+                if parent is None:
+                    return local_pos, local_rot
+                parent_pos, parent_rot = _node_world_transform(parent, anim_pose=anim_pose)
+                offset = _quat_rotate(parent_rot, local_pos)
+                return (
+                    float(parent_pos[0]) + float(offset[0]),
+                    float(parent_pos[1]) + float(offset[1]),
+                    float(parent_pos[2]) + float(offset[2]),
+                ), tuple(_quat_mul(parent_rot, local_rot))
+            except Exception:
+                return (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)
 
 
 def node_world_matrix(node, *, anim_pose=None):
@@ -1047,13 +1067,166 @@ def _bas_attachment_socket_node(bas_root):
     return None
 
 
-def _bas_attachment_world_transform(node, bas_root, *, anim_pose=None):
+def _bas_attachment_world_transform(node, bas_root, *, anim_pose=None, transform_cache=None):
     from src.core.geometry.model_data import (
         _quat_mul,
         _quat_normalize,
         _quat_normalize_bind,
         _quat_rotate,
     )
+
+    # Retained renderers can ask for every node in the same detachable BAS head
+    # during one frame.  The uncached, renderer-neutral path below deliberately
+    # rebuilds the complete root chain, but doing that for each eye/face/skin
+    # node repeatedly rescans the same head pose and socket hierarchy.  Keep the
+    # cache caller-owned so animation-pose and scene changes invalidate it at the
+    # next frame boundary without persistent scene state.
+    if transform_cache is not None:
+        state_key = ("bas_attachment_root_pose", id(bas_root), id(anim_pose))
+        state = transform_cache.get(state_key)
+        if not (
+            isinstance(state, dict)
+            and state.get("root") is bas_root
+            and state.get("pose") is anim_pose
+        ):
+            socket = _bas_attachment_socket_node(bas_root)
+            socket_pose = getattr(anim_pose, "_gr_bas_socket_pose", anim_pose)
+            if socket is not None:
+                socket_wp, socket_wo = _node_world_transform(socket, anim_pose=socket_pose)
+                socket_base = (
+                    tuple(float(value) for value in socket_wp[:3]),
+                    tuple(float(value) for value in socket_wo[:4]),
+                )
+            else:
+                socket_base = ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0))
+            state = {
+                "root": bas_root,
+                "pose": anim_pose,
+                "socket_base": socket_base,
+                "pose_mode": _bas_attachment_pose_mode_for_root(bas_root, anim_pose),
+                "bind_states": {},
+            }
+            transform_cache[state_key] = state
+
+        # Validate the BAS chain while arranging it root-first.  If a malformed
+        # attachment does not actually reach its tagged root, retain the legacy
+        # full-chain fallback below instead of caching a different transform.
+        chain = []
+        current = node
+        visited: set[int] = set()
+        while current is not None:
+            current_id = id(current)
+            if current_id in visited or len(chain) > 512:
+                break
+            visited.add(current_id)
+            chain.append(current)
+            if current is bas_root:
+                break
+            current = getattr(current, "parent", None)
+
+        if chain and chain[-1] is bas_root:
+            chain.reverse()
+            pose_mode = str(state["pose_mode"] or "")
+            bind_states = state["bind_states"]
+            (base_position, base_orientation) = state["socket_base"]
+            wx, wy, wz = base_position
+            parent_orientation = base_orientation
+            start_index = 0
+
+            # A cached bind-state is the exact root-to-ancestor prefix needed by
+            # the original full-chain calculation.  It is intentionally distinct
+            # from that ancestor's leaf result because Odyssey's pure-X bind
+            # quaternion normalization differs for ancestors and leaves.
+            for index in range(len(chain) - 2, -1, -1):
+                cached_prefix = bind_states.get(id(chain[index]))
+                if cached_prefix is None:
+                    continue
+                (cached_position, cached_orientation) = cached_prefix
+                wx, wy, wz = cached_position
+                parent_orientation = cached_orientation
+                start_index = index + 1
+                break
+
+            for chain_node in chain[start_index:-1]:
+                pose_node = None
+                if pose_mode == "source_local" or (
+                    pose_mode == "inherited_head_local"
+                    and _bas_inherited_head_pose_node_allowed(chain_node)
+                ):
+                    pose_node = _pose_node_for_transform(chain_node, anim_pose)
+                if pose_node is not None:
+                    lx, ly, lz = getattr(
+                        pose_node,
+                        "position",
+                        getattr(chain_node, "position", (0.0, 0.0, 0.0)),
+                    )
+                    if not (math.isfinite(lx) and math.isfinite(ly) and math.isfinite(lz)):
+                        lx, ly, lz = getattr(chain_node, "position", (0.0, 0.0, 0.0))
+                    rot = list(
+                        getattr(
+                            pose_node,
+                            "rotation",
+                            getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0)),
+                        )
+                    )
+                    if not all(math.isfinite(value) for value in rot):
+                        rot = list(getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+                else:
+                    lx, ly, lz = getattr(chain_node, "position", (0.0, 0.0, 0.0))
+                    rot = list(getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+                node_rot = _quat_normalize_bind(rot)
+                rx, ry, rz = _quat_rotate(parent_orientation, (lx, ly, lz))
+                wx += rx
+                wy += ry
+                wz += rz
+                parent_orientation = _quat_mul(parent_orientation, node_rot)
+                bind_states[id(chain_node)] = (
+                    (float(wx), float(wy), float(wz)),
+                    tuple(float(value) for value in parent_orientation[:4]),
+                )
+
+            leaf = chain[-1]
+            pose_node = None
+            if pose_mode == "source_local" or (
+                pose_mode == "inherited_head_local"
+                and _bas_inherited_head_pose_node_allowed(leaf)
+            ):
+                pose_node = _pose_node_for_transform(leaf, anim_pose)
+            if pose_node is not None:
+                lx, ly, lz = getattr(
+                    pose_node,
+                    "position",
+                    getattr(leaf, "position", (0.0, 0.0, 0.0)),
+                )
+                if not (math.isfinite(lx) and math.isfinite(ly) and math.isfinite(lz)):
+                    lx, ly, lz = getattr(leaf, "position", (0.0, 0.0, 0.0))
+                rot = list(
+                    getattr(
+                        pose_node,
+                        "rotation",
+                        getattr(leaf, "rotation", (0.0, 0.0, 0.0, 1.0)),
+                    )
+                )
+                if not all(math.isfinite(value) for value in rot):
+                    rot = list(getattr(leaf, "rotation", (0.0, 0.0, 0.0, 1.0)))
+            else:
+                lx, ly, lz = getattr(leaf, "position", (0.0, 0.0, 0.0))
+                rot = list(getattr(leaf, "rotation", (0.0, 0.0, 0.0, 1.0)))
+            node_rot = _quat_normalize(rot)
+            rx, ry, rz = _quat_rotate(parent_orientation, (lx, ly, lz))
+            wx += rx
+            wy += ry
+            wz += rz
+            parent_orientation = _quat_mul(parent_orientation, node_rot)
+
+            length_sq = sum(float(value) * float(value) for value in parent_orientation[:4])
+            if length_sq > 1e-9 and abs(length_sq - 1.0) > 1e-4:
+                scale = 1.0 / math.sqrt(length_sq)
+                parent_orientation = [float(value) * scale for value in parent_orientation[:4]]
+            return (
+                (float(wx), float(wy), float(wz)),
+                tuple(float(value) for value in parent_orientation[:4]),
+            )
 
     socket = _bas_attachment_socket_node(bas_root)
     socket_pose = getattr(anim_pose, "_gr_bas_socket_pose", anim_pose)

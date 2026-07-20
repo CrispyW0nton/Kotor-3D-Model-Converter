@@ -10,7 +10,6 @@ the manual warp and traversal checklist.
 from __future__ import annotations
 
 import argparse
-import csv
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -69,9 +68,10 @@ def _same_path(first: Path, second: Path) -> bool:
 def is_swkotor2_running() -> bool:
     """Return whether the retail K2 executable is running.
 
-    Windows ``tasklist`` is used instead of an optional process dependency.  A
-    failed process query is treated as unsafe rather than silently assuming the
-    game is stopped.
+    Query the Windows process table through ``System.Diagnostics`` rather than
+    ``tasklist``.  Some Windows installs leave ``tasklist`` blocked behind a
+    broken WMI/provider query even though the process table itself is healthy.
+    A failed or ambiguous query remains unsafe and therefore blocks staging.
     """
 
     if os.name != "nt":
@@ -79,27 +79,45 @@ def is_swkotor2_running() -> bool:
     try:
         completed = subprocess.run(
             [
-                "tasklist",
-                "/FI",
-                "IMAGENAME eq swkotor2.exe",
-                "/FO",
-                "CSV",
-                "/NH",
+                "powershell.exe",
+                "-NoLogo",
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                (
+                    "try { "
+                    "$p = [System.Diagnostics.Process]::GetProcessesByName('swkotor2'); "
+                    "if ($p.Count -gt 0) { Write-Output 'RUNNING' } "
+                    "else { Write-Output 'NOT_RUNNING' }; "
+                    "exit 0 "
+                    "} catch { Write-Error $_; exit 2 }"
+                ),
             ],
-            check=True,
+            check=False,
             capture_output=True,
             text=True,
             timeout=10,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise StagingError(
             "Could not verify whether swkotor2.exe is running; refusing to stage."
         ) from exc
-
-    for row in csv.reader(completed.stdout.splitlines()):
-        if row and row[0].strip().lower() == "swkotor2.exe":
-            return True
-    return False
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "process query failed").strip()
+        raise StagingError(
+            "Could not verify whether swkotor2.exe is running; refusing to stage. "
+            f"Windows process query returned {completed.returncode}: {detail}"
+        )
+    states = [line.strip().upper() for line in completed.stdout.splitlines() if line.strip()]
+    if states == ["RUNNING"]:
+        return True
+    if states == ["NOT_RUNNING"]:
+        return False
+    raise StagingError(
+        "Could not verify whether swkotor2.exe is running; refusing to stage. "
+        f"Unexpected Windows process-query response: {completed.stdout!r}"
+    )
 
 
 def _validate_module_root(value: str) -> str:

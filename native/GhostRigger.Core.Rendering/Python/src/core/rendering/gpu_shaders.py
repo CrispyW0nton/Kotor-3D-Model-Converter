@@ -456,7 +456,12 @@ void main() {
         vec4 lm_samp = texture(u_lm_tex, v_uv_lm);
         debug_lightmap_rgb = lm_samp.rgb;
         float lm_strength = clamp(u_lightmap_intensity, 0.0, 4.0);
-        vec3 baked_light = mix(vec3(1.0), lm_samp.rgb * 2.0, clamp(lm_strength, 0.0, 1.0));
+        // Preserve the user-facing intensity blend, but restore the validated
+        // pre-lighting-system KotOR preview target.  The May lightmap audit
+        // used 2.5x overbright plus a 0.03 floor; the later generic-lighting
+        // rewrite accidentally replaced that target with 2.0x and no floor.
+        vec3 baked_target = lm_samp.rgb * 2.5 + vec3(0.03);
+        vec3 baked_light = mix(vec3(1.0), baked_target, clamp(lm_strength, 0.0, 1.0));
         if (u_lightmap_mode == 1) {
             float ndotl  = max(dot(N, u_light_dir),  0.0);
             float ndotl2 = max(dot(N, u_light_dir2), 0.0);
@@ -475,7 +480,7 @@ void main() {
             // Diagnostic: documented original overbright 2.0, no ambient floor.
             lit_color = diffuse_samp.rgb * lm_samp.rgb * 2.0;
         } else {
-            // FIX-LMBRIGHT: Raised overbright 2.0 → 2.5 + ambient floor 0.03
+            // FIX-LMBRIGHT: 2.5x overbright + 0.03 ambient floor.
             lit_color = diffuse_samp.rgb * baked_light;
             if (u_lm_composite_mode == 3) {
                 lit_color = clamp(lit_color, 0.0, 1.0);
@@ -562,7 +567,8 @@ void main() {
             vec4 lm_samp = texture(u_lm_tex, v_uv_lm);
             debug_lightmap_rgb = lm_samp.rgb;
             float lm_strength = clamp(u_lightmap_intensity, 0.0, 4.0);
-            vec3 baked_light = mix(vec3(1.0), lm_samp.rgb * 2.0, clamp(lm_strength, 0.0, 1.0));
+            vec3 baked_target = lm_samp.rgb * 2.5 + vec3(0.03);
+            vec3 baked_light = mix(vec3(1.0), baked_target, clamp(lm_strength, 0.0, 1.0));
             if (u_lightmap_mode == 2) {
                 lit_color += lm_samp.rgb * lm_strength;
             } else if (u_lm_composite_mode == 1) {

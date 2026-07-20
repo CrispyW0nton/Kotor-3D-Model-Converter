@@ -416,6 +416,7 @@ class GhostRiggerMDLBinaryReader(_iom.MDLBinaryReader):
         bin_node = self._gr_bin_nodes.get(offset)
         if bin_node is not None:
             self._preserve_raw_node_flags(node, bin_node)
+            self._preserve_raw_node_payload(node, bin_node)
             self._fill_mdx_offset_zero_vertices(node, bin_node)
         return node
 
@@ -495,6 +496,19 @@ class GhostRiggerMDLBinaryReader(_iom.MDLBinaryReader):
 
         if int(bin_node.header.type_id) & int(_iom.MDLNodeFlags.SABER):
             node.node_type = _iom.MDLNodeType.SABER
+
+    @staticmethod
+    def _preserve_raw_node_payload(node, bin_node: GhostRiggerNode) -> None:
+        """Retain binary-only sub-header bytes omitted by PyKotor's model API."""
+
+        emitter = getattr(node, "emitter", None)
+        raw_emitter = getattr(bin_node, "emitter", None)
+        if emitter is not None and raw_emitter is not None:
+            setattr(
+                emitter,
+                "_gr_binary_emitter",
+                {"unknown1": int(getattr(raw_emitter, "unknown1", 0) or 0) & 0xFF},
+            )
 
     def _fill_mdx_offset_zero_vertices(self, node, bin_node: GhostRiggerNode) -> None:
         trimesh = bin_node.trimesh

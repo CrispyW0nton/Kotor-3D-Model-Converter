@@ -36,6 +36,7 @@ from src.gui.qt_lib.assets.qt_theme import (
 )
 from src.gui.qt_lib.panels.qt_workflow_rail import QtWorkflowRail
 from src.systems.bas.attachment_alignment import default_bas_attachment_transform
+from src.systems.bas.attachment_catalog import repair_bas_body_texture_references
 from src.systems.bas.head_resolution import normalize_bas_model_resref, resolve_bas_head_resref
 from src.systems.bas.preview_composer import (
     bas_slot_for_preview_socket,
@@ -438,6 +439,8 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
     # Re-emitted to outside listeners (e.g. qt_main_window status bar)
     # whenever the user picks a different CharacterMode.
     modeChanged = QtCore.Signal(object)
+    # Navigation only: the foreign-rig product remains an independent window.
+    customBuilderRequested = QtCore.Signal()
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
@@ -788,6 +791,17 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         toolbar.addWidget(brand)
 
         toolbar.addSeparator()
+        toolbar.addWidget(QtWidgets.QLabel(" Character type: "))
+        self._character_type_combo = QtWidgets.QComboBox()
+        self._character_type_combo.addItem("Native KOTOR Character", "native_kotor_character")
+        self._character_type_combo.addItem("Custom Rigged Character", "custom_rigged_character")
+        self._character_type_combo.setToolTip(
+            "Switch to the independent custom-rig workflow without changing this native KOTOR character."
+        )
+        self._character_type_combo.currentIndexChanged.connect(self._on_character_type_changed)
+        toolbar.addWidget(self._character_type_combo)
+
+        toolbar.addSeparator()
         toolbar.addWidget(QtWidgets.QLabel(" Mode: "))
 
         # Exclusive QToolButtons wired to authoring CharacterMode values (T205).
@@ -1132,6 +1146,8 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             bas_panel.attachRequested.connect(self._on_bas_panel_attach_requested)
             bas_panel.clearRequested.connect(self._on_bas_panel_clear_requested)
             bas_panel.slotSelected.connect(self._ensure_cb_bas_attachment_catalog)
+            bas_panel.catalogRefreshRequested.connect(self._ensure_cb_bas_attachment_catalog)
+            QtCore.QTimer.singleShot(0, self._ensure_cb_bas_attachment_catalog)
         # M12 / T1204 — mode-aware motion assignment replaces the
         # placeholder Add Motions action.
         if hasattr(self.inspector, "assignMotionsRequested"):
@@ -1179,6 +1195,15 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 self._on_properties_mode_changed)
 
     # ── Toolbar slots ────────────────────────────────────────────────────
+
+    @QtCore.Slot(int)
+    def _on_character_type_changed(self, index: int) -> None:
+        if self._character_type_combo.itemData(index) != "custom_rigged_character":
+            return
+        self._character_type_combo.blockSignals(True)
+        self._character_type_combo.setCurrentIndex(0)
+        self._character_type_combo.blockSignals(False)
+        self.customBuilderRequested.emit()
 
     @QtCore.Slot()
     def _on_mode_action_triggered(self) -> None:
@@ -3546,6 +3571,87 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         formats = dlg.selected_formats()
         out_dir = dlg.output_dir()
         write_sidecar = dlg.write_sidecar()
+        profile_getter = getattr(dlg, "fbx_compatibility_profile", None)
+        fbx_compatibility_profile = (
+            str(profile_getter() or "standard") if callable(profile_getter) else "standard"
+        )
+        tex_cache_getter = getattr(getattr(self, "viewport", None), "tex_cache", None)
+        export_tex_cache = tex_cache_getter() if callable(tex_cache_getter) else tex_cache_getter
+        fbx_animation_names = None
+        animation_resource_manager = None
+        if "fbx" in formats and md is not None:
+            body_entry = self.scene.get(md.PartSlot.HEADLESS_BODY)
+            body_model = getattr(body_entry, "model", None) if body_entry is not None else None
+            head_entry = self.scene.get(md.PartSlot.HEAD_SHELL)
+            head_model = getattr(head_entry, "model", None) if head_entry is not None else None
+            game = str(getattr(self.scene, "game_version", "") or "K1").upper()
+            animation_resource_manager = self._ensure_game_resource_manager(game)
+            try:
+                self._sync_motion_controls_to_scene(_wf)
+            except Exception:
+                log.debug("Could not sync motion controls before FBX animation selection", exc_info=True)
+            supermodel = str(getattr(body_model, "supermodel", "") or "").strip()
+            base_skeleton_model = None
+            if body_model is not None and supermodel.lower() not in {"", "null", "none", "****"}:
+                if animation_resource_manager is not None:
+                    try:
+                        loader = getattr(animation_resource_manager, "load_model_strict", None)
+                        if not callable(loader):
+                            loader = animation_resource_manager.load_model
+                        base_skeleton_model = loader(supermodel, game)
+                        setattr(body_model, "_gr_fbx_base_skeleton_model", base_skeleton_model)
+                    except Exception:
+                        log.warning("Could not resolve Character Builder FBX supermodel %s", supermodel, exc_info=True)
+            if body_model is not None:
+                try:
+                    from src.core.animation.fbx_animation_selection import list_fbx_animation_sets
+                    from src.gui.qt_lib.dialogs.qt_fbx_animation_selection_dialog import (
+                        QtFbxAnimationSelectionDialog,
+                    )
+
+                    rows = list_fbx_animation_sets(
+                        body_model,
+                        game=game,
+                        resource_manager=animation_resource_manager,
+                        base_skeleton_model=base_skeleton_model,
+                        supplemental_models=((head_model,) if head_model is not None else ()),
+                    )
+                    initial_names = [
+                        str(getattr(anim, "name", "") or "")
+                        for anim in list(getattr(body_model, "animations", []) or [])
+                        if str(getattr(anim, "name", "") or "")
+                    ]
+                    current_animation = getattr(
+                        getattr(self, "_animation_engine", None),
+                        "current_animation",
+                        None,
+                    )
+                    current_name = str(getattr(current_animation, "name", "") or "")
+                    if current_name and current_name.lower() not in {
+                        name.lower() for name in initial_names
+                    }:
+                        initial_names.append(current_name)
+                    animation_dialog = QtFbxAnimationSelectionDialog(
+                        rows,
+                        self,
+                        profile=fbx_compatibility_profile,
+                        initial_selected_names=tuple(initial_names),
+                        current_animation_name=current_name,
+                    )
+                    if animation_dialog.exec() != QtWidgets.QDialog.Accepted:
+                        self.statusBar().showMessage("Export cancelled.", 3000)
+                        return
+                    fbx_animation_names = tuple(
+                        animation_dialog.selected_animation_names()
+                    )
+                except Exception as exc:
+                    log.exception("Could not prepare Character Builder FBX animation selection")
+                    self.bottom_strip.set_validation(
+                        "error",
+                        "FBX_ANIMATION_SELECTION",
+                        issues=[str(exc)],
+                    )
+                    return
         # Remember the chosen folder for the next invocation.
         self._last_export_dir = out_dir
         can_export, skip_validation = self._confirm_pre_export_validation()
@@ -3564,6 +3670,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 out_dir=out_dir,
                 write_sidecar=write_sidecar,
                 skip_validation=skip_validation,
+                fbx_compatibility_profile=fbx_compatibility_profile,
+                tex_cache=export_tex_cache,
+                fbx_animation_names=fbx_animation_names,
+                animation_resource_manager=animation_resource_manager,
             )
         else:
             result = _wf.export_scene(
@@ -3572,6 +3682,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 out_dir=out_dir,
                 write_sidecar=write_sidecar,
                 skip_validation=skip_validation,
+                fbx_compatibility_profile=fbx_compatibility_profile,
+                tex_cache=export_tex_cache,
+                fbx_animation_names=fbx_animation_names,
+                animation_resource_manager=animation_resource_manager,
             )
 
         export_artifact = {
@@ -3579,6 +3693,10 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             "output_dir": str(out_dir),
             "requested_formats": [str(value) for value in formats],
             "write_sidecar": bool(write_sidecar),
+            "fbx_compatibility_profile": fbx_compatibility_profile,
+            "fbx_animation_names": (
+                None if fbx_animation_names is None else list(fbx_animation_names)
+            ),
             "sidecar_path": str(result.sidecar_path or ""),
             "formats": [
                 {
@@ -4346,13 +4464,20 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         length = float(getattr(anim, "length", 0.0) or 0.0) if anim else 0.0
         base_pose = engine.evaluate(0.0)
         pose = base_pose
+        preview_anim_name = str(getattr(anim, "name", anim_name) if anim else anim_name)
+        try:
+            setattr(base_pose, "_gr_animation_source_model_id", id(body))
+            setattr(base_pose, "_gr_animation_source_model_name", str(getattr(body, "name", "") or ""))
+            setattr(base_pose, "_gr_animation_name", preview_anim_name)
+        except Exception:
+            pass
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "set_animation_pose"):
             if hasattr(viewport, "set_anim_base_pose"):
                 viewport.set_anim_base_pose(base_pose)
             viewport.set_animation_pose(
                 pose,
-                name=str(getattr(anim, "name", anim_name) if anim else anim_name),
+                name=preview_anim_name,
                 time=0.0,
                 length=length,
             )
@@ -4396,6 +4521,13 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         pose = engine.evaluate()
         length = float(getattr(anim, "length", 0.0) or 0.0) if anim else 0.0
         name = str(getattr(anim, "name", "") or "")
+        body = self._body_model_for_preview()
+        try:
+            setattr(pose, "_gr_animation_source_model_id", id(body) if body is not None else 0)
+            setattr(pose, "_gr_animation_source_model_name", str(getattr(body, "name", "") or ""))
+            setattr(pose, "_gr_animation_name", name)
+        except Exception:
+            pass
         viewport = getattr(self, "viewport", None)
         if viewport is not None and hasattr(viewport, "set_animation_pose"):
             viewport.set_animation_pose(
@@ -4465,9 +4597,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             if bas_slot_for_preview_socket(socket, clean_resref) == "head":
                 try:
                     try:
-                        from core.geometry import model_data as _md
+                        from src.core.geometry import model_data as _md
                     except ImportError:                  # pragma: no cover
-                        from src.core.geometry import model_data as _md  # type: ignore
+                        from core.geometry import model_data as _md  # type: ignore
                     body_model = self.scene.get_model(_md.PartSlot.HEADLESS_BODY)
                 except Exception:
                     body_model = None
@@ -4582,9 +4714,9 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         if self._bas_preview_body is not None:
             return self._bas_preview_body
         try:
-            from core.geometry import model_data as _md
+            from src.core.geometry import model_data as _md
         except ImportError:                                 # pragma: no cover
-            from src.core.geometry import model_data as _md        # type: ignore
+            from core.geometry import model_data as _md        # type: ignore
         for slot_name in ("HEADLESS_BODY", "FULL_BODY"):
             part = getattr(_md.PartSlot, slot_name, None)
             if part is None:
@@ -4601,12 +4733,24 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
         """Populate the embedded BAS panel from the installed games once."""
 
         panel = getattr(self.inspector, "body_attachment_panel", None)
-        if panel is None or panel.attachment_catalog() is not None:
+        if panel is None:
             return
         game = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
             getattr(self.scene, "game_version", "K1")
-        manager = self._ensure_game_resource_manager(game)
+        manager = None
+        for game_tag in ("K1", "K2"):
+            manager = self._ensure_game_resource_manager(game_tag) or manager
+        # Indexing both installs must not leave the viewport targeting the
+        # other game's texture/supermodel context.
+        manager = self._ensure_game_resource_manager(game) or manager
         if manager is None:
+            return
+        revision = getattr(manager, "revision", None)
+        revision_getter = getattr(panel, "attachment_catalog_revision", None)
+        current_revision = revision_getter() if callable(revision_getter) else None
+        if panel.attachment_catalog() is not None and (
+            revision is None or current_revision == int(revision)
+        ):
             return
         try:
             from src.systems.bas.attachment_catalog import build_bas_attachment_catalog
@@ -4616,16 +4760,21 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             log.debug("Character Builder BAS catalog build failed", exc_info=True)
             return
         if not catalog.empty:
-            panel.set_attachment_catalog(catalog)
+            panel.set_attachment_catalog(catalog, revision=revision)
+            panel.set_status(
+                "BAS catalog ready: "
+                f"{len(catalog.entries('head'))} K1/K2 head choices and "
+                f"{len(catalog.entries('body'))} headless body choices."
+            )
 
     def _on_bas_panel_attach_requested(self, slot: str, resref: str) -> None:
         """Attach a catalog item from the embedded BAS panel to the preview."""
 
         slot = str(slot or "").strip().lower()
         panel = getattr(self.inspector, "body_attachment_panel", None)
-        if slot in {"body", "left_hand", "right_hand"}:
+        if slot in {"left_hand", "right_hand"}:
             if panel is not None:
-                panel.set_status("Body and hand slots are sockets; attach items through the other slots.")
+                panel.set_status("Hand slots are sockets; attach items through the weapon slots.")
             return
         resref_clean = normalize_bas_model_resref(resref)
         if not resref_clean:
@@ -4634,10 +4783,63 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
             return
         game = self._game_combo.currentText() if hasattr(self, "_game_combo") else \
             getattr(self.scene, "game_version", "K1")
-        manager = self._ensure_game_resource_manager(game)
+        selected_game_getter = getattr(panel, "selected_model_game", None)
+        selected_game = str(selected_game_getter() or "").upper() if callable(selected_game_getter) else ""
+        target_game = selected_game if selected_game in {"K1", "K2"} else str(game or "K1").upper()
+        manager = self._ensure_game_resource_manager(target_game)
         if manager is None:
             if panel is not None:
                 panel.set_status("Configure the KOTOR game folders to load attachment models.")
+            return
+        if slot == "body":
+            try:
+                item_model = (
+                    manager.load_model_strict(resref_clean, target_game)
+                    if hasattr(manager, "load_model_strict")
+                    else manager.load_model(resref_clean, target_game)
+                )
+            except Exception:
+                item_model = None
+            if item_model is None:
+                if panel is not None:
+                    panel.set_status(f"Could not load {target_game}:{resref_clean}.")
+                return
+            repair_bas_body_texture_references(
+                item_model,
+                manager=manager,
+                game=target_game,
+                resref=resref_clean,
+            )
+            try:
+                try:
+                    from src.core.geometry import model_data as _md
+                except ImportError:                         # pragma: no cover
+                    from core.geometry import model_data as _md  # type: ignore
+                self.scene.set_mode(_md.CharacterMode.HEADLESS_BODY, locked=True)
+                self.scene.assign(
+                    _md.PartSlot.HEADLESS_BODY,
+                    item_model,
+                    resref=resref_clean,
+                    game_version=target_game,
+                )
+                self.scene.game_version = target_game
+                self._bas_preview_body = item_model
+                self._body_guides = {}
+                self._rebuild_cb_bas_preview(item_model)
+            except Exception as exc:                        # pragma: no cover
+                log.exception("Character Builder BAS body switch failed")
+                if panel is not None:
+                    panel.set_status(f"Could not use {target_game}:{resref_clean}: {exc}")
+                return
+            self._sync_from_scene()
+            if panel is not None:
+                panel.set_body_model(item_model, resref=resref_clean, game=target_game)
+                panel.set_mode("headless_body")
+                panel.set_status(
+                    f"Using {target_game}:{resref_clean} as the BAS body; "
+                    "existing attachment layers were preserved."
+                )
+            self._schedule_live_validation("bas_body")
             return
         body = self._cb_bas_body_model()
         if body is None:
@@ -4649,11 +4851,15 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 requested=resref_clean,
                 body_model=body,
                 manager=manager,
-                game=str(game or "K1").upper(),
+                game=target_game,
             )
             resref_clean = resolution.resolved_resref or resref_clean
         try:
-            item_model = manager.load_model(resref_clean, str(game or "K1").upper())
+            item_model = (
+                manager.load_model_strict(resref_clean, target_game)
+                if selected_game and hasattr(manager, "load_model_strict")
+                else manager.load_model(resref_clean, target_game)
+            )
         except Exception:
             item_model = None
         if item_model is None:
@@ -5009,6 +5215,11 @@ class QtCharacterBuilderWindow(QtWidgets.QMainWindow):
                 self._game_combo.setCurrentText(self.scene.game_version or "K1")
             finally:
                 self._game_combo.blockSignals(False)
+        bas_panel = getattr(self.inspector, "body_attachment_panel", None)
+        if bas_panel is not None:
+            body = self._cb_bas_body_model()
+            if body is not None:
+                bas_panel.set_body_model(body)
         self._refresh_motion_assignment_state()
 
     def _capture_scene_session_metadata(self) -> None:

@@ -5,10 +5,12 @@ import inspect
 import math
 from types import SimpleNamespace
 
+import pytest
+
 from src.core.characters import character_builder as character_builder_module
 from src.core.characters.character_builder import apply_template_rig
 from src.core.characters.character_rig_state import get_character_rig_state
-from src.core.animation.animation_engine import AnimPose, NodePose
+from src.core.animation.animation_engine import AnimationEngine, AnimPose, NodePose
 from src.core.animation.gpu_skinning import MatrixPaletteUploader
 from src.core.geometry.model_data import (
     BoneWeight,
@@ -530,10 +532,69 @@ def test_apply_template_rig_generated_skin_bind_palette_survives_kotor_parent_fl
     rigged_mesh = result["model"].find_node("BendakFit")
     assert rigged_mesh is not None
     assert rigged_mesh.bone_map == ["rootdummy"]
+    assert rigged_mesh.qbone_list[0] == pytest.approx(
+        (1.0, 0.0, 0.0, 0.0),
+        abs=1.0e-6,
+    )
+    assert rigged_mesh.tbone_list[0] == pytest.approx(
+        (-1.0, 0.0, 0.0),
+        abs=1.0e-6,
+    )
+    assert rigged_mesh._gr_kotor_inverse_bind_qt is True
 
     uploader = MatrixPaletteUploader()
     uploader.build_inverse_bind_pose(result["model"])
     palette = uploader.compute_skin_node_palette(rigged_mesh, AnimPose(time=0.0))
+
+    assert len(palette) == 1
+    assert uploader._skin_palette_formula == "G5_FULL_REF"
+    assert uploader._skin_inverse_bind_source == "qBone_tBone_dfs_indexed_TR_no_invert"
+    # G5's bind-pose palette collapses bone_world * inverse_bind to the
+    # final skin-node world transform.  The payload sits under the flipped
+    # KOTOR root, so this is that 180-degree Z rotation rather than identity.
+    skin_world_col_major = [
+        -1.0, 0.0, 0.0, 0.0,
+        0.0, -1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0,
+    ]
+    for actual, expected in zip(palette[0].flat_col, skin_world_col_major):
+        assert math.isclose(actual, expected, abs_tol=1.0e-6)
+
+
+def test_generated_skin_bind_preserves_intermediate_180_degree_finger_parent() -> None:
+    from src.core.characters import headless_body_workflow as workflow
+
+    root = _node("PMBCM")
+    hand = _node("rhand_g", parent=root)
+    hand.position = (0.5, 0.0, 1.0)
+    finger_base = _node("RcFngrB_g", parent=hand)
+    finger_base.position = (0.0, 0.0, -0.08)
+    finger_base.rotation = (0.9994, 0.0021, 0.0349, 0.0044)
+    finger_tip = _node("RcFngrT_g", parent=finger_base)
+    finger_tip.position = (-0.0074, 0.0, 0.0607)
+    finger_tip.rotation = (0.0, -0.3461, 0.0, 0.9382)
+    skin = _node(
+        "custom_glove",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH | NodeFlags.SKIN),
+        parent=root,
+    )
+    skin.vertices = [(0.0, 0.0, 0.0)]
+    skin.faces = [(0, 0, 0)]
+    skin.bone_map = ["RcFngrT_g"]
+    skin.bone_node_indices = [3]
+    skin.skin_data = [VertexSkinData([BoneWeight(0, 1.0)])]
+    model = KotorModel(name="pmbcm_custom", root_node=root, supermodel="S_Female02")
+
+    qbones, tbones, missing = workflow._kotor_skin_inverse_bind_arrays(model, skin)
+    assert missing == []
+    skin.qbone_list = qbones
+    skin.tbone_list = tbones
+    skin._gr_kotor_inverse_bind_qt = True
+
+    uploader = MatrixPaletteUploader()
+    uploader.build_inverse_bind_pose(model)
+    palette = uploader.compute_skin_node_palette(skin, AnimPose(time=0.0))
 
     assert len(palette) == 1
     identity_col_major = [
@@ -543,7 +604,76 @@ def test_apply_template_rig_generated_skin_bind_palette_survives_kotor_parent_fl
         0.0, 0.0, 0.0, 1.0,
     ]
     for actual, expected in zip(palette[0].flat_col, identity_col_major):
-        assert math.isclose(actual, expected, abs_tol=1.0e-6)
+        assert math.isclose(actual, expected, abs_tol=1.0e-5)
+
+
+def test_apply_template_rig_deduplicates_native_bone_names_for_fresh_skin() -> None:
+    src_root = _node("Imported")
+    mesh = _node(
+        "female_uniform",
+        flags=int(NodeFlags.HEADER | NodeFlags.MESH),
+        parent=src_root,
+    )
+    mesh.vertices = [(0.0, 0.0, 0.0), (0.1, 0.0, 0.0)]
+    mesh.faces = [(0, 1, 1)]
+    mesh._gr_vertices_in_kotor_world = True
+    mesh_model = KotorModel(name="female_uniform", root_node=src_root)
+
+    template_root = _node("PFBCM")
+    first_hand = _node("lhand_g", parent=template_root)
+    first_hand.position = (0.0, 0.0, 1.0)
+    duplicate_hand = _node("lhand_g", parent=first_hand)
+    duplicate_hand.position = (0.0, 0.0, 0.05)
+    template = KotorModel(
+        name="pfbcm",
+        root_node=template_root,
+        supermodel="S_Female03",
+    )
+
+    result = apply_template_rig(
+        mesh_model,
+        template,
+        game="K2",
+        scale_mode="manual",
+    )
+
+    assert result["ok"] is True
+    rigged_mesh = result["model"].find_node("female_uniform")
+    assert rigged_mesh is not None
+    assert rigged_mesh.bone_map == ["lhand_g"]
+    assert rigged_mesh.bone_node_indices == [1]
+    assert len(rigged_mesh.qbone_list) == 1
+    assert len(rigged_mesh.tbone_list) == 1
+    assert rigged_mesh._gr_kotor_inverse_bind_qt is True
+
+    rigged_hands = [
+        node
+        for node in result["model"].all_nodes()
+        if node.name.lower() == "lhand_g"
+    ]
+    assert len(rigged_hands) == 2
+    engine = AnimationEngine(result["model"])
+    assert engine._base_nodes["lhand_g"] is rigged_hands[0]
+    uploader = MatrixPaletteUploader()
+    uploader.build_inverse_bind_pose(result["model"])
+    assert uploader._node_lookup["lhand_g"] is rigged_hands[0]
+    assert uploader._node_parent["lhand_g"] == "pfbcm"
+
+    from src.core.game.kotor_loader import load_model_from_bytes
+    from src.core.geometry.model_data import GameVersion
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
+
+    mdl_bytes, mdx_bytes = MDLBinaryWriter().write(result["model"])
+    reloaded = load_model_from_bytes(
+        mdl_bytes,
+        mdx_bytes,
+        game_version=GameVersion.K2,
+    )
+    assert reloaded is not None
+    reloaded_mesh = reloaded.find_node("female_uniform")
+    assert reloaded_mesh is not None
+    assert reloaded_mesh.bone_map == ["lhand_g"]
+    assert reloaded_mesh.bone_node_indices == [1]
 
 
 def test_apply_template_rig_live_palette_uses_animation_base_pose_for_imported_skin() -> None:

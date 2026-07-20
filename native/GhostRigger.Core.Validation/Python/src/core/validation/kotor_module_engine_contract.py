@@ -486,6 +486,88 @@ def inspect_raw_mdl_structure(
             )
         if flags & _MDL_AABB_FLAG:
             aabb_count += 1
+            mesh_abs = node_abs + _MDL_NODE_SIZE
+            mesh_size = 340 if _normalise_game(game) == "K2" else 332
+            if not _bounded(mdl, mesh_abs, mesh_size):
+                _add_issue(
+                    report,
+                    ValidationSeverity.BLOCKING,
+                    "map.engine.mdl.aabb_mesh_header_truncated",
+                    f"{resource} AABB node '{node_name}' has a truncated mesh header.",
+                    resource=resource,
+                )
+            else:
+                faces_rel, face_count1, face_count2 = struct.unpack_from("<III", mdl, mesh_abs + 8)
+                vertex_count = struct.unpack_from("<H", mdl, mesh_abs + 304)[0]
+                vertices_rel_offset = 336 if _normalise_game(game) == "K2" else 328
+                vertices_rel = struct.unpack_from("<I", mdl, mesh_abs + vertices_rel_offset)[0]
+                faces_abs = _MDL_BASE + faces_rel
+                vertices_abs = _MDL_BASE + vertices_rel
+                if face_count1 != face_count2:
+                    _add_issue(
+                        report,
+                        ValidationSeverity.BLOCKING,
+                        "map.engine.mdl.aabb_face_count_mismatch",
+                        f"{resource} AABB node '{node_name}' duplicated face counts disagree.",
+                        resource=resource,
+                    )
+                elif (
+                    face_count1 > _MAX_REASONABLE_COUNT
+                    or vertex_count > _MAX_REASONABLE_COUNT
+                    or not _bounded(mdl, faces_abs, face_count1 * 32)
+                    or not _bounded(mdl, vertices_abs, vertex_count * 12)
+                ):
+                    _add_issue(
+                        report,
+                        ValidationSeverity.BLOCKING,
+                        "map.engine.mdl.aabb_geometry_out_of_bounds",
+                        f"{resource} AABB node '{node_name}' face/vertex payload is out of bounds.",
+                        resource=resource,
+                    )
+                else:
+                    vertices = [
+                        struct.unpack_from("<3f", mdl, vertices_abs + index * 12)
+                        for index in range(vertex_count)
+                    ]
+                    invalid_planes = 0
+                    invalid_indices = 0
+                    for index in range(face_count1):
+                        face_abs = faces_abs + index * 32
+                        nx, ny, nz, coefficient = struct.unpack_from("<4f", mdl, face_abs)
+                        v1, v2, v3 = struct.unpack_from("<HHH", mdl, face_abs + 26)
+                        if max(v1, v2, v3) >= vertex_count:
+                            invalid_indices += 1
+                            continue
+                        magnitude = math.sqrt(nx * nx + ny * ny + nz * nz)
+                        ax, ay, az = vertices[v1]
+                        residual = (nx * ax) + (ny * ay) + (nz * az) + coefficient
+                        tolerance = max(1.0e-4, 2.0e-5 * (abs(coefficient) + 1.0))
+                        if (
+                            not all(math.isfinite(value) for value in (nx, ny, nz, coefficient, residual))
+                            or abs(magnitude - 1.0) > 1.0e-3
+                            or abs(residual) > tolerance
+                        ):
+                            invalid_planes += 1
+                    if invalid_indices:
+                        _add_issue(
+                            report,
+                            ValidationSeverity.BLOCKING,
+                            "map.engine.mdl.aabb_face_index_out_of_bounds",
+                            f"{resource} AABB node '{node_name}' has {invalid_indices} face(s) with invalid vertex indices.",
+                            resource=resource,
+                        )
+                    if invalid_planes:
+                        _add_issue(
+                            report,
+                            ValidationSeverity.BLOCKING,
+                            "map.engine.mdl.aabb_face_plane_invalid",
+                            (
+                                f"{resource} AABB node '{node_name}' has {invalid_planes} face plane(s) "
+                                "that do not satisfy vanilla's n·p+d=0 contract."
+                            ),
+                            resource=resource,
+                            fix_hint="Write each face coefficient as -dot(unit_normal, a face vertex).",
+                        )
 
         if child_count != child_count2:
             _add_issue(
@@ -627,8 +709,15 @@ def inspect_raw_wok_structure(
     data: bytes,
     *,
     allow_empty_visual: bool = False,
+    transition_room_count: int | None = None,
 ) -> tuple[WokEngineFingerprint, ValidationReport]:
-    """Inspect raw BWM tables, including serialized perimeter loop records."""
+    """Inspect raw BWM tables, including serialized perimeter loop records.
+
+    ``transition_room_count`` supplies the owning LYT room count when this WOK
+    is validated as part of a module.  Transition destinations are room-order
+    indices, so values outside that range are engine-invalid even when the BWM
+    is otherwise structurally sound.
+    """
 
     room = _normalise_resref(room_resref)
     resource = f"{room}.wok"
@@ -1021,6 +1110,7 @@ def inspect_raw_wok_structure(
             )
 
     edge_rows: list[tuple[int, int]] = []
+    invalid_transition_rows: list[dict[str, int]] = []
     transition_count = 0
     if edges_ok:
         for index in range(edge_count):
@@ -1036,6 +1126,24 @@ def inspect_raw_wok_structure(
                 )
             if transition != 0xFFFFFFFF:
                 transition_count += 1
+                if transition_room_count is not None and transition >= transition_room_count:
+                    invalid_transition_rows.append(
+                        {"row": index, "directed_edge": edge_id, "destination": transition}
+                    )
+
+    if invalid_transition_rows:
+        _add_issue(
+            report,
+            ValidationSeverity.BLOCKING,
+            "map.engine.wok.transition_target_out_of_range",
+            f"{resource} has {len(invalid_transition_rows)} transition destination(s) outside the "
+            f"owning LYT's {transition_room_count} room rows.",
+            resource=resource,
+            details={
+                "lyt_room_count": transition_room_count,
+                "invalid_transitions": invalid_transition_rows,
+            },
+        )
 
     if edge_rows and expected_boundary_ids:
         serialized_boundary_ids = [edge_id for edge_id, _transition in edge_rows]
@@ -1640,6 +1748,7 @@ def validate_kotor_module_engine_contract(
             room,
             resources[(room, "wok")],
             allow_empty_visual=room in visual_only_rooms,
+            transition_room_count=len(canonical_rooms),
         )
         validation.issues.extend(mdl_report.issues)
         validation.issues.extend(wok_report.issues)

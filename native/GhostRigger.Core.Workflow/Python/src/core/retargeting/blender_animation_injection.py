@@ -44,6 +44,20 @@ def resolve_blender_extract_script() -> Path:
 BLENDER_EXTRACT_SCRIPT = resolve_blender_extract_script()
 
 
+def _hidden_process_options() -> dict[str, Any]:
+    """Keep headless Blender invisible in the Windows desktop application."""
+
+    if os.name != "nt":
+        return {}
+    startup = subprocess.STARTUPINFO()
+    startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startup.wShowWindow = 0
+    return {
+        "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        "startupinfo": startup,
+    }
+
+
 def run_blender_animation_extraction(
     *,
     source_fbx: Path,
@@ -91,6 +105,7 @@ def run_blender_animation_extraction(
         text=True,
         timeout=timeout,
         check=False,
+        **_hidden_process_options(),
     )
     log_path.write_text(
         f"COMMAND:\n{' '.join(cmd)}\n\nSTDOUT:\n{proc.stdout}\n\nSTDERR:\n{proc.stderr}\n",

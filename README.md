@@ -57,12 +57,18 @@ payload generation.
 - Character Builder with base skeleton selection, external mesh fit helpers,
   native skeleton build flow, supermodel assignment, BAS attachment preview,
   validation, and export preflight.
+- Character Builder opens with a clear choice between that preserved **Native
+  KOTOR Character** workflow and the independent, guided **Custom Rigged
+  Character** workflow for foreign FBX skeletons. See
+  [docs/custom_rigged_character_builder.md](docs/custom_rigged_character_builder.md).
 - Body Attachment System for head, weapon, mask, goggle, belt, and equipment
-  socket preview recipes, with a game-derived item catalog covering every
-  attachable model from both installed games and a lightsaber Color selector
-  spanning all K1/K2 blade colors (including the K2-only Viridian, Silver,
-  and Bronze). The same panel is embedded in the Character Builder preview
-  step.
+  socket preview recipes. Its game-derived catalog includes every installed
+  `heads.2da` head, every installed modeltype-B headless body, and attachable
+  equipment from both games, plus a lightsaber Color selector spanning all
+  K1/K2 blade colors (including the K2-only Viridian, Silver, and Bronze).
+  The same panel is embedded in Character Builder, and the complete body plus
+  attachments can be exported as one MDL/MDX, OBJ, or target-compatible FBX
+  character asset.
 - Lightsaber preview support for powered blade animation, game-color blade
   textures, and preview-only color overrides.
 - Map Studio: import a stock KOTOR module with real rendered previews
@@ -116,8 +122,12 @@ Near-term priorities:
 Recommended Windows development/runtime:
 
 - Windows 10 or newer.
-- Python 3.13 or newer (development currently runs on 3.14; 3.12 remains
-  usable for the Qt source-run path).
+- Native application builds require a complete 64-bit CPython 3.13 install.
+  The C++ host links to `python313.lib` and requires `Include\Python.h`,
+  `libs\python313.lib`, and `python313.dll`. Python 3.14 may be installed
+  alongside 3.13, but it cannot replace 3.13 for the current native host.
+- Source-run development supports Python 3.13 or 3.14; Python 3.12 remains
+  usable for the Qt source-run path.
 - Visual Studio 2022 or the VS 2022 Build Tools (MSBuild) for the native
   Debug application build.
 - A legal local installation of KOTOR (K1) and/or KOTOR II: The Sith Lords
@@ -132,18 +142,61 @@ Recommended Windows development/runtime:
 
 The primary product is the payload-backed native application. It embeds the
 Python packages into 18 native DLLs and is what all visible testing runs
-against.
+against. Install Python 3.13 even when Python 3.14 is already present; the two
+versions can coexist.
 
-```bat
+```powershell
 git clone https://github.com/CrispyW0nton/Ghost-Studio.git
 cd Ghost-Studio
 git switch ghost-studio
-py -3.14 -m pip install -r requirements.txt
-"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe" GhostRigger.sln /m /t:Build /p:Configuration=Debug /p:Platform=x64 /v:minimal
+
+$pythonVersion = "3.13.14"
+$installer = "$env:TEMP\python-$pythonVersion-amd64.exe"
+$installerUrl = "https://www.python.org/ftp/python/$pythonVersion/python-$pythonVersion-amd64.exe"
+$installerSha256 = "c54d9b9bbb8a36e6489363ddd01139707fd781d72f1f9e90c7ec65d0061368e0"
+$pythonHome = "$env:LOCALAPPDATA\Programs\Python\Python313"
+
+Invoke-WebRequest -Uri $installerUrl -OutFile $installer
+if ((Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant() -ne $installerSha256) {
+    throw "Python installer checksum verification failed."
+}
+
+$installArgs = @(
+    "/quiet"
+    "InstallAllUsers=0"
+    "TargetDir=$pythonHome"
+    "PrependPath=1"
+    "Include_launcher=1"
+    "Include_pip=1"
+    "Include_dev=1"
+    "Include_test=0"
+)
+$install = Start-Process -FilePath $installer -ArgumentList $installArgs -Wait -PassThru
+if ($install.ExitCode -notin @(0, 3010)) {
+    throw "Python 3.13 installer failed with exit code $($install.ExitCode)."
+}
+
+$required = @(
+    "$pythonHome\Include\Python.h"
+    "$pythonHome\libs\python313.lib"
+    "$pythonHome\python313.dll"
+)
+$missing = @($required | Where-Object { -not (Test-Path $_) })
+if ($missing) { throw "Incomplete Python 3.13 install: $($missing -join ', ')" }
+
+$env:GhostRiggerPythonHome = $pythonHome
+$env:GHOSTRIGGER_PYTHON = "$pythonHome\python.exe"
+[Environment]::SetEnvironmentVariable("GhostRiggerPythonHome", $pythonHome, "User")
+[Environment]::SetEnvironmentVariable("GHOSTRIGGER_PYTHON", $env:GHOSTRIGGER_PYTHON, "User")
+& $env:GHOSTRIGGER_PYTHON -m pip install -r requirements.txt
+
+$msbuild = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
+& $msbuild GhostRigger.sln /m /t:Build /p:Configuration=Debug /p:Platform=x64 "/p:GhostRiggerPythonHome=$pythonHome" /v:minimal
 ```
 
 (Adjust the MSBuild path for your VS 2022 edition, or build `GhostRigger.sln`
-as `Debug|x64` from Visual Studio.)
+as `Debug|x64` from Visual Studio. Restart Visual Studio after running the
+PowerShell setup so MSBuild receives the saved Python 3.13 environment.)
 
 Run the result:
 
@@ -156,13 +209,16 @@ all 18 payload DLLs next to the executable.
 
 ### Option B: Run from source
 
-```bat
+```powershell
 git clone https://github.com/CrispyW0nton/Ghost-Studio.git
 cd Ghost-Studio
 git switch ghost-studio
-pip install -r requirements.txt
-python main.py
+py -3.14 -m pip install -r requirements.txt
+py -3.14 main.py
 ```
+
+The source-run path may use Python 3.13 instead by replacing `-3.14` with
+`-3.13` in both commands.
 
 ### First launch (either option)
 
@@ -266,6 +322,159 @@ Character Studio is the custom-character pipeline. The intended modder flow is:
 
 Do not claim a custom character is game-ready until viewport preview, export
 readback, and in-game testing have passed.
+
+### Combined Character FBX Export For Unity And Unreal
+
+Ghost-Studio can export one composed character asset containing the selected
+body, head, weapons, mask, goggles, belt, and any other active Body Attachment
+System (BAS) layers. The exporter preserves the native Odyssey hierarchy,
+skinning, UVs, material slots, texture references, and selected animations.
+
+"Combined" means one FBX file, one character hierarchy, and one skeletal asset.
+The individual mesh sections and material slots remain logically separate
+inside that asset. Ghost-Studio does not destructively weld the body, eyes,
+teeth, clothing, weapons, and accessories into one vertex/material stream,
+because doing that would damage skinning, UV seams, material assignment, and
+attachment transforms.
+
+#### Export A Body And Its Attachments
+
+1. Configure and scan the K1 and/or K2 game installation under **Settings ->
+   Game Paths**.
+2. Load a body, or select one from the BAS **BODY** catalog. BAS lists the
+   available game-owned heads and headless modeltype-B bodies separately for
+   K1 and K2 so resources from different games are not mixed silently.
+3. Attach the desired head and equipment. Confirm the composed preview looks
+   correct and that every layer is attached to the expected hook.
+4. In the main BAS panel, choose **Export Composed Model...**. Character
+   Builder users can instead choose FBX in its normal Export dialog. Main
+   viewport **Export FBX** and single selected-object export use the same
+   compatibility pipeline when a runtime model is available.
+5. Select the FBX profile in the save/export dialog:
+
+   - **Unity-Compatible FBX** for Unity.
+   - **Unreal Engine-Compatible FBX** for Unreal Engine.
+   - **3ds Max-Compatible FBX** for Autodesk 3ds Max.
+   - **Standard FBX** only when the destination does not need one of the
+     target-specific handoff rules.
+
+6. Choose the animation sets to embed. Each checked row becomes an independent
+   FBX take/clip. The list includes the animation name, source model, whether
+   it is local or inherited, and its duration.
+7. Select **Continue**. Canceling either dialog leaves the scene unchanged and
+   writes no export.
+
+The animation-selector shortcuts are:
+
+| Control | Result |
+|---------|--------|
+| **Select Current** | Export only the animation currently selected for preview. |
+| **Select Local** | Export only clips stored directly on the primary body/model. |
+| **Select All** | Export every animation resolved through the model's strict same-game supermodel chain. This can create a large FBX. |
+| **Clear** | Export the combined mesh and rig with no animation clips. |
+| Row checkboxes/search | Find and select only the clips needed by the destination project. |
+
+Selecting a small intentional set is recommended. A KOTOR humanoid may expose
+hundreds of inherited animations, and importing all of them increases FBX size
+and engine import time.
+
+#### How Animation Resolution Works
+
+- A local body clip wins over a same-named inherited clip.
+- Otherwise Ghost-Studio resolves the clip through that model's K1 or K2
+  supermodel chain and records the owning source model.
+- For a composed body and head, the body's effective clip provides the body
+  motion. The attached head contributes only same-named tracks for nodes that
+  actually belong to that head, including jaw, lip, eyelid, and eye tracks
+  inherited from the head's own supermodel.
+- A conflicting track for a real body-owned node remains body-authoritative;
+  head inheritance cannot replace pelvis, limb, or root motion.
+- Each selected inherited clip gets its own cumulative translation scale baked
+  into the exported copy. Mixed local and inherited clips therefore do not
+  share an incorrect model-wide animation scale.
+- Selection and baking operate on a deep copy. The loaded scene, source game
+  resources, body model, head model, and original animations are not mutated.
+- If a requested name cannot be resolved, export stops with an error instead
+  of silently omitting the animation.
+
+#### Files Produced
+
+Keep the complete output folder together:
+
+```text
+CharacterName.fbx
+CharacterName.ghostrigger.json
+textures/
+  body_texture.png
+  head_texture.png
+rigging/                       # when rigging sidecars are enabled
+  CharacterName.skeleton.json
+  CharacterName.weights.json
+  CharacterName.<clip>.anim.json
+```
+
+The `.ghostrigger.json` manifest records the compatibility profile, selected
+and embedded animation names, missing-name check, source models, inheritance
+scope, scale, contributing attachment models, coordinate/unit policy, and
+recommended engine import settings. The FBX is the engine asset; the manifest
+and rigging JSON preserve Ghost-Studio/KOTOR handoff and diagnostic metadata.
+
+#### Import In Unity
+
+1. Copy the **entire exported folder** under the Unity project's `Assets`
+   directory. Do not copy only the FBX; its relative `textures/` references
+   need to remain beside it.
+2. Select the FBX and use **Scale Factor 1**, **Use File Scale**, and **Bake Axis
+   Conversion**.
+3. On the Rig tab, use a **Generic** rig unless the character has separately
+   been mapped to a valid Unity Humanoid avatar.
+4. Enable **Import Animation**. For the closest KOTOR curve result, use
+   **Animation Compression: Off** and disable **Resample Curves**.
+5. Enable material/texture import and apply the settings. The selected takes
+   appear as separately named Unity `AnimationClip` assets.
+
+The Unity profile declares the correct meter-scale handoff, emits clean clip
+names, complete mesh-to-bone inverse bind data, linear animation keys, and
+continuous Euler branches. These rules prevent the exploded/deformed meshes,
+overshooting joints, scale errors, and clip-name artifacts caused by the old
+generic FBX handoff.
+
+#### Import In Unreal Engine
+
+1. Import the FBX as a **Skeletal Mesh** with **Import Mesh**, **Import
+   Animations**, **Import Materials**, and **Import Textures** enabled.
+2. Enable **Import Meshes in Bone Hierarchy**. This is required so rigid eyes,
+   eyelids, teeth, tongue, and similar child meshes remain geometry instead of
+   being converted into bones.
+3. Enable scene/unit conversion, preserve smoothing groups, and import normals
+   and tangents when present.
+4. Import the exported animation time at 30 fps. Keep **Use T0 As Ref Pose**
+   and **Update Skeleton Reference Pose** disabled unless the first frame was
+   intentionally authored as a replacement bind pose.
+5. Unreal creates a separate `AnimSequence` for each selected FBX take on the
+   same imported skeleton.
+
+The Unreal profile preserves the native Odyssey skeleton and bone names; it
+does not silently retarget the character to Quinn or the Unreal mannequin.
+Create an Unreal IK Rig/IK Retargeter after import when mannequin/Quinn
+compatibility is required.
+
+#### Troubleshooting
+
+- **White or missing textures:** import/copy the whole output folder, keep the
+  `textures/` directory beside the FBX, and enable material/texture import.
+- **Exploded or extremely deformed character:** re-export with the correct
+  Unity or Unreal profile, import at scale 1, and do not add a manual 90-degree
+  root rotation or replace the skeleton reference pose during import.
+- **Eyes or teeth missing in Unreal:** enable **Import Meshes in Bone
+  Hierarchy**.
+- **No clips appear:** confirm at least one checkbox was selected. **Clear** is
+  intentionally the mesh-and-rig-only mode.
+- **Import is unexpectedly slow or the file is huge:** avoid **Select All** and
+  export only the animation sets the project will use.
+- **Need a single welded mesh:** perform that destructive optimization later in
+  a DCC tool only after deciding how materials, UVs, rigid accessories, and
+  skin weights should be collapsed. It is not the safe interchange default.
 
 ### Module Studio And Map Studio
 

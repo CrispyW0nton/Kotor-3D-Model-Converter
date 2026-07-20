@@ -7,6 +7,7 @@ from importlib import import_module
 import math
 import os
 from pathlib import Path
+import shutil
 from statistics import median
 from typing import Any
 
@@ -34,6 +35,32 @@ _MAP_STUDIO_SKYBOX_PROOF_FIXTURES: dict[tuple[str, str], dict[str, Any]] = {
         "textures": {f"tel_sb0{index}": [2048, 2048] for index in range(1, 6)},
     },
 }
+
+_MAP_STUDIO_PIE_RENDERER_READINESS_MAX_ATTEMPTS = 12
+_MAP_STUDIO_PIE_RENDERER_READINESS_INTERVAL_MS = 100
+
+
+def _map_studio_pie_marker_geometry_is_runtime_only(geometry: object) -> bool:
+    """Accept transient PIE focus/path guides while rejecting authored markers."""
+
+    if geometry is None:
+        return True
+    rows = (
+        tuple(getattr(geometry, "footprints", ()) or ())
+        + tuple(getattr(geometry, "lines", ()) or ())
+        + tuple(getattr(geometry, "icons", ()) or ())
+    )
+    for row in rows:
+        role = str(getattr(row, "role", "") or "").strip().lower()
+        kind = str(getattr(row, "kind", "") or "").strip().lower()
+        placement_id = str(getattr(row, "placement_id", "") or "").strip().lower()
+        if not (
+            role.startswith("pie_")
+            or kind.startswith("pie_")
+            or placement_id.startswith("__map_studio_pie_")
+        ):
+            return False
+    return True
 
 
 def _map_studio_project_content_reasons(project: object) -> tuple[str, ...]:
@@ -132,6 +159,1235 @@ def _settle_map_studio_visual_proof(milliseconds: int) -> None:
     timer.timeout.connect(loop.quit)
     timer.start(int(milliseconds))
     loop.exec(flags)
+
+
+def _capture_map_studio_pie_dialogue_context(window: object, capture_dir: Path) -> dict[str, Any]:
+    """Capture the compact PIE conversation-context tab and its resolved lines.
+
+    Reads the loaded module's real dialogue catalog through the live controller,
+    switches the right-rail to the PIE tab, saves a window screenshot, and
+    resolves the opening NPC line under clean Auto and (when present) a forced
+    B-4D4 starting link. Every claim here is editor-side, not KOTOR proof.
+    """
+
+    panel = getattr(window, "pie_context_panel", None)
+    controller = getattr(window, "controller", None)
+    if panel is None or controller is None:
+        return {"captured": False, "reason": "PIE context panel or controller unavailable."}
+
+    refresh = getattr(window, "_refresh_map_studio_pie_context_panel", None)
+    if callable(refresh):
+        refresh()
+    _settle_map_studio_visual_proof(0)
+
+    catalog_getter = getattr(controller, "map_studio_pie_dialogue_catalog", None)
+    catalog = tuple(catalog_getter() or ()) if callable(catalog_getter) else ()
+    conversations: list[dict[str, Any]] = []
+    for row in catalog:
+        conversations.append(
+            {
+                "resref": str(getattr(row, "conversation_resref", "") or ""),
+                "display_name": str(getattr(row, "display_name", "") or ""),
+                "owner_names": [str(value) for value in tuple(getattr(row, "owner_names", ()) or ())],
+                "source_label": str(getattr(row, "source_label", "") or ""),
+                "starter_count": len(tuple(getattr(row, "starters", ()) or ())),
+            }
+        )
+
+    combo = getattr(panel, "conversation_combo", None)
+    selected_resref = str(combo.currentData() or "").strip().lower() if combo is not None and combo.count() else ""
+
+    # Resolve the opening line under clean Auto and a forced B-4D4 start.
+    previewer = getattr(controller, "map_studio_pie_dialogue_preview", None)
+    auto_preview: dict[str, Any] = {}
+    forced_preview: dict[str, Any] = {}
+    if callable(previewer) and selected_resref:
+        try:
+            auto_preview = dict(previewer(selected_resref))
+        except Exception as exc:
+            auto_preview = {"error": str(exc)}
+        b4d4_link = ""
+        for row in catalog:
+            if str(getattr(row, "conversation_resref", "") or "").strip().lower() != selected_resref:
+                continue
+            for starter in tuple(getattr(row, "starters", ()) or ()):
+                conditions = {str(value).lower() for value in tuple(getattr(starter, "condition_resrefs", ()) or ())}
+                if "c_b4d4pc" in conditions:
+                    b4d4_link = str(getattr(starter, "link_id", "") or "")
+                    break
+        if b4d4_link:
+            try:
+                forced_preview = dict(previewer(selected_resref, starter_link_id=b4d4_link))
+            except Exception as exc:
+                forced_preview = {"error": str(exc)}
+
+    # Bring the PIE tab forward and capture the module editor window.
+    right_tabs = getattr(window, "right_tabs", None)
+    if right_tabs is not None:
+        try:
+            right_tabs.setCurrentWidget(panel)
+        except Exception:
+            pass
+    _settle_map_studio_visual_proof(0)
+    capture_dir.mkdir(parents=True, exist_ok=True)
+    screenshot = capture_dir / "pie_dialogue_context_tab.png"
+    saved = False
+    grab = getattr(window, "grab", None)
+    if callable(grab):
+        pixmap = grab()
+        saved = bool(pixmap is not None and not pixmap.isNull() and pixmap.save(str(screenshot), "PNG"))
+
+    def _label_text(name: str) -> str:
+        widget = getattr(panel, name, None)
+        getter = getattr(widget, "text", None)
+        return str(getter() or "").strip() if callable(getter) else ""
+
+    # Showcase the resource-driven B-4D4 case: select the conversation whose
+    # starting list gates on c_b4d4pc (207luxa in 207TEL), let the panel resolve
+    # its clean-Auto opening line visibly, and record both the Auto and the
+    # forced-B-4D4 opening lines through the live controller preview.
+    b4d4_showcase: dict[str, Any] = {}
+    b4d4_resref = ""
+    b4d4_link = ""
+    for row in catalog:
+        for starter in tuple(getattr(row, "starters", ()) or ()):
+            conditions = {str(value).lower() for value in tuple(getattr(starter, "condition_resrefs", ()) or ())}
+            if "c_b4d4pc" in conditions:
+                b4d4_resref = str(getattr(row, "conversation_resref", "") or "").strip().lower()
+                b4d4_link = str(getattr(starter, "link_id", "") or "")
+                break
+        if b4d4_resref:
+            break
+    if b4d4_resref and combo is not None and callable(previewer):
+        index = combo.findData(b4d4_resref)
+        if index >= 0:
+            combo.setCurrentIndex(index)
+            _settle_map_studio_visual_proof(0)
+        showcase_shot = capture_dir / "pie_dialogue_context_b4d4.png"
+        showcase_saved = False
+        if callable(grab):
+            pix = grab()
+            showcase_saved = bool(pix is not None and not pix.isNull() and pix.save(str(showcase_shot), "PNG"))
+        try:
+            showcase_auto = dict(previewer(b4d4_resref))
+        except Exception as exc:
+            showcase_auto = {"error": str(exc)}
+        try:
+            showcase_forced = dict(previewer(b4d4_resref, starter_link_id=b4d4_link))
+        except Exception as exc:
+            showcase_forced = {"error": str(exc)}
+        # Surface the module's journal touchpoints for this conversation from its
+        # real DLG (quest tag + entry state per node that plays a journal update).
+        quest_references: list[str] = []
+        loader = getattr(getattr(controller, "_map_studio_pie_resource_context", lambda: None)(), "dialogue_loader", None)
+        if callable(loader):
+            try:
+                from src.core.modules.map_studio_pie_dialogue import extract_dialogue_quest_references
+
+                dlg_bytes = loader(b4d4_resref)
+                if dlg_bytes:
+                    quest_references = [f"{quest}:{entry}" for quest, entry in extract_dialogue_quest_references(bytes(dlg_bytes))]
+            except Exception:
+                quest_references = []
+        b4d4_showcase = {
+            "conversation": b4d4_resref,
+            "starter_link_id": b4d4_link,
+            "screenshot": str(showcase_shot) if showcase_saved else "",
+            "screenshot_saved": showcase_saved,
+            "panel_opening_line": _label_text("opening_preview_label"),
+            "auto_line": str(showcase_auto.get("text", "")),
+            "forced_b4d4_line": str(showcase_forced.get("text", "")),
+            "journal_touchpoints": quest_references,
+        }
+
+    return {
+        "captured": True,
+        "screenshot": str(screenshot) if saved else "",
+        "screenshot_saved": saved,
+        "conversation_count": len(conversations),
+        "conversations": conversations,
+        "selected_conversation": selected_resref,
+        "conversation_enabled": bool(combo.isEnabled()) if combo is not None else False,
+        "starter_enabled": bool(getattr(panel, "starter_combo").isEnabled())
+        if getattr(panel, "starter_combo", None) is not None
+        else False,
+        "source_label": _label_text("source_label"),
+        "status_label": _label_text("status_label"),
+        "opening_preview_label": _label_text("opening_preview_label"),
+        "auto_preview": {
+            "text": str(auto_preview.get("text", "")),
+            "forced": bool(auto_preview.get("forced", False)),
+            "resolved": bool(auto_preview.get("resolved", False)),
+        }
+        if auto_preview
+        else {},
+        "forced_b4d4_preview": {
+            "text": str(forced_preview.get("text", "")),
+            "forced": bool(forced_preview.get("forced", False)),
+            "resolved": bool(forced_preview.get("resolved", False)),
+        }
+        if forced_preview
+        else {},
+        "b4d4_showcase": b4d4_showcase,
+    }
+
+
+def _probe_map_studio_pie_dialogue_camera(window: object) -> dict[str, Any]:
+    """Verify the live window drives the viewport camera via the headless solver.
+
+    Uses a real registry creature as the dialogue owner and, when present, a real
+    placed area camera. Reads the resulting camera state synchronously after each
+    call so the running PIE tick cannot interleave, and cross-checks it against
+    the standalone solver. Deterministic and editor-side; no dialogue-range or
+    pathing dependency.
+    """
+
+    from types import SimpleNamespace
+
+    from src.core.modules.map_studio_pie_dialogue_camera import (
+        DialoguePlacedCamera,
+        solve_map_studio_pie_dialogue_camera,
+    )
+
+    session = getattr(window, "_map_studio_pie_session", None)
+    registry = getattr(session, "entity_registry", None)
+    viewport = getattr(getattr(window, "viewport_panel", None), "viewport", None)
+    camera = getattr(viewport, "camera", None)
+    method = getattr(window, "_update_map_studio_pie_dialogue_camera", None)
+    if session is None or registry is None or camera is None or not callable(method):
+        return {"probed": False, "reason": "PIE session, registry, camera, or method unavailable."}
+
+    creatures = [c for c in registry.of_kind("creature") if tuple(getattr(c, "position", ()) or ())]
+    if not creatures:
+        return {"probed": False, "reason": "No creature entity is available to own a dialogue."}
+    owner = creatures[0]
+    placed_cameras = [
+        cam
+        for cam in registry.of_kind("camera")
+        if int((getattr(cam, "metadata", {}) or {}).get("camera_id", -1)) >= 0
+    ]
+
+    def _restore_exploration() -> None:
+        method(SimpleNamespace(mode="exploration", dialogue=None), camera)
+
+    def _run(angle: int, camera_id: int | None) -> dict[str, Any]:
+        # Enter dialogue fresh each time so the pre-dialogue snapshot is saved.
+        _restore_exploration()
+        window._map_studio_pie_gameplay_mode = "exploration"
+        dialogue = SimpleNamespace(
+            owner_id=str(getattr(owner, "entity_id", "") or ""),
+            camera_angle=int(angle),
+            camera_id=camera_id,
+            camera_fov=None,
+            camera_height_offset=0.0,
+            target_height_offset=0.0,
+            current_node_id=f"probe:{angle}",
+        )
+        method(SimpleNamespace(mode="dialogue", dialogue=dialogue), camera)
+        applied = {
+            "azimuth": round(float(getattr(camera, "azimuth", 0.0)), 4),
+            "elevation": round(float(getattr(camera, "elevation", 0.0)), 4),
+            "distance": round(float(getattr(camera, "distance", 0.0)), 4),
+            "fov": round(float(getattr(camera, "fov", 0.0)), 4),
+        }
+        placed = None
+        if angle == 6 and camera_id is not None:
+            match = next(
+                (
+                    cam
+                    for cam in placed_cameras
+                    if int((getattr(cam, "metadata", {}) or {}).get("camera_id", -1)) == int(camera_id)
+                ),
+                None,
+            )
+            if match is not None:
+                meta = dict(getattr(match, "metadata", {}) or {})
+                placed = DialoguePlacedCamera(
+                    position=tuple(float(v) for v in tuple(getattr(match, "position", ()) or (0.0, 0.0, 0.0))[:3]),
+                    height=float(meta.get("height", 0.0) or 0.0),
+                    field_of_view=float(meta.get("field_of_view", 45.0) or 45.0),
+                )
+        framing = solve_map_studio_pie_dialogue_camera(
+            listener_position=tuple(session.state.position),
+            speaker_position=tuple(getattr(owner, "position", session.state.position) or session.state.position),
+            camera_angle=int(angle),
+            placed_camera=placed,
+        )
+        expected = {
+            "azimuth": round(framing.azimuth_deg, 4),
+            "elevation": round(framing.elevation_deg, 4),
+            "distance": round(framing.distance, 4),
+            "fov": round(framing.fov, 4),
+        }
+        matches = (
+            abs(applied["azimuth"] - expected["azimuth"]) < 0.05
+            and abs(applied["elevation"] - expected["elevation"]) < 0.05
+            and abs(applied["fov"] - expected["fov"]) < 0.05
+        )
+        return {
+            "camera_angle": int(angle),
+            "camera_id": camera_id,
+            "mode": framing.mode,
+            "applied": applied,
+            "solver_expected": expected,
+            "window_matches_solver": bool(matches),
+        }
+
+    results = [_run(0, None), _run(2, None)]
+    if placed_cameras:
+        cam_id = int((getattr(placed_cameras[0], "metadata", {}) or {}).get("camera_id", -1))
+        results.append(_run(6, cam_id))
+    _restore_exploration()
+    window._map_studio_pie_gameplay_mode = "exploration"
+
+    return {
+        "probed": True,
+        "owner_entity_id": str(getattr(owner, "entity_id", "") or ""),
+        "placed_camera_count": len(placed_cameras),
+        "shots": results,
+        "all_window_matches_solver": all(bool(row.get("window_matches_solver")) for row in results),
+    }
+
+
+def _probe_map_studio_pie_triggers(window: object) -> dict[str, Any]:
+    """Confirm the live gameplay runtime fires enter events from real triggers.
+
+    Drives the running module's gameplay runtime to each authored trigger
+    volume's centroid and records the emitted crossing event. Deterministic and
+    editor-side; transition triggers are reported, never warped.
+    """
+
+    session = getattr(window, "_map_studio_pie_session", None)
+    gameplay = getattr(session, "gameplay", None)
+    tracker = getattr(gameplay, "_trigger_tracker", None)
+    if session is None or gameplay is None or tracker is None:
+        return {"probed": False, "reason": "PIE session, gameplay runtime, or trigger tracker unavailable."}
+
+    volumes = tuple(getattr(tracker, "volumes", ()) or ())
+    if not volumes:
+        return {"probed": True, "volume_count": 0, "shots": [], "note": "The loaded module has no authored trigger volumes."}
+
+    camera_forward = tuple(getattr(gameplay, "_last_camera_forward", (1.0, 0.0, 0.0)) or (1.0, 0.0, 0.0))
+    base_z = float(tuple(getattr(session.state, "position", (0.0, 0.0, 0.0)))[2])
+    shots: list[dict[str, Any]] = []
+    for volume in volumes[:8]:
+        polygon = tuple(volume.polygon_xy)
+        centroid_x = sum(p[0] for p in polygon) / len(polygon)
+        centroid_y = sum(p[1] for p in polygon) / len(polygon)
+        # Step outside first so the tracker registers a fresh entry.
+        gameplay.advance(0.0, player_position=(centroid_x + 1000.0, centroid_y + 1000.0, base_z), camera_forward=camera_forward)
+        gameplay.drain_events()
+        gameplay.advance(0.0, player_position=(centroid_x, centroid_y, base_z), camera_forward=camera_forward)
+        events = [e for e in gameplay.drain_events() if str(getattr(e, "kind", "")).startswith(("trigger", "transition"))]
+        entered = next(
+            (e for e in events if getattr(e, "kind", "") in {"trigger_entered", "transition_trigger_entered"}),
+            None,
+        )
+        script_executed = next((e for e in events if getattr(e, "kind", "") == "trigger_script_executed"), None)
+        shots.append(
+            {
+                "tag": volume.tag,
+                "entity_id": volume.entity_id,
+                "is_transition": bool(volume.is_transition),
+                "event_kind": str(getattr(entered, "kind", "")) if entered is not None else "",
+                "event_message": str(getattr(entered, "message", "")) if entered is not None else "",
+                "fired": entered is not None,
+                "on_enter_script": str(getattr(volume, "on_enter_script", "") or ""),
+                "script_executed": script_executed is not None,
+                "script_writes": str(getattr(script_executed, "message", "")) if script_executed is not None else "",
+            }
+        )
+    # Restore the tracker so the live tick does not emit stale exits mid-proof.
+    gameplay.advance(0.0, player_position=tuple(session.state.position), camera_forward=camera_forward)
+    gameplay.drain_events()
+    return {
+        "probed": True,
+        "volume_count": len(volumes),
+        "transition_volume_count": sum(1 for v in volumes if v.is_transition),
+        "all_fired": all(row["fired"] for row in shots),
+        "scripted_trigger_count": sum(1 for row in shots if row["on_enter_script"]),
+        "executed_trigger_count": sum(1 for row in shots if row["script_executed"]),
+        "shots": shots,
+    }
+
+
+def _probe_map_studio_pie_companion_actors(window: object) -> dict[str, Any]:
+    """Spawn a companion actor from a real creature resref and confirm attach.
+
+    Sets a one-entry party roster to a placed creature's template (guaranteed to
+    resolve a body model), calls the live window companion-actor builder, checks
+    the follower attached behind the player, then detaches and restores the
+    roster. Editor-side; visible companion models, not a KOTOR proof.
+    """
+
+    import math
+
+    session = getattr(window, "_map_studio_pie_session", None)
+    registry = getattr(session, "entity_registry", None)
+    controller = getattr(window, "controller", None)
+    create = getattr(window, "_create_map_studio_pie_party_actors", None)
+    if session is None or registry is None or controller is None or not callable(create):
+        return {"probed": False, "reason": "PIE session / registry / controller / builder unavailable."}
+    preview_model = getattr(getattr(window, "_map_studio_pie_actor", None), "preview_model", None)
+    if preview_model is None:
+        preview_model = getattr(getattr(getattr(window, "viewport_panel", None), "viewport", None), "model", None)
+    if preview_model is None:
+        return {"probed": False, "reason": "No live preview model to attach a companion to."}
+    creatures = [c for c in registry.of_kind("creature") if str(getattr(c, "template_resref", "") or "").strip()]
+    if not creatures:
+        return {"probed": True, "attached": 0, "note": "Module has no creature templates to spawn as a companion."}
+    companion_resref = str(creatures[0].template_resref).strip().lower()
+    game = str(getattr(getattr(controller, "project", None), "game", "K1") or "K1")
+    prior = tuple(controller.map_studio_pie_context_settings().get("party_roster") or ())
+    leader = tuple(float(v) for v in tuple(session.state.position)[:3])
+    facing = float(session.state.facing_radians)
+    forward = (math.cos(facing), math.sin(facing))
+    result: dict[str, Any] = {"probed": True, "companion_resref": companion_resref}
+    entries: list = []
+    try:
+        controller.update_map_studio_pie_context(party_roster=[companion_resref])
+        warning = create(session, preview_model, game)
+        entries = list(getattr(window, "_map_studio_pie_party_actors", []) or ())
+        targets = tuple(session.party_follow_targets(max(1, len(entries))))
+        rows: list[dict[str, Any]] = []
+        for entry in entries:
+            slot = int(entry.get("slot", 0) or 0)
+            pos = tuple(float(v) for v in tuple(targets[slot - 1])[:3]) if 0 < slot <= len(targets) else None
+            behind = None
+            if pos is not None:
+                fc = (pos[0] - leader[0]) * forward[0] + (pos[1] - leader[1]) * forward[1]
+                behind = bool(fc < 0.0)
+            rows.append(
+                {
+                    "resref": entry.get("resref"),
+                    "actor_attached": entry.get("actor") is not None,
+                    "position": [round(v, 4) for v in pos] if pos else None,
+                    "behind_leader": behind,
+                }
+            )
+        result.update(
+            {
+                "attached": len(entries),
+                "warning": str(warning or ""),
+                "companions": rows,
+                "companion_attached_behind_leader": bool(rows)
+                and all(r["actor_attached"] and r["behind_leader"] for r in rows),
+            }
+        )
+    except Exception as exc:
+        result.update({"attached": 0, "error": str(exc)})
+    finally:
+        for entry in entries:
+            actor = entry.get("actor")
+            if actor is not None:
+                try:
+                    actor.detach(recompute_bounds=False)
+                except Exception:
+                    pass
+        try:
+            window._map_studio_pie_party_actors = []
+            controller.update_map_studio_pie_context(party_roster=list(prior))
+        except Exception:
+            pass
+    return result
+
+
+def _probe_map_studio_pie_party(window: object) -> dict[str, Any]:
+    """Confirm the live session computes a trailing party formation on the walkmesh.
+
+    Uses the real session's player position/facing and its walkmesh sampler to
+    place two followers, then checks they trail behind the leader. Deterministic
+    and editor-side; visible companion actors are a separate follow-on.
+    """
+
+    import math
+
+    session = getattr(window, "_map_studio_pie_session", None)
+    targets_fn = getattr(session, "party_follow_targets", None)
+    if session is None or not callable(targets_fn):
+        return {"probed": False, "reason": "PIE session or party_follow_targets unavailable."}
+
+    leader = tuple(float(v) for v in tuple(getattr(session.state, "position", (0.0, 0.0, 0.0)))[:3])
+    facing = float(getattr(session.state, "facing_radians", 0.0))
+    forward = (math.cos(facing), math.sin(facing))
+    targets = tuple(targets_fn(2))
+    rows: list[dict[str, Any]] = []
+    for index, target in enumerate(targets, start=1):
+        point = tuple(float(v) for v in tuple(target)[:3])
+        # Positive => in front of the leader; a trailing follower must be negative.
+        forward_component = (point[0] - leader[0]) * forward[0] + (point[1] - leader[1]) * forward[1]
+        rows.append(
+            {
+                "slot": index,
+                "position": [round(v, 4) for v in point],
+                "behind_leader": bool(forward_component < 0.0),
+                "forward_component": round(forward_component, 4),
+            }
+        )
+
+    # Confirm the creator-configurable party roster round-trips through the live
+    # controller and drives the follow-slot marker count end to end.
+    roster_roundtrip = None
+    controller = getattr(window, "controller", None)
+    update_ctx = getattr(controller, "update_map_studio_pie_context", None)
+    read_ctx = getattr(controller, "map_studio_pie_context_settings", None)
+    if callable(update_ctx) and callable(read_ctx):
+        try:
+            prior = tuple(read_ctx().get("party_roster") or ())
+            update_ctx(party_roster=["atton", "atton", "kreia"])  # dup + cap check
+            roster_roundtrip = list(read_ctx().get("party_roster") or ())
+            update_ctx(party_roster=list(prior))  # restore
+        except Exception as exc:
+            roster_roundtrip = {"error": str(exc)}
+
+    # Enable the party follow-slot markers and confirm they enter the overlay
+    # geometry the viewport renders each frame (visible party formation preview).
+    party_markers = 0
+    setter = getattr(session, "set_party_follower_count", None)
+    overlay_fn = getattr(session, "overlay_geometry", None)
+    if callable(setter) and callable(overlay_fn):
+        setter(2)
+        overlay = overlay_fn()
+        party_markers = sum(
+            1
+            for footprint in tuple(getattr(overlay, "footprints", ()) or ())
+            if str(getattr(footprint, "role", "") or "") == "pie_party"
+        )
+
+    return {
+        "probed": True,
+        "leader_position": [round(v, 4) for v in leader],
+        "follower_count": len(targets),
+        "all_behind_leader": bool(rows) and all(row["behind_leader"] for row in rows),
+        "followers": rows,
+        "roster_roundtrip": roster_roundtrip,
+        "party_overlay_markers": party_markers,
+        "party_markers_rendered": bool(party_markers == len(targets) and party_markers > 0),
+    }
+
+
+def _probe_map_studio_pie_weapon_damage(window: object) -> dict[str, Any]:
+    """Resolve real KOTOR weapon damage through the live baseitems.2da chain.
+
+    Calls the module's stock template resolver on installed weapon UTIs and
+    confirms it returns each weapon's baseitems.2da dice (Str for melee). This
+    exercises the UTI -> BaseItem -> baseitems.2da resolution in the running app.
+    Editor-side derivation, not a KOTOR combat proof.
+    """
+
+    controller = getattr(window, "controller", None)
+    resolver = getattr(controller, "_map_studio_stock_template_resolver", None)
+    resolve = getattr(resolver, "weapon_damage_dice", None)
+    if resolver is None or not callable(resolve):
+        return {"probed": False, "reason": "Stock template resolver / weapon_damage_dice unavailable."}
+
+    # Installed K2 weapons: g_w_lghtsbr01 == Lightsaber (baseitems row 8, 2d10).
+    strength_modifier = 2
+    rows: list[dict[str, Any]] = []
+    for resref in ("g_w_lghtsbr01", "w_melee_01", "g_w_dblsbr001"):
+        try:
+            dice = resolve(resref, strength_modifier)
+        except Exception as exc:
+            rows.append({"resref": resref, "error": str(exc)})
+            continue
+        if dice is None:
+            rows.append({"resref": resref, "resolved": False})
+            continue
+        crit_resolve = getattr(resolver, "weapon_critical", None)
+        crit = None
+        if callable(crit_resolve):
+            try:
+                crit = crit_resolve(resref)
+            except Exception:
+                crit = None
+        type_resolve = getattr(resolver, "weapon_damage_type", None)
+        dmg_type = None
+        if callable(type_resolve):
+            try:
+                dmg_type = type_resolve(resref)
+            except Exception:
+                dmg_type = None
+        feat_resolve = getattr(resolver, "weapon_feat_category", None)
+        feat_cat = None
+        if callable(feat_resolve):
+            try:
+                feat_cat = feat_resolve(resref)
+            except Exception:
+                feat_cat = None
+        rows.append(
+            {
+                "resref": resref,
+                "resolved": True,
+                "dice": f"{int(dice.count)}d{int(dice.sides)}+{int(dice.bonus)}",
+                "min": int(dice.count) + int(dice.bonus),
+                "max": int(dice.count) * int(dice.sides) + int(dice.bonus),
+                "crit_threat": int(crit[0]) if crit else None,
+                "crit_multiplier": int(crit[1]) if crit else None,
+                "damage_type": str(dmg_type) if dmg_type else None,
+                "feat_category": str(feat_cat) if feat_cat else None,
+            }
+        )
+    lightsaber = next((r for r in rows if r.get("resref") == "g_w_lghtsbr01"), {})
+
+    # Also resolve equipped armor AC through the same baseitems.2da chain.
+    armor_rows: list[dict[str, Any]] = []
+    armor_resolve = getattr(resolver, "armor_class_bonus", None)
+    if callable(armor_resolve):
+        for resref in ("a_light_01",):
+            try:
+                bonus = armor_resolve(resref)
+            except Exception as exc:
+                armor_rows.append({"resref": resref, "error": str(exc)})
+                continue
+            armor_rows.append(
+                {
+                    "resref": resref,
+                    "resolved": bonus is not None,
+                    "base_ac": int(bonus[0]) if bonus else None,
+                    "max_dex": int(bonus[1]) if bonus else None,
+                }
+            )
+    light_armor = next((r for r in armor_rows if r.get("resref") == "a_light_01"), {})
+
+    return {
+        "probed": True,
+        "strength_modifier": strength_modifier,
+        "weapons": rows,
+        # The lightsaber is 2d10 melee; +Str(2) => min 4, max 22.
+        "lightsaber_2d10_verified": bool(lightsaber.get("min") == 4 and lightsaber.get("max") == 22),
+        # Lightsaber crit threat 2 (19-20), x2 multiplier.
+        "lightsaber_crit_verified": bool(lightsaber.get("crit_threat") == 2 and lightsaber.get("crit_multiplier") == 2),
+        # Lightsaber deals Energy damage (DAMAGE_TYPE_BLASTER 4096).
+        "lightsaber_damage_type_verified": bool(lightsaber.get("damage_type") == "Energy"),
+        # Lightsaber classifies as the "lightsaber" Weapon Focus category.
+        "lightsaber_feat_category_verified": bool(lightsaber.get("feat_category") == "lightsaber"),
+        "armor": armor_rows,
+        # a_light_01 == Armor_Class_4: +4 base AC, +5 max Dex.
+        "light_armor_ac4_verified": bool(light_armor.get("base_ac") == 4 and light_armor.get("max_dex") == 5),
+    }
+
+
+def _probe_map_studio_pie_scripted_globals(window: object) -> dict[str, Any]:
+    """Execute the loaded module's OnEnter script through the live VM.
+
+    Runs the controller's scripting engine (NCS virtual machine first, bounded
+    literal reader as fallback) on the running module's OnEnter script and
+    reports the state writes plus the scripted-event timeline (AssignCommand /
+    DelayCommand closures, music, fades) — the same values folded into the live
+    PIE dialogue condition state at Play start. A campaign-seeded second run
+    proves conditional writes fire only when their gate state is present.
+    Editor-side; journal writes reported, not applied to campaign quest state.
+    """
+
+    controller = getattr(window, "controller", None)
+    reader = getattr(controller, "map_studio_pie_scripted_globals", None)
+    if controller is None or not callable(reader):
+        return {"probed": False, "reason": "Controller / scripted-globals reader unavailable."}
+    resource_manager = getattr(window, "resource_manager", None)
+    try:
+        scripted = reader(resource_manager)
+    except Exception as exc:
+        return {"probed": False, "reason": f"Scripted-globals read failed: {exc}"}
+
+    numbers = {str(k): int(v) for k, v in dict(scripted.get("global_numbers") or {}).items()}
+    booleans = {str(k): bool(v) for k, v in dict(scripted.get("global_booleans") or {}).items()}
+    journal = [[str(name), int(value)] for name, value in tuple(scripted.get("journal") or ())]
+    commands = [dict(command) for command in tuple(scripted.get("commands") or ())][:24]
+    # Campaign-conditional check: seed 207TEL-style gate state and confirm the
+    # VM only then fires the write chain (retail parity for gated OnEnter sets).
+    conditional_check: dict[str, Any] = {"ran": False}
+    try:
+        seeded = reader(resource_manager, sandbox_numbers={"207TEL_Benok": 1})
+        if str(seeded.get("engine") or "") == "vm":
+            conditional_check = {
+                "ran": True,
+                "seeded_benok_advances": int(dict(seeded.get("global_numbers") or {}).get("207TEL_Benok", 0)) == 2,
+            }
+    except Exception as exc:
+        conditional_check = {"ran": False, "error": str(exc)}
+    session_scripted = getattr(controller, "last_map_studio_pie_scripted_globals", None)
+    return {
+        "probed": True,
+        "engine": str(scripted.get("engine") or ""),
+        "instructions_executed": int(scripted.get("instructions_executed") or 0),
+        "script_resref": str(scripted.get("script_resref") or ""),
+        "source": str(scripted.get("source") or ""),
+        "effect_count": int(scripted.get("effect_count") or 0),
+        "global_numbers": numbers,
+        "global_booleans": booleans,
+        "journal": journal,
+        "commands": commands,
+        "command_count": len(tuple(scripted.get("commands") or ())),
+        "unknown_routines": dict(scripted.get("unknown_routines") or {}),
+        "conditional_check": conditional_check,
+        "wrote_any_global": bool(numbers or booleans),
+        # True once Play start executed the engine into the live condition state.
+        "applied_at_play_start": session_scripted is not None,
+    }
+
+
+def _probe_map_studio_pie_journal(window: object) -> dict[str, Any]:
+    """Confirm the live PIE session exposes a runtime quest log and accumulates it.
+
+    Reads the running session's journal state (seeded from the module OnEnter
+    script's AddJournalQuestEntry writes — often empty, e.g. 207TEL adds none)
+    and confirms the gameplay snapshot carries the `journal` field, then
+    exercises the app's *embedded* `MapStudioPIEJournalState` to prove the
+    monotonic accumulation logic is present in the rebuilt payload. Read-only:
+    it does not drive live conversations. Runtime preview log, never campaign
+    quest state.
+    """
+
+    session = getattr(window, "_map_studio_pie_session", None)
+    gameplay = getattr(session, "gameplay", None)
+    if session is None or gameplay is None:
+        return {"probed": False, "reason": "PIE session or gameplay runtime unavailable."}
+
+    controller = getattr(window, "controller", None)
+    seed: tuple[Any, ...] = ()
+    scripted = getattr(controller, "last_map_studio_pie_scripted_globals", None)
+    if isinstance(scripted, dict):
+        seed = tuple(scripted.get("journal") or ())
+
+    entries_getter = getattr(gameplay, "journal_entries", None)
+    live_entries = tuple(entries_getter() or ()) if callable(entries_getter) else ()
+    try:
+        snapshot_has_journal = hasattr(gameplay.snapshot(), "journal")
+    except Exception:
+        snapshot_has_journal = False
+
+    # Exercise the embedded accumulator to prove monotonic behavior in-app.
+    accumulator_ok = False
+    try:
+        from src.core.modules.map_studio_pie_journal import MapStudioPIEJournalState
+
+        probe_state = MapStudioPIEJournalState(seed=[("czerkamain", 5)])
+        advanced = probe_state.record("czerkamain", 20)          # advances
+        ignored = probe_state.record("czerkamain", 10)           # lower -> ignored
+        added = probe_state.record_value("faltquest:2")          # new plot
+        accumulator_ok = bool(advanced and not ignored and added and probe_state.as_dict() == {"czerkamain": 20, "faltquest": 2})
+    except Exception:
+        accumulator_ok = False
+
+    return {
+        "probed": True,
+        "seed_from_onenter": [[str(t), int(v)] for t, v in seed],
+        "live_journal": {str(q.quest_tag): int(q.entry) for q in live_entries},
+        "live_entry_count": len(live_entries),
+        "snapshot_exposes_journal": bool(snapshot_has_journal),
+        "monotonic_accumulator_verified": accumulator_ok,
+    }
+
+
+def _probe_map_studio_pie_dialogue_scripts(window: object) -> dict[str, Any]:
+    """Prove the embedded dialogue runtime executes a node action script live.
+
+    Confirms the running session wired a compiled-NCS loader for node scripts,
+    then exercises the app's *embedded* dialogue classes with a synthetic entry
+    whose action script does `SetGlobalNumber('czerka_state', 7)` — verifying the
+    quest-advance pattern folds into the shared condition state in the rebuilt
+    payload. Editor-side preview state, never campaign state.
+    """
+
+    session = getattr(window, "_map_studio_pie_session", None)
+    gameplay = getattr(session, "gameplay", None)
+    live_loader_wired = bool(getattr(gameplay, "_script_loader", None)) if gameplay is not None else False
+
+    try:
+        from contextlib import redirect_stdout
+        from io import StringIO
+
+        from pykotor.common.language import LocalizedString
+        from pykotor.common.misc import Game
+        from pykotor.resource.formats.ncs import (
+            NCS,
+            NCSInstruction,
+            NCSInstructionType as T,
+            bytes_ncs,
+        )
+        from pykotor.resource.generics.dlg import DLG, DLGEntry, DLGLink, bytes_dlg
+
+        from src.core.modules.map_studio_pie_dialogue import (
+            MapStudioPIEDialogueContextEvaluator,
+            MapStudioPIEDialogueSession,
+        )
+    except Exception as exc:
+        return {"probed": False, "reason": f"embedded dialogue/NCS classes unavailable: {exc}"}
+
+    try:
+        ncs = NCS()
+        ncs.instructions.append(NCSInstruction(T.CONSTS, ["czerka_state"]))
+        ncs.instructions.append(NCSInstruction(T.CONSTI, [7]))
+        ncs.instructions.append(NCSInstruction(T.ACTION, [581, 2]))  # SetGlobalNumber
+        ncs.instructions.append(NCSInstruction(T.CONSTS, ["207_probe_name"]))
+        ncs.instructions.append(NCSInstruction(T.CONSTS, ["Exile"]))
+        ncs.instructions.append(NCSInstruction(T.ACTION, [160, 2]))  # SetGlobalString
+        # SetLocalBoolean(GetObjectByTag("probe_npc"), 3, TRUE) — literal object.
+        ncs.instructions.append(NCSInstruction(T.CONSTI, [1]))       # nValue
+        ncs.instructions.append(NCSInstruction(T.CONSTI, [3]))       # nIndex
+        ncs.instructions.append(NCSInstruction(T.CONSTS, ["probe_npc"]))
+        ncs.instructions.append(NCSInstruction(T.CONSTI, [0]))       # nNth
+        ncs.instructions.append(NCSInstruction(T.ACTION, [200, 2]))  # GetObjectByTag
+        ncs.instructions.append(NCSInstruction(T.ACTION, [680, 3]))  # SetLocalBoolean
+        ncs.instructions.append(NCSInstruction(T.RETN))
+        script_bytes = bytes_ncs(ncs)
+
+        dlg = DLG()
+        entry = DLGEntry()
+        entry.list_index = 0
+        entry.text = LocalizedString.from_english("Czerka has business with you.")
+        entry.script1 = "a_probe_set"
+        dlg.starters.append(DLGLink(entry))
+        with redirect_stdout(StringIO()):
+            payload = bytes_dlg(dlg, Game.K2)
+
+        evaluator = MapStudioPIEDialogueContextEvaluator()
+        probe_session = MapStudioPIEDialogueSession(
+            payload,
+            game="K2",
+            resref="probe",
+            condition_evaluator=evaluator,
+            script_loader=lambda resref: script_bytes if resref == "a_probe_set" else None,
+            allow_unknown_starter_assumption=True,
+        )
+        snapshot = probe_session.start()
+        applied = evaluator._global_numbers.get("czerka_state")
+        applied_string = evaluator._global_strings.get("207_probe_name")
+        applied_local = evaluator._local_booleans.get(("probe_npc", 3))
+        executed_event = any(e.kind == "node_script_executed" for e in snapshot.events)
+        return {
+            "probed": True,
+            "live_script_loader_wired": live_loader_wired,
+            "applied_global": applied,
+            "applied_global_string": applied_string,
+            "applied_local_boolean": applied_local,
+            "node_script_executed_event": executed_event,
+            "execution_verified": bool(
+                applied == 7 and applied_string == "Exile" and applied_local is True and executed_event
+            ),
+        }
+    except Exception as exc:
+        return {"probed": False, "reason": f"embedded node-script execution failed: {exc}"}
+
+
+def _probe_map_studio_pie_interaction_scripts(window: object) -> dict[str, Any]:
+    """Prove the embedded runtime executes a placeable OnUsed script's globals.
+
+    Confirms the live session wired a compiled-NCS loader, then exercises the
+    app's *embedded* gameplay runtime: using a placeable whose OnUsed script does
+    `SetGlobalNumber('terminal_used', 1)` folds that write into the shared
+    condition state and emits `interaction_script_executed`. Editor-side preview
+    state only, never campaign state.
+    """
+
+    session = getattr(window, "_map_studio_pie_session", None)
+    gameplay = getattr(session, "gameplay", None)
+    live_loader_wired = bool(getattr(gameplay, "_script_loader", None)) if gameplay is not None else False
+
+    try:
+        from pykotor.resource.formats.ncs import (
+            NCS,
+            NCSInstruction,
+            NCSInstructionType as T,
+            bytes_ncs,
+        )
+
+        from src.core.modules.map_studio_pie_dialogue import MapStudioPIEDialogueContextEvaluator
+        from src.core.modules.map_studio_pie_entities import PIEEntity, PIEEntityRegistry
+        from src.core.modules.map_studio_pie_gameplay import MapStudioPIEGameplayRuntime
+    except Exception as exc:
+        return {"probed": False, "reason": f"embedded runtime/NCS classes unavailable: {exc}"}
+
+    try:
+        ncs = NCS()
+        ncs.instructions.append(NCSInstruction(T.CONSTS, ["terminal_used"]))
+        ncs.instructions.append(NCSInstruction(T.CONSTI, [1]))
+        ncs.instructions.append(NCSInstruction(T.ACTION, [581, 2]))  # SetGlobalNumber
+        ncs.instructions.append(NCSInstruction(T.RETN))
+        script_bytes = bytes_ncs(ncs)
+
+        player = PIEEntity(
+            entity_id="pie:player", kind="player", tag="player", display_name="Player",
+            template_resref="", position=(0.0, 0.0, 0.0), faction="player",
+            focusable=False, interactive=False,
+        )
+        terminal = PIEEntity(
+            entity_id="probe:placeable:term", kind="placeable", tag="term", display_name="Terminal",
+            template_resref="", position=(1.0, 0.0, 0.0), faction="neutral",
+            focusable=True, interactive=True, interaction="use", actions=("use",),
+            metadata={"on_used": "k_probe_used"},
+        )
+        evaluator = MapStudioPIEDialogueContextEvaluator()
+        runtime = MapStudioPIEGameplayRuntime(
+            PIEEntityRegistry((player, terminal)),
+            game="K2",
+            dialogue_condition_evaluator=evaluator,
+            script_loader=lambda resref: script_bytes if resref == "k_probe_used" else None,
+        )
+        runtime.advance(0.0, player_position=(0.0, 0.0, 0.0), camera_forward=(1.0, 0.0, 0.0))
+        runtime.drain_events()
+        result = runtime.activate_entity("probe:placeable:term", "use")
+        applied = evaluator._global_numbers.get("terminal_used")
+        executed_event = any(e.kind == "interaction_script_executed" for e in runtime.drain_events())
+        return {
+            "probed": True,
+            "live_script_loader_wired": live_loader_wired,
+            "deferred_scripts": list(getattr(result, "deferred_scripts", ()) or ()),
+            "applied_global": applied,
+            "interaction_script_executed_event": executed_event,
+            "execution_verified": bool(applied == 1 and executed_event),
+        }
+    except Exception as exc:
+        return {"probed": False, "reason": f"embedded interaction-script execution failed: {exc}"}
+
+
+def _probe_map_studio_pie_global_state(window: object) -> dict[str, Any]:
+    """Confirm the live PIE snapshot exposes the current global-variable state.
+
+    The three script-execution surfaces (OnEnter, dialogue nodes, interactions)
+    write into this shared state; surfacing it on the gameplay snapshot lets a
+    HUD/inspector show a creator which globals a module is exercising. Read-only.
+    For real 207TEL the OnEnter script seeds 12 globals, so the live state should
+    be non-empty. Editor-side preview state, never campaign state.
+    """
+
+    session = getattr(window, "_map_studio_pie_session", None)
+    gameplay = getattr(session, "gameplay", None)
+    if session is None or gameplay is None:
+        return {"probed": False, "reason": "PIE session or gameplay runtime unavailable."}
+
+    reader = getattr(gameplay, "global_state", None)
+    live_globals = tuple(reader() or ()) if callable(reader) else ()
+    try:
+        snapshot = gameplay.snapshot()
+        snapshot_has_globals = hasattr(snapshot, "globals")
+        snapshot_count = len(tuple(getattr(snapshot, "globals", ()) or ()))
+    except Exception:
+        snapshot_has_globals = False
+        snapshot_count = 0
+
+    numbers = {g.name: int(g.value) for g in live_globals if g.kind == "number"}
+    booleans = {g.name: bool(g.value) for g in live_globals if g.kind == "boolean"}
+    return {
+        "probed": True,
+        "snapshot_exposes_globals": bool(snapshot_has_globals),
+        "global_count": len(live_globals),
+        "snapshot_global_count": snapshot_count,
+        "number_count": len(numbers),
+        "boolean_count": len(booleans),
+        # A few real 207TEL OnEnter globals, if present, to make the readout concrete.
+        "sample": {k: numbers[k] for k in sorted(numbers)[:6]},
+    }
+
+
+def _probe_map_studio_pie_state_inspector(window: object) -> dict[str, Any]:
+    """Confirm the live PIE HUD renders the quest-log/global-state inspector.
+
+    Refreshes the running gameplay HUD with the live runtime snapshot and reads
+    back the inspector QLabel — a real, visible widget (not a pixel guess). For
+    real 207TEL the OnEnter globals populate the Globals section. Editor-side
+    preview state, never campaign state.
+    """
+
+    session = getattr(window, "_map_studio_pie_session", None)
+    gameplay = getattr(session, "gameplay", None)
+    panel = getattr(window, "viewport_panel", None)
+    hud = getattr(panel, "_pie_gameplay_hud", None)
+    label = getattr(hud, "state_inspector_label", None)
+    if gameplay is None or hud is None or label is None:
+        return {"probed": False, "reason": "PIE gameplay HUD or state inspector label unavailable."}
+
+    try:
+        snapshot = gameplay.snapshot()
+        hud.set_state(snapshot)  # refresh the HUD with the live runtime state
+        text = str(label.text() or "")
+        frame = getattr(hud, "state_inspector_frame", None)
+        frame_visible = bool(frame.isVisible()) if frame is not None else False
+    except Exception as exc:
+        return {"probed": False, "reason": f"state inspector refresh failed: {exc}"}
+
+    return {
+        "probed": True,
+        "nonempty": bool(text.strip()),
+        "has_globals_section": "Globals:" in text,
+        "has_journal_section": "Journal:" in text,
+        "frame_visible": frame_visible,
+        "inspector_text": text[:600],
+    }
+
+
+def _probe_map_studio_pie_area_music(window: object) -> dict[str, Any]:
+    """Resolve the loaded module's script-driven ambient music through the app.
+
+    KOTOR area music is not a static ARE field — the OnEnter script calls
+    `MusicBackgroundChangeDay`/`…Night` with a literal `ambientmusic.2da` row.
+    Runs the controller's bounded reader on the running module and reports the
+    day/night track + resolved music resref. For real 207TEL the OnEnter selects
+    day/night track 18. Reported, not yet played; editor-side only.
+    """
+
+    controller = getattr(window, "controller", None)
+    reader = getattr(controller, "map_studio_pie_area_music", None)
+    if controller is None or not callable(reader):
+        return {"probed": False, "reason": "Controller / area-music reader unavailable."}
+    resource_manager = getattr(window, "resource_manager", None)
+    try:
+        music = dict(reader(resource_manager) or {})
+    except Exception as exc:
+        return {"probed": False, "reason": f"area-music read failed: {exc}"}
+
+    day_track = music.get("day_track")
+    night_track = music.get("night_track")
+    battle_track = music.get("battle_track")
+    return {
+        "probed": True,
+        "script_resref": str(music.get("script_resref") or ""),
+        "day_track": day_track,
+        "night_track": night_track,
+        "battle_track": battle_track,
+        "day_resref": str(music.get("day_resref") or ""),
+        "night_resref": str(music.get("night_resref") or ""),
+        "battle_resref": str(music.get("battle_resref") or ""),
+        "has_area_music": day_track is not None or night_track is not None or battle_track is not None,
+    }
+
+
+def _probe_map_studio_pie_transition_validation(window: object) -> dict[str, Any]:
+    """Validate the loaded module's inter-module transitions through the app.
+
+    Doors/triggers with `LinkedToModule` point at another module; a link to an
+    uninstalled module would black-screen the retail game. Runs the controller's
+    validator on the running module and reports each destination's existence so a
+    creator catches broken links before launch. For real 207TEL the Cantina doors
+    link to `202tel`. Reported only; editor-side.
+    """
+
+    controller = getattr(window, "controller", None)
+    validator = getattr(controller, "map_studio_pie_transition_validation", None)
+    if controller is None or not callable(validator):
+        return {"probed": False, "reason": "Controller / transition validator unavailable."}
+    resource_manager = getattr(window, "resource_manager", None)
+    try:
+        report = dict(validator(resource_manager) or {})
+    except Exception as exc:
+        return {"probed": False, "reason": f"transition validation failed: {exc}"}
+
+    rows = [dict(r) for r in tuple(report.get("transitions") or ())]
+    return {
+        "probed": True,
+        "checked": int(report.get("checked") or 0),
+        "missing": int(report.get("missing") or 0),
+        "unverified": int(report.get("unverified") or 0),
+        "available_module_count": int(report.get("available_module_count") or 0),
+        "transitions": rows[:12],
+    }
+
+
+def _probe_map_studio_pie_party_combat(window: object) -> dict[str, Any]:
+    """Prove the embedded runtime lets a party companion fight as an ally.
+
+    Exercises the app's *embedded* gameplay runtime with a hostile creature and a
+    resolved party companion: opening combat auto-engages the companion as an
+    assisting ally, and it lands basic attacks on the hostile. Deterministic and
+    editor-side; RTwP preview, not a KOTOR combat proof.
+    """
+
+    try:
+        from src.core.modules.map_studio_pie_entities import PIEEntity, PIEEntityRegistry
+        from src.core.modules.map_studio_pie_gameplay import MapStudioPIEGameplayRuntime
+    except Exception as exc:
+        return {"probed": False, "reason": f"embedded runtime classes unavailable: {exc}"}
+
+    try:
+        player = PIEEntity(
+            entity_id="pie:player", kind="player", tag="player", display_name="Player",
+            template_resref="", position=(0.0, 0.0, 0.0), faction="player",
+            focusable=False, interactive=False,
+        )
+        hostile = PIEEntity(
+            entity_id="probe:creature:guard", kind="creature", tag="guard", display_name="Guard",
+            template_resref="", position=(1.0, 0.0, 0.0), faction="hostile",
+            focusable=True, interactive=True, interaction="combat", actions=("attack",),
+            current_hp=30, max_hp=30, armor_class=10, attack_bonus=1, damage_min=1, damage_max=3,
+        )
+        party = [{
+            "entity_id": "pie:party:0", "display_name": "Companion",
+            "max_hp": 40, "current_hp": 40, "armor_class": 16,
+            "attack_bonus": 6, "damage_min": 3, "damage_max": 12,
+        }]
+        runtime = MapStudioPIEGameplayRuntime(
+            PIEEntityRegistry((player, hostile)), game="K2", combat_seed=7, party_combatants=party
+        )
+        runtime.advance(0.0, player_position=(0.0, 0.0, 0.0), camera_forward=(1.0, 0.0, 0.0))
+        runtime.activate_focused()
+        combat = runtime.snapshot().combat
+        companion = combat.combatant("pie:party:0") if combat is not None else None
+        engaged = any(
+            e.kind == "combat_ally_engaged" and e.entity_id == "pie:party:0"
+            for e in runtime.drain_events()
+        )
+        runtime.advance(6.0, player_position=(0.0, 0.0, 0.0), camera_forward=(1.0, 0.0, 0.0))
+        attacked = any(
+            e.kind in {"combat_attack_hit", "combat_attack_missed"} and e.entity_id == "pie:party:0"
+            for e in runtime.drain_events()
+        )
+        # Run the encounter to resolution and read the victory/defeat outcome.
+        runtime.advance(60.0, player_position=(0.0, 0.0, 0.0), camera_forward=(1.0, 0.0, 0.0))
+        final = runtime.snapshot().combat
+        outcome = str(getattr(final, "outcome", "") or "") if final is not None else ""
+        return {
+            "probed": True,
+            "companion_is_combatant": companion is not None,
+            "companion_relationship": str(getattr(companion, "relationship_to_player", "")) if companion is not None else "",
+            "companion_engaged": bool(engaged),
+            "companion_attacked": bool(attacked),
+            "combat_outcome": outcome,
+            "participation_verified": bool(companion is not None and engaged and attacked),
+        }
+    except Exception as exc:
+        return {"probed": False, "reason": f"embedded party-combat run failed: {exc}"}
+
+
+def _probe_map_studio_pie_player_build(window: object) -> dict[str, Any]:
+    """Resolve a real module creature as the PIE player's combat build.
+
+    The PC is a custom campaign build, so PIE uses an editor proxy by default;
+    when a creator picks a UTC the same creature stat chain resolves it into real
+    combat stats for the player. Runs the controller's resolver on a live module
+    creature to confirm the resolution works in the rebuilt app. Editor-side.
+    """
+
+    controller = getattr(window, "controller", None)
+    resolver = getattr(controller, "_resolve_player_combat_stats", None)
+    ctx_getter = getattr(controller, "_map_studio_pie_resource_context", None)
+    session = getattr(window, "_map_studio_pie_session", None)
+    gameplay = getattr(session, "gameplay", None)
+    if controller is None or not callable(resolver) or not callable(ctx_getter) or gameplay is None:
+        return {"probed": False, "reason": "player-build resolver or live session unavailable."}
+
+    resref = ""
+    for entity in tuple(getattr(getattr(gameplay, "registry", None), "entities", ()) or ()):
+        if str(getattr(entity, "kind", "")) == "creature" and str(getattr(entity, "template_resref", "") or ""):
+            resref = str(entity.template_resref)
+            break
+    if not resref:
+        return {"probed": True, "resolved": False, "reason": "the loaded module has no creature template to sample."}
+
+    try:
+        stats = resolver(resref, ctx_getter())
+    except Exception as exc:
+        return {"probed": False, "reason": f"player-build resolve failed: {exc}"}
+    if stats is None:
+        return {"probed": True, "resolved": False, "template_resref": resref}
+    max_hp = int(getattr(stats, "max_hp", 0) or 0)
+    return {
+        "probed": True,
+        "resolved": True,
+        "template_resref": resref,
+        "max_hp": max_hp,
+        "armor_class": int(getattr(stats, "armor_class", 0) or 0),
+        "attack_bonus": int(getattr(stats, "attack_bonus", 0) or 0),
+        # The proxy is a fixed 24 HP / AC 14; a resolved build replaces it.
+        "replaces_proxy": bool(max_hp > 0),
+    }
+
+
+def _probe_map_studio_pie_side_npc_dialogue(window: object) -> dict[str, Any]:
+    """Diagnose why side-NPC one-liner conversations fail in PIE.
+
+    For each creature in the loaded module, reports its conversation, whether the
+    live dialogue loader resolves it, and whether the gameplay-path session
+    (allow_unknown_starter_assumption=False) blocks. Pinpoints resolution vs
+    talk-action vs starter-condition-block. Editor-side diagnostic.
+    """
+
+    session = getattr(window, "_map_studio_pie_session", None)
+    gameplay = getattr(session, "gameplay", None)
+    controller = getattr(window, "controller", None)
+    if gameplay is None or controller is None:
+        return {"probed": False, "reason": "PIE session or controller unavailable."}
+    context_getter = getattr(controller, "_map_studio_pie_resource_context", None)
+    context = context_getter() if callable(context_getter) else None
+    loader = getattr(context, "dialogue_loader", None)
+    if not callable(loader):
+        return {"probed": False, "reason": "dialogue loader unavailable."}
+
+    try:
+        from src.core.modules.map_studio_pie_dialogue import MapStudioPIEDialogueSession
+    except Exception as exc:
+        return {"probed": False, "reason": f"dialogue class unavailable: {exc}"}
+
+    rows: list[dict[str, Any]] = []
+    seen_conv: set[str] = set()
+    for entity in tuple(getattr(getattr(gameplay, "registry", None), "entities", ()) or ()):
+        if str(getattr(entity, "kind", "")) != "creature":
+            continue
+        conv = str(getattr(entity, "conversation", "") or "").strip().lower()
+        actions = tuple(getattr(entity, "actions", ()) or ())
+        has_talk = "talk" in actions
+        row: dict[str, Any] = {
+            "tag": str(getattr(entity, "tag", "") or ""),
+            "conversation": conv,
+            "has_talk_action": has_talk,
+            "resolved": False,
+            "blocked": None,
+        }
+        if conv and conv not in seen_conv:
+            seen_conv.add(conv)
+            try:
+                payload = loader(conv)
+            except Exception:
+                payload = None
+            row["resolved"] = bool(payload)
+            if payload:
+                game = str(getattr(context, "game", "K2"))
+                tlk = getattr(context, "tlk_lookup", None)
+                try:
+                    strict = MapStudioPIEDialogueSession(
+                        bytes(payload), game=game, resref=conv, tlk_lookup=tlk,
+                        allow_unknown_starter_assumption=False,
+                    ).start()
+                    row["blocked"] = bool(getattr(strict, "blocked", False))
+                    # The fix: a strict-blocked one-liner is rescued by the
+                    # preview-assumption fallback (what _start_dialogue now does).
+                    if row["blocked"]:
+                        assumed = MapStudioPIEDialogueSession(
+                            bytes(payload), game=game, resref=conv, tlk_lookup=tlk,
+                            allow_unknown_starter_assumption=True,
+                        ).start()
+                        row["rescued_by_assumption"] = not bool(getattr(assumed, "blocked", False))
+                except Exception as exc:
+                    row["blocked"] = f"error:{exc}"
+            rows.append(row)
+
+    resolved = sum(1 for r in rows if r["resolved"])
+    blocked = sum(1 for r in rows if r["blocked"] is True)
+    rescued = sum(1 for r in rows if r.get("rescued_by_assumption") is True)
+    return {
+        "probed": True,
+        "distinct_conversations": len(rows),
+        "resolved_count": resolved,
+        "unresolved_count": len(rows) - resolved,
+        "strict_blocked_count": blocked,
+        "rescued_by_assumption_count": rescued,
+        # After the fix, every strict-blocked one-liner shows via the assumption path.
+        "all_blocked_now_shown": bool(blocked > 0 and rescued == blocked),
+        "rows": rows[:24],
+    }
+
+
+def _probe_map_studio_pie_doors(window: object) -> dict[str, Any]:
+    """Report the loaded module's PIE door plan (artifact/culling diagnosis)."""
+
+    getter = getattr(window, "map_studio_pie_door_diagnostics", None)
+    if not callable(getter):
+        return {"probed": False, "reason": "door diagnostics unavailable."}
+    try:
+        report = dict(getter() or {})
+    except Exception as exc:
+        return {"probed": False, "reason": f"door diagnostics failed: {exc}"}
+    report["probed"] = True
+    return report
 
 
 def _capture_map_studio_canvas(canvas: object, target: Path) -> tuple[dict[str, Any], bytes]:
@@ -250,6 +1506,177 @@ def _map_studio_capture_content_metrics(capture: dict[str, Any], rgba: bytes) ->
         "luma_dynamic_range": round(dynamic_range, 4),
         "dominant_quantized_rgb_fraction": round(dominant_fraction, 6),
         "content_present": bool(dynamic_range >= 20.0 and math.sqrt(variance) >= 4.0 and dominant_fraction < 0.97),
+    }
+
+
+def _map_studio_renderer_performance_snapshot(viewport: object) -> dict[str, Any]:
+    """Return one bounded proof sample from the viewport and GPU renderer."""
+
+    renderer_perf = dict(getattr(getattr(viewport, "_gpu_renderer", None), "perf", {}) or {})
+    return {
+        "viewport_frame_ms": round(float(getattr(viewport, "_last_render_ms", 0.0) or 0.0), 3),
+        "gpu_frame_ms": round(float(renderer_perf.get("last_frame_ms", 0.0) or 0.0), 3),
+        "gpu_upload_ms": round(float(renderer_perf.get("gpu_upload_ms", 0.0) or 0.0), 3),
+        "gpu_draw_ms": round(float(renderer_perf.get("draw_ms", 0.0) or 0.0), 3),
+        "gpu_readback_ms": round(float(renderer_perf.get("readback_ms", 0.0) or 0.0), 3),
+        "draw_calls": int(renderer_perf.get("draw_calls", 0) or 0),
+        "triangles": int(renderer_perf.get("tri_count", 0) or 0),
+        "visible_meshes": int(renderer_perf.get("visible_meshes", 0) or 0),
+        "culled_meshes": int(renderer_perf.get("culled_meshes", 0) or 0),
+    }
+
+
+def _drive_map_studio_renderer_readiness_paint(canvas: object, viewport: object) -> dict[str, Any]:
+    """Request one real viewport frame and queue native-surface paint work.
+
+    A native child surface does not necessarily paint merely because the IPC
+    callback is processing events.  Readiness therefore requests a renderer
+    frame first, queues paint on both the host and its current surface, and
+    lets the caller process the queued events before reading renderer counters.
+    This deliberately performs no QPixmap grab.
+    """
+
+    evidence: dict[str, Any] = {
+        "render_request_available": False,
+        "render_request_succeeded": False,
+        "canvas_update_requested": False,
+        "surface_update_requested": False,
+        "errors": [],
+    }
+    request_render = getattr(viewport, "_request_render", None)
+    if callable(request_render):
+        evidence["render_request_available"] = True
+        try:
+            request_render(
+                fast=True,
+                reason="PIE visual proof renderer readiness",
+                scene=True,
+            )
+            evidence["render_request_succeeded"] = True
+        except Exception as exc:
+            evidence["errors"].append(f"render request: {exc}")
+
+    update_canvas = getattr(canvas, "update", None)
+    if callable(update_canvas):
+        try:
+            update_canvas()
+            evidence["canvas_update_requested"] = True
+        except Exception as exc:
+            evidence["errors"].append(f"canvas update: {exc}")
+
+    current_surface = getattr(canvas, "current_surface", None)
+    surface = None
+    if callable(current_surface):
+        try:
+            surface = current_surface()
+        except Exception as exc:
+            evidence["errors"].append(f"current surface: {exc}")
+    update_surface = getattr(surface, "update", None)
+    if callable(update_surface):
+        try:
+            update_surface()
+            evidence["surface_update_requested"] = True
+        except Exception as exc:
+            evidence["errors"].append(f"surface update: {exc}")
+    return evidence
+
+
+def _wait_for_map_studio_renderer_readiness(
+    canvas: object,
+    viewport: object,
+    capture_dir: Path,
+    *,
+    max_attempts: int = _MAP_STUDIO_PIE_RENDERER_READINESS_MAX_ATTEMPTS,
+    interval_ms: int = _MAP_STUDIO_PIE_RENDERER_READINESS_INTERVAL_MS,
+    ready_frame: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Audit renderer readiness before starting the continuous proof sequence.
+
+    Every poll actively requests and drives paint before renderer counters are
+    sampled. Zero-draw polls are retained as evidence but deliberately avoid a
+    native-surface grab. Once the renderer reports real work, one bounded
+    capture verifies that the central viewport is varied rather than a flat
+    native-surface placeholder. The successful capture can seed the requested
+    frame sequence so readiness does not add an unnecessary native grab.
+    """
+
+    bounded_attempts = max(1, int(max_attempts))
+    bounded_interval_ms = max(0, int(interval_ms))
+    attempts: list[dict[str, Any]] = []
+    for index in range(bounded_attempts):
+        paint_drive = _drive_map_studio_renderer_readiness_paint(canvas, viewport)
+        _settle_map_studio_visual_proof(bounded_interval_ms)
+        performance = _map_studio_renderer_performance_snapshot(viewport)
+        attempt: dict[str, Any] = {
+            "attempt": index + 1,
+            "waited_ms": (index + 1) * bounded_interval_ms,
+            "paint_drive": paint_drive,
+            "performance": performance,
+            "capture_attempted": False,
+            "ready": False,
+        }
+        draw_calls = int(performance.get("draw_calls", 0) or 0)
+        if draw_calls <= 0:
+            attempt["content"] = {
+                "sample_count": 0,
+                "content_present": False,
+                "classification": "zero_draw_calls",
+            }
+        else:
+            attempt["capture_attempted"] = True
+            try:
+                attempt_target = capture_dir / f"pie_renderer_readiness_{index:02d}.png"
+                capture, rgba = _capture_map_studio_canvas(
+                    canvas,
+                    attempt_target,
+                )
+                content = _map_studio_capture_content_metrics(capture, rgba)
+                attempt["capture"] = capture
+                attempt["content"] = content
+                attempt["ready"] = bool(content.get("content_present"))
+                if attempt["ready"] and ready_frame is not None:
+                    frame_target = capture_dir / "pie_frame_00.png"
+                    shutil.copyfile(attempt_target, frame_target)
+                    frame_capture = dict(capture)
+                    frame_capture["path"] = str(frame_target)
+                    frame_capture["saved"] = frame_target.is_file() and frame_target.stat().st_size > 0
+                    ready_frame["capture"] = frame_capture
+                    ready_frame["rgba"] = rgba
+            except Exception as exc:
+                attempt["capture_error"] = str(exc)
+                attempt["content"] = {
+                    "sample_count": 0,
+                    "content_present": False,
+                    "classification": "capture_error",
+                }
+        attempts.append(attempt)
+        # Native QWidget grabs are kept to one readiness sample.  A varied
+        # frame is reused as requested frame zero; an unvaried/error sample is
+        # honest blocking evidence and must not start a grab loop before the
+        # still-requested twelve-frame sequence.
+        if draw_calls > 0:
+            break
+
+    ready_attempt = next((row for row in attempts if bool(row.get("ready"))), None)
+    return {
+        "ready": ready_attempt is not None,
+        "max_attempts": bounded_attempts,
+        "interval_ms": bounded_interval_ms,
+        "maximum_wait_ms": bounded_attempts * bounded_interval_ms,
+        "attempt_count": len(attempts),
+        "blank_attempt_count": sum(not bool(row.get("ready")) for row in attempts),
+        "zero_draw_call_attempt_count": sum(
+            int(row.get("performance", {}).get("draw_calls", 0) or 0) <= 0 for row in attempts
+        ),
+        "varied_content_missing_attempt_count": sum(
+            int(row.get("performance", {}).get("draw_calls", 0) or 0) > 0
+            and not bool(row.get("content", {}).get("content_present"))
+            for row in attempts
+        ),
+        "capture_error_count": sum(bool(row.get("capture_error")) for row in attempts),
+        "ready_attempt": int(ready_attempt["attempt"]) if ready_attempt is not None else None,
+        "ready_after_wait_ms": int(ready_attempt["waited_ms"]) if ready_attempt is not None else None,
+        "attempts": attempts,
     }
 
 
@@ -1164,9 +2591,9 @@ class ResourcePanelsMixin:
     def _map_studio_pie_visual_proof_from_ipc(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Run a bounded, focus-safe PIE movement and retained-frame proof.
 
-        This is viewport evidence only. It intentionally does not emulate or
-        claim KOTOR's NWScript VM, action queues, dialogue runtime, or engine
-        module acceptance.
+        This is viewport evidence only. It exercises GhostStudio's bounded PIE
+        dialogue and combat previews without claiming KOTOR's NWScript VM,
+        exact action/AI runtime, or engine module acceptance.
         """
 
         foreground_before = _foreground_window_handle()
@@ -1182,7 +2609,8 @@ class ResourcePanelsMixin:
             "limitations": [
                 "This proves GhostStudio PIE viewport behavior, not KOTOR engine acceptance.",
                 "The DEFAULT-style camera is a clean-room approximation, not an exact recovered KOTOR camera runtime.",
-                "PIE does not yet execute arbitrary NWScript, dialogue, combat AI, or full creature action queues.",
+                "PIE previews DLG conversations and deterministic round combat, but does not yet execute arbitrary NWScript, retail combat AI, feats/powers/equipment math, or the exact Odyssey action queue.",
+                "Dialogue cameras and line playback are resource-driven previews; retail timing, lipsync, animated camera tracks, and script side effects remain outside this proof.",
             ],
         }
         blockers: list[str] = result["blockers"]
@@ -1224,7 +2652,10 @@ class ResourcePanelsMixin:
         result["project_guard"] = {"refused_existing_project": False, "used_empty_singleton": existing is not None}
 
         try:
-            window.controller.open_project(kmap_path)
+            window.controller.open_project(
+                kmap_path,
+                resource_manager=getattr(window, "resource_manager", None),
+            )
             reset_paint = getattr(window, "_reset_map_studio_texture_paint_session", None)
             if callable(reset_paint):
                 reset_paint()
@@ -1232,6 +2663,15 @@ class ResourcePanelsMixin:
         except Exception as exc:
             blockers.append(f"KMAP could not be opened for PIE proof: {exc}")
             return _finish()
+
+        # Capture the compact PIE conversation-context tab while the panel is
+        # still enabled (context controls disable during active PIE). This is a
+        # visible, resource-driven artifact: the catalog and the resolved
+        # opening line come from the loaded module's real UTC/UTP/DLG/TLK.
+        try:
+            result["dialogue_context"] = _capture_map_studio_pie_dialogue_context(window, capture_dir)
+        except Exception as exc:
+            result["dialogue_context"] = {"captured": False, "error": str(exc)}
 
         panel = getattr(window, "viewport_panel", None)
         viewport = getattr(panel, "viewport", None)
@@ -1266,7 +2706,7 @@ class ResourcePanelsMixin:
         }
 
         try:
-            window._start_map_studio_pie()
+            window._start_map_studio_pie(focus_viewport=False)
         except Exception as exc:
             blockers.append(f"PIE could not start: {exc}")
             return _finish()
@@ -1276,11 +2716,156 @@ class ResourcePanelsMixin:
             blockers.append("PIE start returned without a live simulation session.")
             return _finish()
 
+        # Drive the live window dialogue-camera method with real registry
+        # entities and confirm it reframes the actual viewport camera through the
+        # headless solver. Read the camera state synchronously (no event pump
+        # between) so the running PIE tick cannot interleave. Editor-side only.
+        try:
+            result["dialogue_camera_probe"] = _probe_map_studio_pie_dialogue_camera(window)
+        except Exception as exc:
+            result["dialogue_camera_probe"] = {"probed": False, "error": str(exc)}
+
+        # Drive the live gameplay runtime into each authored trigger volume and
+        # confirm it emits the enter/transition event from real GIT geometry.
+        try:
+            result["trigger_probe"] = _probe_map_studio_pie_triggers(window)
+        except Exception as exc:
+            result["trigger_probe"] = {"probed": False, "error": str(exc)}
+
+        # Compute the live party follow formation against the real walkmesh and
+        # confirm followers trail behind the leader on walkable ground.
+        try:
+            result["party_probe"] = _probe_map_studio_pie_party(window)
+        except Exception as exc:
+            result["party_probe"] = {"probed": False, "error": str(exc)}
+
+        # Spawn a companion actor from a real creature resref and confirm it
+        # attaches to the live scene behind the player (companion model render).
+        try:
+            result["companion_probe"] = _probe_map_studio_pie_companion_actors(window)
+        except Exception as exc:
+            result["companion_probe"] = {"probed": False, "error": str(exc)}
+
+        # Resolve real weapon damage through the live baseitems.2da chain.
+        try:
+            result["weapon_damage_probe"] = _probe_map_studio_pie_weapon_damage(window)
+        except Exception as exc:
+            result["weapon_damage_probe"] = {"probed": False, "error": str(exc)}
+
+        # Execute the loaded module's OnEnter script global writes (bounded NCS
+        # reader) and confirm they are folded into the live dialogue condition
+        # state at Play start — scripting-state loop, editor-side only.
+        try:
+            result["scripted_globals_probe"] = _probe_map_studio_pie_scripted_globals(window)
+        except Exception as exc:
+            result["scripted_globals_probe"] = {"probed": False, "error": str(exc)}
+
+        # Confirm the live session exposes a runtime quest log seeded from OnEnter
+        # and that the embedded monotonic accumulator is present — journal state.
+        try:
+            result["journal_probe"] = _probe_map_studio_pie_journal(window)
+        except Exception as exc:
+            result["journal_probe"] = {"probed": False, "error": str(exc)}
+
+        # Prove the embedded dialogue runtime executes a node action script's
+        # literal global writes into the shared condition state (quest advance).
+        try:
+            result["dialogue_script_probe"] = _probe_map_studio_pie_dialogue_scripts(window)
+        except Exception as exc:
+            result["dialogue_script_probe"] = {"probed": False, "error": str(exc)}
+
+        # Prove the embedded runtime executes a placeable OnUsed script's literal
+        # global writes into the shared condition state (interaction scripting).
+        try:
+            result["interaction_script_probe"] = _probe_map_studio_pie_interaction_scripts(window)
+        except Exception as exc:
+            result["interaction_script_probe"] = {"probed": False, "error": str(exc)}
+
+        # Confirm the live snapshot exposes the shared global-variable state that
+        # all three script surfaces write (readout for a HUD/state inspector).
+        try:
+            result["global_state_probe"] = _probe_map_studio_pie_global_state(window)
+        except Exception as exc:
+            result["global_state_probe"] = {"probed": False, "error": str(exc)}
+
+        # Confirm the live PIE HUD renders the quest-log/global-state inspector
+        # widget from the runtime snapshot (visible state readout).
+        try:
+            result["state_inspector_probe"] = _probe_map_studio_pie_state_inspector(window)
+        except Exception as exc:
+            result["state_inspector_probe"] = {"probed": False, "error": str(exc)}
+
+        # Resolve the loaded module's script-driven ambient music (area audio).
+        try:
+            result["area_music_probe"] = _probe_map_studio_pie_area_music(window)
+        except Exception as exc:
+            result["area_music_probe"] = {"probed": False, "error": str(exc)}
+
+        # Validate inter-module transitions against installed modules.
+        try:
+            result["transition_validation_probe"] = _probe_map_studio_pie_transition_validation(window)
+        except Exception as exc:
+            result["transition_validation_probe"] = {"probed": False, "error": str(exc)}
+
+        # Prove a party companion fights as an assisting ally (party + combat).
+        try:
+            result["party_combat_probe"] = _probe_map_studio_pie_party_combat(window)
+        except Exception as exc:
+            result["party_combat_probe"] = {"probed": False, "error": str(exc)}
+
+        # Diagnose side-NPC one-liner dialogue resolution/blocking.
+        try:
+            result["side_npc_dialogue_probe"] = _probe_map_studio_pie_side_npc_dialogue(window)
+        except Exception as exc:
+            result["side_npc_dialogue_probe"] = {"probed": False, "error": str(exc)}
+
+        # Diagnose PIE door plan (models/positions/culling) for the loaded module.
+        try:
+            result["door_diagnostics_probe"] = _probe_map_studio_pie_doors(window)
+        except Exception as exc:
+            result["door_diagnostics_probe"] = {"probed": False, "error": str(exc)}
+
+        # Resolve a real module creature as the player's combat build.
+        try:
+            result["player_build_probe"] = _probe_map_studio_pie_player_build(window)
+        except Exception as exc:
+            result["player_build_probe"] = {"probed": False, "error": str(exc)}
+
         settle_ms = int(payload.get("settle_ms", 1500) or 0)
         movement_ms = int(payload.get("movement_ms", 1200) or 1200)
         sample_count = int(payload.get("sample_count", 12) or 12)
         capture_dir.mkdir(parents=True, exist_ok=True)
         _settle_map_studio_visual_proof(settle_ms)
+
+        readiness_frame: dict[str, Any] = {}
+        renderer_readiness = _wait_for_map_studio_renderer_readiness(
+            canvas,
+            viewport,
+            capture_dir,
+            ready_frame=readiness_frame,
+        )
+        result["renderer_readiness"] = renderer_readiness
+        if not bool(renderer_readiness["ready"]):
+            result["captures"] = {
+                "directory": str(capture_dir),
+                "requested": sample_count,
+                "completed": 0,
+                "content_frames": 0,
+                "continuous_content": False,
+                "sequence_started": False,
+                "frames": [],
+                "motion_frame": None,
+            }
+            blockers.append(
+                "PIE renderer readiness was not reached after "
+                f"{renderer_readiness['attempt_count']} of {renderer_readiness['max_attempts']} bounded attempts "
+                f"({renderer_readiness['maximum_wait_ms']} ms maximum wait; "
+                f"{renderer_readiness['zero_draw_call_attempt_count']} zero-draw, "
+                f"{renderer_readiness['varied_content_missing_attempt_count']} unvaried-content, "
+                f"{renderer_readiness['capture_error_count']} capture-error). "
+                "The requested continuous sample sequence was not started."
+            )
+            return _finish()
 
         initial_position = tuple(float(value) for value in tuple(session.state.position)[:3])
         camera = getattr(viewport, "camera", None)
@@ -1300,37 +2885,30 @@ class ResourcePanelsMixin:
         last_capture: tuple[dict[str, Any], bytes] | None = None
         interval_ms = max(16.0, min(100.0, movement_ms / max(1, sample_count - 1)))
         for index in range(sample_count):
-            if index:
-                _settle_map_studio_visual_proof(max(1, int(round(interval_ms))))
-            target = capture_dir / f"pie_frame_{index:02d}.png"
-            try:
-                capture, rgba = _capture_map_studio_canvas(canvas, target)
-            except Exception as exc:
-                blockers.append(f"PIE frame {index} capture failed: {exc}")
-                break
+            if index == 0 and readiness_frame:
+                capture = dict(readiness_frame["capture"])
+                rgba = bytes(readiness_frame["rgba"])
+            else:
+                if index:
+                    _settle_map_studio_visual_proof(max(1, int(round(interval_ms))))
+                target = capture_dir / f"pie_frame_{index:02d}.png"
+                try:
+                    capture, rgba = _capture_map_studio_canvas(canvas, target)
+                except Exception as exc:
+                    blockers.append(f"PIE frame {index} capture failed: {exc}")
+                    break
             capture["content"] = _map_studio_capture_content_metrics(capture, rgba)
             capture["simulation_time"] = round(float(getattr(session.state, "simulation_time", 0.0)), 6)
             capture["player_position"] = [
                 round(float(value), 6) for value in tuple(getattr(session.state, "position", (0.0, 0.0, 0.0)))[:3]
             ]
             capture["animation"] = str(getattr(window, "_map_studio_pie_animation_name", "") or "")
-            viewport_frame_ms = float(getattr(viewport, "_last_render_ms", 0.0) or 0.0)
-            renderer_perf = dict(getattr(getattr(viewport, "_gpu_renderer", None), "perf", {}) or {})
-            gpu_frame_ms = float(renderer_perf.get("last_frame_ms", 0.0) or 0.0)
-            gpu_upload_ms = float(renderer_perf.get("gpu_upload_ms", 0.0) or 0.0)
-            gpu_draw_ms = float(renderer_perf.get("draw_ms", 0.0) or 0.0)
-            gpu_readback_ms = float(renderer_perf.get("readback_ms", 0.0) or 0.0)
-            capture["performance"] = {
-                "viewport_frame_ms": round(viewport_frame_ms, 3),
-                "gpu_frame_ms": round(gpu_frame_ms, 3),
-                "gpu_upload_ms": round(gpu_upload_ms, 3),
-                "gpu_draw_ms": round(gpu_draw_ms, 3),
-                "gpu_readback_ms": round(gpu_readback_ms, 3),
-                "draw_calls": int(renderer_perf.get("draw_calls", 0) or 0),
-                "triangles": int(renderer_perf.get("tri_count", 0) or 0),
-                "visible_meshes": int(renderer_perf.get("visible_meshes", 0) or 0),
-                "culled_meshes": int(renderer_perf.get("culled_meshes", 0) or 0),
-            }
+            capture["performance"] = _map_studio_renderer_performance_snapshot(viewport)
+            viewport_frame_ms = float(capture["performance"]["viewport_frame_ms"] or 0.0)
+            gpu_frame_ms = float(capture["performance"]["gpu_frame_ms"] or 0.0)
+            gpu_upload_ms = float(capture["performance"]["gpu_upload_ms"] or 0.0)
+            gpu_draw_ms = float(capture["performance"]["gpu_draw_ms"] or 0.0)
+            gpu_readback_ms = float(capture["performance"]["gpu_readback_ms"] or 0.0)
             if viewport_frame_ms > 0.0:
                 viewport_frame_samples_ms.append(viewport_frame_ms)
             if gpu_frame_ms > 0.0:
@@ -1347,10 +2925,18 @@ class ResourcePanelsMixin:
                 first_capture = (capture, rgba)
             last_capture = (capture, rgba)
 
+        requested_forward = float(payload.get("forward", 1.0) or 0.0)
+        requested_strafe = float(payload.get("strafe", 0.0) or 0.0)
+        expected_distance = float(payload.get("expected_min_distance", 0.05) or 0.0)
+        moving_animation_required = bool(
+            requested_forward != 0.0
+            or requested_strafe != 0.0
+            or expected_distance > 0.0
+        )
         window._handle_map_studio_pie_move_input(
             {
-                "forward": float(payload.get("forward", 1.0) or 0.0),
-                "strafe": float(payload.get("strafe", 0.0) or 0.0),
+                "forward": requested_forward,
+                "strafe": requested_strafe,
                 "run": bool(payload.get("run", False)),
             }
         )
@@ -1361,15 +2947,15 @@ class ResourcePanelsMixin:
         animation_names.append(motion_animation)
         window._handle_map_studio_pie_move_input({"forward": 0.0, "strafe": 0.0, "run": False})
         motion_capture: dict[str, Any] | None = None
-        try:
-            motion_capture, motion_rgba = _capture_map_studio_canvas(canvas, capture_dir / "pie_motion.png")
-            motion_capture["content"] = _map_studio_capture_content_metrics(motion_capture, motion_rgba)
-            motion_capture["animation"] = motion_animation
-            motion_capture["player_position"] = [round(value, 6) for value in final_position]
-        except Exception as exc:
-            blockers.append(f"PIE moving-frame capture failed: {exc}")
+        if moving_animation_required:
+            try:
+                motion_capture, motion_rgba = _capture_map_studio_canvas(canvas, capture_dir / "pie_motion.png")
+                motion_capture["content"] = _map_studio_capture_content_metrics(motion_capture, motion_rgba)
+                motion_capture["animation"] = motion_animation
+                motion_capture["player_position"] = [round(value, 6) for value in final_position]
+            except Exception as exc:
+                blockers.append(f"PIE moving-frame capture failed: {exc}")
         distance = math.sqrt(sum((right - left) ** 2 for left, right in zip(initial_position, final_position)))
-        expected_distance = float(payload.get("expected_min_distance", 0.05) or 0.0)
         actor_attached = getattr(window, "_map_studio_pie_actor", None) is not None
         moving_animation_observed = any(name in {"walk", "run"} for name in animation_names)
         gpu_renderer = getattr(viewport, "_gpu_renderer", None)
@@ -1382,7 +2968,9 @@ class ResourcePanelsMixin:
         )
         clean_runtime_presentation = {
             "active": bool(viewport.property("_gr_map_studio_pie_clean_runtime")),
-            "authored_markers_hidden": getattr(viewport, "_map_studio_marker_geometry", None) is None,
+            "authored_markers_hidden": _map_studio_pie_marker_geometry_is_runtime_only(
+                getattr(viewport, "_map_studio_marker_geometry", None)
+            ),
             "authoring_marquees_hidden": authoring_marquees_hidden,
             "light_helpers_hidden": gpu_renderer is not None and not bool(getattr(gpu_renderer, "show_light_gizmos", True)),
             "light_volumes_hidden": gpu_renderer is not None and not bool(getattr(gpu_renderer, "show_light_radius_volumes", True)),
@@ -1431,6 +3019,7 @@ class ResourcePanelsMixin:
             "actor_warning": str(getattr(window, "_map_studio_pie_actor_warning", "") or ""),
             "animations_observed": list(dict.fromkeys(animation_names)),
             "moving_animation_observed": moving_animation_observed,
+            "moving_animation_required": moving_animation_required,
             "clean_runtime_presentation": clean_runtime_presentation,
             "performance": performance,
         }
@@ -1440,7 +3029,7 @@ class ResourcePanelsMixin:
             )
         if not actor_attached:
             blockers.append("The runtime-only animated player actor was not attached.")
-        if not moving_animation_observed:
+        if moving_animation_required and not moving_animation_observed:
             blockers.append("No walk/run animation was observed while the PIE player moved.")
         if not bool(clean_runtime_presentation["ok"]):
             failed = [name for name, value in clean_runtime_presentation.items() if name != "ok" and not bool(value)]
@@ -1455,6 +3044,7 @@ class ResourcePanelsMixin:
             "completed": len(captures),
             "content_frames": content_frames,
             "continuous_content": bool(captures and content_frames == len(captures)),
+            "sequence_started": True,
             "frames": captures,
             "motion_frame": motion_capture,
         }

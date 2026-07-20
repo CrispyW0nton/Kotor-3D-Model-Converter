@@ -40,6 +40,7 @@ class ViewportEventNavigationMixin:
                 return False
             if et in {
                 QtCore.QEvent.MouseButtonPress,
+                QtCore.QEvent.MouseButtonDblClick,
                 QtCore.QEvent.MouseMove,
                 QtCore.QEvent.MouseButtonRelease,
                 QtCore.QEvent.KeyPress,

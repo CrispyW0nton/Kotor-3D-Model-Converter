@@ -178,6 +178,7 @@ class MapStudioPIEDialogueContextEvaluator:
         player_gender: str = "male",
         global_numbers: Mapping[str, int] | None = None,
         global_booleans: Mapping[str, bool] | None = None,
+        global_strings: Mapping[str, str] | None = None,
         local_booleans: Mapping[tuple[str, int], bool] | None = None,
         overrides: Mapping[str, DialogueConditionValue] | None = None,
     ) -> None:
@@ -195,6 +196,11 @@ class MapStudioPIEDialogueContextEvaluator:
             for key, value in dict(global_booleans or {}).items()
             if str(key or "").strip()
         }
+        self._global_strings = {
+            str(key or "").strip().casefold(): str(value)
+            for key, value in dict(global_strings or {}).items()
+            if str(key or "").strip()
+        }
         self._local_booleans = {
             (str(key[0] or "").strip().casefold(), int(key[1])): bool(value)
             for key, value in dict(local_booleans or {}).items()
@@ -205,6 +211,75 @@ class MapStudioPIEDialogueContextEvaluator:
             for key, value in dict(overrides or {}).items()
             if _clean_resref(key)
         }
+
+    def set_global_number(self, name: str, value: int) -> bool:
+        """Advance a global number mid-session (from an executed node script).
+
+        Returns True if the stored value changed. Keys are casefolded to match
+        ``evaluate``'s lookup so a later condition reads the new value.
+        """
+
+        key = str(name or "").strip().casefold()
+        if not key:
+            return False
+        try:
+            new_value = int(value)
+        except (TypeError, ValueError):
+            return False
+        changed = self._global_numbers.get(key) != new_value
+        self._global_numbers[key] = new_value
+        return changed
+
+    def set_global_boolean(self, name: str, value: bool) -> bool:
+        """Advance a global boolean mid-session (from an executed node script)."""
+
+        key = str(name or "").strip().casefold()
+        if not key:
+            return False
+        new_value = bool(value)
+        changed = self._global_booleans.get(key) != new_value
+        self._global_booleans[key] = new_value
+        return changed
+
+    def set_global_string(self, name: str, value: str) -> bool:
+        """Advance a global string mid-session (from an executed node script)."""
+
+        key = str(name or "").strip().casefold()
+        if not key:
+            return False
+        new_value = str(value)
+        changed = self._global_strings.get(key) != new_value
+        self._global_strings[key] = new_value
+        return changed
+
+    def set_local_boolean(self, owner_tag: str, index: int, value: bool) -> bool:
+        """Advance an object-local boolean mid-session (from a node script).
+
+        Keyed by ``(owner_tag_casefolded, index)`` to match ``evaluate``'s local
+        lookup, so a condition checking that object's local reads the new value.
+        """
+
+        tag = str(owner_tag or "").strip().casefold()
+        if not tag:
+            return False
+        try:
+            slot = int(index)
+        except (TypeError, ValueError):
+            return False
+        key = (tag, slot)
+        new_value = bool(value)
+        changed = self._local_booleans.get(key) != new_value
+        self._local_booleans[key] = new_value
+        return changed
+
+    def global_state(self) -> tuple[dict[str, int], dict[str, bool], dict[str, str]]:
+        """Read-only copies of the current global numbers, booleans, and strings.
+
+        Lets a HUD/inspector surface the sandbox + script-set globals a creator
+        is exercising during play (keys are casefolded, as stored).
+        """
+
+        return dict(self._global_numbers), dict(self._global_booleans), dict(self._global_strings)
 
     def evaluate(self, request: MapStudioPIEDialogueConditionRequest) -> DialogueConditionValue:
         if request.resref in self._overrides:
@@ -540,6 +615,7 @@ class MapStudioPIEDialogueEvent:
     link_id: str = ""
     resrefs: tuple[str, ...] = ()
     preview_assumed: bool = False
+    value: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -576,6 +652,8 @@ class MapStudioPIEDialogueSnapshot:
     wait_flags: int = 0
     line_interval_seconds: float = 1.0
     conversation_type: int = 0
+    quest_tag: str = ""
+    quest_entry: int = 0
     events: tuple[MapStudioPIEDialogueEvent, ...] = ()
     warnings: tuple[str, ...] = ()
 
@@ -601,6 +679,7 @@ class MapStudioPIEDialogueSession:
         listener_id: str = "",
         tlk_lookup: TLKLookup | None = None,
         condition_evaluator: Any = None,
+        script_loader: Any = None,
         starter_link_id: str = "",
         allow_unknown_starter_assumption: bool = True,
         max_auto_hops: int = 64,
@@ -624,6 +703,7 @@ class MapStudioPIEDialogueSession:
         self.listener_id = str(listener_id or "")
         self.tlk_lookup = tlk_lookup
         self.condition_evaluator = condition_evaluator
+        self._script_loader = script_loader
         self.starter_link_id = str(starter_link_id or "").strip().lower()
         self.allow_unknown_starter_assumption = bool(allow_unknown_starter_assumption)
         self.max_auto_hops = max(1, int(max_auto_hops))
@@ -757,6 +837,7 @@ class MapStudioPIEDialogueSession:
         link: Any = None,
         resrefs: Iterable[str] = (),
         preview_assumed: bool = False,
+        value: str = "",
     ) -> None:
         self._events.append(
             MapStudioPIEDialogueEvent(
@@ -766,6 +847,7 @@ class MapStudioPIEDialogueSession:
                 link_id=self._link_id(link) if link is not None else "",
                 resrefs=tuple(dict.fromkeys(_clean_resref(value) for value in resrefs if _clean_resref(value))),
                 preview_assumed=bool(preview_assumed),
+                value=str(value or ""),
             )
         )
 
@@ -895,13 +977,128 @@ class MapStudioPIEDialogueSession:
 
     def _defer_node_scripts(self, node: Any) -> None:
         scripts = _node_script_resrefs(node)
-        if scripts:
+        if not scripts:
+            return
+        # With a compiled-NCS loader, execute the bounded literal global/journal
+        # writes a node's action script performs (the common quest-advance
+        # pattern) into the shared condition state so later branches read them.
+        # Anything the bounded reader cannot resolve stays honestly deferred.
+        executed_globals: list[str] = []
+        executed_scripts: list[str] = []
+        deferred: list[str] = []
+        for resref in scripts:
+            effects = self._load_script_global_effects(resref)
+            applied = list(self._apply_script_effects(node, effects)) if effects else []
+            applied.extend(self._apply_node_script_locals(resref))
+            if applied:
+                executed_scripts.append(resref)
+                executed_globals.extend(applied)
+            else:
+                deferred.append(resref)
+        if executed_scripts:
+            self._emit(
+                "node_script_executed",
+                "PIE executed the node action script's literal global/journal writes: "
+                + ", ".join(executed_globals)
+                + ". Editor-side preview state, not campaign state.",
+                node=node,
+                resrefs=tuple(executed_scripts),
+            )
+        if deferred:
             self._emit(
                 "node_scripts_deferred",
-                "Dialogue node action scripts were preserved but not executed by PIE.",
+                "Dialogue node action scripts were preserved but not executed by PIE "
+                "(no bounded literal writes; arbitrary NWScript stays deferred).",
                 node=node,
-                resrefs=scripts,
+                resrefs=tuple(deferred),
             )
+
+    def _apply_node_script_locals(self, resref: str) -> list[str]:
+        """Apply a node script's literal-object SetLocalBoolean writes.
+
+        `SetLocalBoolean(GetObjectByTag("tag"), i, v)` folds into the evaluator's
+        local state so a later branch whose condition checks that object's local
+        reads it. Computed-object locals are skipped (no dataflow). Never raises.
+        """
+
+        loader = self._script_loader
+        evaluator = self.condition_evaluator
+        if not callable(loader) or not hasattr(evaluator, "set_local_boolean"):
+            return []
+        try:
+            data = loader(resref)
+        except Exception:
+            return []
+        if not data:
+            return []
+        try:
+            from .map_studio_pie_scripting import extract_ncs_local_effects
+
+            locals_ = extract_ncs_local_effects(bytes(data))
+        except Exception:
+            return []
+        labels: list[str] = []
+        for effect in locals_:
+            try:
+                evaluator.set_local_boolean(effect.owner_tag, effect.index, effect.value)
+                labels.append(f"{effect.owner_tag}[{effect.index}]={effect.value}")
+            except Exception:
+                continue
+        return labels
+
+    def _load_script_global_effects(self, resref: str) -> tuple[Any, ...]:
+        """Load and read literal global/journal effects from a node script NCS."""
+
+        loader = self._script_loader
+        if not callable(loader):
+            return ()
+        try:
+            data = loader(resref)
+        except Exception:
+            return ()
+        if not data:
+            return ()
+        try:
+            from .map_studio_pie_scripting import extract_ncs_global_effects
+
+            return extract_ncs_global_effects(bytes(data))
+        except Exception:
+            return ()
+
+    def _apply_script_effects(self, node: Any, effects: Any) -> list[str]:
+        """Apply extracted global writes to the evaluator; journal → an event.
+
+        Returns short human-readable labels for each write actually applied.
+        """
+
+        evaluator = self.condition_evaluator
+        applied: list[str] = []
+        for effect in tuple(effects or ()):
+            kind = getattr(effect, "kind", "")
+            name = str(getattr(effect, "name", "") or "")
+            value = getattr(effect, "value", 0)
+            if not name:
+                continue
+            if kind == "global_number" and hasattr(evaluator, "set_global_number"):
+                evaluator.set_global_number(name, int(value))
+                applied.append(f"{name}={int(value)}")
+            elif kind == "global_boolean" and hasattr(evaluator, "set_global_boolean"):
+                evaluator.set_global_boolean(name, bool(value))
+                applied.append(f"{name}={bool(value)}")
+            elif kind == "global_string" and hasattr(evaluator, "set_global_string"):
+                evaluator.set_global_string(name, str(value))
+                applied.append(f"{name}={str(value)!r}")
+            elif kind == "journal":
+                # Reuse the journal event contract so the runtime quest log folds it.
+                self._emit(
+                    "journal_updated",
+                    f"PIE would set journal quest {name!r} to entry {int(value)} via the node "
+                    "script's AddJournalQuestEntry. PIE reports it without mutating campaign quest state.",
+                    node=node,
+                    value=f"{name}:{int(value)}",
+                )
+                applied.append(f"journal {name}:{int(value)}")
+        return applied
 
     def _guard_node(self, node: Any, seen: set[str], hops: list[int]) -> bool:
         node_id = self._node_id(node) or f"runtime:{id(node)}"
@@ -957,6 +1154,7 @@ class MapStudioPIEDialogueSession:
         self._choice_condition_evaluations = ()
         self._choices = ()
         self._defer_node_scripts(entry)
+        self._report_journal_update(entry)
         text = _node_text(entry, self.tlk_lookup)
         if text:
             self._state = PIE_DIALOGUE_LISTENING
@@ -968,6 +1166,29 @@ class MapStudioPIEDialogueSession:
             node=entry,
         )
         self._present_replies(entry, seen, hops)
+
+    def _report_journal_update(self, entry: Any) -> None:
+        """Report the journal quest entry a KOTOR dialogue node would add.
+
+        Entry nodes carry Quest (a plot tag) and QuestEntry (its state index);
+        the retail engine calls AddJournalQuestEntry when the line plays. PIE
+        cannot mutate campaign quest state, so it reports the update instead.
+        """
+
+        quest = str(getattr(entry, "quest", "") or "").strip()
+        if not quest:
+            return
+        try:
+            quest_entry = int(getattr(entry, "quest_entry", 0) or 0)
+        except (TypeError, ValueError):
+            quest_entry = 0
+        self._emit(
+            "journal_updated",
+            f"PIE would set journal quest {quest!r} to entry {quest_entry}; retail applies it via the "
+            "dialogue's AddJournalQuestEntry. PIE reports the update without mutating campaign quest state.",
+            node=entry,
+            value=f"{quest}:{quest_entry}",
+        )
 
     def _choice_for(
         self,
@@ -1229,6 +1450,11 @@ class MapStudioPIEDialogueSession:
         target_height_offset = _optional_float(getattr(node, "target_height", None)) if node is not None else None
         delay = int(getattr(node, "delay", -1)) if node is not None else -1
         text = _node_text(node, self.tlk_lookup) if node is not None and self._state == PIE_DIALOGUE_LISTENING else ""
+        quest_tag = str(getattr(node, "quest", "") or "").strip() if node is not None else ""
+        try:
+            quest_entry = int(getattr(node, "quest_entry", 0) or 0) if node is not None else 0
+        except (TypeError, ValueError):
+            quest_entry = 0
         return MapStudioPIEDialogueSnapshot(
             state=self._state,
             game=self.game,
@@ -1260,6 +1486,8 @@ class MapStudioPIEDialogueSession:
             wait_flags=int(getattr(node, "wait_flags", 0) or 0) if node is not None else 0,
             line_interval_seconds=map_studio_pie_dialogue_line_interval(text, delay_milliseconds=delay),
             conversation_type=conversation_type,
+            quest_tag=quest_tag,
+            quest_entry=quest_entry,
             events=tuple(self._events),
             warnings=tuple(dict.fromkeys(self._warnings)),
         )
@@ -1280,6 +1508,41 @@ def inspect_map_studio_pie_dialogue_starters(
         resref=resref,
         tlk_lookup=tlk_lookup,
     ).starter_options()
+
+
+def extract_dialogue_quest_references(dlg_bytes: bytes) -> tuple[tuple[str, int], ...]:
+    """Distinct (quest_tag, quest_entry) journal touchpoints a DLG's entries carry.
+
+    KOTOR entry nodes with a Quest/QuestEntry add that journal state when played;
+    this surfaces the module's journal touchpoints for validation without playing
+    the conversation. Returns () for empty/undecodable DLGs.
+    """
+
+    payload = bytes(dlg_bytes or b"")
+    if not payload:
+        return ()
+    try:
+        from pykotor.resource.generics.dlg import read_dlg
+
+        with redirect_stdout(StringIO()):
+            dialogue = read_dlg(payload)
+    except Exception:
+        return ()
+    references: list[tuple[str, int]] = []
+    entries_getter = getattr(dialogue, "all_entries", None)
+    entries = tuple(entries_getter() or ()) if callable(entries_getter) else ()
+    for entry in entries:
+        quest = str(getattr(entry, "quest", "") or "").strip()
+        if not quest:
+            continue
+        try:
+            quest_entry = int(getattr(entry, "quest_entry", 0) or 0)
+        except (TypeError, ValueError):
+            quest_entry = 0
+        pair = (quest, quest_entry)
+        if pair not in references:
+            references.append(pair)
+    return tuple(references)
 
 
 def build_map_studio_pie_dialogue_catalog(
@@ -1370,6 +1633,7 @@ __all__ = [
     "MapStudioPIEDialogueSnapshot",
     "MapStudioPIEDialogueStarterOption",
     "build_map_studio_pie_dialogue_catalog",
+    "extract_dialogue_quest_references",
     "inspect_map_studio_pie_dialogue_starters",
     "load_map_studio_pie_dialogue_animation_policies",
     "map_studio_pie_dialogue_line_interval",

@@ -28,6 +28,7 @@ from src.core.lighting.light_gizmo_renderer import (
     LIGHT_HELPER_SPOT_CAP_MAX_RADIUS,
     LIGHT_HELPER_SPOT_LENGTH,
 )
+from src.core.lighting.render_data import scene_light_relevance_key
 from src.core.rendering.gpu_debug_tables import (
     ModuleDrawItem,
     debug_draw_table,
@@ -92,11 +93,17 @@ from src.adapters.rendering.moderngl_resources import (
 )
 from src.core.rendering.mesh_render_data import (
     _animated_node_world_transform,
+    _bas_attachment_world_transform,
+    _effective_animation_pose_for_node,
     _pose_node_for_transform,
     animation_pose_applies_to_node,
     animation_pose_for_node,
     bas_attachment_palette_model_for_node,
     runtime_source_model_for_node,
+)
+from src.core.rendering.skeleton_render_data import (
+    bas_attachment_root_local_skin_palette,
+    skin_palette_flat_bytes,
 )
 from src.core.rendering.renderer_performance import (
     bounds_intersects_frustum,
@@ -114,6 +121,19 @@ def _uniform_value_stamp(value):
     """Return an exact, comparison-safe stamp for one uniform value."""
     if np is not None and isinstance(value, np.ndarray):
         return ("ndarray", value.dtype.str, tuple(value.shape), value.tobytes())
+    # ModernGL vector uniforms overwhelmingly arrive as immutable numeric
+    # tuples.  Let CPython hash those tuples in C and retain the exact typed
+    # value instead of recursively allocating a tagged tuple for every scalar.
+    # The 207TEL PIE draw loop asks this cache about 14,000 times per frame;
+    # the recursive form spent several milliseconds rebuilding stamps even
+    # though almost every submission was skipped.  Unhashable containers keep
+    # the recursive snapshot below so later mutation cannot corrupt equality.
+    try:
+        hash(value)
+    except (TypeError, ValueError):
+        pass
+    else:
+        return (type(value), value)
     if isinstance(value, tuple):
         return (tuple, tuple(_uniform_value_stamp(item) for item in value))
     if isinstance(value, list):
@@ -362,6 +382,11 @@ class GpuRenderer:
         self._node_cache_built_revision: int = -1
         self._node_cache_node_count: int = 0
         self._node_cache_model_revision: tuple[int, int] = (0, 0)
+        # Scene-light attributes and transforms remain live every frame, but
+        # node type is static for a retained scene revision.  Keep the small
+        # candidate set so light selection does not scan every room/actor node.
+        self._scene_light_candidate_key: tuple = ()
+        self._scene_light_candidate_nodes: tuple = ()
         # PERF: Interactive mode skips MSAA for faster frame times.
         # Keep the default scale at full resolution; lowering it is available
         # for emergency performance mode, but makes animated previews pixelated.
@@ -727,6 +752,8 @@ class GpuRenderer:
         self._node_cache_cutout = []
         self._node_cache_transparent = []
         self._node_cache_proxy_ids = set()
+        self._scene_light_candidate_key = ()
+        self._scene_light_candidate_nodes = ()
         # Phase A: Clear GPU skinning state (new model = new bone palette)
         if self._skin_uploader is not None:
             try: self._skin_uploader.release()
@@ -1033,7 +1060,34 @@ class GpuRenderer:
         except Exception:
             return (0.0, 0.0, -1.0)
 
-    def _scene_light_records(self, nodes, get_world_transform) -> list[dict]:
+    def _scene_light_candidates_for_model(self, model, nodes) -> tuple:
+        """Return light-typed nodes for the retained scene topology revision.
+
+        Enabled/hidden state, color, radius, intensity, and world transform are
+        deliberately not cached: ``_scene_light_records`` reads those values
+        from each candidate every frame.  Only the immutable node-type filter is
+        retained.  Topology/material workflows invalidate the same explicit
+        classification revision used by draw-list caching.
+        """
+        root = getattr(model, "root_node", None)
+        key = (
+            id(model),
+            len(nodes),
+            int(self._node_classification_revision),
+            int(getattr(model, "_gr_classification_revision", 0) or 0),
+            int(getattr(root, "_gr_classification_revision", 0) or 0),
+            int(getattr(model, "_gr_lighting_revision", 0) or 0),
+            int(getattr(root, "_gr_lighting_revision", 0) or 0),
+        )
+        if key != self._scene_light_candidate_key:
+            self._scene_light_candidate_nodes = tuple(
+                node for node in nodes
+                if bool(getattr(node, "is_light", False))
+            )
+            self._scene_light_candidate_key = key
+        return self._scene_light_candidate_nodes
+
+    def _scene_light_records(self, nodes, get_world_transform, *, reference_position=None) -> list[dict]:
         records: list[dict] = []
         for node in nodes:
             if not bool(getattr(node, "is_light", False)):
@@ -1051,7 +1105,8 @@ class GpuRenderer:
             radius = max(0.001, float(getattr(node, "light_radius", 5.0) or 5.0))
             intensity = max(0.0, float(getattr(node, "light_multiplier", 1.0) or 1.0))
             cone_deg = max(1.0, min(179.0, float(getattr(node, "light_cone_degrees", 45.0) or 45.0)))
-            records.append({
+            light_kind = str(getattr(node, "light_kind", "point") or "point").strip().lower()
+            record = {
                 "enabled": 1,
                 "kind": self._light_kind_int(node),
                 "ambient_only": 1 if bool(getattr(node, "light_ambient_only", False)) else 0,
@@ -1063,8 +1118,17 @@ class GpuRenderer:
                 "cone_cos": math.cos(math.radians(cone_deg * 0.5)),
                 "area_size": max(0.0, float(getattr(node, "light_area_size", 1.0) or 1.0)),
                 "score": radius * max(0.01, intensity),
-            })
-        records.sort(key=lambda item: item["score"], reverse=True)
+            }
+            record["selection_key"] = scene_light_relevance_key(
+                position=record["pos"],
+                radius=radius,
+                intensity=intensity,
+                reference_position=reference_position,
+                light_type=light_kind,
+                color_rgb=record["color"],
+            )
+            records.append(record)
+        records.sort(key=lambda item: item["selection_key"], reverse=True)
         return records[:16]
 
     def _upload_scene_lights(self, prog, uniforms, records: list[dict]) -> None:
@@ -1193,7 +1257,15 @@ class GpuRenderer:
             anim_pose,
             anim_base_pose=anim_base_pose,
         )
-        palette_bytes = uploader.as_flat_bytes()
+        if bool(getattr(skin_node, "_gr_bas_attachment_layer", False)):
+            palette = bas_attachment_root_local_skin_palette(
+                skin_node,
+                uploader.as_numpy_array(),
+                anim_pose,
+            )
+            palette_bytes = skin_palette_flat_bytes(palette, _SKIN_MAX_BONES)
+        else:
+            palette_bytes = uploader.as_flat_bytes()
         self._skin_palette_bytes_cache[cache_key] = (
             stamp,
             bone_count,
@@ -1202,6 +1274,53 @@ class GpuRenderer:
             str(getattr(uploader, "_skin_inverse_bind_source", "") or ""),
         )
         return bone_count, palette_bytes, False
+
+    def _skin_uploader_for_palette_scope(
+        self,
+        *,
+        scope_key: tuple,
+        palette_model,
+        fallback_nodes,
+    ):
+        """Return the retained palette uploader for one renderer scope.
+
+        PIE runtime actors and BAS attachment palette models are immutable for
+        their retained lifetime, and both scope keys include the model object
+        identity.  Once built, an exact-key hit therefore does not need another
+        recursive ``all_nodes()`` walk for every skin draw.  Editable scene and
+        model scopes retain the identity-signature validation used previously.
+        """
+        if MatrixPaletteUploader is None:
+            return None
+        cached = self._skin_uploaders_by_scope.get(scope_key)
+        immutable_scope = bool(
+            scope_key
+            and scope_key[0] in {"runtime_actor", "bas_attachment"}
+        )
+        if cached is not None and immutable_scope:
+            return cached[1]
+        try:
+            palette_nodes = list(palette_model.all_nodes())
+        except Exception:
+            palette_nodes = list(fallback_nodes)
+        signature = tuple(id(item) for item in palette_nodes)
+        if cached is not None and cached[0] == signature:
+            return cached[1]
+        uploader = MatrixPaletteUploader(max_bones=_SKIN_MAX_BONES)
+        n_built = uploader.build_inverse_bind_pose(palette_model)
+        self._skin_uploaders_by_scope[scope_key] = (signature, uploader)
+        self._skin_uploader = uploader
+        self._skin_model_id = self._wt_model_id
+        self._skin_bone_count = n_built
+        if not self._skin_logged:
+            log.info(
+                "GPU-SKINNING: MatrixPaletteUploader built %s inverse bind-pose "
+                "matrices for scope %s",
+                n_built,
+                scope_key,
+            )
+            self._skin_logged = True
+        return uploader
 
     @staticmethod
     def _transformed_bounds_outside_frustum(bounds, model_matrix, planes) -> bool:
@@ -1624,36 +1743,16 @@ class GpuRenderer:
                 return ("model", _cur_model_id), model
 
             def _skin_uploader_for_node(nd, resolved_scope=None):
-                if MatrixPaletteUploader is None:
-                    return None
                 scope_key, palette_model = (
                     resolved_scope
                     if resolved_scope is not None
                     else _skin_palette_scope_for_node(nd)
                 )
-                try:
-                    palette_nodes = list(palette_model.all_nodes())
-                except Exception:
-                    palette_nodes = nodes
-                signature = tuple(id(item) for item in palette_nodes)
-                cached = self._skin_uploaders_by_scope.get(scope_key)
-                if cached is not None and cached[0] == signature:
-                    return cached[1]
-                uploader = MatrixPaletteUploader(max_bones=_SKIN_MAX_BONES)
-                n_built = uploader.build_inverse_bind_pose(palette_model)
-                self._skin_uploaders_by_scope[scope_key] = (signature, uploader)
-                self._skin_uploader = uploader
-                self._skin_model_id = _cur_model_id
-                self._skin_bone_count = n_built
-                if not self._skin_logged:
-                    log.info(
-                        "GPU-SKINNING: MatrixPaletteUploader built %s inverse bind-pose "
-                        "matrices for scope %s",
-                        n_built,
-                        scope_key,
-                    )
-                    self._skin_logged = True
-                return uploader
+                return self._skin_uploader_for_palette_scope(
+                    scope_key=scope_key,
+                    palette_model=palette_model,
+                    fallback_nodes=nodes,
+                )
 
             # PERF: Only stamp model refs and compute proxy IDs when model changes.
             # These are O(N) walks that produce identical results across frames for
@@ -1710,6 +1809,7 @@ class GpuRenderer:
             _wt_cache = self._wt_cache
             _bas_root_cache: Dict[int, object | None] = {}
             _bas_socket_cache: Dict[int, object | None] = {}
+            _bas_transform_cache: Dict[object, object] = {}
 
             def _bas_attachment_root_for_node(nd):
                 _node_id = id(nd)
@@ -1785,7 +1885,7 @@ class GpuRenderer:
                     return None
                 node_id = id(nd)
                 if node_id not in _node_anim_pose_cache:
-                    _node_anim_pose_cache[node_id] = animation_pose_for_node(
+                    _node_anim_pose_cache[node_id] = _effective_animation_pose_for_node(
                         nd,
                         anim_pose,
                     )
@@ -1821,40 +1921,15 @@ class GpuRenderer:
                     return _frame_wt_cache[nid]
                 _bas_root = _bas_attachment_root_for_node(nd)
                 if _bas_root is not None:
-                    _parent = getattr(nd, "parent", None)
-                    if nd is _bas_root:
-                        _socket = _bas_attachment_socket_node(_bas_root)
-                        if _socket is not None:
-                            _base_wp, _base_wo = _get_world_transform(_socket)
-                        else:
-                            _base_wp, _base_wo = (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)
-                    elif (
-                        _parent is not None
-                        and _bas_attachment_root_for_node(_parent) is _bas_root
-                    ):
-                        _base_wp, _base_wo = _get_world_transform(_parent)
-                    else:
-                        # Preserve the old corrupt-chain fallback: valid BAS DAGs
-                        # always reach their tagged root through ``parent``.
-                        _socket = _bas_attachment_socket_node(_bas_root)
-                        if _socket is not None:
-                            _base_wp, _base_wo = _get_world_transform(_socket)
-                        else:
-                            _base_wp, _base_wo = (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)
-                        _local_wp, _local_wo = _bas_attachment_local_transform_np(nd, _bas_root)
-                        result = _compose_world_transform_np(
-                            _base_wp,
-                            _base_wo,
-                            _local_wp,
-                            _local_wo,
-                        )
-                        _frame_wt_cache[nid] = result
-                        return result
-                    result = _compose_world_transform_np(
-                        _base_wp,
-                        _base_wo,
-                        getattr(nd, "position", (0.0, 0.0, 0.0)),
-                        getattr(nd, "rotation", (0.0, 0.0, 0.0, 1.0)),
+                    # BAS heads need two poses at once: the body pose places the
+                    # headhook socket, while the attachment source pose drives
+                    # facial bones and rigid eye/mouth descendants.  The shared
+                    # renderer-neutral helper owns that space conversion.
+                    result = _bas_attachment_world_transform(
+                        nd,
+                        _bas_root,
+                        anim_pose=_resolved_animation_pose(nd),
+                        transform_cache=_bas_transform_cache,
                     )
                     _frame_wt_cache[nid] = result
                     return result
@@ -1908,7 +1983,15 @@ class GpuRenderer:
             _gpu_model_type  = int(_gpu_model_type_raw) if _gpu_model_type_raw is not None else 4
             _gpu_is_module   = (_gpu_model_cls in ('effect', 'tile', 'other') or
                                 _gpu_model_type in (0, 2))
-            _scene_lights = self._scene_light_records(nodes, _get_world_transform)
+            _scene_light_candidates = self._scene_light_candidates_for_model(
+                model,
+                nodes,
+            )
+            _scene_lights = self._scene_light_records(
+                _scene_light_candidates,
+                _get_world_transform,
+                reference_position=target,
+            )
             self._upload_scene_lights(prog, _u, _scene_lights)
 
             def _is_deform_helper(nd) -> bool:
@@ -2243,7 +2326,7 @@ class GpuRenderer:
                     )
                 _skin_anim_pose = _node_anim_pose
                 _skin_anim_base_pose = (
-                    animation_pose_for_node(node, anim_base_pose)
+                    _effective_animation_pose_for_node(node, anim_base_pose)
                     if anim_base_pose is not None else None
                 )
                 _skin_palette_scope = (
@@ -2263,7 +2346,6 @@ class GpuRenderer:
                 )
                 _skin_can_lbs = bool(
                     _nd_is_skin
-                    and not bool(getattr(node, "_gr_bas_attachment_layer", False))
                     and _has_skin_nodes
                     and _skin_uploader is not None
                     and _skin_anim_pose is not None
@@ -2951,8 +3033,9 @@ class GpuRenderer:
                 if txi_blend == 2:      _feat_mask |= (1 << 12)  # FEAT_PUNCHTHRU
                 if txi_blend == 1:      _feat_mask |= (1 << 13)  # FEAT_ADDITIVE
                 # Phase A: Set FEAT_SKIN bit only when this draw is actually
-                # palette-skinned. BAS attachment skins are socket followers,
-                # so their VBO data is already root-local and must pass through.
+                # palette-skinned. BAS attachment palettes are converted to
+                # attachment-root local space before upload, then the socket/root
+                # draw matrix places the skinned result on the body.
                 if _skin_can_lbs:
                     _feat_mask |= (1 << 10)  # FEAT_SKIN
                 _u['u_features'].value = _feat_mask
@@ -3356,6 +3439,35 @@ class GpuRenderer:
         self._node_cache_cutout = []
         self._node_cache_transparent = []
         self._node_cache_signature = ()
+        self._scene_light_candidate_key = ()
+        self._scene_light_candidate_nodes = ()
+
+    def invalidate_transform_cache(self, reason: str = "transforms changed", node=None) -> None:
+        """Evict world transforms without discarding retained draw classification.
+
+        Runtime actors update their wrapper transform and pose every PIE frame,
+        but neither operation changes mesh membership, visibility, or material
+        pass.  Reclassifying the complete module here turns each actor tick into
+        an O(scene) pre-draw walk.  A supplied scene-object root therefore evicts
+        only its hierarchy; callers without a root retain the conservative full
+        transform-cache invalidation.
+        """
+
+        if node is None:
+            self._wt_cache.clear()
+            return
+        stack = [node]
+        visited: set[int] = set()
+        while stack:
+            current = stack.pop()
+            if current is None:
+                continue
+            current_id = id(current)
+            if current_id in visited:
+                continue
+            visited.add(current_id)
+            self._wt_cache.pop(current_id, None)
+            stack.extend(getattr(current, "children", []) or [])
 
     @staticmethod
     def _sprite_text(node) -> str:

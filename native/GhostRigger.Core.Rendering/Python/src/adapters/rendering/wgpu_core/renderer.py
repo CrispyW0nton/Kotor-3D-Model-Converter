@@ -15,6 +15,7 @@ from src.adapters.rendering.null_renderer import NullDiagnosticRenderer
 from src.adapters.rendering.wgpu_core.resources import WgpuResourceCache
 from src.adapters.rendering.wgpu_core.shared import _probe_script
 from src.core.lighting.light_gizmo_renderer import LIGHT_HELPER_COLORS
+from src.core.lighting.render_data import scene_light_relevance_key
 from src.core.rendering.color_utils import _hex_to_rgb_float
 from src.core.rendering.picking import PickHit
 from src.core.rendering.renderer_backend import RendererBackend
@@ -1748,6 +1749,22 @@ class WgpuRenderer(NullDiagnosticRenderer):
             except Exception:
                 pass
         revision = int(getattr(lighting, "revision", 0) or 0)
+        reference_position = None
+        try:
+            camera_target = getattr(self._active_camera, "target", None)
+            camera_target = camera_target() if callable(camera_target) else camera_target
+            candidate = tuple(float(value) for value in camera_target[:3])
+            if len(candidate) == 3 and all(math.isfinite(value) for value in candidate):
+                # Avoid rebuilding the light buffer for sub-pixel camera target
+                # jitter while still following the PIE/player focus through a
+                # room.  KOTOR scene units are metres.
+                reference_position = tuple(round(value * 4.0) / 4.0 for value in candidate)
+        except (TypeError, ValueError, AttributeError):
+            reference_position = None
+        revision = (
+            revision
+            ^ (hash(("light_selection_reference", reference_position)) & 0x7FFFFFFF)
+        ) & 0x7FFFFFFF
         display_options = self._effective_display_options or self._active_display_options
         display_revision = hash(
             (
@@ -1773,10 +1790,19 @@ class WgpuRenderer(NullDiagnosticRenderer):
             all_lights = list(getattr(lighting, "lights", ()) or ())
             visible_lights = [light for light in all_lights if bool(getattr(light, "visible", True))]
 
-            def score(light) -> float:
-                selected_bonus = 100000.0 if bool(getattr(light, "selected", False)) else 0.0
-                enabled_bonus = 1000.0 if bool(getattr(light, "enabled", True)) else 0.0
-                return selected_bonus + enabled_bonus + float(getattr(light, "radius", 0.0) or 0.0) * max(0.01, float(getattr(light, "intensity", 0.0) or 0.0))
+            def score(light) -> tuple:
+                return (
+                    1 if bool(getattr(light, "selected", False)) else 0,
+                    1 if bool(getattr(light, "enabled", True)) else 0,
+                    *scene_light_relevance_key(
+                        position=getattr(light, "position", (0.0, 0.0, 0.0)),
+                        radius=getattr(light, "radius", 0.0),
+                        intensity=getattr(light, "intensity", 0.0),
+                        reference_position=reference_position,
+                        light_type=getattr(light, "light_type", "point"),
+                        color_rgb=getattr(light, "color_rgb", (1.0, 1.0, 1.0)),
+                    ),
+                )
 
             visible_lights.sort(key=score, reverse=True)
             max_lights = int(self.max_wgpu_lights)

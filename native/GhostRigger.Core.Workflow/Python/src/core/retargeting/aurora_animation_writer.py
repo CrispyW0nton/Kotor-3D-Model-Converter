@@ -506,7 +506,11 @@ class AuroraAnimationWriter:
             result.frame_count = int(payload.get("frame_count") or 0)
             result.duration_seconds = float(animation.length or 0.0)
             result.bone_count_animated = len(animation.nodes)
-            amplitude_issues = self._validate_export_motion_amplitude(payload, animation)
+            amplitude_issues = self._validate_export_motion_amplitude(
+                payload,
+                animation,
+                model=model,
+            )
             if amplitude_issues:
                 result.errors.append(
                     "Exported animation lost source motion amplitude before MDL write: "
@@ -750,17 +754,27 @@ class AuroraAnimationWriter:
         cls,
         payload: dict,
         animation: Animation,
+        model: Optional[KotorModel] = None,
         *,
         source_motion_threshold_degrees: float = 1.0,
         minimum_ratio: float = 0.5,
     ) -> List[str]:
-        """Return issues when important source tracks are flattened in export."""
+        """Return issues when important source motion is flattened in export.
+
+        Source curves contain world-space rotations, while Aurora controllers
+        contain absolute parent-local rotations. Comparing those amplitudes
+        directly rejects correct hierarchical motion whenever a child follows
+        its animated parent. When a target model is available, evaluate the
+        exported graph by FK and compare world-space amplitudes. The local
+        comparison remains only as a compatibility fallback.
+        """
 
         nodes_by_key = {
             str(getattr(node, "name", "") or "").lower(): node
             for node in getattr(animation, "nodes", []) or []
         }
         issues: List[str] = []
+        pose_cache: Dict[float, object] = {}
         target_curves = payload.get("target_curves", {}) or {}
         for requested_name, curve in target_curves.items():
             target_name = str(curve.get("target_bone") or requested_name or "")
@@ -770,12 +784,66 @@ class AuroraAnimationWriter:
             if source_amp < source_motion_threshold_degrees:
                 continue
             anim_node = nodes_by_key.get(target_name.lower())
-            export_amp = cls._export_orientation_amplitude_degrees(anim_node) if anim_node else 0.0
+            export_amp = 0.0
+            if model is not None and anim_node is not None:
+                export_amp = cls._export_world_orientation_amplitude_degrees(
+                    model,
+                    animation,
+                    target_name,
+                    anim_node,
+                    pose_cache,
+                )
+            elif anim_node is not None:
+                export_amp = cls._export_orientation_amplitude_degrees(anim_node)
             if export_amp + 1e-5 < source_amp * minimum_ratio:
                 issues.append(
-                    f"{target_name} source={source_amp:.3f}deg export={export_amp:.3f}deg"
+                    f"{target_name} source_world={source_amp:.3f}deg "
+                    f"export_world={export_amp:.3f}deg"
                 )
         return issues
+
+    @classmethod
+    def _export_world_orientation_amplitude_degrees(
+        cls,
+        model: KotorModel,
+        animation: Animation,
+        target_name: str,
+        anim_node: ModelNode,
+        pose_cache: Dict[float, object],
+    ) -> float:
+        """Evaluate one exported node's world-space rotational amplitude."""
+
+        try:
+            from src.core.animation.animation_engine import evaluate_aurora_animation_pose
+        except ImportError:  # pragma: no cover - package-relative fallback
+            from ..animation.animation_engine import evaluate_aurora_animation_pose
+
+        times: List[float] = []
+        for ctrl in getattr(anim_node, "controllers", []) or []:
+            if int(ctrl.get("type", 0) or 0) == CTRL_ORIENTATION or str(ctrl.get("name", "")).lower() == "orientation":
+                times = [float(value) for value in (ctrl.get("times", []) or [])]
+                break
+        if not times:
+            return 0.0
+
+        wanted = str(target_name or "").lower()
+        rotations: List[Tuple[float, float, float, float]] = []
+        for time_value in times:
+            pose = pose_cache.get(time_value)
+            if pose is None:
+                pose = evaluate_aurora_animation_pose(model, animation, time_value)
+                pose_cache[time_value] = pose
+            entry = None
+            for raw_name, candidate in (getattr(pose, "world_transforms_by_node", {}) or {}).items():
+                if str(raw_name or "").lower() == wanted:
+                    entry = candidate
+                    break
+            if entry is None:
+                continue
+            rotations.append(
+                cls._normalize_quat_wxyz(xyzw_to_wxyz(entry.rotation[:4]))
+            )
+        return cls._rotation_amplitude_wxyz(rotations)
 
     @staticmethod
     def _is_motion_gate_node(node_name: str) -> bool:
@@ -871,8 +939,12 @@ class AuroraAnimationWriter:
             anim_root=getattr(getattr(model, "root_node", None), "name", "") or getattr(model, "name", ""),
         )
 
-        aurora_rest_bases = self._capture_aurora_rest_bases(model)
+        aurora_rest_world = self._capture_aurora_rest_world_rotations(model)
         target_curves = payload.get("target_curves", {}) or {}
+        mapped_world_tracks: Dict[
+            str,
+            Tuple[List[float], List[Tuple[float, float, float, float]]],
+        ] = {}
         orientation_tracks: Dict[str, Tuple[List[float], List[List[float]]]] = {}
         position_tracks: Dict[str, Tuple[List[float], List[List[float]]]] = {}
         canonical_times: List[float] = []
@@ -888,58 +960,56 @@ class AuroraAnimationWriter:
                 continue
 
             times = self._normalized_times(frames, fps)
-            source_rest = curve.get("source_rest_world")
-            source_parent_rest = curve.get("source_parent_rest_world")
-            parent_frames = sorted(
-                curve.get("source_parent_frames", []) or [],
-                key=lambda item: int(item.get("frame") or 0),
-            )
             curve_reference_mode = _curve_reference_mode(reference_mode, curve, target_node)
-            source_reference_frame = frames[0]
-            source_parent_reference_frame = parent_frames[0] if parent_frames else None
-            if curve_reference_mode == "source_rest":
-                source_reference_frame = None
-                source_parent_reference_frame = None
-            basis_change = self._basis_change_for_curve(
-                curve=curve,
-                target_node=target_node,
-                source_rest=source_rest,
-                aurora_rest_bases=aurora_rest_bases,
-                source_quaternion_conversion=source_quaternion_conversion,
-            )
-            rotations = []
-            for index, frame in enumerate(frames):
-                parent_frame = parent_frames[index] if index < len(parent_frames) else None
-                source_rest_rotation = self._motion_rotation_xyzw_from_ue5_world(
+            key = str(target_node.name or "").lower()
+            target_rest_world = aurora_rest_world.get(key)
+            if target_rest_world is None:
+                raise ValueError(f"Missing Aurora rest rotation for target node '{target_node.name}'")
+
+            source_frame_world = [
+                self._source_world_rotation_aurora_wxyz(
                     frame,
-                    target_node,
-                    source_rest,
-                    source_parent_rest,
-                    parent_frame,
-                    basis_change,
-                    source_reference_frame,
-                    source_parent_reference_frame,
                     source_quaternion_conversion,
                 )
+                for frame in frames
+            ]
+            clip_reference_world = source_frame_world[0]
+            source_rest_world = self._source_world_rotation_aurora_wxyz(
+                curve.get("source_rest_world"),
+                source_quaternion_conversion,
+                fallback=clip_reference_world,
+            )
+            clip_correction = quat_mul_wxyz(
+                quat_inverse_wxyz(clip_reference_world),
+                target_rest_world,
+            )
+            rest_correction = quat_mul_wxyz(
+                quat_inverse_wxyz(source_rest_world),
+                target_rest_world,
+            )
+            desired_world_rotations: List[Tuple[float, float, float, float]] = []
+            for source_world in source_frame_world:
+                clip_world = normalize_quat_wxyz(
+                    quat_mul_wxyz(source_world, clip_correction)
+                )
+                rest_world = normalize_quat_wxyz(
+                    quat_mul_wxyz(source_world, rest_correction)
+                )
                 if reference_mode == "hybrid_limb_source_rest" and curve_reference_mode == "source_rest":
-                    frame_zero_rotation = self._motion_rotation_xyzw_from_ue5_world(
-                        frame,
-                        target_node,
-                        source_rest,
-                        source_parent_rest,
-                        parent_frame,
-                        basis_change,
-                        frames[0],
-                        parent_frames[0] if parent_frames else None,
-                        source_quaternion_conversion,
+                    blended_xyzw = _slerp_xyzw(
+                        wxyz_to_xyzw(clip_world),
+                        wxyz_to_xyzw(rest_world),
+                        hybrid_weight,
                     )
-                    rotations.append(_slerp_xyzw(frame_zero_rotation, source_rest_rotation, hybrid_weight))
+                    desired_world_rotations.append(
+                        normalize_quat_wxyz(xyzw_to_wxyz(blended_xyzw))
+                    )
+                elif curve_reference_mode == "source_rest":
+                    desired_world_rotations.append(rest_world)
                 else:
-                    rotations.append(source_rest_rotation)
-            rotations = self._hemisphere_continuous_xyzw(rotations)
-            self._validate_controller_rows(target_node.name, times, rotations, 4)
-            key = str(target_node.name or "").lower()
-            orientation_tracks[key] = (times, rotations)
+                    desired_world_rotations.append(clip_world)
+
+            mapped_world_tracks[key] = (times, desired_world_rotations)
             position_tracks[key] = (
                 times,
                 self._position_values_from_frames(frames, default_position=target_node.position),
@@ -950,6 +1020,61 @@ class AuroraAnimationWriter:
             canonical_times = self._fallback_animation_times(frame_count, duration, fps)
         if canonical_times:
             anim.length = max(float(anim.length or 0.0), max(canonical_times))
+
+        desired_world_cache: Dict[Tuple[str, float], Tuple[float, float, float, float]] = {}
+
+        def desired_world_rotation(
+            target_node: ModelNode,
+            time_value: float,
+        ) -> Tuple[float, float, float, float]:
+            key = str(target_node.name or "").lower()
+            cache_key = (key, float(time_value))
+            cached = desired_world_cache.get(cache_key)
+            if cached is not None:
+                return cached
+
+            mapped_track = mapped_world_tracks.get(key)
+            if mapped_track is not None:
+                result = self._sample_wxyz_track(
+                    mapped_track[0],
+                    mapped_track[1],
+                    time_value,
+                )
+            else:
+                bind_local = normalize_quat_wxyz(xyzw_to_wxyz(target_node.rotation))
+                parent = getattr(target_node, "parent", None)
+                if parent is None:
+                    result = bind_local
+                else:
+                    result = normalize_quat_wxyz(
+                        quat_mul_wxyz(
+                            desired_world_rotation(parent, time_value),
+                            bind_local,
+                        )
+                    )
+            desired_world_cache[cache_key] = result
+            return result
+
+        for target_node in model.all_nodes():
+            key = str(target_node.name or "").lower()
+            times = mapped_world_tracks.get(key, (canonical_times, []))[0]
+            rotations: List[List[float]] = []
+            parent = getattr(target_node, "parent", None)
+            for time_value in times:
+                node_world = desired_world_rotation(target_node, time_value)
+                if parent is None:
+                    local_wxyz = node_world
+                else:
+                    local_wxyz = quat_mul_wxyz(
+                        quat_inverse_wxyz(desired_world_rotation(parent, time_value)),
+                        node_world,
+                    )
+                rotations.append(
+                    [float(value) for value in wxyz_to_xyzw(normalize_quat_wxyz(local_wxyz))]
+                )
+            rotations = self._hemisphere_continuous_xyzw(rotations)
+            self._validate_controller_rows(target_node.name, times, rotations, 4)
+            orientation_tracks[key] = (times, rotations)
 
         root_motion_present = any(
             self._is_root_or_pelvis_node(model, node_name)
@@ -1025,7 +1150,9 @@ class AuroraAnimationWriter:
             warnings.append(
                 "R3.B/R3.5 omits Aurora position controllers to preserve PMBAM bind proportions."
             )
-        warnings.append("R3.5 per-bone local basis remapping enabled for orientation controllers.")
+        warnings.append(
+            "R3.7 derives absolute parent-local orientation controllers from corrected target world poses."
+        )
         if source_quaternion_conversion == "identity":
             warnings.append(
                 "R3.5 uses identity Blender-FBX source quaternion conversion for Mixamo-style source clips."
@@ -1180,6 +1307,94 @@ class AuroraAnimationWriter:
             key = str(name or "").lower()
             bases[key] = quat_to_matrix_wxyz(registry.world_rotation(name))[:3, :3]
         return bases
+
+    def _capture_aurora_rest_world_rotations(
+        self,
+        model: KotorModel,
+    ) -> Dict[str, Tuple[float, float, float, float]]:
+        """Capture normalized target bind rotations in world space."""
+
+        registry = CoordinateNormalizer().normalize_aurora_bind(
+            model,
+            skeleton_id=getattr(model, "name", "aurora"),
+        )
+        return {
+            str(name or "").lower(): normalize_quat_wxyz(registry.world_rotation(name))
+            for name in registry.bone_names
+        }
+
+    @classmethod
+    def _source_world_rotation_aurora_wxyz(
+        cls,
+        record: Optional[dict],
+        source_quaternion_conversion: str,
+        *,
+        fallback: Tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0),
+    ) -> Tuple[float, float, float, float]:
+        """Read one source world rotation and convert it into Aurora space."""
+
+        record = record or {}
+        raw_rotation = record.get("rotation_wxyz")
+        if raw_rotation is None and record.get("world_matrix_at_rest") is not None:
+            raw_rotation = matrix_to_quat_wxyz(
+                np.asarray(record["world_matrix_at_rest"], dtype=np.float64)
+            )
+        if raw_rotation is None and record.get("matrix") is not None:
+            raw_rotation = matrix_to_quat_wxyz(
+                np.asarray(record["matrix"], dtype=np.float64)
+            )
+        if raw_rotation is None:
+            return normalize_quat_wxyz(fallback)
+
+        source_w, source_x, source_y, source_z = cls._four_floats(
+            raw_rotation,
+            (1.0, 0.0, 0.0, 0.0),
+        )
+        return normalize_quat_wxyz(
+            _source_quat_xyzw_to_aurora_wxyz(
+                (source_x, source_y, source_z, source_w),
+                source_quaternion_conversion,
+            )
+        )
+
+    @staticmethod
+    def _sample_wxyz_track(
+        times: List[float],
+        values: List[Tuple[float, float, float, float]],
+        sample_time: float,
+    ) -> Tuple[float, float, float, float]:
+        """Sample a normalized WXYZ quaternion track with shortest-path slerp."""
+
+        if not times or not values:
+            return (1.0, 0.0, 0.0, 0.0)
+        usable_count = min(len(times), len(values))
+        pairs = sorted(
+            (
+                float(times[index]),
+                normalize_quat_wxyz(values[index]),
+            )
+            for index in range(usable_count)
+        )
+        t = float(sample_time)
+        if t <= pairs[0][0]:
+            return pairs[0][1]
+        if t >= pairs[-1][0]:
+            return pairs[-1][1]
+
+        right_index = next(
+            index
+            for index, (time_value, _rotation) in enumerate(pairs)
+            if time_value > t
+        )
+        time0, rotation0 = pairs[right_index - 1]
+        time1, rotation1 = pairs[right_index]
+        amount = (t - time0) / max(1.0e-12, time1 - time0)
+        sampled_xyzw = _slerp_xyzw(
+            wxyz_to_xyzw(rotation0),
+            wxyz_to_xyzw(rotation1),
+            amount,
+        )
+        return normalize_quat_wxyz(xyzw_to_wxyz(sampled_xyzw))
 
     def _source_rest_basis_aurora(
         self,

@@ -2425,6 +2425,28 @@ def test_moderngl_exact_uniform_submission_skips_only_identical_payloads() -> No
     assert raw.byte_writes == [b"matrix-a", b"matrix-b", b"matrix-b"]
 
 
+def test_moderngl_uniform_stamp_fast_path_preserves_exact_mutable_snapshots() -> None:
+    import numpy as np
+
+    from src.adapters.rendering.moderngl_renderer_impl import _uniform_value_stamp
+
+    assert _uniform_value_stamp((1.0, 2.0, 3.0)) == (
+        tuple,
+        (1.0, 2.0, 3.0),
+    )
+    assert _uniform_value_stamp((1, 2, 3)) != _uniform_value_stamp([1, 2, 3])
+
+    mutable = [1.0, [2.0, 3.0]]
+    mutable_stamp = _uniform_value_stamp(mutable)
+    mutable[1][0] = 9.0
+    assert mutable_stamp != _uniform_value_stamp(mutable)
+
+    array = np.asarray([[1.0, 2.0]], dtype=np.float32)
+    array_stamp = _uniform_value_stamp(array)
+    array[0, 0] = 7.0
+    assert array_stamp != _uniform_value_stamp(array)
+
+
 def test_moderngl_skin_palette_bypasses_generic_uniform_cache() -> None:
     from src.adapters.rendering.moderngl_renderer_impl import _ExactUniformSubmission
 

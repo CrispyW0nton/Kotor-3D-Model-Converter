@@ -50,7 +50,7 @@ def _model(*, skinned: bool, animated: bool):
     return model
 
 
-def _run_export(monkeypatch, tmp_path, model):
+def _run_export(monkeypatch, tmp_path, model, *, compatibility_profile="standard"):
     from src.converters import mesh_converter
 
     calls = {"sdk": 0, "ascii": 0}
@@ -59,8 +59,16 @@ def _run_export(monkeypatch, tmp_path, model):
         calls["sdk"] += 1
         return True
 
-    def fake_ascii(self, target_model, fbx_path, base_skeleton_model=None, texture_paths=None):
+    def fake_ascii(
+        self,
+        target_model,
+        fbx_path,
+        base_skeleton_model=None,
+        texture_paths=None,
+        compatibility_profile="standard",
+    ):
         calls["ascii"] += 1
+        calls["profile"] = compatibility_profile
         Path(fbx_path).write_text("; FBX 7.4 ASCII stub", encoding="ascii")
         return True
 
@@ -70,7 +78,13 @@ def _run_export(monkeypatch, tmp_path, model):
     monkeypatch.setitem(sys.modules, "fbx", types.ModuleType("fbx"))
     monkeypatch.setitem(sys.modules, "pyassimp", None)  # force ImportError path
     out = tmp_path / f"{model.name}.fbx"
-    ok = mesh_converter.FBXExporter().export(model, str(out), export_rigging=False, export_manifest=False)
+    ok = mesh_converter.FBXExporter().export(
+        model,
+        str(out),
+        export_rigging=False,
+        export_manifest=False,
+        compatibility_profile=compatibility_profile,
+    )
     return ok, calls
 
 
@@ -96,3 +110,31 @@ def test_static_model_still_uses_sdk_when_available(monkeypatch, tmp_path) -> No
     assert ok
     assert calls["sdk"] == 1
     assert calls["ascii"] == 0
+
+
+def test_static_unity_profile_bypasses_incomplete_sdk_writer(monkeypatch, tmp_path) -> None:
+    _configure_native_python_roots()
+    ok, calls = _run_export(
+        monkeypatch,
+        tmp_path,
+        _model(skinned=False, animated=False),
+        compatibility_profile="unity",
+    )
+    assert ok
+    assert calls["sdk"] == 0
+    assert calls["ascii"] == 1
+    assert calls["profile"] == "unity"
+
+
+def test_static_unreal_profile_bypasses_incomplete_sdk_writer(monkeypatch, tmp_path) -> None:
+    _configure_native_python_roots()
+    ok, calls = _run_export(
+        monkeypatch,
+        tmp_path,
+        _model(skinned=False, animated=False),
+        compatibility_profile="unreal",
+    )
+    assert ok
+    assert calls["sdk"] == 0
+    assert calls["ascii"] == 1
+    assert calls["profile"] == "unreal"

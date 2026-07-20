@@ -115,6 +115,26 @@ overlays can stay readable in both dark and light themes.
 
 The standalone Module Editor uses existing theme tokens and layout metrics rather than adding a separate palette. It exposes a `moduleEditor` toolbar layout id for density/button sizing and keeps panels compatible with Default, Matrix, Droid, Dark, Light, Classic plus Default, Compact, Wide, and Cinematic layouts.
 
+## GUI Editor
+
+The standalone GUI Editor inherits the active application palette and uses the
+stable `guiEditorCatalog` and `guiEditorInspector` panel layout ids for its
+retail-resource browser and typed selection inspector. Its texture-backed,
+direct-manipulation canvas is custom painted through the active Qt palette; it
+introduces no private colour tokens. Add/delete controls, drag/resize handles,
+validation, and file commands remain inside the standalone workbench. The
+main-workbench GUI Editor command is separate from Map Studio, and PIE consumes
+only the renderer-neutral preview payload.
+
+## Custom Rigged Character Builder
+
+The standalone Custom Rigged Character Builder registers as
+`customRiggedCharacterBuilder`. It uses the active Qt palette, existing
+viewport/theme services, and existing layout metrics; it introduces no private
+Matrix-only colors or fixed splitter contract. Its import, rig, ground,
+animation, material, gameplay, validation, and install pages must remain
+readable in Default/native, Matrix, Droid, Dark, Light, and Classic themes.
+
 ## Scripting Suite
 
 The standalone Scripting Suite registers as

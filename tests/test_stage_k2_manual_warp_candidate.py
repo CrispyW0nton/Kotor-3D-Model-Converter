@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -48,6 +49,46 @@ def _passing_engine_contract(
         "blocking_issues": [],
         "visual_only_room_resrefs": list(visual_only_room_resrefs),
     }
+
+
+@pytest.mark.parametrize(
+    ("stdout", "expected"),
+    (("RUNNING\n", True), ("NOT_RUNNING\n", False)),
+)
+def test_windows_process_probe_has_unambiguous_states(
+    monkeypatch: pytest.MonkeyPatch,
+    stdout: str,
+    expected: bool,
+) -> None:
+    def fake_run(args, **kwargs):
+        assert args[0].lower() == "powershell.exe"
+        assert "System.Diagnostics.Process" in args[-1]
+        assert kwargs["check"] is False
+        return SimpleNamespace(returncode=0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(staging.subprocess, "run", fake_run)
+
+    assert staging.is_swkotor2_running() is expected
+
+
+def test_windows_process_probe_refuses_failed_or_ambiguous_queries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        staging.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=2, stdout="", stderr="provider failed"),
+    )
+    with pytest.raises(StagingError, match="provider failed"):
+        staging.is_swkotor2_running()
+
+    monkeypatch.setattr(
+        staging.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""),
+    )
+    with pytest.raises(StagingError, match="Unexpected Windows process-query response"):
+        staging.is_swkotor2_running()
 
 
 def test_stages_only_requested_module_and_preserves_installed_and_cache_evidence(

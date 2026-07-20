@@ -9,7 +9,1343 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-07-19
+
+### [2026-07-19] publish the canonical Ghost Studio working tree
+
+Owner: LordVaderCW
+
+Intersects: `ghost-studio` commits `03b150ee`, `d2f89026`, `276a4208`, and
+`b2853733`, plus the current Character Builder, Map Studio PIE, GUI Editor,
+FBX, MDL auto-import, and animation-playback work in this workspace.
+
+Subsystem: full canonical source tree, native embedded-Python payloads, Visual
+Studio project metadata, focused tests, product documentation, developer
+scripts, and repository hygiene.
+
+- Consolidated the current working implementations for Custom Rigged Character
+  Builder, BAS composition/export, Map Studio PIE gameplay systems, KOTOR GUI
+  editing, FBX animation export, automatic K1/K2 MDL import, and viewport
+  animation frame pacing into one publishable repository snapshot.
+- Regenerated every affected native Python payload and its project/resource
+  metadata from the canonical source tree.
+- Corrected the viewport source-contract test to inspect the actual
+  `GhostRigger.Core.GUI.Display` package-owned payload instead of the empty
+  legacy root viewport path.
+- Kept local compiler evidence, debugger sessions/logs, and `Saved` previews
+  out of version control while retaining the reusable GhostRigger skills and
+  KOTOR debugger source tools.
+
+Verification:
+
+- All 266 changed Python files passed `py_compile`.
+- Twelve focused native-payload, MDL auto-import, and animation-governor tests
+  passed.
+- 203 focused Custom Rigged Character, BAS, GUI Editor, and Map Studio PIE
+  tests passed.
+- The existing entries below retain their feature-specific visible Debug-app,
+  KOTOR, Unity, and artifact verification details. No new visible UI behavior
+  was introduced solely by this publication snapshot.
+
+### [2026-07-19] T2705/T3501: match custom-creature root and indexed-skin runtime contracts
+
+Owner: LordVaderCW
+
+T###: T2705, T3501
+
+Intersects: the working `Kotor-Patch-Manager` Borhek prototype at
+`Patches/CustomCreatureK2Borhek` and the 2026-07-19 Ghost Studio Character
+Builder/behavior work in this workspace.
+
+Subsystem: Custom Rigged Character import/build workflow, Blender FBX mesh
+extraction, Core.IO FBX conversion, Odyssey model reload validation, focused
+tests, and user/architecture documentation.
+
+- Made the selected single FBX authoring root become the resource-named
+  Odyssey model/animation root. Borhek now exports `c_borhek -> heightdummy ->
+  cutscenedummy -> root_joint` instead of adding `godnode` as a second root
+  layer.
+- Preserved original Blender/FBX control-point indices alongside the
+  loop-flattened preview payload and restored indexed vertices before Odyssey
+  skin-palette splitting. Borhek's fifteen skin parts now match every proven
+  prototype vertex/triangle/palette count and return to a 231,700-byte MDX.
+- Removed sub-micrometre FBX bake-noise position tracks while retaining real
+  `root_joint` translation. Every mapped Borhek animation now reloads with the
+  prototype's 42-node tree and only its meaningful position track.
+- Added reload rejection for a retained second authoring root and documented
+  the distinction between loop-flattened preview records and indexed Odyssey
+  skin output.
+
+Affected files: `scripts/blender_extract_fbx_mesh.py`, Core.IO
+`blender_fbx_mesh_importer.py`, Core.Workflow custom-rig import/build services,
+`tests/test_custom_rigged_character_import.py`, custom-rig user/architecture
+guides, native payload metadata, and `CHANGES.md`.
+
+Verification:
+
+- The corrected Borhek headless comparison reloaded with 58 model nodes, 15
+  skin nodes, 2,302 partition-local skin vertices, 3,058 triangles, a maximum
+  palette of 12, no `godnode`, `root_joint` parented to `cutscenedummy`, 42
+  nodes in each mapped animation, and only `root_joint` position controllers.
+- All fifteen part counts match the working prototype, and generated MDX size
+  is exactly 231,700 bytes instead of the rejected candidate's 918,900 bytes.
+- The five focused Custom Rigged Character suites passed (62 tests), plus four
+  focused native payload checks; changed Python sources passed compilation.
+- Visible Debug-app rebuild/install and KOTOR II playback remain required and
+  are intentionally not claimed by this entry yet.
+
+### [2026-07-19] document the Python 3.13 native-host prerequisite
+
+Owner: LordVaderCW
+
+Intersects: first-install support following `ghost-studio` commit `276a4208`.
+
+Subsystem: root installation guide and native C++ host prerequisites.
+
+- Corrected the root README so the recommended native build no longer installs
+  dependencies only into Python 3.14 while the host searches for and links
+  Python 3.13.
+- Added a `winget`-independent PowerShell preflight that downloads the official
+  CPython 3.13 installer, verifies its SHA-256, enables development files,
+  checks `Python.h`, `python313.lib`, and `python313.dll`, persists the
+  host/MSBuild environment, and passes the resolved home to MSBuild.
+- Kept Python 3.14 documented for the source-run workflow, where it is
+  supported without the native host's Python 3.13 ABI constraint.
+
+Affected files: `README.md` and `CHANGES.md`.
+
+Verification: reviewed the documented include, library, DLL, and environment
+paths against `GhostRigger.Native.Core.Host.vcxproj` and the native host setup
+notes; Markdown changes passed `git diff --check`.
+
+### [2026-07-19] T2906/T3101: restore Validation payload parity for clean-clone builds
+
+Owner: LordVaderCW
+
+T###: T2906, T3101
+
+Intersects: `ghost-studio` commit `5e524858`, which updated the packaged
+walkmesh engine-contract validator without updating its canonical `src/` twin.
+
+Subsystem: Core.Validation embedded-Python payload generation and Visual Studio
+Debug/Release pre-build integration.
+
+- Synchronized `src/core/validation/kotor_module_engine_contract.py` with the
+  newer Core.Validation packaged implementation so the payload generator's
+  byte-identity gate no longer rejects a fresh checkout.
+- Regenerated the focused Core.Validation payload metadata and retained the
+  current package additions without rewriting unrelated native payloads.
+
+Affected files: canonical and packaged
+`kotor_module_engine_contract.py`, Core.Validation payload metadata/project
+items, and `CHANGES.md`.
+
+Verification:
+
+- Both validator copies and the payload generator compiled with Python 3.14.
+- The project-local `GeneratePythonPayload.py` command completed with exit code
+  0; the two focused payload identity/generator contract tests passed.
+- `GhostRigger.Core.Validation.vcxproj` built successfully as Debug|x64 through
+  MSBuild, including the exact `GenerateGhostRiggerPythonPayload` pre-build step
+  that previously returned MSB3073.
+
+### [2026-07-19] prevent PFBC09 file-open stalls and generated-light model crashes
+
+Owner: LordVaderCW
+
+Subsystem: automatic KOTOR MDL import, animation browser handoff, scene model
+queries, and generated viewport lighting (Core.GUI.Display/Core.Math/Core.Rendering).
+
+- Kept inherited-supermodel discovery out of the automatic file-open handoff.
+  Local clips now appear immediately, while the Animation Browser exposes an
+  explicit `Load Inherited` action for the slower game-library lookup.
+- Added a dedicated inherited-animation worker path and stale-request handling
+  so an explicitly requested lookup does not run inside the file importer or
+  replace the results for a newly selected model.
+- Made generated preview-light nodes obey the shared model-node query contract
+  and hardened model traversal against renderer-owned helper nodes that do not
+  carry mesh flags.
+- Preserved the existing automatic K1/K2 binary detection, sibling MDX pairing,
+  and corrected PFBC09 texture orientation.
+
+Affected files: Core.GUI.Display animation panel/workflow/worker/main-window
+payload, Core.Math `model_data.py`, Core.Rendering `light_manager.py`,
+`tests/test_mdl_auto_import.py`, and regenerated native payload metadata.
+
+Verification:
+
+- The exact user file `pfbc09.mdl` parsed as a K2 character model with its
+  sibling MDX in under one second. In the instrumented actual main window, the
+  scene/selection handoff fell from roughly 12-17 seconds to 0.189 seconds
+  (0.122 seconds for selection listeners) after inherited lookup was deferred.
+- Six focused importer/animation/model-query regressions and two focused native
+  payload identity/project-inclusion checks passed; changed Python files also
+  passed compilation.
+- Visible file-menu proof confirmed PFBC09 reaches the textured viewport. The
+  model-helper crash was reproduced before the fix and absent afterward.
+- Core.Math, Core.Rendering, and Core.GUI.Display rebuilt in Debug x64; the
+  native Debug host then rebuilt and staged all 18 manifest-owned payload DLLs.
+
+### [2026-07-19] T2404/T2505/T3506: preserve attached-head facial animation in Unity FBX exports
+
+Owner: LordVaderCW
+
+T###: T2404, T2505, T3506
+
+Subsystem: BAS DCC composition, FBX animation selection/materialization, facial
+geometry export, and the shared FBX animation-selection dialog
+(Core.Tools/Core.Workflow/Core.IO/Core.GUI.Display).
+
+- Fixed BAS DCC export composition so hidden rigid face geometry embedded in a
+  full body (eyes, eyelids, and teeth) is omitted when the selected head
+  supplies its same-name replacement. The nodes remain available for hierarchy
+  and bind references, avoiding destructive changes to the native DAG.
+- Preserved facial animation after collision-safe attachment renaming by
+  mapping only the attached head's descendants below `head_g` into their final
+  export names. Structural root/torso/neck/head tracks are deliberately not
+  duplicated beneath `headhook`, preventing double transforms.
+- Fixed `Select All` in the FBX animation dialog to check only rows visible
+  under the current supermodel/text filter and clear hidden rows.
+- Added reusable exact-model proof scripts for Carth (`P_CarthBB` +
+  `P_CarthH`) and Darth Bandon (`N_DarthBand` + `darthband_h`) in Unity, plus
+  an actual main-window dialog proof for filtered animation selection.
+
+Affected files: Core.Tools `systems/bas/preview_composer.py` and dialog payload,
+Core.Workflow `core/animation/fbx_animation_selection.py`, Core.IO
+`converters/mesh_converter.py`, Core.GUI.Display dialog payload,
+`tests/test_bas_composed_export.py`, `tests/test_unity_export_bridge.py`, proof
+scripts, and regenerated native payload metadata/resources.
+
+Verification:
+
+- Focused BAS composition, inherited/local animation materialization, rigid
+  facial mesh, Unity FBX, dialog, and package-payload checks passed; Python
+  compilation passed for all changed runtime and proof files.
+- Unity 2022.3.62f1 imported and sampled exact `tlknorm` exports for Carth and
+  Darth Bandon. Both had 96 facial curve bindings, six attached eyes/lids/teeth
+  renderers, zero unattached duplicate face renderers, measurable facial motion
+  (16.078 degrees maximum rotation), and passed bind/animated image capture.
+- The actual Ghost Studio main-window FBX selector filtered to `S_Male02`, then
+  `Select All` selected only the two visible clips (`tlknorm`, `walk`) and left
+  no hidden clip checked.
+- Core.Tools, Core.Workflow, Core.IO, and Core.GUI.Display rebuilt in Debug x64;
+  the full Debug x64 host then rebuilt and staged `GhostStudio.exe` plus all 18
+  manifest-owned native payload DLLs successfully.
+
+### [2026-07-19] T1210/T2505/T3506: keep attached heads animated in KMAX main-viewport scenes
+
+Owner: LordVaderCW
+
+T###: T1210, T2505, T3506
+
+Subsystem: Body Attachment System scene composition, main-viewport animation,
+and Peragus uniform visual proof (Core.Tools/Core.GUI.Display).
+
+- Fixed the main viewport's KMAX scene-composite copy so detachable BAS layers
+  retain their original runtime source-model reference. A normal deep copy had
+  cloned the attached head model but preserved its old numeric source ID; the
+  renderer therefore rejected every generated head-local pose while the body
+  and `headhook` continued animating, leaving the head floating at bind height.
+- Added a focused regression that copies a BAS head through the KMAX scene path,
+  proves the source reference/ID remain identical, and verifies an inherited
+  `b11a3` head-local pose keeps the body pose as its animated socket.
+- Added a reusable actual-main-window proof for PFBC09/PFHC01 and
+  PMBC09/PMHC01 on the ModernGL backend. It captures requested side views and
+  records exact animated `headhook`/head-root world-coordinate parity without
+  writing to KOTOR 2's Override directory.
+
+Affected files: Core.Tools `systems/bas/preview_composer.py`, Core.GUI.Display
+`viewport_core/widgets/scene_models.py`, `tests/test_core_contracts.py`,
+`scripts/capture_peragus_main_viewport_bas_proof.py`, and regenerated native
+payload metadata/resources.
+
+Verification:
+
+- MCP-backed stock baseline `compare_model_pipelines(K2, PFBCM)` matched all 76
+  nodes with no missing, extra, or discrepant nodes.
+- Focused KMAX/BAS source-identity and head-pose regression passed.
+- Actual Ghost Studio main-window ModernGL proof passed for both custom bodies
+  with inherited K2 `b11a3`: head root equaled animated `headhook` exactly
+  (`0.0 m` maximum error), head-local source IDs matched, and the generated
+  head pose retained the live body pose as its socket. Side-view screenshots
+  and JSON evidence are under the Peragus proof artifact's `VisualProof`
+  directory; `override_modified` is `false`.
+- The focused Core.Tools and Core.GUI.Display Debug x64 projects rebuilt, then
+  the full Debug x64 native host rebuilt in one process and staged the updated
+  `GhostStudio.exe` plus all 18 payload DLLs successfully.
+
+### [2026-07-19] Ghost Studio: correct loose-TGA wrapping on KOTOR UVs
+
+Owner: LordVaderCW
+
+T###: N/A
+
+Subsystem: Core.Rendering texture orientation and ModernGL character-atlas sampling.
+
+- Corrected the loose TGA/PNG texture-cache orientation marker after Pillow
+  normalizes rows and Ghost Studio converts them to bottom-up GPU order. KOTOR
+  binary/D3D UVs now retain the required shader V conversion, while imported
+  DCC/OpenGL meshes can still opt out through `uv_v_flip=False`.
+- Added an asymmetric four-color TGA regression that proves both stored row
+  order and the GPU V-conversion contract instead of relying on visually
+  symmetric textures.
+- Updated the renderer source contract to require normalized loose images to
+  advertise the KOTOR UV conversion.
+
+Affected files: Core.Rendering package-local `frame_core/texture_cache.py`,
+`tests/test_tpc_viewport_mip_fast_path.py`, and
+`tests/test_skeleton_template_hud_wiring.py`, plus regenerated Core.Rendering
+payload metadata/resources.
+
+Verification:
+
+- Python compilation passed for the changed texture cache.
+- Focused loose-TGA orientation, renderer contract, and native payload tests
+  passed (3 tests).
+- Visible ModernGL GL330 proof reloaded the supplied K2 `pfbc09.mdl/.mdx` and
+  its 4096x4096 `PFBC09_basecolor.tga`; gold armor, dark sleeves, green cloth,
+  brown pouches, gloves, and boots all sampled their intended atlas regions.
+  Proof: `Saved/VisualProofs/mdl_auto_import_20260718/pfbc09_texture_orientation_fixed.png`.
+
+## 2026-07-18
+
+### [2026-07-18] Ghost Studio: automatic K1/K2 MDL import and responsive UI handoff
+
+Owner: LordVaderCW
+
+T###: N/A
+
+Subsystem: Core.IO KOTOR model import routing and Core.GUI.Display file-load workflow.
+
+- Replaced separate binary/ASCII file-open choices with one `Open KOTOR Model
+  (Automatic)` workflow that detects binary versus ASCII MDL, pairs a sibling
+  MDX, identifies K1/K2 from the binary geometry function pointer, and routes
+  parsed character, area, placeable, door, effect, and lightsaber models to the
+  appropriate Ghost Studio workflow.
+- Added evidence and confidence metadata for automatic game selection, with
+  configured-install paths, ASCII header comments, and the active/default game
+  used only when the format has no definitive K1/K2 signature.
+- Fixed native positional-file launch so Explorer/Open-With model arguments use
+  the same automatic importer.
+- Fixed a permanent UI freeze exposed by `pfbc09.mdl`: PySide was invoking the
+  progress-toast callback directly on the model worker thread. A main-thread
+  QObject relay now queues all progress and completion callbacks before they
+  touch the viewport or other widgets.
+
+Affected files: `src/io/mdl_auto_import.py`, its Core.IO embedded payload,
+Core.GUI.Display `workers.py`, `resource_loading.py`, and `window_chrome.py`,
+native payload manifests/resources, and focused importer/payload contracts.
+
+Verification:
+
+- Focused automatic-import, worker-delegation, positional-launch, main-thread
+  relay, and native payload tests passed.
+- MCP model-pipeline comparisons matched without discrepancies for K1 `pmbam`
+  (61 nodes) and K2 `001ebo1` (60 nodes).
+- Real K1 `pmbam.mdl` and K2 `001ebo1.mdl` files loaded through the automatic
+  Core.IO service with exact game signatures and their sibling MDX files.
+- Visible Debug-app proof loaded the supplied K2 `pfbc09.mdl/.mdx` through
+  File > Open KOTOR Model (Automatic); the application remained responsive and
+  rendered the textured headless armor model. Its 4096x4096 uncompressed TGA
+  took about 14 seconds to prepare for the viewport.
+- Focused Debug x64 Core.IO and Core.GUI.Display native projects built
+  successfully; the isolated host used matching rebuilt DLLs for visible proof.
+
+### [2026-07-18] T2503/T2505/T3501/T3502/T3504/T3506: Peragus custom uniforms rigged, oriented, and BAS-proven
+
+Owner: LordVaderCW
+
+T###: T2503, T2505, T3501, T3502, T3504, T3506
+
+Intersects: T2550/T2555 compact inverse-bind and split-skin preview work in
+the shared Character Studio animation/skinning runtime.
+
+Subsystem: Character Studio native-DAG binding, Odyssey MDL/MDX skin export,
+animation preview, and Body Attachment System proof.
+
+- Built reloadable K2 `pfbc09.mdl/.mdx` and `pmbc09.mdl/.mdx` proof bodies
+  from the custom Peragus Mining Uniform meshes while retaining the PFBCM and
+  PMBCM native node DAGs, hooks, supermodels, and inherited animation library.
+- Corrected fresh Character Builder qBone/tBone generation to serialize the
+  engine inverse-bind contract (`inverse(bone_world) * skin_world`, disk WXYZ)
+  and retained exact numeric palette IDs through anatomical splitting,
+  MDL write, and reload.
+- Corrected the authored body basis with a geometry-only 180-degree KOTOR-Z
+  rotation and anatomical left/right palette remap; the native DAG and hooks
+  were not rotated.
+- Made AnimationEngine and MatrixPaletteUploader retain the first native joint
+  for duplicate Odyssey node names. K2 PFBCM's nested duplicate `lhand_g` and
+  finger helpers no longer become a name-driven self-parent cycle or detach
+  the female glove from the wrist.
+- Added an exact skin-palette hierarchy transform that preserves intermediate
+  180-degree finger rotations. This fixed PMBC09 `RcFngrT_g`, whose adjacent
+  glove edges previously stretched 25.81x despite structurally valid weights.
+- Stabilized the custom armored gloves by collapsing transferred finger/thumb
+  influences onto each `hand_g` while retaining forearm/wrist blends. The
+  female right-hand maximum edge stretch fell from 5.26x to 1.78x, its
+  left-hand p99 fell from 2.27x to 1.50x, and the male failure fell from
+  25.81x to 2.02x at the quarter-cycle `walk` pose.
+- Fixed Character Builder's embedded BAS slot identity and tagged preview
+  poses with body animation source/name metadata so attached skinned heads
+  evaluate their own local `walk` hierarchy instead of collapsing at the
+  collar.
+- Applied artifact-specific headhook fitting from true side profiles: PFBC09
+  is 35 mm down / 10 mm forward from stock; PMBC09 is 35 mm down / 20 mm
+  forward. The necks now overlap the raised collars and hide the seams.
+- Added idempotent Peragus artifact finalizers and a live D3D12 proof harness;
+  none of the proof steps writes to the KOTOR 2 Override directory.
+
+Affected files:
+
+- `native/GhostRigger.Core.Scene/Python/src/core/skeleton/skeleton_builder.py`
+- `native/GhostRigger.Core.Tools/Python/src/core/skeleton/skeleton_builder.py`
+- `native/GhostRigger.Core.Workflow/Python/src/core/animation/animation_engine.py`
+- `native/GhostRigger.Core.Workflow/Python/src/core/animation/gpu_skinning.py`
+- `native/GhostRigger.Core.Workflow/Python/src/core/characters/headless_body_workflow.py`
+- `native/GhostRigger.Core.Resources/Python/src/core/game/kotor_loader.py`
+- `src/core/mdl/mdl_writer.py` and packaged IO/Runtime Host copies
+- `native/GhostRigger.Core.Tools/Python/src/gui/panels/qt_character_builder_panel.py`
+  and the GUI Display packaged copy
+- `scripts/finalize_peragus_uniform_orientation.py`
+- `scripts/repair_peragus_uniform_duplicate_bones.py`
+- `scripts/stabilize_peragus_uniform_glove_weights.py`
+- `scripts/adjust_peragus_uniform_headhook.py`
+- `scripts/capture_peragus_uniform_bas_proof.py`
+- `tests/test_character_builder_template_rig.py`
+- `tests/test_bas_composed_export.py`
+- `tests/test_motion_assignment_wiring.py`
+- Generated Python payload manifests for the seven affected native owner
+  packages (GUI Display, Tools, Workflow, Scene, Resources, IO, Runtime Host)
+
+Verification:
+
+- Six focused Character Builder/BAS/pose tests pass, including the new
+  intermediate-180-degree finger-parent inverse-bind regression.
+- The focused native payload byte-identity/manifest contract passes after
+  regenerating only the seven affected owner packages.
+- Reload audit: PFBC09 3,232 vertices / 58 palette rows / max bind error
+  `4.1069e-08`; PMBC09 3,181 vertices / 47 rows / max bind error
+  `3.9268e-08`; every weight row is normalized with at most four influences.
+- Both bodies resolve 473 inherited animation names and remain bounded through
+  five `walk` samples.
+- Live Qt viewport proof passed on `pygfx_wgpu` / D3D12 / NVIDIA RTX 5090 with
+  PFHC01 and PMHC01 attached directly to `headhook`; front, three-quarter,
+  true-side, full-body, and textured captures were written under the proof
+  artifact's `VisualProof` directory.
+- The proof report confirms `override_modified: false`.
+
+### [2026-07-18] T2906/T3101: canonical KOQ200 retail K2 proof and community package
+
+Owner: LordVaderCW
+
+T###: T2906, T3101
+
+Intersects: the seven-rung KOQ200 transplant bisection and hash-locked live
+logging work recorded below.
+
+Subsystem: canonical KOQ200 packaging, Map Studio round trip, K2 retail proof,
+and community handoff.
+
+- Repacked the retail-proven `kq2all` eight-room axis as canonical
+  `koq200.mod`, changing only five root resource keys, five ARE tag bytes, and
+  31 IFO identity bytes. All 24 room MDL/MDX/WOK payloads, all 34 WOK
+  transitions, GIT, LYT, PTH, VIS, and texture payloads remain byte-exact to
+  the fully traversed source axis. The canonical Mod_ID is
+  `3dcb7bee8f3ebcff4642c70b0ef1dc9e`.
+- Imported the result through Ghost Studio Map Studio, saved and reopened
+  `koq200.kmap`, and required MOD/KMAP WOK audit and reopen parity for all eight
+  rooms before staging. The canonical MOD contains 1,181 walkable faces, nine
+  closed perimeter loops, complete AABB coverage, and no raw walkmesh errors.
+- Guardedly staged exact MOD SHA-256
+  `bde7b0de877f8243f31fdd69a7c4e61bf5357d985be297d30abd58add748ec3a`
+  and started hash-locked session
+  `Saved/KotorLiveLogs/20260718-172204-koq200-canonical-hashlocked-r15`.
+  The exact hash reached `currentgame` while KOTOR 2 remained responsive.
+- The user manually ran `warp koq200`, traversed the complete canonical map,
+  and reported: “Everything works as intended.” The debugger-attached log
+  recorded zero crashes, zero second-chance exceptions, four handled
+  first-chance notifications, and a normal process exit with code 0.
+- Preserved the retail attestation and exact evidence hashes in
+  `Saved/KotorManualWarpEvidence/20260719T002142443222Z_koq200/retail_proof_manifest.json`.
+- Assembled an upload-ready K2 community package containing the installable
+  MOD, optional editable KMAP, checksums, technical proof, and an explicit
+  scope/provenance README. The source-authored/recovered WOK topology is
+  described honestly: Ghost Studio validated and preserved it byte-for-byte;
+  it was not regenerated from visual geometry for this recovery.
+
+Affected files:
+
+- `scripts/build_koq200_k2_canonical_from_kq2all.py`
+- `tests/test_build_koq200_k2_canonical_from_kq2all.py`
+- `artifacts/map_studio/koq200_k2_canonical_from_kq2all_20260718_v2/`
+- `artifacts/map_studio/community_packages/KOQ200_K2_Retail_Verified_20260718/`
+- `Saved/KotorManualWarpEvidence/20260719T002142443222Z_koq200/`
+
+Verification:
+
+- Canonical builder tests pass: 5/5; Python compilation passes.
+- Engine contract, archive readback, MOD and KMAP walkmesh audits, 8/8 room
+  reopen checks, and 8/8 WOK parity pass.
+- Canonical MOD: 15,858,897 bytes, SHA-256
+  `bde7b0de877f8243f31fdd69a7c4e61bf5357d985be297d30abd58add748ec3a`.
+- Editable KMAP SHA-256:
+  `e597e77d368618e866655a560a4e7ec2e64172e71e4de2beb0aae6324ac5dc27`.
+- Upload ZIP SHA-256:
+  `668f21a50a7d06a9e1872ce370a4af56afeab375b7f2aa6de9da3501ba7e2a64`;
+  every archived entry was streamed back and matched its expected checksum.
+- This closes KOQ200 for KOTOR 2 only. KOQ200 K1 port/proof and KOQ201/KOQ202
+  retail proof remain separate pending gates.
+
+### [2026-07-18] Character Studio: restore `c_rakghoul` animation playback
+
+Owner: LordVaderCW
+
+Subsystem: Core.Rendering animation-pose dispatch and Character Studio
+Animation Browser playback.
+
+- Fixed the optional dangly/cloth simulation pass so retained-scene helper
+  nodes without full `ModelNode` fields are skipped safely. Previously,
+  `c_rakghoul` advanced in the animation engine but every visible playback tick
+  raised `AttributeError` on a `SimpleNamespace` helper before the pose reached
+  the viewport, leaving the timeline frozen while the UI still said Playing.
+- Added a focused mixed-node renderer regression covering the failing
+  `cgustandb` pose-publication boundary.
+- Regenerated the Core.Rendering embedded Python payload metadata; no KOTOR
+  source model or animation data was changed.
+
+Affected files:
+
+- `native/GhostRigger.Core.Rendering/Python/src/core/rendering/frame_core/renderer_setup.py`
+- `tests/test_rakghoul_animation_playback.py`
+- Core.Rendering embedded payload manifests/resources
+
+Verification:
+
+- KotorMCP `compare_model_pipelines(K2, c_rakghoul)` still reports a complete
+  match with no discrepancies after the fix.
+- Python compilation and the focused renderer/payload checks pass: 3/3.
+- `GhostRigger.Native.Core.Host` builds successfully in `Debug|x64`, including
+  generation and staging of all 18 native payload DLLs.
+- In the actual Debug application, `cgustandb` remained selected, playing, and
+  looped while its clock advanced from 0.202 s to 0.885 s. Two captured window
+  frames show the corresponding pose change, and the new session log contains
+  no traceback, renderer tick error, or `AttributeError` before the app exited
+  cleanly.
+
+### [2026-07-18] T2906/T3101: hash-locked K2 warp evidence and KOQ200 control proof
+
+Owner: LordVaderCW
+
+T###: T2906, T3101
+
+Intersects: the KOQ200 failed-warp forensics and seven-rung K2 transplant
+bisection recorded below.
+
+Subsystem: KotorMCP live logging, retail warp routing, and KOQ200 bisection.
+
+- Live-log sessions may now bind themselves to an expected warp resref and an
+  exact installed MOD SHA-256. The logger records the normalized console
+  command, start/end `Modules` snapshots, and the final `currentgame` snapshot;
+  a missing or wrong-hash target fails before the monitor starts.
+- Summary output now distinguishes first-chance debugger notifications from
+  second-chance exceptions and reports a crash count. Handled first-chance
+  access violations are no longer mislabeled as game crashes.
+- Reclassified the reported `warp koq200` event as an invalid route rather
+  than a candidate failure: no `koq200.mod`, `.rim`, or `_s.rim` was installed,
+  the stale AUTOSAVE did not contain KOQ200, and Windows recorded no new
+  unhandled `swkotor2.exe` failure.
+- Completed the first valid bisection rung. The user manually entered
+  `warp kq2ctl`; KOTOR 2 remained alive and responsive, and
+  `currentgame/kq2ctl.mod` matched the installed control byte-for-byte at
+  SHA-256
+  `2e9954ac2abfff31a10aeb6f0cd6e03bc9d7df03869dd1335a04e6d4df7c4dc6`.
+  Hash-locked session
+  `Saved/KotorLiveLogs/20260718-164949-koq200-bisection-kq2ctl-hashlocked-r8`
+  finished with zero crashes, zero second-chance exceptions, and no process
+  exit. This proves the renamed-oracle load boundary; it does not yet prove any
+  KOQ200 room geometry.
+- Completed the remaining hash-locked matrix in the same live K2 process.
+  `kq2min`, `kq2r0h`, `kq2r0a`, `kq2met`, `kq2scr`, and `kq2all` each reached
+  `currentgame` at its exact installed SHA-256. Every per-rung session reports
+  zero crashes, zero second-chance exceptions, and no process exit. This proves
+  the empty-GIT shell, isolated rooms `01h` and `01a`, candidate metadata,
+  script-neutralized metadata, and the complete eight-room layout all cross
+  the K2 retail load boundary.
+- The user manually traversed the entire `kq2all` map and reported it good to
+  go. This is the first retail movement/walkmesh proof for the complete KOQ200
+  room set. It proves the clean-shell/eight-room axis, while canonical
+  `koq200.mod` naming and packaging still require their own final warp.
+
+Affected files:
+
+- `native/GhostRigger.Core.Automation/Python/src/kotormcp/game_process_log.py`
+- `native/GhostRigger.Core.Automation/Python/src/kotormcp/schemas/__init__.py`
+- `native/GhostRigger.Core.Automation/Python/src/kotormcp/tools/kotor_live_log.py`
+- Core.Automation embedded payload metadata/copies regenerated
+- `tests/test_kotor_live_log_tools.py`
+
+Verification:
+
+- Focused live-log tests pass: 34/34. Python compilation passes for the logger,
+  schema, tool adapter, and focused test module. The test bootstrap explicitly
+  selects Ghost Studio's packaged KotorMCP implementation instead of the
+  sibling standalone workspace.
+- The retail session captured the expected installed and `currentgame` hashes,
+  four handled first-chance notifications, zero second-chance exceptions, and
+  zero crashes while PID 80604 remained responsive.
+- Hash-locked follow-up sessions:
+  `20260718-165306-koq200-bisection-kq2min-hashlocked-r9`,
+  `20260718-165739-koq200-bisection-kq2r0h-hashlocked-r10`,
+  `20260718-170301-koq200-bisection-kq2r0a-hashlocked-r11`,
+  `20260718-170412-koq200-bisection-kq2met-hashlocked-r12`,
+  `20260718-170502-koq200-bisection-kq2scr-hashlocked-r13`, and
+  `20260718-170555-koq200-bisection-kq2all-hashlocked-r14` all closed their
+  evidence logs cleanly with exact start/end/currentgame target hashes.
+- Consolidated the seven immutable session chains and the separately scoped
+  user traversal attestation in
+  `Saved/KotorManualWarpEvidence/20260718-170833-koq200-k2-hashlocked-r8-r14-load-boundary/manifest.json`,
+  SHA-256
+  `f65370ea172d58cced8cc1f9163ec8d50db637665f5d68131dff70e88b609171`.
+  The manifest deliberately classifies r8-r14 as load-boundary evidence and
+  applies the traversal claim only to `kq2all`, not to the not-yet-tested
+  canonical package.
+
+### [2026-07-18] T2906/T3101: canonical-safe KOQ201 collision and pathing rebuild
+
+Owner: LordVaderCW
+
+T###: T2906, T3101
+
+Intersects: the earlier controller-preserved KOQ201 structural build and the
+transition-aware legacy-room path compiler.
+
+Subsystem: KOQ201 authoritative WOK selection, room collision ownership,
+module scripts, K2 binary models, pathing, and Map Studio round trip.
+
+- Added a distinct canonical KOQ201 build plan instead of silently falling
+  through the `rnvcity` provenance alias. It preserves all audited source
+  controller banks and uses the repaired, hash-pinned six-face local
+  `koq201_01a.wok` SHA
+  `836ef5d11505b5e6e64a4a038552cd57c8494078e5cf22eb8406c3642c4a42b4`.
+- Removed the previous centralized 76-face collision union from room `01a`.
+  A new fail-closed cross-room collision gate finds zero exact world-space
+  duplicate triangles across the nine final room WOKs.
+- Restored the five reciprocal room seams from `01a` through `01f` and
+  regenerated a 21-point/34-edge PTH with five portal bridges and four expected
+  graph components. Rooms `01g`, `01h`, and `01j` remain evidence-honest
+  isolated partitions because their sources contain no portal transitions.
+- Neutralized only the three donor module hooks proven absent from both the
+  package and clean K2 libraries (`k_getitem`, `k_activate_med`, and
+  `a_no_mines`). The final module-script audit reports zero unresolved hooks.
+- Added mandatory engine/readback, MOD/KMAP walkmesh audit, and
+  MOD-to-KMAP-to-reopen parity gates before KOQ201 can be offered for manual
+  testing. The resulting MOD and KMAP remain uninstalled and retail-unverified.
+
+Affected files:
+
+- `scripts/build_rnv_k2_full_candidates.py`
+- `tests/test_generate_legacy_room_walkmesh_candidates.py`
+- generated evidence under
+  `artifacts/map_studio/koq201_k2_canonical_safe_20260718_v1/`
+
+Verification:
+
+- Five focused KOQ201 plan/WOK/collision/transition/proof-gate tests pass;
+  Python compilation and diff checks pass.
+- Engine and packaged readback report export-ready with zero blockers. MOD and
+  KMAP WOK audits pass, and reopened parity is 9/9 rooms.
+- Fresh MOD SHA-256:
+  `43caa5abba41a5529b6ee62c0317515489a2094639561ddce64858bf49cb088e`.
+  Fresh KMAP SHA-256:
+  `f676fe75150c1a49321d4e359ef383f42a95c0b17d15bba4c26e65964c4daf01`.
+  No KOQ201 file was installed into either game; manual K2 proof is still
+  required.
+
+### [2026-07-18] T2906/T3101: fresh controller-preserved KOQ202 K2 candidate
+
+Owner: LordVaderCW
+
+T###: T2906, T3101
+
+Intersects: the earlier controller-free KOQ202 candidate, which is now
+quarantined, and the transition-aware PTH repair.
+
+Subsystem: KOQ202 legacy-room recovery, K2 binary model contracts, walkmesh
+pathing, Map Studio round trip, and fail-closed staging metadata.
+
+- Rebuilt KOQ202 with the source controller banks preserved exactly rather than
+  stripping vanilla-shaped static-room controllers. Per-room controller counts
+  are `618/970/174/0/272`; geometry, materials, textures, controller ordering,
+  raw controller metadata, times, and values match their audited inputs.
+- Regenerated each embedded AABB from its authoritative external WOK. All 190
+  faces pass the current negative-dot plane contract and topology parity.
+  Transition preservation/remapping includes `01c` source room index 6 to
+  retained index 4 and explicitly drops `01g`'s reference to missing `01h`.
+- Regenerated a 12-point/20-edge PTH with three reciprocal portal bridges and
+  zero one-way links. Raw and packaged-readback engine contracts, MOD audit,
+  MOD-to-KMAP conversion, KMAP reopen, and 5/5 WOK parity all pass.
+- Hardened the candidate overlay to quarantine the obsolete controller-free
+  SHA `7ecb30e2...f1f771b`. A stage command is exposed only when controller,
+  AABB, transition, PTH, artifact-hash, and Map Studio round-trip evidence all
+  match the fresh proof. KOQ202 remains uninstalled and retail-unverified.
+
+Affected files:
+
+- `scripts/build_k2_candidate_overlay.py`
+- `tests/test_build_k2_candidate_overlay.py`
+- generated evidence under
+  `artifacts/map_studio/koq202_k2_controller_preserved_20260718/`
+
+Verification:
+
+- Overlay fail-closed tests pass: 2/2; Python compilation passes.
+- Fresh MOD SHA-256:
+  `9c13504f5f398d984a4e4a52ff9483aa2de63ddc97b7aacc48350f4d22235f22`.
+  Fresh KMAP SHA-256:
+  `79c558572bb56cfec6e4b56f989241c29e3b81391d94aa71ff9df5dc11269e35`.
+  No KOQ202 file was installed into either game; manual K2 proof is still
+  required.
+
+### [2026-07-18] T2906/T3101: KOQ200 failed-warp forensics and isolated K2 bisection matrix
+
+Owner: LordVaderCW
+
+T###: T2906, T3101
+
+Intersects: the conservative KOQ200 candidate/writer repair and the audited
+complete KOQ200 hybrid work from this date.
+
+Subsystem: retail K2 manual-warp proof, live crash evidence, room/metadata
+transplant bisection, and fail-closed candidate status.
+
+- Recorded the user's manual `warp koq200` result for candidate SHA-256
+  `6395c56e2ee6184a29e505206e90fec0019306f169c51766ea6fcfd978667a78`
+  as **failed**. The transition never established KOQ200 as the running area;
+  `currentgame` retained only `plcaa`, and the full process dump contains the
+  live server state `ModuleLoaded plcaa`/`ModuleRunning plcaa` with no retained
+  KOQ200 room or texture resources. The candidate is no longer eligible for
+  promotion or an unchanged retry.
+- Preserved the exact installed MOD, currentgame source save, logger snapshot,
+  INI/logs, and a 687,269,362-byte full-memory dump under
+  `Saved/KotorManualWarpEvidence/20260718T144644223_koq200_k2_crash_safe_6395`.
+  Live session
+  `Saved/KotorLiveLogs/20260718-144029-koq200-k2-safe-6395-manual-warp-r2`
+  could not attach the Windows debugger (error 87), so it captured liveness
+  rather than an exception. The process later exited cleanly with code zero
+  after the failed/hung transition was closed; the dump has no exception stream
+  or valid fault address. A `CustomAnimationCore` debug-print exception visible
+  on the live stack also occurs in proven PLCaa sessions and is not a KOQ fault.
+- Compared every candidate room against clean K2 CHITIN `001ebo1` and the
+  known-loadable `r00_test` room. All `koq200_01a..01h` rooms use K2 model
+  pointers, zero node-header `+8` runtime pointers, a root-parented embedded
+  AABB, valid AABB planes/coverage, and closed external-WOK perimeters. This
+  eliminates the already-fixed node-runtime-pointer/AABB-plane defects as the
+  immediate explanation. `01h` remains a semantic outlier (two WOK faces,
+  no transition, far-offset position hooks, AABB node `Plane01`) but has no raw
+  structural blocker.
+- Added a five-module, unique-resref K2 transplant matrix that isolates one
+  engine-load axis at a time: renamed oracle control (`kq2ctl`), empty-GIT
+  oracle control (`kq2min`), proven metadata plus candidate `01h` (`kq2r0h`),
+  proven metadata plus candidate `01a` (`kq2r0a`), and candidate IFO/ARE/GIT
+  plus proven room (`kq2met`). Single-room WOK transition destinations are
+  neutralized in place while vertices/faces/materials/planes/AABB/adjacency/
+  edge IDs/perimeters stay byte-identical, preventing an out-of-range room
+  target from creating a false room-binary failure. Each package has a
+  deterministic unique Mod_ID, a walkable entry point, and one PTH point.
+- Extended the matrix with `kq2scr`, a sixth candidate-metadata/oracle-room
+  rung that clears only the three non-empty module event hooks proven to be
+  unresolved (`k_activate_med`, `k_getitem`, and `a_no_mines`). The exact
+  failed IFO reused vanilla `001EBO`'s Mod_ID
+  `5e0de59ebb74711d0ff07e5d092a4fc9` and those three `001EBO_s.rim`-local
+  scripts without bundling them. NCS disassembly confirmed that the scripts
+  manipulate Ebon Hawk-specific tags, tutorials, and `002EBO_Has_Mine`; they
+  must not be transplanted into KOQ200.
+- Added `kq2all` as the seventh rung: clean scriptless oracle IFO/ARE/GIT
+  semantics plus the complete `koq200_01a..01h` candidate room set. It retains
+  each MDL/MDX/WOK triplet byte-for-byte, preserves all 34 original in-range
+  WOK transition records, emits CRLF LYT/VIS, lists the eight rooms in matching
+  ARE/LYT order, and places the entry/PTH point on a walkable `01a` face. This
+  separates complete room-layout loading from the failed candidate metadata.
+- Added an explicit legacy-candidate identity policy to the Core.Workflow
+  repair packager. Recovered or renamed community modules may now regenerate
+  `Mod_ID` deterministically for their own resref while same-module stock
+  repairs retain the existing preservation default. The canonical KOQ200
+  builder enables that policy and neutralizes only event hooks that fail both
+  candidate-bundle and clean target-game KEY/BIF resolution.
+- Local K2 disassembly confirms `Mod_ID` is read during IFO bootstrap in
+  `FUN_005582f0` and persisted again during module/save serialization in
+  `FUN_0055bd10`. No equality/collision rejection branch was found for the
+  stored module-identity member, so the copied `001EBO` ID is a real identity
+  defect but is not claimed as the direct crash cause; the unresolved donor
+  event hooks remain the higher-confidence metadata suspect.
+- Rebuilt a full, still-unverified KOQ200 diagnostic candidate with unique
+  Mod_ID `3dcb7bee8f3ebcff4642c70b0ef1dc9e`, zero unresolved module hooks, and MOD
+  SHA-256 `0c938328c09f3071a2a142b3be2bc631878af83351f1036041b2502a8614886b`.
+  It passes the structural/round-trip gates but remains explicitly blocked
+  from installation until the smaller retail bisection establishes the safe
+  room and metadata axes.
+- Every output manifest is explicitly `bisection_only=true`,
+  `ready_for_manual_k2_test=false`, `manual_test_status=unverified`, and
+  `retail_engine_status=unknown`. After KOTOR 2 closed, the installed failed
+  `koq200.mod` was removed only after its SHA-256 matched the preserved crash
+  evidence byte-for-byte. The seven unique-resref variants were then staged
+  side-by-side through the guarded manual-warp installer, with independent
+  manifests under `Saved/KotorManualWarpEvidence/20260718T223733707299Z_kq2ctl`
+  and the following timestamped `kq2*` evidence directories, including
+  `Saved/KotorManualWarpEvidence/20260718T230642427030Z_kq2all`.
+  No unrelated module, save, INI, input hook, or currentgame cache was changed.
+  Subsequent logger runs, including r5 and target-specific `kq2ctl` r7, ended
+  normally with exit code zero before any valid bisection warp completed;
+  neither is retail proof. The newer complete hybrid SHA-256
+  `dff8cd57f3eecd6034e308f9d8460cc3c1d784e221c154918262c5b412f27a0c`
+  also remains a bisection input and must not replace this isolation sequence.
+- Audited the subsequent reported `warp koq200` session before assigning it to
+  any room or metadata axis. `koq200.mod` was not installed; only the seven
+  unique-resref `kq2*` bisection packages were present. Live session
+  `Saved/KotorLiveLogs/20260718-160659-koq200-k2-bisection-manual-warps-r5`
+  recorded zero second-chance exceptions and an orderly process exit with code
+  zero. Its 1,176 access violations were all handled first-chance exceptions
+  from the separate cloth-dynamics patch during teardown. This is invalid-route
+  evidence, not a failure of any `kq2*` rung.
+- Fixed the underlying save-route handoff defect in KotorMCP. Automatic warp
+  preflight now rejects a save whose `LASTMODULE` is absent from both its
+  `SAVEGAME.sav` module entries and the installed `.mod`/`.rim`/`_s.rim`
+  files. Explicitly requested saves remain selected but return a precise
+  blocking diagnosis instead of silently falling back. On the live K2 install,
+  automatic `kq2ctl` preflight now selects `000008 - Game7` (`DevRoom`,
+  `plcaa`) and reports ready; explicit `AUTOSAVE` selection fails closed because
+  its hollow `LASTMODULE=koq200` route cannot resolve.
+
+Affected files:
+
+- `scripts/build_koq200_k2_bisection_matrix.py`
+- `tests/test_build_koq200_k2_bisection_matrix.py`
+- `scripts/build_rnv_k2_full_candidates.py`
+- `tests/test_generate_legacy_room_walkmesh_candidates.py`
+- `native/GhostRigger.Core.Workflow/Python/src/core/workflow/legacy_module_repair.py`
+- `native/GhostRigger.Core.Automation/Python/src/kotormcp/tools/game_test.py`
+- Core.Workflow embedded payload manifest/resource/project rows regenerated
+- Core.Automation embedded payload manifest hashes regenerated
+- KOQ200 crash evidence and generated bisection manifests under ignored
+  `Saved/` and `artifacts/` roots
+
+Verification:
+
+- Focused bisection tests pass: 7/7. Archive readback exactly matches each
+  build input; all seven variants pass the raw K2 module/MDL/WOK structural
+  contract and the focused round-trip walkmesh audit while remaining manually
+  unverified. Installed bytes were re-hashed after staging. Current MOD
+  SHA-256 values are
+  `kq2ctl=2e9954ac2abfff31a10aeb6f0cd6e03bc9d7df03869dd1335a04e6d4df7c4dc6`,
+  `kq2min=a3e39406c320263e83eb6bac6683e06cb85bdcdce423b429b3ee92aba5650ad7`,
+  `kq2r0h=4aeecb69e66e78e40df0b882a7a0c5e7f8c0506e3f94988ab94ea3ae1e9bf0bb`,
+  `kq2r0a=158dfed6a97355bdd641995b2dd2e7716792e1a26440c04ad9bc76b6070471ea`,
+  `kq2met=fe31eb34706be777b944c455228841945fa900e64335ee7f1ea02052343938cd`,
+  `kq2scr=0d14f027893bd338bdec428e8fde3226e2a94d6a35451c403b9bd493f7d12882`,
+  and `kq2all=750d1c47a6454e00f33a53310781930db296bc8f22d51c439abaa45002b51ff7`.
+- The audited complete-hybrid/room-contract slice passes 23 focused tests;
+  the bisection slice passes 7 focused tests. Python compilation passes for
+  the workflow, both builders, and both focused test modules.
+  Its raw room comparison report is under the ignored KOQ200 `HybridBuilds`
+  evidence root. Retail proof is still required and remains the authority.
+- The focused save-route regression slice passes 6/6 after Python compilation.
+  A live read-only preflight proves the automatic route selects `Game7` and the
+  hollow KOQ200 autosave returns `ready=false` with the expected missing-module
+  blocker. The two focused native-payload manifest/byte-identity contracts also
+  pass. No KOTOR install, save, or currentgame bytes were changed by the fix.
+
+### [2026-07-18] T2906/T3101: quarantine crashed KOQ200 build and preserve vanilla room behavior
+
+Owner: LordVaderCW
+
+T###: T2906, T3101
+
+Intersects: the earlier KOQ200/KOQ201/KOQ202 controller-free promotion,
+transition-aware PTH, and manual-warp staging work from this date.
+
+Subsystem: legacy room conversion, K2 binary MDL/MDX writing, embedded AABB
+validation, live crash logging, and manual-warp candidate staging.
+
+- The user confirmed that KOQ200 candidate SHA-256
+  `5d49e50a078c861fd0f5abb76293384445663393e083421319062083de469d55`
+  crashed KOTOR 2 during warp. The failed MOD was removed from `Modules` and
+  `currentgame` and is now evidence-only; KOQ201 and KOQ202 builds produced by
+  the same controller-stripping route are quarantined from retail testing.
+- Corrected the vanilla oracle. Clean K2 CHITIN `001ebo1` contains 199
+  controllers and clean `001ebo17` contains 837; the controller-free
+  `Override/001ebo1.mdl` used by the earlier audit was a modified local copy,
+  not stock evidence. Static room conversion now preserves controller entry
+  order, raw column bytes, unknown fields, times, and values exactly and fails
+  closed on any loss. It no longer strips source controller banks.
+- Corrected the embedded AABB face-plane convention in both binary writers.
+  Odyssey stores `n·p+d=0`, so the serialized coefficient is
+  `-dot(unit_normal, vertex)`. The failed KOQ200 build used the opposite sign
+  on every generated embedded AABB face.
+- Preserved emitter and light behavior during binary conversion: emitter
+  controller widths are taken from the raw column byte, the uint32 control-point
+  smoothing field and packed emitter flags/padding are retained, and light
+  priority/dynamic/flare header state survives resource loading. Static room
+  promotion retains the source AABB node identity/controllers while replacing
+  only its topology from the authoritative external WOK.
+- Added a blocking raw-MDL validator for AABB payload bounds, face indices,
+  unit normals, and the vanilla plane equation. Hardened the live KOTOR logger
+  to retry debugger attachment, retain the process handle/real exit code, and
+  capture access type/address, instruction bytes, registers, frames, and a
+  larger stack sample when the debugger receives a crash. The legacy live-warp
+  helper now parses `--help` normally instead of treating it as a real test run
+  and launching KOTOR 2. Fallback monitoring treats the retained Windows
+  process handle as authoritative, so a transient Toolhelp enumeration miss
+  cannot end the session while the process still reports `STILL_ACTIVE`.
+- Independently audited and staged only the conservative eight-room MDLOps K2
+  candidate SHA-256
+  `6395c56e2ee6184a29e505206e90fec0019306f169c51766ea6fcfd978667a78`.
+  It preserves 4 emitters in `koq200_01d`, all source controller banks, one
+  valid embedded AABB per room, 9/9 closed WOK perimeter loops, correct IFO/ARE/
+  LYT/VIS routing, and a walkable entry point. This is a load/crash-isolation
+  candidate only: its five PTH points are disconnected, its GIT is empty, and
+  inherited K1 scripts still need K2 resolution before release.
+
+Affected files:
+
+- `src/core/mdl/mdl_writer.py`, `mdl_porter.py`, and
+  `ghostrigger_mdl_reader.py` plus byte-identical Core.IO/Runtime payload copies
+- `native/GhostRigger.Core.Resources/Python/src/core/game/kotor_loader.py`
+- `src/core/validation/kotor_module_engine_contract.py` plus its Validation
+  payload copy
+- `scripts/generate_legacy_room_walkmesh_candidates.py`
+- `scripts/kotor_live_warp_plcaa.py`
+- `native/GhostRigger.Core.Automation/Python/src/kotormcp/game_process_log.py`
+- focused writer, validator, and logger tests
+
+Verification:
+
+- Focused writer/engine-contract tests pass: 29 passed, one installation-only
+  case skipped. All nine retained KOQ200 source partitions round-trip through
+  the repaired writer with exact controller and non-AABB node payload parity;
+  controller counts are 851, 848, 1100, 269, 641, 617, 404, 195, and 30.
+- The preferred four-emitter `koq200_01d` round-trip preserves all 318
+  controllers, all 46 nodes, emitter headers, visual payload, and exact
+  external/embedded WOK topology. The independent whole-candidate audit found
+  zero engine-contract blockers, maximum AABB plane residual `1.135e-5`, full
+  AABB leaf coverage, reciprocal adjacency, and external/embedded geometry
+  agreement within `5.01e-5`.
+- Logger tests pass 6/6, including recovery of a real exit code after process
+  disappearance and the exact enumeration-miss-before-handle-signal case. The
+  audited replacement was staged under
+  `Saved/KotorManualWarpEvidence/20260718T213416252833Z_koq200`; its subsequent
+  manual warp failed before KOQ200 became the running area. The exact failure
+  evidence and superseding bisection matrix are recorded in the entry above.
+
+### [2026-07-18] T2906/T3101: controller-free KOQ202 K2 room promotion and final Map Studio proof
+
+Owner: LordVaderCW
+
+T###: T2906, T3101
+
+Intersects: the KOQ202 trimmed-LYT transition repair and reciprocal-transition
+PTH work completed in the same recovery pass.
+
+Subsystem: legacy static-room recovery, K2 MDL/MDX writing, WOK embedding,
+Map Studio MOD-to-KMAP proof, and manual-warp candidate indexing.
+
+- Replaced the four retained KOQ202 legacy room binaries that still carried
+  hundreds of static transform controllers. Controller removal now fails closed
+  unless every source controller is a single time-zero position/orientation key
+  exactly equal to the node-header bind transform and the model has no animation
+  blocks. All five retained rooms are compiled through the controller-free
+  Ghost Studio binary writer.
+- Expanded source/output parity from aggregate counts to exact per-node indexed
+  faces, vertices, normals, tangents, UV0-UV3, face UV/material arrays,
+  texture/lightmap/bump slots, render/material state, hierarchy, and bind
+  transforms. The final MDLs retain K2 pointer families, node-header `+8 = 0`,
+  and one WOK-derived embedded AABB per room.
+- Updated the derived K2 candidate overlay so KOQ200, KOQ201, and KOQ202 are the
+  first manual-proof wave and KOQ202 is identified as a controller-free binary
+  build rather than the obsolete ASCII candidate.
+
+Affected files:
+
+- `scripts/generate_legacy_room_walkmesh_candidates.py`
+- `scripts/build_k2_candidate_overlay.py`
+- `tests/test_generate_legacy_room_walkmesh_candidates.py`
+
+Verification:
+
+- The combined focused KOQ recovery/pathing/WOK/staging/payload suite passed:
+  66 tests. Independent fresh whole-MOD checks report `audit_pass=true`,
+  `export_ready=true`, zero blocking issues, 190/190 walkable WOK faces, 7/7
+  closed perimeter loops, complete AABB coverage, reciprocal adjacency, and
+  exact round-trip derived tables.
+- Controller source-to-output counts are `618→0`, `970→0`, `174→0`, `0→0`,
+  and `272→0` for `koq202_01a/01b/01c/01d/01g`. Exact visual payload parity,
+  embedded/external WOK parity, and node-header runtime-pointer checks pass for
+  every room. Transition-aware PTH has 12 points, 20 directed connections, and
+  three proven bidirectional portal bridges.
+- Map Studio imported and converted all five rooms, saved and reopened the KMAP,
+  and matched 5/5 MOD-to-KMAP WOK resources. Final MOD SHA-256:
+  `7ecb30e28c3d5c68b64f230216653765b2cfcfe10a4c586be4db8797cf1f771b`;
+  KMAP SHA-256:
+  `e1cbcf7c1555f3a758a9822439e3e469f8461a784b3146662024872d629b170c`.
+- No KOQ202 file was installed into either game. Manual K2 warp, traversal,
+  camera collision, AI pathing, transitions, and save/reload remain required.
+
+### [2026-07-18] T2906/T3101: reciprocal-transition-aware PTH generation for KOQ200/201/202
+
+Owner: LordVaderCW
+
+T###: T2906, T3101
+
+Intersects: the concurrent KOQ200 reviewed floor-WOK repair, canonical KOQ201
+identity rebuild, and KOQ202 trimmed-LYT transition remap work.
+
+Subsystem: Map Studio room pathing, legacy module recovery, WOK transition
+semantics, and K2 candidate packaging.
+
+- Established the vanilla oracle with K1 `danm13` and K2 `001ebo`: every
+  reciprocal WOK transition room pair has a direct PTH link in both directions.
+  PTH regeneration now consumes the final LYT-ordered room WOK set instead of
+  collapsing it to unrelated raw-index islands.
+- Added a reusable Scene-owned room path compiler. It matches the actual
+  reciprocal transition boundary-edge midpoints in module coordinates, routes
+  through exact raw-index walkable face adjacency, creates inward portal
+  endpoints with room/face/edge/target provenance, and emits a two-way crossing
+  only for a proven reciprocal seam. One-way rows and truly disconnected rooms
+  remain disconnected.
+- Added a semantic packaging gate: every reciprocal transition pair must expose
+  at least one generated bidirectional PTH bridge. Out-of-range LYT targets,
+  mismatched portal edges, non-walkable transition faces, invalid room-local
+  segments, and missing reverse links block the candidate. The manifest records
+  reciprocal pairs, portal links, one-way rows, and post-transition graph
+  components.
+- Centralized WOK coordinate policy so KOQ200/201/202 module-space WOKs receive
+  zero LYT translation, while genuinely room-local WOKs receive the room offset
+  exactly once. Sharply concave face routes now bend through the finite shared
+  indexed-edge midpoint rather than assuming adjacent face centroids have line
+  of sight.
+
+Affected files:
+
+- `native/GhostRigger.Core.Scene/Python/src/core/modules/authored_module_pathing.py`
+  and the byte-identical Core.Tools payload copy
+- `native/GhostRigger.Core.Workflow/Python/src/core/workflow/legacy_module_repair.py`
+- `tests/test_legacy_module_repair.py`
+- regenerated Core.Scene, Core.Tools, and Core.Workflow payload manifests
+
+Verification:
+
+- Focused pathing/workflow regressions passed: 18 tests. Coverage reproduces the
+  KOQ200 reciprocal tree, KOQ201 reciprocal-only chain plus one-way/isolated
+  rooms, KOQ202 retained/remapped pairs plus the isolated `01d`, stale removed
+  room indices, missing reverse bridges, module-space no-double-translation,
+  and the concave KOQ200 `01d` route case.
+- Fresh KOQ200 output: 31 PTH points, 54 directed edges, six reciprocal room
+  pairs, six proven bidirectional portal links, and four intentionally separate
+  path networks. Engine/readback and MOD-to-KMAP gates pass. MOD SHA-256:
+  `5d49e50a078c861fd0f5abb76293384445663393e083421319062083de469d55`;
+  KMAP SHA-256:
+  `cd2109b0a0a508fc268e9f26b9b65f3d671be8a32941c8d083b09cc5719157cf`.
+- Fresh KOQ201 output: 18 PTH points, 26 directed edges, four reciprocal pairs,
+  four portal links, the stock one-way row preserved without a fabricated
+  bridge, and five path networks (the connected `01b`-`01f` chain plus isolated
+  `01a`/`01g`/`01h`/`01j`). MOD SHA-256:
+  `6c5c2d8c9da653133f30fff9fe8bfa0bfc56385f3fa6519772fffbd8e45a1cec`;
+  KMAP SHA-256:
+  `0ff1fb40d86d9823626c82febb1b2e3f4f52729cbe93e7e4d51a566873490a4f`.
+- Fresh controller-free KOQ202 output: 12 PTH points, 20 directed edges, three reciprocal pairs
+  (`01a`-`01b`, `01a`-`01c`, `01c`-`01g`), three portal links, and two path
+  networks with `01d` intentionally isolated. Engine/readback and Map Studio
+  proof pass after the `01g` index remap and removed `01h` destination. MOD
+  SHA-256: `7ecb30e28c3d5c68b64f230216653765b2cfcfe10a4c586be4db8797cf1f771b`;
+  KMAP SHA-256:
+  `e1cbcf7c1555f3a758a9822439e3e469f8461a784b3146662024872d629b170c`.
+- KOQ200 is staged alone under a hash-verified backup/restore manifest for the
+  first manual test; KOQ201 and KOQ202 remain unstaged. Warp, transition
+  traversal, AI pathing, movement/camera containment, save/reload, and combat
+  traversal are still required before claiming retail-game success.
+
+### [2026-07-18] T2906/T3101: KOQ200 floor-WOK wall-strip repair with conservative retail gate
+
+Owner: LordVaderCW
+
+T###: T2906, T3101
+
+Intersects: the concurrent canonical KOQ200/KOQ201 identity and trimmed-layout
+transition-remap work in `scripts/build_rnv_k2_full_candidates.py`.
+
+Subsystem: recovered-module walkmesh repair, K2 room compilation, and Map
+Studio MOD-to-KMAP walkmesh proof.
+
+- Compared the recovered KOQ200 steep-face inventory with known-loadable K1/K2
+  WOKs, including `001ebo1`, `r00_test`, `701kore`, `601dana`, `601danb`, and
+  `231tel*`. Vanilla contains valid walkable faces above 45 degrees—including
+  near-vertical rough-terrain and boundary strips—so slope is now explicitly
+  rejected as an automatic wall classifier.
+- Added a canonical-KOQ200-only, source-indexed repair for ten conclusively
+  reviewed vertical wall-strip triangles: two in `koq200_01d` and eight in
+  `koq200_01e`. The repair removes those faces from the floor collision WOK,
+  fails closed if their reviewed topology changes, and preserves retained
+  vertex indices, face order, transitions, existing NON_WALK margins, rebuilt
+  AABB coverage, and closed perimeter records.
+- Added manifest evidence for all seven playable rooms. Eighty-four remaining
+  steep walkable faces are enumerated and deliberately preserved for manual K2
+  traversal because their topology overlaps known-loadable exterior terrain.
+
+Affected files:
+
+- `scripts/build_rnv_k2_full_candidates.py`
+- `tests/test_generate_rnv_walkmesh_candidates.py`
+
+Verification:
+
+- Six focused repair tests passed, including retained topology/transitions,
+  horizontal NON_WALK preservation, raw AABB/perimeter validity, fail-closed
+  review guards, and historical `rnvcanyon` no-op scope. Python compilation and
+  diff whitespace checks passed.
+- A fresh `--module koq200` build completed with
+  `ready_for_manual_k2_test=true`. The MOD and reopened KMAP agree for all nine
+  WOK resources: 1,405 faces, 1,183 walkable faces, 11/11 closed perimeter
+  loops, 34 transition records, complete AABB coverage, reciprocal adjacency,
+  zero raw-structure errors, and zero semantic or derived-table drift.
+- Independent whole-MOD K2 validation reports export-ready with no blocking
+  issue. Every playable room MDL has exactly one embedded AABB, zero transform
+  controllers, and zero nonzero node-header `+8` values; the two visual-only
+  rooms retain the measured no-AABB/empty-WOK exception. The rebuilt MOD
+  SHA-256 is
+  `13805821befbffa22b07bcf7ca2e2889398079fd311af5f0d46b0be8ddc9890b`.
+- No file was installed into KOTOR 2. Retail warp, movement/camera containment,
+  transition traversal, AI pathing, save/reload, and review of the 84 preserved
+  steep faces remain required before claiming in-game success.
+
+### [2026-07-18] T2906/T3101: KOQ202 trimmed-layout transition repair and five-room K2 control proof
+
+Owner: LordVaderCW
+
+T###: T2906, T3101
+
+Intersects: concurrent legacy WOK calibration/KOQ201 recovery work in the
+legacy candidate generator tests and this changelog.
+
+Subsystem: legacy module recovery, WOK transition serialization, K2 engine
+contract validation, and Map Studio MOD-to-KMAP proof.
+
+- Added an explicit source-LYT room-order contract to the legacy module repair
+  workflow. WOK transition destinations retained by a trimmed layout are now
+  remapped by room identity; destinations for omitted rooms are removed rather
+  than left pointing at unrelated/out-of-range room indices. The request,
+  result manifest, generator, and generic repair CLI all expose the source
+  transition ordering and per-edge preserve/remap/drop evidence.
+- Added a blocking module validator gate for serialized WOK transition
+  destinations outside the owning LYT room count. This exposes the previous
+  KOQ202 five-room package as invalid instead of reporting it engine-ready.
+- Regenerated the isolated KOQ202 K2 control candidate. The retained `01c ->
+  01g` destination is remapped from original LYT index 6 to trimmed index 4,
+  and the `01g -> 01h` link is removed because `01h` has no recoverable room
+  resource. The proof worktree and final packaged resources are synchronized so
+  Map Studio cannot resolve a stale loose WOK over the corrected MOD resource.
+
+Affected files:
+
+- `native/GhostRigger.Core.Workflow/Python/src/core/workflow/legacy_module_repair.py`
+- `src/core/validation/kotor_module_engine_contract.py` and its regenerated
+  Core.Validation payload copy
+- `scripts/generate_legacy_room_walkmesh_candidates.py`
+- `scripts/repair_legacy_modules.py`
+- `tests/test_legacy_module_repair.py`
+- `tests/test_kotor_module_engine_contract.py`
+
+Verification:
+
+- Focused Python compilation passed. Focused workflow, validator, and legacy
+  generator tests passed: 28 tests, with one installation-dependent vanilla
+  fixture skipped.
+- Fresh archive readback has all 21 required module/room resources and passes
+  the engine contract with no blocking issue. Every room MDL has one embedded
+  AABB, zero nonzero node-header `+8` values, and indexed AABB geometry exactly
+  matching its external WOK. All WOK AABB, adjacency, and perimeter gates pass.
+- Map Studio imports and converts all five rooms, reopens the KMAP, and compiles
+  all five WOKs with exact MOD-to-KMAP transition and derived-table parity. The
+  previous candidate is independently rejected by two out-of-range transition
+  issues. The fresh MOD SHA-256 is
+  `33cabce75ce657a46ea2b49313d987e9e7101f49f2a08b25118ed063465b1364`;
+  the KMAP SHA-256 is
+  `b2a1308f38caa12e41cd559b97ec3b467c30321d40f2fd6cc541b98a5847363c`.
+- No file was installed into KOTOR 2. Retail warp/load, transition traversal,
+  camera containment, save/reload, and AI pathing remain manual proof gates.
+
+### [2026-07-18] T2906/T3101: Canonical KOQ201 K2 candidate identity and nine-room walkmesh proof
+
+Owner: LordVaderCW
+
+T###: T2906, T3101
+
+Subsystem: legacy module recovery, K2 module packaging, Map Studio KMAP proof,
+and room MDL/MDX/WOK structural validation.
+
+- Added canonical `koq200`/`koq201` output aliases to the RNV recovery builder
+  while retaining the provenance-named `rnvcanyon`/`rnvcity` defaults. An
+  explicit `--module koq201` build now emits a `koq201.mod`, `koq201.kmap`,
+  `koq201.are/git/lyt/vis/pth`, and IFO entry routing that all agree with the
+  recovered Odyssey area identity instead of requiring a mismatched
+  `rnvcity.mod` filename. The final K2 candidate overlay now points at this
+  canonical KOQ201 pair and stages it under the `koq201` warp root.
+- Rebuilt all nine `koq201_01a` through `koq201_01j` (excluding the nonexistent
+  `01i`) room binaries through the controller-free K2 writer. Four damaged WOK
+  AABB tables were regenerated with zero indexed or semantic drift; every WOK
+  has one closed perimeter loop, zero missing boundary edges, complete AABB
+  face coverage, reciprocal adjacency, and exact embedded-AABB topology.
+- The canonical candidate includes the five recovered custom Korriban City
+  textures plus 22 required K1 stock texture ports. No referenced room texture
+  is unresolved. The source `(0, 0, 0)` entry point is retained because the
+  geometry proof places it on a walkable face.
+
+Verification:
+- `py -3.14 scripts/build_rnv_k2_full_candidates.py --module koq201` completed
+  with `ready_for_manual_k2_test=true`, zero blocking engine/readback issues,
+  nine editable KMAP rooms, and 9/9 exact MOD-to-KMAP WOK parity.
+- Independent archive readback found the canonical ARE/GIT/LYT/VIS/PTH
+  resources, `module.ifo` routed to `koq201`, nine MDL/MDX/WOK triples, no WOK
+  audit errors or warnings, and no missing textures. The transition-aware PTH
+  now has 18 points, 26 directed connections, and four proven reciprocal portal
+  bridges; the stock one-way row and four genuinely isolated rooms are preserved
+  without fabricated links. All source LYT positions are zero, so room seams and
+  transitions remain an explicit manual KOTOR 2 traversal test rather than
+  retail game proof.
+- Focused alias contract tests and Python compilation passed. No file was
+  installed into the live KOTOR 2 directories during this build.
+
+### [2026-07-18] Editable texture-backed KOTOR GUI authoring workbench
+
+Owner: LordVaderCW
+
+T###: No existing roadmap task; this completes the authoring slice introduced
+by the 2026-07-16 standalone GUI Editor foundation.
+
+Intersects: the 2026-07-16 GUI Editor/PIE preview seam and the existing
+Core.GUI.Display main-command-strip integration.
+
+Subsystem: Odyssey `.gui` authoring and resource preview
+(Core.Tools/Core.IO/Core.Rendering/Core.GUI.Display)
+
+- Added a lossless GFF-backed GUI document that preserves unknown community
+  fields while exposing typed, validated schemas for identity, extents, text,
+  TLK/font/alignment, colors, borders and states, navigation, check boxes,
+  sliders, scroll bars, progress bars, list boxes, and prototype items.
+- Expanded the standalone, theme/layout-aware GUI Editor into a complete
+  authoring surface: direct selection/move/resize, keyboard nudging, bounded
+  undo/redo, add menus for eight known control types, guarded recursive delete,
+  typed property widgets, live validation, and K1/K2 retail resource catalogs.
+- Added asynchronous TPC/TGA resolution and renderer-neutral decode from the
+  configured game install, nested parent-local extent composition, and a
+  texture-backed preview canvas. The visual interaction model credits Andrew
+  McOlash's MIT-licensed `amcolash/kotor-gui-editor`; the GhostRigger workbench
+  is a clean-room Qt implementation rather than an Electron source port.
+- Added safe standalone `.gui` IO with pre-save validation, same-directory
+  staging, readable-GFF verification, backup of existing output, atomic
+  replacement, dirty-state tracking, and save/discard/cancel prompts. New files
+  use the correct `GUI V3.2` content header and retail files remain clean after
+  parser canonicalization.
+- Regenerated only the affected Core.Tools, Core.IO, Core.Rendering, and
+  Core.GUI.Display embedded Python payload manifests, RC resources, and Visual
+  Studio project items. Updated the GUI Editor theme/layout documentation and
+  focused ownership contracts.
+
+Verification:
+- `python -m py_compile` passed for the five canonical implementation modules;
+  `python -m pytest tests/test_gui_editor_boundary.py -q` passed 10 focused
+  document, validation, add/delete, undo/redo, IO, rendering, workflow, launcher,
+  and offscreen Qt contracts.
+- A direct configured-install proof loaded K2 `maininterface_p.gui` as 103
+  controls in 640×480 retail pixel space, kept it clean, resolved 31 referenced
+  textures, and decoded `lbl_micombat.tpc` to 128×64 RGBA. A 1600×920 rendered
+  workbench inspection confirmed the catalog/tree/canvas/typed-inspector layout.
+- The focused payload count/resource/project checks passed after updating the
+  expected total to 1,347, and the repository-wide packaged-source identity
+  assertion passed after the Debug build refreshed payload hashes. The native
+  Debug host built successfully and staged all 18 manifest-owned DLLs.
+- Visible acceptance ran in the actual Debug `GhostStudio.exe`: the dedicated
+  main command-strip GUI Editor icon opened the standalone window; K2
+  `maininterface_p.gui` rendered with retail textures; a new Button changed the
+  live hierarchy from 103 to 104 controls; its typed tag was changed to
+  `BTN_CODEX_QA`; it was dragged to `(126, 111)`, resized from 120×36 to 171×69,
+  deleted back to the untouched retail document, restored with Undo, and
+  re-deleted with Redo. No retail or workspace file was saved, and the test app
+  was closed cleanly. The live editor remained legible and correctly textured
+  under Default, Matrix, Droid, Dark, Light, and Classic with appearance
+  persistence disabled. This machine has Visual Studio Build Tools but no active
+  `devenv` IDE process, so the same Debug host was launched directly after the
+  successful MSBuild rather than through an IDE Start command.
+
 ## 2026-07-17
+
+### [2026-07-17] T3008: Clean-room NCS virtual machine + scripted-event playback (Benok exit decoded) + PIE tick perf fix
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: PIE scripting/cinematics — new `map_studio_pie_nwscript_vm.py` and
+`map_studio_pie_scripted_events.py` (mirrored root/Scene/Tools), controller
+VM-first scripting engine, upgraded `scripted_globals_probe`, animation-engine
+hot-path fix (`animation_engine.py`, Core.Workflow).
+
+- **NCS virtual machine** (replaces pattern-matching as the primary engine):
+  a full stack machine over PyKotor-decoded bytecode — typed 4-byte-slot stack,
+  CONST/CPDOWNSP/CPTOPSP/CPDOWNBP/CPTOPBP, SAVEBP/RESTOREBP globals, JSR/JZ/JNZ
+  control flow, MOVSP/DESTRUCT, full typed arithmetic/logic/vector ops, and
+  STORE_STATE closures. Engine-routine dispatch follows Ghidra decompilation of
+  the K1 engine (598 VM functions decompiled from the Odyssey repository):
+  per-id command table (`ExecuteCommand` @0052c0d0), closures resume via the
+  `RunScriptSituation` model @005d4ad0 (restore saved stack wholesale,
+  OBJECT_SELF = bound target), `AssignCommand` = delay-0 event on the target
+  (@0052e720), `DelayCommand` pops float-then-command (@0052fe30), and
+  `SetGlobalNumber` truncates to a byte (`SetValueNumber` @00542b60). Unknown
+  routines return typed defaults and are census-tracked, never guessed.
+- Faithfulness upgrade over the literal reader: executing real 207TEL
+  `k_207tel_enter` proves the 12 "literal" global writes are campaign-GATED —
+  a clean sandbox writes none (retail first-entry), and seeding
+  `207TEL_Benok=1` fires exactly `SetGlobalNumber("207TEL_Benok", 2)`. The
+  creator sandbox is now the pre-entry campaign state seeded into the VM;
+  the literal reader remains as fallback (`engine` field reports which ran).
+- Cross-validation: VM-executed tag→animation intents on 207TEL match the
+  independent static scene-animation extractor exactly (all 10), plus the
+  0.1–0.8 s DelayCommand stagger timing the extractor cannot see.
+- **Scripted-event playback runtime**: per-entity FIFO action queues consuming
+  VM command timelines (retail `CSWSObject` action-queue analogue). Decoded and
+  validated the real 207TEL **Benok cantina exit** end-to-end: `benok.dlg`
+  entry fires `a_benokleave` → ActionPauseConversation → Benok walks
+  (bRun=0, 1.75 m/s) to GIT waypoint `wp_exitcantina` (4.46, −35.27) →
+  207_matu +0.2 s, 207_nahata +0.4 s → DestroyObject ×3 at +7 s →
+  ActionResumeConversation. Movement semantics from
+  `ExecuteCommandMoveToObject` @0053fb00 (target position at queue time,
+  ≥0.5 arrival range, walk/run flag).
+- **PIE tick performance** (user-reported lag, profiled on real 207TEL with a
+  2-companion roster, offscreen Debug): full tick median 29.0 ms; the creature
+  cohort cost 14.5 ms/tick, dominated by per-sample channel sanitization —
+  `_interp_channel` re-ran `_ensure_quat_sign_consistency` (O(n) rebuild) and
+  per-sample finiteness checks on every controller sample every frame. Fixed
+  with a one-time per-channel sanitized cache + lean sampler
+  (`_channel_samples`/`_interp_channel_sanitized`). Measured: full tick
+  29.0 → 19.9 ms median (−31 %), creature phase 14.5 → 8.0 ms (−45 %).
+  Remaining bottleneck identified and documented: the ModernGL per-node Python
+  draw path (~172 ms/frame offscreen, 198 draw-node calls/frame) — batching is
+  the next perf slice.
+
+Verification:
+- Focused tests green: `tests/test_map_studio_pie_nwscript_vm.py` (9 — opcode
+  flow, closures with swapped OBJECT_SELF, DelayCommand scheduling, budget
+  guard, real-207TEL cross-check incl. conditional gating),
+  `tests/test_map_studio_pie_scripted_events.py` (3 — real Benok exit playback
+  with waypoint position/stagger/despawn, FIFO completion, pause tracking);
+  102 passed across the consolidated VM/scripting/scene-anim/animation-engine/
+  payload gate. The 2 pre-existing `test_animation_deformation_validator`
+  failures reproduce identically WITHOUT these changes (verified by A/B swap).
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC
+  proof on real 207TEL): `scripted_globals_probe` → `engine: "vm"`,
+  563 instructions, 13 timeline commands, clean-sandbox globals {} (correct),
+  `conditional_check.seeded_benok_advances: true`, unknown-routine census
+  surfaced; proof `passed`, `focus_safe: true`, no blockers, all 16 other
+  probes green. Editor-side simulation only — retail KOTOR remains the sole
+  in-game authority.
 
 ### [2026-07-17] T3101: 921srt walkmesh repair — room WOK coordinate-space fix plus reviewed regeneration tooling
 
@@ -63,7 +1399,1015 @@ overlay this repair extends; 921srt remains classified retail_donor_overlay.
 - Retail proof remains pending: warp `921srt`, traverse every room and every
   door transition, and save/reload before calling the map walkable in game.
 
-## 2026-07-16
+### [2026-07-17] T3008: PIE shows side-NPC one-liner dialogue (bug fix)
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE dialogue start (`map_studio_pie_gameplay.py`).
+
+- Fixed a user-reported bug: in 207TEL, main conversations worked but side NPCs
+  that give one-liners showed no dialogue when talked to. Diagnosis (via an
+  in-app probe over the loaded module's 15 distinct conversations): resolution
+  and talk-action routing were fine — all 15 resolved (the commoner DLGs
+  `200comm`/`200comf` load from the base `dialogs.bif`, not the module) — but 3
+  (`200comm`, `200comf`, `207luxa`) *blocked* because every starting line's
+  Active condition is an arbitrary NWScript PIE can't prove, and the gameplay
+  runtime started dialogue with `allow_unknown_starter_assumption=False`, so it
+  showed nothing. Retail runs the condition script and shows a line. Fix:
+  `_start_dialogue` now, when the strict start blocks (and no forced starter
+  override), retries with the unknown-starter assumption and emits
+  `dialogue_starter_assumed`, showing the first line as a labelled preview
+  assumption instead of nothing. Genuinely-undecodable DLGs still block.
+
+Verification:
+- Focused test green (+1 in `tests/test_map_studio_pie_gameplay.py`): a creature
+  whose only starter has an unprovable `active1` condition now shows its line
+  (mode=dialogue, text presented) and emits `dialogue_starter_assumed` instead
+  of raising. Gameplay/dialogue suites green; payload identity green.
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC on
+  real 207TEL): the PIE proof `side_npc_dialogue_probe` reported `distinct:15`,
+  `resolved:15`, `strict_blocked:3`, `rescued_by_assumption:3`,
+  `all_blocked_now_shown:true` — the three previously-blocked one-liners
+  (`200comm`, `200comf`, `207luxa`) now show. Overall proof `passed`,
+  `focus_safe:true`, no blockers, all sixteen probes green. Editor-side preview;
+  a manual KOTOR run remains the authority.
+
+### [2026-07-17] T3008: PIE executes literal-object SetLocalBoolean writes
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE scripting — object-local writes
+(`map_studio_pie_scripting.py`), evaluator local setter + dialogue path
+(`map_studio_pie_dialogue.py`), dialogue-script probe (`resource_panels.py`).
+
+- Extended the bounded reader to the literal-object local-variable subset:
+  `SetLocalBoolean(GetObjectByTag("tag"), nIndex, nValue)` (routine 680 whose
+  object arg is a literal `GetObjectByTag`, 200) now folds into the evaluator's
+  `local_booleans` keyed by (owner_tag, index) — so a dialogue branch whose
+  condition checks that object's local reads the script-set value. This is pure
+  pattern-matching (no stack dataflow): a computed/stack-referenced object is
+  skipped, not guessed, keeping the "skip rather than guess" contract. Added
+  `NCSLocalEffect` + `extract_ncs_local_effects`,
+  `MapStudioPIEDialogueContextEvaluator.set_local_boolean`, application in the
+  shared `execute_ncs_global_effects` (covers interaction/trigger scripts) and in
+  the dialogue node-script path. `SetLocalNumber` and computed-object locals stay
+  deferred.
+
+Verification:
+- Focused tests green (+3 in `tests/test_map_studio_pie_scripting.py`): extraction
+  of the literal-object write, skip of the computed-object (`CPTOPSP`) form, and
+  execution folding it into the evaluator (casefolded key, idempotent). Dialogue
+  suites green; scripting + payload suites green (37 in the gate); mirrors
+  byte-identical.
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC on
+  real 207TEL): the PIE proof `dialogue_script_probe` executed a node script
+  doing SetGlobalNumber + SetGlobalString + SetLocalBoolean and read back
+  `applied_local_boolean:true` (with `applied_global:7`, `applied_global_string:
+  "Exile"`, `execution_verified:true`). Overall proof `passed`, `focus_safe:true`,
+  no blockers, all fifteen probes green. Editor-side preview; a manual KOTOR run
+  remains the authority.
+
+### [2026-07-17] T3008: PIE HUD inspector shows loot and combat outcome
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE HUD — state inspector expansion
+(`module_editor_viewport_panel.py`).
+
+- Grew the HUD "Quest / Global State" inspector into a runtime validation
+  dashboard. `_update_state_inspector` now also renders the player's looted items
+  (`interaction.player_inventory` — the runtime-only inventory that accumulates
+  from containers) as a "Loot:" section (name × quantity, capped with "… +N
+  more"), and the combat resolution as a "Combat: Victory/Defeat" line
+  (`combat.outcome`). So a creator sees quests, globals, loot, and the encounter
+  result in one panel while exercising a module. Hidden when all are empty.
+
+Verification:
+- Focused test green (updated in `tests/test_map_studio_pie_gameplay_hud.py`):
+  the real HUD widget renders `Loot:` with `Blaster Rifle` and `Credits x250`
+  and `Combat: Victory` from a snapshot carrying inventory + a resolved combat
+  outcome, alongside the existing journal/globals rows. HUD/gameplay/combat
+  suites green (94 in the consolidated gate); payload identity/coverage green
+  (1341); panel mirror (Display == Tools) byte-identical.
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC on
+  real 207TEL): the PIE proof `state_inspector_probe` confirmed the live HUD
+  still renders the module's real OnEnter globals (`nonempty:true`,
+  `has_globals_section:true`, `frame_visible:true`); loot/combat rows are empty
+  at spawn (no loot taken, combat unresolved — faithful). Overall proof `passed`,
+  `focus_safe:true`, no blockers, all fifteen probes green. Editor-side preview;
+  a manual KOTOR run remains the authority.
+
+### [2026-07-17] T3008: PIE resolves the player's combat build from a template
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE combat — configurable player build
+(`module_editor_controller.py`), session/build threading (`map_studio_pie.py`),
+IPC probe (`resource_panels.py`).
+
+- Addressed the "player stats are a proxy" combat limitation. Added a
+  `player_combat_template` sandbox setting (a UTC resref — the PC is a custom
+  campaign build, so it is a configurable preview value). When set,
+  `_resolve_player_combat_stats` runs the same creature projection the placed
+  creatures use (HP/AC/attack/damage/crit from the 2DA chain) and the resolved
+  `MapStudioPIECombatStats` replaces the fixed editor proxy for the player
+  combatant (threaded `player_combat_stats` through
+  `create_map_studio_pie_session` → `build_map_studio_pie_session` →
+  `configure_gameplay` → the runtime, which already accepted it). Empty keeps
+  the proxy.
+
+Verification:
+- Focused test green (+1 in `tests/test_map_studio_pie_gameplay.py`): a runtime
+  built with explicit player stats shows those values on the `pie:player`
+  combatant (99 HP / AC 25) instead of the 24 HP / AC 14 proxy. Gameplay/combat
+  suites green (64 in the consolidated gate); payload identity/coverage green
+  (1341).
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC on
+  real 207TEL): the PIE proof `player_build_probe` resolved a real module
+  creature (`203_ramana`) into player combat stats (`max_hp:8`, `armor_class:10`,
+  `attack_bonus:1`, `resolved:true`, `replaces_proxy:true`). Overall proof
+  `passed`, `focus_safe:true`, no blockers, all fifteen probes green.
+  Editor-side RTwP preview; a manual KOTOR run remains the authority.
+
+### [2026-07-17] T3008: PIE combat resolves with a victory/defeat outcome
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE combat resolution (`map_studio_pie_combat.py`),
+gameplay event forwarding (`map_studio_pie_gameplay.py`), party-combat probe
+(`resource_panels.py`).
+
+- Combat previously ended with a generic message; it now resolves with a
+  `victory`/`defeat` outcome so a creator can validate whether an encounter is
+  winnable/terminates. `_finish_or_schedule_next_round` sets `defeat` when the
+  player falls (takes precedence) else `victory` when every engaged hostile is
+  down; the `combat_ended` event carries `outcome` and `MapStudioPIECombatSnapshot`
+  exposes it (the gameplay runtime forwards it as the event value). Deterministic
+  RTwP preview.
+
+Verification:
+- Focused tests green (+2 in `tests/test_map_studio_pie_combat.py`): a one-shot
+  player yields `outcome=="victory"` on `combat_ended` and the snapshot; a
+  glass-cannon hostile that fells the player yields `outcome=="defeat"`.
+  Combat/gameplay suites green (63 in the consolidated gate); payload
+  identity/coverage green (1341).
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC on
+  real 207TEL): the PIE proof `party_combat_probe` ran a player+companion vs a
+  hostile encounter to resolution and read back `combat_outcome:"victory"`
+  (alongside the existing `participation_verified:true`). Overall proof `passed`,
+  `focus_safe:true`, no blockers, all fourteen probes green. Editor-side RTwP
+  preview; a manual KOTOR run remains the authority.
+
+### [2026-07-17] T3008: PIE party companions participate in combat
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE party + combat — runtime combatant injection
+(`map_studio_pie_gameplay.py`), session/build threading (`map_studio_pie.py`),
+party stat resolution (`module_editor_controller.py`), IPC probe
+(`resource_panels.py`).
+
+- Closed the "no companion combat participation" gap. Each configured
+  `party_roster` UTC is resolved through the same creature projection the placed
+  creatures use (HP/AC/attack/damage/crit from the 2DA chain) into a
+  `pie:party:N` combatant; the gameplay runtime injects these into `_combatants()`
+  as friendly assisting allies (`assists=True`, `retaliates=False`). When combat
+  opens they auto-engage (`combat_ally_engaged`) and make basic attacks on the
+  first living hostile each round via the existing assisting-ally AI. Threaded
+  `party_combatants` through `create_map_studio_pie_session` →
+  `build_map_studio_pie_session` → `configure_gameplay` → the runtime. Companion
+  combat is basic-attack assist only (no powers/positioning); preview state.
+
+Verification:
+- Focused test green (+1 in `tests/test_map_studio_pie_gameplay.py`): a resolved
+  companion appears as a friendly combatant, auto-engages on combat open, and
+  lands attacks on the hostile over subsequent rounds. Gameplay/combat/party
+  suites green (61 in the consolidated gate); payload identity/coverage green
+  (1341).
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC on
+  real 207TEL): the PIE proof `party_combat_probe` returned `probed:true`,
+  `companion_is_combatant:true`, `companion_relationship:"friendly"`,
+  `companion_engaged:true`, `companion_attacked:true`, `participation_verified:true`.
+  Overall proof `passed`, `focus_safe:true`, no blockers, all fourteen probes
+  green. Editor-side RTwP preview; a manual KOTOR run remains the authority.
+
+### [2026-07-17] T3008: PIE validates inter-module transition destinations
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE transitions — validation core
+(`map_studio_pie_triggers.py`), controller
+(`module_editor_controller.py`), IPC probe (`resource_panels.py`).
+
+- Advanced module transitions from Reported-only to reported+validated. Doors and
+  triggers carry `LinkedToModule`/`LinkedTo`; a link to an uninstalled module
+  would black-screen or crash the retail game. Added `normalize_module_root` +
+  `validate_module_transitions(transitions, available_modules)` (dedupes,
+  normalizes `202tel.mod`→`202tel`) and `controller.map_studio_pie_transition_validation(...)`
+  which collects the loaded module's transitions from the entity registry and
+  resolves the installed-module set (installation `modules_list`/`module_names`,
+  then a `module_path` directory scan). When the module set can't be resolved it
+  reports `exists=None` (unverified) rather than a false "missing" alarm — an
+  honest "couldn't check" beats a false positive. Reported only; PIE does not
+  warp.
+
+Verification:
+- Focused test green (+1 in `tests/test_map_studio_pie_triggers.py`): installed
+  destinations resolve True, an uninstalled one False (filename and root forms
+  both normalized), a blank destination is skipped, and an empty available set
+  yields `exists=None` (unverifiable, not a false alarm).
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC on
+  real 207TEL): the PIE proof `transition_validation_probe` found the module's
+  two Cantina doors linking to `202tel` (`from_207TEL_main`/`_game`), deduped and
+  reported them; the sampled runtime's manager did not expose a module list, so
+  both were honestly reported `unverified` (0 false "missing"). Overall proof
+  `passed`, `focus_safe:true`, no blockers, all thirteen probes green.
+  Editor-side; a manual KOTOR run remains the authority.
+
+### [2026-07-17] T3008: PIE executes trigger OnEnter scripts (4th script surface)
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE triggers — OnEnter script execution
+(`map_studio_pie_triggers.py`, `map_studio_pie_gameplay.py`), trigger probe
+(`resource_panels.py`).
+
+- Completed the literal-write script-execution surfaces: crossing a
+  non-transition trigger now runs its OnEnter script's bounded literal
+  `SetGlobalNumber`/`SetGlobalBoolean`/`SetGlobalString`/`AddJournalQuestEntry`
+  writes into the shared condition state and runtime quest log — so entering a
+  plot trigger advances a global a later dialogue branch reads. `TriggerVolume`
+  gained `on_enter_script` (from the entity's `on_enter` script pair); the
+  interaction-script executor was refactored into a shared
+  `_execute_scripts_into_shared_state(...)` used by both placeable/door
+  interactions and trigger OnEnter; emits `trigger_script_executed`, keeping the
+  deferred fallback for non-literal scripts. PIE now executes literal writes from
+  all four surfaces: area OnEnter, dialogue nodes, placeable/door interactions,
+  and trigger OnEnter. Preview state only — never campaign state or a VM.
+
+Verification:
+- Focused test green (+1 in `tests/test_map_studio_pie_gameplay.py`): stepping
+  into a trigger whose OnEnter script sets a global folds the write into the
+  evaluator and emits `trigger_script_executed` (deferred fallback suppressed).
+  Trigger/gameplay/scripting/journal suites green (62 in the consolidated gate);
+  payload identity/coverage green (1341).
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC on
+  real 207TEL): the PIE proof `trigger_probe` drove the runtime into each of the
+  module's 3 authored triggers (all 3 scripted); one executed a literal write —
+  `207TEL_Benok=1` (a real Telos global) — while the other two stayed deferred
+  (non-literal, faithful). Overall proof `passed`, `focus_safe:true`, no
+  blockers, all twelve probes green. Editor-side preview; a manual KOTOR run
+  remains the authority.
+
+### [2026-07-17] T3008: PIE resolves script-driven area ambient music
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE audio — area-music NCS reader
+(`map_studio_pie_scripting.py`), ambientmusic.2da resolver
+(`map_studio_stock_content_preview.py`), controller
+(`module_editor_controller.py`), IPC probe (`resource_panels.py`).
+
+- Resolved the long-standing "area ambient music absent" gap. KOTOR area music
+  is NOT a static ARE field (confirmed: 207TEL's ARE has no MusicDay/Night/Battle
+  labels) — it is script-driven: the area OnEnter calls
+  `MusicBackgroundChangeDay(oArea, nTrack)` / `…ChangeNight` / `MusicBattleChange`
+  (routines 428/429/432) with a literal `ambientmusic.2da` row. Added
+  `extract_ncs_area_music` (the args push right-to-left, so `nTrack` is the
+  CONSTI nearest the ACTION; later calls win) + day/night/battle tracks +
+  `TemplateModelResolver.ambient_music_resref(track)` (maps the row to the
+  `resource` column) + `controller.map_studio_pie_area_music(...)` which loads
+  the OnEnter NCS (shared `_load_module_ncs_resource`) and returns the
+  day/night/battle track and resolved music resref. Reported/identified, not yet
+  played through the audio backend.
+
+Verification:
+- Focused tests green (+2): instruction-level extraction of day/night/battle
+  tracks with the right-to-left arg order, and later-call-wins / absent-track-is
+  -None. Scripting/gameplay/HUD/journal/combat suites green (consolidated gate);
+  payload identity/coverage green (1341).
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC on
+  real 207TEL): the PIE proof `area_music_probe` returned `probed:true`,
+  `has_area_music:true`, `day_track:18`, `night_track:18`, both resolved to
+  `mus_a_232` (the actual Telos ambient track) via ambientmusic.2da, and
+  `battle_track:null` (207TEL is a peaceful hub — faithfully no combat music).
+  Overall proof `passed`, `focus_safe:true`, no blockers, all twelve probes
+  green. Editor-side preview; a manual KOTOR run remains the authority.
+
+### [2026-07-17] T3008: PIE completes the global-variable family with SetGlobalString
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE scripting — string globals across the reader/executor
+(`map_studio_pie_scripting.py`), evaluator (`map_studio_pie_dialogue.py`),
+snapshot/HUD state (`map_studio_pie_gameplay.py`), context/merge
+(`module_editor_controller.py`), IPC probe (`resource_panels.py`).
+
+- Completed the global-variable family: the bounded NCS reader now recovers
+  literal `SetGlobalString(sName, sValue)` (routine 160 — two-CONSTS shape) as a
+  `global_string` effect (`NCSGlobalEffect.value` widened to `int | str`;
+  `apply_ncs_global_effects` returns a strings map; `execute_ncs_global_effects`
+  applies it). The condition evaluator gained `_global_strings` +
+  `set_global_string`, and `global_state()` now returns numbers, booleans, and
+  strings. OnEnter/dialogue/interaction script execution all fold string writes
+  into the shared state (under creator overrides), and the snapshot `globals` +
+  HUD inspector surface them with a `string` kind. So numbers, booleans, and
+  strings are now executed uniformly across every literal-write surface. Preview
+  state only — never campaign state or a general NWScript VM.
+
+Verification:
+- Focused tests green (+2): a real compiled `SetGlobalString` NCS extracts to
+  `("global_string","207_LastName","Onasi")` with correct arg order, and a
+  dialogue node script `SetGlobalString("207_PlayerName","Exile")` folds into
+  the evaluator's `global_state()`. Scripting/dialogue/gameplay/HUD/journal
+  suites green (109 in the consolidated gate); payload identity/coverage green
+  (1341).
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC on
+  real 207TEL): the PIE proof `dialogue_script_probe` executed a node script
+  doing both `SetGlobalNumber` and `SetGlobalString` — `applied_global:7`,
+  `applied_global_string:"Exile"`, `execution_verified:true`. Overall proof
+  `passed`, `focus_safe:true`, no blockers, all eleven probes green. Editor-side
+  preview; a manual KOTOR run remains the authority.
+
+### [2026-07-17] T3008: PIE HUD draws a Quest / Global State inspector
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE HUD — inspector widget in the gameplay HUD
+(`module_editor_viewport_panel.py`), IPC probe (`resource_panels.py`).
+
+- Added a compact "Quest / Global State" inspector to the PIE gameplay HUD
+  (`_MapStudioPIEGameplayHUD`): a titled, word-wrapped `QLabel`
+  (`mapStudioPIEStateInspectorHUD`/`…Label`) that renders the snapshot's runtime
+  quest log (`journal`) and shared global-variable state (`globals`, the values
+  the OnEnter/dialogue/interaction scripts write). `_update_state_inspector`
+  composes up to 6 quest rows + 8 global rows (with "… +N more"), shows the
+  frame when there is state and hides it when empty; `clear_state` resets it.
+  This makes the scripting state a creator is exercising visible during play.
+
+Verification:
+- Focused test green (+1 in `tests/test_map_studio_pie_gameplay_hud.py`): the
+  real HUD widget (offscreen Qt) renders `czerkamain → 20`,
+  `200tel_falt_arrest = 6`, `207tel_destroy_luxa = False` from a journal+globals
+  snapshot and hides on empty/clear. HUD/gameplay/scripting suites green (87 in
+  the consolidated gate); payload identity/coverage green (1341); panel mirror
+  (Display == Tools) byte-identical.
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC on
+  real 207TEL): the PIE proof `state_inspector_probe` read back the live HUD
+  label — `frame_visible:true`, `has_globals_section:true`, rendering the actual
+  OnEnter globals (`Globals: 200tel_falt_arrest = 6, 203tel_ramana = 5,
+  207tel_swoop_champ = 1, … +3 more`). Overall proof `passed`, `focus_safe:true`,
+  no blockers, all eleven probes green. Editor-side preview; a manual KOTOR run
+  remains the authority.
+
+### [2026-07-17] T3008: PIE exposes live global-variable state on the snapshot
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE state readout — evaluator accessor
+(`map_studio_pie_dialogue.py`), snapshot `globals` field + accessor
+(`map_studio_pie_gameplay.py`), IPC probe (`resource_panels.py`).
+
+- Surfaced the shared global-variable state on the gameplay snapshot so a
+  HUD/state inspector can show a creator which globals a module is exercising.
+  `MapStudioPIEDialogueContextEvaluator.global_state()` returns read-only copies
+  of the current numbers/booleans; the runtime folds them into
+  `MapStudioPIEGameplaySnapshot.globals` (a sorted tuple of
+  `MapStudioPIEGlobalValue(name, kind, value)`) plus a `global_state()`
+  accessor. This is the readout for the three script-execution surfaces (OnEnter
+  + dialogue nodes + interactions) shipped earlier today. Preview state only.
+
+Verification:
+- Focused test green (+1 in `tests/test_map_studio_pie_gameplay.py`): a seeded
+  number + boolean and a placeable OnUsed script write all appear on
+  `snapshot.globals` with the correct kind tags. Gameplay/dialogue/journal
+  suites green; payload identity/coverage green (1341).
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC on
+  real 207TEL): the PIE proof `global_state_probe` returned `probed:true`,
+  `snapshot_exposes_globals:true`, `global_count:11` — surfacing the actual
+  OnEnter globals (`200TEL_Falt_Arrest=6`, `203TEL_Ramana=5`, `207TEL_Benok=2`,
+  …). Overall proof `passed`, `focus_safe:true`, no blockers, all ten probes
+  green. Editor-side preview; a manual KOTOR run remains the authority.
+
+### [2026-07-17] T3008: PIE executes placeable/door interaction-script global writes
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE interaction scripting — runtime interaction-script
+execution (`map_studio_pie_gameplay.py`), shared executor
+(`map_studio_pie_scripting.py`), IPC probe (`resource_panels.py`).
+
+- Extended bounded scripting-state execution into the interaction path. When a
+  placeable/container/door interaction routes an OnUsed/OnOpen/OnClick script
+  (which the router reports as deferred), the runtime now loads that compiled
+  NCS via the session's script loader and executes its literal `SetGlobalNumber`/
+  `SetGlobalBoolean`/`AddJournalQuestEntry` writes into the shared condition
+  state and runtime quest log — so using a terminal or opening a door can flip a
+  global a later dialogue branch reads. Centralized in the runtime's
+  `_record_result` chokepoint via a new shared
+  `map_studio_pie_scripting.execute_ncs_global_effects(evaluator, journal_sink)`
+  helper; emits `interaction_script_executed`. Non-literal/branching scripts
+  stay honestly deferred. Preview state only — never campaign state or a VM.
+
+Verification:
+- Focused tests green (+2 in `tests/test_map_studio_pie_gameplay.py`): using a
+  placeable whose OnUsed script does `SetGlobalNumber('terminal_used',1)` folds
+  the write into the shared evaluator and emits `interaction_script_executed`;
+  without a loader nothing executes. Gameplay/scripting/dialogue/interaction
+  suites green (69 in the consolidated gate); payload identity/coverage green
+  (1341).
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC on
+  real 207TEL): the PIE proof `interaction_script_probe` returned `probed:true`,
+  `live_script_loader_wired:true`, `applied_global:1`, `execution_verified:true`.
+  Overall proof `passed`, `focus_safe:true`, no blockers, all nine probes green.
+  Editor-side preview; a manual KOTOR run remains the authority.
+
+### [2026-07-17] T3008: PIE executes dialogue node action-script global writes
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE dialogue runtime — node-script execution
+(`map_studio_pie_dialogue.py`), script-loader threading
+(`map_studio_pie_gameplay.py`, `map_studio_pie.py`), controller NCS loader +
+refactor (`module_editor_controller.py`), IPC probe (`resource_panels.py`).
+
+- Extended the bounded scripting-state execution into the dialogue action path.
+  When a DLG entry/reply carrying a `Script1`/`Script2` plays, PIE now loads the
+  compiled node script and executes its literal `SetGlobalNumber`/
+  `SetGlobalBoolean`/`AddJournalQuestEntry` writes into the *shared* condition
+  state (new `MapStudioPIEDialogueContextEvaluator.set_global_number/boolean`),
+  so a later branch or condition in the same or a following conversation reads
+  the advanced value — the canonical KOTOR quest-advance pattern. Journal writes
+  reuse the `journal_updated` event so the runtime quest log folds them. Scripts
+  the bounded reader cannot resolve (computed/branching) stay honestly deferred;
+  `node_scripts_deferred` becomes `node_script_executed` only for what actually
+  ran. The OnEnter NCS-byte loader was refactored into a reusable
+  `_load_module_ncs_resource(resref, …)` used by both OnEnter reading and the new
+  per-node `script_loader` (imported MOD/RIM capsule first, then resource
+  manager). Preview state only — never campaign state or a general NWScript VM.
+
+Verification:
+- Focused tests green (3 in `tests/test_map_studio_pie_dialogue_scripts.py`):
+  evaluator setters mutate casefolded state; a starter entry's action script
+  (real compiled NCS) advances two globals and emits `node_script_executed`; a
+  node without a loader stays deferred. Dialogue/gameplay/journal/scripting
+  suites still green (70 in the consolidated gate); payload identity/coverage
+  green (1341).
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC on
+  real 207TEL): the PIE proof `dialogue_script_probe` returned `probed:true`,
+  `live_script_loader_wired:true`, `applied_global:7`, `execution_verified:true`
+  — the embedded dialogue runtime executed a node script's `SetGlobalNumber`
+  into the shared condition state. Overall proof `passed`, `focus_safe:true`, no
+  blockers, all eight probes green. Editor-side preview; a manual KOTOR run
+  remains the authority.
+
+### [2026-07-17] T3008: PIE accumulates a runtime journal/quest log
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE journal — new runtime quest-log core
+(`map_studio_pie_journal.py`, mirrored root/Scene/Tools), gameplay runtime
+accumulation + snapshot field (`map_studio_pie_gameplay.py`), session/build
+threading (`map_studio_pie.py`), OnEnter seed (`module_editor_controller.py`),
+IPC probe (`resource_panels.py`).
+
+- Upgraded Journal from Reported-only toward executed: PIE now accumulates the
+  journal entries a play session touches into a runtime, monotonic per-plot
+  quest log (`MapStudioPIEJournalState`). Dialogue `Quest`/`QuestEntry` nodes
+  advance it as lines play, and it is seeded at Play start from the module
+  OnEnter script's literal `AddJournalQuestEntry` writes (the bounded NCS reader
+  from the prior slice). Entries are monotonic — a higher entry supersedes a
+  lower one for the same plot, matching how the engine overwrites a plot's
+  current state — and it is exposed on `MapStudioPIEGameplaySnapshot.journal`
+  for a quest-log adapter. Explicitly a runtime preview log: never the campaign
+  journal, and it does not consult `journal.2da` end/priority flags.
+
+Verification:
+- Focused tests green (6 in `tests/test_map_studio_pie_journal.py`, +2 new):
+  monotonic/seedable state (pairs and `"tag:entry"` strings, lower entries
+  ignored) and the gameplay runtime accumulating a seeded OnEnter quest plus a
+  dialogue-advanced quest into the snapshot. Gameplay + scripting suites still
+  green; payload identity/coverage green (count 1341).
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC on
+  real 207TEL): the PIE proof `journal_probe` returned `probed:true`,
+  `snapshot_exposes_journal:true`, `monotonic_accumulator_verified:true`. The
+  live log is empty because 207TEL's OnEnter adds no journal entries (it sets
+  globals, not journal state) — a faithful result, not a gap. Overall proof
+  `passed`, `focus_safe:true`, no blockers, all seven probes green. Editor-side
+  preview only; a manual KOTOR run remains the authority.
+
+### [2026-07-17] T3008: PIE executes a module's OnEnter global writes (scripting state)
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE scripting state — new bounded NCS reader
+(`map_studio_pie_scripting.py`, mirrored root/Scene/Tools), controller
+integration (`module_editor_controller.py`), window wiring
+(`module_editor_window.py`), IPC visual-proof probe (`resource_panels.py`).
+
+- Added a bounded NCS reader (not a general NWScript VM) that recovers a module
+  OnEnter script's literal `SetGlobalNumber`/`SetGlobalBoolean`/
+  `AddJournalQuestEntry` writes — the fixed CONST-push → routine-ACTION shape —
+  and executes them into the PIE global sandbox at Play start. Dialogue Active
+  conditions (`MapStudioPIEDialogueContextEvaluator`) then read script-set
+  globals instead of only the creator-configured sandbox; explicit creator
+  overrides still win. Journal writes are reported, not applied to campaign
+  quest state. Non-literal / computed / branching writes are skipped, not
+  guessed. `create_map_studio_pie_session(resource_manager=…)` folds the result
+  under the sandbox; the OnEnter NCS load was factored into a shared
+  `_map_studio_onenter_ncs` helper reused by the scene-animation reader.
+- Corrected the ACTION routine ids: earlier work used SetGlobalNumber=577 /
+  SetGlobalBoolean=575 / AddJournalQuestEntry=364, which do not match compiled
+  bytecode. The authoritative PyKotor engine function table (K1 `KOTOR_FUNCTIONS`
+  and K2 `TSL_FUNCTIONS`, identical) gives **SetGlobalNumber=581,
+  SetGlobalBoolean=579, AddJournalQuestEntry=367** (GetGlobal* 578/580, locals
+  679–682, string globals 160/194). The empirical proof caught the bug: with the
+  wrong ids the reader found 0 writes in 207TEL; with the correct ids it recovers
+  the real ones. A regression test pins the constants to the live table.
+
+Verification:
+- Focused tests green (6): `tests/test_map_studio_pie_scripting.py` — real NCS
+  binary round-trip via PyKotor's `bytes_ncs`, routine-number pin against
+  `KOTOR_FUNCTIONS`/`TSL_FUNCTIONS`, unrelated-routine/empty skips, non-literal
+  skip, fold/last-write-wins, and the dialogue-condition close-the-loop case.
+  Scene-animation suite still green after the shared-helper refactor. Payload
+  identity + coverage green (count bumped for the PIE simulation module set).
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC on
+  the real 207TEL editable module): the PIE proof `scripted_globals_probe`
+  returned `probed:true`, `applied_at_play_start:true`, `effect_count:12` —
+  recovering genuine Telos globals `200TEL_Falt_Arrest=6`, `203TEL_Ramana=5`,
+  `203TEL_Harra=8`, `207TEL_Swoop_Champ=1`, `207TEL_Destroy_Luxa=false`, … from
+  `k_207tel_enter` (3 computed-arg writes correctly skipped). Overall proof
+  `passed`, `focus_safe:true`, no blockers, all six probes green. Editor-side
+  simulation only; a manual KOTOR warp remains the sole gameplay authority.
+
+### [2026-07-17] T3008: PIE combat applies Weapon Focus/Specialization feats
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE combat resources + stock template resolver + PIE
+resource context (`map_studio_pie_resources.py`,
+`map_studio_stock_content_preview.py`, `module_editor_controller.py`)
+
+- Reconstructed the Weapon Focus / Weapon Specialization feats from `feat.2da`
+  (Lightsaber 36/50, Melee 37/51, Blaster 32/46/33/47) and the weapon → category
+  mapping from baseitems.2da (`powereditem` = lightsaber; non-powered non-ranged
+  = melee; ranged = blaster). `TemplateModelResolver.weapon_feat_category`
+  classifies the equipped weapon; the creature inspection reads the UTC FeatList
+  and folds +1 attack (Weapon Focus) / +2 damage (Weapon Specialization) into the
+  derived `attack_bonus`/`damage_min`/`damage_max` when the matching feat is
+  present. Because attack/damage are *derived* (BAB+Str, baseitems dice), the
+  feat bonus is additive without double-counting the UTC's stored final values.
+  Only the unambiguous lightsaber/melee categories are applied — the blaster
+  pistol-vs-rifle focus feat cannot be split from baseitems columns (documented).
+
+Verification:
+- Focused tests green (23): `tests/test_map_studio_pie_combat.py` — a new test
+  asserts a lightsaber-wielding creature with feats 36/50 gets +1 attack / +2
+  damage, and an identical creature without the feats gets neither.
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC):
+  the PIE proof resolved the weapon feat category live — `g_w_lghtsbr01` →
+  lightsaber (`lightsaber_feat_category_verified`), `w_melee_01` → melee,
+  `g_w_dblsbr001` → lightsaber. Recorded under
+  `Saved/VisibleProof/2026-07-17_pie_weapon_feats/`. Editor-side; a manual KOTOR
+  run remains the authority.
+
+### [2026-07-17] T3008: PIE combat gains assisting-ally AI (companions fight)
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE combat runtime + gameplay (Core.Scene/Core.Tools/root
+`map_studio_pie_combat.py`, `map_studio_pie_gameplay.py`)
+
+- Added assisting-ally combat AI to the RTwP runtime. `MapStudioPIECombatant`
+  gained an opt-in `assists` flag; assisting friendly combatants auto-engage when
+  combat opens (emitting `ally_engaged`) and make one basic attack per round
+  against the first living engaged hostile — mirroring the existing hostile
+  retaliation, deterministic, no positional targeting. The gameplay `_combatants`
+  builder marks friendly-faction creatures `assists=True`, so allied NPCs (and
+  configured party companions) now fight for the player. Opt-in flag keeps all
+  existing non-assisting combatant behavior untouched.
+
+Verification:
+- Focused tests green (33): `tests/test_map_studio_pie_combat.py` — a new test
+  asserts an assisting ally engages and strikes the hostile; a guard test asserts
+  a non-assisting friendly stays entirely out of combat (no behavior change).
+  `test_map_studio_pie_gameplay` (11) + `test_map_studio_pie_gameplay_hud` (29,
+  no regression from the new event kind) + payload byte-identity.
+- The combat runtime is headless (Qt-free); the deterministic tests exercise the
+  same runtime PIE uses. Rebuilt Debug x64, staged 18 payload DLLs, app boots
+  healthy. Editor-side; a manual KOTOR run remains the authority.
+
+### [2026-07-17] T3008: PIE renders companion party actors (party system complete)
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Module Editor window PIE party actors (Core.Tools
+`module_editor_window.py`) + focus-safe PIE visual proof
+(Core.GUI.Display/Core.Tools)
+
+- Implemented the final party sub-slice: rendered companion actors. New
+  `_create_map_studio_pie_party_actors` resolves each `party_roster` UTC's body
+  model via `TemplateModelResolver.creature_model` (appearance.2da modeltype-B
+  `modela` / else `race`), loads it with `load_model_strict`, and attaches it
+  with `attach_map_studio_pie_actor` at its walkmesh-snapped follow slot with an
+  idle pose. `_update_map_studio_pie_party_actors` drives each to its current
+  `party_follow_targets` slot every tick, and the actors tear down with the other
+  runtime actors. Companions are a SEPARATE retained-actor list — they never join
+  the creature staggered-animation cohort. Fully guarded (resolution/load failure
+  never breaks PIE). This completes party systems: roster → formation → markers →
+  rendered following companions.
+
+Verification:
+- Focused tests green (10): `tests/test_map_studio_pie_party.py` — a new window
+  source contract asserts the create/update/teardown wiring, the appearance-path
+  resolution, and that companions stay isolated from the creature cohort.
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC):
+  the PIE proof set a one-entry roster to a real placed creature and confirmed
+  the companion actor (`203_ramana`) attaches to the live scene behind the player
+  on the walkmesh (`companion_attached_behind_leader: true`, no warning), then
+  detaches cleanly. Recorded under
+  `Saved/VisibleProof/2026-07-17_pie_companion_actors/`. Editor-side; a manual
+  KOTOR run remains the authority.
+
+### [2026-07-17] T3008: PIE party gains a persisted, configurable roster
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE party (controller context settings + PIE session)
+
+- Added a creator-configurable `party_roster` to the PIE context settings
+  (`map_studio_pie_context_settings`/`update_map_studio_pie_context`): up to two
+  companion UTC resrefs, deduped and lowercased, persisted in the KMAP's
+  `map_studio_pie_context` section. `create_map_studio_pie_session` now sets the
+  live follow-slot count from that roster, so the trailing formation/markers
+  reflect the configured party. This is the persisted prerequisite the follow-on
+  companion-model rendering will consume.
+
+Verification:
+- Focused tests green (9): `tests/test_map_studio_pie_party.py` — a new test
+  asserts the controller normalizes/dedups/caps the persisted roster.
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC):
+  the PIE proof round-tripped `["atton","atton","kreia"]` → `["atton","kreia"]`
+  through the live controller and confirmed the follow-slot markers render.
+  Recorded under `Saved/VisibleProof/2026-07-17_pie_party_roster/`. Editor-side;
+  companion *models* and a manual KOTOR run remain the follow-on/authority.
+
+### [2026-07-17] T3008: PIE combat shows weapon damage type (nwscript DAMAGE_TYPE)
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE combat/resources/entities/gameplay + stock template
+resolver + PIE resource context (same chain as the weapon damage/crit work)
+
+- Reconstructed the KOTOR damage-type map from the game's own `nwscript.nss`
+  `DAMAGE_TYPE_*` constants (1 Bludgeoning, 2 Piercing, 4 Slashing, 8 Universal,
+  16 Acid, 32 Cold, 64 Light Side, 128 Electrical, 256 Fire, 512 Dark Side,
+  1024 Sonic, 2048 Ion, 4096 Blaster/Energy). Added `pie_damage_type_label` and
+  `TemplateModelResolver.weapon_damage_type` (baseitems.2da `damageflags`), then
+  threaded the equipped weapon's type resolver → inspection → `PIEEntity` →
+  `MapStudioPIECombatStats.damage_type` → the `attack_hit` line ("N Energy
+  damage"). Non-weapons/unarmed keep "Physical".
+
+Verification:
+- Focused tests green (31): `tests/test_map_studio_pie_combat.py` (new
+  bitfield-label test matching the nwscript constants incl. blended flags, and a
+  full inspection→combat test asserting an equipped weapon's type reaches the
+  attack line) + `test_map_studio_pie_gameplay` (11, no regression) + payload
+  byte-identity.
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC):
+  the PIE proof resolved live — `g_w_lghtsbr01` → Energy
+  (`lightsaber_damage_type_verified`), `w_melee_01` → Piercing, `g_w_dblsbr001`
+  → Energy. Recorded under `Saved/VisibleProof/2026-07-17_pie_damage_type/`.
+  Editor-side; a manual KOTOR run remains the authority.
+
+### [2026-07-17] T3008: PIE combat uses per-weapon critical threat/multiplier (baseitems.2da)
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE combat/resources/entities/gameplay
+(`map_studio_pie_combat.py`, `map_studio_pie_resources.py`,
+`map_studio_pie_entities.py`, `map_studio_pie_gameplay.py`), stock template
+resolver (`map_studio_stock_content_preview.py`), and the PIE resource context
+(`module_editor_controller.py`)
+
+- Threaded per-weapon critical data end to end.
+  `TemplateModelResolver.weapon_critical(uti_resref)` reads baseitems.2da
+  `critthreat`/`crithitmult` (defensive; non-weapons/failures → None). The
+  creature inspection resolves the equipped weapon's crit and emits
+  `critical_threat`/`critical_multiplier`; `PIEEntity` carries them; the gameplay
+  `_combatants` builder passes them to `MapStudioPIECombatStats`, so combat crits
+  use the actual weapon's threat range and multiplier (d20 baseline 1/x2 when
+  unresolved).
+
+Verification:
+- Focused tests green (29): `tests/test_map_studio_pie_combat.py` (a new
+  inspection test asserts a Lightsaber carries crit threat 2 / x2 and the
+  no-resolver baseline stays 1 / x2) + `test_map_studio_pie_gameplay` (11, no
+  regression) + payload byte-identity.
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC):
+  the PIE proof resolved crit through the live baseitems.2da chain —
+  `g_w_lghtsbr01` (Lightsaber) → threat 2 (19-20), x2 (`lightsaber_crit_verified`);
+  `w_melee_01` / `g_w_dblsbr001` → threat 1, x2. Recorded under
+  `Saved/VisibleProof/2026-07-17_pie_weapon_crit/`. Editor-side; a manual KOTOR
+  run remains the authority.
+
+### [2026-07-16] T3008: PIE combat adds d20 critical hits
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE combat (Core.Scene/Core.Tools/root
+`map_studio_pie_combat.py`)
+
+- Added the d20 critical-hit baseline to the RTwP combat runtime.
+  `MapStudioPIECombatStats` now carries `critical_threat` (default 1 — threatens
+  only on a natural 20) and `critical_multiplier` (default 2), and
+  `_resolve_attack` multiplies damage when the attack roll is within the threat
+  range, flagging the `attack_hit` event with `critical` and a "critical xN"
+  note. Backward-compatible: existing callers get the standard "natural 20 → x2"
+  rule automatically. Per-weapon threat/mult from baseitems.2da
+  (`critthreat`/`critmult`) can be threaded onto the stats later.
+
+Verification:
+- Focused tests green (17): `tests/test_map_studio_pie_combat.py` — a new
+  deterministic test reuses the seed that forces a natural 20 and asserts the hit
+  is a critical dealing 2 base → 4 damage with a "critical x2" message, plus a
+  default-baseline stats check. `test_map_studio_pie_gameplay_hud` (29, no
+  regression from the new event field) + payload byte-identity.
+- The combat runtime is headless (Qt-free); the deterministic test exercises the
+  same runtime PIE uses. Rebuilt Debug x64, staged 18 payload DLLs, app boots
+  healthy. Editor-side; a manual KOTOR run remains the authority.
+
+### [2026-07-16] T3008: PIE combat uses real equipped-weapon damage and armor AC (baseitems.2da)
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE combat + resources (Core.Scene/Core.Tools/root
+`map_studio_pie_combat.py`, `map_studio_pie_resources.py`), stock template
+resolver (`map_studio_stock_content_preview.py`), and the PIE resource context
+(`module_editor_controller.py`)
+
+- Added `derive_pie_weapon_damage_dice(baseitem_fields, strength_modifier,
+  ranged)`: maps a baseitems.2da weapon row (`numdice` × d`dietoroll`) to the
+  combat runtime's damage expression — melee adds the wielder's Strength
+  modifier, ranged does not, empty/`****`-masked → unarmed 1d3.
+- Wired it live: `TemplateModelResolver.weapon_damage_dice(uti_resref, str_mod)`
+  resolves UTI → BaseItem → baseitems.2da (defensive; non-weapons/failures return
+  None). The creature inspection now accepts a `weapon_damage_resolver` and uses
+  the first equipped weapon's dice for `damage_min`/`damage_max`; the PIE resource
+  context passes the resolver so combatant damage is per-weapon, not a generic
+  1d6. Non-weapons and unarmed creatures keep the Strength-scaled fallback.
+- Extended the same chain to armor class:
+  `TemplateModelResolver.armor_class_bonus(uti_resref)` reads baseitems.2da
+  `baseac`/`dexbonus`, and the creature inspection applies the equipped armor's
+  base AC and caps the Dexterity bonus (uncapped when unarmored). Verified in-app
+  that `a_light_01` (Armor_Class_4) resolves to +4 AC / +5 max Dex through the
+  live baseitems.2da chain (`light_armor_ac4_verified`), recorded under
+  `Saved/VisibleProof/2026-07-16_pie_armor_ac/`.
+
+Verification:
+- Focused tests green (25): `tests/test_map_studio_pie_combat.py` (14, incl.
+  melee-adds-Str / ranged-ignores-Str / masked→unarmed and a creature-inspection
+  wiring test with a resolver) + `test_map_studio_pie_gameplay` (11, no
+  regression) + payload byte-identity/VS-inclusion.
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC):
+  the PIE proof resolved installed weapons through the live baseitems.2da chain —
+  `g_w_lghtsbr01` (Lightsaber, row 8) → 2d10+2 (verified), `w_melee_01` → 1d6+2,
+  `g_w_dblsbr001` → 2d12+2. Recorded under
+  `Saved/VisibleProof/2026-07-16_pie_weapon_damage/`. Editor-side derivation;
+  feats/powers/equipment bonuses and a manual KOTOR run remain out of scope/the
+  authority.
+
+### [2026-07-16] T3008: PIE party follow-formation foundation + gameplay parity ledger
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE party (new Core.Scene/Core.Tools/root
+`map_studio_pie_party.py`), PIE session (`map_studio_pie.py`), the focus-safe PIE
+visual proof (Core.GUI.Display/Core.Tools), and a new parity ledger
+(`docs/knowledgebase/pie_gameplay_parity_ledger.md`)
+
+- Started the party system (a genuinely-missing named gap). Added a headless
+  follow-formation core: `normalize_party_roster` (caps at a leader plus two
+  companions, dedup) and `party_follow_positions` (trailing slots staggered
+  left/right behind the leader, facing-aware, snapped to the walkmesh via an
+  injected sampler). The exact Odyssey follow spacing is engine-internal, so the
+  offsets are labelled clean-room approximations.
+- The PIE session exposes `party_follow_targets(count)`, snapping each slot to
+  the runtime walkmesh floor near the player's height.
+- Added the headless `build_map_studio_pie_party_plan(roster, model_resolver)`
+  actor-spawn contract (`MapStudioPIEPartyActorSpec` with resolved body/head
+  model resrefs per follow slot) that the viewport actor-attach will consume.
+  Resolver failures degrade gracefully; unresolved followers keep an empty model
+  and `can_build_actor` stays false. Headless + tested; visible companion-actor
+  rendering (hooking this plan into the retained-actor pipeline) is the next
+  increment and is NOT yet in the running app.
+- Made the party formation visible: `MapStudioPIESession.set_party_follower_count`
+  adds trailing follow-slot markers to the existing overlay geometry the
+  viewport renders each frame (reusing the marker renderer, no changes to the
+  mature creature-actor pipeline). Verified in the live Debug app — 2 party
+  markers entered the overlay behind the player on the 207TEL walkmesh
+  (`party_markers_rendered: true`), recorded under
+  `Saved/VisibleProof/2026-07-16_pie_party_markers/`. Companion *models* (vs slot
+  markers) remain the next increment.
+- Added `docs/knowledgebase/pie_gameplay_parity_ledger.md`: an accurate,
+  evidence-cited status of every named engine-visible PIE system (implemented /
+  partial / reported-only / not started) with owner modules and tracked
+  limitations — correcting the record that dialogue, cameras, triggers, journal,
+  doors, inventory/containers, focus/interaction, combat rounds, and placement
+  audio are already implemented. The largest remaining named systems are
+  companion-actor rendering, combat 2DA/feat/power/equipment math, and animated
+  dialogue camera tracks.
+
+Verification:
+- Focused tests green: new `tests/test_map_studio_pie_party.py` (6 — roster cap/
+  dedup, zero/one/two-follower formation geometry, facing rotation, walkmesh
+  snap) plus the two payload byte-identity/VS-inclusion checks.
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC):
+  the PIE visual proof computed the live party formation against the real 207TEL
+  walkmesh — leader at (7.0, -17.0, 10.20), two followers trailing behind
+  (forward-component -1.8 each), staggered left/right, and snapped to the
+  walkable floor (z 10.20). Recorded under
+  `Saved/VisibleProof/2026-07-16_pie_party/`. Editor-side only; visible companion
+  actors and a manual KOTOR run remain follow-ons/authority.
+
+### [2026-07-16] T3008: PIE reports journal/quest updates from dialogue nodes
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE dialogue journal (Core.Scene/Core.Tools/root
+`map_studio_pie_dialogue.py`), gameplay runtime event capture
+(`map_studio_pie_gameplay.py`), and the focus-safe PIE visual proof
+(Core.GUI.Display/Core.Tools)
+
+Intersects: the `ghost-studio` PIE dialogue conversation-context/camera slices.
+
+- Verified against real 207TEL dialogues that entry nodes carry Quest (a plot
+  tag) and QuestEntry (its state index) — 17 of 328 nodes in 207TEL, e.g.
+  207falt's czerkamain 11/12/20 and falt 10/30. The retail engine calls
+  AddJournalQuestEntry when such a line plays.
+- The PIE dialogue session now emits a `journal_updated` event (carrying
+  `quest:entry`) when it enters a quest-bearing node, and the snapshot exposes
+  `quest_tag`/`quest_entry`. The gameplay runtime surfaces it as a top-level
+  `journal_updated` gameplay event so a quest-log adapter can list it. PIE
+  reports the update; it never mutates campaign quest state (no NWScript run).
+- Added `extract_dialogue_quest_references(dlg_bytes)` to surface a module's
+  distinct journal touchpoints from its real DLGs for validation.
+
+Verification:
+- Focused tests green: new `tests/test_map_studio_pie_journal.py` (6 — snapshot
+  quest fields + event, no-quest node stays silent, distinct-touchpoint
+  extraction, and a full `MapStudioPIEGameplayRuntime` activate→talk→
+  `journal_updated` integration), plus `test_map_studio_pie_dialogue` (9),
+  `test_map_studio_pie_dialogue_context/preview`, `test_map_studio_pie_gameplay`
+  (11), `test_map_studio_pie_gameplay_hud` (29, no regression), and payload
+  byte-identity/VS-inclusion.
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC):
+  the PIE visual proof surfaced 207falt's real journal touchpoints —
+  `czerkamain:20, czerkamain:12, czerkamain:11, falt:10, falt:30` — read live
+  from the module's DLG. Recorded under
+  `Saved/VisibleProof/2026-07-16_pie_journal/`. Editor-side reporting only; not a
+  KOTOR engine/warp proof.
+
+### [2026-07-16] T3008: PIE detects authored trigger volumes and reports transitions
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE triggers (new Core.Scene/Core.Tools/root
+`map_studio_pie_triggers.py`), gameplay runtime advance (Core.Scene/Core.Tools/
+root `map_studio_pie_gameplay.py`), and the focus-safe PIE visual proof
+(Core.GUI.Display/Core.Tools)
+
+Intersects: the `ghost-studio` PIE entity-registry/door-transition slices; this
+adds the missing trigger-volume enter/exit detection those left open.
+
+- Verified against real 207TEL GIT triggers that geometry points are authored
+  *local* to the trigger position, so world polygons offset by that position.
+  Added a headless `map_studio_pie_triggers` module: even-odd
+  `point_in_polygon_xy`, `build_trigger_volumes` (skips <3-point/degenerate and
+  non-trigger entities), and a debounced `TriggerCrossingTracker` (one enter
+  event per crossing, plus exit).
+- The gameplay runtime now builds trigger volumes at construction and detects
+  player enter/exit each `advance`. Script triggers emit `trigger_entered` with
+  the OnEnter script reported as deferred (PIE executes no arbitrary NWScript);
+  transition triggers emit `transition_trigger_entered` naming the linked
+  module/waypoint but are reported, not warped (mirroring the inter-module door
+  policy).
+
+Verification:
+- Focused tests green: new `tests/test_map_studio_pie_triggers.py` (6 —
+  point-in-polygon inside/outside/concave/degenerate, local→world offset,
+  degenerate/non-trigger skip, transition classification, tracker enter-debounce
+  and exit, and a full `MapStudioPIEGameplayRuntime` integration emitting the
+  script and transition events), plus `test_map_studio_pie_gameplay` (11),
+  `test_map_studio_pie_gameplay_hud` (29 — no regression from the advance
+  change), and the two payload byte-identity/VS-inclusion checks.
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC):
+  the PIE visual proof drove the live gameplay runtime into every authored
+  trigger volume of the real 207TEL module — 3 volumes, all fired
+  `trigger_entered` (`all_fired: true`), 0 transition volumes as expected.
+  Recorded under `Saved/VisibleProof/2026-07-16_pie_triggers/`. Editor-side
+  detection only; not a KOTOR engine/warp proof.
+
+### [2026-07-16] T3008: PIE dialogue cameras resolve through a headless, tested solver
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE dialogue camera (new Core.Scene/Core.Tools/root
+`map_studio_pie_dialogue_camera.py`), Module Editor window camera wiring
+(Core.Tools), and the focus-safe PIE visual proof (Core.GUI.Display/Core.Tools)
+
+Intersects: the `ghost-studio` PIE dialogue/HUD slices; this refactors the
+uncommitted `_update_map_studio_pie_dialogue_camera` framing math out of the GUI.
+
+- Censused the vanilla K2 DLG CameraAngle usage (160 DLGs): 0 dominant
+  (default two-shot), 6 the placed area-camera shot by CameraID, and 1-5 the
+  remaining distinct discrete shots. Added a headless
+  `solve_map_studio_pie_dialogue_camera(...)` that turns a dialogue node's
+  CameraAngle/CameraID/CameraFOV plus live speaker/listener positions into an
+  orbit-camera framing (target, azimuth, elevation, distance, FOV) in the exact
+  convention the PIE viewport tick consumes.
+- CameraAngle 6 is faithful: it uses the authored area camera's real position,
+  height, and field of view. Angles 0-5 now select *distinct, deterministic*
+  shots (previously only a shoulder flip); the per-angle distances/elevations
+  are labelled clean-room approximations of the engine's shot table, not a
+  retail-parity claim (the exact Odyssey geometry is not recoverable from static
+  disassembly). A positive CameraFOV overrides the shot/camera default.
+- Rewired the window to call the solver, keeping the renderer camera-animation
+  hook, the pre-dialogue camera snapshot/restore, and camera-collision reset in
+  the window where they belong.
+
+Verification:
+- Focused tests green (53 passed): new
+  `tests/test_map_studio_pie_dialogue_camera.py` (9 — look-at midpoint, angle-0
+  reverse two-shot, distinct angles 0-5, placed-camera authored framing, FOV and
+  height overrides), the updated T3008 window source contract (animation-first
+  ordering now anchored on the solver call), the dialogue context/preview suites,
+  and the two payload byte-identity/VS-inclusion checks.
+- Visible, in the running Debug app (rebuilt, 18 DLLs staged, focus-safe IPC):
+  the PIE visual proof drove the live window `_update_map_studio_pie_dialogue_camera`
+  against real 207TEL entities (9 authored area cameras) and confirmed it reframes
+  the actual viewport camera to match the solver exactly for a default two-shot
+  (angle 0), a distinct profile shot (angle 2), and a placed camera (angle 6,
+  id 8, mode `placed`, honoring the authored FOV). Recorded under
+  `Saved/VisibleProof/2026-07-16_pie_dialogue_camera/`. Editor-side proof only;
+  not a KOTOR engine/warp proof.
 
 ### [2026-07-16] T2906/T3101: binary MDL room-compile route, MOD/KMAP parity closure, and K2 candidate overlay
 
@@ -151,6 +2495,321 @@ with that slice.
   transitions, and save/reload before any module is marked
   `retail_game_proven`.
 
+### [2026-07-16] T3008: PIE conversation-context panel resolves the opening line per loaded resource
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE dialogue context (Core.Scene/Core.Tools controller),
+compact PIE context panel (Core.GUI.Display/Core.Tools), Module Editor window
+wiring (Core.Tools), and the focus-safe PIE visual proof
+(Core.GUI.Display/Core.Tools)
+
+Intersects: the `ghost-studio` PIE dialogue-context slice (player role/gender,
+link-keyed SHA-guarded start overrides, clean-Auto unknown handling) that this
+builds on.
+
+- Added `ModuleEditorController.map_studio_pie_dialogue_preview(resref,
+  starter_link_id="")`, which resolves the opening NPC line a conversation shows
+  under the current PIE context using the identical production dialogue classes
+  the live runtime uses (same DLG loader, TLK, and
+  `MapStudioPIEDialogueContextEvaluator`). It applies a persisted start override
+  only when its SHA still matches, honors an explicit forced link, and never
+  raises for missing/undecodable resources. Extracted the shared
+  `_map_studio_pie_condition_evaluator(settings)` helper so live PIE session
+  construction and this preview evaluate authored Active conditions identically.
+- The compact PIE tab now shows an "Opens with" line for the selected
+  conversation/start, labelled `[Auto]` for canonical clean-state selection or
+  `[Forced preview start]` for a condition-bypassing override. The window
+  recomputes it on every context change and on catalog reload.
+- Extended the focus-safe `map_studio_pie_visual_proof` to also capture the PIE
+  conversation-context tab from the loaded module's real UTC/UTP/DLG/TLK: it
+  records the resource-derived catalog, screenshots the tab, and showcases a
+  c_b4d4pc-gated conversation's clean-Auto versus forced-B-4D4 opening lines.
+
+Verification:
+- Focused tests green (64 passed): new
+  `tests/test_map_studio_pie_dialogue_preview.py` (7, incl. a real installed
+  207Luxa Auto=="Hello there." vs forced-B-4D4=="Ah, there's my favorite
+  protocol droid." through the production controller code), plus
+  `test_map_studio_pie_dialogue_context`, `test_map_studio_pie_dialogue`,
+  `test_map_studio_pie_gameplay`, `test_map_studio_pie_gameplay_hud`, and the two
+  payload byte-identity/VS-inclusion checks.
+- Visible: rebuilt Debug x64, staged all 18 payload DLLs, launched on the
+  focus-safe IPC port, and ran the PIE visual proof against the editable 207TEL
+  KMAP. Result `status: passed`, `focus_safe: true`, 16 conversations derived
+  from `207tel.mod`, panel controls enabled, and the live B-4D4 showcase on
+  `207falt` resolved clean Auto "So you're back." vs forced-B-4D4 "Leave me
+  alone, B-4D4." — captured in
+  `Saved/VisibleProof/2026-07-16_pie_dialogue_context/`. Editor-side proof only;
+  not a KOTOR engine/warp proof.
+
+### [2026-07-16] T2906/T3101: production 3ds Max MCP and live Max-2019 legacy-room recovery
+
+Owner: LordVaderCW
+
+T###: T2906 / T3101
+
+Subsystem: Autodesk 3ds Max automation, legacy NWMax recovery, and
+MDL/MDX/WOK structural candidates (Core.Automation/Core.IO/Core.Validation)
+
+Intersects: the earlier guarded Vul803 NWMax/KOTORMax recovery and converted-
+module walkmesh audit on `ghost-studio`; the standalone MCP lives at
+`C:\Users\NewAdmin\Documents\GDeveloper\Workspaces\3dsMaxMCP`.
+
+- Added a standalone FastMCP server with typed interactive Max operations,
+  authenticated atomic file-spool transport, UI-thread execution, source-scene
+  staging, trusted hash-pinned scripts, isolated batch profiles, minimal child
+  environments, Windows Job Object process-tree supervision, fail-closed ACLs,
+  immutable evidence, and no ordinary raw-inline-MaxScript tool.
+- Added strict typed KOTOR recovery recipes for Vul803/Vul801 `01a` and `01c`.
+  The Max-2019 compatibility profile patches exactly three NWMax 0.8 b60
+  statements in each run-owned copy while preserving the pinned original tree;
+  NWMax and KOTORMax remain mutually exclusive. Publication rechecks recorded
+  artifact hashes/sizes before and after copy and labels every result as not
+  retail-game proof.
+- Recovered all four registered visual partitions through real 3ds Max 2019.
+  Vul801 `01c` explicitly normalizes only four named static non-unit-scale nodes
+  in memory. It refuses animation/procedural controllers, ambiguity,
+  non-leaf/shared nodes, or collateral room edits and proves evaluated
+  vertices, topology, materials, smoothing, edge visibility, all map channels,
+  bounds, and unit scale before publication. It never saves the staged scene.
+- Merged each module's `01a + 01c` visual shells and used authoritative
+  collision-only `01b` once. Fresh K1/K2 Vul803 candidates retain 370 meshes,
+  17,113 vertices, 27,792 faces, a 127-vertex/145-face walkable WOK with 11
+  closed loops, zero controllers, and zero nonzero node-header `+8` fields.
+  Vul801 retains 287 meshes, 12,754 vertices, 18,010 faces, a
+  314-vertex/336-face walkable WOK with three closed loops, zero controllers,
+  and zero nonzero node-header `+8` fields. Final Vul801 packaging includes the
+  recovered custom textures plus nine exact K2-to-K1 stock texture ports for
+  the K1 candidate; its three closed WOK components remain a required retail
+  movement/pathing inspection point.
+- Affected: standalone `3dsMaxMCP`,
+  `scripts/kotormax/vul803_nwmax_recovery_bridge.ms`, the legacy recovery
+  README/knowledgebase/CHEETSHEET, Codex MCP registration, and immutable
+  candidate/evidence directories under the converted-module library.
+- Verification: standalone MCP `48 passed, 2 skipped`; Ruff, formatting, and
+  Python byte-compilation passed; a fresh real `3dsmaxbatch.exe` smoke test
+  passed. A separate real-Max safety fixture preserved static export channels
+  and pivot/object offsets while refusing keyed, procedural, instanced, and
+  non-leaf resets. Four typed Max recovery jobs passed NWMax sanity, exporter-
+  marker/report validation, ASCII envelope, input/source/toolset post-integrity,
+  and publication checks. Four merged K1/
+  K2 compiler reports returned `structural_candidate_ready`, binary geometry
+  parity passed, WOK adjacency/AABB/perimeters passed, and output hashes were
+  rechecked. Four fresh MODs passed serialized engine-contract and package
+  readback; Map Studio imported each, converted 1/1 room to editable geometry,
+  saved KMAP, and reopened it through a fresh controller with all render/WOK
+  faces retained. The focused auto-walkmesh, terrain, slope, WOK alignment,
+  floor-fill, surface, topology, and exporter regression slice passed (`127
+  passed`). This proves the writer and tested classification paths, not a
+  universal generator: imported/terrain hole derivation, disconnected-island
+  policy, and primitive floor/ramp seam welding remain follow-up gates. Source
+  `.max` files and original NWMax tree remained
+  hash-identical. The user's manual retail warp/movement proof remains required
+  before claiming either module works in KOTOR.
+
+### [2026-07-16] T3008: retail K2 PIE HUD focus, stable motion presentation, and canonical GUIBorder frames
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE gameplay HUD, retained Qt viewport presentation, and
+composed-character ModernGL submission
+(Core.GUI.Display/Core.Tools/Core.Rendering/Runtime.Shared)
+
+Intersects: the `ghost-studio` PIE interaction, scene-animation, composed-head,
+door-actor, lighting, and 207TEL quality-pass slices from 2026-07-15/16.
+
+- Audited all 1,001 frames of the supplied retail K2 207TEL Q/E capture and
+  recovered the relevant executable behavior with Ghidra: immediate angular
+  focus cycling, 500 ms initial/60 ms held repeat, 10 m ordinary and 30 m
+  hostile ranges, wraparound, and separate friendly/hostile selected reticles.
+  PIE now composes the K2 `mipc28x6_p.gui` shell from the installed game's real
+  minimap, menu, action, portrait, utility, target-plate, health, reticle, and
+  off-screen-arrow resources in authored 800x600 coordinates.
+- Extended the Ghidra recovery through K2's world-click/default-action path.
+  The retail picker combines a front scene hit with gameplay-object position,
+  footprint/selection thresholds, and visibility/collision checks; it does not
+  require a click on the actor's currently posed triangles. The first click on
+  a newly retained object changes focus, while a later click on that retained
+  object invokes its default action. PIE now follows that ordering without
+  inventing a timed double-click rule.
+- Kept every HUD layer clipped to the renderer canvas, projected the target
+  plate from the selected actor's current head/camerahook position, stripped
+  only raw gender suffixes such as `{F01s}`, and routed Enter, the active action
+  slot, and projected plate/reticle clicks through one range-checked primary
+  interaction path.
+- World clicks now use either an exact retained-entity mesh hit or a stable
+  registry-derived actor selection capsule at the actor's current retained
+  root. A room hit behind the capsule no longer steals the click, while a
+  nearer wall still blocks it by camera depth; missing/stale depth fails closed.
+  Retained creature/door/placeable IDs resolve back to stable authored entity
+  IDs. The selected target plate uses that same live root and current renderer
+  depth, rather than stale angular focus depth, so it remains attached to the
+  actor that was clicked. Projected authoring-marker hit-zones remain excluded,
+  and authoring selection remains untouched outside PIE.
+- Blank placed-object tags now hydrate from their UTC/UTD/UTP templates, so the
+  saved 207TEL fixture resolves Corrun Falt as `207_Falt` with conversation
+  `207falt`. The click path loads the source-overlay DLG/VO resources, preserves
+  source-module precedence, evaluates the bounded condition forms PIE actually
+  understands, and leaves arbitrary NWScript state visibly unknown instead of
+  guessing. On the exact fixture, focus then activation entered dialogue and
+  presented all four numbered replies.
+- Removed the fabricated looping `tlknorm`/`talk`/`listen`/`pause1` fallback
+  from voiced dialogue nodes. PIE now plays only explicit DLG `AnimList` body
+  gestures. Retail facial LIP curves are a separate channel; retained actors do
+  not expose that channel yet, so PIE reports the limitation once and leaves
+  lip motion unavailable rather than replaying an incorrect whole-body pose.
+- Fixed the moving/Q/E gray exposure by treating the retained non-live QLabel
+  scene as the opaque composition source and using ordinary child-background
+  propagation instead of top-level `WA_TranslucentBackground` semantics. No
+  per-frame z-order churn or isolated transparent-child repaint remains.
+- Corrected Odyssey GUIBorder nine-slice composition. FILL now occupies only
+  the DIMENSION-inset interior; edge/corner textures use cached canonical UV
+  mirrors/transposes while destination quads stay axis-aligned. This removes
+  the crossed/wide green bands previously visible over the top-right menu and
+  bottom-left action well.
+- Stable held door poses are no longer re-evaluated and resubmitted every 16 ms.
+  BAS attachment transforms now share a caller-owned per-render socket/pose/
+  root-chain cache while preserving exact bind-vs-leaf quaternion behavior.
+  Transform-only PIE actor changes now preserve immutable prebuilt GPU mesh
+  data and evict only that actor's world-transform subtree; they no longer
+  discard meshes or invalidate the full 3,179-node draw classification.
+- Restored the viewport frame governor during animation. The previous 1 ms
+  animation rearm and governor bypass could start another synchronous render
+  before Qt painted the pixmap it had just received, making the scene appear
+  frozen until held movement stopped. Animation frames now retain canonical
+  time evaluation while leaving a target-frame presentation/input window.
+  ModernGL also no longer builds and discards the WGPU/Pygfx full-scene lighting
+  payload on every PIE frame.
+- Retained skin uploaders now reuse immutable runtime/BAS scope signatures and
+  bind matrices, vectorize the independent final bone-palette multiplies in
+  float64, and cache the existing float32 GPU packing boundary. On the exact
+  3,179-node/33-actor 207TEL production-churn fixture, render time fell from
+  112.76 to 70.63 ms and the complete pose+render tick from 122.90 to 76.68 ms;
+  all 150 palette payloads remained byte-identical and the image delta was zero.
+  The full Debug editor's settled 443-draw frame fell from 155.21 to 105.59 ms.
+- ModernGL now fast-paths immutable, hashable uniform stamps while preserving
+  exact snapshots for mutable lists and NumPy arrays. This reduced 14,021
+  dense-frame stamp checks from 5.68 to 1.53 ms (about 4.15 ms saved per frame)
+  with pixel-identical realistic, unlit, and lightmap-preview output. The scene
+  light pass also reuses the authored light-candidate set instead of rescanning
+  all 3,179 nodes each frame.
+- Affected: both mirrored `module_editor_viewport_panel.py` payloads,
+  the mirrored `map_studio_pie_gameplay.py`, template-backed entity hydration,
+  `module_editor_window.py`, `viewport_host.py`, viewport resource cache/frame
+  pacing, the mirrored renderer `mesh_render_data.py`, ModernGL submission,
+  Workflow skin-palette math, focused HUD/dialogue/audio/interaction/door/cache/
+  pacing/palette tests, video/Ghidra audit notes, and regenerated native payload
+  manifests/resources.
+- Verification: 72 focused gameplay, dialogue/audio, HUD, interaction,
+  occlusion, entity, scene-light, and uniform-submission checks plus all 22
+  native payload identity checks passed; Python compilation and focused diff
+  checks passed. Debug x64 GUI Display, Scene, Tools, and Rendering DLLs were
+  rebuilt and copied with matching hashes after the final changes. The bounded
+  actual-app 207TEL proof captured 12/12 content frames, moved 2.408 m, observed
+  `pause1` and `walk`, and reported no blockers. A separate physical click on
+  the visible Czerka officer focused `Corrun Falt` with the plate centered over
+  that officer; the next click entered the real source-overlay conversation and
+  visibly presented four replies. A final
+  physical held-W run produced 24/24 distinct full-window frames, no gray/blank
+  samples, and movement from `(7.00,-17.00)` to `(7.00,-30.34)`. These are editor
+  proofs, not KOTOR engine claims. The 443 Python draw submissions still cap the
+  actual fixture near 9.8 FPS, so draw batching remains the next step toward
+  fully smooth retail-like frame rate; the motion-only presentation freeze and
+  gray-frame exposure did not reproduce.
+
+### [2026-07-16] T1210/T2404: selectable Unity and Unreal FBX animation takes
+
+Owner: LordVaderCW
+
+T###: T1210 / T2404
+
+Subsystem: composed character animation handoff and FBX compatibility export
+(Core.Workflow/Core.IO/Core.GUI.Display/Core.Tools/Core.Automation)
+
+Intersects: the existing composed BAS export, inherited facial-animation fix,
+Unity inverse-bind profile, 3ds Max global-bind profile, and T3502 rigged-FBX
+ASCII writer gate.
+
+- Added one shared animation-set selector to main-window, selected-object,
+  composed BAS, and Character Builder FBX export. It inventories local and
+  inherited supermodel clips, identifies their source/scope/duration, supports
+  Current/Local/All/Clear presets, and preserves an explicit empty selection as
+  a mesh-and-rig-only export. Main-window export reuses the Animation Browser's
+  strict-game supermodel cache instead of reparsing the same large base model
+  before the selector opens.
+- Selected takes are deep-copied without mutating the loaded model, resolve the
+  strict K1/K2 supermodel chain, bake each clip's cumulative inherited position
+  scale independently, and embed exactly the requested names. Composed body +
+  head exports merge only attachment-owned facial tracks; real PMHA01 jaw/eye
+  tracks inherited from its head supermodel no longer disappear or import the
+  competing supermodel pelvis/limb motion.
+- Added an Unreal Engine-Compatible FBX profile beside Standard, Unity, and 3ds
+  Max. Unity receives clean take names; Unreal receives its multi-take stack
+  convention. Both engine modes use meter-scale units, linear keys, continuous
+  Euler branches, textures/materials, and complete native Odyssey skin/bind
+  hierarchy. Unreal manifests also specify 30 fps, imported normals/tangents,
+  Import Meshes in Bone Hierarchy, and safe reference-pose settings.
+- Added repeatable Unity CLI `--animation` selection, explicit
+  `--no-animations`, Unity MCP `animation_names`, and a new
+  `ghostrigger_export_model_for_unreal` MCP route with identical omitted/empty/
+  selected semantics. Export manifests record requested, embedded, missing,
+  source, scope, scale, and contributing-model provenance.
+- Affected: `fbx_animation_selection.py`, `mesh_converter.py`,
+  `kotor_fbx_manifest.py`, the shared FBX animation dialog, main/BAS/Character
+  Builder routes and workflow mirrors, Unity CLI, GhostRigger MCP tools,
+  `README.md` user instructions, focused tests, and regenerated native payload
+  manifests/resources.
+- Verification: 73 focused FBX/animation/BAS/workflow regressions passed (two
+  optional-backend skips), three payload coverage/identity/ownership checks
+  passed, Python compilation passed, and the full Debug x64 solution rebuilt
+  and staged all 18 native payload DLLs. The actual Debug app loaded K1 PMBAM,
+  exposed both target filters in the native save dialog, and showed all 268
+  inherited rows in target-titled Unity and Unreal selectors; All and Clear
+  states were captured, the cached Unreal repeat opened in about two seconds,
+  and both runs were canceled without writing an unintended export. Unity
+  2022.3.62f1 imported the real
+  composed PMBAM + PMHA01 export with exactly `talk`/`walk`, 11/11 textured
+  material slots, five valid skins, finite 1.5577 m bounds, and no deformation
+  errors. Unreal Engine 5.6.1 imported the matching profile with exactly two
+  positive-duration Animation Sequences, a populated native skeleton, 11/11
+  materials, both textures, finite 178.28 cm height, and zero audit errors. No
+  broad test suite was run.
+
+### [2026-07-16] Standalone GUI Editor shell and immutable PIE HUD preview seam
+
+Owner: LordVaderCW
+
+T###: No existing roadmap task; the future GUI Editor needs a unique task ID.
+Intersects: T3008 only at the renderer-neutral PIE preview consumer boundary.
+
+Subsystem: GUI Editor product shell and KOTOR `.gui` preview contracts
+(Core.Rendering/Core.GUI.Display)
+
+- Added a separate, theme/layout-aware GUI Editor opened from its own main
+  command-strip icon and Tools action. It is not embedded in Map Studio.
+- The intentionally read-only first slice catalogs configured K1/K2 retail GUI
+  resources, loads real GFF-based `.gui` definitions through PyKotor, and shows
+  their control hierarchy, retail pixel extents, texture refs, and text metadata.
+- Added an immutable, JSON-safe `ghoststudio.pie_hud_preview.v1` snapshot. The
+  editor publishes this through the main-shell workflow; PIE can consume the
+  payload without importing Qt or the GUI Editor. Engine controller/event
+  semantics, texture rendering, mutation, undo/save, and export remain later
+  evidence-backed slices.
+- Affected: `src/core/rendering/kotor_gui_preview.py`,
+  `src/gui/windows/qt_gui_editor_window.py`, the main-shell GUI Editor workflow,
+  GUI Display/Rendering payload mirrors, the new `gui_editor.svg` icon, and
+  focused boundary tests.
+- Verification: Python compilation passed for the canonical files and payload
+  mirrors; all three mirror pairs are byte-identical; 4 focused tests passed.
+  The local K2 installation audit found 159 retail GUI resources, including
+  `maininterface`, resolution-specific `mipc*`, dialogue, container, inventory,
+  and pause surfaces. Final Debug DLL regeneration/build and visible launcher
+  acceptance are intentionally left to the enclosing PIE quality pass.
 
 ### [2026-07-16] T2906/T3101: guarded Vul803 NWMax/KOTORMax recovery and controller-free room proof
 
@@ -207,7 +2866,298 @@ tests, and documentation only and does not rewrite packaged Python mirrors.
   No licensed 3ds Max/gmax runtime is installed, so live MaxScript export and
   manual K1/K2 warp/movement proof remain explicitly outstanding.
 
+### [2026-07-16] T3008: 207TEL PIE restores heads and seats the real table crowd
+
+Owner: LordVaderCW
+
+T###: T3008
+
+Subsystem: Map Studio PIE creature composition and authored scene-animation playback (Core.Scene/Core.Tools/Core.GUI.Display)
+
+Intersects: the 2026-07-15 `ghost-studio` OnEnter NCS extraction and PIE
+scene-animation slices, plus the concurrent T2404/T2806 dirty workspace.
+
+- Stamped each retained PIE actor pose with its composed source actor/model and
+  selected animation name so detachable BAS heads are evaluated from the same
+  animated pose as the body instead of disappearing during retained playback.
+- Corrected K2 script constants 36-40 to the creature chair loops represented by
+  `animations.2da` rows 316-318 (`animloop01`/`animloop02`/`animloop03`). The old
+  generic `sit` fallback is a floor-meditation pose; the correct loops retain
+  their authored backward/upward root anchors and keep actors in their chairs.
+- Kept scene animations as persistent engine loops started once during actor
+  preparation, avoiding repeated one-shot sitting transitions.
+- Expanded exact UTC Tag+nNth matching with a deliberately narrow semantic
+  reconciliation for stale `Sitting*` script tags. It uses only UTC Tag and
+  template-resref identity, accepts a whole family only when unmatched target
+  and candidate counts are equal, and preserves GIT occurrence order. This
+  maps the five stale CommonFemale/CommonMale/Walrusman targets plus the three
+  exact targets, so all eight real 207TEL table sitters receive their authored
+  chair loops without changing placement position or bearing.
+- Refused two unsafe guesses: `SittingRodian` does not identify the named story
+  Rodian, and one unsupported placeable-loop `SittingBith` target conflicts with
+  three stage musicians. PIE reports both cases instead of moving or posing the
+  wrong creatures.
+- Hardened the focus-safe visual-proof route so a separate validation instance
+  can drive renderer residency and capture continuous frames without replacing
+  an open authored project.
+- Affected: `src/core/modules/map_studio_pie_creatures.py`, its Scene/Tools
+  payload mirrors, `map_studio_scene_animations.py`, the Map Studio window actor
+  publication path, the visual-proof IPC surface, focused tests, and regenerated
+  Scene/Tools native payload manifests.
+- Verification: 35 focused scene-animation/head/performance tests and 46 focused
+  environment/light-preservation/visual-proof tests passed. Scene and Tools were
+  rebuilt Debug x64; all 18 native payload DLLs were staged, and all 497
+  Scene/Tools payload rows were byte-identical to their manifests and canonical
+  sources; the complete native-payload contract passed 21/21. The actual source
+  MOD/KMAP hashes remained unchanged. A focus-safe
+  Debug app proof captured 12/12 populated 207TEL PIE frames with no blockers,
+  heads attached, visible chair contact, a stable seated loop, and an audited
+  `8 of 10` scene-target match. This is editor proof, not KOTOR engine proof.
+
+### [2026-07-16] T2908: Map Studio preview uses authored ambient/lightmap lighting
+
+Owner: LordVaderCW
+
+T###: T2908
+
+Subsystem: Map Studio world-light extraction and retained ModernGL/WGPU rendering (Core.Rendering/Core.Tools)
+
+Intersects: the 2026-07-15 stock-room model/light preservation and 207TEL PIE
+visible-proof work on `ghost-studio`.
+
+- Stopped averaging the stock ARE `DynamicAmbient` with a zero `SunAmbient`.
+  Imported modules now use the authored dynamic ambient value directly; the
+  user's 207TEL fixture therefore retains `(45, 43, 34)` instead of being
+  incorrectly halved to `(22.5, 21.5, 17)`.
+- Restored the Odyssey-style lightmap contribution used by the renderer
+  (`lightmap * 2.5 + 0.03`) and replaced arbitrary first-16-light truncation
+  with deterministic camera-relevance selection shared by ModernGL and WGPU.
+- Preserved source room MDL/MDX lighting and texture/lightmap identities; the
+  preview changes do not rebake or overwrite stock game resources.
+- Affected: renderer light extraction/render data, GPU shader composition,
+  ModernGL/WGPU light selection, mirrored Tools payloads, and focused world-
+  settings/light-preservation tests.
+- Verification: direct pipeline comparisons matched source lightmap membership
+  for `207tel_1` (54 lightmapped meshes/six lightmaps), `207tel_2` (four/two),
+  and `001ebo1` (13/two). The corrected 207TEL Debug proof increased mean frame
+  luminance from 19.141 to about 29.9 (+56.3%) and reduced pixels below luma 16
+  from 49.476% to 16.872% while keeping highlight clipping negligible. A fresh
+  12-frame proof remained fully populated. The isolated 001EBO1 visible control
+  exceeded its 180-second conversion budget under concurrent CPU load, so exact
+  in-game gamma/fog/shadow parity and the manual KOTOR warp check remain open.
+
+### [2026-07-16] T1210: full installed K1/K2 head/body catalog and texture-safe BAS switching
+
+Owner: LordVaderCW
+
+T###: T1210
+
+Subsystem: Body Attachment System catalog, composition, persistence, and
+viewport resources (Core.Tools/Core.GUI.Display/Core.Workflow)
+
+Intersects: the existing T1210 composed-model export and T2404
+Unity-compatible FBX handoff.
+
+- BAS now exposes separate game-owned rows for every installed `heads.2da`
+  head and every installed `appearance.2da` modeltype-B body, plus narrowly
+  validated shipped player-head/player-body fallbacks. Shared resrefs remain
+  distinct K1/K2 choices, and both the main BAS panel and Character Builder can
+  replace the active body through `Use Body`.
+- Body/head selection, saved recipes, and recipe reloads preserve each layer's
+  K1/K2 provenance and use strict game lookups. A failed replacement leaves the
+  prior body intact; a successful replacement preserves attachments, refreshes
+  animation/model panels, and rebinds viewport resources before composition so
+  a K2 body is not rendered through a stale K1 texture cache.
+- Diagnosed K2 `PMBD`'s white preview as an unresolved shipped authoring
+  placeholder: its skinned mesh references `PMBMV_01`, while the installed body
+  texture is `PMBD01`. The guarded BAS-only repair changes a fresh selected
+  body's populated skin nodes only when the authored texture is strictly absent
+  and the conventional `<body>01` replacement is strictly installed in that
+  game. Valid authored textures, helper nodes, source game data, and unrelated
+  loaded models remain untouched; the repaired material reference travels with
+  the composed MDL/OBJ/FBX output.
+- Catalogs refresh when the resource-manager revision changes. Composed export
+  keeps the body plus head, mask, goggles, both weapons, and belt in one model,
+  rejects ambiguous duplicate DAG names or unbaked layer scale, and passes the
+  live texture cache to FBX material/PNG sidecars.
+- Affected: `systems/bas/attachment_catalog.py`, `head_resolution.py`,
+  `model_recipe.py`, `preview_composer.py`, both BAS/Character Builder panel and
+  workflow mirrors, Character export workflows, BAS recipe loading, focused
+  BAS tests, and regenerated native payloads.
+- Verification: the configured installs produced 265 game-specific head
+  choices (107 K1/158 K2) and 229 headless-body choices (101 K1/128 K2).
+  All 58 focused BAS/FBX/Unity regressions passed after the guarded texture
+  repair, and three targeted native-payload identity/ownership checks passed.
+  The actual Debug app switched from K1 PMBAM to K2 PMBD and visibly rendered
+  `PMBD01` across the torso, arms, gloves, belt, trousers, and boots with the
+  BODY catalog row active. No broad suite was run.
+
+### [2026-07-16] T2404: Unity/3ds Max FBX bind, hierarchy, and animation interoperability
+
+Owner: LordVaderCW
+
+T###: T2404
+
+Subsystem: FBX export and DCC character handoff
+(Core.IO/Core.Workflow/Core.Automation)
+
+- Unity-compatible clusters now serialize the mesh-to-bone inverse-bind
+  `Transform` that Unity stores as `Mesh.bindposes`; 3ds Max-compatible clusters
+  retain Autodesk's global mesh `Transform` and global bone `TransformLink`.
+  Both paths compose the exact emitted parent/local hierarchy instead of the
+  viewport-oriented `world_transform()` convention that disagreed with one deep
+  finger chain and produced exploded Unity meshes.
+- Compatibility exports declare meter-scale source units, use the actual FBX
+  linear interpolation flag (`4`), unwrap Euler channels across +/-180 degrees,
+  preserve static rotations, and synthesize every required supermodel ancestor
+  so standalone heads/accessories keep valid local transforms and parent chains.
+- Standard, Unity-Compatible, and 3ds Max-Compatible modes route consistently
+  through main, selected-object, composed BAS, Character Builder, CLI, and MCP
+  export. Base-supermodel resolution and the live texture cache travel with the
+  export; manifests record target-specific unit, axis, material, texture-folder,
+  and color-space guidance.
+- Affected: `mesh_converter.py`, `animation_library.py`, the FBX manifest/Unity
+  bridge and export callers, focused FBX/BAS tests, and regenerated
+  Core.IO/Workflow/Automation/GUI/Tools payloads.
+- Verification: the latest current-code UI export of combined PMBAM + PMHA01
+  has SHA-256 `FF83D597CA45A28BE23E9F8F6E5F33001B13D94B594771E6A9AE27EB766269B3`
+  and is byte-identical to the three-angle rendered and skin-matrix-audited
+  fixture. Unity 2022.3.62f1 reimported it at scale 1 with 95 hierarchy nodes,
+  11 meshes, five valid skins, 2,115 vertices/2,603 triangles, finite bounds,
+  textures assigned on all 11 material slots, and a maximum
+  `bone.localToWorld * bindPose` residual of 0.000004053. Focused tests covered
+  Unity inverse binds, 3ds Max global binds, required synthetic ancestors, and
+  linear-key flags; the Debug x64 host rebuilt successfully. Live 3ds Max import
+  remains outstanding because no licensed runtime is installed. No broad suite
+  was run.
+
 ## 2026-07-15
+
+### [2026-07-15] T1210/T2404: facial BAS playback and Unity/3ds Max compatibility exports
+
+Owner: LordVaderCW
+
+T###: T1210 / T2404
+
+Subsystem: Body Attachment System, main-viewport animation rendering, and FBX DCC handoff (Core.Rendering/Core.Tools/Core.GUI.Display/Core.IO/Core.Automation/Runtime.Shared)
+
+Intersects: the existing T1210 composed-model export, T3502 rigged-FBX ASCII
+backend gate, Unity export bridge, and concurrent native-payload regeneration.
+
+- Fixed the main-window ModernGL path that deliberately excluded BAS attachment
+  skins from live GPU linear-blend skinning and evaluated attached nodes only in
+  the body's socket pose. Attached heads now resolve their own inherited facial
+  pose, convert skin palettes into attachment-root local space, and compose the
+  animated attachment transform exactly once. Lightweight socket fallback math
+  now also composes explicit local transforms through the parent chain.
+- Hardened composed BAS export by deep-copying the preview and deterministically
+  renaming only attachment-layer DAG collisions while rewriting their bone maps.
+  The body remains the naming authority, every attached layer is kept in the
+  single exported model, and real PMBAM + PMHA01 normalization resolves the four
+  duplicate names without missing skin influences.
+- Added selectable Standard, Unity-Compatible, and 3ds Max-Compatible FBX modes
+  to normal, selected-object, and composed BAS export. Unity/Max profiles declare
+  meter units, resolve the inherited base skeleton, use linear animation curves,
+  and unwrap Euler channels across +/-180 degrees. The Unity/Max sidecar manifest
+  records target-specific unit, axis, texture-folder, material, and color-space
+  handoff guidance; the Unity MCP route now uses the same profile.
+- Combined model export keeps the rig and any animations already owned/baked on
+  the model. It does not silently inline the entire inherited KOTOR supermodel
+  library: the real PMBAM chain contains 268 unique takes and a stress import
+  remained CPU-bound in Unity for more than six minutes. Bulk inherited take
+  transfer stays with the animation/retarget workflow instead of making every
+  model handoff unexpectedly enormous.
+- Root causes recorded: the SDK writer could emit rigged models without complete
+  skin/animation data; composed character DAGs can contain duplicate node names;
+  the old FBX metadata treated one KOTOR unit as one centimetre; cubic Euler
+  interpolation could overshoot or take a 358-degree discontinuity; and DCC
+  texture differences come from relative sidecars plus Unity material extraction
+  and 3ds Max OCIO/gamma interpretation rather than a lossy MDL UV roundtrip.
+- Affected: `moderngl_renderer_impl.py`, both packaged
+  `core/rendering/mesh_render_data.py` owners, `systems/bas/preview_composer.py`,
+  both BAS workflow mirrors, `model_io.py`, `mesh_converter.py`,
+  `kotor_fbx_manifest.py`, `unity_export_bridge.py`, the GhostRigger MCP export
+  route, focused tests, and regenerated per-project native Python payloads.
+- Verification: MCP pipeline comparison matched PyKotor for PMHA01, S_Female02,
+  and S_Male02; installed K1 PMBAM + PMHA01 Unity export produced one 95-node,
+  11-mesh model with five skins/61 clusters, a valid bind pose, no missing bones,
+  unique normalized names, and both PNG textures; PMHA01 and N_DarthMalak Unity
+  and 3ds Max profiles passed FBX diagnostics (N_DarthMalak: 111 nodes, eight
+  skins/84 clusters, 66 animation stacks, 20,901 curves). The real attached-head
+  `tlklaugh` palette changed by 0.207286 and its rigid facial matrix by 0.361878.
+  Unity 2022.3.62f1 then imported the real PMBAM + PMHA01 compatibility FBX in an
+  isolated batch project at global scale 1 with Convert Units and Bake Axis
+  Conversion enabled: 95 hierarchy nodes, 11 meshes, five skinned meshes, 2,115
+  vertices/2,603 triangles, finite 1.5577 m maximum bounds, valid bones/bind poses
+  and weights on every skin, and textures assigned on all 11 material slots.
+  The Visual Studio Debug host and all six affected payload projects built
+  successfully. Live Debug main-window captures at 0% and 50% of PMHA01
+  `tlklaugh` visibly confirmed jaw/lip/eye deformation with stable texture; the
+  visible BAS panel exposed `Export Composed Model...`, and its native save
+  dialog exposed all three FBX modes. Targeted regressions passed 49/49 and
+  native payload identity checks passed 2/2. No broad suite was run.
+
+### [2026-07-15] T2806: Evidence-led binary recovery skills and full converted-module audit
+
+Owner: LordVaderCW
+
+T###: T2806
+
+Subsystem: Binary recovery knowledge base and Map Studio module regression evidence
+
+Intersects: the 2026-07-14 legacy community-module recovery candidates and
+the existing external `Converted/Candidates` evidence tree.
+
+- Added original, project-specific binary-analysis and Radare2 skills derived
+  from the two supplied books. The guidance separates physical, logical, and
+  runtime truth; names file/RVA/runtime address spaces; defines immutable
+  evidence, structure-first carving, vanilla differential comparison,
+  same-length patch safety, and the KOTOR module/room recovery gate.
+- Cross-checked volatile Radare2 syntax against the current official manual,
+  recorded corrections for `axt`/`axf`, `dmp`, project commands, write-mode
+  behavior, and heuristic analysis, and recorded that Radare2 is not currently
+  installed on this workstation rather than claiming tool proof.
+- Added `scripts/audit_converted_module_library.py`, a read-only repeatable
+  audit of `CONVERSION_STATUS.json`. It hashes and validates every indexed MOD
+  with Ghost Studio's strict byte-structural engine contract, reopens every
+  KMAP through the serializer/authored-project bridge, and keeps editor proof
+  distinct from manual retail-game proof.
+- The deeper consistency pass caught a post-proof overwrite of `921srt.mod`.
+  The unsafe export (fragmented regenerated WOK and sixteen omitted templates)
+  was preserved as rejected evidence, and the canonical MOD was restored from
+  the exact hash-matched backup (`5a51bb2b...c3ab1`). Fresh import/conversion/
+  KMAP proof passed 10/10 rooms with 33 doors, 14 placeables, and 18 sounds.
+- Map Studio proof reports now bind the input MOD and emitted KMAP by byte size
+  and SHA-256. Fresh hash-bound proofs were generated for both `clubrb` targets
+  (the only missing per-target proof records), stale source-only blocker files
+  were marked as historical/superseded rather than erased, six false “LYT was
+  missing” statements were corrected, and eight plain-text stdout logs were
+  renamed from `.json` to `.log`.
+- The aggregate audit now compares every target path/size/SHA-256 with the
+  preceding report and fails on silent MOD/KMAP drift unless an intentional
+  rebuild is explicitly acknowledged; before/after hashes remain in the new
+  report either way.
+- Current result: all 24 module identities have an openable route; all 46
+  indexed target-game MODs pass the current strict structural contract; all 46
+  KMAPs reopen; 44 are fully editable and the two `vul801` files are explicitly
+  reference-only. Twenty-two identities have K1/K2 outputs; `901mal` and
+  `921srt` remain intentionally K2-only donor recoveries. No candidate is
+  represented as retail-game proven.
+- Affected: `docs/knowledgebase/learned/binaryanalysisskill.md`,
+  `docs/knowledgebase/learned/radare2skill.md`,
+  `docs/knowledgebase/skills.md`, `scripts/audit_converted_module_library.py`,
+  `scripts/prove_legacy_module_mapstudio_roundtrip.py`,
+  `tests/test_audit_converted_module_library.py`, `.gitignore`, and
+  `CHEETSHEET.md`.
+- Verification: supplied PDF metadata/TOCs and focused chapters inspected;
+  source hashes recorded in the skills; current official Radare2 documentation
+  checked; audit script compiled under Python 3.14; the real 24-identity/46-
+  package index completed with zero structural blockers and 46/46 KMAP reopen;
+  all 363 remaining candidate `.json` evidence files parse successfully;
+  the two focused test files pass 6/6; artifact drift is 0; and the optional
+  both-games gate correctly reports the two intentional K1 target gaps.
+  Retail K1/K2 install, warp, movement, camera, lighting, texture, script, and
+  transition proof still requires the user's manual game runs.
 
 ### [2026-07-15] T2801: Auto Generate Walkmesh — one button, any loaded map
 

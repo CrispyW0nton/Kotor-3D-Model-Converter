@@ -652,7 +652,6 @@ class ModuleEditorController:
         from .map_studio_scene_animations import (
             MapStudioSceneAnimationMap,
             build_module_scene_animations,
-            module_onenter_script_resref,
         )
 
         self.last_map_studio_scene_animation_source = ""
@@ -661,69 +660,10 @@ class ModuleEditorController:
         if authored is None:
             return MapStudioSceneAnimationMap()
 
-        module_root = normalise_resref(getattr(authored, "module_root", "") or getattr(self.project, "name", ""))
-        game = str(getattr(authored, "game", "") or self.project.game or "K1").upper()
-        script_resref = ""
-        # Prefer the preserved stock IFO's Mod_OnClientEntr, else the k_<root>_enter convention.
-        extra = dict(getattr(authored, "extra", {}) or {})
-        ifo_record = dict((extra.get("stock_resources") or {}).get("ifo") or {})
-        if ifo_record.get("data"):
-            try:
-                import base64
-
-                from pykotor.resource.formats.gff import read_gff
-
-                ifo_bytes = base64.b64decode(str(ifo_record.get("data") or ""), validate=True)
-                script_resref = module_onenter_script_resref(read_gff(bytes(ifo_bytes)).root)
-            except Exception:
-                script_resref = ""
-        if not script_resref and module_root:
-            script_resref = f"k_{module_root}_enter"
+        script_resref, ncs_bytes, ncs_source = self._map_studio_onenter_ncs(authored, resource_manager)
         self.last_map_studio_scene_animation_script = script_resref
         if not script_resref:
             return MapStudioSceneAnimationMap()
-
-        ncs_bytes = None
-        ncs_source = ""
-        try:
-            from pykotor.extract.capsule import LazyCapsule
-            from pykotor.resource.type import ResourceType as RT
-
-            import_source = str(extra.get("import_source") or "").strip()
-            source_paths: list[Path] = []
-            if import_source:
-                primary = Path(import_source)
-                source_paths.append(primary)
-                if primary.suffix.lower() == ".rim":
-                    if primary.stem.lower().endswith("_s"):
-                        source_paths.append(primary.with_name(f"{primary.stem[:-2]}.rim"))
-                    else:
-                        source_paths.append(primary.with_name(f"{primary.stem}_s.rim"))
-            for source_path in tuple(dict.fromkeys(source_paths)):
-                if not source_path.is_file():
-                    continue
-                try:
-                    data = LazyCapsule(str(source_path)).resource(script_resref, RT.NCS)
-                except Exception:
-                    data = None
-                if data:
-                    ncs_bytes = bytes(data)
-                    ncs_source = f"capsule:{source_path.resolve()}"
-                    break
-        except Exception:
-            ncs_bytes = None
-
-        if not ncs_bytes and resource_manager is not None:
-            try:
-                from pykotor.resource.type import ResourceType as RT
-
-                getter = getattr(resource_manager, "get_strict", None) or getattr(resource_manager, "get", None)
-                data = getter(script_resref, int(RT.NCS), game) if callable(getter) else None
-                if data:
-                    ncs_bytes = bytes(data)
-                    ncs_source = f"resource_manager:{game}"
-            except Exception:
-                ncs_bytes = None
         if not ncs_bytes:
             return MapStudioSceneAnimationMap(script_resref=script_resref)
 
@@ -744,6 +684,352 @@ class ModuleEditorController:
         self.last_map_studio_scene_animation_source = ncs_source
         self.last_map_studio_scene_animation_sha256 = source_sha256
         return result
+
+    def _map_studio_onenter_ncs(self, authored: Any, resource_manager: Any):
+        """Resolve a module's OnEnter script resref and compiled NCS bytes.
+
+        Shared by scene-animation reading and PIE scripting-state execution. The
+        imported MOD/RIM capsule is authoritative (checked first), then the
+        active resource manager. Returns ``(script_resref, ncs_bytes|None,
+        source)``; never raises.
+        """
+
+        from .map_studio_scene_animations import module_onenter_script_resref
+
+        module_root = normalise_resref(getattr(authored, "module_root", "") or getattr(self.project, "name", ""))
+        game = str(getattr(authored, "game", "") or self.project.game or "K1").upper()
+        script_resref = ""
+        # Prefer the preserved stock IFO's Mod_OnClientEntr, else the k_<root>_enter convention.
+        extra = dict(getattr(authored, "extra", {}) or {})
+        ifo_record = dict((extra.get("stock_resources") or {}).get("ifo") or {})
+        if ifo_record.get("data"):
+            try:
+                import base64
+
+                from pykotor.resource.formats.gff import read_gff
+
+                ifo_bytes = base64.b64decode(str(ifo_record.get("data") or ""), validate=True)
+                script_resref = module_onenter_script_resref(read_gff(bytes(ifo_bytes)).root)
+            except Exception:
+                script_resref = ""
+        if not script_resref and module_root:
+            script_resref = f"k_{module_root}_enter"
+        if not script_resref:
+            return "", None, ""
+        ncs_bytes, ncs_source = self._load_module_ncs_resource(script_resref, authored, resource_manager)
+        return script_resref, ncs_bytes, ncs_source
+
+    def _load_module_ncs_resource(self, resref: str, authored: Any, resource_manager: Any):
+        """Load one compiled NCS script by resref for the loaded module.
+
+        The imported MOD/RIM capsule is authoritative (checked first), then the
+        active resource manager. Shared by OnEnter reading and dialogue node
+        action-script execution. Returns ``(ncs_bytes|None, source)``; never
+        raises.
+        """
+
+        clean = str(resref or "").strip()
+        if not clean:
+            return None, ""
+        game = str(getattr(authored, "game", "") or self.project.game or "K1").upper()
+        extra = dict(getattr(authored, "extra", {}) or {})
+        ncs_bytes = None
+        ncs_source = ""
+        try:
+            from pykotor.extract.capsule import LazyCapsule
+            from pykotor.resource.type import ResourceType as RT
+
+            import_source = str(extra.get("import_source") or "").strip()
+            source_paths: list[Path] = []
+            if import_source:
+                primary = Path(import_source)
+                source_paths.append(primary)
+                if primary.suffix.lower() == ".rim":
+                    if primary.stem.lower().endswith("_s"):
+                        source_paths.append(primary.with_name(f"{primary.stem[:-2]}.rim"))
+                    else:
+                        source_paths.append(primary.with_name(f"{primary.stem}_s.rim"))
+            for source_path in tuple(dict.fromkeys(source_paths)):
+                if not source_path.is_file():
+                    continue
+                try:
+                    data = LazyCapsule(str(source_path)).resource(clean, RT.NCS)
+                except Exception:
+                    data = None
+                if data:
+                    ncs_bytes = bytes(data)
+                    ncs_source = f"capsule:{source_path.resolve()}"
+                    break
+        except Exception:
+            ncs_bytes = None
+
+        if not ncs_bytes and resource_manager is not None:
+            try:
+                from pykotor.resource.type import ResourceType as RT
+
+                getter = getattr(resource_manager, "get_strict", None) or getattr(resource_manager, "get", None)
+                data = getter(clean, int(RT.NCS), game) if callable(getter) else None
+                if data:
+                    ncs_bytes = bytes(data)
+                    ncs_source = f"resource_manager:{game}"
+            except Exception:
+                ncs_bytes = None
+        return ncs_bytes, ncs_source
+
+    def map_studio_pie_scripted_globals(
+        self,
+        resource_manager: Any,
+        *,
+        sandbox_numbers: dict[str, int] | None = None,
+        sandbox_booleans: dict[str, bool] | None = None,
+        sandbox_strings: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Execute the module OnEnter script for PIE scripting state.
+
+        Primary engine: the clean-room NCS virtual machine
+        (``map_studio_pie_nwscript_vm``) runs the compiled script with real
+        control flow, seeded with the creator sandbox so campaign-gated writes
+        behave like retail (e.g. 207TEL only advances ``207TEL_Benok`` 1→2 when
+        the earlier-module state is present); it also returns the scripted-event
+        timeline (AssignCommand/DelayCommand closures, music, fades) for PIE.
+        Fallback: the bounded literal-write reader (``map_studio_pie_scripting``)
+        when the VM cannot complete — over-eager on campaign-conditional writes,
+        tracked in the parity ledger. Journal writes are reported, never applied
+        to campaign quest state. Never raises.
+        """
+
+        empty: dict[str, Any] = {
+            "global_numbers": {},
+            "global_booleans": {},
+            "global_strings": {},
+            "journal": (),
+            "script_resref": "",
+            "source": "",
+            "effect_count": 0,
+            "engine": "none",
+            "commands": (),
+            "unknown_routines": {},
+        }
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None:
+            return empty
+        try:
+            script_resref, ncs_bytes, ncs_source = self._map_studio_onenter_ncs(authored, resource_manager)
+        except Exception:
+            return empty
+        if not ncs_bytes:
+            return {**empty, "script_resref": script_resref}
+
+        game = str(getattr(authored, "game", "") or self.project.game or "K1").upper()
+        try:
+            from .map_studio_pie_nwscript_vm import MapStudioPIEScriptContext, execute_ncs_script
+
+            vm_context = MapStudioPIEScriptContext(
+                game=game,
+                global_numbers=dict(sandbox_numbers or {}),
+                global_booleans=dict(sandbox_booleans or {}),
+                global_strings=dict(sandbox_strings or {}),
+            )
+            vm_result = execute_ncs_script(bytes(ncs_bytes), game=game, context=vm_context)
+        except Exception:
+            vm_result = None
+        if vm_result is not None and vm_result.completed:
+            commands = tuple(
+                {
+                    "kind": str(command.kind),
+                    "object_tag": str(command.object_tag),
+                    "args": tuple(a for a in command.args if isinstance(a, (int, float, str))),
+                    "delay_seconds": float(command.delay_seconds),
+                    "deferred": command.saved_state is not None,
+                }
+                for command in vm_result.commands
+            )
+            return {
+                "global_numbers": dict(vm_result.global_numbers),
+                "global_booleans": dict(vm_result.global_booleans),
+                "global_strings": dict(vm_result.global_strings),
+                "journal": tuple(vm_result.journal_entries),
+                "script_resref": script_resref,
+                "source": ncs_source,
+                "effect_count": len(vm_result.global_numbers)
+                + len(vm_result.global_booleans)
+                + len(vm_result.global_strings)
+                + len(vm_result.journal_entries),
+                "engine": "vm",
+                "instructions_executed": int(vm_result.instructions_executed),
+                "commands": commands,
+                "local_booleans": {
+                    f"{tag}:{index}": bool(value)
+                    for (tag, index), value in vm_result.local_booleans.items()
+                },
+                "unknown_routines": dict(vm_result.unknown_routines),
+            }
+
+        from .map_studio_pie_scripting import apply_ncs_global_effects, extract_ncs_global_effects
+
+        try:
+            effects = extract_ncs_global_effects(bytes(ncs_bytes))
+            numbers, booleans, strings, journal = apply_ncs_global_effects(effects)
+        except Exception:
+            return {**empty, "script_resref": script_resref, "source": ncs_source}
+        return {
+            **empty,
+            "global_numbers": numbers,
+            "global_booleans": booleans,
+            "global_strings": strings,
+            "journal": tuple((effect.name, int(effect.value)) for effect in journal),
+            "script_resref": script_resref,
+            "source": ncs_source,
+            "effect_count": len(effects),
+            "engine": "literal-reader",
+        }
+
+    def map_studio_pie_area_music(self, resource_manager: Any) -> dict[str, Any]:
+        """Resolve the area's ambient music from its OnEnter script.
+
+        KOTOR area music is not a static ARE field — the area OnEnter calls
+        ``MusicBackgroundChangeDay``/``…Night`` with a literal ``ambientmusic.2da``
+        row. This bounded reader recovers those tracks and resolves each to its
+        streaming music resref, so PIE can report the area's ambient music
+        instead of treating it as absent. Reported (not yet played); never
+        raises.
+        """
+
+        from .map_studio_pie_scripting import extract_ncs_area_music
+
+        empty: dict[str, Any] = {
+            "day_track": None,
+            "night_track": None,
+            "battle_track": None,
+            "day_resref": "",
+            "night_resref": "",
+            "battle_resref": "",
+            "script_resref": "",
+            "source": "",
+        }
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None:
+            return empty
+        try:
+            script_resref, ncs_bytes, ncs_source = self._map_studio_onenter_ncs(authored, resource_manager)
+        except Exception:
+            return empty
+        if not ncs_bytes:
+            return {**empty, "script_resref": script_resref}
+        try:
+            music = extract_ncs_area_music(bytes(ncs_bytes))
+        except Exception:
+            return {**empty, "script_resref": script_resref, "source": ncs_source}
+        resolver = getattr(self, "_map_studio_stock_template_resolver", None)
+        resolve = getattr(resolver, "ambient_music_resref", None)
+
+        def _resref(track: Any) -> str:
+            if track is None or not callable(resolve):
+                return ""
+            try:
+                return str(resolve(int(track)) or "")
+            except Exception:
+                return ""
+
+        return {
+            "day_track": music.day_track,
+            "night_track": music.night_track,
+            "battle_track": music.battle_track,
+            "day_resref": _resref(music.day_track),
+            "night_resref": _resref(music.night_track),
+            "battle_resref": _resref(music.battle_track),
+            "script_resref": script_resref,
+            "source": ncs_source,
+        }
+
+    def map_studio_pie_transition_validation(self, resource_manager: Any) -> dict[str, Any]:
+        """Validate the module's inter-module transitions against installed modules.
+
+        Doors/triggers carry ``LinkedToModule``/``LinkedTo``; a link to a module
+        that is not installed would black-screen or crash the retail game. This
+        resolves each destination against the installation's module list so a
+        creator can catch broken transitions before launching. Reported only
+        (PIE does not warp); never raises.
+        """
+
+        from .map_studio_pie_triggers import validate_module_transitions
+
+        empty: dict[str, Any] = {"transitions": (), "checked": 0, "missing": 0, "available_module_count": 0}
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None:
+            return empty
+        try:
+            context = self._map_studio_pie_resource_context()
+            registry = build_pie_entity_registry(authored, template_inspector=context.template_inspector)
+        except Exception:
+            return empty
+
+        transitions: list[tuple[str, str, str, str]] = []
+        for entity in tuple(getattr(registry, "entities", ()) or ()):
+            module = str(getattr(entity, "transition_module", "") or "").strip()
+            if not module:
+                continue
+            kind = str(getattr(entity, "kind", "") or "").strip().lower()
+            transitions.append(
+                (
+                    kind,
+                    str(getattr(entity, "tag", "") or ""),
+                    module,
+                    str(getattr(entity, "transition_target", "") or ""),
+                )
+            )
+        if not transitions:
+            return empty
+
+        available: list[str] = []
+        game = str(getattr(authored, "game", "") or self.project.game or "K1").upper()
+        manager = getattr(context.resolver, "_manager", None) if context.resolver is not None else None
+        installation_getter = getattr(manager, "get_k2" if game == "K2" else "get_k1", None) if manager is not None else None
+        try:
+            installation = installation_getter() if callable(installation_getter) else None
+        except Exception:
+            installation = None
+        if installation is not None:
+            # Prefer the installation's own module enumeration; fall back to
+            # scanning the Modules directory so a lazily-loaded install still
+            # resolves rather than falsely reporting every link as missing.
+            for attr in ("modules_list", "module_names"):
+                try:
+                    lister = getattr(installation, attr, None)
+                    listed = lister() if callable(lister) else None
+                    if listed:
+                        available = [str(name) for name in (listed.keys() if isinstance(listed, dict) else listed)]
+                        break
+                except Exception:
+                    continue
+            if not available:
+                try:
+                    path_getter = getattr(installation, "module_path", None)
+                    modules_dir = path_getter() if callable(path_getter) else None
+                    if modules_dir is not None:
+                        for child in Path(str(modules_dir)).glob("*.*"):
+                            if child.suffix.lower() in {".mod", ".rim", ".erf"}:
+                                available.append(child.name)
+                except Exception:
+                    pass
+
+        checks = validate_module_transitions(transitions, available)
+        return {
+            "transitions": tuple(
+                {
+                    "source_kind": c.source_kind,
+                    "tag": c.tag,
+                    "module": c.module,
+                    "target": c.target,
+                    "exists": c.exists,  # True | False | None (unverifiable)
+                }
+                for c in checks
+            ),
+            "checked": len(checks),
+            "missing": sum(1 for c in checks if c.exists is False),
+            "unverified": sum(1 for c in checks if c.exists is None),
+            "available_module_count": len({name for name in available if name}),
+        }
 
     def _map_studio_cached_authored_query(self, key: tuple[Any, ...], builder):
         """Reuse an immutable/read-only projection for the current revision."""
@@ -4449,6 +4735,15 @@ class ModuleEditorController:
             for key, value in dict(raw.get("global_booleans") or {}).items()
             if str(key or "").strip()
         }
+        global_strings = {
+            str(key).strip(): str(value)
+            for key, value in dict(raw.get("global_strings") or {}).items()
+            if str(key or "").strip()
+        }
+        # Preview player build: a UTC resref whose combat stats stand in for the
+        # PC in RTwP combat (the PC is a custom campaign build, so this is a
+        # configurable sandbox value; empty keeps the editor proxy).
+        player_combat_template = str(raw.get("player_combat_template") or "").strip().lower()[:16]
         local_booleans = {
             str(key).strip(): bool(value)
             for key, value in dict(raw.get("local_booleans") or {}).items()
@@ -4466,13 +4761,28 @@ class ModuleEditorController:
                     "starter_link_id": starter_link_id,
                     "resource_sha256": resource_sha256,
                 }
+        # Preview party roster: up to two companion UTC resrefs the creator wants
+        # trailing the player in PIE (party membership is campaign state, not
+        # module data, so it is a configurable sandbox value).
+        party_roster: list[str] = []
+        seen_party: set[str] = set()
+        for value in tuple(raw.get("party_roster") or ()):
+            resref = str(value or "").strip().lower()[:16]
+            if resref and resref not in seen_party:
+                seen_party.add(resref)
+                party_roster.append(resref)
+            if len(party_roster) >= 2:
+                break
         return {
             "player_role": role,
             "player_gender": gender,
             "global_numbers": global_numbers,
             "global_booleans": global_booleans,
+            "global_strings": global_strings,
             "local_booleans": local_booleans,
             "dialogue_start_overrides": dialogue_start_overrides,
+            "party_roster": tuple(party_roster),
+            "player_combat_template": player_combat_template,
         }
 
     def update_map_studio_pie_context(self, **changes: Any) -> dict[str, Any]:
@@ -4553,12 +4863,28 @@ class ModuleEditorController:
             raw = reader(resref, restype)
             return bytes(raw) if raw else None
 
+        weapon_damage_resolver = getattr(resolver, "weapon_damage_dice", None) if resolver is not None else None
+        armor_ac_resolver = getattr(resolver, "armor_class_bonus", None) if resolver is not None else None
+        weapon_critical_resolver = getattr(resolver, "weapon_critical", None) if resolver is not None else None
+        weapon_damage_type_resolver = getattr(resolver, "weapon_damage_type", None) if resolver is not None else None
+        weapon_feat_category_resolver = getattr(resolver, "weapon_feat_category", None) if resolver is not None else None
+
         def _template_inspector(kind: str, resref: str) -> dict[str, Any]:
             raw = _resource_bytes(kind, resref)
             if raw is None:
                 raise FileNotFoundError(f"{str(kind or 'template').upper()} {resref} was unavailable for PIE inspection")
             try:
-                return inspect_map_studio_pie_resource(kind, resref, raw, tlk_lookup=_tlk_lookup)
+                return inspect_map_studio_pie_resource(
+                    kind,
+                    resref,
+                    raw,
+                    tlk_lookup=_tlk_lookup,
+                    weapon_damage_resolver=weapon_damage_resolver if kind == "creature" else None,
+                    armor_ac_resolver=armor_ac_resolver if kind == "creature" else None,
+                    weapon_critical_resolver=weapon_critical_resolver if kind == "creature" else None,
+                    weapon_damage_type_resolver=weapon_damage_type_resolver if kind == "creature" else None,
+                    weapon_feat_category_resolver=weapon_feat_category_resolver if kind == "creature" else None,
+                )
             except Exception as exc:
                 raise ValueError(f"{kind} {resref} could not be decoded for PIE: {exc}") from exc
 
@@ -4644,6 +4970,7 @@ class ModuleEditorController:
             player_gender=str(settings.get("player_gender") or "male"),
             global_numbers=dict(settings.get("global_numbers") or {}),
             global_booleans=dict(settings.get("global_booleans") or {}),
+            global_strings=dict(settings.get("global_strings") or {}),
             local_booleans=local_booleans,
         )
 
@@ -4722,13 +5049,18 @@ class ModuleEditorController:
             result["warning"] = str(warnings[-1]) if warnings else "Dialogue has no valid starting NPC entry."
         return result
 
-    def create_map_studio_pie_session(self, *, preview_model=None):
+    def create_map_studio_pie_session(self, *, preview_model=None, resource_manager=None):
         """Build one read-only PIE session from the current authored snapshot.
 
         Session construction is intentionally explicit and one-shot: the WOK
         spatial index and room collision BVH are built once when Play starts,
         never during a paint frame.  The returned validation keeps simulation
         capability separate from KOTOR export/game-proof status.
+
+        When ``resource_manager`` is supplied, the module's OnEnter script is read
+        for literal global-variable writes (bounded NCS reader) and folded under
+        the creator-configured sandbox so dialogue Active conditions see
+        script-set globals; explicit creator overrides still win.
         """
 
         authored = self._load_authored_project_or_raise()
@@ -4740,8 +5072,60 @@ class ModuleEditorController:
         )
         context = self._map_studio_pie_resource_context()
         settings = self.map_studio_pie_context_settings()
+        # Execute the OnEnter script so dialogue conditions read script state.
+        # The creator sandbox is the PRE-ENTRY campaign state: the NCS virtual
+        # machine is seeded with it and runs the script on top (campaign-gated
+        # writes fire exactly when their gate state is present, like retail).
+        # Only the bounded literal-reader fallback keeps the old merge where
+        # creator values win over the reader's unconditional writes.
+        self.last_map_studio_pie_scripted_globals = None
+        journal_seed: tuple[tuple[str, int], ...] = ()
+        if resource_manager is not None:
+            scripted = self.map_studio_pie_scripted_globals(
+                resource_manager,
+                sandbox_numbers=dict(settings.get("global_numbers") or {}),
+                sandbox_booleans=dict(settings.get("global_booleans") or {}),
+                sandbox_strings=dict(settings.get("global_strings") or {}),
+            )
+            self.last_map_studio_pie_scripted_globals = scripted
+            if str(scripted.get("engine") or "") == "vm":
+                settings = {
+                    **settings,
+                    "global_numbers": dict(scripted.get("global_numbers") or {}),
+                    "global_booleans": dict(scripted.get("global_booleans") or {}),
+                    "global_strings": dict(scripted.get("global_strings") or {}),
+                }
+            elif scripted.get("global_numbers") or scripted.get("global_booleans") or scripted.get("global_strings"):
+                merged_numbers = dict(scripted.get("global_numbers") or {})
+                merged_numbers.update(settings.get("global_numbers") or {})
+                merged_booleans = dict(scripted.get("global_booleans") or {})
+                merged_booleans.update(settings.get("global_booleans") or {})
+                merged_strings = dict(scripted.get("global_strings") or {})
+                merged_strings.update(settings.get("global_strings") or {})
+                settings = {
+                    **settings,
+                    "global_numbers": merged_numbers,
+                    "global_booleans": merged_booleans,
+                    "global_strings": merged_strings,
+                }
+            # Seed the runtime quest log with the OnEnter script's
+            # AddJournalQuestEntry writes (reported, not campaign state).
+            journal_seed = tuple(scripted.get("journal") or ())
+        # A compiled-NCS loader so a dialogue node's action script can execute
+        # its bounded literal global/journal writes into the shared PIE state.
+        # Uses the same authored snapshot the OnEnter reader resolves the capsule
+        # from, so node scripts load from the imported MOD/RIM + resource manager.
+        script_loader = None
+        if resource_manager is not None:
+            script_authored = self._map_studio_authored_project_snapshot()
+            if script_authored is not None:
+                def script_loader(resref, _authored=script_authored, _rm=resource_manager):
+                    data, _source = self._load_module_ncs_resource(resref, _authored, _rm)
+                    return data
         condition_evaluator = self._map_studio_pie_condition_evaluator(settings)
-        return build_map_studio_pie_session(
+        party_combatants = self._resolve_party_combatants(settings.get("party_roster") or (), context)
+        player_combat_stats = self._resolve_player_combat_stats(settings.get("player_combat_template") or "", context)
+        result = build_map_studio_pie_session(
             authored,
             preview_model=preview_model,
             combined_walkmesh=combined_walkmesh,
@@ -4751,6 +5135,91 @@ class ModuleEditorController:
             tlk_lookup=context.tlk_lookup,
             dialogue_condition_evaluator=condition_evaluator,
             dialogue_start_overrides=dict(settings.get("dialogue_start_overrides") or {}),
+            journal_seed=journal_seed,
+            script_loader=script_loader,
+            party_combatants=party_combatants,
+            player_combat_stats=player_combat_stats,
+        )
+        # Reflect the configured preview party roster in the live follow formation.
+        session = getattr(result, "session", None)
+        if session is not None and hasattr(session, "set_party_follower_count"):
+            session.set_party_follower_count(len(settings.get("party_roster") or ()))
+        return result
+
+    def _resolve_party_combatants(self, party_roster: Any, context: Any) -> tuple[dict[str, Any], ...]:
+        """Resolve configured party companions to RTwP combat stat rows.
+
+        Each roster UTC is inspected through the same creature projection the
+        placed creatures use (HP/AC/attack/damage/crit from the 2DA chain), so a
+        companion joins PIE combat as an assisting ally with faithful stats
+        rather than a proxy. Defensive: a UTC that cannot be inspected is skipped.
+        """
+
+        inspector = getattr(context, "template_inspector", None)
+        if not callable(inspector):
+            return ()
+        rows: list[dict[str, Any]] = []
+        for index, resref in enumerate(tuple(party_roster or ())):
+            clean = str(resref or "").strip().lower()
+            if not clean:
+                continue
+            try:
+                inspected = dict(inspector("creature", clean) or {})
+            except Exception:
+                continue
+            rows.append(
+                {
+                    "entity_id": f"pie:party:{index}",
+                    "display_name": str(inspected.get("display_name") or clean),
+                    "max_hp": max(1, int(inspected.get("max_hp", 0) or 0) or 1),
+                    "current_hp": max(1, int(inspected.get("current_hp", 0) or inspected.get("max_hp", 0) or 1)),
+                    "armor_class": max(1, int(inspected.get("armor_class", 10) or 10)),
+                    "attack_bonus": int(inspected.get("attack_bonus", 0) or 0),
+                    "damage_min": max(1, int(inspected.get("damage_min", 1) or 1)),
+                    "damage_max": max(1, int(inspected.get("damage_max", 6) or 6)),
+                    "critical_threat": max(1, int(inspected.get("critical_threat", 1) or 1)),
+                    "critical_multiplier": max(1, int(inspected.get("critical_multiplier", 2) or 2)),
+                    "damage_type": str(inspected.get("damage_type", "Physical") or "Physical"),
+                    "initiative_bonus": int(inspected.get("initiative_bonus", 0) or 0),
+                }
+            )
+        return tuple(rows)
+
+    def _resolve_player_combat_stats(self, template_resref: Any, context: Any):
+        """Resolve the configured player-build UTC to PIE combat stats.
+
+        The PC is a custom campaign build, so PIE uses an editor proxy by
+        default; when the creator picks a representative UTC the same creature
+        projection (HP/AC/attack/damage from the 2DA chain) stands in for the
+        player in RTwP combat. Returns ``None`` (keep the proxy) on any failure.
+        """
+
+        resref = str(template_resref or "").strip().lower()
+        inspector = getattr(context, "template_inspector", None)
+        if not resref or not callable(inspector):
+            return None
+        try:
+            inspected = dict(inspector("creature", resref) or {})
+        except Exception:
+            return None
+        try:
+            from .map_studio_pie_combat import MapStudioPIECombatStats, MapStudioPIEDamageDice
+        except Exception:
+            return None
+        max_hp = max(1, int(inspected.get("max_hp", 0) or 0) or 1)
+        current_hp = max(1, int(inspected.get("current_hp", 0) or inspected.get("max_hp", 0) or 1))
+        damage_min = max(1, int(inspected.get("damage_min", 1) or 1))
+        damage_max = max(damage_min, int(inspected.get("damage_max", 6) or 6))
+        return MapStudioPIECombatStats(
+            max_hp=max_hp,
+            current_hp=min(current_hp, max_hp),
+            armor_class=max(1, int(inspected.get("armor_class", 10) or 10)),
+            attack_bonus=int(inspected.get("attack_bonus", 0) or 0),
+            damage=MapStudioPIEDamageDice(1, max(1, damage_max - damage_min + 1), damage_min - 1),
+            initiative_bonus=int(inspected.get("initiative_bonus", 0) or 0),
+            critical_threat=max(1, int(inspected.get("critical_threat", 1) or 1)),
+            critical_multiplier=max(1, int(inspected.get("critical_multiplier", 2) or 2)),
+            damage_type=str(inspected.get("damage_type", "Physical") or "Physical"),
         )
 
     def authored_room_primitive_transforms(self):

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Mapping
 from pathlib import Path
 
 import numpy as np
@@ -19,8 +20,2633 @@ from src.core.modules.map_studio_terrain_sculpt_session import (
     interpolate_terrain_sculpt_segment,
     terrain_sculpt_brush_is_deferred,
 )
-from src.core.modules.authored_gameplay_marker_geometry import AuthoredGameplayMarkerGeometry
 from src.gui.qt_lib.viewports.qt_viewport import QtMapStudioViewportWidget
+
+
+def _pie_hud_value(source: object, name: str, default: object = None) -> object:
+    """Read one generic gameplay field without coupling the GUI to a core type."""
+
+    if source is None:
+        return default
+    if isinstance(source, Mapping):
+        return source.get(name, default)
+    return getattr(source, name, default)
+
+
+def _pie_hud_sequence(source: object, name: str) -> tuple[object, ...]:
+    value = _pie_hud_value(source, name, ())
+    if value is None or isinstance(value, (str, bytes, bytearray)):
+        return ()
+    try:
+        return tuple(value)
+    except TypeError:
+        return ()
+
+
+_PIE_GAME_GUI_RESOURCE_TYPE = 2047
+_PIE_GAME_ARE_RESOURCE_TYPE = 2012
+_PIE_GAME_TPC_RESOURCE_TYPE = 3007
+_PIE_GAME_TGA_RESOURCE_TYPE = 3
+
+
+def _pie_game_gui_resref(value: object) -> str:
+    """Normalize one PyKotor ResRef without importing resource ownership here."""
+
+    return str(value or "").strip().lower()
+
+
+def _pie_game_gui_color(value: object) -> tuple[float, float, float, float] | None:
+    """Return an Odyssey GUI color as normalized RGBA when the field exists."""
+
+    if value is None:
+        return None
+    channels: list[float] = []
+    for name in ("r", "g", "b", "a"):
+        raw = getattr(value, name, 1.0 if name == "a" else None)
+        if raw is None:
+            return None
+        try:
+            channels.append(max(0.0, min(1.0, float(raw))))
+        except (TypeError, ValueError):
+            return None
+    return tuple(channels)  # type: ignore[return-value]
+
+
+def _pie_game_gui_control(root: object, tag: str) -> object | None:
+    """Find one recursively nested control by its retail GUI tag."""
+
+    wanted = str(tag or "").strip().upper()
+    stack = [root] if root is not None else []
+    seen: set[int] = set()
+    while stack:
+        control = stack.pop()
+        if id(control) in seen:
+            continue
+        seen.add(id(control))
+        if str(getattr(control, "tag", "") or "").strip().upper() == wanted:
+            return control
+        stack.extend(tuple(getattr(control, "children", ()) or ()))
+    return None
+
+
+def _pie_game_gui_border(control: object | None) -> dict[str, object]:
+    border = getattr(control, "border", None)
+    if border is None:
+        return {}
+    return {
+        "corner": _pie_game_gui_resref(getattr(border, "corner", "")),
+        "edge": _pie_game_gui_resref(getattr(border, "edge", "")),
+        "fill": _pie_game_gui_resref(getattr(border, "fill", "")),
+        "dimension": int(getattr(border, "dimension", 0) or 0),
+        "fill_style": int(getattr(border, "fill_style", 0) or 0),
+        "color": _pie_game_gui_color(getattr(border, "color", None)),
+    }
+
+
+def _pie_game_gui_text_style(control: object | None) -> dict[str, object]:
+    text = getattr(control, "gui_text", None)
+    if text is None:
+        return {}
+    return {
+        "font": _pie_game_gui_resref(getattr(text, "font", "")),
+        "color": _pie_game_gui_color(getattr(text, "color", None)),
+        "alignment": int(getattr(text, "alignment", 0) or 0),
+    }
+
+
+def _pie_game_gui_extent(control: object | None) -> tuple[float, float, float, float]:
+    """Return one retail top-left GUI extent without importing preview code."""
+
+    position = getattr(control, "position", None)
+    size = getattr(control, "size", None)
+    try:
+        return (
+            float(getattr(position, "x", 0.0) or 0.0),
+            float(getattr(position, "y", 0.0) or 0.0),
+            float(getattr(size, "x", 0.0) or 0.0),
+            float(getattr(size, "y", 0.0) or 0.0),
+        )
+    except (TypeError, ValueError):
+        return (0.0, 0.0, 0.0, 0.0)
+
+
+def _pie_game_hud_anchor_extent(
+    extent: tuple[float, float, float, float],
+    viewport_width: float,
+    viewport_height: float,
+    anchor: str = "left",
+) -> tuple[float, float, float, float]:
+    """Scale one 800x600 K2 control uniformly and preserve its widescreen anchor."""
+
+    scale = max(0.35, float(viewport_height) / 600.0)
+    extra_width = float(viewport_width) - (800.0 * scale)
+    normalized_anchor = str(anchor or "left").strip().lower()
+    anchor_offset = extra_width if normalized_anchor == "right" else extra_width * 0.5 if normalized_anchor == "center" else 0.0
+    return (
+        (float(extent[0]) * scale) + anchor_offset,
+        float(extent[1]) * scale,
+        float(extent[2]) * scale,
+        float(extent[3]) * scale,
+    )
+
+
+def _pie_game_hud_arrow_margin_extent(
+    extent: tuple[float, float, float, float],
+    viewport_width: float,
+    viewport_height: float,
+) -> tuple[float, float, float, float]:
+    """Expand K2's authored focus-arrow safe area across a widescreen viewport."""
+
+    scale = max(0.35, float(viewport_height) / 600.0)
+    authored_left = max(0.0, float(extent[0]))
+    authored_top = max(0.0, float(extent[1]))
+    authored_right_reserve = max(0.0, 800.0 - (float(extent[0]) + float(extent[2])))
+    left = min(float(viewport_width), authored_left * scale)
+    right = max(left, float(viewport_width) - (authored_right_reserve * scale))
+    top = min(float(viewport_height), authored_top * scale)
+    bottom = max(top, min(float(viewport_height), (authored_top + max(0.0, float(extent[3]))) * scale))
+    return (left, top, right - left, bottom - top)
+
+
+def _pie_minimap_world_to_map(
+    world_position: tuple[float, float, float] | tuple[float, float],
+    mapping: Mapping[str, object],
+) -> tuple[float, float] | None:
+    """Map a module-space XY point into the normalized ARE minimap texture."""
+
+    try:
+        world_1 = tuple(float(value) for value in tuple(mapping.get("world_point_1", ()))[:2])
+        world_2 = tuple(float(value) for value in tuple(mapping.get("world_point_2", ()))[:2])
+        map_1 = tuple(float(value) for value in tuple(mapping.get("map_point_1", ()))[:2])
+        map_2 = tuple(float(value) for value in tuple(mapping.get("map_point_2", ()))[:2])
+        point = tuple(float(value) for value in tuple(world_position)[:2])
+    except (TypeError, ValueError):
+        return None
+    if any(len(row) < 2 for row in (world_1, world_2, map_1, map_2, point)):
+        return None
+    delta_x = world_2[0] - world_1[0]
+    delta_y = world_2[1] - world_1[1]
+    if abs(delta_x) <= 1.0e-8 or abs(delta_y) <= 1.0e-8:
+        return None
+    return (
+        map_1[0] + ((point[0] - world_1[0]) * (map_2[0] - map_1[0]) / delta_x),
+        map_1[1] + ((point[1] - world_1[1]) * (map_2[1] - map_1[1]) / delta_y),
+    )
+
+
+def _pie_minimap_arrow_rotation_degrees(facing_radians: float, north_axis: int) -> float:
+    """Rotate the stock upward arrow into the ARE's fixed-north map space."""
+
+    north_angle = {
+        0: math.pi * 0.5,   # PositiveY
+        1: -math.pi * 0.5,  # NegativeY
+        2: 0.0,             # PositiveX
+        3: math.pi,         # NegativeX
+    }.get(int(north_axis), math.pi * 0.5)
+    return math.degrees(north_angle - float(facing_radians))
+
+
+def _pie_screen_capsule_distance_squared(
+    point: tuple[float, float],
+    base: tuple[float, float],
+    top: tuple[float, float],
+) -> float:
+    """Return screen-space distance to an upright projected target axis."""
+
+    px, py = float(point[0]), float(point[1])
+    ax, ay = float(base[0]), float(base[1])
+    bx, by = float(top[0]), float(top[1])
+    dx, dy = bx - ax, by - ay
+    length_sq = (dx * dx) + (dy * dy)
+    if length_sq <= 1.0e-8:
+        return ((px - ax) ** 2) + ((py - ay) ** 2)
+    amount = max(0.0, min(1.0, (((px - ax) * dx) + ((py - ay) * dy)) / length_sq))
+    nearest_x = ax + (dx * amount)
+    nearest_y = ay + (dy * amount)
+    return ((px - nearest_x) ** 2) + ((py - nearest_y) ** 2)
+
+
+def _load_map_studio_pie_game_hud_spec(
+    manager: object,
+    game: str,
+    *,
+    module_root: str = "",
+    player_portrait_resref: str = "",
+) -> dict[str, object]:
+    """Resolve a small PIE skin from the target game's real Odyssey GUI GFFs.
+
+    The returned contract is deliberately renderer-neutral metadata.  It does
+    not own gameplay state, and a caller can deterministically fall back to its
+    active application palette when a game installation or referenced texture
+    is unavailable.
+    """
+
+    normalized_game = "K2" if str(game or "").strip().upper() == "K2" else "K1"
+    suffix = "_p" if normalized_game == "K2" else ""
+    normalized_module_root = str(module_root or "").strip().lower()
+    portrait_resref = str(player_portrait_resref or "po_pmhc01").strip().lower()
+    requested_layouts = {
+        # The retail PC executable selects a resolution-specific MIPC layout.
+        # K2's usable GUI texture set belongs to the MIPC2 family; its older
+        # mipc8x6_p compatibility layout still references K1-only textures.
+        "main": "mipc28x6_p" if normalized_game == "K2" else "mipc8x6",
+        "semantic_main": f"maininterface{suffix}",
+        "dialogue": f"dialog{suffix}",
+        "container": f"container{suffix}",
+        "pause": f"pause{suffix}",
+    }
+    spec: dict[str, object] = {
+        "game": normalized_game,
+        "platform": "pc",
+        "layout_variant": "retail_800x600",
+        "module_root": normalized_module_root,
+        "player_portrait_resref": portrait_resref,
+        "source": "theme_fallback",
+        "pixel_parity": False,
+        "requested_layouts": dict(requested_layouts),
+        "loaded_layouts": (),
+        "textures": {},
+        "borders": {},
+        "text_styles": {},
+        "warning": "",
+        "implemented_elements": (
+            "projected_target_name_health",
+            "projected_focus_brackets",
+            "offscreen_target_bearing",
+            "lower_left_action_stack",
+            "scrolling_module_minimap",
+            "top_menu_strip",
+            "player_portrait_vital_force",
+            "lower_right_utility_strip",
+        ),
+        "presentation_only_elements": (
+            "top_menu_buttons",
+            "player_vital_force_values",
+            "stealth_solo_swap_pause_buttons",
+        ),
+        "deferred_elements": (
+            "minimap_discovery_fog",
+            "functional_menu_screens",
+            "additional_party_members",
+            "functional_stealth_solo_swap_controls",
+            "journal_feedback",
+        ),
+        "minimap": {},
+    }
+    getter = getattr(manager, "get_strict", None)
+    if not callable(getter):
+        spec["warning"] = "Target-game GUI resources are unavailable; PIE is using the active Ghost Studio theme."
+        return spec
+    try:
+        from pykotor.resource.generics.gui import read_gui
+    except Exception as exc:
+        spec["warning"] = f"Odyssey GUI parsing is unavailable; PIE is using the active Ghost Studio theme ({exc})."
+        return spec
+
+    layouts: dict[str, object] = {}
+    parse_errors: list[str] = []
+    for role, resref in requested_layouts.items():
+        try:
+            raw = getter(resref, _PIE_GAME_GUI_RESOURCE_TYPE, normalized_game)
+            if raw:
+                layouts[role] = read_gui(raw)
+        except Exception as exc:
+            parse_errors.append(f"{resref}: {exc}")
+
+    main = layouts.get("main") or layouts.get("semantic_main")
+    container = layouts.get("container")
+    dialogue = layouts.get("dialogue")
+    pause = layouts.get("pause")
+    if main is None:
+        detail = f" ({parse_errors[0]})" if parse_errors else ""
+        spec["warning"] = (
+            f"{requested_layouts['main']}.gui was not available in {normalized_game}; "
+            f"PIE is using the active Ghost Studio theme{detail}."
+        )
+        return spec
+
+    main_root = getattr(main, "root", None)
+    container_root = getattr(container, "root", None)
+    dialogue_root = getattr(dialogue, "root", None)
+    pause_root = getattr(pause, "root", None)
+    def first_control(*tags: str) -> object | None:
+        return next(
+            (control for control in (_pie_game_gui_control(main_root, tag) for tag in tags) if control is not None),
+            None,
+        )
+
+    controls = {
+        "focus": first_control("LBL_ACTIONDESCBG", "LBL_MOULDING3", "LBL_CMBTMODEMSG"),
+        "focus_footer": _pie_game_gui_control(main_root, "LBL_ACTIONDESCBG2"),
+        "combat": first_control("LBL_COMBATBG1", "LBL_COMBATBG3", "LBL_BG1"),
+        "queue": first_control("BTN_ACTION0", "LBH_BORDER1"),
+        "focus_arrow": first_control("BTN_ACTIONUP0", "LBH_ARROW1"),
+        "portrait": _pie_game_gui_control(main_root, "LBL_BACK1"),
+        "main_text": _pie_game_gui_control(main_root, "LBL_ACTIONDESC"),
+        "target_name_bg": _pie_game_gui_control(main_root, "LBL_NAMEBG"),
+        "target_name": _pie_game_gui_control(main_root, "LBL_NAME"),
+        "target_health_bg": _pie_game_gui_control(main_root, "LBL_HEALTHBG"),
+        "target_health": _pie_game_gui_control(main_root, "PB_HEALTH"),
+        "arrow_margin": _pie_game_gui_control(main_root, "LBL_ARROW_MARGIN"),
+        "action_slot": _pie_game_gui_control(main_root, "BTN_ACTION0"),
+        "action_arrow_up": _pie_game_gui_control(main_root, "BTN_ACTIONUP0"),
+        "action_arrow_down": _pie_game_gui_control(main_root, "BTN_ACTIONDOWN0"),
+        "action_icon": _pie_game_gui_control(main_root, "LBL_ACTION0"),
+        "action_well": _pie_game_gui_control(main_root, "LBL_MOULDING3"),
+        "minimap_border": _pie_game_gui_control(main_root, "LBL_MAPBORDER"),
+        "minimap_map": _pie_game_gui_control(main_root, "LBL_MAP"),
+        "minimap_view": _pie_game_gui_control(main_root, "LBL_MAPVIEW"),
+        "minimap_arrow": _pie_game_gui_control(main_root, "LBL_ARROW"),
+        "menu_background": _pie_game_gui_control(main_root, "LBL_MENUBG"),
+        "menu_equipment": _pie_game_gui_control(main_root, "BTN_EQU"),
+        "menu_inventory": _pie_game_gui_control(main_root, "BTN_INV"),
+        "menu_character": _pie_game_gui_control(main_root, "BTN_CHAR"),
+        "menu_abilities": _pie_game_gui_control(main_root, "BTN_ABI"),
+        "menu_messages": _pie_game_gui_control(main_root, "BTN_MSG"),
+        "menu_journal": _pie_game_gui_control(main_root, "BTN_JOU"),
+        "menu_map": _pie_game_gui_control(main_root, "BTN_MAP"),
+        "menu_options": _pie_game_gui_control(main_root, "BTN_OPT"),
+        "portrait_frame": _pie_game_gui_control(main_root, "LBL_BACK1"),
+        "portrait_image": _pie_game_gui_control(main_root, "LBL_CHAR1"),
+        "player_vital": _pie_game_gui_control(main_root, "PB_VIT1"),
+        "player_force": _pie_game_gui_control(main_root, "PB_FORCE1"),
+        "utility_stealth": _pie_game_gui_control(main_root, "TB_STEALTH"),
+        "utility_solo": _pie_game_gui_control(main_root, "TB_SOLO"),
+        "utility_swap": _pie_game_gui_control(main_root, "BTN_SWAPWEAPONS"),
+        "utility_pause": _pie_game_gui_control(main_root, "TB_PAUSE"),
+        "dialogue_text": _pie_game_gui_control(dialogue_root, "LBL_MESSAGE"),
+        "dialogue_replies": _pie_game_gui_control(dialogue_root, "LB_REPLIES"),
+        "container_text": _pie_game_gui_control(container_root, "LBL_MESSAGE"),
+        "container_list": _pie_game_gui_control(container_root, "LB_ITEMS"),
+        "button": _pie_game_gui_control(container_root, "BTN_OK"),
+        "pause_text": _pie_game_gui_control(pause_root, "LBL_PAUSEREASON"),
+    }
+    borders = {
+        "panel": _pie_game_gui_border(container_root),
+        "dialogue_panel": _pie_game_gui_border(dialogue_root),
+        "pause": _pie_game_gui_border(pause_root),
+        **{
+            role: _pie_game_gui_border(control)
+            for role, control in controls.items()
+            if control is not None
+        },
+    }
+    text_styles = {
+        role: _pie_game_gui_text_style(control)
+        for role, control in controls.items()
+        if control is not None
+    }
+    extents = {
+        role: _pie_game_gui_extent(control)
+        for role, control in controls.items()
+        if control is not None
+    }
+    if dialogue_root is not None:
+        extents["dialogue_panel"] = _pie_game_gui_extent(dialogue_root)
+    panel_fill = str(borders.get("panel", {}).get("fill", "") or "")
+    textures = {
+        "panel": panel_fill,
+        "focus": str(borders.get("focus", {}).get("fill", "") or panel_fill),
+        "focus_footer": str(borders.get("focus_footer", {}).get("fill", "") or ""),
+        "dialogue": str(borders.get("focus", {}).get("fill", "") or panel_fill),
+        "inventory": panel_fill,
+        "inventory_list": str(borders.get("container_list", {}).get("fill", "") or panel_fill),
+        "combat": str(borders.get("combat", {}).get("fill", "") or panel_fill),
+        "queue": str(borders.get("queue", {}).get("fill", "") or ""),
+        "button": str(borders.get("button", {}).get("fill", "") or ""),
+        "focus_arrow": str(borders.get("focus_arrow", {}).get("fill", "") or ""),
+        "portrait": str(borders.get("portrait", {}).get("fill", "") or ""),
+        "target_name": str(borders.get("target_name_bg", {}).get("fill", "") or ""),
+        "target_health_bg": str(borders.get("target_health_bg", {}).get("fill", "") or ""),
+        "target_health": str(
+            _pie_game_gui_resref(getattr(getattr(controls.get("target_health"), "progress", None), "fill", ""))
+            or borders.get("target_health", {}).get("fill", "")
+            or ""
+        ),
+        "action_slot": str(borders.get("action_slot", {}).get("fill", "") or ""),
+        "action_slot_highlight": str(
+            _pie_game_gui_resref(getattr(getattr(controls.get("action_slot"), "hilight", None), "fill", "")) or ""
+        ),
+        "action_arrow_up": str(borders.get("action_arrow_up", {}).get("fill", "") or ""),
+        "action_arrow_down": str(borders.get("action_arrow_down", {}).get("fill", "") or ""),
+        "action_well": str(borders.get("action_well", {}).get("fill", "") or ""),
+        "action_well_corner": str(borders.get("action_well", {}).get("corner", "") or ""),
+        "action_well_edge": str(borders.get("action_well", {}).get("edge", "") or ""),
+        "minimap_border": str(borders.get("minimap_border", {}).get("fill", "") or ""),
+        "minimap_image": f"lbl_map{normalized_module_root}" if normalized_module_root else "",
+        "minimap_arrow": str(borders.get("minimap_arrow", {}).get("fill", "") or ""),
+        "menu_background": str(borders.get("menu_background", {}).get("fill", "") or ""),
+        "menu_background_corner": str(borders.get("menu_background", {}).get("corner", "") or ""),
+        "menu_background_edge": str(borders.get("menu_background", {}).get("edge", "") or ""),
+        "menu_equipment": str(borders.get("menu_equipment", {}).get("fill", "") or ""),
+        "menu_inventory": str(borders.get("menu_inventory", {}).get("fill", "") or ""),
+        "menu_character": str(borders.get("menu_character", {}).get("fill", "") or ""),
+        "menu_abilities": str(borders.get("menu_abilities", {}).get("fill", "") or ""),
+        "menu_messages": str(borders.get("menu_messages", {}).get("fill", "") or ""),
+        "menu_journal": str(borders.get("menu_journal", {}).get("fill", "") or ""),
+        "menu_map": str(borders.get("menu_map", {}).get("fill", "") or ""),
+        "menu_options": str(borders.get("menu_options", {}).get("fill", "") or ""),
+        "portrait_frame": str(borders.get("portrait_frame", {}).get("fill", "") or ""),
+        "portrait_image": portrait_resref,
+        "player_vital": str(borders.get("player_vital", {}).get("fill", "") or ""),
+        "player_force": str(borders.get("player_force", {}).get("fill", "") or ""),
+        "utility_stealth": str(borders.get("utility_stealth", {}).get("fill", "") or ""),
+        "utility_solo": str(borders.get("utility_solo", {}).get("fill", "") or ""),
+        "utility_swap": str(borders.get("utility_swap", {}).get("fill", "") or ""),
+        "utility_pause": str(borders.get("utility_pause", {}).get("fill", "") or ""),
+        "utility_pause_selected": str(
+            _pie_game_gui_resref(getattr(getattr(controls.get("utility_pause"), "selected", None), "fill", ""))
+            or ""
+        ),
+        # These runtime action/reticle textures are selected by Odyssey code,
+        # not statically referenced by mipc28x6_p.gui.  Their stock resrefs
+        # were confirmed against K2 swpc_tex_gui.erf and executable xrefs.
+        "action_icon_talk": "i_dialog",
+        "action_icon_attack": "i_attack",
+        "action_icon_door": "i_opendoor",
+        "action_icon_container": "i_openplace",
+        "action_icon_use": "i_useplace",
+        "action_icon_item": "i_useitem",
+        "action_icon_examine": "i_examine",
+        "action_icon_none": "i_noaction",
+        "friendly_reticle": "friendlyreticle2",
+        "hostile_reticle": "hostilereticle2",
+        "friendly_arrow": "friendlyarrow",
+        "hostile_arrow": "hostilearrow",
+    }
+    minimap: dict[str, object] = {}
+    if normalized_module_root:
+        try:
+            from pykotor.resource.generics.are import read_are
+
+            raw_are = getter(normalized_module_root, _PIE_GAME_ARE_RESOURCE_TYPE, normalized_game)
+            if raw_are:
+                area = read_are(raw_are)
+                minimap = {
+                    "map_point_1": (float(area.map_point_1.x), float(area.map_point_1.y)),
+                    "map_point_2": (float(area.map_point_2.x), float(area.map_point_2.y)),
+                    "world_point_1": (float(area.world_point_1.x), float(area.world_point_1.y)),
+                    "world_point_2": (float(area.world_point_2.x), float(area.world_point_2.y)),
+                    "map_zoom": max(1, int(area.map_zoom or 1)),
+                    "north_axis": int(area.north_axis),
+                }
+            else:
+                spec["minimap_warning"] = f"{normalized_module_root}.are was unavailable; the minimap frame remains visible without a live map."
+        except Exception as exc:
+            spec["minimap_warning"] = f"{normalized_module_root}.are map metadata could not be read ({exc})."
+    spec["minimap"] = minimap
+    spec.update(
+        {
+            "source": "odyssey_gui_resources",
+            "loaded_layouts": tuple(requested_layouts[role] for role in requested_layouts if role in layouts),
+            "textures": textures,
+            "borders": borders,
+            "text_styles": text_styles,
+            "extents": extents,
+        }
+    )
+    if parse_errors:
+        spec["warning"] = "Some optional Odyssey GUI layouts could not be read: " + "; ".join(parse_errors[:2])
+    return spec
+
+
+class _MapStudioPIETargetOverlay(QtWidgets.QWidget):
+    """Mouse-transparent K2-style focus plate projected into viewport space."""
+
+    def __init__(self, parent: QtWidgets.QWidget) -> None:
+        super().__init__(parent)
+        self.setObjectName("mapStudioPIETargetOverlay")
+        self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+        # This is a child of the retained scene surface, not a translucent
+        # top-level window. WA_TranslucentBackground also enables
+        # WA_NoSystemBackground; while the QLabel scene pixmap was replaced
+        # during locomotion, Windows could then expose the host palette
+        # between child repaints. Ordinary child transparency propagates the
+        # parent's retained scene pixels and keeps the presentation atomic.
+        self.setAutoFillBackground(False)
+        self._target_name = ""
+        self._target_point: tuple[float, float] | None = None
+        self._target_onscreen = False
+        self._health_fraction = 1.0
+        self._in_range = False
+        self._hostile = False
+        self._reticle_size: tuple[float, float] | None = None
+        self._skin_spec: dict[str, object] = {}
+        self._skin_pixmaps: dict[str, QtGui.QPixmap] = {}
+        self._frame_composited = False
+        self.hide()
+
+    @staticmethod
+    def _retail_scale(width: int, height: int) -> float:
+        return max(0.35, min(float(width) / 800.0, float(height) / 600.0))
+
+    def configure_skin(
+        self,
+        spec: Mapping[str, object],
+        pixmaps: Mapping[str, QtGui.QPixmap],
+    ) -> None:
+        self._skin_spec = dict(spec or {})
+        self._skin_pixmaps = dict(pixmaps or {})
+        self.update()
+
+    def clear_target(self) -> None:
+        dirty = self._target_dirty_bounds()
+        self._target_name = ""
+        self._target_point = None
+        self.hide()
+        parent = self.parentWidget()
+        if parent is not None and not dirty.isEmpty():
+            parent.update(dirty)
+
+    def set_frame_composited(self, enabled: bool) -> None:
+        """Choose atomic scene-frame composition over an independent child paint."""
+
+        wanted = bool(enabled)
+        if wanted == self._frame_composited:
+            return
+        dirty = self._target_dirty_bounds()
+        self._frame_composited = wanted
+        if wanted:
+            self.hide()
+        elif self._target_name:
+            self.show()
+            if not dirty.isEmpty():
+                self.update(dirty)
+
+    def set_target(
+        self,
+        *,
+        name: str,
+        point: tuple[float, float] | None,
+        onscreen: bool,
+        health_fraction: float,
+        in_range: bool,
+        hostile: bool,
+        reticle_size: tuple[float, float] | None = None,
+    ) -> None:
+        previous_dirty = self._target_dirty_bounds()
+        previous_state = (
+            self._target_name,
+            self._target_point,
+            self._target_onscreen,
+            self._health_fraction,
+            self._in_range,
+            self._hostile,
+            self._reticle_size,
+        )
+        self._target_name = str(name or "").strip().upper()
+        self._target_point = point
+        self._target_onscreen = bool(onscreen)
+        self._health_fraction = max(0.0, min(1.0, float(health_fraction)))
+        self._in_range = bool(in_range)
+        self._hostile = bool(hostile)
+        self._reticle_size = reticle_size
+        current_state = (
+            self._target_name,
+            self._target_point,
+            self._target_onscreen,
+            self._health_fraction,
+            self._in_range,
+            self._hostile,
+            self._reticle_size,
+        )
+        if self._frame_composited:
+            self.hide()
+            return
+        self.setVisible(bool(self._target_name))
+        if not self._target_name or current_state == previous_state:
+            return
+        dirty = previous_dirty.united(self._target_dirty_bounds())
+        if not dirty.isEmpty():
+            parent = self.parentWidget()
+            if parent is not None:
+                parent.update(dirty)
+            self.update(dirty)
+
+    def _retail_color(self) -> QtGui.QColor:
+        styles = dict(self._skin_spec.get("text_styles", {}) or {})
+        style = dict(styles.get("target_name", {}) or styles.get("main_text", {}) or {})
+        rgba = style.get("color")
+        if isinstance(rgba, tuple) and len(rgba) == 4:
+            return QtGui.QColor.fromRgbF(*rgba)
+        return QtGui.QColor(self.palette().color(QtGui.QPalette.ColorRole.Highlight))
+
+    def _extent(self, role: str, fallback: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+        value = dict(self._skin_spec.get("extents", {}) or {}).get(role, fallback)
+        try:
+            row = tuple(float(item) for item in tuple(value or ())[:4])
+        except (TypeError, ValueError):
+            return fallback
+        return row if len(row) == 4 and row[2] > 0.0 and row[3] > 0.0 else fallback
+
+    @staticmethod
+    def _draw_textured_rect(
+        painter: QtGui.QPainter,
+        rect: QtCore.QRectF,
+        pixmap: QtGui.QPixmap | None,
+        fallback: QtGui.QColor,
+    ) -> None:
+        if pixmap is not None and not pixmap.isNull():
+            painter.drawPixmap(rect, pixmap, QtCore.QRectF(pixmap.rect()))
+        else:
+            painter.fillRect(rect, fallback)
+
+    @staticmethod
+    def _clamp_plate(
+        point: tuple[float, float],
+        width: float,
+        height: float,
+        bounds: tuple[float, float, float, float],
+    ) -> QtCore.QRectF:
+        margin = max(2.0, height * 0.10)
+        bounds_left, bounds_top, bounds_width, bounds_height = bounds
+        bounds_right = bounds_left + max(0.0, bounds_width)
+        bounds_bottom = bounds_top + max(0.0, bounds_height)
+        minimum_left = bounds_left + margin
+        maximum_left = max(minimum_left, bounds_right - width - margin)
+        minimum_top = bounds_top + margin
+        maximum_top = max(minimum_top, bounds_bottom - height - margin)
+        left = max(minimum_left, min(maximum_left, point[0] - (width * 0.5)))
+        top = max(
+            minimum_top,
+            min(
+                maximum_top,
+                point[1] - height - max(margin, height * 0.95),
+            ),
+        )
+        return QtCore.QRectF(left, top, width, height)
+
+    def _target_plate_geometry(
+        self,
+        source_point: tuple[float, float],
+        scale: float,
+        name_extent: tuple[float, float, float, float],
+        health_extent: tuple[float, float, float, float],
+        canvas_width: float | None = None,
+        canvas_height: float | None = None,
+    ) -> tuple[QtCore.QRectF, tuple[float, float, float, float]]:
+        """Return the exact canvas-local plate and authored arrow-safe region."""
+
+        plate_width = max(name_extent[2], health_extent[2]) * scale
+        plate_height = max(
+            name_extent[1] + name_extent[3],
+            health_extent[1] + health_extent[3],
+        ) * scale
+        action_reserve = 105.0 * scale
+        authored_arrow_margin = self._extent("arrow_margin", (3.0, 129.0, 794.0, 333.0))
+        width = float(self.width()) if canvas_width is None else float(canvas_width)
+        height = float(self.height()) if canvas_height is None else float(canvas_height)
+        arrow_margin = _pie_game_hud_arrow_margin_extent(
+            authored_arrow_margin,
+            width,
+            height,
+        )
+        plate_bounds = (
+            arrow_margin
+            if not self._target_onscreen
+            else (0.0, 0.0, width, max(0.0, height - action_reserve))
+        )
+        return (
+            self._clamp_plate(source_point, plate_width, plate_height, plate_bounds),
+            arrow_margin,
+        )
+
+    def _target_dirty_bounds(self) -> QtCore.QRect:
+        """Return the small old/new region needed by the child-widget fallback."""
+
+        if not self._target_name or self._target_point is None or self.width() <= 0 or self.height() <= 0:
+            return QtCore.QRect()
+        scale = self._retail_scale(self.width(), self.height())
+        source_point = (float(self._target_point[0]), float(self._target_point[1]))
+        name_extent = self._extent("target_name_bg", (0.0, 0.0, 200.0, 26.0))
+        health_extent = self._extent("target_health_bg", (0.0, 27.0, 200.0, 6.0))
+        plate, arrow_margin = self._target_plate_geometry(
+            source_point,
+            scale,
+            name_extent,
+            health_extent,
+        )
+        bounds = QtCore.QRectF(plate)
+        reticle = self._target_reticle_rect(source_point, scale)
+        if reticle is not None:
+            bounds = bounds.united(reticle)
+        else:
+            inset = 10.0 * scale
+            left, top, width, height = arrow_margin
+            right = left + width
+            bottom = top + height
+            edge_x = max(min(right, left + inset), min(max(left + inset, right - inset), source_point[0]))
+            edge_y = max(min(bottom, top + inset), min(max(top + inset, bottom - inset), source_point[1]))
+            radius = max(10.0, 12.0 * scale)
+            bounds = bounds.united(
+                QtCore.QRectF(edge_x - radius, edge_y - radius, radius * 2.0, radius * 2.0)
+            )
+        return bounds.toAlignedRect().adjusted(-4, -4, 4, 4).intersected(self.rect())
+
+    def _target_reticle_rect(
+        self,
+        source_point: tuple[float, float],
+        scale: float,
+    ) -> QtCore.QRectF | None:
+        """Return the exact canvas-local rectangle painted for the selected target."""
+
+        if not self._target_onscreen:
+            return None
+        reticle_role = "hostile_reticle" if self._hostile else "friendly_reticle"
+        reticle = self._skin_pixmaps.get(reticle_role)
+        fallback_size = (
+            (52.0 * scale, 68.0 * scale)
+            if reticle is not None and not reticle.isNull()
+            else (38.0 * scale, 54.0 * scale)
+        )
+        reticle_width, reticle_height = self._reticle_size or fallback_size
+        return QtCore.QRectF(
+            source_point[0] - (reticle_width * 0.5),
+            source_point[1] - (reticle_height * 0.5),
+            reticle_width,
+            reticle_height,
+        )
+
+    def target_hit_test(self, point: tuple[float, float]) -> bool:
+        """Hit-test only the visible projected plate/reticle in canvas coordinates."""
+
+        if not self._target_name or self._target_point is None:
+            return False
+        try:
+            canvas_point = QtCore.QPointF(float(point[0]), float(point[1]))
+        except (IndexError, TypeError, ValueError):
+            return False
+        scale = self._retail_scale(self.width(), self.height())
+        source_point = (float(self._target_point[0]), float(self._target_point[1]))
+        name_extent = self._extent("target_name_bg", (0.0, 0.0, 200.0, 26.0))
+        health_extent = self._extent("target_health_bg", (0.0, 27.0, 200.0, 6.0))
+        plate, _arrow_margin = self._target_plate_geometry(
+            source_point,
+            scale,
+            name_extent,
+            health_extent,
+        )
+        if plate.contains(canvas_point):
+            return True
+        reticle = self._target_reticle_rect(source_point, scale)
+        return bool(reticle is not None and reticle.contains(canvas_point))
+
+    def _draw_focus_brackets(
+        self,
+        painter: QtGui.QPainter,
+        point: tuple[float, float],
+        scale: float,
+        color: QtGui.QColor,
+    ) -> None:
+        fallback_width, fallback_height = self._reticle_size or (38.0 * scale, 54.0 * scale)
+        half_width = fallback_width * 0.5
+        half_height = fallback_height * 0.5
+        arm = min(half_width, half_height) * 0.42
+        x, y = point
+        pen = QtGui.QPen(color, max(1.0, 1.6 * scale), QtCore.Qt.SolidLine, QtCore.Qt.RoundCap)
+        painter.setPen(pen)
+        painter.setBrush(QtCore.Qt.NoBrush)
+        for sx, sy in ((-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)):
+            corner_x = x + (sx * half_width)
+            corner_y = y + (sy * half_height)
+            painter.drawLine(
+                QtCore.QPointF(corner_x, corner_y),
+                QtCore.QPointF(corner_x - (sx * arm), corner_y),
+            )
+            painter.drawLine(
+                QtCore.QPointF(corner_x, corner_y),
+                QtCore.QPointF(corner_x, corner_y - (sy * arm)),
+            )
+
+    @staticmethod
+    def _draw_bearing_arrow(
+        painter: QtGui.QPainter,
+        source: tuple[float, float],
+        edge_point: tuple[float, float],
+        scale: float,
+        color: QtGui.QColor,
+    ) -> None:
+        dx = edge_point[0] - source[0]
+        dy = edge_point[1] - source[1]
+        length = max(1.0e-6, math.hypot(dx, dy))
+        ux, uy = dx / length, dy / length
+        px, py = -uy, ux
+        radius = 8.0 * scale
+        tip = QtCore.QPointF(edge_point[0] + (ux * radius), edge_point[1] + (uy * radius))
+        tail_x = edge_point[0] - (ux * radius * 0.65)
+        tail_y = edge_point[1] - (uy * radius * 0.65)
+        path = QtGui.QPainterPath(tip)
+        path.lineTo(tail_x + (px * radius * 0.65), tail_y + (py * radius * 0.65))
+        path.lineTo(tail_x - (px * radius * 0.65), tail_y - (py * radius * 0.65))
+        path.closeSubpath()
+        painter.setPen(QtCore.Qt.NoPen)
+        painter.setBrush(color)
+        painter.drawPath(path)
+
+    @staticmethod
+    def _draw_bearing_texture(
+        painter: QtGui.QPainter,
+        source: tuple[float, float],
+        edge_point: tuple[float, float],
+        scale: float,
+        pixmap: QtGui.QPixmap,
+    ) -> None:
+        dx = edge_point[0] - source[0]
+        dy = edge_point[1] - source[1]
+        if math.hypot(dx, dy) <= 1.0e-6:
+            dx = -1.0
+            dy = 0.0
+        # friendlyarrow/hostilearrow point left in their authored 64x64 TPC.
+        rotation = math.degrees(math.atan2(dy, dx)) - 180.0
+        side = 18.0 * scale
+        painter.save()
+        painter.translate(edge_point[0], edge_point[1])
+        painter.rotate(rotation)
+        painter.drawPixmap(
+            QtCore.QRectF(-side * 0.5, -side * 0.5, side, side),
+            pixmap,
+            QtCore.QRectF(pixmap.rect()),
+        )
+        painter.restore()
+
+    def _paint_target(self, painter: QtGui.QPainter, width: int, height: int) -> None:
+        if not self._target_name:
+            return
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        scale = self._retail_scale(width, height)
+        color = self._retail_color()
+        point = self._target_point or (width * 0.5, height * 0.5)
+        source_point = (float(point[0]), float(point[1]))
+        name_extent = self._extent("target_name_bg", (0.0, 0.0, 200.0, 26.0))
+        health_extent = self._extent("target_health_bg", (0.0, 27.0, 200.0, 6.0))
+        plate, arrow_margin = self._target_plate_geometry(
+            source_point,
+            scale,
+            name_extent,
+            health_extent,
+            float(width),
+            float(height),
+        )
+        textures = dict(self._skin_spec.get("textures", {}) or {})
+        background = self._skin_pixmaps.get("target_name")
+        fallback = QtGui.QColor(self.palette().color(QtGui.QPalette.ColorRole.Window))
+        fallback.setAlpha(190)
+        self._draw_textured_rect(painter, plate, background, fallback)
+
+        name_height = name_extent[3] * scale
+        font = QtGui.QFont(self.font())
+        font.setPixelSize(max(7, int(round(10.0 * scale))))
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(color)
+        painter.drawText(
+            QtCore.QRectF(plate.left(), plate.top(), plate.width(), name_height),
+            QtCore.Qt.AlignHCenter | QtCore.Qt.AlignVCenter,
+            self._target_name,
+        )
+
+        health_bg = QtCore.QRectF(
+            plate.left() + (health_extent[0] * scale),
+            plate.top() + (health_extent[1] * scale),
+            health_extent[2] * scale,
+            health_extent[3] * scale,
+        )
+        bg_color = QtGui.QColor(fallback)
+        bg_color.setAlpha(220)
+        self._draw_textured_rect(
+            painter,
+            health_bg,
+            self._skin_pixmaps.get("target_health_bg"),
+            bg_color,
+        )
+        health = QtCore.QRectF(
+            health_bg.left(),
+            health_bg.top(),
+            health_bg.width() * self._health_fraction,
+            health_bg.height(),
+        )
+        if health.width() > 0.0:
+            health_texture = self._skin_pixmaps.get("target_health")
+            if health_texture is not None and not health_texture.isNull():
+                painter.drawPixmap(health, health_texture, QtCore.QRectF(health_texture.rect()))
+            else:
+                painter.fillRect(health, color)
+
+        reticle_rect = self._target_reticle_rect(source_point, scale)
+        if reticle_rect is not None:
+            reticle_role = "hostile_reticle" if self._hostile else "friendly_reticle"
+            reticle = self._skin_pixmaps.get(reticle_role)
+            if reticle is not None and not reticle.isNull():
+                painter.drawPixmap(reticle_rect, reticle, QtCore.QRectF(reticle.rect()))
+            else:
+                self._draw_focus_brackets(painter, source_point, scale, color)
+        else:
+            arrow_inset = 10.0 * scale
+            margin_left, margin_top, margin_width, margin_height = arrow_margin
+            margin_right = margin_left + margin_width
+            margin_bottom = margin_top + margin_height
+            minimum_x = min(margin_right, margin_left + arrow_inset)
+            maximum_x = max(minimum_x, margin_right - arrow_inset)
+            minimum_y = min(margin_bottom, margin_top + arrow_inset)
+            maximum_y = max(minimum_y, margin_bottom - arrow_inset)
+            edge_x = max(minimum_x, min(maximum_x, source_point[0]))
+            edge_y = max(minimum_y, min(maximum_y, source_point[1]))
+            arrow_role = "hostile_arrow" if self._hostile else "friendly_arrow"
+            arrow = self._skin_pixmaps.get(arrow_role)
+            if arrow is not None and not arrow.isNull():
+                self._draw_bearing_texture(
+                    painter,
+                    (width * 0.5, height * 0.5),
+                    (edge_x, edge_y),
+                    scale,
+                    arrow,
+                )
+            else:
+                self._draw_bearing_arrow(
+                    painter,
+                    (width * 0.5, height * 0.5),
+                    (edge_x, edge_y),
+                    scale,
+                    color,
+                )
+
+    def paintEvent(self, _event: QtGui.QPaintEvent) -> None:
+        if self._frame_composited:
+            return
+        painter = QtGui.QPainter(self)
+        self._paint_target(painter, self.width(), self.height())
+        painter.end()
+
+
+class _MapStudioPIEActionStrip(QtWidgets.QWidget):
+    """Retail-sized lower-left action stack with one functional action slot."""
+
+    primaryRequested = QtCore.Signal(str)
+
+    _SLOT_ORDER = (3, 4, 5, 2, 1, 0)
+
+    def __init__(self, parent: QtWidgets.QWidget) -> None:
+        super().__init__(parent)
+        self.setObjectName("mapStudioPIEActionStrip")
+        self.setMouseTracking(True)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        self._focus_id = ""
+        self._actions: tuple[tuple[str, str, bool], ...] = ()
+        self._active_index = 0
+        self._in_range = False
+        self._skin_spec: dict[str, object] = {}
+        self._skin_pixmaps: dict[str, QtGui.QPixmap] = {}
+        self.setToolTip("Q/E target · Enter uses the selected action")
+
+    def sizeHint(self) -> QtCore.QSize:
+        return QtCore.QSize(250, 100)
+
+    @property
+    def active_command(self) -> str:
+        if not self._actions:
+            return ""
+        return self._actions[self._active_index][0]
+
+    @property
+    def active_action_enabled(self) -> bool:
+        if not self._actions or not self._in_range:
+            return False
+        return bool(self._actions[self._active_index][2])
+
+    def configure_skin(
+        self,
+        spec: Mapping[str, object],
+        pixmaps: Mapping[str, QtGui.QPixmap],
+    ) -> None:
+        self._skin_spec = dict(spec or {})
+        self._skin_pixmaps = dict(pixmaps or {})
+        self.update()
+
+    def set_focus(self, focus_id: str, actions: tuple[object, ...], in_range: bool) -> None:
+        wanted = str(focus_id or "")
+        if wanted != self._focus_id:
+            self._active_index = 0
+        self._focus_id = wanted
+        rows: list[tuple[str, str, bool]] = []
+        for action in actions:
+            command = str(_pie_hud_value(action, "command", "") or "").strip()
+            if not command:
+                continue
+            rows.append(
+                (
+                    command,
+                    str(_pie_hud_value(action, "label", "") or command.replace("_", " ").title()),
+                    bool(_pie_hud_value(action, "supported", True)),
+                )
+            )
+        self._actions = tuple(rows)
+        self._active_index = min(self._active_index, max(0, len(self._actions) - 1))
+        self._in_range = bool(in_range)
+        if self._actions:
+            self.setToolTip(
+                f"{self._actions[self._active_index][1]} · Enter/click · arrows change action"
+            )
+        else:
+            self.setToolTip("Q/E changes target")
+        self.update()
+
+    def _scale(self) -> float:
+        return max(0.25, min(float(self.width()) / 250.0, float(self.height()) / 100.0))
+
+    def _extent(self, role: str, fallback: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+        value = dict(self._skin_spec.get("extents", {}) or {}).get(role, fallback)
+        try:
+            row = tuple(float(item) for item in tuple(value or ())[:4])
+        except (TypeError, ValueError):
+            return fallback
+        return row if len(row) == 4 and row[2] > 0.0 and row[3] > 0.0 else fallback
+
+    def _retail_origin_y(self) -> float:
+        action = self._extent("action_slot", (12.0, 532.0, 36.0, 60.0))
+        description = self._extent("main_text", (14.0, 496.0, 232.0, 32.0))
+        return min(action[1], description[1]) - 2.0
+
+    def _slot_rect(self, slot: int) -> QtCore.QRectF:
+        scale = self._scale()
+        base = self._extent("action_slot", (12.0, 532.0, 36.0, 60.0))
+        return QtCore.QRectF(
+            (base[0] + (slot * 40.0)) * scale,
+            (base[1] - self._retail_origin_y()) * scale,
+            base[2] * scale,
+            base[3] * scale,
+        )
+
+    def _cycle(self, direction: int) -> None:
+        if len(self._actions) <= 1:
+            return
+        self._active_index = (self._active_index + int(direction)) % len(self._actions)
+        self.setToolTip(
+            f"{self._actions[self._active_index][1]} · Enter/click · arrows change action"
+        )
+        self.update()
+
+    def request_primary_action(self) -> bool:
+        """Emit the selected gameplay action only while its HUD slot is enabled."""
+
+        if not self.active_action_enabled:
+            return False
+        self.primaryRequested.emit(self.active_command)
+        return True
+
+    @staticmethod
+    def _draw_scaled_pixmap(
+        painter: QtGui.QPainter,
+        rect: QtCore.QRectF,
+        pixmap: QtGui.QPixmap | None,
+        fallback: QtGui.QColor,
+    ) -> None:
+        if pixmap is not None and not pixmap.isNull():
+            painter.drawPixmap(rect, pixmap, QtCore.QRectF(pixmap.rect()))
+        else:
+            painter.fillRect(rect, fallback)
+
+    @staticmethod
+    def _draw_rotated_pixmap(
+        painter: QtGui.QPainter,
+        rect: QtCore.QRectF,
+        pixmap: QtGui.QPixmap,
+        degrees: float,
+    ) -> None:
+        painter.save()
+        painter.translate(rect.center())
+        painter.rotate(float(degrees))
+        local_rect = QtCore.QRectF(-rect.width() * 0.5, -rect.height() * 0.5, rect.width(), rect.height())
+        painter.drawPixmap(local_rect, pixmap, QtCore.QRectF(pixmap.rect()))
+        painter.restore()
+
+    def _draw_action_glyph(
+        self,
+        painter: QtGui.QPainter,
+        rect: QtCore.QRectF,
+        command: str,
+        enabled: bool,
+    ) -> None:
+        color = QtGui.QColor(self.palette().color(QtGui.QPalette.ColorRole.Highlight))
+        if not enabled:
+            color.setAlpha(100)
+        painter.setPen(QtGui.QPen(color, max(1.0, rect.width() * 0.08), QtCore.Qt.SolidLine, QtCore.Qt.RoundCap))
+        painter.setBrush(QtCore.Qt.NoBrush)
+        center = rect.center()
+        radius = rect.width() * 0.12
+        normalized = str(command or "").lower()
+        if normalized in {"talk", "dialogue"}:
+            painter.drawEllipse(QtCore.QPointF(center.x(), rect.top() + (rect.height() * 0.24)), radius, radius)
+            painter.drawLine(
+                QtCore.QPointF(center.x(), rect.top() + (rect.height() * 0.38)),
+                QtCore.QPointF(center.x(), rect.top() + (rect.height() * 0.68)),
+            )
+            painter.drawLine(
+                QtCore.QPointF(center.x(), rect.top() + (rect.height() * 0.46)),
+                QtCore.QPointF(rect.left() + (rect.width() * 0.20), center.y()),
+            )
+            painter.drawLine(
+                QtCore.QPointF(center.x(), rect.top() + (rect.height() * 0.46)),
+                QtCore.QPointF(rect.right() - (rect.width() * 0.20), center.y()),
+            )
+            painter.drawLine(
+                QtCore.QPointF(center.x(), rect.top() + (rect.height() * 0.68)),
+                QtCore.QPointF(rect.left() + (rect.width() * 0.30), rect.bottom() - (rect.height() * 0.10)),
+            )
+            painter.drawLine(
+                QtCore.QPointF(center.x(), rect.top() + (rect.height() * 0.68)),
+                QtCore.QPointF(rect.right() - (rect.width() * 0.30), rect.bottom() - (rect.height() * 0.10)),
+            )
+        elif normalized == "attack":
+            painter.drawLine(
+                QtCore.QPointF(rect.left() + (rect.width() * 0.20), rect.bottom() - (rect.height() * 0.20)),
+                QtCore.QPointF(rect.right() - (rect.width() * 0.18), rect.top() + (rect.height() * 0.18)),
+            )
+            painter.drawLine(
+                QtCore.QPointF(rect.left() + (rect.width() * 0.20), rect.bottom() - (rect.height() * 0.20)),
+                QtCore.QPointF(rect.left() + (rect.width() * 0.40), rect.bottom() - (rect.height() * 0.12)),
+            )
+        else:
+            painter.drawEllipse(rect.adjusted(rect.width() * 0.18, rect.height() * 0.18, -rect.width() * 0.18, -rect.height() * 0.18))
+            painter.drawLine(
+                QtCore.QPointF(rect.left() + (rect.width() * 0.30), center.y()),
+                QtCore.QPointF(rect.right() - (rect.width() * 0.30), center.y()),
+            )
+
+    @staticmethod
+    def _action_icon_role(command: str) -> str:
+        normalized = str(command or "").strip().lower()
+        return {
+            "talk": "action_icon_talk",
+            "attack": "action_icon_attack",
+            "door": "action_icon_door",
+            "container": "action_icon_container",
+            "terminal": "action_icon_use",
+            "use": "action_icon_use",
+            "store": "action_icon_use",
+            "use_item": "action_icon_item",
+            "take": "action_icon_item",
+            "examine": "action_icon_examine",
+        }.get(normalized, "action_icon_none")
+
+    def paintEvent(self, _event: QtGui.QPaintEvent) -> None:
+        painter = QtGui.QPainter(self)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        scale = self._scale()
+        fallback = QtGui.QColor(self.palette().color(QtGui.QPalette.ColorRole.Window))
+        fallback.setAlpha(205)
+        border_color = QtGui.QColor(self.palette().color(QtGui.QPalette.ColorRole.Highlight))
+        slot_texture = self._skin_pixmaps.get("action_slot")
+        highlight_texture = self._skin_pixmaps.get("action_slot_highlight")
+        for slot in range(6):
+            rect = self._slot_rect(slot)
+            active_slot = bool(self._actions and slot == self._SLOT_ORDER[0])
+            self._draw_scaled_pixmap(
+                painter,
+                rect,
+                highlight_texture if active_slot else slot_texture,
+                fallback,
+            )
+            if slot_texture is None:
+                painter.setPen(QtGui.QPen(border_color, max(1.0, scale)))
+                painter.setBrush(QtCore.Qt.NoBrush)
+                painter.drawRect(rect)
+
+        if not self._actions:
+            return
+        slot_rect = self._slot_rect(self._SLOT_ORDER[0])
+        origin_y = self._retail_origin_y()
+        up_extent = self._extent("action_arrow_up", (12.0, 534.0, 36.0, 12.0))
+        down_extent = self._extent("action_arrow_down", (12.0, 578.0, 36.0, 12.0))
+        icon_extent = self._extent("action_icon", (15.0, 547.0, 30.0, 30.0))
+        slot_offset = self._SLOT_ORDER[0] * 40.0
+        up_rect = QtCore.QRectF(
+            (up_extent[0] + slot_offset) * scale,
+            (up_extent[1] - origin_y) * scale,
+            up_extent[2] * scale,
+            up_extent[3] * scale,
+        )
+        down_rect = QtCore.QRectF(
+            (down_extent[0] + slot_offset) * scale,
+            (down_extent[1] - origin_y) * scale,
+            down_extent[2] * scale,
+            down_extent[3] * scale,
+        )
+        icon_rect = QtCore.QRectF(
+            (icon_extent[0] + slot_offset) * scale,
+            (icon_extent[1] - origin_y) * scale,
+            icon_extent[2] * scale,
+            icon_extent[3] * scale,
+        )
+        up_pixmap = self._skin_pixmaps.get("action_arrow_up")
+        down_pixmap = self._skin_pixmaps.get("action_arrow_down")
+        self._draw_scaled_pixmap(
+            painter,
+            up_rect,
+            up_pixmap,
+            fallback,
+        )
+        textures = dict(self._skin_spec.get("textures", {}) or {})
+        up_resref = str(textures.get("action_arrow_up", "") or "").strip().lower()
+        down_resref = str(textures.get("action_arrow_down", "") or "").strip().lower()
+        same_authored_arrow = bool(
+            up_resref
+            and down_pixmap is not None
+            and not down_pixmap.isNull()
+            and up_resref == down_resref
+        )
+        if same_authored_arrow:
+            self._draw_rotated_pixmap(painter, down_rect, down_pixmap, 180.0)
+        else:
+            self._draw_scaled_pixmap(painter, down_rect, down_pixmap, fallback)
+        if up_pixmap is None:
+            painter.setBrush(border_color)
+            painter.setPen(QtCore.Qt.NoPen)
+            painter.drawPolygon(
+                QtGui.QPolygonF(
+                    (
+                        QtCore.QPointF(up_rect.center().x(), up_rect.top() + (2.0 * scale)),
+                        QtCore.QPointF(up_rect.left() + (9.0 * scale), up_rect.bottom() - (2.0 * scale)),
+                        QtCore.QPointF(up_rect.right() - (9.0 * scale), up_rect.bottom() - (2.0 * scale)),
+                    )
+                )
+            )
+        if down_pixmap is None:
+            painter.setBrush(border_color)
+            painter.setPen(QtCore.Qt.NoPen)
+            painter.drawPolygon(
+                QtGui.QPolygonF(
+                    (
+                        QtCore.QPointF(down_rect.left() + (9.0 * scale), down_rect.top() + (2.0 * scale)),
+                        QtCore.QPointF(down_rect.right() - (9.0 * scale), down_rect.top() + (2.0 * scale)),
+                        QtCore.QPointF(down_rect.center().x(), down_rect.bottom() - (2.0 * scale)),
+                    )
+                )
+            )
+        command, _label, supported = self._actions[self._active_index]
+        icon = self._skin_pixmaps.get(self._action_icon_role(command))
+        if icon is not None and not icon.isNull():
+            painter.setOpacity(1.0 if self._in_range and supported else 0.40)
+            painter.drawPixmap(icon_rect, icon, QtCore.QRectF(icon.rect()))
+            painter.setOpacity(1.0)
+        else:
+            self._draw_action_glyph(painter, icon_rect, command, self._in_range and supported)
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:
+        if not self._actions or event.button() != QtCore.Qt.LeftButton:
+            event.ignore()
+            return
+        point = event.position()
+        scale = self._scale()
+        slot_rect = self._slot_rect(self._SLOT_ORDER[0])
+        if not slot_rect.contains(point):
+            event.ignore()
+            return
+        if point.y() <= slot_rect.top() + (15.0 * scale):
+            self._cycle(-1)
+        elif point.y() >= slot_rect.bottom() - (15.0 * scale):
+            self._cycle(1)
+        else:
+            self.request_primary_action()
+        event.accept()
+
+
+class _MapStudioPIEExplorationChrome(QtWidgets.QWidget):
+    """Mouse-transparent persistent shell composed from K2's mipc28x6_p assets."""
+
+    _MENU_ROLES = (
+        "menu_equipment",
+        "menu_inventory",
+        "menu_character",
+        "menu_abilities",
+        "menu_messages",
+        "menu_journal",
+        "menu_map",
+        "menu_options",
+    )
+    _UTILITY_ROLES = (
+        "utility_stealth",
+        "utility_solo",
+        "utility_swap",
+        "utility_pause",
+    )
+
+    def __init__(self, parent: QtWidgets.QWidget) -> None:
+        super().__init__(parent)
+        self.setObjectName("mapStudioPIEExplorationChrome")
+        self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, True)
+        self.setAutoFillBackground(False)
+        self._skin_spec: dict[str, object] = {}
+        self._skin_pixmaps: dict[str, QtGui.QPixmap] = {}
+        self._skin_draw_pixmaps: dict[str, QtGui.QPixmap] = {}
+        self._skin_oriented_pixmaps: dict[tuple[int, str], QtGui.QPixmap] = {}
+        self._player_position = (0.0, 0.0, 0.0)
+        self._player_facing_radians = 0.0
+        self._camera_forward = (1.0, 0.0, 0.0)
+        self._paused = False
+        self._exploration_active = False
+        self._frame_composited = False
+        self.hide()
+
+    def configure_skin(
+        self,
+        spec: Mapping[str, object],
+        pixmaps: Mapping[str, QtGui.QPixmap],
+    ) -> None:
+        self._skin_spec = dict(spec or {})
+        self._skin_pixmaps = dict(pixmaps or {})
+        self._skin_draw_pixmaps = dict(self._skin_pixmaps)
+        self._skin_oriented_pixmaps.clear()
+        borders = dict(self._skin_spec.get("borders", {}) or {})
+        for role, pixmap in tuple(self._skin_pixmaps.items()):
+            base_role = str(role)
+            for suffix in ("_selected", "_corner", "_edge"):
+                if base_role.endswith(suffix):
+                    base_role = base_role[: -len(suffix)]
+                    break
+            runtime_tints = {
+                # Odyssey supplies these progress-channel colors at runtime;
+                # the GUI GFF contains only the bar masks/frames.
+                "player_vital": (0.68, 0.12, 0.08, 1.0),
+                "player_force": (0.08, 0.72, 0.82, 1.0),
+            }
+            color = runtime_tints.get(base_role) or dict(borders.get(base_role, {}) or {}).get("color")
+            if not isinstance(color, tuple) or len(color) != 4:
+                continue
+            if all(float(channel) >= 0.995 for channel in color[:3]):
+                continue
+            self._skin_draw_pixmaps[role] = self._multiply_pixmap_color(pixmap, color)
+        self.update()
+
+    @staticmethod
+    def _multiply_pixmap_color(
+        pixmap: QtGui.QPixmap,
+        rgba: tuple[float, float, float, float],
+    ) -> QtGui.QPixmap:
+        """Apply Odyssey GUIBorder color while retaining texture shading/alpha."""
+
+        if pixmap.isNull():
+            return pixmap
+        # K2's low-intensity frame colors are authored for the legacy GUI
+        # texture combiner's 2x stage.  Applying the raw half-intensity value
+        # makes the MIPC frame much darker than both retail and the supplied
+        # 207TEL capture; icon colors are already authored at display strength.
+        rgb = tuple(float(channel) for channel in rgba[:3])
+        display_rgba = (
+            tuple(min(1.0, channel * 2.0) for channel in rgb) + (float(rgba[3]),)
+            if max(rgb) < 0.5
+            else rgba
+        )
+        result = QtGui.QPixmap(pixmap.size())
+        result.fill(QtCore.Qt.transparent)
+        painter = QtGui.QPainter(result)
+        painter.drawPixmap(0, 0, pixmap)
+        painter.setCompositionMode(QtGui.QPainter.CompositionMode_Multiply)
+        painter.fillRect(result.rect(), QtGui.QColor.fromRgbF(*display_rgba))
+        painter.setCompositionMode(QtGui.QPainter.CompositionMode_DestinationIn)
+        painter.drawPixmap(0, 0, pixmap)
+        painter.end()
+        return result
+
+    def clear_state(self) -> None:
+        self._exploration_active = False
+        self.hide()
+
+    def set_frame_composited(self, enabled: bool) -> None:
+        """Choose one scene-frame publication over an independent full-canvas paint."""
+
+        wanted = bool(enabled)
+        if wanted == self._frame_composited:
+            return
+        self._frame_composited = wanted
+        visible = bool(self._exploration_active and not wanted)
+        self.setVisible(visible)
+        if visible:
+            self.update()
+
+    def set_state(self, snapshot: object | None) -> None:
+        mode = str(_pie_hud_value(snapshot, "mode", "") or "").strip().lower()
+        self._exploration_active = bool(snapshot is not None and mode in {"exploration", "combat", "combat_paused"})
+        self._paused = mode == "combat_paused"
+        position = tuple(_pie_hud_value(snapshot, "player_position", ()) or ())
+        if len(position) >= 3:
+            self._player_position = tuple(float(value) for value in position[:3])
+        camera_forward = tuple(_pie_hud_value(snapshot, "camera_forward", ()) or ())
+        if len(camera_forward) >= 2:
+            self._camera_forward = (
+                float(camera_forward[0]),
+                float(camera_forward[1]),
+                float(camera_forward[2]) if len(camera_forward) >= 3 else 0.0,
+            )
+        facing = _pie_hud_value(snapshot, "player_facing_radians", None)
+        if facing is None and math.hypot(self._camera_forward[0], self._camera_forward[1]) > 1.0e-8:
+            facing = math.atan2(self._camera_forward[1], self._camera_forward[0])
+        try:
+            self._player_facing_radians = float(facing if facing is not None else self._player_facing_radians)
+        except (TypeError, ValueError):
+            pass
+        visible = bool(self._exploration_active and not self._frame_composited)
+        self.setVisible(visible)
+        if visible:
+            self.update()
+
+    def _extent(
+        self,
+        role: str,
+        fallback: tuple[float, float, float, float],
+    ) -> tuple[float, float, float, float]:
+        value = dict(self._skin_spec.get("extents", {}) or {}).get(role, fallback)
+        try:
+            row = tuple(float(item) for item in tuple(value or ())[:4])
+        except (TypeError, ValueError):
+            return fallback
+        return row if len(row) == 4 and row[2] > 0.0 and row[3] > 0.0 else fallback
+
+    def _rect(
+        self,
+        role: str,
+        fallback: tuple[float, float, float, float],
+        anchor: str,
+    ) -> QtCore.QRectF:
+        return QtCore.QRectF(
+            *_pie_game_hud_anchor_extent(
+                self._extent(role, fallback),
+                float(self.width()),
+                float(self.height()),
+                anchor,
+            )
+        )
+
+    @staticmethod
+    def _draw_pixmap(
+        painter: QtGui.QPainter,
+        rect: QtCore.QRectF,
+        pixmap: QtGui.QPixmap | None,
+    ) -> None:
+        if pixmap is not None and not pixmap.isNull() and rect.width() > 0.0 and rect.height() > 0.0:
+            painter.drawPixmap(rect, pixmap, QtCore.QRectF(pixmap.rect()))
+
+    def _draw_role(
+        self,
+        painter: QtGui.QPainter,
+        role: str,
+        fallback: tuple[float, float, float, float],
+        anchor: str,
+    ) -> None:
+        self._draw_pixmap(painter, self._rect(role, fallback, anchor), self._skin_draw_pixmaps.get(role))
+
+    def _draw_rotated_pixmap(
+        self,
+        painter: QtGui.QPainter,
+        rect: QtCore.QRectF,
+        pixmap: QtGui.QPixmap | None,
+        degrees: float,
+    ) -> None:
+        if pixmap is None or pixmap.isNull():
+            return
+        painter.save()
+        painter.translate(rect.center())
+        painter.rotate(float(degrees))
+        local_rect = QtCore.QRectF(-rect.width() * 0.5, -rect.height() * 0.5, rect.width(), rect.height())
+        painter.drawPixmap(local_rect, pixmap, QtCore.QRectF(pixmap.rect()))
+        painter.restore()
+
+    def _oriented_gui_border_pixmap(
+        self,
+        pixmap: QtGui.QPixmap | None,
+        orientation: str,
+    ) -> QtGui.QPixmap | None:
+        """Return one cached Odyssey GUIBorder UV orientation.
+
+        GUIBorder mirrors its corner quads and transforms the square edge
+        texture's UVs while leaving every destination rectangle axis-aligned.
+        Rotating a tall destination side rectangle instead makes it sweep
+        horizontally through the control and collapse the frame artwork.
+        """
+
+        if pixmap is None or pixmap.isNull() or orientation == "identity":
+            return pixmap
+        key = (int(pixmap.cacheKey()), str(orientation))
+        cached = self._skin_oriented_pixmaps.get(key)
+        if cached is not None:
+            return cached
+        image = pixmap.toImage()
+        if orientation == "flip_vertical":
+            image = image.flipped(QtCore.Qt.Vertical)
+        elif orientation == "flip_horizontal":
+            image = image.flipped(QtCore.Qt.Horizontal)
+        elif orientation == "flip_both":
+            image = image.flipped(QtCore.Qt.Horizontal | QtCore.Qt.Vertical)
+        elif orientation in {"rotate_clockwise", "transpose"}:
+            image = image.transformed(
+                QtGui.QTransform().rotate(90.0),
+                QtCore.Qt.FastTransformation,
+            )
+            if orientation == "transpose":
+                image = image.flipped(QtCore.Qt.Horizontal)
+        oriented = QtGui.QPixmap.fromImage(image)
+        self._skin_oriented_pixmaps[key] = oriented
+        return oriented
+
+    def _draw_gui_panel(
+        self,
+        painter: QtGui.QPainter,
+        role: str,
+        fallback: tuple[float, float, float, float],
+        anchor: str,
+    ) -> None:
+        """Compose one GUIBorder from its actual fill/edge/corner textures."""
+
+        rect = self._rect(role, fallback, anchor)
+        fill = self._skin_draw_pixmaps.get(role)
+        edge = self._skin_draw_pixmaps.get(f"{role}_edge")
+        corner = self._skin_draw_pixmaps.get(f"{role}_corner")
+        border = dict(dict(self._skin_spec.get("borders", {}) or {}).get(role, {}) or {})
+        scale = max(0.35, float(self.height()) / 600.0)
+        dimension = max(0.0, min(rect.width() * 0.5, rect.height() * 0.5, float(border.get("dimension", 0) or 0) * scale))
+        if dimension <= 0.0:
+            self._draw_pixmap(painter, rect, fill)
+            return
+        inner = QtCore.QRectF(
+            rect.left() + dimension,
+            rect.top() + dimension,
+            max(0.0, rect.width() - (dimension * 2.0)),
+            max(0.0, rect.height() - (dimension * 2.0)),
+        )
+        self._draw_pixmap(painter, inner, fill)
+        if edge is not None and not edge.isNull():
+            top = QtCore.QRectF(rect.left() + dimension, rect.top(), rect.width() - (dimension * 2.0), dimension)
+            bottom = QtCore.QRectF(top.left(), rect.bottom() - dimension, top.width(), dimension)
+            left = QtCore.QRectF(rect.left(), rect.top() + dimension, dimension, rect.height() - (dimension * 2.0))
+            right = QtCore.QRectF(rect.right() - dimension, left.top(), dimension, left.height())
+            self._draw_pixmap(painter, top, edge)
+            self._draw_pixmap(painter, bottom, self._oriented_gui_border_pixmap(edge, "flip_vertical"))
+            self._draw_pixmap(painter, left, self._oriented_gui_border_pixmap(edge, "rotate_clockwise"))
+            self._draw_pixmap(painter, right, self._oriented_gui_border_pixmap(edge, "transpose"))
+        if corner is not None and not corner.isNull():
+            corners = (
+                (QtCore.QRectF(rect.left(), rect.top(), dimension, dimension), "identity"),
+                (QtCore.QRectF(rect.right() - dimension, rect.top(), dimension, dimension), "flip_horizontal"),
+                (QtCore.QRectF(rect.right() - dimension, rect.bottom() - dimension, dimension, dimension), "flip_both"),
+                (QtCore.QRectF(rect.left(), rect.bottom() - dimension, dimension, dimension), "flip_vertical"),
+            )
+            for corner_rect, orientation in corners:
+                self._draw_pixmap(painter, corner_rect, self._oriented_gui_border_pixmap(corner, orientation))
+
+    def _draw_minimap(self, painter: QtGui.QPainter) -> None:
+        view_rect = self._rect("minimap_view", (17.0, 5.0, 120.0, 120.0), "left")
+        arrow_rect = self._rect("minimap_arrow", (58.0, 58.0, 20.0, 20.0), "left")
+        painter.fillRect(view_rect, QtGui.QColor(0, 0, 0, 238))
+        map_pixmap = self._skin_draw_pixmaps.get("minimap_image")
+        minimap = dict(self._skin_spec.get("minimap", {}) or {})
+        map_coordinate = _pie_minimap_world_to_map(self._player_position, minimap)
+        if map_pixmap is not None and not map_pixmap.isNull() and map_coordinate is not None:
+            authored_map = self._extent("minimap_map", (17.0, 5.0, 512.0, 256.0))
+            scale = max(0.35, float(self.height()) / 600.0)
+            zoom = max(1.0, float(minimap.get("map_zoom", 1) or 1))
+            map_width = authored_map[2] * scale * zoom
+            map_height = authored_map[3] * scale * zoom
+            map_rect = QtCore.QRectF(
+                arrow_rect.center().x() - (float(map_coordinate[0]) * map_width),
+                arrow_rect.center().y() - (float(map_coordinate[1]) * map_height),
+                map_width,
+                map_height,
+            )
+            painter.save()
+            painter.setClipRect(view_rect)
+            self._draw_pixmap(painter, map_rect, map_pixmap)
+            painter.restore()
+        self._draw_role(painter, "minimap_border", (3.0, -9.0, 148.0, 148.0), "left")
+        self._draw_rotated_pixmap(
+            painter,
+            arrow_rect,
+            self._skin_draw_pixmaps.get("minimap_arrow"),
+            _pie_minimap_arrow_rotation_degrees(
+                self._player_facing_radians,
+                int(minimap.get("north_axis", 0) or 0),
+            ),
+        )
+
+    def _paint_chrome(self, painter: QtGui.QPainter) -> None:
+        """Paint non-interactive retail chrome into the current presentation target."""
+
+        if not self._exploration_active:
+            return
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.SmoothPixmapTransform, True)
+        self._draw_minimap(painter)
+        self._draw_gui_panel(painter, "action_well", (4.0, 528.0, 252.0, 68.0), "left")
+        self._draw_gui_panel(painter, "menu_background", (536.0, 4.0, 260.0, 36.0), "right")
+        menu_fallbacks = {
+            "menu_equipment": (544.0, 8.0, 28.0, 28.0),
+            "menu_inventory": (574.0, 8.0, 28.0, 28.0),
+            "menu_character": (604.0, 9.0, 26.0, 26.0),
+            "menu_abilities": (635.0, 8.0, 28.0, 28.0),
+            "menu_messages": (669.0, 8.0, 28.0, 28.0),
+            "menu_journal": (702.0, 8.0, 28.0, 28.0),
+            "menu_map": (734.0, 8.0, 28.0, 28.0),
+            "menu_options": (763.0, 8.0, 28.0, 28.0),
+        }
+        for role in self._MENU_ROLES:
+            self._draw_role(painter, role, menu_fallbacks[role], "right")
+
+        self._draw_role(painter, "portrait_frame", (704.0, 520.0, 78.0, 78.0), "right")
+        self._draw_role(painter, "portrait_image", (707.0, 523.0, 72.0, 72.0), "right")
+        self._draw_role(painter, "player_vital", (677.0, 520.0, 39.0, 78.0), "right")
+        self._draw_role(painter, "player_force", (771.0, 520.0, 39.0, 78.0), "right")
+        utility_fallbacks = {
+            "utility_stealth": (548.0, 562.0, 36.0, 36.0),
+            "utility_solo": (584.0, 562.0, 36.0, 36.0),
+            "utility_swap": (620.0, 562.0, 36.0, 36.0),
+            "utility_pause": (656.0, 562.0, 36.0, 36.0),
+        }
+        for role in self._UTILITY_ROLES:
+            if role == "utility_pause" and self._paused:
+                self._draw_pixmap(
+                    painter,
+                    self._rect(role, utility_fallbacks[role], "right"),
+                    self._skin_draw_pixmaps.get("utility_pause_selected") or self._skin_draw_pixmaps.get(role),
+                )
+            else:
+                self._draw_role(painter, role, utility_fallbacks[role], "right")
+
+    def paintEvent(self, _event: QtGui.QPaintEvent) -> None:
+        if not self._exploration_active or self._frame_composited:
+            return
+        painter = QtGui.QPainter(self)
+        self._paint_chrome(painter)
+
+
+class _MapStudioPIEGameplayHUD(QtWidgets.QFrame):
+    """K2-scaled PIE controls plus separate modal preview panels."""
+
+    actionRequested = QtCore.Signal(object)
+
+    def __init__(self, parent: QtWidgets.QWidget) -> None:
+        super().__init__(parent)
+        self.setObjectName("mapStudioPIEGameplayHUD")
+        self.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        self.setFrameShadow(QtWidgets.QFrame.Raised)
+        self.setAutoFillBackground(True)
+        self.setBackgroundRole(QtGui.QPalette.ColorRole.Window)
+        self.setForegroundRole(QtGui.QPalette.ColorRole.WindowText)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        self._root_layout = layout
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(6)
+
+        self.action_strip = _MapStudioPIEActionStrip(self)
+        self.action_strip.primaryRequested.connect(self._request_action_command)
+        layout.addWidget(self.action_strip, 0, QtCore.Qt.AlignLeft | QtCore.Qt.AlignBottom)
+
+        self.focus_frame = QtWidgets.QFrame(self)
+        self.focus_frame.setObjectName("mapStudioPIEFocusHUD")
+        self.focus_frame.setAutoFillBackground(True)
+        focus_row = QtWidgets.QHBoxLayout(self.focus_frame)
+        focus_row.setContentsMargins(0, 0, 0, 0)
+        self.focus_label = QtWidgets.QLabel(self)
+        self.focus_label.setObjectName("mapStudioPIEFocusLabel")
+        self.focus_label.setWordWrap(True)
+        self.primary_button = QtWidgets.QPushButton("Interact", self)
+        self.primary_button.setObjectName("mapStudioPIEPrimaryActionButton")
+        self.primary_button.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.primary_button.clicked.connect(self._request_primary)
+        focus_row.addWidget(self.focus_label, 1)
+        focus_row.addWidget(self.primary_button, 0, QtCore.Qt.AlignTop)
+        layout.addWidget(self.focus_frame)
+
+        self.context_label = QtWidgets.QLabel(self)
+        self.context_label.setObjectName("mapStudioPIEContextLabel")
+        self.context_label.setWordWrap(True)
+        layout.addWidget(self.context_label)
+
+        # Runtime quest log + global-variable inspector so a creator can watch
+        # the scripting state a module exercises during play (OnEnter, dialogue,
+        # and interaction scripts all write here). Editor-side preview state.
+        self.state_inspector_frame = QtWidgets.QFrame(self)
+        self.state_inspector_frame.setObjectName("mapStudioPIEStateInspectorHUD")
+        self.state_inspector_frame.setAutoFillBackground(True)
+        state_inspector_layout = QtWidgets.QVBoxLayout(self.state_inspector_frame)
+        state_inspector_layout.setContentsMargins(0, 2, 0, 0)
+        state_inspector_layout.setSpacing(2)
+        self.state_inspector_title_label = QtWidgets.QLabel("Quest / Global State", self.state_inspector_frame)
+        self.state_inspector_title_label.setObjectName("mapStudioPIEStateInspectorTitleLabel")
+        state_inspector_title_font = self.state_inspector_title_label.font()
+        state_inspector_title_font.setBold(True)
+        self.state_inspector_title_label.setFont(state_inspector_title_font)
+        self.state_inspector_label = QtWidgets.QLabel("", self.state_inspector_frame)
+        self.state_inspector_label.setObjectName("mapStudioPIEStateInspectorLabel")
+        self.state_inspector_label.setWordWrap(True)
+        self.state_inspector_label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        state_inspector_layout.addWidget(self.state_inspector_title_label)
+        state_inspector_layout.addWidget(self.state_inspector_label)
+        self.state_inspector_frame.setVisible(False)
+        layout.addWidget(self.state_inspector_frame)
+
+        self.dialogue_frame = QtWidgets.QFrame(self)
+        self.dialogue_frame.setObjectName("mapStudioPIEDialogueHUD")
+        self.dialogue_frame.setAutoFillBackground(True)
+        dialogue_layout = QtWidgets.QVBoxLayout(self.dialogue_frame)
+        dialogue_layout.setContentsMargins(0, 2, 0, 0)
+        dialogue_layout.setSpacing(4)
+        self.dialogue_speaker_label = QtWidgets.QLabel(self.dialogue_frame)
+        self.dialogue_speaker_label.setObjectName("mapStudioPIEDialogueSpeakerLabel")
+        speaker_font = self.dialogue_speaker_label.font()
+        speaker_font.setBold(True)
+        self.dialogue_speaker_label.setFont(speaker_font)
+        self.dialogue_text_label = QtWidgets.QLabel(self.dialogue_frame)
+        self.dialogue_text_label.setObjectName("mapStudioPIEDialogueTextLabel")
+        self.dialogue_text_label.setWordWrap(True)
+        self.dialogue_choices_layout = QtWidgets.QVBoxLayout()
+        self.dialogue_choices_layout.setContentsMargins(0, 0, 0, 0)
+        self.dialogue_choices_layout.setSpacing(3)
+        dialogue_layout.addWidget(self.dialogue_speaker_label)
+        dialogue_layout.addWidget(self.dialogue_text_label)
+        dialogue_layout.addLayout(self.dialogue_choices_layout)
+        layout.addWidget(self.dialogue_frame)
+
+        self.inventory_frame = QtWidgets.QFrame(self)
+        self.inventory_frame.setObjectName("mapStudioPIEInventoryHUD")
+        self.inventory_frame.setAutoFillBackground(True)
+        inventory_layout = QtWidgets.QVBoxLayout(self.inventory_frame)
+        inventory_layout.setContentsMargins(0, 2, 0, 0)
+        inventory_layout.setSpacing(4)
+        self.inventory_title_label = QtWidgets.QLabel("Container", self.inventory_frame)
+        self.inventory_title_label.setObjectName("mapStudioPIEInventoryTitleLabel")
+        inventory_font = self.inventory_title_label.font()
+        inventory_font.setBold(True)
+        self.inventory_title_label.setFont(inventory_font)
+        self.inventory_list = QtWidgets.QListWidget(self.inventory_frame)
+        self.inventory_list.setObjectName("mapStudioPIEInventoryList")
+        self.inventory_list.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.inventory_list.itemDoubleClicked.connect(lambda _item: self._request_take())
+        inventory_buttons = QtWidgets.QHBoxLayout()
+        inventory_buttons.setContentsMargins(0, 0, 0, 0)
+        self.take_button = QtWidgets.QPushButton("Take", self.inventory_frame)
+        self.take_button.setObjectName("mapStudioPIETakeButton")
+        self.take_all_button = QtWidgets.QPushButton("Take All", self.inventory_frame)
+        self.take_all_button.setObjectName("mapStudioPIETakeAllButton")
+        self.inventory_close_button = QtWidgets.QPushButton("Close", self.inventory_frame)
+        self.inventory_close_button.setObjectName("mapStudioPIEInventoryCloseButton")
+        for button in (self.take_button, self.take_all_button, self.inventory_close_button):
+            button.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.take_button.clicked.connect(self._request_take)
+        self.take_all_button.clicked.connect(self._request_take_all)
+        self.inventory_close_button.clicked.connect(self._request_modal_close)
+        inventory_buttons.addWidget(self.take_button)
+        inventory_buttons.addWidget(self.take_all_button)
+        inventory_buttons.addStretch(1)
+        inventory_buttons.addWidget(self.inventory_close_button)
+        inventory_layout.addWidget(self.inventory_title_label)
+        inventory_layout.addWidget(self.inventory_list)
+        inventory_layout.addLayout(inventory_buttons)
+        layout.addWidget(self.inventory_frame)
+
+        self.combat_frame = QtWidgets.QFrame(self)
+        self.combat_frame.setObjectName("mapStudioPIECombatHUD")
+        self.combat_frame.setAutoFillBackground(True)
+        combat_layout = QtWidgets.QVBoxLayout(self.combat_frame)
+        combat_layout.setContentsMargins(0, 2, 0, 0)
+        combat_layout.setSpacing(5)
+        self.combat_status_label = QtWidgets.QLabel(self.combat_frame)
+        self.combat_status_label.setObjectName("mapStudioPIECombatStatusLabel")
+        self.combat_status_label.setWordWrap(True)
+        self.combat_queue_label = QtWidgets.QLabel(self.combat_frame)
+        self.combat_queue_label.setObjectName("mapStudioPIECombatQueueLabel")
+        self.combat_queue_label.setWordWrap(True)
+        combat_buttons = QtWidgets.QHBoxLayout()
+        combat_buttons.setContentsMargins(0, 0, 0, 0)
+        self.combat_attack_button = QtWidgets.QPushButton("Queue Attack", self.combat_frame)
+        self.combat_attack_button.setObjectName("mapStudioPIECombatAttackButton")
+        self.combat_clear_button = QtWidgets.QPushButton("Clear Queue", self.combat_frame)
+        self.combat_clear_button.setObjectName("mapStudioPIECombatClearQueueButton")
+        self.combat_pause_button = QtWidgets.QPushButton("Pause", self.combat_frame)
+        self.combat_pause_button.setObjectName("mapStudioPIECombatPauseButton")
+        for button in (self.combat_attack_button, self.combat_clear_button, self.combat_pause_button):
+            button.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.combat_attack_button.clicked.connect(self._request_combat_attack)
+        self.combat_clear_button.clicked.connect(self._request_combat_clear_queue)
+        self.combat_pause_button.clicked.connect(self._request_combat_pause)
+        combat_buttons.addWidget(self.combat_attack_button)
+        combat_buttons.addWidget(self.combat_clear_button)
+        combat_buttons.addStretch(1)
+        combat_buttons.addWidget(self.combat_pause_button)
+        combat_layout.addWidget(self.combat_status_label)
+        combat_layout.addWidget(self.combat_queue_label)
+        combat_layout.addLayout(combat_buttons)
+        layout.addWidget(self.combat_frame)
+
+        self.shortcut_label = QtWidgets.QLabel(
+            "Q/E focus  ·  Enter interact  ·  1–9 reply  ·  Space pause",
+            self,
+        )
+        self.shortcut_label.setObjectName("mapStudioPIEShortcutLabel")
+        self.shortcut_label.setWordWrap(True)
+        layout.addWidget(self.shortcut_label)
+
+        self._snapshot: object | None = None
+        self._focus_id = ""
+        self._container_id = ""
+        self._combat_target_id = ""
+        self._dialogue_active = False
+        self._inventory_active = False
+        self._exploration_mode = False
+        self._target_overlay: _MapStudioPIETargetOverlay | None = None
+        self._exploration_chrome: _MapStudioPIEExplorationChrome | None = None
+        self._dialogue_signature: tuple[object, ...] = ()
+        self._inventory_signature: tuple[object, ...] = ()
+        self._game_hud_skin_key: tuple[int, int, str, str, str] | None = None
+        self._game_hud_skin_spec: dict[str, object] = {
+            "game": "",
+            "source": "theme_fallback",
+            "pixel_parity": False,
+            "loaded_layouts": (),
+            "loaded_textures": (),
+            "textures": {},
+            "warning": "",
+        }
+        self._game_hud_skin_pixmaps: dict[str, QtGui.QPixmap] = {}
+        self.hide()
+
+    @property
+    def exploration_mode(self) -> bool:
+        return bool(self._exploration_mode)
+
+    @property
+    def dialogue_active(self) -> bool:
+        return bool(self._dialogue_active)
+
+    def dialogue_authored_extent(self) -> tuple[float, float, float, float]:
+        """Return K2 ``dialog_p``'s fixed 640x480-space conversation rectangle."""
+
+        raw = dict(self._game_hud_skin_spec.get("extents", {}) or {}).get(
+            "dialogue_panel",
+            (48.0, 378.0, 544.0, 100.0),
+        )
+        try:
+            extent = tuple(float(value) for value in tuple(raw or ())[:4])
+        except (TypeError, ValueError):
+            extent = ()
+        if len(extent) != 4 or extent[2] <= 0.0 or extent[3] <= 0.0:
+            return (48.0, 378.0, 544.0, 100.0)
+        return extent  # type: ignore[return-value]
+
+    def set_target_overlay(self, overlay: _MapStudioPIETargetOverlay | None) -> None:
+        self._target_overlay = overlay
+        if overlay is not None:
+            overlay.configure_skin(self._game_hud_skin_spec, self._game_hud_skin_pixmaps)
+
+    def set_exploration_chrome(self, chrome: _MapStudioPIEExplorationChrome | None) -> None:
+        self._exploration_chrome = chrome
+        if chrome is not None:
+            chrome.configure_skin(self._game_hud_skin_spec, self._game_hud_skin_pixmaps)
+
+    def set_exploration_scale(self, scale: float) -> None:
+        value = max(0.35, float(scale))
+        self.action_strip.setFixedSize(
+            max(1, int(round(250.0 * value))),
+            max(1, int(round(100.0 * value))),
+        )
+
+    def game_hud_skin_state(self) -> dict[str, object]:
+        """Return non-gameplay diagnostics for the active resource skin."""
+
+        return dict(self._game_hud_skin_spec)
+
+    def _game_hud_skin_widgets(self) -> tuple[QtWidgets.QWidget, ...]:
+        return (
+            self,
+            self.action_strip,
+            self.focus_frame,
+            self.focus_label,
+            self.primary_button,
+            self.context_label,
+            self.dialogue_frame,
+            self.dialogue_speaker_label,
+            self.dialogue_text_label,
+            self.inventory_frame,
+            self.inventory_title_label,
+            self.inventory_list,
+            self.take_button,
+            self.take_all_button,
+            self.inventory_close_button,
+            self.combat_frame,
+            self.combat_status_label,
+            self.combat_queue_label,
+            self.combat_attack_button,
+            self.combat_clear_button,
+            self.combat_pause_button,
+            self.shortcut_label,
+        )
+
+    def _restore_game_hud_theme_fallback(self) -> None:
+        """Restore the current application palette without fixed fallback colors."""
+
+        parent = self.parentWidget()
+        base_palette = QtGui.QPalette(parent.palette() if parent is not None else self.palette())
+        for widget in self._game_hud_skin_widgets():
+            widget.setPalette(QtGui.QPalette(base_palette))
+            widget.setProperty("mapStudioPIEGameTextureResref", "")
+            widget.setProperty("mapStudioPIEGameFontResref", "")
+        self.setBackgroundRole(QtGui.QPalette.ColorRole.Window)
+        self.inventory_list.setBackgroundRole(QtGui.QPalette.ColorRole.Base)
+
+    @staticmethod
+    def _game_hud_pixmap(
+        manager: object,
+        game: str,
+        resref: str,
+        *,
+        preserve_decoded_row_order: bool = False,
+    ) -> QtGui.QPixmap | None:
+        """Decode one target-game-strict TPC/TGA through ResourceManager."""
+
+        name = str(resref or "").strip().lower()
+        getter = getattr(manager, "get_strict", None)
+        loader = getattr(manager, "load_texture_image", None)
+        if not name or not callable(getter) or not callable(loader):
+            return None
+        try:
+            exists = any(
+                bool(getter(name, resource_type, game))
+                for resource_type in (_PIE_GAME_TPC_RESOURCE_TYPE, _PIE_GAME_TGA_RESOURCE_TYPE)
+            )
+            if not exists:
+                return None
+            image = loader(name, game, max_size=0)
+            if image is None:
+                return None
+            rgba = image.convert("RGBA")
+            width, height = rgba.size
+            pixels = rgba.tobytes("raw", "RGBA")
+            qimage = QtGui.QImage(
+                pixels,
+                int(width),
+                int(height),
+                int(width) * 4,
+                QtGui.QImage.Format_RGBA8888,
+            ).copy()
+            # ResourceManager deliberately returns bottom-up images for direct
+            # GPU upload. QWidget/QPainter image space is top-down, so ordinary
+            # GUI textures need the inverse conversion here. Module-map TPCs
+            # are the exception: ARE MapPt coordinates address their decoded
+            # row order directly (207TEL stage/world +Y is at the top), so
+            # flipping those would invert the live minimap.
+            if not preserve_decoded_row_order:
+                qimage = qimage.mirrored(False, True)
+            pixmap = QtGui.QPixmap.fromImage(qimage)
+            return pixmap if not pixmap.isNull() else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _set_game_hud_brush(
+        widget: QtWidgets.QWidget,
+        pixmap: QtGui.QPixmap | None,
+        resref: str,
+        role: QtGui.QPalette.ColorRole,
+    ) -> None:
+        if pixmap is None or pixmap.isNull():
+            return
+        palette = QtGui.QPalette(widget.palette())
+        palette.setBrush(role, QtGui.QBrush(pixmap))
+        widget.setPalette(palette)
+        widget.setProperty("mapStudioPIEGameTextureResref", str(resref or ""))
+        if role == QtGui.QPalette.ColorRole.Window:
+            widget.setAutoFillBackground(True)
+            widget.setBackgroundRole(QtGui.QPalette.ColorRole.Window)
+
+    @staticmethod
+    def _set_game_hud_text_color(
+        widget: QtWidgets.QWidget,
+        color: object,
+        role: QtGui.QPalette.ColorRole,
+    ) -> None:
+        if not isinstance(color, tuple) or len(color) != 4:
+            return
+        palette = QtGui.QPalette(widget.palette())
+        palette.setColor(role, QtGui.QColor.fromRgbF(*color))
+        widget.setPalette(palette)
+
+    def _apply_game_hud_button_skin(self, button: QtWidgets.QAbstractButton) -> None:
+        textures = dict(self._game_hud_skin_spec.get("textures", {}) or {})
+        text_styles = dict(self._game_hud_skin_spec.get("text_styles", {}) or {})
+        resref = str(textures.get("button", "") or "")
+        self._set_game_hud_brush(
+            button,
+            self._game_hud_skin_pixmaps.get("button"),
+            resref,
+            QtGui.QPalette.ColorRole.Button,
+        )
+        button_style = dict(text_styles.get("button", {}) or {})
+        self._set_game_hud_text_color(
+            button,
+            button_style.get("color"),
+            QtGui.QPalette.ColorRole.ButtonText,
+        )
+        button.setProperty("mapStudioPIEGameFontResref", str(button_style.get("font", "") or ""))
+
+    def _apply_game_hud_skin(self) -> None:
+        self._restore_game_hud_theme_fallback()
+        textures = dict(self._game_hud_skin_spec.get("textures", {}) or {})
+        text_styles = dict(self._game_hud_skin_spec.get("text_styles", {}) or {})
+
+        for widget, texture_role, palette_role in (
+            (self, "panel", QtGui.QPalette.ColorRole.Window),
+            (self.focus_frame, "focus", QtGui.QPalette.ColorRole.Window),
+            (self.dialogue_frame, "dialogue", QtGui.QPalette.ColorRole.Window),
+            (self.inventory_frame, "inventory", QtGui.QPalette.ColorRole.Window),
+            (self.inventory_list, "inventory_list", QtGui.QPalette.ColorRole.Base),
+            (self.combat_frame, "combat", QtGui.QPalette.ColorRole.Window),
+            (self.combat_queue_label, "queue", QtGui.QPalette.ColorRole.Window),
+        ):
+            resref = str(textures.get(texture_role, "") or "")
+            self._set_game_hud_brush(
+                widget,
+                self._game_hud_skin_pixmaps.get(texture_role),
+                resref,
+                palette_role,
+            )
+
+        focus_style = dict(text_styles.get("main_text", {}) or text_styles.get("focus", {}) or {})
+        dialogue_style = dict(text_styles.get("dialogue_text", {}) or focus_style)
+        container_style = dict(text_styles.get("container_text", {}) or focus_style)
+        button_style = dict(text_styles.get("button", {}) or focus_style)
+        pause_style = dict(text_styles.get("pause_text", {}) or focus_style)
+        for widget, style in (
+            (self.focus_label, focus_style),
+            (self.context_label, focus_style),
+            (self.shortcut_label, pause_style),
+            (self.dialogue_speaker_label, dialogue_style),
+            (self.dialogue_text_label, dialogue_style),
+            (self.inventory_title_label, container_style),
+            (self.combat_status_label, focus_style),
+            (self.combat_queue_label, focus_style),
+        ):
+            self._set_game_hud_text_color(widget, style.get("color"), QtGui.QPalette.ColorRole.WindowText)
+            widget.setProperty("mapStudioPIEGameFontResref", str(style.get("font", "") or ""))
+        self._set_game_hud_text_color(
+            self.inventory_list,
+            button_style.get("color"),
+            QtGui.QPalette.ColorRole.Text,
+        )
+        self.inventory_list.setProperty(
+            "mapStudioPIEGameFontResref",
+            str(button_style.get("font", "") or ""),
+        )
+        for button in (
+            self.primary_button,
+            self.take_button,
+            self.take_all_button,
+            self.inventory_close_button,
+            self.combat_attack_button,
+            self.combat_clear_button,
+            self.combat_pause_button,
+        ):
+            self._apply_game_hud_button_skin(button)
+
+        source = str(self._game_hud_skin_spec.get("source", "theme_fallback") or "theme_fallback")
+        game = str(self._game_hud_skin_spec.get("game", "") or "")
+        self.setProperty("mapStudioPIEGameHudSkinSource", source)
+        self.setProperty("mapStudioPIEGameHudSkinGame", game)
+        self.setProperty("mapStudioPIEGameHudPixelParity", False)
+        self.action_strip.configure_skin(self._game_hud_skin_spec, self._game_hud_skin_pixmaps)
+        if self._target_overlay is not None:
+            self._target_overlay.configure_skin(self._game_hud_skin_spec, self._game_hud_skin_pixmaps)
+        if self._exploration_chrome is not None:
+            self._exploration_chrome.configure_skin(self._game_hud_skin_spec, self._game_hud_skin_pixmaps)
+
+    def configure_game_resources(
+        self,
+        manager: object,
+        game: str,
+        *,
+        module_root: str = "",
+        player_portrait_resref: str = "",
+    ) -> str:
+        """Load the target game's GUI/TPC skin, retaining a palette fallback."""
+
+        normalized_game = "K2" if str(game or "").strip().upper() == "K2" else "K1"
+        try:
+            revision = max(0, int(getattr(manager, "revision", 0) or 0))
+        except (TypeError, ValueError):
+            revision = 0
+        normalized_module_root = str(module_root or "").strip().lower()
+        portrait_resref = str(player_portrait_resref or "po_pmhc01").strip().lower()
+        key = (id(manager), revision, normalized_game, normalized_module_root, portrait_resref)
+        if key == self._game_hud_skin_key:
+            return str(self._game_hud_skin_spec.get("warning", "") or "")
+        self._game_hud_skin_key = key
+        spec = _load_map_studio_pie_game_hud_spec(
+            manager,
+            normalized_game,
+            module_root=normalized_module_root,
+            player_portrait_resref=portrait_resref,
+        )
+        pixmaps: dict[str, QtGui.QPixmap] = {}
+        decoded: dict[tuple[str, bool], QtGui.QPixmap] = {}
+        failed: set[tuple[str, bool]] = set()
+        missing: list[str] = []
+        for role, resref_value in dict(spec.get("textures", {}) or {}).items():
+            resref = str(resref_value or "").strip().lower()
+            if not resref:
+                continue
+            module_map_texture = bool(
+                str(role) == "minimap_image"
+                and normalized_module_root
+                and resref == f"lbl_map{normalized_module_root}"
+            )
+            decode_key = (resref, module_map_texture)
+            pixmap = decoded.get(decode_key)
+            if pixmap is None and decode_key not in failed:
+                pixmap = self._game_hud_pixmap(
+                    manager,
+                    normalized_game,
+                    resref,
+                    preserve_decoded_row_order=module_map_texture,
+                )
+                if pixmap is None:
+                    failed.add(decode_key)
+                else:
+                    decoded[decode_key] = pixmap
+            if pixmap is None:
+                missing.append(resref)
+            else:
+                pixmaps[str(role)] = pixmap
+        spec["loaded_textures"] = tuple(
+            sorted({str(dict(spec.get("textures", {}) or {}).get(role, "") or "") for role in pixmaps})
+        )
+        spec["missing_textures"] = tuple(sorted(set(missing)))
+        if spec.get("source") == "odyssey_gui_resources" and not pixmaps:
+            spec["source"] = "theme_fallback"
+            spec["warning"] = (
+                f"{normalized_game} GUI layouts loaded, but their HUD textures could not be decoded; "
+                "PIE is using the active Ghost Studio theme."
+            )
+        self._game_hud_skin_spec = spec
+        self._game_hud_skin_pixmaps = pixmaps
+        self._apply_game_hud_skin()
+        return str(spec.get("warning", "") or "")
+
+    @staticmethod
+    def _looks_like_dialogue(value: object) -> bool:
+        return bool(value is not None and (
+            _pie_hud_value(value, "conversation_resref", "")
+            or _pie_hud_value(value, "current_node_id", "")
+            or _pie_hud_sequence(value, "choices")
+        ))
+
+    @staticmethod
+    def _looks_like_interaction(value: object) -> bool:
+        return bool(value is not None and (
+            _pie_hud_sequence(value, "open_containers")
+            or _pie_hud_sequence(value, "container_inventories")
+            or _pie_hud_sequence(value, "player_inventory")
+        ))
+
+    @staticmethod
+    def _looks_like_combat(value: object) -> bool:
+        return bool(value is not None and (
+            _pie_hud_sequence(value, "combatants")
+            or _pie_hud_sequence(value, "queued_actions")
+            or bool(_pie_hud_value(value, "active", False))
+        ))
+
+    @staticmethod
+    def _nested(snapshot: object, *names: str) -> object | None:
+        for name in names:
+            value = _pie_hud_value(snapshot, name, None)
+            if value is not None:
+                return value
+        return None
+
+    def _update_state_inspector(self, snapshot: object) -> None:
+        """Compose the runtime validation readout for the HUD.
+
+        A compact dashboard of the state a creator exercises during play: the
+        quest log (``journal``), global variables (``globals``, written by the
+        OnEnter/dialogue/interaction scripts), looted items
+        (``interaction.player_inventory``), and the combat outcome
+        (``combat.outcome``). Hidden when empty. Editor-side preview state, never
+        campaign state.
+        """
+
+        lines: list[str] = []
+        journal = _pie_hud_sequence(snapshot, "journal")
+        if journal:
+            lines.append("Journal:")
+            for quest in journal[:6]:
+                tag = str(_pie_hud_value(quest, "quest_tag", "") or "")
+                entry = _pie_hud_value(quest, "entry", 0)
+                if tag:
+                    lines.append(f"  {tag} → {entry}")
+            if len(journal) > 6:
+                lines.append(f"  … +{len(journal) - 6} more")
+
+        globals_ = _pie_hud_sequence(snapshot, "globals")
+        if globals_:
+            lines.append("Globals:")
+            for entry in globals_[:8]:
+                name = str(_pie_hud_value(entry, "name", "") or "")
+                value = _pie_hud_value(entry, "value", "")
+                if name:
+                    lines.append(f"  {name} = {value}")
+            if len(globals_) > 8:
+                lines.append(f"  … +{len(globals_) - 8} more")
+
+        # Loot picked up during the preview (runtime-only player inventory).
+        interaction = _pie_hud_value(snapshot, "interaction", None)
+        loot = _pie_hud_sequence(interaction, "player_inventory") if interaction is not None else ()
+        if loot:
+            lines.append("Loot:")
+            for item in loot[:6]:
+                name = str(
+                    _pie_hud_value(item, "display_name", "")
+                    or _pie_hud_value(item, "resref", "")
+                    or ""
+                )
+                if not name:
+                    continue
+                try:
+                    quantity = int(_pie_hud_value(item, "quantity", 1) or 1)
+                except (TypeError, ValueError):
+                    quantity = 1
+                lines.append(f"  {name} x{quantity}" if quantity > 1 else f"  {name}")
+            if len(loot) > 6:
+                lines.append(f"  … +{len(loot) - 6} more")
+
+        # Combat resolution, once the encounter has ended (victory/defeat).
+        combat = _pie_hud_value(snapshot, "combat", None)
+        outcome = str(_pie_hud_value(combat, "outcome", "") or "") if combat is not None else ""
+        if outcome:
+            lines.append(f"Combat: {outcome.title()}")
+
+        text = "\n".join(lines)
+        self.state_inspector_label.setText(text)
+        self.state_inspector_frame.setVisible(bool(text))
+
+    @staticmethod
+    def _clear_layout(layout: QtWidgets.QLayout) -> None:
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                # Removed reply widgets must stop painting in this event turn.
+                # deleteLater alone leaves their old geometry alive until Qt
+                # drains deferred deletes, which visibly superimposes two DLG
+                # nodes for several recorded frames.
+                widget.hide()
+                widget.setParent(None)
+                widget.deleteLater()
+
+    def _emit(self, command: str, **payload: object) -> None:
+        self.actionRequested.emit({"command": str(command), **payload})
+
+    def _request_primary(self) -> bool:
+        return self.action_strip.request_primary_action()
+
+    def request_primary_action(self) -> bool:
+        """Route Enter through the same currently selected retail action slot."""
+
+        return self._request_primary()
+
+    def _request_action_command(self, command: str) -> None:
+        self._emit(
+            "primary",
+            entity_id=self._focus_id,
+            action_command=str(command or ""),
+        )
+
+    def _request_modal_close(self) -> None:
+        self._emit("modal_close", entity_id=self._container_id)
+
+    def _request_take(self) -> None:
+        item = self.inventory_list.currentItem()
+        if item is None:
+            return
+        self._emit(
+            "inventory_take",
+            entity_id=self._container_id,
+            resref=str(item.data(QtCore.Qt.UserRole) or ""),
+        )
+
+    def _request_take_all(self) -> None:
+        self._emit("inventory_take_all", entity_id=self._container_id)
+
+    def _request_combat_pause(self) -> None:
+        self._emit("combat_toggle_pause")
+
+    def _request_combat_attack(self) -> None:
+        self._emit("combat_attack", target_id=self._combat_target_id)
+
+    def _request_combat_clear_queue(self) -> None:
+        self._emit("combat_clear_queue")
+
+    @property
+    def modal_active(self) -> bool:
+        return bool(self._dialogue_active or self._inventory_active)
+
+    def clear_state(self) -> None:
+        self._snapshot = None
+        self._focus_id = ""
+        self._container_id = ""
+        self._combat_target_id = ""
+        self._dialogue_active = False
+        self._inventory_active = False
+        self._exploration_mode = False
+        self._dialogue_signature = ()
+        self._inventory_signature = ()
+        self.inventory_list.clear()
+        self._clear_layout(self.dialogue_choices_layout)
+        self.action_strip.set_focus("", (), False)
+        self.state_inspector_label.setText("")
+        self.state_inspector_frame.setVisible(False)
+        if self._target_overlay is not None:
+            self._target_overlay.clear_target()
+        if self._exploration_chrome is not None:
+            self._exploration_chrome.clear_state()
+        self.hide()
+
+    def set_state(self, snapshot: object | None) -> None:
+        self._snapshot = snapshot
+        if snapshot is None:
+            self.clear_state()
+            return
+        if self._exploration_chrome is not None:
+            self._exploration_chrome.set_state(snapshot)
+
+        focus = self._nested(snapshot, "focus", "focus_state", "focused_entity")
+        if focus is None and _pie_hud_value(snapshot, "entity_id", "") and _pie_hud_sequence(snapshot, "actions"):
+            focus = snapshot
+        dialogue = self._nested(snapshot, "dialogue", "dialogue_snapshot", "conversation")
+        if dialogue is None and self._looks_like_dialogue(snapshot):
+            dialogue = snapshot
+        interaction = self._nested(snapshot, "interaction", "interaction_snapshot", "inventory")
+        if interaction is None and self._looks_like_interaction(snapshot):
+            interaction = snapshot
+        combat = self._nested(snapshot, "combat", "combat_snapshot")
+        if combat is None and self._looks_like_combat(snapshot):
+            combat = snapshot
+
+        self._focus_id = str(_pie_hud_value(focus, "entity_id", "") or "")
+        focus_name = str(
+            _pie_hud_value(focus, "display_name", "")
+            or _pie_hud_value(snapshot, "focus_name", "")
+            or ""
+        )
+        actions = _pie_hud_sequence(focus, "actions")
+        primary = _pie_hud_value(focus, "primary_action", None) or (actions[0] if actions else None)
+        action_label = str(_pie_hud_value(primary, "label", "") or "Interact")
+        in_range = bool(_pie_hud_value(focus, "in_range", bool(focus)))
+        primary_supported = bool(_pie_hud_value(primary, "supported", True))
+        last_result = self._nested(snapshot, "last_result")
+        semantic_state = str(
+            _pie_hud_value(focus, "semantic_state", "")
+            or _pie_hud_value(last_result, "message", "")
+            or ""
+        )
+        self.focus_label.setText(focus_name or "No interaction target")
+        self.primary_button.setText(action_label)
+        self.primary_button.setEnabled(
+            bool(self._focus_id and primary is not None and in_range and primary_supported)
+        )
+        self.context_label.setText(semantic_state)
+        self.action_strip.set_focus(self._focus_id, actions, in_range)
+        self._update_state_inspector(snapshot)
+
+        dialogue_state = str(_pie_hud_value(dialogue, "state", "") or "").strip().lower()
+        dialogue_ended = bool(_pie_hud_value(dialogue, "ended", False))
+        self._dialogue_active = bool(
+            dialogue is not None
+            and not dialogue_ended
+            and dialogue_state not in {"idle", "inactive", "ended", "aborted"}
+        )
+        self.dialogue_frame.setVisible(self._dialogue_active)
+        if self._dialogue_active:
+            speaker = str(
+                _pie_hud_value(dialogue, "speaker_name", "")
+                or _pie_hud_value(dialogue, "speaker_tag", "")
+                or focus_name
+                or "Speaker"
+            )
+            dialogue_text = str(_pie_hud_value(dialogue, "text", "") or "…")
+            choices = _pie_hud_sequence(dialogue, "choices")[:9]
+            choice_rows = tuple(
+                (
+                    int(_pie_hud_value(choice, "number", fallback_number) or fallback_number),
+                    str(_pie_hud_value(choice, "text", "") or "Continue"),
+                )
+                for fallback_number, choice in enumerate(choices, 1)
+            )
+            dialogue_signature = (
+                speaker,
+                dialogue_text,
+                choice_rows,
+                bool(_pie_hud_value(dialogue, "can_continue", False)),
+            )
+            if dialogue_signature != self._dialogue_signature:
+                self._dialogue_signature = dialogue_signature
+                self.dialogue_speaker_label.setText(speaker)
+                self.dialogue_text_label.setText(dialogue_text)
+                self._clear_layout(self.dialogue_choices_layout)
+                for number, text in choice_rows:
+                    button = QtWidgets.QPushButton(f"{number}. {text}", self.dialogue_frame)
+                    button.setObjectName("mapStudioPIEDialogueChoiceButton")
+                    button.setFocusPolicy(QtCore.Qt.NoFocus)
+                    self._apply_game_hud_button_skin(button)
+                    button.clicked.connect(
+                        lambda _checked=False, value=number: self._emit("dialogue_choice", number=value)
+                    )
+                    self.dialogue_choices_layout.addWidget(button)
+                if not choice_rows and bool(_pie_hud_value(dialogue, "can_continue", False)):
+                    button = QtWidgets.QPushButton("Continue", self.dialogue_frame)
+                    button.setObjectName("mapStudioPIEDialogueContinueButton")
+                    button.setFocusPolicy(QtCore.Qt.NoFocus)
+                    self._apply_game_hud_button_skin(button)
+                    button.clicked.connect(lambda: self._emit("dialogue_continue"))
+                    self.dialogue_choices_layout.addWidget(button)
+            # Retail dialog_p overlays LBL_MESSAGE and LB_REPLIES in the same
+            # fixed 544x100 region.  They replace one another; stacking both
+            # makes the conversation panel content-sized and visibly jumps it.
+            self.dialogue_speaker_label.hide()
+            self.dialogue_text_label.setVisible(not bool(choice_rows))
+        elif self._dialogue_signature:
+            self._dialogue_signature = ()
+            self._clear_layout(self.dialogue_choices_layout)
+
+        open_containers = tuple(str(value or "") for value in _pie_hud_sequence(interaction, "open_containers") if str(value or ""))
+        self._container_id = str(
+            _pie_hud_value(snapshot, "open_container_id", "")
+            or _pie_hud_value(snapshot, "container_entity_id", "")
+            or (open_containers[-1] if open_containers else "")
+        )
+        container_items = _pie_hud_sequence(snapshot, "container_items")
+        if not container_items and self._container_id:
+            accessor = getattr(interaction, "container_inventory", None)
+            if callable(accessor):
+                try:
+                    container_items = tuple(accessor(self._container_id) or ())
+                except Exception:
+                    container_items = ()
+            if not container_items:
+                for entity_id, items in _pie_hud_sequence(interaction, "container_inventories"):
+                    if str(entity_id or "") == self._container_id:
+                        container_items = tuple(items or ())
+                        break
+        if not self._container_id and str(_pie_hud_value(snapshot, "command", "")) == "open_container":
+            self._container_id = str(_pie_hud_value(snapshot, "entity_id", "") or "")
+            container_items = _pie_hud_sequence(snapshot, "items")
+        self._inventory_active = bool(self._container_id)
+        self.inventory_frame.setVisible(self._inventory_active)
+        if self._inventory_active:
+            title = str(_pie_hud_value(snapshot, "container_name", "") or focus_name or "Container")
+            item_rows = tuple(
+                (
+                    str(_pie_hud_value(item, "resref", "") or ""),
+                    str(
+                        _pie_hud_value(item, "display_name", "")
+                        or _pie_hud_value(item, "resref", "")
+                        or "Item"
+                    ),
+                    int(_pie_hud_value(item, "quantity", 1) or 1),
+                )
+                for item in container_items
+            )
+            inventory_signature = (self._container_id, title, item_rows)
+            if inventory_signature != self._inventory_signature:
+                self._inventory_signature = inventory_signature
+                self.inventory_title_label.setText(title)
+                self.inventory_list.clear()
+                for resref, display_name, quantity in item_rows:
+                    row = QtWidgets.QListWidgetItem(
+                        f"{display_name} ×{quantity}" if quantity != 1 else display_name
+                    )
+                    row.setData(QtCore.Qt.UserRole, resref)
+                    self.inventory_list.addItem(row)
+                if self.inventory_list.count():
+                    self.inventory_list.setCurrentRow(0)
+                row_height = self.inventory_list.sizeHintForRow(0)
+                if row_height > 0:
+                    self.inventory_list.setMaximumHeight(row_height * min(4, max(1, self.inventory_list.count())) + 8)
+                self.take_button.setEnabled(self.inventory_list.count() > 0)
+                self.take_all_button.setEnabled(self.inventory_list.count() > 0)
+        elif self._inventory_signature:
+            self._inventory_signature = ()
+            self.inventory_list.clear()
+
+        combat_active = bool(_pie_hud_value(combat, "active", False))
+        combatants = _pie_hud_sequence(combat, "combatants")
+        self.combat_frame.setVisible(combat_active)
+        if combat_active:
+            player_id = str(
+                _pie_hud_value(snapshot, "combat_player_id", "")
+                or _pie_hud_value(combat, "player_id", "")
+                or ""
+            )
+            player = next((row for row in combatants if str(_pie_hud_value(row, "entity_id", "")) == player_id), None)
+            if player is None:
+                player = next(
+                    (
+                        row for row in combatants
+                        if "player" in str(_pie_hud_value(row, "entity_id", "")).lower()
+                    ),
+                    combatants[0] if combatants else None,
+                )
+            queued = _pie_hud_sequence(combat, "queued_actions")
+            focus_target = self._focus_id
+            target = next(
+                (
+                    row for row in combatants
+                    if str(_pie_hud_value(row, "entity_id", "")) == focus_target and row is not player
+                ),
+                None,
+            )
+            if target is None and queued:
+                queued_target = str(_pie_hud_value(queued[0], "target_id", "") or "")
+                target = next(
+                    (row for row in combatants if str(_pie_hud_value(row, "entity_id", "")) == queued_target),
+                    None,
+                )
+            if target is None:
+                target = next(
+                    (
+                        row for row in combatants
+                        if row is not player
+                        and bool(_pie_hud_value(row, "engaged", False))
+                        and bool(_pie_hud_value(row, "alive", True))
+                    ),
+                    None,
+                )
+            self._combat_target_id = str(_pie_hud_value(target, "entity_id", "") or "")
+            player_name = str(_pie_hud_value(player, "display_name", "") or "Player")
+            player_hp = int(_pie_hud_value(player, "current_hp", 0) or 0)
+            player_max = int(_pie_hud_value(player, "max_hp", 0) or 0)
+            target_name = str(_pie_hud_value(target, "display_name", "") or "No target")
+            target_hp = int(_pie_hud_value(target, "current_hp", 0) or 0)
+            target_max = int(_pie_hud_value(target, "max_hp", 0) or 0)
+            queued_text = f" · queued {len(queued)}" if queued else ""
+            round_index = int(_pie_hud_value(combat, "round_index", 0) or 0)
+            next_round = _pie_hud_value(combat, "next_round_in", None)
+            next_round_text = (
+                f" · next round {float(next_round):.1f}s"
+                if next_round is not None
+                else ""
+            )
+            self.combat_status_label.setText(
+                f"Round {round_index} (real-time) · {player_name} {player_hp}/{player_max} HP  ·  "
+                f"{target_name} {target_hp}/{target_max} HP{queued_text}"
+                f"{next_round_text}"
+            )
+            combatant_names = {
+                str(_pie_hud_value(row, "entity_id", "") or ""):
+                str(_pie_hud_value(row, "display_name", "") or _pie_hud_value(row, "entity_id", "") or "target")
+                for row in combatants
+            }
+            queue_rows = tuple(
+                f"{index + 1}. Basic Attack → "
+                f"{combatant_names.get(str(_pie_hud_value(action, 'target_id', '') or ''), 'target')}"
+                for index, action in enumerate(queued[:4])
+            )
+            queue_rows += tuple("— empty —" for _index in range(max(0, 4 - len(queue_rows))))
+            self.combat_queue_label.setText("Round action queue:  " + "   |   ".join(queue_rows))
+            paused = bool(_pie_hud_value(combat, "paused", False))
+            self.combat_pause_button.setText("Resume" if paused else "Pause")
+            self.combat_attack_button.setEnabled(bool(self._combat_target_id))
+            self.combat_clear_button.setEnabled(bool(queued))
+
+        modal_active = bool(self._dialogue_active or self._inventory_active)
+        mode = str(_pie_hud_value(snapshot, "mode", "exploration") or "exploration").strip().lower()
+        self._exploration_mode = bool(mode == "exploration" and not modal_active and not combat_active)
+        self.action_strip.setVisible(self._exploration_mode)
+        self.focus_frame.setVisible(bool(focus is not None and not modal_active))
+        self.focus_label.setVisible(bool(focus is not None and not modal_active))
+        self.primary_button.setVisible(bool(focus is not None and not modal_active))
+        self.context_label.setVisible(bool(semantic_state and not modal_active and not self._exploration_mode))
+        if self._exploration_mode:
+            self.focus_frame.hide()
+            self.focus_label.hide()
+            self.primary_button.hide()
+            self.shortcut_label.hide()
+            self._root_layout.setContentsMargins(0, 0, 0, 0)
+            self._root_layout.setSpacing(0)
+            self.setFrameShape(QtWidgets.QFrame.NoFrame)
+            self.setAutoFillBackground(False)
+        elif self._dialogue_active:
+            self.shortcut_label.hide()
+            self._root_layout.setContentsMargins(0, 0, 0, 0)
+            self._root_layout.setSpacing(0)
+            self.setFrameShape(QtWidgets.QFrame.NoFrame)
+            self.setAutoFillBackground(False)
+        else:
+            self.shortcut_label.setVisible(bool(modal_active or combat_active))
+            self.setFrameShape(QtWidgets.QFrame.StyledPanel)
+            self.setAutoFillBackground(True)
+            self._root_layout.setContentsMargins(10, 8, 10, 8)
+            self._root_layout.setSpacing(6)
+        has_content = bool(self._exploration_mode or focus is not None or modal_active or combat_active)
+        self.setVisible(has_content)
+
 
 
 class ModuleEditorViewportPanel(QtWidgets.QWidget):
@@ -62,6 +2688,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     pieMoveInputChanged = QtCore.Signal(object)
     pieDestinationRequested = QtCore.Signal(object)
     pieCameraInputChanged = QtCore.Signal(object)
+    pieGameplayActionRequested = QtCore.Signal(object)
     pieStopRequested = QtCore.Signal()
 
     #: Viewport selection interaction state (marquee + click-vs-drag).
@@ -1547,12 +4174,32 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self.splitter.setStretchFactor(1, 0)
         self.splitter.setSizes([980, 54])
         root.addWidget(self.splitter, 1)
+        pie_canvas = getattr(self.viewport, "canvas", None)
+        if not isinstance(pie_canvas, QtWidgets.QWidget):
+            pie_canvas = self.viewport
+        pie_parent = pie_canvas
+        current_surface = getattr(pie_canvas, "current_surface", lambda: None)()
+        is_live_surface = bool(getattr(pie_canvas, "is_live_surface", lambda: False)())
+        if isinstance(current_surface, QtWidgets.QWidget) and not is_live_surface:
+            pie_parent = current_surface
+        self._pie_gameplay_exploration_chrome = _MapStudioPIEExplorationChrome(pie_parent)
+        self._pie_gameplay_target_overlay = _MapStudioPIETargetOverlay(pie_parent)
+        self._pie_gameplay_hud = _MapStudioPIEGameplayHUD(pie_parent)
+        self._pie_gameplay_hud.set_exploration_chrome(self._pie_gameplay_exploration_chrome)
+        self._pie_gameplay_hud.set_target_overlay(self._pie_gameplay_target_overlay)
+        self._pie_gameplay_hud.actionRequested.connect(self.pieGameplayActionRequested.emit)
+        self._pie_gameplay_state: object | None = None
+        self._pie_gameplay_hud_geometry_key: tuple[int, ...] | None = None
         self._row_ids: list[str] = []
         self._placement_markers: dict[str, object] = {}
         self._placement_marker_geometry: object | None = None
         self._pie_overlay_geometry: object | None = None
         self._pie_active = False
         self._pie_held_keys: set[int] = set()
+        self._pie_focus_repeat_key: int | None = None
+        self._pie_focus_repeat_timer = QtCore.QTimer(self)
+        self._pie_focus_repeat_timer.setSingleShot(True)
+        self._pie_focus_repeat_timer.timeout.connect(self._repeat_map_studio_pie_focus)
         self._pie_previous_hover: tuple[bool, str] | None = None
         self._pie_previous_generic_hover: bool | None = None
         self._pie_previous_viewcube_visible: bool | None = None
@@ -1563,6 +4210,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._pie_camera_dragging = False
         self._pie_camera_last_screen: tuple[float, float] | None = None
         self._pie_free_look = False
+        self._pie_last_world_press_activation_id = ""
         self._room_preview_model: object | None = None
         self._room_preview_model_key = ""
         self._component_mesh_preview_baselines: dict[int, tuple[object, dict[str, object]]] = {}
@@ -1939,8 +4587,35 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self.viewport.set_renderer_settings(settings)
 
     def eventFilter(self, watched: QtCore.QObject, event: QtCore.QEvent) -> bool:  # noqa: N802 - Qt API
+        event_type = event.type()
+        viewport = getattr(self, "viewport", None)
+        canvas = getattr(viewport, "canvas", None)
+        if (watched is viewport or watched is canvas) and event_type == QtCore.QEvent.Resize:
+            QtCore.QTimer.singleShot(0, self._position_map_studio_pie_gameplay_hud)
+        if watched is canvas and event_type in {
+            QtCore.QEvent.ChildAdded,
+            QtCore.QEvent.ChildRemoved,
+            QtCore.QEvent.LayoutRequest,
+        }:
+            # A renderer surface replacement reparents/deletes the old QLabel
+            # asynchronously.  Move PIE layers to the replacement before the
+            # old surface's deferred delete can take its children with it.
+            QtCore.QTimer.singleShot(0, self._position_map_studio_pie_gameplay_hud)
+            # The panel's Map Studio/PIE event filters are installed on the
+            # concrete renderer child as well as the host.  A backend switch
+            # replaces that child, so bind the replacement after Qt finishes
+            # the reparent/layout transaction.  Relying only on the viewport's
+            # generic input bridge loses panel-only events (notably the second
+            # half of a focus-then-double-click interaction).
+            QtCore.QTimer.singleShot(0, self._install_marker_pick_filters)
+        if self._is_pie_gameplay_hud_event_source(watched):
+            if (
+                bool(getattr(self, "_pie_active", False))
+                and event_type in {QtCore.QEvent.KeyPress, QtCore.QEvent.KeyRelease}
+            ):
+                return self._handle_pie_input_event(event, watched)
+            return False
         if self._is_marker_pick_event_source(watched):
-            event_type = event.type()
             # Qt may deliver child-attach/focus events while __init__ is still
             # assembling the viewport.  PIE state is assigned later in that
             # constructor, so this guard must be construction-safe.
@@ -2367,6 +5042,564 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 band.hide()
         self._map_studio_click_candidate = None
 
+    def _is_pie_gameplay_hud_event_source(self, watched: QtCore.QObject | None) -> bool:
+        hud = getattr(self, "_pie_gameplay_hud", None)
+        return bool(
+            isinstance(hud, QtWidgets.QWidget)
+            and isinstance(watched, QtWidgets.QWidget)
+            and (watched is hud or hud.isAncestorOf(watched))
+        )
+
+    def _map_studio_pie_canvas_widget(self) -> QtWidgets.QWidget | None:
+        """Return the widget whose local coordinates the renderer projection uses."""
+
+        viewport = getattr(self, "viewport", None)
+        canvas = getattr(viewport, "canvas", None)
+        if isinstance(canvas, QtWidgets.QWidget):
+            return canvas
+        return viewport if isinstance(viewport, QtWidgets.QWidget) else None
+
+    def _map_studio_pie_presentation_parent_widget(self) -> QtWidgets.QWidget | None:
+        """Return the parent that composites transparent HUD pixels over the scene."""
+
+        canvas = self._map_studio_pie_canvas_widget()
+        if canvas is None:
+            return None
+        current_surface = getattr(canvas, "current_surface", lambda: None)()
+        is_live_surface = bool(getattr(canvas, "is_live_surface", lambda: False)())
+        if isinstance(current_surface, QtWidgets.QWidget) and not is_live_surface:
+            return current_surface
+        return canvas
+
+    def _position_map_studio_pie_gameplay_hud(self) -> None:
+        hud = getattr(self, "_pie_gameplay_hud", None)
+        canvas = self._map_studio_pie_canvas_widget()
+        presentation_parent = self._map_studio_pie_presentation_parent_widget()
+        if not isinstance(hud, QtWidgets.QWidget) or canvas is None or presentation_parent is None:
+            return
+        target_overlay = getattr(self, "_pie_gameplay_target_overlay", None)
+        exploration_chrome = getattr(self, "_pie_gameplay_exploration_chrome", None)
+        layers_reparented = False
+        for layer in (exploration_chrome, target_overlay, hud):
+            if isinstance(layer, QtWidgets.QWidget) and layer.parentWidget() is not presentation_parent:
+                was_visible = layer.isVisible()
+                layer.setParent(presentation_parent)
+                layer.setVisible(was_visible)
+                layers_reparented = True
+        if isinstance(exploration_chrome, QtWidgets.QWidget):
+            exploration_chrome.setGeometry(presentation_parent.rect())
+            exploration_chrome.set_frame_composited(
+                not bool(getattr(canvas, "is_live_surface", lambda: False)())
+            )
+        if isinstance(target_overlay, QtWidgets.QWidget):
+            target_overlay.setGeometry(presentation_parent.rect())
+            target_overlay.set_frame_composited(
+                not bool(getattr(canvas, "is_live_surface", lambda: False)())
+            )
+        exploration_mode = bool(getattr(hud, "exploration_mode", False))
+        dialogue_mode = bool(getattr(hud, "dialogue_active", False))
+        dialogue_extent = hud.dialogue_authored_extent() if dialogue_mode else ()
+        hint = hud.sizeHint() if not dialogue_mode else QtCore.QSize()
+        geometry_key = (
+            canvas.width(),
+            canvas.height(),
+            id(presentation_parent),
+            hint.width(),
+            hint.height(),
+            int(exploration_mode),
+            int(dialogue_mode),
+            tuple(round(float(value), 3) for value in dialogue_extent),
+        )
+        if geometry_key == self._pie_gameplay_hud_geometry_key and not layers_reparented:
+            return
+        self._pie_gameplay_hud_geometry_key = geometry_key
+        margin = max(6, self.fontMetrics().height() // 2)
+        if exploration_mode:
+            scale = max(0.35, min(float(canvas.width()) / 800.0, float(canvas.height()) / 600.0))
+            hud.set_exploration_scale(scale)
+            hud.setFixedSize(
+                max(1, int(round(250.0 * scale))),
+                max(1, int(round(100.0 * scale))),
+            )
+            bottom_margin = max(1, int(round(6.0 * scale)))
+            hud.move(0, max(0, canvas.height() - hud.height() - bottom_margin))
+            self._raise_map_studio_pie_gameplay_layers()
+            return
+        if dialogue_mode:
+            # dialog_p is authored in a 640x480 coordinate space.  Its root is
+            # the stable (48,378,544,100) lower conversation rectangle; message
+            # and reply controls occupy that same space and never resize it.
+            authored_left, authored_top, authored_width, authored_height = dialogue_extent
+            authored_canvas_width = 640.0
+            authored_canvas_height = 480.0
+            scale = max(
+                0.10,
+                min(
+                    float(canvas.width()) / authored_canvas_width,
+                    float(canvas.height()) / authored_canvas_height,
+                ),
+            )
+            width = max(1, min(canvas.width(), int(round(authored_width * scale))))
+            height = max(1, min(canvas.height(), int(round(authored_height * scale))))
+            bottom_margin = max(
+                0,
+                int(round((authored_canvas_height - authored_top - authored_height) * scale)),
+            )
+            hud.setFixedSize(width, height)
+            hud.move(
+                max(0, (canvas.width() - width) // 2),
+                max(0, canvas.height() - height - bottom_margin),
+            )
+            self._raise_map_studio_pie_gameplay_layers()
+            return
+        hud.setMinimumSize(0, 0)
+        hud.setMaximumSize(max(1, canvas.width()), max(1, canvas.height()))
+        available_width = max(1, canvas.width() - (margin * 2))
+        preferred_width = max(
+            hud.minimumSizeHint().width(),
+            self.fontMetrics().averageCharWidth() * 52,
+        )
+        hud.setFixedWidth(min(available_width, preferred_width))
+        hud.adjustSize()
+        available_height = max(1, canvas.height() - (margin * 2))
+        hud.resize(hud.width(), min(hud.height(), available_height))
+        hud.move(
+            max(margin, (canvas.width() - hud.width()) // 2),
+            max(margin, canvas.height() - hud.height() - margin),
+        )
+        self._raise_map_studio_pie_gameplay_layers()
+
+    def _raise_map_studio_pie_gameplay_layers(self) -> None:
+        """Establish stable chrome/target/action stacking after geometry changes."""
+
+        for layer in (
+            getattr(self, "_pie_gameplay_exploration_chrome", None),
+            getattr(self, "_pie_gameplay_target_overlay", None),
+            getattr(self, "_pie_gameplay_hud", None),
+        ):
+            if isinstance(layer, QtWidgets.QWidget):
+                layer.raise_()
+
+    def _sync_map_studio_pie_target_overlay(self, snapshot: object | None) -> None:
+        """Project the current headless focus into the K2 screen-space overlay."""
+
+        overlay = getattr(self, "_pie_gameplay_target_overlay", None)
+        canvas = self._map_studio_pie_canvas_widget()
+        if not isinstance(overlay, _MapStudioPIETargetOverlay) or canvas is None:
+            return
+        mode = str(_pie_hud_value(snapshot, "mode", "exploration") or "exploration").strip().lower()
+        focus = _pie_hud_value(snapshot, "focus", None)
+        if mode != "exploration" or focus is None:
+            overlay.clear_target()
+            return
+        entity_id = self._normalize_map_studio_pie_entity_id(
+            _pie_hud_value(focus, "entity_id", "")
+        )
+        live_positions = self._map_studio_pie_live_world_target_positions((entity_id,))
+        position = tuple(
+            live_positions.get(entity_id, _pie_hud_value(focus, "position", ())) or ()
+        )
+        if len(position) < 3:
+            overlay.clear_target()
+            return
+        kind = str(_pie_hud_value(focus, "kind", "") or "").strip().lower()
+        height = {
+            "creature": 1.55,
+            "door": 1.15,
+            "placeable": 0.85,
+            "store": 1.35,
+        }.get(kind, 0.90)
+        projected_top_depth = self._project_world_to_screen_depth(
+            (float(position[0]), float(position[1]), float(position[2]) + height)
+        )
+        projected_base_depth = self._project_world_to_screen_depth(
+            (float(position[0]), float(position[1]), float(position[2]))
+        )
+        projected_top = (
+            (float(projected_top_depth[0]), float(projected_top_depth[1]))
+            if projected_top_depth is not None
+            else None
+        )
+        projected_base = (
+            (float(projected_base_depth[0]), float(projected_base_depth[1]))
+            if projected_base_depth is not None
+            else None
+        )
+        # Gameplay focus depth is an angular-selection value captured before
+        # this render tick.  It can be negative under a camera/player-facing
+        # sign mismatch even when the retained actor is visibly in front of
+        # the current viewport.  Use the same current camera-space projection
+        # as world clicking so the target plate stays attached to what was hit.
+        depth = float(projected_top_depth[2]) if projected_top_depth is not None else 0.0
+        onscreen = bool(
+            projected_top is not None
+            and depth > 0.0
+            and 0.0 <= projected_top[0] <= float(canvas.width())
+            and 0.0 <= projected_top[1] <= float(canvas.height())
+        )
+        if projected_top is None or depth <= 0.0:
+            side = float(_pie_hud_value(focus, "camera_side_alignment", 0.0) or 0.0)
+            forward = float(_pie_hud_value(focus, "forward_alignment", 0.0) or 0.0)
+            side_sign = side if abs(side) > 1.0e-4 else 1.0
+            projected_top = (
+                (canvas.width() * 0.5) - (side_sign * canvas.width()),
+                (canvas.height() * 0.5) + (max(0.0, -forward) * canvas.height()),
+            )
+        current_hp = max(0, int(_pie_hud_value(focus, "current_hp", 0) or 0))
+        max_hp = max(0, int(_pie_hud_value(focus, "max_hp", 0) or 0))
+        health_fraction = (float(current_hp) / float(max_hp)) if max_hp else 1.0
+        reticle_size = None
+        if depth > 0.0 and projected_top is not None and projected_base is not None:
+            projected_height = abs(float(projected_base[1]) - float(projected_top[1]))
+            if projected_height > 1.0:
+                # Ghidra confirms the selected-target *2 reticle is sized by
+                # distance.  Projected target height supplies the equivalent
+                # renderer-side signal without inventing an engine distance
+                # formula whose constants have not yet been recovered.
+                reticle_side = max(22.0, min(64.0, projected_height * 0.55))
+                reticle_size = (reticle_side, reticle_side)
+        overlay.set_target(
+            name=str(_pie_hud_value(focus, "display_name", "") or ""),
+            point=projected_top,
+            onscreen=onscreen,
+            health_fraction=health_fraction,
+            in_range=bool(_pie_hud_value(focus, "in_range", False)),
+            hostile=str(_pie_hud_value(focus, "semantic_state", "") or "").strip().lower() == "hostile",
+            reticle_size=reticle_size,
+        )
+
+    def _compose_map_studio_pie_target_into_frame(self, image: QtGui.QImage) -> None:
+        """Paint the current focus into the same image publication as the 3D scene."""
+
+        if not bool(getattr(self, "_pie_active", False)) or image is None or image.isNull():
+            return
+        chrome = getattr(self, "_pie_gameplay_exploration_chrome", None)
+        overlay = getattr(self, "_pie_gameplay_target_overlay", None)
+        if not isinstance(chrome, _MapStudioPIEExplorationChrome) and not isinstance(
+            overlay,
+            _MapStudioPIETargetOverlay,
+        ):
+            return
+        # Projection belongs to this presentation boundary: it uses the exact
+        # camera/actor state that produced the scene pixels below it.
+        if isinstance(overlay, _MapStudioPIETargetOverlay):
+            self._sync_map_studio_pie_target_overlay(self._pie_gameplay_state)
+        painter = QtGui.QPainter(image)
+        try:
+            if isinstance(chrome, _MapStudioPIEExplorationChrome):
+                chrome._paint_chrome(painter)
+            if isinstance(overlay, _MapStudioPIETargetOverlay):
+                overlay._paint_target(painter, image.width(), image.height())
+        finally:
+            painter.end()
+
+    def refresh_map_studio_pie_target_overlay(self) -> None:
+        """Refresh projection after a camera-only frame without rebuilding HUD state."""
+
+        if bool(getattr(self, "_pie_active", False)):
+            self._sync_map_studio_pie_target_overlay(self._pie_gameplay_state)
+
+    def set_map_studio_pie_gameplay_state(self, snapshot: object | None) -> None:
+        """Present a runtime-only gameplay snapshot without owning its rules."""
+
+        self._pie_gameplay_state = snapshot
+        hud = getattr(self, "_pie_gameplay_hud", None)
+        if not isinstance(hud, _MapStudioPIEGameplayHUD):
+            return
+        if not bool(getattr(self, "_pie_active", False)):
+            hud.hide()
+            return
+        hud.set_state(snapshot)
+        self._sync_map_studio_pie_target_overlay(snapshot)
+        if hud.modal_active and self._pie_held_keys:
+            self._stop_map_studio_pie_focus_repeat(clear_keys=True)
+            self._pie_held_keys.clear()
+            self._emit_pie_move_input()
+        self._position_map_studio_pie_gameplay_hud()
+
+    def configure_map_studio_pie_game_hud(
+        self,
+        manager: object,
+        game: str,
+        *,
+        module_root: str = "",
+        player_portrait_resref: str = "",
+    ) -> str:
+        """Resolve presentation assets from the selected target installation."""
+
+        hud = getattr(self, "_pie_gameplay_hud", None)
+        if not isinstance(hud, _MapStudioPIEGameplayHUD):
+            return "PIE gameplay HUD is unavailable; the simulation will continue without its overlay."
+        warning = hud.configure_game_resources(
+            manager,
+            game,
+            module_root=module_root,
+            player_portrait_resref=player_portrait_resref,
+        )
+        self._pie_gameplay_hud_geometry_key = None
+        if bool(getattr(self, "_pie_active", False)):
+            self._position_map_studio_pie_gameplay_hud()
+        return warning
+
+    def map_studio_pie_game_hud_skin_state(self) -> dict[str, object]:
+        """Expose resource provenance for diagnostics and the future GUI editor."""
+
+        hud = getattr(self, "_pie_gameplay_hud", None)
+        if not isinstance(hud, _MapStudioPIEGameplayHUD):
+            return {
+                "source": "unavailable",
+                "pixel_parity": False,
+                "warning": "PIE gameplay HUD is unavailable.",
+            }
+        return hud.game_hud_skin_state()
+
+    def clear_map_studio_pie_gameplay_state(self) -> None:
+        self._pie_gameplay_state = None
+        self._pie_gameplay_hud_geometry_key = None
+        hud = getattr(self, "_pie_gameplay_hud", None)
+        if isinstance(hud, _MapStudioPIEGameplayHUD):
+            hud.clear_state()
+        overlay = getattr(self, "_pie_gameplay_target_overlay", None)
+        if isinstance(overlay, _MapStudioPIETargetOverlay):
+            overlay.clear_target()
+
+    @staticmethod
+    def _normalize_map_studio_pie_entity_id(value: object) -> str:
+        candidate = str(value or "").strip()
+        if not candidate or candidate == "__map_studio_pie_player__":
+            return ""
+        for prefix in (
+            "__map_studio_pie_creature__:",
+            "__map_studio_pie_door__:",
+            "__map_studio_pie_placeable__:",
+        ):
+            if candidate.startswith(prefix):
+                return candidate[len(prefix) :]
+        if candidate.startswith("__map_studio_pie_"):
+            return ""
+        return candidate
+
+    def _map_studio_pie_entity_at_screen(self, screen: tuple[float, float]) -> str:
+        """Resolve a rendered surface or depth-proved gameplay target volume.
+
+        An exact entity mesh hit always wins.  Retained Odyssey actors are
+        animated from pose palettes after their CPU triangles were uploaded,
+        however, so the generic editor ray can miss the visible pose and hit a
+        room behind it.  In that case PIE tests the registry-derived projected
+        selection volumes and accepts only a target whose camera depth is in
+        front of that same scene hit.  Authoring marker hit-zones are never
+        consulted, so nearer walls continue to block interaction.
+        """
+
+        picker = getattr(self.viewport, "_mesh_hit_test_detail", None)
+        hit = None
+        if callable(picker):
+            try:
+                hit = picker(int(round(screen[0])), int(round(screen[1])))
+            except Exception:
+                hit = None
+            node = hit[0] if isinstance(hit, tuple) and hit else None
+            stack = [node]
+            seen: set[int] = set()
+            while stack:
+                current = stack.pop()
+                if current is None or id(current) in seen:
+                    continue
+                seen.add(id(current))
+                for attribute in (
+                    "_gr_scene_object_id",
+                    "_gr_scene_import_id",
+                    "_gr_map_studio_placement_id",
+                ):
+                    raw_id = str(getattr(current, attribute, "") or "")
+                    if (
+                        attribute != "_gr_map_studio_placement_id"
+                        and not raw_id.startswith("__map_studio_pie_")
+                    ):
+                        continue
+                    entity_id = self._normalize_map_studio_pie_entity_id(
+                        raw_id
+                    )
+                    if entity_id:
+                        return entity_id
+                stack.extend(
+                    (
+                        getattr(current, "_gr_scene_object_root_ref", None),
+                        getattr(current, "parent", None),
+                    )
+                )
+        if hit is None:
+            return self._map_studio_pie_projected_entity_at_screen(screen, occluder_depth=None)
+
+        # A static scene hit must carry the exact hit point from this pointer
+        # request before it can be compared with projected camera depths.  If a
+        # backend cannot provide that proof, fail closed instead of selecting
+        # an entity through unknown geometry.
+        pick_hit = getattr(self.viewport, "_last_pick_hit", None)
+        pick_screen = tuple(getattr(pick_hit, "screen_position", ()) or ())
+        hit_world = tuple(getattr(pick_hit, "world_position", ()) or ())
+        if (
+            len(pick_screen) < 2
+            or abs(float(pick_screen[0]) - float(screen[0])) > 1.0
+            or abs(float(pick_screen[1]) - float(screen[1])) > 1.0
+            or len(hit_world) < 3
+        ):
+            return ""
+        projected_hit = self._project_world_to_screen_depth(hit_world)
+        if projected_hit is None:
+            return ""
+        return self._map_studio_pie_projected_entity_at_screen(
+            screen,
+            occluder_depth=float(projected_hit[2]),
+        )
+
+    def _map_studio_pie_projected_entity_at_screen(
+        self,
+        screen: tuple[float, float],
+        *,
+        occluder_depth: float | None,
+    ) -> str:
+        """Pick the nearest projected gameplay selection capsule at ``screen``."""
+
+        candidates: list[tuple[float, float, str]] = []
+        targets = _pie_hud_sequence(self._pie_gameplay_state, "world_targets")
+        target_ids = tuple(
+            self._normalize_map_studio_pie_entity_id(_pie_hud_value(target, "entity_id", ""))
+            for target in targets
+        )
+        live_positions = self._map_studio_pie_live_world_target_positions(target_ids)
+        for target in targets:
+            entity_id = self._normalize_map_studio_pie_entity_id(
+                _pie_hud_value(target, "entity_id", "")
+            )
+            position = tuple(
+                live_positions.get(entity_id, _pie_hud_value(target, "position", ())) or ()
+            )
+            if not entity_id or len(position) < 3:
+                continue
+            try:
+                x, y, z = (float(value) for value in position[:3])
+                radius = max(0.1, float(_pie_hud_value(target, "target_radius", 0.5) or 0.5))
+                height = max(0.2, float(_pie_hud_value(target, "height", 0.9) or 0.9))
+            except (TypeError, ValueError):
+                continue
+            base = self._project_world_to_screen_depth((x, y, z))
+            top = self._project_world_to_screen_depth((x, y, z + height))
+            center = self._project_world_to_screen_depth((x, y, z + (height * 0.5)))
+            if base is None or top is None or center is None or center[2] <= 0.0:
+                continue
+
+            radius_samples = (
+                self._project_world_to_screen_depth((x + radius, y, z + (height * 0.5))),
+                self._project_world_to_screen_depth((x - radius, y, z + (height * 0.5))),
+                self._project_world_to_screen_depth((x, y + radius, z + (height * 0.5))),
+                self._project_world_to_screen_depth((x, y - radius, z + (height * 0.5))),
+            )
+            screen_radius = max(
+                (
+                    math.hypot(float(sample[0]) - float(center[0]), float(sample[1]) - float(center[1]))
+                    for sample in radius_samples
+                    if sample is not None
+                ),
+                default=0.0,
+            )
+            # Preserve a small retail-style click affordance for distant
+            # interactables without inflating it into an authoring marker.
+            screen_radius = max(4.0, screen_radius)
+            distance_sq = _pie_screen_capsule_distance_squared(
+                screen,
+                (float(base[0]), float(base[1])),
+                (float(top[0]), float(top[1])),
+            )
+            if distance_sq > screen_radius * screen_radius:
+                continue
+            target_depth = float(center[2])
+            if occluder_depth is not None and float(occluder_depth) + 0.18 < target_depth:
+                continue
+            candidates.append((target_depth, distance_sq / (screen_radius * screen_radius), entity_id))
+        if not candidates:
+            return ""
+        candidates.sort(key=lambda row: (row[0], row[1], row[2]))
+        return candidates[0][2]
+
+    def _map_studio_pie_live_world_target_positions(
+        self,
+        entity_ids: tuple[str, ...],
+    ) -> dict[str, tuple[float, float, float]]:
+        """Read current retained actor/group roots once for click-time projection."""
+
+        wanted = {str(value or "") for value in entity_ids if str(value or "")}
+        if not wanted:
+            return {}
+        root = getattr(getattr(self, "_room_preview_model", None), "root_node", None)
+        result: dict[str, tuple[float, float, float]] = {}
+        for node in tuple(getattr(root, "children", ()) or ()):
+            raw_id = str(
+                getattr(node, "_gr_scene_object_id", "")
+                or getattr(node, "_gr_scene_import_id", "")
+                or getattr(node, "_gr_map_studio_placement_id", "")
+                or ""
+            )
+            entity_id = self._normalize_map_studio_pie_entity_id(raw_id)
+            if entity_id not in wanted or entity_id in result:
+                continue
+            try:
+                world_position, _world_rotation = node.world_transform()
+                values = tuple(float(value) for value in tuple(world_position)[:3])
+            except Exception:
+                try:
+                    values = tuple(float(value) for value in tuple(getattr(node, "position", ()))[:3])
+                except (TypeError, ValueError):
+                    values = ()
+            if len(values) == 3 and all(math.isfinite(value) for value in values):
+                result[entity_id] = values  # type: ignore[assignment]
+        return result
+
+    def _map_studio_pie_focused_entity_id(self) -> str:
+        focus = _pie_hud_value(self._pie_gameplay_state, "focus", None)
+        return self._normalize_map_studio_pie_entity_id(
+            _pie_hud_value(focus, "entity_id", "")
+        )
+
+    def _route_map_studio_pie_world_entity_click(self, entity_id: str) -> bool:
+        """Focus on first world click; activate only an already retained focus."""
+
+        wanted = self._normalize_map_studio_pie_entity_id(entity_id)
+        if not wanted:
+            self._pie_last_world_press_activation_id = ""
+            return False
+        if wanted != self._map_studio_pie_focused_entity_id():
+            self._pie_last_world_press_activation_id = ""
+            self.pieGameplayActionRequested.emit(
+                {"command": "focus_entity", "entity_id": wanted}
+            )
+            return True
+        # This is the world-space equivalent of activating the retained target.
+        # The window routes it through the same headless session action router;
+        # the projected target plate and HUD/Enter keep their existing primary
+        # action-slot path.
+        self._pie_last_world_press_activation_id = wanted
+        self.pieGameplayActionRequested.emit(
+            {"command": "interact_entity", "entity_id": wanted}
+        )
+        return True
+
+    def _activate_map_studio_pie_projected_target_at_screen(
+        self,
+        screen: tuple[float, float],
+    ) -> bool:
+        """Activate only a click inside the selected target's painted HUD geometry."""
+
+        overlay = getattr(self, "_pie_gameplay_target_overlay", None)
+        if not isinstance(overlay, _MapStudioPIETargetOverlay) or not overlay.target_hit_test(screen):
+            return False
+        hud = getattr(self, "_pie_gameplay_hud", None)
+        if isinstance(hud, _MapStudioPIEGameplayHUD):
+            hud.request_primary_action()
+        # Consume a projected-target click even when its selected action is
+        # disabled, so it cannot accidentally become a walk destination.
+        return True
+
     def set_map_studio_pie_active(self, active: bool) -> None:
         """Give runtime navigation input precedence without mutating KMAP state."""
 
@@ -2374,10 +5607,18 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if wanted == bool(self._pie_active):
             return
         self._pie_active = wanted
+        set_compositor = getattr(self.viewport, "set_runtime_qimage_compositor", None)
+        if callable(set_compositor):
+            set_compositor(
+                self._compose_map_studio_pie_target_into_frame if wanted else None,
+                request_render=False,
+            )
+        self._stop_map_studio_pie_focus_repeat(clear_keys=True)
         self._pie_held_keys.clear()
         self._pie_camera_dragging = False
         self._pie_camera_last_screen = None
         self._pie_free_look = False
+        self._pie_last_world_press_activation_id = ""
         self._map_studio_click_candidate = None
         if wanted:
             self._cancel_map_studio_selection_marquees()
@@ -2428,8 +5669,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 suppress(True)
             self._sync_marker_geometry_overlay()
             self.marker_summary_label.setText(
-                "Simulation — not KOTOR proof | W/S move, Z/C strafe, A/D turn, Ctrl/MMB look, Caps Lock free-look; Esc stops."
+                "Simulation — not KOTOR proof | W/S move, Q/E focus, Enter interact, 1–9 reply, Space pause; Esc closes or stops."
             )
+            if self._pie_gameplay_state is not None:
+                self.set_map_studio_pie_gameplay_state(self._pie_gameplay_state)
         else:
             self.pieMoveInputChanged.emit({"forward": 0.0, "strafe": 0.0, "run": False})
             previous = self._pie_previous_hover or (False, "")
@@ -2465,6 +5708,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             if callable(suppress):
                 suppress(False)
             self._pie_overlay_geometry = None
+            self.clear_map_studio_pie_gameplay_state()
             self._sync_marker_geometry_overlay()
             self._restore_marker_summary_after_transform_snap()
         self._install_marker_pick_filters()
@@ -2504,9 +5748,65 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             }
         )
 
+    def _stop_map_studio_pie_focus_repeat(self, *, clear_keys: bool = False) -> None:
+        """Stop the executable-matched Q/E repeat without relying on OS repeat."""
+
+        timer = getattr(self, "_pie_focus_repeat_timer", None)
+        if isinstance(timer, QtCore.QTimer):
+            timer.stop()
+        self._pie_focus_repeat_key = None
+        if clear_keys:
+            self._pie_held_keys.discard(QtCore.Qt.Key_Q)
+            self._pie_held_keys.discard(QtCore.Qt.Key_E)
+
+    def _emit_map_studio_pie_focus_cycle(self, key: int) -> bool:
+        hud = getattr(self, "_pie_gameplay_hud", None)
+        if not bool(getattr(self, "_pie_active", False)) or (
+            isinstance(hud, _MapStudioPIEGameplayHUD) and hud.modal_active
+        ):
+            self._stop_map_studio_pie_focus_repeat(clear_keys=True)
+            return False
+        self.pieGameplayActionRequested.emit(
+            {
+                "command": "focus_cycle",
+                "direction": -1 if key == QtCore.Qt.Key_Q else 1,
+            }
+        )
+        return True
+
+    def _begin_map_studio_pie_focus_repeat(self, key: int) -> None:
+        if key in self._pie_held_keys:
+            return
+        self._pie_held_keys.add(key)
+        self._pie_focus_repeat_key = key
+        if self._emit_map_studio_pie_focus_cycle(key):
+            self._pie_focus_repeat_timer.start(500)
+
+    def _release_map_studio_pie_focus_repeat(self, key: int) -> None:
+        self._pie_held_keys.discard(key)
+        if self._pie_focus_repeat_key != key:
+            return
+        self._stop_map_studio_pie_focus_repeat()
+        remaining = next(
+            (candidate for candidate in (QtCore.Qt.Key_E, QtCore.Qt.Key_Q) if candidate in self._pie_held_keys),
+            None,
+        )
+        if remaining is not None:
+            self._pie_focus_repeat_key = remaining
+            self._pie_focus_repeat_timer.start(500)
+
+    def _repeat_map_studio_pie_focus(self) -> None:
+        key = self._pie_focus_repeat_key
+        if key not in {QtCore.Qt.Key_Q, QtCore.Qt.Key_E} or key not in self._pie_held_keys:
+            self._stop_map_studio_pie_focus_repeat()
+            return
+        if self._emit_map_studio_pie_focus_cycle(key):
+            self._pie_focus_repeat_timer.start(60)
+
     def _handle_pie_input_event(self, event: QtCore.QEvent, watched: QtCore.QObject | None = None) -> bool:
         event_type = event.type()
         if event_type in {QtCore.QEvent.Leave, QtCore.QEvent.FocusOut}:
+            self._stop_map_studio_pie_focus_repeat(clear_keys=True)
             if self._pie_held_keys:
                 self._pie_held_keys.clear()
                 self._emit_pie_move_input()
@@ -2515,11 +5815,69 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return False
         if event_type in {QtCore.QEvent.KeyPress, QtCore.QEvent.KeyRelease}:
             key = getattr(event, "key", lambda: None)()
-            if event_type == QtCore.QEvent.KeyPress and key == QtCore.Qt.Key_Escape:
-                self.pieStopRequested.emit()
+            pressed = event_type == QtCore.QEvent.KeyPress
+            auto_repeat = bool(getattr(event, "isAutoRepeat", lambda: False)())
+            if key == QtCore.Qt.Key_Escape:
+                if pressed and not auto_repeat:
+                    hud = getattr(self, "_pie_gameplay_hud", None)
+                    if isinstance(hud, _MapStudioPIEGameplayHUD) and hud.modal_active:
+                        self.pieGameplayActionRequested.emit({"command": "modal_close"})
+                    else:
+                        self.pieStopRequested.emit()
                 return True
-            if event_type == QtCore.QEvent.KeyPress and key == QtCore.Qt.Key_CapsLock:
-                if not bool(getattr(event, "isAutoRepeat", lambda: False)()):
+            if key == QtCore.Qt.Key_Tab:
+                if pressed and not auto_repeat:
+                    modifiers = getattr(event, "modifiers", lambda: QtCore.Qt.NoModifier)()
+                    self.pieGameplayActionRequested.emit(
+                        {
+                            "command": "focus_cycle",
+                            "direction": -1 if bool(modifiers & QtCore.Qt.ShiftModifier) else 1,
+                        }
+                    )
+                return True
+            if key in {QtCore.Qt.Key_Q, QtCore.Qt.Key_E}:
+                hud = getattr(self, "_pie_gameplay_hud", None)
+                if isinstance(hud, _MapStudioPIEGameplayHUD) and hud.modal_active:
+                    self._stop_map_studio_pie_focus_repeat(clear_keys=True)
+                    return True
+                if auto_repeat:
+                    return True
+                if pressed:
+                    self._begin_map_studio_pie_focus_repeat(key)
+                else:
+                    self._release_map_studio_pie_focus_repeat(key)
+                return True
+            if key in {QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter}:
+                if pressed and not auto_repeat:
+                    hud = getattr(self, "_pie_gameplay_hud", None)
+                    if isinstance(hud, _MapStudioPIEGameplayHUD):
+                        hud.request_primary_action()
+                    else:
+                        self.pieGameplayActionRequested.emit({"command": "primary"})
+                return True
+            dialogue_numbers = {
+                QtCore.Qt.Key_1: 1,
+                QtCore.Qt.Key_2: 2,
+                QtCore.Qt.Key_3: 3,
+                QtCore.Qt.Key_4: 4,
+                QtCore.Qt.Key_5: 5,
+                QtCore.Qt.Key_6: 6,
+                QtCore.Qt.Key_7: 7,
+                QtCore.Qt.Key_8: 8,
+                QtCore.Qt.Key_9: 9,
+            }
+            if key in dialogue_numbers:
+                if pressed and not auto_repeat:
+                    self.pieGameplayActionRequested.emit(
+                        {"command": "dialogue_choice", "number": dialogue_numbers[key]}
+                    )
+                return True
+            if key == QtCore.Qt.Key_Space:
+                if pressed and not auto_repeat:
+                    self.pieGameplayActionRequested.emit({"command": "combat_toggle_pause"})
+                return True
+            if key == QtCore.Qt.Key_CapsLock:
+                if pressed and not auto_repeat:
                     self._pie_free_look = not self._pie_free_look
                     self._pie_camera_last_screen = None
                     state = "on" if self._pie_free_look else "off"
@@ -2535,9 +5893,15 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 QtCore.Qt.Key_Shift,
                 QtCore.Qt.Key_Control,
             }:
-                if bool(getattr(event, "isAutoRepeat", lambda: False)()):
+                hud = getattr(self, "_pie_gameplay_hud", None)
+                if isinstance(hud, _MapStudioPIEGameplayHUD) and hud.modal_active:
+                    if self._pie_held_keys:
+                        self._pie_held_keys.clear()
+                        self._emit_pie_move_input()
                     return True
-                if event_type == QtCore.QEvent.KeyPress:
+                if auto_repeat:
+                    return True
+                if pressed:
                     self._pie_held_keys.add(key)
                 else:
                     self._pie_held_keys.discard(key)
@@ -2557,10 +5921,20 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             if button == QtCore.Qt.LeftButton:
                 if self._map_studio_hover_navigation_active(event):
                     return False
+                hud = getattr(self, "_pie_gameplay_hud", None)
+                if isinstance(hud, _MapStudioPIEGameplayHUD) and hud.modal_active:
+                    return True
                 focus = getattr(watched, "setFocus", None)
                 if callable(focus):
                     focus()
                 screen = self._event_position(event, watched)
+                if screen is not None and self._activate_map_studio_pie_projected_target_at_screen(screen):
+                    self._pie_last_world_press_activation_id = ""
+                    return True
+                entity_id = self._map_studio_pie_entity_at_screen(screen) if screen is not None else ""
+                if self._route_map_studio_pie_world_entity_click(entity_id):
+                    return True
+                self._pie_last_world_press_activation_id = ""
                 point = self._map_studio_pie_destination_at_screen(screen) if screen is not None else None
                 if point is not None:
                     self.pieDestinationRequested.emit(point)
@@ -2569,6 +5943,20 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                         "Simulation destination rejected: click a walkable floor face."
                     )
                 return True
+        if event_type == QtCore.QEvent.MouseButtonDblClick:
+            if getattr(event, "button", lambda: None)() != QtCore.Qt.LeftButton:
+                return False
+            screen = self._event_position(event, watched)
+            entity_id = self._map_studio_pie_entity_at_screen(screen) if screen is not None else ""
+            # Qt reports a rapid second click as MouseButtonDblClick rather
+            # than MouseButtonPress.  If the preceding press already activated
+            # this retained target, consume the duplicate; otherwise this is
+            # the activation half of focus-then-double-click.
+            if entity_id and entity_id == self._pie_last_world_press_activation_id:
+                self._pie_last_world_press_activation_id = ""
+                return True
+            self._route_map_studio_pie_world_entity_click(entity_id)
+            return True
         if event_type == QtCore.QEvent.MouseButtonRelease:
             button = getattr(event, "button", lambda: None)()
             if button in {QtCore.Qt.MiddleButton, QtCore.Qt.RightButton}:
@@ -5147,6 +8535,12 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         return True
 
     def _project_world_to_screen(self, position: object) -> tuple[float, float] | None:
+        projected = self._project_world_to_screen_depth(position)
+        return None if projected is None else (projected[0], projected[1])
+
+    def _project_world_to_screen_depth(self, position: object) -> tuple[float, float, float] | None:
+        """Project a world point and retain renderer camera depth for occlusion."""
+
         project = getattr(getattr(self.viewport, "_renderer", None), "_proj", None)
         if not callable(project):
             return None
@@ -5158,9 +8552,13 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             projected = project(float(point[0]), float(point[1]), float(point[2]), w, h)
         except Exception:
             return None
-        if projected is None or len(projected) < 2:
+        if projected is None or len(projected) < 3:
             return None
-        return (float(projected[0]), float(projected[1]))
+        try:
+            result = (float(projected[0]), float(projected[1]), float(projected[2]))
+        except (TypeError, ValueError):
+            return None
+        return result if all(math.isfinite(value) for value in result) else None
 
     @staticmethod
     def _screen_rotation_delta_degrees(
@@ -5622,17 +9020,9 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         base = self._placement_marker_geometry if authored_gameplay_marker_geometry is None else authored_gameplay_marker_geometry
         pie = self._pie_overlay_geometry
         # PIE is meant to read like the game, not like the authoring viewport.
-        # Keep the authored marker data resident, but publish none of its
-        # footprints/icons/guides while the runtime presentation owns the view.
-        geometry = None if self._pie_active else base
-        if not self._pie_active and pie is not None:
-            geometry = AuthoredGameplayMarkerGeometry(
-                marker_count=int(getattr(base, "marker_count", 0) or 0) + int(getattr(pie, "marker_count", 0) or 0),
-                footprints=tuple(getattr(base, "footprints", ()) or ()) + tuple(getattr(pie, "footprints", ()) or ()),
-                lines=tuple(getattr(base, "lines", ()) or ()) + tuple(getattr(pie, "lines", ()) or ()),
-                icons=tuple(getattr(base, "icons", ()) or ()) + tuple(getattr(pie, "icons", ()) or ()),
-                warnings=tuple(getattr(base, "warnings", ()) or ()) + tuple(getattr(pie, "warnings", ()) or ()),
-            )
+        # Keep authored markers resident but hidden; only transient focus/path
+        # guides from the runtime may be published during simulation.
+        geometry = pie if self._pie_active else base
         footprints = tuple(getattr(geometry, "footprints", ()) or ())
         lines = tuple(getattr(geometry, "lines", ()) or ())
         icons = tuple(getattr(geometry, "icons", ()) or ())

@@ -30,6 +30,9 @@ task, then return to the source PDFs only when deeper detail is needed.
 - Level and map design (2026-06): `Architectural_Approach_to_Level_Design_-_Christopher_Totten.pdf`, `Level_Design_for_Games_-_Phil_Co.pdf`.
 - Procedural generation (2026-06): `Procedural_Content_Generation_-_Paul_Martin_Eliasz.pdf`.
 - C game-engine architecture (2026-06): `Practical_C_Game_Programming_-_Zhenyu_George_Li.pdf`.
+- Binary analysis and Radare2 (2026-07 external study):
+  `_OceanofPDF.com_Practical_Binary_Analysis_-_Dennis_Andriesse.pdf`,
+  `_OceanofPDF.com_Radare2_in_Action_A_Practical_Guide_to_Open-Source_Binary_Analysis_The_Ultimate_Reverse_Engineering_Guide_From_Beginner_to_Expert_-_Soren_Veyron.pdf`.
 
 ## Skill Index
 
@@ -62,6 +65,7 @@ task, then return to the source PDFs only when deeper detail is needed.
 ### Level Design, Map Studio, and Procedural Generation (2026-06 books)
 
 - `learned/leveldesignskill.md`: Use for Map Studio room/area authoring decisions, module layout design, LYT/VIS/WOK spatial planning, gameplay placement strategy, grayboxing, and modular room construction. Grounded in Totten's *Architectural Approach to Level Design*, Phil Co's *Level Design for Games*, and Eliasz's *Procedural Content Generation*.
+- `learned/kotorwalkmeshcontract.md`: Use for K1/K2 WOK/BWM reading, fidelity round trips, walkmesh generation, adjacency and perimeter repair, AABB construction, holes/islands, header-vector preservation, visual-only classification, converted-module walkmesh audits, and the structural-to-retail proof ladder. Grounded in exhaustive vanilla K1/K2 WOK censuses and named engine-era exceptions.
 - `learned/kotormaxlegacyroomrecovery.md`: Use when recovering KOTOR rooms from legacy 3ds Max/NWMax scenes, KOTORMax fallback exports, or historical sanity manifests. Covers scripted-plugin class/superclass compatibility, lossless first-open discipline, non-destructive partition reconstruction, Vul803 room-role evidence, controller-free compilation, and the vanilla-to-retail proof ladder.
 - `learned/proceduralgenerationskill.md`: Use for ISM/HISM instancing for performance, PCG graph systems, spline-driven generation, animated crowd spawning, and performance budgeting. Grounded in Eliasz's *Procedural Content Generation with UE5*.
 - `learned/gamedesignskill.md`: Use for workflow and tool design through mechanics, feedback, difficulty, narrative/task flow, playtest loops, and user motivation.
@@ -75,6 +79,9 @@ task, then return to the source PDFs only when deeper detail is needed.
 
 ### Cross-Cutting Skills
 
+- `kotorghidraskill.md`: Use before expanding Map Studio PIE focus, interaction, combat, dialogue, camera, audio, inventory, or HUD behavior. It makes the analyzed retail Odyssey runtime the behavioral specification, requires engine evidence/file evidence/editor inference to stay separately labeled, and keeps manual K1/K2 proof authoritative.
+- `learned/binaryanalysisskill.md`: Use for corrupt MOD/ERF/RIM/GFF/MDL/MDX/WOK triage, header/table validation, carving, vanilla binary comparison, safe fixed-length patching, recovery provenance, executable crash slicing, and the proof ladder that separates parser acceptance from retail-game truth. Grounded in Andriesse's *Practical Binary Analysis* and Ghost Studio's established KOTOR loader findings.
+- `learned/radare2skill.md`: Use for version-checked Radare2 read-only triage, metadata/section/string/function/xref navigation, r2pipe evidence capture, bounded debugging, cache-first patch proposals, and KOTOR-specific escalation to Ghidra/Capstone/live proof. Exact commands must be checked against the installed Radare2 version and official documentation.
 - `learned/qtuiskill.md`: Use for PySide6/Qt widgets, signals, model/view, long-running GUI tasks, custom widgets, theming, layout, and visual workflow tests.
 - `learned/mcpvalidationskill.md`: Use for backend/model-pipeline validation tools, MCP server/tool design, and context-safe validation workflows.
 - `learned/kotormcp_live_game_proofskill.md`: Use for real KOTOR 1/KOTOR 2 runtime proof with KotorMCP, the DirectInput `dinput8.dll` proxy hook, live debug-event logs, Ghidra crash-address annotation, save-load/warp testing, and Map Studio or Character Builder in-game evidence.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import os
@@ -19,6 +20,7 @@ from src.gui.qt_lib.dialogs.qt_settings_dialog import save_settings
 from src.core.rendering.hardware_info import collect_hardware_diagnostics
 from src.adapters.rendering.renderer_factory import renderer_capabilities_snapshot
 from src.core.rendering.renderer_settings import RendererSettings
+from src.io.mdl_auto_import import load_mdl_auto
 from src.gui.windows.application_core.application_core_lib.functions.geometry import _prebuild_gpu_mesh_data_for_model
 from src.gui.windows.application_core.application_core_lib.functions.startup_library import (
     _build_prelaunch_library_input,
@@ -133,61 +135,44 @@ class ModelLoadWorker(QtCore.QObject):
     progress = QtCore.Signal(str, int, int)
     finished = QtCore.Signal(object, str, str)
 
-    def __init__(self, path: str, mdx_path: str = "", game: str = ""):
+    def __init__(
+        self,
+        path: str,
+        mdx_path: str = "",
+        game: str = "",
+        *,
+        fallback_game: str = "K1",
+        k1_root: str = "",
+        k2_root: str = "",
+    ):
         super().__init__()
         self.path = path
         self.mdx_path = mdx_path
         self.game = game.upper()
+        self.fallback_game = str(fallback_game or "K1").upper()
+        self.k1_root = k1_root
+        self.k2_root = k2_root
 
     @QtCore.Slot()
     def run(self):
         try:
-            path = Path(self.path)
-            self.progress.emit("Reading model into RAM", 1, 5)
-            raw = path.read_bytes()
-            first16 = raw[:16]
-            printable_count = sum(
-                1 for byte in first16
-                if 0x20 <= byte <= 0x7E or byte in (0x09, 0x0A, 0x0D)
+            log.info("Automatic MDL import worker started: %s", self.path)
+            model = load_mdl_auto(
+                self.path,
+                mdx_path=self.mdx_path,
+                game_hint=self.game,
+                fallback_game=self.fallback_game,
+                k1_root=self.k1_root,
+                k2_root=self.k2_root,
+                progress_callback=lambda message, step, total: self.progress.emit(message, step, total),
             )
-            is_ascii_mdl = (
-                printable_count >= 10
-                or raw[:8].lstrip(b"\x00").startswith(b"newmodel")
-                or raw[:2] in (b"#\x20", b"# ")
-            )
-            if is_ascii_mdl:
-                from src.core.mdl.mdl_parser import MDLAsciiParser
-
-                self.progress.emit("Parsing ASCII MDL", 2, 5)
-                lines = raw.decode("utf-8", errors="replace").splitlines()
-                model = MDLAsciiParser().parse(lines)
-                model.mdl_path = str(path)
-                model.mdx_path = ""
-            else:
-                from src.core.game.kotor_loader import load_model_from_bytes
-                from src.core.geometry.model_data import GameVersion
-
-                self.progress.emit("Reading MDX bytes", 2, 5)
-                mdx_path = Path(self.mdx_path) if self.mdx_path else path.with_suffix(".mdx")
-                mdx = mdx_path.read_bytes() if mdx_path.exists() else b""
-                game_version = None
-                if self.game:
-                    game_version = GameVersion.K2 if self.game == "K2" else GameVersion.K1
-                self.progress.emit("Parsing binary MDL/MDX", 3, 5)
-                model = load_model_from_bytes(raw, mdx, game_version=game_version)
-                if model is not None:
-                    model.mdl_path = str(path)
-                    model.mdx_path = str(mdx_path) if mdx else ""
-            if model is None:
-                raise RuntimeError(f"Could not parse {path.name}")
-            if self.game:
-                from src.core.geometry.model_data import GameVersion
-
-                model.game_version = GameVersion.K2 if self.game == "K2" else GameVersion.K1
+            log.info("Automatic MDL import parse complete: %s", self.path)
             self.progress.emit("Preparing GPU mesh buffers in RAM", 4, 5)
             _prebuild_gpu_mesh_data_for_model(model)
+            log.info("Automatic MDL import mesh preparation complete: %s", self.path)
             self.progress.emit("Handing model to viewport", 5, 5)
             self.finished.emit(model, self.path, "")
+            log.info("Automatic MDL import worker handoff emitted: %s", self.path)
         except Exception:
             self.finished.emit(None, self.path, traceback.format_exc())
 
@@ -409,6 +394,56 @@ class AnimationLibraryScanWorker(QtCore.QObject):
             self.finished.emit(entries, "")
         except Exception:
             self.finished.emit([], traceback.format_exc())
+
+
+class AnimationModelLoadWorker(QtCore.QObject):
+    """Resolve one model's inherited animation chain without blocking Qt."""
+
+    finished = QtCore.Signal(int, object, list, str)
+
+    def __init__(
+        self,
+        request_id: int,
+        model,
+        game: str,
+        supermodel: str,
+        k1_dir: str = "",
+        k2_dir: str = "",
+    ) -> None:
+        super().__init__()
+        self.request_id = int(request_id)
+        self.model = model
+        self.game = str(game or "K1").upper()
+        self.supermodel = str(supermodel or "").strip()
+        self.k1_dir = str(k1_dir or "")
+        self.k2_dir = str(k2_dir or "")
+
+    @QtCore.Slot()
+    def run(self) -> None:
+        try:
+            from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
+            from src.core.assets.resource_manager import ResourceManager
+            from src.core.geometry.model_data import GameVersion
+
+            # The viewport continues reading the live model while this runs.
+            # Resolve against a private copy so alternate game/supermodel UI
+            # choices never mutate render state from a worker thread.
+            model = copy.deepcopy(self.model)
+            model.game_version = GameVersion.K2 if self.game == "K2" else GameVersion.K1
+            if self.supermodel:
+                model.supermodel = self.supermodel
+
+            manager = ResourceManager()
+            if self.k1_dir:
+                manager.set_k1_dir(self.k1_dir)
+            if self.k2_dir:
+                manager.set_k2_dir(self.k2_dir)
+            SuperModelResolver.configure(manager)
+
+            entries = AnimationEngine(model).list_all_animations()
+            self.finished.emit(self.request_id, self.model, entries, "")
+        except Exception:
+            self.finished.emit(self.request_id, self.model, [], traceback.format_exc())
 
 class AutoDetectWorker(QtCore.QObject):
     finished = QtCore.Signal(str, str, str)

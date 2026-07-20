@@ -10,6 +10,8 @@
         <panel id="library" region="left" visible="true" minWidth="320" preferredWidth="430"/>
         <panel id="modules" region="left" visible="true" minWidth="320" preferredWidth="430"/>
         <panel id="properties" region="right" visible="true" minWidth="320" preferredWidth="420"/>
+        <panel id="guiEditorCatalog" region="left" visible="true" minWidth="320" preferredWidth="430"/>
+        <panel id="guiEditorInspector" region="right" visible="true" minWidth="320" preferredWidth="420"/>
         <panel id="animationLibrary" region="right" visible="true" minWidth="320" preferredWidth="420"/>
         <panel id="meshTools" region="farRight" visible="true" minWidth="300" preferredWidth="420"/>
         <panel id="spriteMaterials" region="right" visible="false" minWidth="360" preferredWidth="560"/>

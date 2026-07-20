@@ -14,9 +14,10 @@ Export plus a manual ``warp plcaa`` remains the engine proof.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, replace
 from time import perf_counter
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Mapping
 
 
 Vec3 = tuple[float, float, float]
@@ -169,7 +170,10 @@ def play_map_studio_pie_safe_idle(engine: Any) -> str:
     return ""
 
 
-def play_map_studio_pie_scene_animation(engine: Any, candidates: tuple[str, ...]) -> str:
+def play_map_studio_pie_scene_animation(
+    engine: Any,
+    candidates: tuple[str, ...],
+) -> str:
     """Play the first authored scene-animation clip that resolves, else safe idle.
 
     ``candidates`` come from the module's OnEnter script (a seated NPC's sit
@@ -181,7 +185,11 @@ def play_map_studio_pie_scene_animation(engine: Any, candidates: tuple[str, ...]
 
     for candidate in tuple(candidates or ()):
         clean = str(candidate or "").strip().lower()
-        if clean and clean not in ("pause1", "walk", "run") and engine.play(clean, loop=True, blend=False):
+        if (
+            clean
+            and clean not in ("pause1", "walk", "run")
+            and engine.play(clean, loop=True, blend=False)
+        ):
             return str(
                 getattr(getattr(engine, "current_animation", None), "name", clean) or clean
             ).lower()
@@ -377,7 +385,8 @@ def prepare_map_studio_pie_creature_actor_artifacts(
             # Authored scene animation (seated/talking from the OnEnter script)
             # first; a neutral safe idle only when none resolves.
             animation_name = play_map_studio_pie_scene_animation(
-                engine, tuple(getattr(spec.render, "animation_candidates", ()) or ())
+                engine,
+                tuple(getattr(spec.render, "animation_candidates", ()) or ()),
             )
             if not animation_name:
                 animation_seconds += perf_counter() - phase_started
@@ -450,8 +459,10 @@ def _template_overrides(resources: Iterable[Any]) -> dict[str, bytes]:
     return rows
 
 
-def _read_utc_contract(data: bytes) -> tuple[int | None, str, tuple[tuple[str, str], ...], bool, int | None]:
-    """Return faction, conversation, scripts, visibility, and appearance."""
+def _read_utc_contract(
+    data: bytes,
+) -> tuple[int | None, str, tuple[tuple[str, str], ...], bool, int | None, str]:
+    """Return faction, conversation, scripts, visibility, appearance, and Tag."""
 
     from pykotor.resource.generics.utc import read_utc
 
@@ -468,7 +479,8 @@ def _read_utc_contract(data: bytes) -> tuple[int | None, str, tuple[tuple[str, s
         appearance_id = int(getattr(utc, "appearance_id", -1))
     except (TypeError, ValueError):
         appearance_id = None
-    return faction_id, conversation, scripts, visible, appearance_id
+    tag = str(getattr(utc, "tag", "") or "").strip()
+    return faction_id, conversation, scripts, visible, appearance_id, tag
 
 
 def _relationship_for(role: str, faction_id: int | None) -> str:
@@ -523,6 +535,133 @@ def _creatures_and_metadata(project_or_rows: Any) -> tuple[tuple[Any, ...], dict
     return creatures, behaviors, game
 
 
+_SCENE_SEMANTIC_FAMILY_ALIASES: dict[str, str] = {
+    # Common KOTOR UTC/template shorthand. These aliases describe blueprint
+    # identity only; rendered appearance/model names are deliberately excluded
+    # so a named story NPC is never converted into a sitter merely because it
+    # happens to use the same species or commoner body.
+    "commf": "commonfemale",
+    "commonf": "commonfemale",
+    "commfemale": "commonfemale",
+    "commonfemale": "commonfemale",
+    "fatcomf": "commonfemale",
+    "commm": "commonmale",
+    "commonm": "commonmale",
+    "commmale": "commonmale",
+    "commonmale": "commonmale",
+    "fatcomm": "commonmale",
+}
+
+
+def _canonical_scene_semantic_family(value: Any) -> str:
+    compact = re.sub(r"[^a-z]", "", str(value or "").lower())
+    return _SCENE_SEMANTIC_FAMILY_ALIASES.get(compact, compact)
+
+
+def _scene_animation_target_family(tag: Any) -> str:
+    """Semantic family for a literal ``Sitting*`` script target."""
+
+    compact = re.sub(r"[^a-z0-9]", "", str(tag or "").lower())
+    if not compact.startswith("sitting"):
+        return ""
+    return _canonical_scene_semantic_family(compact[len("sitting"):])
+
+
+def _creature_scene_identity_families(spec: MapStudioPIECreatureSpec) -> frozenset[str]:
+    """Return identity-only semantic keys from UTC Tag and template resrefs.
+
+    Tokens such as ``n_commf001`` and ``207tel_bith4`` intentionally retain
+    their semantic words while dropping archive prefixes and numeric suffixes.
+    Body/head appearance is not consulted: a unique rendered Rodian is still
+    not proof that a stale ``SittingRodian`` script literal meant that named
+    story creature.
+    """
+
+    families: set[str] = set()
+    for value in (
+        getattr(spec, "tag", ""),
+        getattr(spec, "runtime_template_resref", ""),
+        getattr(spec, "source_template_resref", ""),
+    ):
+        text = str(value or "").strip().lower()
+        for token in re.findall(r"[a-z]+", text):
+            if token.startswith("sitting") and len(token) > len("sitting"):
+                token = token[len("sitting"):]
+            family = _canonical_scene_semantic_family(token)
+            if family:
+                families.add(family)
+    return frozenset(families)
+
+
+def _reconcile_scene_animation_semantic_families(
+    specs: list[MapStudioPIECreatureSpec],
+    scene_map: Mapping[tuple[str, int], tuple[str, ...]],
+    matched_spec_indices: set[int],
+    matched_scene_keys: set[tuple[str, int]],
+) -> tuple[dict[int, tuple[str, int]], tuple[str, ...], dict[str, int]]:
+    """Reconcile stale ``Sitting*`` tags only when a whole family is exact.
+
+    A family is accepted when the number of still-unmatched literal targets is
+    exactly the number of unclaimed UTC/template identity candidates. This
+    preserves GetObjectByTag occurrence order through GIT placement order and
+    refuses ambiguous cases (for example one target versus three Bith band
+    members). No geometry, proximity, appearance, or module-name guess enters
+    the decision.
+    """
+
+    targets_by_family: dict[str, list[tuple[str, int]]] = {}
+    for key, candidates in scene_map.items():
+        if key in matched_scene_keys:
+            continue
+        family = _scene_animation_target_family(key[0])
+        if family:
+            targets_by_family.setdefault(family, []).append(key)
+    if not targets_by_family:
+        return {}, (), {}
+
+    requested_families = frozenset(targets_by_family)
+    candidate_families: dict[int, frozenset[str]] = {}
+    for index, spec in enumerate(specs):
+        if index in matched_spec_indices:
+            continue
+        relevant = _creature_scene_identity_families(spec) & requested_families
+        if relevant:
+            candidate_families[index] = relevant
+
+    assignments: dict[int, tuple[str, int]] = {}
+    diagnostics: list[str] = []
+    matched_counts: dict[str, int] = {}
+    for family, raw_targets in targets_by_family.items():
+        targets = sorted(raw_targets, key=lambda key: (int(key[1]), str(key[0])))
+        # A candidate whose Tag and template imply different requested families
+        # is not deterministic and therefore cannot satisfy either family.
+        candidates = [
+            index
+            for index, families in candidate_families.items()
+            if families == frozenset({family})
+        ]
+        if candidates and len(candidates) != len(targets):
+            diagnostics.append(
+                f"Authored scene family '{family}' has {len(targets)} target occurrence(s) "
+                f"but {len(candidates)} unmatched UTC/template identity candidate(s); "
+                "PIE left that family unmatched instead of guessing."
+            )
+            continue
+        if not candidates:
+            continue
+        if not all(tuple(scene_map[key] or ()) for key in targets):
+            diagnostics.append(
+                f"Authored scene family '{family}' has a complete UTC/template "
+                "identity set, but its animation constant is not a supported "
+                "creature clip; PIE kept those creatures on neutral idle."
+            )
+            continue
+        for index, key in zip(candidates, targets):
+            assignments[index] = key
+        matched_counts[family] = len(targets)
+    return assignments, tuple(diagnostics), matched_counts
+
+
 def build_map_studio_pie_creature_plan(
     project_or_rows: Any,
     resolver: Any,
@@ -530,7 +669,7 @@ def build_map_studio_pie_creature_plan(
     game: str | None = None,
     utc_reader: UTCReader | None = None,
     template_resources: Iterable[Any] = (),
-    scene_animations: dict[str, tuple[str, ...]] | None = None,
+    scene_animations: Mapping[Any, tuple[str, ...]] | None = None,
 ) -> MapStudioPIECreaturePlan:
     """Resolve safe PIE creature recipes without executing game behavior.
 
@@ -544,8 +683,26 @@ def build_map_studio_pie_creature_plan(
     creatures, behavior_records, inferred_game = _creatures_and_metadata(project_or_rows)
     game_tag = str(game or inferred_game or "K1").strip().upper()
     overrides = _template_overrides(template_resources)
-    scene_map = {str(k).strip().lower(): tuple(v) for k, v in dict(scene_animations or {}).items()}
+    scene_map: dict[tuple[str, int], tuple[str, ...]] = {}
+    for raw_key, candidates in dict(scene_animations or {}).items():
+        if isinstance(raw_key, tuple) and len(raw_key) == 2:
+            tag = str(raw_key[0] or "").strip().lower()
+            try:
+                nth = max(0, int(raw_key[1]))
+            except (TypeError, ValueError):
+                nth = 0
+        else:
+            # Backward-compatible maps target only the first matching object;
+            # they must not silently apply one animation to every duplicate tag.
+            tag = str(raw_key or "").strip().lower()
+            nth = 0
+        if tag:
+            scene_map[(tag, nth)] = tuple(candidates or ())
     scene_matched = 0
+    scene_unresolved = 0
+    tag_occurrences: dict[str, int] = {}
+    matched_scene_keys: set[tuple[str, int]] = set()
+    matched_spec_indices: set[int] = set()
     specs: list[MapStudioPIECreatureSpec] = []
     plan_warnings: list[str] = []
 
@@ -620,9 +777,17 @@ def build_map_studio_pie_creature_plan(
         )
         scripts: tuple[tuple[str, str], ...] = ()
         visible = True
+        utc_tag = ""
         if utc_data:
             try:
-                faction_id, utc_conversation, scripts, visible, _appearance_id = _read_utc_contract(utc_data)
+                (
+                    faction_id,
+                    utc_conversation,
+                    scripts,
+                    visible,
+                    _appearance_id,
+                    utc_tag,
+                ) = _read_utc_contract(utc_data)
                 if not conversation:
                     conversation = utc_conversation
             except Exception as exc:
@@ -649,11 +814,30 @@ def build_map_studio_pie_creature_plan(
             scripts_suppressed=scripts_suppressed,
             conversation_suppressed=conversation_suppressed,
         )
-        creature_tag = str(getattr(row, "tag", "") or runtime_template or source_template)
-        scene_clips = scene_map.get(creature_tag.strip().lower())
-        if scene_clips:
+        # GIT creature instances reference a UTC but do not own the runtime Tag;
+        # GetObjectByTag resolves the Tag stored in that UTC. Imported placement
+        # rows are therefore commonly blank here. Fall back only when the UTC
+        # was unavailable or could not be parsed.
+        creature_tag = str(
+            utc_tag
+            or getattr(row, "tag", "")
+            or runtime_template
+            or source_template
+        )
+        clean_creature_tag = creature_tag.strip().lower()
+        occurrence = tag_occurrences.get(clean_creature_tag, 0)
+        tag_occurrences[clean_creature_tag] = occurrence + 1
+        scene_key = (clean_creature_tag, occurrence)
+        if scene_key in scene_map:
             scene_matched += 1
-            animation_candidates = tuple(scene_clips)
+            matched_scene_keys.add(scene_key)
+            matched_spec_indices.add(index)
+            scene_clips = tuple(scene_map[scene_key])
+            if scene_clips:
+                animation_candidates = scene_clips
+            else:
+                scene_unresolved += 1
+                animation_candidates = ("pause1", "walk", "run")
         else:
             animation_candidates = ("pause1", "walk", "run")
         render = MapStudioPIECreatureRenderRecipe(
@@ -678,6 +862,37 @@ def build_map_studio_pie_creature_plan(
             )
         )
 
+    semantic_assignments, semantic_diagnostics, semantic_match_counts = (
+        _reconcile_scene_animation_semantic_families(
+            specs,
+            scene_map,
+            matched_spec_indices,
+            matched_scene_keys,
+        )
+    )
+    for spec_index, scene_key in semantic_assignments.items():
+        scene_clips = tuple(scene_map[scene_key])
+        spec = specs[spec_index]
+        specs[spec_index] = replace(
+            spec,
+            render=replace(spec.render, animation_candidates=scene_clips),
+        )
+        matched_spec_indices.add(spec_index)
+        matched_scene_keys.add(scene_key)
+        scene_matched += 1
+    if semantic_match_counts:
+        family_summary = ", ".join(
+            f"{family}={count}"
+            for family, count in sorted(semantic_match_counts.items())
+        )
+        plan_warnings.append(
+            f"Deterministic UTC/template semantic reconciliation matched "
+            f"{sum(semantic_match_counts.values())} authored Sitting* target(s) "
+            f"after exact Tag matching ({family_summary}); no proximity or "
+            "rendered-appearance guesses were used."
+        )
+    plan_warnings.extend(semantic_diagnostics)
+
     script_count = sum(1 for spec in specs if spec.behavior.scripts_suppressed)
     dialogue_count = sum(1 for spec in specs if spec.behavior.conversation_suppressed)
     unresolved_count = sum(1 for spec in specs if not spec.render.can_build_actor and spec.render.visible_in_game)
@@ -693,8 +908,14 @@ def build_map_studio_pie_creature_plan(
         plan_warnings.append(f"{unresolved_count} visible creature actor recipe(s) have no resolved body model.")
     if scene_map:
         plan_warnings.append(
-            f"Authored scene animations from the module OnEnter script matched {scene_matched} of {len(specs)} "
-            "creature(s) by tag; the rest use a neutral idle."
+            f"Authored scene animations from the module OnEnter script matched {scene_matched} of {len(scene_map)} "
+            f"authored tag occurrence(s) against {len(specs)} placed creature(s); "
+            f"{max(0, len(scene_map) - scene_matched)} authored target(s) had no matching placed tag occurrence."
+        )
+    if scene_unresolved:
+        plan_warnings.append(
+            f"{scene_unresolved} matched authored scene animation constant(s) are not portable creature clips; "
+            "those creatures use a neutral idle instead of a guessed animation."
         )
     return MapStudioPIECreaturePlan(
         game=game_tag,

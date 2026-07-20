@@ -10,6 +10,18 @@ from .snap_view_bar import *  # noqa: F401,F403
 
 
 class ViewportRenderingPipelineMixin:
+    @staticmethod
+    def _renderer_consumes_scene_lighting_render_data(renderer) -> bool:
+        """Return whether the active backend consumes the shared light payload.
+
+        ModernGL resolves the canonical room/model lights directly inside its
+        retained renderer.  Building the WGPU/Pygfx payload for that backend is
+        discarded by the renderer factory and walks every node in a stock module
+        on every PIE frame.
+        """
+        backend_id = str(getattr(renderer, "backend_id", "") or "").strip().lower()
+        return backend_id == "pygfx_wgpu" or backend_id.startswith("wgpu_")
+
     def _request_render(self, fast: bool = False, reason: str = "viewport change", **dirty_flags: bool) -> None:
         if hasattr(self, "_viewcube_widget") and self._viewcube_widget is not None and (fast or dirty_flags.get("camera")):
             self._viewcube_widget.update()
@@ -24,16 +36,37 @@ class ViewportRenderingPipelineMixin:
         if fast:
             self._fast_frame_until = max(self._fast_frame_until, now + 0.08)
             elapsed_ms = (now - self._last_render_wall) * 1000.0 if self._last_render_wall else min_interval_ms
-            if governor is not None and governor.animation_playing:
-                delay = 1
-            else:
-                delay = max(1, int(min_interval_ms - elapsed_ms))
+            # Animation remains continuously eligible for rendering through the
+            # frame governor, but it must still respect the target frame interval.
+            # Dense PIE frames are synchronous; rearming this timer after 1 ms can
+            # outrun the QLabel UpdateRequest posted by setPixmap(), so the scene
+            # appears frozen until locomotion/animation stops.  Leaving one paced
+            # event-loop window lets Qt present the completed frame and process
+            # input without reducing animation-time fidelity.
+            delay = max(1, int(min_interval_ms - elapsed_ms))
         else:
             elapsed_ms = (now - self._last_render_wall) * 1000.0 if self._last_render_wall else min_interval_ms
             delay = max(min_interval_ms, int(min_interval_ms - elapsed_ms))
         if self._render_timer.isActive():
-            delay = min(delay, max(1, self._render_timer.remainingTime()))
+            # A render request is a coalesced dirty-state notification, not a
+            # timer reset.  PIE submits its newest camera/pose state every
+            # 16 ms; restarting the same single-shot timer can perpetually move
+            # its deadline and leave the last scene pixmap on screen while the
+            # simulation and HUD continue advancing.
+            return
         self._render_timer.start(delay)
+
+    def set_runtime_qimage_compositor(self, callback, *, request_render: bool = True) -> None:
+        """Install one GUI-thread compositor applied before the QPixmap publish."""
+
+        self._runtime_qimage_compositor = callback if callable(callback) else None
+        if request_render:
+            self._request_render(
+                fast=True,
+                reason="runtime frame compositor changed",
+                hud=True,
+                overlay=True,
+            )
 
     def _clear_live_surface_diagnostics(self) -> None:
         clear_text = getattr(getattr(self, "canvas", None), "clear_diagnostics_text", None)
@@ -82,11 +115,7 @@ class ViewportRenderingPipelineMixin:
             return
         now = time_module.perf_counter()
         governor = getattr(self, "_frame_governor", None)
-        if (
-            governor is not None
-            and not governor.animation_playing
-            and not governor.should_render_now(now)
-        ):
+        if governor is not None and not governor.should_render_now(now):
             if self._render_pending and (governor.dirty or governor.active_interaction or governor.animation_playing):
                 self._render_timer.start(governor.delay_until_next_frame_ms(now))
             return
@@ -135,11 +164,24 @@ class ViewportRenderingPipelineMixin:
             img.width * 4,
             QtGui.QImage.Format_RGBA8888,
         ).copy()
+        compositor = getattr(self, "_runtime_qimage_compositor", None)
+        if callable(compositor):
+            try:
+                compositor(qimg)
+            except Exception as exc:
+                log.warning("Runtime frame compositor failed: %s", exc, exc_info=True)
         self._pixmap = QtGui.QPixmap.fromImage(qimg)
         if self.canvas.is_live_surface():
             self.canvas.set_overlay_pixmap(self._pixmap)
         else:
-            self.canvas.setPixmap(self._pixmap)
+            present = getattr(self.canvas, "present_pixmap", None)
+            if callable(present):
+                # A runtime compositor means PIE owns this full retained frame.
+                # Finish the QLabel paint now so a due simulation/render timer
+                # cannot starve presentation until movement stops.
+                present(self._pixmap, immediate=callable(compositor))
+            else:
+                self.canvas.setPixmap(self._pixmap)
         rendered_size = (w, h)
         self._last_rendered_canvas_size = rendered_size
         current_size = (max(8, self.canvas.width()), max(8, self.canvas.height()))
@@ -417,29 +459,30 @@ class ViewportRenderingPipelineMixin:
             except Exception as exc:
                 log.debug("WGPU skeleton render data build failed: %s", exc)
         lighting_render_data = None
-        try:
-            from src.core.lighting.render_data import build_scene_lighting_render_data
+        if self._renderer_consumes_scene_lighting_render_data(self._gpu_renderer):
+            try:
+                from src.core.lighting.render_data import build_scene_lighting_render_data
 
-            lighting_render_data = build_scene_lighting_render_data(
-                self.model,
-                selected_node=None if clean_runtime else getattr(self._renderer, "selected_node", None),
-                hovered_node=None if clean_runtime else getattr(self._renderer, "_hovered_light", None),
-                ambient_color_rgb=float(getattr(self._renderer, "scene_ambient", 0.06)),
-                mode=str(getattr(self._renderer, "lighting_mode", "scene") or "scene"),
-                rig=str(getattr(self._renderer, "lighting_rig", "kotor_original") or "kotor_original"),
-                complexity=str(getattr(self._renderer, "shader_complexity_mode", "basic") or "basic"),
-                show_helpers=bool(getattr(self._renderer, "show_light_gizmos", True)) and not clean_runtime,
-                show_volumes=bool(getattr(self._renderer, "show_light_radius_volumes", False)) and not clean_runtime,
-                diffuse_enabled=bool(getattr(self._renderer, "show_diffuse_map", True)),
-                specular_enabled=bool(getattr(self._renderer, "show_specular_map", True)),
-                normal_enabled=bool(getattr(self._renderer, "show_normal_map", True)),
-                environment_enabled=bool(getattr(self._renderer, "show_environment_map", True)),
-                lightmap_enabled=bool(getattr(self._renderer, "show_lightmap_map", True)),
-                lm_intensity=float(getattr(self._renderer, "lightmap_intensity", 0.55)),
-                lm_mode=str(getattr(self._renderer, "lightmap_mode", "baked") or "baked"),
-            )
-        except Exception as exc:
-            log.debug("WGPU lighting render data build failed: %s", exc)
+                lighting_render_data = build_scene_lighting_render_data(
+                    self.model,
+                    selected_node=None if clean_runtime else getattr(self._renderer, "selected_node", None),
+                    hovered_node=None if clean_runtime else getattr(self._renderer, "_hovered_light", None),
+                    ambient_color_rgb=float(getattr(self._renderer, "scene_ambient", 0.06)),
+                    mode=str(getattr(self._renderer, "lighting_mode", "scene") or "scene"),
+                    rig=str(getattr(self._renderer, "lighting_rig", "kotor_original") or "kotor_original"),
+                    complexity=str(getattr(self._renderer, "shader_complexity_mode", "basic") or "basic"),
+                    show_helpers=bool(getattr(self._renderer, "show_light_gizmos", True)) and not clean_runtime,
+                    show_volumes=bool(getattr(self._renderer, "show_light_radius_volumes", False)) and not clean_runtime,
+                    diffuse_enabled=bool(getattr(self._renderer, "show_diffuse_map", True)),
+                    specular_enabled=bool(getattr(self._renderer, "show_specular_map", True)),
+                    normal_enabled=bool(getattr(self._renderer, "show_normal_map", True)),
+                    environment_enabled=bool(getattr(self._renderer, "show_environment_map", True)),
+                    lightmap_enabled=bool(getattr(self._renderer, "show_lightmap_map", True)),
+                    lm_intensity=float(getattr(self._renderer, "lightmap_intensity", 0.55)),
+                    lm_mode=str(getattr(self._renderer, "lightmap_mode", "baked") or "baked"),
+                )
+            except Exception as exc:
+                log.debug("WGPU lighting render data build failed: %s", exc)
         helper_render_data = None
         if not clean_runtime and str(getattr(self._gpu_renderer, "backend_id", "") or "") == "pygfx_wgpu":
             helper_render_data = self._build_pygfx_helper_render_data()

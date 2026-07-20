@@ -2,14 +2,14 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Validation",
-    "file_count": 9,
+    "file_count": 10,
     "originals_remain_in_src": true,
     "files": [
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_INIT",
             "source_path": "src/core/validation/__init__.py",
             "packaged_path": "Python/src/core/validation/__init__.py",
-            "sha256": "0d7118a4ffa1a578e2c8e7128e5ac1322fa76f186538b4832dceb2472bee55e1"
+            "sha256": "b8b1efe8a729acb4d179a8239e5ebb965d0a711972cc505a1af32966a5deb520"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_NATIVE",
@@ -36,10 +36,16 @@
             "sha256": "3c333a82d7c40a9b50534bb0f53993bd5fd74e4ed42798f7221dcd1aa6ff3a81"
         },
         {
+            "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_CUSTOM_RIGGED_CHARACTER_VALIDATOR",
+            "source_path": "src/core/validation/custom_rigged_character_validator.py",
+            "packaged_path": "Python/src/core/validation/custom_rigged_character_validator.py",
+            "sha256": "ea37222f03f8e29891c01c76e03d07140ea97f8c9981139ad8203c08383b3ec8"
+        },
+        {
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_KOTOR_MODULE_ENGINE_CONTRACT",
             "source_path": "src/core/validation/kotor_module_engine_contract.py",
             "packaged_path": "Python/src/core/validation/kotor_module_engine_contract.py",
-            "sha256": "b1ad2bf5607ab2e183f7c0a23926a28bef40520dd7a8f3d5591f3a24fea36738"
+            "sha256": "ab54e04c39dcbeea4a58ef6c472981c86aefc9e036a5b721bd447745e952eb67"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_VALIDATION_ADAPTERS",

@@ -18,3 +18,4 @@ PYTHON_PAYLOAD_CORE_RESOURCES_PLACEABLE_LIBRARY RCDATA "Python/src/core/resource
 PYTHON_PAYLOAD_RESOURCES_INIT RCDATA "Python/src/resources/__init__.py"
 PYTHON_PAYLOAD_RESOURCES_GAME_DETECTOR RCDATA "Python/src/resources/game_detector.py"
 PYTHON_PAYLOAD_RESOURCES_GAME_LIBRARY RCDATA "Python/src/resources/game_library.py"
+PYTHON_PAYLOAD_RESOURCES_KOTOR_UTC_TEMPLATE_CATALOG RCDATA "Python/src/resources/kotor_utc_template_catalog.py"

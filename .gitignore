@@ -52,8 +52,10 @@ native/GhostRigger.Core.IO.MDL/**/*.py[cod]
 !/tests/__init__.py
 !/tests/conftest.py
 !/tests/test_core_contracts.py
+!/tests/test_mdl_auto_import.py
 !/tests/test_content_browser_panel.py
 !/tests/test_regression.py
+!/tests/test_resource_manager_revision_concurrency.py
 !/tests/test_authored_import_source_overlay.py
 !/tests/test_audit_converted_module_library.py
 !/tests/test_audit_walkmesh_library.py
@@ -61,8 +63,6 @@ native/GhostRigger.Core.IO.MDL/**/*.py[cod]
 !/tests/test_generate_rnv_walkmesh_candidates.py
 !/tests/test_stage_k2_manual_warp_candidate.py
 !/tests/test_restore_k2_manual_warp_candidate.py
-!/tests/test_wok_engine_contract_topology.py
-!/tests/test_wok_index_topology.py
 !/tests/test_mcp_full_scan.py
 !/tests/test_mcp_resource_exposure.py
 !/tests/test_mcp_textures.py
@@ -87,6 +87,7 @@ native/GhostRigger.Core.IO.MDL/**/*.py[cod]
 !/tests/test_head_viseme_panel.py
 !/tests/test_head_phoneme_panel.py
 !/tests/test_head_camera_preset.py
+!/tests/test_bas_attachment_catalog.py
 !/tests/test_lightmap_baker.py
 !/tests/test_mcp_retargeting_tools.py
 !/tests/test_retargeting_test_utils.py
@@ -383,6 +384,23 @@ knowledge_base/test_artifacts/*.zip
 !/tests/test_map_studio_lightmap_apply_workflow.py
 !/tests/test_sith_ithorian_visual_capture_harness.py
 !/tests/test_map_studio_pie_entities.py
+!/tests/test_map_studio_pie_interactions.py
+!/tests/test_map_studio_pie_combat.py
+!/tests/test_map_studio_pie_dialogue.py
+!/tests/test_map_studio_pie_dialogue_audio.py
+!/tests/test_map_studio_pie_dialogue_camera.py
+!/tests/test_map_studio_pie_dialogue_scripts.py
+!/tests/test_map_studio_pie_journal.py
+!/tests/test_map_studio_pie_party.py
+!/tests/test_map_studio_pie_dialogue_preview.py
+!/tests/test_map_studio_pie_gameplay.py
+!/tests/test_map_studio_pie_gameplay_hud.py
+!/tests/test_map_studio_pie_nwscript_vm.py
+!/tests/test_map_studio_pie_resources.py
+!/tests/test_map_studio_pie_scripted_events.py
+!/tests/test_map_studio_pie_scripting.py
+!/tests/test_map_studio_pie_triggers.py
+!/tests/test_gui_editor_boundary.py
 !/tests/test_map_studio_pie_performance.py
 !/tests/test_map_studio_wok_alignment.py
 !/tests/test_map_studio_wok_floor_fill.py
@@ -398,6 +416,11 @@ knowledge_base/test_artifacts/*.zip
 !/tests/test_authored_pathing_grid_and_door_transition.py
 !/tests/test_authored_room_light_preservation.py
 !/tests/test_map_studio_pie_doors.py
+!/tests/test_custom_rigged_character_behavior.py
+!/tests/test_custom_rigged_character_builder_workflow.py
+!/tests/test_custom_rigged_character_import.py
+!/tests/test_custom_rigged_character_packaging.py
+!/tests/test_custom_rigged_character_validation.py
 /knowledge_base/books
 /docs/architecture
 /docs
@@ -412,12 +435,16 @@ knowledge_base/test_artifacts/*.zip
 !/docs/audits/
 !/docs/audits/map_studio_sky_traffic_vanilla_contract_2026-07-11.md
 !/docs/audits/map_studio_lightmap_apply_contract_2026-07-11.md
+!/docs/custom_rigged_character_builder.md
+!/docs/architecture/
+!/docs/architecture/custom_rigged_character_builder.md
 /native/GhostRigger.Core.IO.MDL/build
 
 # Local build, proof, crash, and research-clone artifacts.
 # Keep these available on the developer machine without making them eligible
 # for an accidental product-source commit.
 /Saved/
+/.codex/evidence/
 /GhostRigger*.dll
 /.hermes/
 /hs_err_pid*.log
@@ -425,4 +452,5 @@ knowledge_base/test_artifacts/*.zip
 /kotornet-analysis/
 /kotornet-fork/
 /KotorDebugger/sessions/
+/KotorDebugger/*.log
 /extract_books_output.txt

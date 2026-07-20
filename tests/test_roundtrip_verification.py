@@ -224,6 +224,45 @@ def test_mdl_writer_places_animations_before_static_tree_for_kotor2_loader():
     assert struct.unpack_from("<I", mdl_bytes, base + anim_root_rel + 0x08)[0] == first_anim_rel
 
 
+def test_mdl_writer_animation_nodes_keep_target_geometry_node_indexes():
+    from src.core.geometry.model_data import Animation, GameVersion, KotorModel, ModelNode
+    from src.core.mdl.mdl_writer import MDLBinaryWriter
+
+    root = ModelNode(name="PFBNM", index=0)
+    child = ModelNode(name="rootdummy", index=97)
+    root.children = [child]
+    child.parent = root
+    model = KotorModel(
+        name="PFBNM",
+        root_node=root,
+        animations=[
+            Animation(
+                name="kpm_flurry",
+                length=1.0,
+                anim_root="PFBNM",
+                nodes=[ModelNode(name="rootdummy")],
+            )
+        ],
+        game_version=GameVersion.K2,
+    )
+
+    mdl_bytes, _mdx_bytes = MDLBinaryWriter().write(model)
+    base = 12
+    geometry_root_rel = struct.unpack_from("<I", mdl_bytes, base + 0x28)[0]
+    geometry_child_array_rel = struct.unpack_from("<I", mdl_bytes, base + geometry_root_rel + 0x2C)[0]
+    geometry_child_rel = struct.unpack_from("<I", mdl_bytes, base + geometry_child_array_rel)[0]
+    anim_table_rel = struct.unpack_from("<I", mdl_bytes, base + 0x58)[0]
+    anim_rel = struct.unpack_from("<I", mdl_bytes, base + anim_table_rel)[0]
+    anim_root_rel = struct.unpack_from("<I", mdl_bytes, base + anim_rel + 0x28)[0]
+    anim_child_array_rel = struct.unpack_from("<I", mdl_bytes, base + anim_root_rel + 0x2C)[0]
+    anim_child_rel = struct.unpack_from("<I", mdl_bytes, base + anim_child_array_rel)[0]
+
+    geometry_identity = struct.unpack_from("<HH", mdl_bytes, base + geometry_child_rel + 0x02)
+    animation_identity = struct.unpack_from("<HH", mdl_bytes, base + anim_child_rel + 0x02)
+    assert geometry_identity == (1, 1)
+    assert animation_identity == geometry_identity
+
+
 def test_mdl_writer_keeps_animation_runtime_base_slot_clear_of_events_and_root():
     from src.core.geometry.model_data import AnimEvent, Animation, GameVersion, KotorModel, ModelNode
     from src.core.mdl.mdl_writer import MDLBinaryWriter

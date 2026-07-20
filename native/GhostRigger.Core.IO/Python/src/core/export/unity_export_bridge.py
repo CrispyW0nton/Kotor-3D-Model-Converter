@@ -52,9 +52,12 @@ def summarize_model(
         game=game,
         resref=resref,
         target_engine="unity",
+        compatibility_profile="unity",
     )
     metadata["tool"] = "ghostrigger.export_model_for_unity"
-    metadata["unity"] = {"asset_path": asset_relative(asset_path, unity_project)}
+    unity_metadata = dict(metadata.get("unity") or {})
+    unity_metadata["asset_path"] = asset_relative(asset_path, unity_project)
+    metadata["unity"] = unity_metadata
     metadata["animations"] = [getattr(anim, "name", "") for anim in (getattr(model, "animations", []) or [])]
     return metadata
 

@@ -793,6 +793,9 @@ def _convert_node(pk_node, parent: Optional[ModelNode],
     if ntype == int(MDLNodeType.LIGHT):
         _read_light(pk_node, gr)
 
+    if ntype == int(MDLNodeType.EMITTER):
+        _read_emitter(pk_node, gr)
+
     if ntype == int(MDLNodeType.REFERENCE):
         reference = getattr(pk_node, 'reference', None)
         if reference is not None:
@@ -1156,10 +1159,13 @@ def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
             except (TypeError, ValueError):
                 _validated.append('')
                 continue
-            _confirmed = (
-                0 <= _nid < len(_raw_bonemap_check)
-                and int(_raw_bonemap_check[_nid]) == _slot
-            )
+            try:
+                _confirmed = (
+                    0 <= _nid < len(_raw_bonemap_check)
+                    and int(_raw_bonemap_check[_nid]) == _slot
+                )
+            except (TypeError, ValueError, OverflowError):
+                _confirmed = False
             _validated.append(gr.bone_map[_slot] if _confirmed else '')
         if any(name for name in _validated):
             while _validated and not _validated[-1]:
@@ -1256,6 +1262,40 @@ def _read_skin_weights(skin, gr: ModelNode, id_to_pknode: Dict) -> None:
             )
     except Exception as _e:
         log.debug("_read_skin_weights '%s': bonemap overflow extension skipped: %s", gr.name, _e)
+
+    # Preserve the compact palette's exact DFS node ids alongside its display
+    # names. Odyssey permits duplicate node names (K2 PFBCM repeats part of
+    # the left-hand chain); names alone cannot round-trip those palettes or
+    # select the matching qBone/tBone row. The fixed bones[16] block and the
+    # node-indexed bonemap together provide the unambiguous slot -> node map.
+    _slot_to_node_id: Dict[int, int] = {}
+    for _node_id, _slot_raw in enumerate(_raw_bonemap_check):
+        try:
+            _slot = int(_slot_raw)
+        except (TypeError, ValueError):
+            continue
+        if _slot >= 0 and _slot not in _slot_to_node_id:
+            _slot_to_node_id[_slot] = _node_id
+    gr.bone_node_indices = []
+    for _slot in range(len(gr.bone_map)):
+        _node_id = -1
+        if _slot < len(raw_bone_indices):
+            try:
+                _candidate_id = int(raw_bone_indices[_slot])
+            except (TypeError, ValueError):
+                _candidate_id = -1
+            try:
+                _candidate_confirmed = (
+                    0 <= _candidate_id < len(_raw_bonemap_check)
+                    and int(_raw_bonemap_check[_candidate_id]) == _slot
+                )
+            except (TypeError, ValueError, OverflowError):
+                _candidate_confirmed = False
+            if _candidate_confirmed:
+                _node_id = _candidate_id
+        if _node_id < 0:
+            _node_id = int(_slot_to_node_id.get(_slot, -1))
+        gr.bone_node_indices.append(_node_id)
 
     # v7.1 FIX-QBONETBONE (Finding 2.5 — reone mdlmdxreader.cpp cross-ref):
     # Read qBone (quaternion) and tBone (translation) arrays from PyKotor skin object.
@@ -1405,9 +1445,48 @@ def _read_light(pk_node, gr: ModelNode) -> None:
     gr.light_shadow = bool(getattr(light, 'shadow', 0))
     gr.light_flare = bool(getattr(light, 'flare', 0))
     gr.light_fading = bool(getattr(light, 'fading_light', 0))
-    flare_radius = float(getattr(light, 'flare_radius', 0.0) or 0.0)
-    if flare_radius > 0.0 and gr.light_radius <= 0.0:
-        gr.light_radius = flare_radius
+    gr.light_flare_radius = float(getattr(light, 'flare_radius', 0.0) or 0.0)
+    gr.light_priority = int(getattr(light, 'light_priority', 0) or 0)
+    gr.light_affect_dynamic = bool(getattr(light, 'affect_dynamic', 0))
+    gr.light_flare_sizes = [float(value) for value in (getattr(light, 'flare_sizes', None) or [])]
+    gr.light_flare_positions = [float(value) for value in (getattr(light, 'flare_positions', None) or [])]
+    gr.light_flare_color_shifts = [
+        tuple(float(component) for component in value[:3])
+        for value in (getattr(light, 'flare_color_shifts', None) or [])
+    ]
+    gr.light_flare_textures = [str(value) for value in (getattr(light, 'flare_textures', None) or [])]
+
+
+def _read_emitter(pk_node, gr: ModelNode) -> None:
+    """Preserve the complete fixed emitter sub-header used by the writer."""
+
+    emitter = getattr(pk_node, 'emitter', None)
+    if emitter is None:
+        return
+    binary = getattr(emitter, '_gr_binary_emitter', None)
+    unknown1 = int(binary.get('unknown1', 0) or 0) if isinstance(binary, dict) else 0
+    gr.emitter_params = {
+        'deadspace': float(getattr(emitter, 'dead_space', 0.0) or 0.0),
+        'blastradius': float(getattr(emitter, 'blast_radius', 0.0) or 0.0),
+        'blastlength': float(getattr(emitter, 'blast_length', 0.0) or 0.0),
+        'numbranches': int(getattr(emitter, 'branch_count', 0) or 0),
+        'controlptsmoothing': int(getattr(emitter, 'control_point_smoothing', 0) or 0),
+        'xgrid': int(getattr(emitter, 'x_grid', 0) or 0),
+        'ygrid': int(getattr(emitter, 'y_grid', 0) or 0),
+        'spawntype': int(getattr(emitter, 'spawn_type', 0) or 0),
+        'update': str(getattr(emitter, 'update', '') or ''),
+        'emitter_render': str(getattr(emitter, 'render', '') or ''),
+        'blend': str(getattr(emitter, 'blend', '') or ''),
+        'texture': str(getattr(emitter, 'texture', '') or ''),
+        'chunkname': str(getattr(emitter, 'chunk_name', '') or ''),
+        'twosidedtex': int(getattr(emitter, 'two_sided_texture', 0) or 0),
+        'loop': int(getattr(emitter, 'loop', 0) or 0),
+        'renderorder': int(getattr(emitter, 'render_order', 0) or 0),
+        'frameblending': int(getattr(emitter, 'frame_blender', 0) or 0),
+        'depth_texture_name': str(getattr(emitter, 'depth_texture', '') or ''),
+        'unknown1': unknown1 & 0xFF,
+        'flags': int(getattr(emitter, 'flags', 0) or 0),
+    }
 
 
 _CT_NAMES: Dict[int, str] = {
@@ -1485,8 +1564,24 @@ def _read_controllers(pk_node, gr: ModelNode) -> None:
         first = rows[0].data
         times  = [float(r.time) for r in rows]
         values = [[float(v) for v in r.data] for r in rows]
-        name   = _CT_NAMES.get(ct, f'ctrl_{ct}')
-        cols   = _CT_COLS.get(ct, len(first) if first else 1)
+        name = _CT_NAMES.get(ct, f'ctrl_{ct}')
+        raw = getattr(ctrl, "_gr_binary_controller", None)
+        raw_columns = int(raw.get("column_count", 0) or 0) if isinstance(raw, dict) else 0
+        cols = (raw_columns & 0x0F) or _CT_COLS.get(ct, len(first) if first else 1)
+
+        # Emitter IDs overlap mesh/light IDs but use different widths and
+        # meanings.  Preserve their raw rows instead of applying the generic
+        # mesh controller table (for example emitter type 100 is one float,
+        # while mesh type 100 is a three-float self-illumination colour).
+        if gr.is_emitter:
+            gr.controllers.append(_with_binary_metadata(ctrl, {
+                'type': ct,
+                'name': name,
+                'columns': cols,
+                'times': times,
+                'values': [v[:cols] for v in values],
+            }))
+            continue
 
         if ct == _CT_POS and len(first) >= 3:
             gr.controllers.append(_with_binary_metadata(ctrl, {'type': _CT_POS,   'name': name, 'columns': 3,

@@ -177,6 +177,7 @@ class QtViewportWidget(
         self._mesh_topology_cache: dict[int, MeshTopology] = {}
         self._mesh_target_weld_source: int | None = None
         self._render_pending = False
+        self._runtime_qimage_compositor = None
         self._last_canvas_size = (0, 0)
         self._pixmap: Optional[QtGui.QPixmap] = None
         self._fast_drag_enabled = False

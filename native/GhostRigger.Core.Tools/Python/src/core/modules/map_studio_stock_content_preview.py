@@ -379,6 +379,204 @@ class TemplateModelResolver:
             return self._store("door", utd_resref, "")
         return self._store("door", utd_resref, table.get(row_index, "modelname", ""))
 
+    def weapon_damage_dice(self, uti_resref: str, strength_modifier: int = 0) -> Any | None:
+        """Resolve an equipped item's baseitems.2da damage dice.
+
+        Returns a ``MapStudioPIEDamageDice`` for a weapon (``numdice`` × d
+        ``dietoroll`` from baseitems.2da, plus Strength for a melee weapon), or
+        ``None`` for a non-weapon (armor/misc) or any resolution failure so the
+        caller keeps its generic fallback. Fully defensive by contract.
+        """
+
+        raw = self._template_bytes(uti_resref, RES_UTI)
+        if not raw:
+            return None
+        gff = _read_gff_fields(raw)
+        if gff is None:
+            return None
+        try:
+            base_item = int(gff.get("BaseItem", -1))
+        except Exception:
+            return None
+        table = self._table("baseitems")
+        if table is None or base_item < 0 or base_item >= len(table):
+            return None
+        numdice = str(table.get(base_item, "numdice", "") or "").strip()
+        dietoroll = str(table.get(base_item, "dietoroll", "") or "").strip()
+        if numdice in ("", "****") and dietoroll in ("", "****"):
+            return None  # not a damage-dealing weapon (armor, plot item, etc.)
+        ranged = str(table.get(base_item, "rangedweapon", "") or "").strip() not in ("", "****", "0")
+        try:
+            from .map_studio_pie_combat import derive_pie_weapon_damage_dice
+        except Exception:
+            return None
+        return derive_pie_weapon_damage_dice(
+            {"numdice": numdice, "dietoroll": dietoroll},
+            strength_modifier=int(strength_modifier),
+            ranged=ranged,
+        )
+
+    def ambient_music_resref(self, track: int) -> str:
+        """Resolve an ``ambientmusic.2da`` row to its streaming music resref.
+
+        KOTOR area music is script-selected by row index (``MusicBackgroundChangeDay``);
+        this maps that literal row to the ``resource`` column so PIE can report
+        (and, later, play) the area's ambient track. Returns ``""`` on any
+        non-resolvable row. Fully defensive by contract.
+        """
+
+        try:
+            row = int(track)
+        except (TypeError, ValueError):
+            return ""
+        if row < 0:
+            return ""
+        table = self._table("ambientmusic")
+        if table is None or row >= len(table):
+            return ""
+        return str(table.get(row, "resource", "") or "").strip()
+
+    def armor_class_bonus(self, uti_resref: str) -> tuple[int, int] | None:
+        """Resolve an equipped item's baseitems.2da armor class and max-Dex cap.
+
+        Returns ``(base_ac, max_dex)`` for an AC-granting item (baseac > 0) — the
+        armor bonus and the Dexterity cap it imposes — or ``None`` for a
+        non-armor item or any failure, so the caller keeps uncapped Dex and no
+        armor bonus. Fully defensive by contract.
+        """
+
+        raw = self._template_bytes(uti_resref, RES_UTI)
+        if not raw:
+            return None
+        gff = _read_gff_fields(raw)
+        if gff is None:
+            return None
+        try:
+            base_item = int(gff.get("BaseItem", -1))
+        except Exception:
+            return None
+        table = self._table("baseitems")
+        if table is None or base_item < 0 or base_item >= len(table):
+            return None
+        baseac = str(table.get(base_item, "baseac", "") or "").strip()
+        if baseac in ("", "****", "0"):
+            return None
+        try:
+            base_ac = int(float(baseac))
+        except (TypeError, ValueError):
+            return None
+        if base_ac <= 0:
+            return None
+        dexbonus = str(table.get(base_item, "dexbonus", "") or "").strip()
+        try:
+            max_dex = int(float(dexbonus)) if dexbonus not in ("", "****") else 99
+        except (TypeError, ValueError):
+            max_dex = 99
+        return (base_ac, max_dex)
+
+    def weapon_critical(self, uti_resref: str) -> tuple[int, int] | None:
+        """Resolve an equipped weapon's baseitems.2da crit threat and multiplier.
+
+        Returns ``(threat, multiplier)`` where ``threat`` is how many top d20
+        rolls threaten (``critthreat``: 1 => only 20, 2 => 19-20) and
+        ``multiplier`` is ``crithitmult``. Returns ``None`` for a non-weapon or
+        any failure so the caller keeps the d20 baseline (threat 1, x2).
+        """
+
+        raw = self._template_bytes(uti_resref, RES_UTI)
+        if not raw:
+            return None
+        gff = _read_gff_fields(raw)
+        if gff is None:
+            return None
+        try:
+            base_item = int(gff.get("BaseItem", -1))
+        except Exception:
+            return None
+        table = self._table("baseitems")
+        if table is None or base_item < 0 or base_item >= len(table):
+            return None
+        numdice = str(table.get(base_item, "numdice", "") or "").strip()
+        dietoroll = str(table.get(base_item, "dietoroll", "") or "").strip()
+        if numdice in ("", "****") and dietoroll in ("", "****"):
+            return None  # not a damage-dealing weapon
+        threat_raw = str(table.get(base_item, "critthreat", "") or "").strip()
+        mult_raw = str(table.get(base_item, "crithitmult", "") or "").strip()
+        try:
+            threat = int(float(threat_raw)) if threat_raw not in ("", "****") else 1
+        except (TypeError, ValueError):
+            threat = 1
+        try:
+            multiplier = int(float(mult_raw)) if mult_raw not in ("", "****") else 2
+        except (TypeError, ValueError):
+            multiplier = 2
+        return (max(1, threat), max(1, multiplier))
+
+    def weapon_damage_type(self, uti_resref: str) -> str | None:
+        """Resolve an equipped weapon's KOTOR damage type from baseitems.2da.
+
+        Returns the label for the weapon's `damageflags` (e.g. "Slashing",
+        "Energy") via the authoritative nwscript `DAMAGE_TYPE_*` bit map, or
+        ``None`` for a non-weapon / any failure.
+        """
+
+        raw = self._template_bytes(uti_resref, RES_UTI)
+        if not raw:
+            return None
+        gff = _read_gff_fields(raw)
+        if gff is None:
+            return None
+        try:
+            base_item = int(gff.get("BaseItem", -1))
+        except Exception:
+            return None
+        table = self._table("baseitems")
+        if table is None or base_item < 0 or base_item >= len(table):
+            return None
+        numdice = str(table.get(base_item, "numdice", "") or "").strip()
+        dietoroll = str(table.get(base_item, "dietoroll", "") or "").strip()
+        if numdice in ("", "****") and dietoroll in ("", "****"):
+            return None  # not a damage-dealing weapon
+        flags_raw = str(table.get(base_item, "damageflags", "") or "").strip()
+        if flags_raw in ("", "****"):
+            return None
+        try:
+            from .map_studio_pie_combat import pie_damage_type_label
+        except Exception:
+            return None
+        return pie_damage_type_label(flags_raw)
+
+    def weapon_feat_category(self, uti_resref: str) -> str:
+        """Classify an equipped weapon for Weapon Focus/Specialization feats.
+
+        Returns "lightsaber" (baseitems.2da `powereditem`), "melee" (non-powered
+        non-ranged), "blaster" (ranged), or "" for a non-weapon/failure. Only
+        the unambiguous lightsaber/melee categories drive feat bonuses (a
+        blaster's pistol-vs-rifle focus feat can't be split from these columns).
+        """
+
+        raw = self._template_bytes(uti_resref, RES_UTI)
+        if not raw:
+            return ""
+        gff = _read_gff_fields(raw)
+        if gff is None:
+            return ""
+        try:
+            base_item = int(gff.get("BaseItem", -1))
+        except Exception:
+            return ""
+        table = self._table("baseitems")
+        if table is None or base_item < 0 or base_item >= len(table):
+            return ""
+        numdice = str(table.get(base_item, "numdice", "") or "").strip()
+        if numdice in ("", "****"):
+            return ""  # not a weapon
+        powered = str(table.get(base_item, "powereditem", "") or "").strip()
+        if powered not in ("", "****", "0"):
+            return "lightsaber"
+        ranged = str(table.get(base_item, "rangedweapon", "") or "").strip() not in ("", "****", "0")
+        return "blaster" if ranged else "melee"
+
     def store_model(self, utm_resref: str) -> str:
         """UTM stores are non-spatial and have no geometry by design."""
 

@@ -109,6 +109,16 @@ def test_legacy_nwmax_bridge_requires_exact_toolset_and_restores_scene_state() -
     assert "with animate off" in source
     assert "matches.count != expectedCount" in source
     assert "replaceExistingRoot:false" in source
+    assert "controller.supportsKeys" in source
+    assert "getXYZControllers" in source
+    assert "InstanceMgr.GetInstances" in source
+    assert "snapshotAsMesh" in source
+    assert "delete evaluated" in source
+    assert "getFaceSmoothGroup" in source
+    assert "getEdgeVis" in source
+    assert "meshop.getNumMaps" in source
+    assert "evaluated_export_channels_preserved=true" in source
+    assert "snapshotAsMesh returns the evaluated world-state TriMesh" in source
     loader = NWMAX_LOADER.read_text(encoding="utf-8")
     assert "KOTORMax is already loaded" in loader
     assert "ghostVul803LegacyNwmaxCoreIsReady" in loader

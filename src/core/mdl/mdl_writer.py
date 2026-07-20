@@ -402,6 +402,10 @@ class MDLBinaryWriter:
 
         self._model = model
         self._is_k2 = (model.game_version == GameVersion.K2)
+        self._animation_override_only = True
+        self._target_node_number_by_name_index = self._read_geometry_node_numbers(
+            source_mdl_bytes
+        )
         self._nodes = []
 
         def _collect(node: ModelNode) -> None:
@@ -478,6 +482,52 @@ class MDLBinaryWriter:
             names.append(source_mdl_bytes[name_abs:end].decode("ascii", errors="replace"))
         return names
 
+    @staticmethod
+    def _read_geometry_node_numbers(source_mdl_bytes: bytes) -> Dict[int, int]:
+        """Return stock geometry name-index -> runtime node-number identities."""
+
+        if len(source_mdl_bytes) < _BASE + 80:
+            return {}
+        root_rel = struct.unpack_from("<I", source_mdl_bytes, _BASE + 40)[0]
+        if root_rel <= 0:
+            return {}
+
+        result: Dict[int, int] = {}
+        queue = [int(root_rel)]
+        seen: set[int] = set()
+        while queue:
+            node_rel = queue.pop(0)
+            if node_rel in seen:
+                continue
+            seen.add(node_rel)
+            node_abs = _BASE + node_rel
+            if node_abs < _BASE or node_abs + 80 > len(source_mdl_bytes):
+                continue
+
+            node_number = struct.unpack_from("<H", source_mdl_bytes, node_abs + 2)[0]
+            name_index = struct.unpack_from("<H", source_mdl_bytes, node_abs + 4)[0]
+            result[name_index] = node_number
+
+            child_array_rel = struct.unpack_from("<I", source_mdl_bytes, node_abs + 44)[0]
+            child_count = struct.unpack_from("<I", source_mdl_bytes, node_abs + 48)[0]
+            child_array_abs = _BASE + child_array_rel
+            if (
+                child_array_rel <= 0
+                or child_count <= 0
+                or child_count > 0x10000
+                or child_array_abs + child_count * 4 > len(source_mdl_bytes)
+            ):
+                continue
+            for index in range(child_count):
+                child_rel = struct.unpack_from(
+                    "<I",
+                    source_mdl_bytes,
+                    child_array_abs + index * 4,
+                )[0]
+                if child_rel > 0:
+                    queue.append(int(child_rel))
+        return result
+
     def write(self, model: KotorModel) -> Tuple[bytes, bytes]:
         """
         Returns (mdl_bytes, mdx_bytes).
@@ -497,6 +547,7 @@ class MDLBinaryWriter:
         """
         self._model = model
         self._is_k2 = (model.game_version == GameVersion.K2)
+        self._animation_override_only = False
         self._child_arr_data_locs: Dict[int, int] = {}  # id(node) → abs pos of child ptr array data
 
         # ── 1. Collect nodes (DFS pre-order) ────────────────────────────────
@@ -1217,10 +1268,25 @@ class MDLBinaryWriter:
                 total += rows
                 total += rows * values_per_row
                 continue
-            cols = ctrl.get('columns', 1)
+            cols = self._linear_controller_column_count(ctrl)
             total += rows          # time keys
             total += rows * cols   # value data
         return total
+
+    @staticmethod
+    def _linear_controller_column_count(ctrl: Dict) -> int:
+        """Return the exact on-disk width for a non-Bezier controller.
+
+        Controller type IDs are node-kind dependent.  In particular, emitter
+        controller 100 is a one-float channel even though mesh controller 100
+        is a three-float self-illumination colour.  A binary read therefore
+        carries the authoritative column byte in ``binary_column_count``;
+        replacing it with the generic type map corrupts the following rows.
+        """
+
+        raw = int(ctrl.get('binary_column_count', ctrl.get('columns', 1)) or 1)
+        # Bit 0x10 belongs to Bezier payloads, handled before this helper.
+        return max(1, raw & 0x0F)
 
     @staticmethod
     def _uses_compressed_orientation_payload(ctrl: Dict, rows: int) -> bool:
@@ -1313,7 +1379,7 @@ class MDLBinaryWriter:
         for ctrl in node.controllers:
             times  = ctrl.get('times', [])
             values = ctrl.get('values', [])
-            cols   = ctrl.get('columns', 1)
+            cols   = self._linear_controller_column_count(ctrl)
             rows   = len(times)
             compressed_orientation = self._uses_compressed_orientation_payload(ctrl, rows)
             bezier_payload = self._bezier_controller_payload(ctrl, rows)
@@ -1359,7 +1425,13 @@ class MDLBinaryWriter:
                 else (
                     int(bezier_payload[0])
                     if bezier_payload is not None
-                    else int(ctrl.get('columns', 1) or 1)
+                    else int(
+                        ctrl.get(
+                            'binary_column_count',
+                            self._linear_controller_column_count(ctrl),
+                        )
+                        or 1
+                    )
                 )
             )
             # Vanilla controller keys carry 0xFFFF (-1) in this slot; only
@@ -1749,7 +1821,11 @@ class MDLBinaryWriter:
                 nz = (ux * wy) - (uy * wx)
                 ln = (nx * nx + ny * ny + nz * nz) ** 0.5 or 1.0
                 nx, ny, nz = nx / ln, ny / ln, nz / ln
-                dist = (nx * ax) + (ny * ay) + (nz * az)
+                # Odyssey stores the plane in implicit form n·p + d = 0.
+                # True K2 CHITIN rooms (001ebo1/r00_test) therefore carry
+                # d = -dot(n, point).  The previous positive sign made every
+                # generated embedded AABB disagree with its external WOK.
+                dist = -((nx * ax) + (ny * ay) + (nz * az))
             except (IndexError, ValueError):
                 nx, ny, nz, dist = 0.0, 0.0, 1.0, 0.0
             adjacency = []
@@ -1948,8 +2024,24 @@ class MDLBinaryWriter:
         # binary load; freshly-built exports carry palette-length arrays
         # (skeleton_builder / split remap), which we expand to node-indexed
         # form here.
-        bone_map_names   = list(node.bone_map or [])
-        palette_node_ids = [self._skin_bone_node_index(nm) for nm in bone_map_names]
+        bone_map_names = list(node.bone_map or [])
+        recorded_node_ids = list(
+            getattr(node, 'bone_node_indices', []) or []
+        )
+        palette_node_ids = []
+        for slot, bone_name in enumerate(bone_map_names):
+            try:
+                recorded_id = int(recorded_node_ids[slot])
+            except (IndexError, TypeError, ValueError):
+                recorded_id = -1
+            if (
+                0 <= recorded_id < len(self._nodes)
+                and str(getattr(self._nodes[recorded_id], 'name', '') or '').lower()
+                    == str(bone_name or '').lower()
+            ):
+                palette_node_ids.append(recorded_id)
+            else:
+                palette_node_ids.append(self._skin_bone_node_index(bone_name))
         n_nodes          = len(self._nodes)
 
         def _is_node_indexed(arr: list) -> bool:
@@ -2017,7 +2109,7 @@ class MDLBinaryWriter:
         # Unused slots are zero-filled to match vanilla binary padding and to
         # avoid confusing tools that compare all 16 entries byte-for-byte.
         for i in range(16):
-            bone_idx = self._skin_bone_node_index(bone_map_names[i]) if i < len(bone_map_names) else -1
+            bone_idx = palette_node_ids[i] if i < len(palette_node_ids) else -1
             if bone_idx >= 0:
                 buf.write(_wu16(bone_idx))
             else:
@@ -2239,7 +2331,9 @@ class MDLBinaryWriter:
         buf.write(_wf32(ep.get('blastradius', 0.0)))
         buf.write(_wf32(ep.get('blastlength', 0.0)))
         buf.write(_wu32(ep.get('numbranches', 0)))
-        buf.write(_wf32(ep.get('controlptsmoothing', 0.0)))
+        # MDLOps/PyKotor's 224-byte emitter header stores this as uint32,
+        # despite older prose documentation describing it as a float.
+        buf.write(_wu32(ep.get('controlptsmoothing', 0)))
         buf.write(_wu32(ep.get('xgrid', 0)))
         buf.write(_wu32(ep.get('ygrid', 0)))
         buf.write(_wu32(ep.get('spawntype', 0)))
@@ -2253,18 +2347,20 @@ class MDLBinaryWriter:
         buf.write(_wu16(ep.get('renderorder', 0)))
         buf.write(struct.pack('B', ep.get('frameblending', 0)))
         buf.write(_wstr(ep.get('depth_texture_name', ''), 32))
-        buf.write(b'\x00')             # padding
-        # Build flags bitmask from individual flag fields
-        flags = 0
+        buf.write(struct.pack('B', int(ep.get('unknown1', 0)) & 0xFF))
+        # Parsed rooms supply the authoritative packed field.  Only synthesize
+        # flags from friendly booleans for a newly authored emitter.
+        flags = int(ep.get('flags', ep.get('emitter_flags', 0)) or 0)
         _flag_map = [
             ('p2p', 0x0001), ('p2p_sel', 0x0002), ('affected_wind', 0x0004),
             ('tinted', 0x0008), ('bounce', 0x0010), ('random', 0x0020),
             ('inherit', 0x0040), ('inheritvel', 0x0080), ('inherit_local', 0x0100),
             ('splat', 0x0200), ('inherit_part', 0x0400), ('depth_texture', 0x0800),
         ]
-        for fname, fbit in _flag_map:
-            if ep.get(fname, 0):
-                flags |= fbit
+        if 'flags' not in ep and 'emitter_flags' not in ep:
+            for fname, fbit in _flag_map:
+                if ep.get(fname, 0):
+                    flags |= fbit
         buf.write(_wu32(flags))
 
     def _write_reference_header(self, buf: BytesIO, node: ModelNode) -> None:
@@ -2999,12 +3095,51 @@ class MDLBinaryWriter:
         """
         node_start = buf.tell()
         name_idx = self._name_index_for(node.name)
+        if getattr(self, '_animation_override_only', False):
+            source_name_idx = int(getattr(node, 'index', name_idx))
+            if (
+                0 <= source_name_idx < len(getattr(self, '_names', []))
+                and str(self._names[source_name_idx]).lower()
+                == str(getattr(node, 'name', '') or '').lower()
+            ):
+                # The parsed node's ``index`` is the stock name-table index.
+                # Preserve it so duplicate geometry names remain unambiguous.
+                name_idx = source_name_idx
 
         # Animation nodes must always be DUMMY (0x0001) — see NWN binary spec
         # and PyKotor io_mdl.py.  Mesh flags belong only in geometry nodes.
         anim_flags = 1  # NodeType.DUMMY
+        node_key = str(getattr(node, 'name', '') or '').lower()
+        if getattr(self, '_animation_override_only', False):
+            # Surgical injection preserves the stock geometry bytes, including
+            # their non-DFS node numbers (PFBNM root children include 97/100/1).
+            # PyKotor retains the +4 name-table index, so recover the matching
+            # raw +2 node number from the source geometry tree.
+            node_index = int(
+                getattr(self, '_target_node_number_by_name_index', {}).get(
+                    name_idx,
+                    getattr(node, 'index', name_idx),
+                )
+            )
+        else:
+            # A full rebuild renumbers static geometry in DFS order, so its
+            # animation nodes must use the same newly assigned runtime slots.
+            node_index = int(
+                getattr(self, '_node_index_by_name', {}).get(
+                    node_key,
+                    getattr(node, 'index', name_idx),
+                )
+            )
+        if not 0 <= node_index <= 0xFFFF:
+            raise ValueError(
+                f"Animation node '{getattr(node, 'name', '')}' has an invalid geometry node index: "
+                f"{node_index}."
+            )
         buf.write(_wu16(anim_flags))
-        buf.write(_wu16(name_idx))
+        # +2 is the target geometry-node index, while +4 is the model name-table
+        # index.  Ghost preview resolves controllers by name, but retail Aurora
+        # pairs animation nodes to model nodes through this geometry index.
+        buf.write(_wu16(node_index))
         buf.write(_wu16(name_idx))
         buf.write(_wu16(0))
 

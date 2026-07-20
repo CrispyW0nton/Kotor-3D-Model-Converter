@@ -97,17 +97,36 @@ async def handle_prepare_save_warp_test(arguments: Dict[str, Any]) -> Dict[str, 
             save_folder=inp.save_folder,
             save_name=inp.save_name,
             require_loaded_save_before_warp=bool(inp.require_loaded_save_before_warp),
+            game_root=game_root,
         )
+        selected_save_route = _save_route_status(selected, game_root) if selected else None
         module_status = _module_status(game_root, target_module)
         console = _console_status(game_root, installation.game_name(), target_module)
         windowed = _windowed_status(game_root, installation.game_name())
         currentgame = _currentgame_status(game_root, target_module)
         dinput_hook = describe_hook(game_root)
-        loaded_save_route = bool(selected) and str(selected.get("last_module", "")).lower() != target_module.lower()
+        loaded_save_route = bool(
+            selected
+            and selected_save_route
+            and selected_save_route["resolvable"]
+            and _clean_module_root(selected.get("last_module", "")) != target_module
+        )
         blocking: list[str] = []
         warnings: list[str] = []
         if not selected:
-            blocking.append("No usable save folder was found.")
+            if inp.save_folder:
+                blocking.append(f"Requested save folder was not found: {inp.save_folder}")
+            elif inp.save_name:
+                blocking.append(f"Requested save name did not match any discovered save: {inp.save_name}")
+            elif saves:
+                blocking.append(
+                    "No usable save folder was found. Every discovered save has an unresolved LASTMODULE route; "
+                    "the module must exist inside SAVEGAME.sav or as an installed .mod, .rim, or _s.rim file."
+                )
+            else:
+                blocking.append("No usable save folder was found.")
+        elif selected_save_route and not selected_save_route["resolvable"]:
+            blocking.append(selected_save_route["blocking_issue"])
         elif bool(inp.require_loaded_save_before_warp) and not loaded_save_route:
             blocking.append(
                 f"Selected save already starts in {target_module}; choose a normal save first, then run warp."
@@ -149,6 +168,7 @@ async def handle_prepare_save_warp_test(arguments: Dict[str, Any]) -> Dict[str, 
                 "target_module": target_module,
                 "warp_command": warp_command,
                 "selected_save": selected,
+                "selected_save_route": selected_save_route,
                 "loaded_save_before_warp": loaded_save_route,
                 "module": module_status,
                 "console": console,
@@ -269,6 +289,7 @@ def _select_save(
     save_folder: Optional[str],
     save_name: Optional[str],
     require_loaded_save_before_warp: bool,
+    game_root: Optional[Path] = None,
 ) -> Optional[dict[str, Any]]:
     if save_folder:
         requested = str(Path(save_folder).resolve()).lower()
@@ -282,11 +303,85 @@ def _select_save(
             ).lower()
             if needle in haystack:
                 return save
+        return None
+    installed_module_files = _installed_module_file_index(game_root) if game_root is not None else None
+    usable_saves = [
+        save
+        for save in saves
+        if game_root is None
+        or _save_route_status(save, game_root, installed_module_files=installed_module_files)["resolvable"]
+    ]
     if require_loaded_save_before_warp:
-        for save in saves:
-            if str(save.get("last_module") or "").lower() != target_module.lower():
+        for save in usable_saves:
+            if _clean_module_root(save.get("last_module") or "") != target_module.lower():
                 return save
-    return saves[0] if saves else None
+    return usable_saves[0] if usable_saves else None
+
+
+def _installed_module_file_index(game_root: Path) -> dict[str, Path]:
+    modules_dir = game_root / "Modules"
+    try:
+        return {
+            path.name.casefold(): path
+            for path in modules_dir.iterdir()
+            if path.is_file() and path.suffix.casefold() in {".mod", ".rim"}
+        }
+    except OSError:
+        return {}
+
+
+def _save_route_status(
+    save: dict[str, Any],
+    game_root: Path,
+    *,
+    installed_module_files: Optional[dict[str, Path]] = None,
+) -> dict[str, Any]:
+    last_module = _clean_module_root(save.get("last_module", ""))
+    archive_modules = sorted(
+        {
+            module
+            for value in (save.get("modules") or [])
+            if (module := _clean_module_root(value))
+        }
+    )
+    installed_index = (
+        installed_module_files
+        if installed_module_files is not None
+        else _installed_module_file_index(game_root)
+    )
+    expected_names = (
+        f"{last_module}.mod",
+        f"{last_module}.rim",
+        f"{last_module}_s.rim",
+    ) if last_module else ()
+    installed_paths = [
+        str(installed_index[name.casefold()])
+        for name in expected_names
+        if name.casefold() in installed_index
+    ]
+    archive_contains_last_module = bool(last_module and last_module in archive_modules)
+    resolvable = bool(last_module and (archive_contains_last_module or installed_paths))
+    if resolvable:
+        blocking_issue = ""
+    elif not last_module:
+        blocking_issue = (
+            "Selected save cannot be loaded: savenfo.res has no LASTMODULE value, so its module route "
+            "cannot be resolved from SAVEGAME.sav or installed module files."
+        )
+    else:
+        blocking_issue = (
+            f"Selected save cannot be loaded: LASTMODULE '{last_module}' is absent from SAVEGAME.sav and no "
+            f"installed {last_module}.mod, {last_module}.rim, or {last_module}_s.rim file exists."
+        )
+    return {
+        "last_module": last_module,
+        "archive_contains_last_module": archive_contains_last_module,
+        "savegame_modules": archive_modules,
+        "expected_installed_files": [str(game_root / "Modules" / name) for name in expected_names],
+        "installed_module_files": installed_paths,
+        "resolvable": resolvable,
+        "blocking_issue": blocking_issue,
+    }
 
 
 def _module_status(game_root: Path, target_module: str) -> dict[str, Any]:

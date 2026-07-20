@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from src.core.animation.animation_engine import SuperModelResolver
+from src.core.animation.animation_engine import SuperModelResolver, evaluate_aurora_animation_pose
 from src.core.game.kotor_loader import load_model_from_file
 from src.core.geometry.model_data import Animation, KotorModel, ModelNode
 from src.core.retargeting.aurora_animation_writer import (
@@ -405,7 +405,7 @@ def test_clip_frame_zero_reference_mode_remains_explicit_legacy_option(tmp_path:
 
 
 @pytest.mark.skipif(not TARGET_MDL.exists(), reason="PMBAM fixture unavailable")
-def test_world_motion_delta_survives_when_source_parent_matches_child_motion(tmp_path: Path):
+def test_world_motion_is_inherited_when_source_parent_matches_child_motion(tmp_path: Path):
     r3a = tmp_path / "r3a.json"
     _write_synthetic_r3a(r3a)
     model = load_model_from_file(str(TARGET_MDL), str(TARGET_MDL.with_suffix(".mdx")))
@@ -454,8 +454,28 @@ def test_world_motion_delta_survives_when_source_parent_matches_child_motion(tmp
         bicep_orientation["values"][0],
         bicep_orientation["values"][1],
     )
-    assert exported_amplitude == pytest.approx(20.0, abs=0.01)
-    assert AuroraAnimationWriter._validate_export_motion_amplitude(payload, animation) == []
+    assert exported_amplitude == pytest.approx(0.0, abs=0.01)
+
+    world_rotations = []
+    for time_value in bicep_orientation["times"]:
+        pose = evaluate_aurora_animation_pose(model, animation, time_value)
+        world_rotations.append(
+            next(
+                entry.rotation
+                for name, entry in pose.world_transforms_by_node.items()
+                if name.lower() == "lbicep_g"
+            )
+        )
+    inherited_world_amplitude = quaternion_angular_difference_degrees(
+        world_rotations[0],
+        world_rotations[1],
+    )
+    assert inherited_world_amplitude == pytest.approx(20.0, abs=0.01)
+    assert AuroraAnimationWriter._validate_export_motion_amplitude(
+        payload,
+        animation,
+        model=model,
+    ) == []
 
 
 @pytest.mark.skipif(not TARGET_MDL.exists(), reason="PMBAM fixture unavailable")
@@ -498,7 +518,7 @@ def test_motion_amplitude_gate_rejects_flattened_arm_export(tmp_path: Path):
         ],
     )
 
-    issues = AuroraAnimationWriter._validate_export_motion_amplitude(payload, flat)
+    issues = AuroraAnimationWriter._validate_export_motion_amplitude(payload, flat, model=model)
 
     assert issues
     assert "lbicep_g" in issues[0]

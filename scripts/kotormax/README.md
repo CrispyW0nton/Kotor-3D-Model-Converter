@@ -93,9 +93,10 @@ KOTORMax a poorer first opener for the saved walkmesh and tile metadata.
 
 ## Required tool configuration
 
-1. Install a licensed Autodesk 3ds Max version that can open the Max 9 scene.
-   No 3ds Max installation is currently present on this machine; the existing
-   `max2021_mcp` files are integration scripts, not an installed Max runtime.
+1. Use the licensed Autodesk 3ds Max 2019 installation at
+   `C:\Program Files\Autodesk\3ds Max 2019`. Version `21.0.0.845` has now opened
+   and exported all four registered legacy room partitions through the isolated
+   `3dsMaxMCP` workflow.
 2. For the preferred legacy pass, copy the complete preserved folder
    `C:\Users\NewAdmin\Documents\KotorMods\Modules\Marius_Things\Extracted\NWMAX\NWMAX\NWmax`
    into the active 3ds Max scripts directory returned by `getDir #scripts` as
@@ -121,10 +122,26 @@ KOTORMax a poorer first opener for the saved walkmesh and tile metadata.
    Never save over the source scene.
 6. Create a new, empty export directory. Both bridges refuse overwrites.
 
-No Autodesk 3ds Max installation is currently present on this machine. The
-existing `scripts/max2021_mcp` folder is integration code, not a Max runtime,
-so the MaxScript wrappers have not yet received a live 3ds Max execution test.
-`gmax` is not a substitute because it cannot open the `.max` source scenes.
+The supported automated route now lives at
+`C:\Users\NewAdmin\Documents\GDeveloper\Workspaces\3dsMaxMCP`. Its typed
+recipes stage the source scene and NWMax tree into a private run directory,
+pin every executable/input hash, supervise the complete Max process tree, and
+publish only verified outputs. The original `.max` scenes and NWMax tree stayed
+hash-identical across every successful run. `gmax` remains unsuitable because
+it cannot open the `.max` source scenes.
+
+For Max 2019, select compatibility profile `nwmax_0_8_b60_max2019`. It applies
+exactly three compatibility edits to the run-owned NWMax copy and records the
+final staged-tree hash
+`808977a31868f202cf38778a3a4f9b1c23477bbc89a75a03465f99d09136147f`.
+It also disables only NWMax's optional legacy weld advisory; all other selected
+sanity checks remain enabled. Vul801 `01c` additionally registers four exact
+static nodes (`Line04`, `Cylinder02`, `Cylinder03`, `Cylinder04`) for a
+fail-closed in-memory `resetXForm`. The bridge requires static allowlisted
+controllers, leaf/single-instance isolation, and preservation of evaluated
+vertices, topology, material IDs, smoothing groups, edge visibility, every map
+channel, world bounds, and every non-target room node. Its ordered evidence
+report is hash-validated before publication; the staged scene is never saved.
 
 ## Operator calls
 
@@ -240,11 +257,25 @@ Both bridges produce ASCII MDL, not final engine binaries. For each room:
 5. Package non-destructively, then manually warp and walk the module in each
    target game. Parsing alone is not engine proof.
 
-The current surviving `01a` + collision-source `01b` proof has already passed
-these headless gates for both K1 and K2: 292 visual meshes, 11,362 visual
-vertices, 17,301 visual faces, 11 textures, one 127-vertex/145-face embedded
-AABB, an identical 145-face external WOK, 11 closed perimeter loops, zero
-controllers, and zero nonzero node-header `+8` values. The fresh evidence is at
-`C:\Users\NewAdmin\Documents\KotorMods\Modules\Converted\WalkmeshAudit\GeneratedCandidates\vul803\NWMaxCompileVerified`.
-It remains a structural candidate, not a claim that the full three-room module
-or a retail K1/K2 warp has been proven.
+The current Max-2019 recovery merges `01a` and `01c` as one visual shell and
+uses collision-only `01b` once; `01c` has no independent collision proof and
+must not receive a duplicate overlapping WOK. Vul803 now passes the K1 and K2
+headless gates with 370 visual meshes, 17,113 visual vertices, 27,792 visual
+faces, 17 textures, one 127-vertex/145-face embedded AABB, an identical
+145-face external WOK, 11 closed perimeter loops, zero controllers, and zero
+nonzero node-header `+8` values. Vul801 passes with 287 meshes, 12,754 vertices,
+18,010 faces, 17 textures, a 314-vertex/336-face WOK, three closed perimeter
+loops, zero controllers, and zero nonzero node-header `+8` values. Evidence is
+under each module's `Max2019NWMaxCompileHardened` directory. These remain
+structural candidates, not claims that either complete module or a retail K1/K2
+warp has been proven.
+
+Fresh `Max2019NWMaxMergedHardened` K1/K2 MOD packages for both modules now pass
+serialized engine-contract validation, package readback, Map Studio import,
+editable-room conversion, KMAP save, and fresh KMAP reopen. The proof retained
+27,792 render faces/145 WOK faces for Vul803 and 18,010 render faces/336 WOK
+faces for Vul801. Vul801 K1 includes its nine required K2 stock texture ports.
+Vul801's WOK has three closed but disconnected components, which is structurally
+valid but requires deliberate retail movement/pathing inspection. Nothing was
+installed into either game; the user's manual warp, movement, camera, texture,
+and transition test is still the final proof gate.

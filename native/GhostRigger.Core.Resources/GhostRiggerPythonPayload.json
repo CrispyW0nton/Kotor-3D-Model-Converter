@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Resources",
-    "file_count": 18,
+    "file_count": 19,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -27,7 +27,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_ASSETS_RESOURCE_MANAGER",
             "source_path": "src/core/assets/resource_manager.py",
             "packaged_path": "Python/src/core/assets/resource_manager.py",
-            "sha256": "f0433aba9e9a192e1c4abe299eca87bf3a1c6482157df0dfe1668ad97b245939"
+            "sha256": "fef51ecf2fd4c6415eede850253673c19a8c5658465582a35fdf2922c6a63bed"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GAME_INIT",
@@ -57,7 +57,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_GAME_KOTOR_LOADER",
             "source_path": "src/core/game/kotor_loader.py",
             "packaged_path": "Python/src/core/game/kotor_loader.py",
-            "sha256": "9dcc3bbb337a4a73df759172c59d33259dfa06ebb30062f25e6c1970e1782051"
+            "sha256": "0d6e29f018b26217d2adcc45cbc72009a1596ffee49c3704be00409f7413a229"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_GAME_PYKOTOR_BRIDGE",
@@ -112,6 +112,12 @@
             "source_path": "src/resources/game_library.py",
             "packaged_path": "Python/src/resources/game_library.py",
             "sha256": "55483bac5cb25efe677f80cbaa140275d905f3292fcba3e9d2bb6ea33fbb148e"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_RESOURCES_KOTOR_UTC_TEMPLATE_CATALOG",
+            "source_path": "src/resources/kotor_utc_template_catalog.py",
+            "packaged_path": "Python/src/resources/kotor_utc_template_catalog.py",
+            "sha256": "7f30c46977ea6b92c42c43c5f2bcbf223d4dd729fe80d4e91a92d405a5f6c5d1"
         }
     ]
 }

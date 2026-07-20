@@ -33,6 +33,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "dock_hosts",
         "editor_services",
         "geometry",
+        "gui_editor_workflow",
         "log_panel",
         "main_layout",
         "model_io",

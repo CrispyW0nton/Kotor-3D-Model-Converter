@@ -950,7 +950,7 @@ def test_stock_module_wok_inventory_summarizes_surfaces_runtime(tmp_path: Path) 
     draft = create_wok_surface_paint_draft(module_path, resource, non_walk_face_index, 19)
     assert draft.ready is True
     assert draft.old_surfaces == {non_walk_face_index: 7}
-    assert draft.new_surface_name == "SNOW"
+    assert draft.new_surface_name == "NON_WALK_GRASS"
     output_path = tmp_path / "walkmesh_wok_patch.mod"
     result = write_wok_surface_patch_export_copy(module_path, output_path, draft)
     assert result.ok is True
@@ -959,7 +959,7 @@ def test_stock_module_wok_inventory_summarizes_surfaces_runtime(tmp_path: Path) 
     assert manifest["patched_resources"] == ["koq200_01a.wok"]
     assert manifest["draft"]["face_indices"] == [non_walk_face_index]
     assert manifest["draft"]["old_surfaces"] == {str(non_walk_face_index): 7}
-    assert manifest["draft"]["new_surface_name"] == "SNOW"
+    assert manifest["draft"]["new_surface_name"] == "NON_WALK_GRASS"
     output_resources = read_module_archive_resources(output_path)
     output_wok_resource = next(item for item in output_resources if item.label == "koq200_01a.wok")
     patched_wok = WOKData.from_bytes(read_module_resource_bytes(output_path, output_wok_resource))
@@ -1031,7 +1031,7 @@ def test_stock_module_wok_inventory_summarizes_surfaces_runtime(tmp_path: Path) 
             window.details.item(row, 0).text(): window.details.item(row, 1).text()
             for row in range(window.details.rowCount())
         }
-        assert paint_rows["Pending WOK surface paint"] == f"koq200_01a.wok face(s) {non_walk_face_index} -> SNOW (19)"
+        assert paint_rows["Pending WOK surface paint"] == f"koq200_01a.wok face(s) {non_walk_face_index} -> NON_WALK_GRASS (19)"
         assert paint_rows["Old surfaces"] == f"{non_walk_face_index}:7"
         assert paint_rows["Export state"] == "ready for copied module export"
     finally:
@@ -7002,7 +7002,7 @@ def test_t2911_visible_wok_surface_combo_paints_required_kotor_intent_runtime(tm
         "walkable": ("4", "STONE", True),
         "non_walk": ("7", "NON_WALK", False),
         "door_transition": ("18", "DOOR", True),
-        "water": ("6", "WATER", False),
+        "water": ("6", "WATER", True),
         "grass": ("3", "GRASS", True),
         "metal": ("10", "METAL", True),
         "visual_only": ("8", "TRANSPARENT", False),

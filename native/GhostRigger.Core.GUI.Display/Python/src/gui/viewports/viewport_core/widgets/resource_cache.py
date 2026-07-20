@@ -54,7 +54,6 @@ class ViewportResourceCacheMixin:
         return cached_image, clipped_regions
 
     def _evict_transform_cache(self, node) -> None:
-        clear_prebuilt_static_gpu_mesh_data(node)
         self._renderer._wt_cache.pop(id(node), None)
         try:
             self._renderer._frame_view = None
@@ -89,6 +88,12 @@ class ViewportResourceCacheMixin:
                     for affected in affected_nodes:
                         self._gpu_renderer.invalidate_node(affected)
             return
+        # Geometry-edit callers need to discard their CPU-prebuilt VBO source.
+        # A retained scene-object transform changes only its draw matrix and has
+        # already returned above; deleting every actor descendant's prebuilt mesh
+        # on each PIE pose tick wastes a full hierarchy walk and guarantees that
+        # later resource reconciliation must rebuild otherwise immutable data.
+        clear_prebuilt_static_gpu_mesh_data(node)
         if self._gpu_renderer is not None:
             self._gpu_renderer.invalidate_node(node)
         stack = list(getattr(node, "children", []) or [])

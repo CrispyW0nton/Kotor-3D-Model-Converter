@@ -21,9 +21,32 @@ from .validation_bus import (
     validation_report_from_dict,
     validation_report_to_dict,
 )
+from .custom_rigged_character_validator import (
+    AnimationClipSnapshot,
+    AnimationTrackSnapshot,
+    CustomRigValidationIssue,
+    CustomRigValidationReport,
+    CustomRiggedCharacterSnapshot,
+    CustomRiggedCharacterValidator,
+    MaterialSnapshot,
+    RigNodeSnapshot,
+    axis_scale_point,
+    ground_offset_for_contacts,
+    normalized_influences,
+    quaternion_continuity,
+    validate_resource_name,
+)
 
 __all__ = [
     "ValidationBus",
+    "AnimationClipSnapshot",
+    "AnimationTrackSnapshot",
+    "CustomRigValidationIssue",
+    "CustomRigValidationReport",
+    "CustomRiggedCharacterSnapshot",
+    "CustomRiggedCharacterValidator",
+    "MaterialSnapshot",
+    "RigNodeSnapshot",
     "ValidationIssue",
     "ValidationNavigationTarget",
     "ValidationReport",
@@ -40,4 +63,9 @@ __all__ = [
     "validation_navigation_target_to_dict",
     "validation_report_from_dict",
     "validation_report_to_dict",
+    "axis_scale_point",
+    "ground_offset_for_contacts",
+    "normalized_influences",
+    "quaternion_continuity",
+    "validate_resource_name",
 ]

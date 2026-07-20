@@ -11,6 +11,8 @@ try:
 except Exception:  # pragma: no cover - compatibility for direct package execution
     from core.scene.node_identity import classify_scene_model, classify_scene_node  # type: ignore
 
+from src.systems.bas.preview_composer import bas_runtime_source_copy_memo
+
 
 class ViewportSceneModelMixin:
     def load_model(
@@ -238,7 +240,7 @@ class ViewportSceneModelMixin:
             first_model = first_model or runtime_model
             prebuilt_mesh_count += int(getattr(runtime_model, "_gr_gpu_prebuilt_mesh_count", 0) or 0)
             try:
-                node = copy.deepcopy(model_root)
+                node = copy.deepcopy(model_root, bas_runtime_source_copy_memo(model_root))
             except Exception:
                 node = model_root.clone_shallow()
                 node.children = []
@@ -819,12 +821,23 @@ class ViewportSceneModelMixin:
         clear_diagnostics = getattr(canvas, "clear_diagnostics_text", None)
         if callable(clear_diagnostics):
             clear_diagnostics()
+        surface_getter = getattr(canvas, "current_surface", None)
+        surface = surface_getter() if callable(surface_getter) else None
+        if isinstance(surface, QtWidgets.QLabel):
+            # RendererSurfaceHost.setText() deliberately switches a retained
+            # QLabel from pixmap mode to text mode. Map Studio publishes
+            # transient marker geometry while PIE moves, so calling it with an
+            # empty string here discarded the current world frame every time
+            # the runtime overlay changed. A populated pixmap already hides
+            # the shared empty-scene label; only clear fallback text when no
+            # retained frame exists.
+            pixmap = surface.pixmap()
+            if (pixmap is None or pixmap.isNull()) and surface.text():
+                surface.setText("")
+            return
         set_text = getattr(canvas, "setText", None)
         if callable(set_text):
             set_text("")
-        surface = getattr(canvas, "current_surface", lambda: None)()
-        if isinstance(surface, QtWidgets.QLabel):
-            surface.setText("")
 
     def _fit_external_skeleton_overlay(self, skeleton) -> None:
         """Fit a KOTOR template skeleton preview to the active source mesh."""

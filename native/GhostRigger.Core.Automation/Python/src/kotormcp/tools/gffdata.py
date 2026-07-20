@@ -10,7 +10,6 @@ complementing the lighter-weight summarization already in discovery.py.
 
 from __future__ import annotations
 
-from io import BytesIO
 from typing import Any, Dict, List, Optional
 
 from kotormcp.schemas import Read2daInput, ReadGffInput, ReadTlkInput
@@ -127,7 +126,11 @@ async def handle_read_gff(arguments: Dict[str, Any]) -> Dict[str, Any]:
         entry = installation.get_resource(inp.resref, inp.restype)
         if entry is None:
             return json_content({"error": f"{inp.resref}.{inp.restype} not found."})
-        gff = read_gff(BytesIO(entry.data))
+        # Pass immutable bytes instead of reusing one BytesIO instance.  PyKotor's
+        # format detector and binary reader each own/close their input stream, so
+        # sharing a BytesIO makes the second phase fail with "I/O operation on
+        # closed file" for valid installed UTC/GFF resources.
+        gff = read_gff(bytes(entry.data))
         max_depth = inp.max_depth if inp.max_depth is not None else 4
         max_fields = inp.max_fields if inp.max_fields is not None else 200
         tree = _gff_struct_to_dict(gff.root, max_depth=max_depth, max_fields=max_fields)
@@ -229,16 +232,27 @@ def _gff_struct_to_dict(
                 result["_truncated"] = f"limited to {max_fields} fields"
                 break
             count += 1
+            value_type = value.__class__.__name__
             if isinstance(value, bytes):
                 result[label] = f"<bytes:{len(value)}>"
-            elif hasattr(value, "__iter__") and hasattr(value, "__len__"):
-                # GFFList
+            elif value_type == "LocalizedString":
+                result[label] = {
+                    "stringref": int(getattr(value, "stringref", -1)),
+                    "substrings": [
+                        {
+                            "language": getattr(language, "name", str(language)),
+                            "gender": getattr(gender, "name", str(gender)),
+                            "text": str(text),
+                        }
+                        for language, gender, text in value
+                    ],
+                }
+            elif value_type == "GFFList":
                 result[label] = [
                     _gff_struct_to_dict(item, depth + 1, max_depth, max_fields)
                     for item in list(value)[:50]
                 ]
-            elif hasattr(value, "struct_id"):
-                # Nested GFFStruct
+            elif value_type == "GFFStruct" or hasattr(value, "struct_id"):
                 result[label] = _gff_struct_to_dict(value, depth + 1, max_depth, max_fields)
             else:
                 str_val = str(value)

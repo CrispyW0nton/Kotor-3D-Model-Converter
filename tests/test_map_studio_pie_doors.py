@@ -45,7 +45,16 @@ def _two_island_wok(gap: float = 2.0):
     return wok
 
 
-def _registry_with_door(*, position, tag="TestDoor", transition_module="", transition_target=""):
+def _registry_with_door(
+    *,
+    position,
+    tag="TestDoor",
+    transition_module="",
+    transition_target="",
+    facing=math.pi * 0.5,
+    locked=False,
+    target_radius=1.0,
+):
     from src.core.modules.map_studio_pie_entities import PIEEntity, PIEEntityRegistry
 
     door = PIEEntity(
@@ -55,8 +64,10 @@ def _registry_with_door(*, position, tag="TestDoor", transition_module="", trans
         display_name=tag,
         template_resref="door_test",
         position=position,
+        facing=facing,
         interaction="door",
-        target_radius=1.0,
+        locked=locked,
+        target_radius=target_radius,
         transition_module=transition_module,
         transition_target=transition_target,
     )
@@ -87,6 +98,7 @@ def test_doors_are_detected_from_the_registry() -> None:
     doors = session.door_states()
     assert len(doors) == 1
     assert doors[0].tag == "TestDoor"
+    assert doors[0].facing == math.pi * 0.5
     assert doors[0].is_open is False
 
 
@@ -123,10 +135,77 @@ def test_inter_module_door_is_reported_not_teleported() -> None:
     )
     events = _walk(session, "forward", seconds=6.0, azimuth=-90.0)
     kinds = [e.kind for e in events]
-    assert "module_transition_blocked" in kinds, kinds
+    assert kinds.count("module_transition_blocked") == 1, kinds
     assert "room_transition" not in kinds
     # The player stays on the near island (no fabricated cross-module teleport).
     assert session.state.position[1] < 11.0
+
+
+def test_locked_door_stays_closed_and_reports_contact_once() -> None:
+    _configure_native_python_roots()
+    session = _session(
+        _two_island_wok(gap=2.0),
+        _registry_with_door(position=(5.0, 11.0, 0.0), locked=True),
+    )
+    events = _walk(session, "forward", seconds=6.0, azimuth=-90.0)
+    kinds = [event.kind for event in events]
+    assert kinds.count("door_locked") == 1, kinds
+    assert "door_opened" not in kinds
+    assert "room_transition" not in kinds
+    assert session.door_states()[0].locked is True
+    assert session.door_states()[0].is_open is False
+
+
+def test_nearby_side_door_does_not_teleport_player_across_gap() -> None:
+    _configure_native_python_roots()
+    session = _session(
+        _two_island_wok(gap=2.0),
+        # Three metres to the side: close enough for the broad auto-open reach,
+        # but outside this doorway's actual width.
+        _registry_with_door(position=(8.0, 11.0, 0.0)),
+    )
+    events = _walk(session, "forward", seconds=6.0, azimuth=-90.0)
+    assert "room_transition" not in [event.kind for event in events]
+    assert session.state.position[1] < 11.0
+
+
+def test_crossing_requires_motion_through_door_plane() -> None:
+    _configure_native_python_roots()
+    session = _session(
+        _two_island_wok(gap=2.0),
+        # Facing +X makes +Y travel parallel to this door plane normal.
+        _registry_with_door(position=(5.0, 11.0, 0.0), facing=0.0),
+    )
+    events = _walk(session, "forward", seconds=6.0, azimuth=-90.0)
+    assert "door_opened" in [event.kind for event in events]
+    assert "room_transition" not in [event.kind for event in events]
+
+
+def test_crossing_requires_a_different_walkmesh_component() -> None:
+    _configure_native_python_roots()
+    session = _session(
+        _two_island_wok(gap=2.0),
+        _registry_with_door(position=(5.0, 5.0, 0.0)),
+        spawn=(5.0, 3.0, 0.0),
+    )
+    door = session.door_states()[0]
+    door.is_open = True
+    assert session._try_room_transition((0.0, 1.0)) is False
+
+
+def test_upper_floor_door_does_not_open_or_cross_for_lower_floor_player() -> None:
+    _configure_native_python_roots()
+    session = _session(
+        _two_island_wok(gap=2.0),
+        # Same XY doorway as the lower islands, but on a stacked floor only
+        # 1.5 metres above it (still outside the derived collision/step reach).
+        _registry_with_door(position=(5.0, 11.0, 1.5)),
+    )
+    events = _walk(session, "forward", seconds=6.0, azimuth=-90.0)
+    kinds = [event.kind for event in events]
+    assert "door_opened" not in kinds
+    assert "room_transition" not in kinds
+    assert session.door_states()[0].is_open is False
 
 
 def test_real_921srt_doors_open() -> None:

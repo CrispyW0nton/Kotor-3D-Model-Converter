@@ -38,9 +38,11 @@ from .source_animation import (
 
 VERIFIED_UE5_TO_AURORA_PROFILE_GENERATOR = "verified_ue5_to_aurora_mapping"
 VERIFIED_MIXAMO_TO_AURORA_PROFILE_GENERATOR = "verified_mixamo_to_aurora_mapping"
+VERIFIED_SWTOR_BMN_TO_AURORA_PROFILE_GENERATOR = "verified_swtor_bmn_to_aurora_mapping"
 VERIFIED_SOURCE_TO_AURORA_PROFILE_GENERATORS = {
     VERIFIED_UE5_TO_AURORA_PROFILE_GENERATOR,
     VERIFIED_MIXAMO_TO_AURORA_PROFILE_GENERATOR,
+    VERIFIED_SWTOR_BMN_TO_AURORA_PROFILE_GENERATOR,
 }
 EXACT_PM_BAM_SEGMENT_PAIRS = (
     ("spine", "chest"),
@@ -171,7 +173,11 @@ def build_r3b_ue5_to_aurora_retarget_result(
         hybrid_limb_source_rest_weight=hybrid_weight,
         warnings=warnings,
     )
-    amplitude_issues = writer._validate_export_motion_amplitude(payload_result.payload, animation)
+    amplitude_issues = writer._validate_export_motion_amplitude(
+        payload_result.payload,
+        animation,
+        model=target_model,
+    )
     if amplitude_issues:
         raise RetargetSolveError(
             "R3.B preview flattened source motion before viewport playback: "

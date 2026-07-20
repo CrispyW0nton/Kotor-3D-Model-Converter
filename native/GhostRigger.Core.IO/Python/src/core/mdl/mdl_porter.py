@@ -974,8 +974,9 @@ class MDLBinaryWriter:
                 mag = math.sqrt(cx2*cx2 + cy2*cy2 + cz2*cz2)
                 if mag > 1e-9:
                     nx, ny, nz = cx2 / mag, cy2 / mag, cz2 / mag
-                    # Plane distance = dot(normal, point_on_plane)
-                    d = nx * ax + ny * ay + nz * az
+                    # Odyssey plane equation is n·p + d = 0.  Vanilla room
+                    # faces therefore store the negated point projection.
+                    d = -(nx * ax + ny * ay + nz * az)
 
             struct.pack_into('<fff', fb,  0, nx, ny, nz)   # face normal
             struct.pack_into('<f',   fb, 12, d)             # plane distance

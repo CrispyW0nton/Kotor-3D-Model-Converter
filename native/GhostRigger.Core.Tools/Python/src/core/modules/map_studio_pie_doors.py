@@ -39,6 +39,15 @@ class MapStudioPIEDoorSpec:
         return bool(self.model_resref)
 
 
+@dataclass(frozen=True)
+class MapStudioPIEDoorAnimationStep:
+    """State after advancing one real door animation clip."""
+
+    is_open: bool
+    transitioning: bool
+    animation_name: str
+
+
 def _clean_resref(value: Any) -> str:
     return str(value or "").strip().lower()
 
@@ -98,13 +107,57 @@ def play_map_studio_pie_door_clip(engine: Any, candidates: tuple[str, ...], *, l
     return ""
 
 
+def advance_map_studio_pie_door_animation(
+    engine: Any,
+    *,
+    wanted_open: bool,
+    current_open: bool,
+    transitioning: bool,
+    delta_time: float,
+) -> MapStudioPIEDoorAnimationStep:
+    """Advance opening/closing for the selected model clip's actual length."""
+
+    wanted = bool(wanted_open)
+    current = bool(current_open)
+    active = bool(transitioning)
+    if wanted != current:
+        current = wanted
+        active = bool(
+            play_map_studio_pie_door_clip(
+                engine,
+                door_state_clip_candidates(is_open=current, transitioning=True),
+                loop=False,
+            )
+        )
+        if not active:
+            play_map_studio_pie_door_clip(
+                engine,
+                door_state_clip_candidates(is_open=current, transitioning=False),
+                loop=True,
+            )
+
+    step = max(0.0, min(float(delta_time), 0.25))
+    still_playing = bool(engine.advance(step))
+    if active and not still_playing:
+        play_map_studio_pie_door_clip(
+            engine,
+            door_state_clip_candidates(is_open=current, transitioning=False),
+            loop=True,
+        )
+        active = False
+    name = str(getattr(getattr(engine, "current_animation", None), "name", "") or "").lower()
+    return MapStudioPIEDoorAnimationStep(current, active, name)
+
+
 __all__ = [
     "MapStudioPIEDoorSpec",
+    "MapStudioPIEDoorAnimationStep",
     "DOOR_OPEN_TRANSITION_CANDIDATES",
     "DOOR_OPENED_HOLD_CANDIDATES",
     "DOOR_CLOSE_TRANSITION_CANDIDATES",
     "DOOR_CLOSED_HOLD_CANDIDATES",
     "build_map_studio_pie_door_plan",
+    "advance_map_studio_pie_door_animation",
     "door_state_clip_candidates",
     "play_map_studio_pie_door_clip",
 ]

@@ -9,13 +9,13 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_AUDIO_INIT",
             "source_path": "src/adapters/qt_audio/__init__.py",
             "packaged_path": "Python/src/adapters/qt_audio/__init__.py",
-            "sha256": "26ed23c56d0a38441862438b0dea4e1d2450bfbeb661abaa815ccbd5f33ef27e"
+            "sha256": "b75a64866e4e9cceb3321a4670b6440af17dbd009598f03d9f85b2faba897a57"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_AUDIO_MAP_STUDIO_PIE_AUDIO",
             "source_path": "src/adapters/qt_audio/map_studio_pie_audio.py",
             "packaged_path": "Python/src/adapters/qt_audio/map_studio_pie_audio.py",
-            "sha256": "8110844e8ce113d255ee0f4d5f4719cbcfc28b4f1073e5791d24980b90250851"
+            "sha256": "24809e4197b2e3a21d15039f56cbe37684cb20715ee4caedc0ed5832b24dacc8"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_QT_AUDIO_NARRATIVE_AUDIO_PREVIEW",

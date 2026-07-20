@@ -124,6 +124,35 @@ def test_raw_contract_fingerprints_complete_same_centroid_aabb_tree() -> None:
     assert fingerprint.aabb_reachable_count == 3
 
 
+def test_raw_contract_blocks_transition_destination_outside_owning_lyt() -> None:
+    _configure_native_python_roots()
+    from src.core.modules.module_format import WOKData, WOKFace
+    from src.core.validation.kotor_module_engine_contract import inspect_raw_wok_structure
+
+    raw = WOKData(
+        name="trimmed_layout",
+        verts=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        faces=[WOKFace(0, 1, 2, 4, trans1=5)],
+    ).to_bytes()
+
+    _valid_fingerprint, valid_report = inspect_raw_wok_structure(
+        "trimmed_layout",
+        raw,
+        transition_room_count=6,
+    )
+    invalid_fingerprint, invalid_report = inspect_raw_wok_structure(
+        "trimmed_layout",
+        raw,
+        transition_room_count=5,
+    )
+
+    assert not valid_report.has_errors
+    assert invalid_fingerprint.transition_count == 1
+    assert "map.engine.wok.transition_target_out_of_range" in {
+        issue.code for issue in invalid_report.issues
+    }
+
+
 def test_raw_contract_blocks_duplicate_aabb_leaf_and_missing_face() -> None:
     _configure_native_python_roots()
     from src.core.validation.kotor_module_engine_contract import inspect_raw_wok_structure

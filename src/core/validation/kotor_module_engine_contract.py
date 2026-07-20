@@ -111,7 +111,14 @@ class WokEngineFingerprint:
     face_count: int = 0
     walkable_face_count: int = 0
     aabb_count: int = 0
+    aabb_leaf_count: int = 0
+    aabb_covered_face_count: int = 0
+    aabb_missing_face_count: int = 0
+    aabb_reachable_count: int = 0
     adjacency_count: int = 0
+    adjacency_mismatch_count: int = 0
+    adjacency_nonreciprocal_count: int = 0
+    non_manifold_edge_count: int = 0
     edge_count: int = 0
     perimeter_count: int = 0
     closed_perimeter_count: int = 0
@@ -479,6 +486,88 @@ def inspect_raw_mdl_structure(
             )
         if flags & _MDL_AABB_FLAG:
             aabb_count += 1
+            mesh_abs = node_abs + _MDL_NODE_SIZE
+            mesh_size = 340 if _normalise_game(game) == "K2" else 332
+            if not _bounded(mdl, mesh_abs, mesh_size):
+                _add_issue(
+                    report,
+                    ValidationSeverity.BLOCKING,
+                    "map.engine.mdl.aabb_mesh_header_truncated",
+                    f"{resource} AABB node '{node_name}' has a truncated mesh header.",
+                    resource=resource,
+                )
+            else:
+                faces_rel, face_count1, face_count2 = struct.unpack_from("<III", mdl, mesh_abs + 8)
+                vertex_count = struct.unpack_from("<H", mdl, mesh_abs + 304)[0]
+                vertices_rel_offset = 336 if _normalise_game(game) == "K2" else 328
+                vertices_rel = struct.unpack_from("<I", mdl, mesh_abs + vertices_rel_offset)[0]
+                faces_abs = _MDL_BASE + faces_rel
+                vertices_abs = _MDL_BASE + vertices_rel
+                if face_count1 != face_count2:
+                    _add_issue(
+                        report,
+                        ValidationSeverity.BLOCKING,
+                        "map.engine.mdl.aabb_face_count_mismatch",
+                        f"{resource} AABB node '{node_name}' duplicated face counts disagree.",
+                        resource=resource,
+                    )
+                elif (
+                    face_count1 > _MAX_REASONABLE_COUNT
+                    or vertex_count > _MAX_REASONABLE_COUNT
+                    or not _bounded(mdl, faces_abs, face_count1 * 32)
+                    or not _bounded(mdl, vertices_abs, vertex_count * 12)
+                ):
+                    _add_issue(
+                        report,
+                        ValidationSeverity.BLOCKING,
+                        "map.engine.mdl.aabb_geometry_out_of_bounds",
+                        f"{resource} AABB node '{node_name}' face/vertex payload is out of bounds.",
+                        resource=resource,
+                    )
+                else:
+                    vertices = [
+                        struct.unpack_from("<3f", mdl, vertices_abs + index * 12)
+                        for index in range(vertex_count)
+                    ]
+                    invalid_planes = 0
+                    invalid_indices = 0
+                    for index in range(face_count1):
+                        face_abs = faces_abs + index * 32
+                        nx, ny, nz, coefficient = struct.unpack_from("<4f", mdl, face_abs)
+                        v1, v2, v3 = struct.unpack_from("<HHH", mdl, face_abs + 26)
+                        if max(v1, v2, v3) >= vertex_count:
+                            invalid_indices += 1
+                            continue
+                        magnitude = math.sqrt(nx * nx + ny * ny + nz * nz)
+                        ax, ay, az = vertices[v1]
+                        residual = (nx * ax) + (ny * ay) + (nz * az) + coefficient
+                        tolerance = max(1.0e-4, 2.0e-5 * (abs(coefficient) + 1.0))
+                        if (
+                            not all(math.isfinite(value) for value in (nx, ny, nz, coefficient, residual))
+                            or abs(magnitude - 1.0) > 1.0e-3
+                            or abs(residual) > tolerance
+                        ):
+                            invalid_planes += 1
+                    if invalid_indices:
+                        _add_issue(
+                            report,
+                            ValidationSeverity.BLOCKING,
+                            "map.engine.mdl.aabb_face_index_out_of_bounds",
+                            f"{resource} AABB node '{node_name}' has {invalid_indices} face(s) with invalid vertex indices.",
+                            resource=resource,
+                        )
+                    if invalid_planes:
+                        _add_issue(
+                            report,
+                            ValidationSeverity.BLOCKING,
+                            "map.engine.mdl.aabb_face_plane_invalid",
+                            (
+                                f"{resource} AABB node '{node_name}' has {invalid_planes} face plane(s) "
+                                "that do not satisfy vanilla's n·p+d=0 contract."
+                            ),
+                            resource=resource,
+                            fix_hint="Write each face coefficient as -dot(unit_normal, a face vertex).",
+                        )
 
         if child_count != child_count2:
             _add_issue(
@@ -620,8 +709,15 @@ def inspect_raw_wok_structure(
     data: bytes,
     *,
     allow_empty_visual: bool = False,
+    transition_room_count: int | None = None,
 ) -> tuple[WokEngineFingerprint, ValidationReport]:
-    """Inspect raw BWM tables, including serialized perimeter loop records."""
+    """Inspect raw BWM tables, including serialized perimeter loop records.
+
+    ``transition_room_count`` supplies the owning LYT room count when this WOK
+    is validated as part of a module.  Transition destinations are room-order
+    indices, so values outside that range are engine-invalid even when the BWM
+    is otherwise structurally sound.
+    """
 
     room = _normalise_resref(room_resref)
     resource = f"{room}.wok"
@@ -703,11 +799,11 @@ def inspect_raw_wok_structure(
         report, data, resource=resource, code="map.engine.wok.plane_table_out_of_bounds",
         label="plane", offset=plane_offset, count=face_count, stride=4,
     )
-    _check_bwm_section(
+    aabb_ok = _check_bwm_section(
         report, data, resource=resource, code="map.engine.wok.aabb_table_out_of_bounds",
         label="AABB", offset=aabb_offset, count=aabb_count, stride=44,
     )
-    _check_bwm_section(
+    adjacency_ok = _check_bwm_section(
         report, data, resource=resource, code="map.engine.wok.adjacency_table_out_of_bounds",
         label="adjacency", offset=adjacency_offset, count=adjacency_count, stride=12,
     )
@@ -757,13 +853,121 @@ def inspect_raw_wok_structure(
                     resource=resource,
                 )
 
+    aabb_leaf_faces: list[int] = []
+    aabb_covered_face_count = 0
+    aabb_missing_face_count = face_count
+    aabb_reachable_count = 0
+    if aabb_ok and aabb_count:
+        aabb_nodes: list[tuple[int, int, int, int]] = []
+        invalid_bounds = invalid_unknown = invalid_planes = invalid_children = invalid_leaves = 0
+        valid_planes = {0, 1, 2, 4, 8, 16, 32}
+        for index in range(aabb_count):
+            node_offset = aabb_offset + index * 44
+            bounds = struct.unpack_from("<6f", data, node_offset)
+            face_index, unknown, sigplane, left, right = struct.unpack_from("<IIIII", data, node_offset + 24)
+            if not all(math.isfinite(value) for value in bounds) or any(bounds[axis] > bounds[axis + 3] for axis in range(3)):
+                invalid_bounds += 1
+            if unknown != 4:
+                invalid_unknown += 1
+            if sigplane not in valid_planes:
+                invalid_planes += 1
+            is_leaf = face_index != 0xFFFFFFFF
+            if is_leaf:
+                if face_index >= face_count or sigplane != 0 or left != 0xFFFFFFFF or right != 0xFFFFFFFF:
+                    invalid_leaves += 1
+                else:
+                    aabb_leaf_faces.append(face_index)
+            elif sigplane == 0 or left >= aabb_count or right >= aabb_count or left == right:
+                invalid_children += 1
+            aabb_nodes.append((face_index, sigplane, left, right))
+
+        stack = [aabb_root] if aabb_root < aabb_count else []
+        reachable: set[int] = set()
+        cycle_count = 0
+        while stack:
+            node_index = stack.pop()
+            if node_index in reachable:
+                cycle_count += 1
+                continue
+            reachable.add(node_index)
+            face_index, _sigplane, left, right = aabb_nodes[node_index]
+            if face_index == 0xFFFFFFFF:
+                if left < aabb_count:
+                    stack.append(left)
+                if right < aabb_count:
+                    stack.append(right)
+        aabb_reachable_count = len(reachable)
+        for count, code, message in (
+            (invalid_bounds, "map.engine.wok.aabb_bounds_invalid", "AABB node(s) contain non-finite or inverted bounds"),
+            (invalid_unknown, "map.engine.wok.aabb_unknown_invalid", "AABB node(s) do not carry vanilla's constant value 4"),
+            (invalid_planes, "map.engine.wok.aabb_plane_invalid", "AABB node(s) use an unknown most-significant-plane bit"),
+            (invalid_children, "map.engine.wok.aabb_children_invalid", "AABB internal node(s) have invalid children"),
+            (invalid_leaves, "map.engine.wok.aabb_leaf_invalid", "AABB leaf node(s) have an invalid face or leaf layout"),
+            (cycle_count, "map.engine.wok.aabb_cycle", "AABB traversal encountered repeated/cyclic node references"),
+        ):
+            if count:
+                _add_issue(
+                    report,
+                    ValidationSeverity.BLOCKING,
+                    code,
+                    f"{resource} {message} ({count}).",
+                    resource=resource,
+                )
+        if len(reachable) != aabb_count:
+            _add_issue(
+                report,
+                ValidationSeverity.BLOCKING,
+                "map.engine.wok.aabb_unreachable_nodes",
+                f"{resource} AABB root reaches {len(reachable)} of {aabb_count} nodes.",
+                resource=resource,
+            )
+        covered_faces = set(aabb_leaf_faces)
+        missing_faces = set(range(face_count)) - covered_faces
+        aabb_covered_face_count = len(covered_faces)
+        aabb_missing_face_count = len(missing_faces)
+        duplicate_leaf_count = max(0, len(aabb_leaf_faces) - len(covered_faces))
+        known_retail_exception = bool(
+            room == "m02af_01a"
+            and face_count == 140
+            and aabb_count == 219
+            and len(covered_faces) == 110
+            and len(missing_faces) == 30
+        )
+        if missing_faces:
+            _add_issue(
+                report,
+                ValidationSeverity.WARNING if known_retail_exception else ValidationSeverity.BLOCKING,
+                "map.engine.wok.aabb_face_coverage_incomplete",
+                f"{resource} AABB leaves cover {len(covered_faces)} of {face_count} faces.",
+                resource=resource,
+                details={"missing_face_count": len(missing_faces), "known_retail_exception": known_retail_exception},
+            )
+        if duplicate_leaf_count:
+            _add_issue(
+                report,
+                ValidationSeverity.BLOCKING,
+                "map.engine.wok.aabb_face_coverage_duplicate",
+                f"{resource} AABB tree repeats {duplicate_leaf_count} face leaf/leaves.",
+                resource=resource,
+            )
+        expected_node_count = max(0, (2 * len(aabb_leaf_faces)) - 1)
+        if aabb_count != expected_node_count:
+            _add_issue(
+                report,
+                ValidationSeverity.WARNING if known_retail_exception else ValidationSeverity.BLOCKING,
+                "map.engine.wok.aabb_tree_not_full",
+                f"{resource} has {aabb_count} AABB nodes for {len(aabb_leaf_faces)} leaves; expected {expected_node_count}.",
+                resource=resource,
+            )
+
     histogram: dict[int, int] = {}
     if materials_ok:
         for index in range(face_count):
             material = struct.unpack_from("<I", data, material_offset + index * 4)[0]
             histogram[material] = histogram.get(material, 0) + 1
     walkable_face_count = sum(count for material, count in histogram.items() if material in _BWM_WALKABLE_MATERIALS)
-    if not empty_visual and (adjacency_count <= 0 or adjacency_count > face_count):
+    visual_collision_only = bool(allow_empty_visual and walkable_face_count <= 0 and adjacency_count <= 0)
+    if not visual_collision_only and (adjacency_count <= 0 or adjacency_count > face_count):
         _add_issue(
             report,
             ValidationSeverity.BLOCKING,
@@ -771,7 +975,7 @@ def inspect_raw_wok_structure(
             f"{resource} declares {adjacency_count} walkable adjacency rows for {face_count} faces.",
             resource=resource,
         )
-    if walkable_face_count <= 0 and not empty_visual:
+    if walkable_face_count <= 0 and not visual_collision_only and adjacency_count <= 0:
         _add_issue(
             report,
             ValidationSeverity.BLOCKING,
@@ -788,7 +992,125 @@ def inspect_raw_wok_structure(
             resource=resource,
         )
 
+    adjacency_rows: list[tuple[int, int, int]] = []
+    adjacency_mismatch_slots: set[tuple[int, int]] = set()
+    adjacency_nonreciprocal_slots: set[tuple[int, int]] = set()
+    non_manifold_edges: set[tuple[int, int]] = set()
+    expected_boundary_ids: set[int] = set()
+    if adjacency_ok:
+        adjacency_rows = [
+            struct.unpack_from("<iii", data, adjacency_offset + index * 12)
+            for index in range(adjacency_count)
+        ]
+
+    # Vanilla topology is keyed by explicit vertex indices.  Equal coordinates
+    # are allowed to remain intentionally disconnected, so never weld them here.
+    if faces and adjacency_rows:
+        domain_count = min(adjacency_count, len(faces))
+        edge_owners: dict[tuple[int, int], list[tuple[int, int, int, int]]] = {}
+        repeated_index_slots: set[tuple[int, int]] = set()
+        for face_index in range(domain_count):
+            triangle = faces[face_index]
+            if any(vertex >= vertex_count for vertex in triangle):
+                continue
+            for local_edge in range(3):
+                start = triangle[local_edge]
+                end = triangle[(local_edge + 1) % 3]
+                if start == end:
+                    repeated_index_slots.add((face_index, local_edge))
+                    # Retail m38aa_11 serializes two self-edge boundary rows.
+                    # Preserve/import them, but never infer adjacency from them.
+                    if adjacency_rows[face_index][local_edge] == -1:
+                        expected_boundary_ids.add(face_index * 3 + local_edge)
+                    continue
+                key = (min(start, end), max(start, end))
+                edge_owners.setdefault(key, []).append((face_index, local_edge, start, end))
+
+        for key, owners in edge_owners.items():
+            if len(owners) > 2:
+                non_manifold_edges.add(key)
+                continue
+            if len(owners) == 2 and owners[0][0] == owners[1][0]:
+                # K1 m38aa_11 has a repeated-index face whose two remaining
+                # half-edges oppose each other on that same face.  Retail keeps
+                # both as perimeter boundaries rather than self-adjacency.
+                for face_index, local_edge, _start, _end in owners:
+                    repeated_index_slots.add((face_index, local_edge))
+                    if adjacency_rows[face_index][local_edge] == -1:
+                        expected_boundary_ids.add(face_index * 3 + local_edge)
+                continue
+            for owner_index, (face_index, local_edge, _start, _end) in enumerate(owners):
+                if len(owners) == 1:
+                    expected = -1
+                    expected_boundary_ids.add(face_index * 3 + local_edge)
+                else:
+                    other = owners[1 - owner_index]
+                    expected = other[0] * 3 + other[1]
+                if adjacency_rows[face_index][local_edge] != expected:
+                    adjacency_mismatch_slots.add((face_index, local_edge))
+
+        for face_index in range(domain_count):
+            triangle = faces[face_index]
+            if any(vertex >= vertex_count for vertex in triangle):
+                continue
+            for local_edge, target in enumerate(adjacency_rows[face_index]):
+                if (face_index, local_edge) in repeated_index_slots:
+                    continue
+                start = triangle[local_edge]
+                end = triangle[(local_edge + 1) % 3]
+                key = (min(start, end), max(start, end))
+                if key in non_manifold_edges:
+                    continue
+                if target == -1:
+                    continue
+                if target < 0:
+                    adjacency_mismatch_slots.add((face_index, local_edge))
+                    continue
+                target_face, target_edge = divmod(target, 3)
+                if target_face >= domain_count:
+                    adjacency_mismatch_slots.add((face_index, local_edge))
+                    continue
+                target_triangle = faces[target_face]
+                target_start = target_triangle[target_edge]
+                target_end = target_triangle[(target_edge + 1) % 3]
+                if target_start != end or target_end != start:
+                    adjacency_mismatch_slots.add((face_index, local_edge))
+                    continue
+                if adjacency_rows[target_face][target_edge] != face_index * 3 + local_edge:
+                    adjacency_nonreciprocal_slots.add((face_index, local_edge))
+
+        if non_manifold_edges:
+            known_retail_non_manifold = bool(
+                (room == "m38aa_03" and non_manifold_edges == {(6, 7)})
+                or (room == "403dxne" and non_manifold_edges == {(264, 270)})
+            )
+            _add_issue(
+                report,
+                ValidationSeverity.WARNING if known_retail_non_manifold else ValidationSeverity.BLOCKING,
+                "map.engine.wok.non_manifold_adjacency_edge",
+                f"{resource} has {len(non_manifold_edges)} raw-index edge(s) owned by more than two adjacency faces.",
+                resource=resource,
+                details={"known_retail_exception": known_retail_non_manifold},
+            )
+        if adjacency_mismatch_slots:
+            _add_issue(
+                report,
+                ValidationSeverity.BLOCKING,
+                "map.engine.wok.adjacency_topology_mismatch",
+                f"{resource} has {len(adjacency_mismatch_slots)} adjacency slot(s) that disagree with raw vertex-index topology.",
+                resource=resource,
+            )
+        if adjacency_nonreciprocal_slots:
+            _add_issue(
+                report,
+                ValidationSeverity.BLOCKING,
+                "map.engine.wok.adjacency_nonreciprocal",
+                f"{resource} has {len(adjacency_nonreciprocal_slots)} non-reciprocal adjacency slot(s).",
+                resource=resource,
+            )
+
     edge_rows: list[tuple[int, int]] = []
+    invalid_transition_rows: list[dict[str, int]] = []
     transition_count = 0
     if edges_ok:
         for index in range(edge_count):
@@ -804,10 +1126,47 @@ def inspect_raw_wok_structure(
                 )
             if transition != 0xFFFFFFFF:
                 transition_count += 1
+                if transition_room_count is not None and transition >= transition_room_count:
+                    invalid_transition_rows.append(
+                        {"row": index, "directed_edge": edge_id, "destination": transition}
+                    )
+
+    if invalid_transition_rows:
+        _add_issue(
+            report,
+            ValidationSeverity.BLOCKING,
+            "map.engine.wok.transition_target_out_of_range",
+            f"{resource} has {len(invalid_transition_rows)} transition destination(s) outside the "
+            f"owning LYT's {transition_room_count} room rows.",
+            resource=resource,
+            details={
+                "lyt_room_count": transition_room_count,
+                "invalid_transitions": invalid_transition_rows,
+            },
+        )
+
+    if edge_rows and expected_boundary_ids:
+        serialized_boundary_ids = [edge_id for edge_id, _transition in edge_rows]
+        duplicate_boundary_count = len(serialized_boundary_ids) - len(set(serialized_boundary_ids))
+        missing_boundary_ids = expected_boundary_ids - set(serialized_boundary_ids)
+        extra_boundary_ids = set(serialized_boundary_ids) - expected_boundary_ids
+        if duplicate_boundary_count or missing_boundary_ids or extra_boundary_ids:
+            _add_issue(
+                report,
+                ValidationSeverity.BLOCKING,
+                "map.engine.wok.boundary_edge_table_mismatch",
+                f"{resource} boundary edge table disagrees with its raw-index adjacency boundary.",
+                resource=resource,
+                details={
+                    "duplicate_edge_rows": duplicate_boundary_count,
+                    "missing_edge_rows": len(missing_boundary_ids),
+                    "extra_edge_rows": len(extra_boundary_ids),
+                },
+            )
 
     closed_perimeters = 0
     endpoints: list[int] = []
-    if perimeter_count <= 0 and not empty_visual:
+    if perimeter_count <= 0 and not visual_collision_only:
         _add_issue(
             report,
             ValidationSeverity.BLOCKING,
@@ -857,6 +1216,14 @@ def inspect_raw_wok_structure(
                     resource=resource,
                 )
             previous = endpoint
+        if endpoints and endpoints[-1] != edge_count:
+            _add_issue(
+                report,
+                ValidationSeverity.BLOCKING,
+                "map.engine.wok.perimeter_edges_unconsumed",
+                f"{resource} perimeter endpoints consume {endpoints[-1]} of {edge_count} edge rows.",
+                resource=resource,
+            )
 
     return (
         WokEngineFingerprint(
@@ -865,7 +1232,14 @@ def inspect_raw_wok_structure(
             face_count=face_count,
             walkable_face_count=walkable_face_count,
             aabb_count=aabb_count,
+            aabb_leaf_count=len(aabb_leaf_faces),
+            aabb_covered_face_count=aabb_covered_face_count,
+            aabb_missing_face_count=aabb_missing_face_count,
+            aabb_reachable_count=aabb_reachable_count,
             adjacency_count=adjacency_count,
+            adjacency_mismatch_count=len(adjacency_mismatch_slots),
+            adjacency_nonreciprocal_count=len(adjacency_nonreciprocal_slots),
+            non_manifold_edge_count=len(non_manifold_edges),
             edge_count=edge_count,
             perimeter_count=perimeter_count,
             closed_perimeter_count=closed_perimeters,
@@ -1374,6 +1748,7 @@ def validate_kotor_module_engine_contract(
             room,
             resources[(room, "wok")],
             allow_empty_visual=room in visual_only_rooms,
+            transition_room_count=len(canonical_rooms),
         )
         validation.issues.extend(mdl_report.issues)
         validation.issues.extend(wok_report.issues)

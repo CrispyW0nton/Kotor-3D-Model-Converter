@@ -1959,9 +1959,11 @@ def test_t2600_map_studio_walkmesh_tab_explains_wok_workflow() -> None:
         assert "Use DOOR only for doorway/transition surfaces." in source
         assert "player start, doors, triggers, waypoints, creatures, and placeables sit on walkable faces" in source
         assert "mapStudioWalkmeshGenerateButton" in source
+        assert "mapStudioWalkmeshGenerateSelectedFloorButton" in source
         assert "mapStudioWalkmeshAssignFaceTypeButton" in source
         assert "mapStudioWalkmeshValidateButton" in source
         assert "mapStudioWalkmeshShowWalkableButton" in source
+        assert "select only the real floor faces" in source
     assert "authored_walkmesh_status = self.controller.authored_walkmesh_status()" in window_source
     assert "authored_walkmesh_room_surfaces = self.controller.authored_walkmesh_room_surface_choices()" in window_source
     assert "self.walkmesh_tab.set_walkmesh_status(authored_walkmesh_status)" in window_source
@@ -1969,6 +1971,14 @@ def test_t2600_map_studio_walkmesh_tab_explains_wok_workflow() -> None:
     assert "self.walkmesh_tab.set_walkmesh_surfaces(self.controller.available_authored_walkmesh_surfaces())" in window_source
     assert "self.walkmesh_tab.roomSurfaceRequested.connect(self.apply_authored_walkmesh_surface)" in window_source
     assert "self.controller.set_authored_room_walkmesh_surface" in window_source
+    assert 'if action == "Generate from Selected Floor Faces"' in window_source
+    assert "map_studio_component_selection" in window_source
+    assert "imported_mesh_surface_index_for_role" in window_source
+    assert "prepare_imported_room_walkmesh_generation_intent" in window_source
+    assert "already has an authoritative source WOK. It was not replaced" in window_source
+    assert "auto_generate_map_studio_walkmesh" in window_source
+    assert "Walkmesh Boundary Rules" in window_source
+    assert "Do not bake vertical wall or ceiling triangles into the WOK" in window_source
     for source in (controller_source, mirror_controller_source):
         assert "AuthoredWalkmeshStatus" in source
         assert "authored_walkmesh_status_for_project" in source

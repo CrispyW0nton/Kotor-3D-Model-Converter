@@ -117,6 +117,10 @@ def test_registry_classifies_factions_and_interactions() -> None:
     assert trigger.interaction == "trigger" and len(trigger.geometry) == 4 and not trigger.interactive
     player = registry.by_id("pie:player")
     assert player.faction == "player" and abs(player.facing - 1.57) < 1e-9
+    camera = registry.of_kind("camera")[0]
+    assert camera.metadata["camera_id"] == 7
+    assert camera.metadata["field_of_view"] == 45.0
+    assert camera.metadata["orientation"] == (0.0, 0.0, 0.0, 1.0)
     # Only genuinely actionable entities are targetable.
     interactive_ids = {e.entity_id for e in registry.interactive_entities}
     assert "authored:store:i_shop" not in interactive_ids
@@ -150,10 +154,113 @@ def test_registry_reports_unsupported_coverage_honestly() -> None:
     assert "player entity was not registered" in warning_text
 
 
+def test_registry_carries_template_locked_state_to_door_entity() -> None:
+    _configure_native_python_roots()
+    from src.core.modules.map_studio_pie_entities import build_pie_entity_registry
+
+    registry = build_pie_entity_registry(
+        _project(),
+        template_inspector=lambda kind, _resref: {"locked": True, "key_required": "door_key"}
+        if kind == "door"
+        else {},
+    )
+    door = registry.by_id("authored:door:i_door")
+    assert door is not None
+    assert door.locked is True
+    assert door.key_required == "door_key"
+
+
+def test_registry_hydrates_blank_runtime_tags_from_inspected_templates() -> None:
+    _configure_native_python_roots()
+    from src.core.modules.map_studio_pie_entities import build_pie_entity_registry
+
+    placements = SimpleNamespace(
+        entry_point=None,
+        creatures=(
+            SimpleNamespace(
+                template_resref="n_czerkaoff002",
+                tag="",
+                position=(0.0, 0.0, 0.0),
+                bearing=0.0,
+                instance_id="blank_creature",
+            ),
+            SimpleNamespace(
+                template_resref="n_czerkaoff002",
+                tag="AuthoredCreature",
+                position=(1.0, 0.0, 0.0),
+                bearing=0.0,
+                instance_id="authored_creature",
+            ),
+        ),
+        doors=(
+            SimpleNamespace(
+                template_resref="door_a",
+                tag="",
+                position=(2.0, 0.0, 0.0),
+                bearing=0.0,
+                instance_id="blank_door",
+            ),
+            SimpleNamespace(
+                template_resref="door_a",
+                tag="AuthoredDoor",
+                position=(3.0, 0.0, 0.0),
+                bearing=0.0,
+                instance_id="authored_door",
+            ),
+        ),
+        placeables=(
+            SimpleNamespace(
+                template_resref="footlker",
+                tag="",
+                position=(4.0, 0.0, 0.0),
+                bearing=0.0,
+                instance_id="blank_placeable",
+            ),
+            SimpleNamespace(
+                template_resref="footlker",
+                tag="AuthoredPlaceable",
+                position=(5.0, 0.0, 0.0),
+                bearing=0.0,
+                instance_id="authored_placeable",
+            ),
+        ),
+        triggers=(),
+        waypoints=(),
+        sounds=(),
+        cameras=(),
+        stores=(),
+        encounters=(),
+        metadata={},
+    )
+    template_tags = {
+        "creature": "207_Falt",
+        "door": "TemplateDoor",
+        "placeable": "TemplatePlaceable",
+    }
+    registry = build_pie_entity_registry(
+        SimpleNamespace(placements=placements),
+        template_inspector=lambda kind, _resref: {
+            "tag": template_tags[kind],
+            "useable": kind == "placeable",
+        },
+    )
+
+    expected = {
+        "authored:creature:blank_creature": "207_Falt",
+        "authored:creature:authored_creature": "AuthoredCreature",
+        "authored:door:blank_door": "TemplateDoor",
+        "authored:door:authored_door": "AuthoredDoor",
+        "authored:placeable:blank_placeable": "TemplatePlaceable",
+        "authored:placeable:authored_placeable": "AuthoredPlaceable",
+    }
+    assert {entity_id: registry.by_id(entity_id).tag for entity_id in expected} == expected
+
+
 def test_session_build_attaches_entity_registry() -> None:
     _configure_native_python_roots()
     source = (ROOT / "native/GhostRigger.Core.Scene/Python/src/core/modules/map_studio_pie.py").read_text(encoding="utf-8")
     assert "build_pie_entity_registry" in source
+    assert "template_inspector=template_inspector" in source
     assert "entity_registry" in source
     mirror = (ROOT / "native/GhostRigger.Core.Tools/Python/src/core/modules/map_studio_pie.py").read_text(encoding="utf-8")
     assert "build_pie_entity_registry" in mirror

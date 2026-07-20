@@ -44,8 +44,12 @@ TH32CS_SNAPMODULE32 = 0x00000010
 INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 PROCESS_QUERY_INFORMATION = 0x0400
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+SYNCHRONIZE = 0x00100000
 STILL_ACTIVE = 259
 PROCESS_VM_READ = 0x0010
+TOKEN_ADJUST_PRIVILEGES = 0x0020
+TOKEN_QUERY = 0x0008
+SE_PRIVILEGE_ENABLED = 0x00000002
 THREAD_GET_CONTEXT = 0x0008
 THREAD_QUERY_INFORMATION = 0x0040
 WOW64_CONTEXT_i386 = 0x00010000
@@ -67,6 +71,13 @@ RIP_EVENT = 9
 
 DBG_CONTINUE = 0x00010002
 DBG_EXCEPTION_NOT_HANDLED = 0x80010001
+
+WAIT_OBJECT_0 = 0x00000000
+WAIT_TIMEOUT = 0x00000102
+WAIT_FAILED = 0xFFFFFFFF
+
+ERROR_INVALID_PARAMETER = 87
+ERROR_NOT_ALL_ASSIGNED = 1300
 
 EXCEPTION_ACCESS_VIOLATION = 0xC0000005
 EXCEPTION_BREAKPOINT = 0x80000003
@@ -109,6 +120,27 @@ class MODULEENTRY32W(ctypes.Structure):
         ("hModule", wintypes.HMODULE),
         ("szModule", wintypes.WCHAR * 256),
         ("szExePath", wintypes.WCHAR * 260),
+    ]
+
+
+class LUID(ctypes.Structure):
+    _fields_ = [
+        ("LowPart", wintypes.DWORD),
+        ("HighPart", wintypes.LONG),
+    ]
+
+
+class LUID_AND_ATTRIBUTES(ctypes.Structure):
+    _fields_ = [
+        ("Luid", LUID),
+        ("Attributes", wintypes.DWORD),
+    ]
+
+
+class TOKEN_PRIVILEGES_ONE(ctypes.Structure):
+    _fields_ = [
+        ("PrivilegeCount", wintypes.DWORD),
+        ("Privileges", LUID_AND_ATTRIBUTES * 1),
     ]
 
 
@@ -274,9 +306,23 @@ class ProcessInfo:
         }
 
 
+@dataclass(frozen=True)
+class ProcessMonitorHandle:
+    """A process handle retained until monitoring is complete.
+
+    Keeping this handle open is what lets ``GetExitCodeProcess`` succeed after
+    the executable has disappeared from Toolhelp snapshots.  ``can_wait`` is
+    false only when Windows allowed query access but denied ``SYNCHRONIZE``.
+    """
+
+    raw: int
+    can_wait: bool
+
+
 class Win32ProcessProbe:
     def __init__(self) -> None:
         self.kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        self.advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
         self._configure()
 
     def _configure(self) -> None:
@@ -297,6 +343,8 @@ class Win32ProcessProbe:
         k.OpenProcess.restype = wintypes.HANDLE
         k.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
         k.GetExitCodeProcess.restype = wintypes.BOOL
+        k.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        k.WaitForSingleObject.restype = wintypes.DWORD
         k.OpenThread.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
         k.OpenThread.restype = wintypes.HANDLE
         k.ReadProcessMemory.argtypes = [
@@ -320,6 +368,23 @@ class Win32ProcessProbe:
         k.WaitForDebugEvent.restype = wintypes.BOOL
         k.ContinueDebugEvent.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.DWORD]
         k.ContinueDebugEvent.restype = wintypes.BOOL
+        k.GetCurrentProcess.argtypes = []
+        k.GetCurrentProcess.restype = wintypes.HANDLE
+
+        a = self.advapi32
+        a.OpenProcessToken.argtypes = [wintypes.HANDLE, wintypes.DWORD, ctypes.POINTER(wintypes.HANDLE)]
+        a.OpenProcessToken.restype = wintypes.BOOL
+        a.LookupPrivilegeValueW.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, ctypes.POINTER(LUID)]
+        a.LookupPrivilegeValueW.restype = wintypes.BOOL
+        a.AdjustTokenPrivileges.argtypes = [
+            wintypes.HANDLE,
+            wintypes.BOOL,
+            ctypes.POINTER(TOKEN_PRIVILEGES_ONE),
+            wintypes.DWORD,
+            wintypes.LPVOID,
+            wintypes.LPVOID,
+        ]
+        a.AdjustTokenPrivileges.restype = wintypes.BOOL
 
     def processes(self) -> list[ProcessInfo]:
         handle = self.kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
@@ -363,6 +428,129 @@ class Win32ProcessProbe:
             )
         finally:
             self.kernel32.CloseHandle(handle)
+
+    def open_monitor_handle(self, pid: int) -> Optional[ProcessMonitorHandle]:
+        """Open and retain a queryable handle before debugger attachment.
+
+        The synchronized form is preferred because it disambiguates a running
+        process from the unusual-but-valid case where a process exits with
+        status ``STILL_ACTIVE`` (259).  Query-only access still preserves the
+        real exit code for ordinary termination values.
+        """
+
+        handle = self.kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
+            False,
+            int(pid),
+        )
+        if handle:
+            return ProcessMonitorHandle(raw=int(handle), can_wait=True)
+        handle = self.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+        if handle:
+            return ProcessMonitorHandle(raw=int(handle), can_wait=False)
+        return None
+
+    def close_monitor_handle(self, handle: Optional[ProcessMonitorHandle]) -> None:
+        if handle is not None and handle.raw:
+            self.kernel32.CloseHandle(wintypes.HANDLE(handle.raw))
+
+    def monitor_status(self, handle: Optional[ProcessMonitorHandle]) -> dict[str, Any]:
+        """Return a race-free process state and exit code when available."""
+
+        if handle is None or not handle.raw:
+            return {
+                "available": False,
+                "running": None,
+                "exit_code": None,
+                "last_error": 0,
+            }
+
+        signaled: Optional[bool] = None
+        wait_error = 0
+        if handle.can_wait:
+            wait_result = int(self.kernel32.WaitForSingleObject(wintypes.HANDLE(handle.raw), 0))
+            if wait_result == WAIT_OBJECT_0:
+                signaled = True
+            elif wait_result == WAIT_TIMEOUT:
+                signaled = False
+            elif wait_result == WAIT_FAILED:
+                wait_error = int(ctypes.get_last_error())
+
+        exit_code = wintypes.DWORD(0)
+        ctypes.set_last_error(0)
+        if not self.kernel32.GetExitCodeProcess(
+            wintypes.HANDLE(handle.raw),
+            ctypes.byref(exit_code),
+        ):
+            return {
+                "available": False,
+                "running": None if signaled is None else not signaled,
+                "exit_code": None,
+                "last_error": int(ctypes.get_last_error()) or wait_error,
+            }
+
+        value = int(exit_code.value)
+        if signaled is True:
+            return {"available": True, "running": False, "exit_code": value, "last_error": 0}
+        if signaled is False:
+            return {"available": True, "running": True, "exit_code": None, "last_error": 0}
+        if value != STILL_ACTIVE:
+            return {"available": True, "running": False, "exit_code": value, "last_error": 0}
+        return {"available": True, "running": True, "exit_code": None, "last_error": wait_error}
+
+    def debug_attach(self, pid: int) -> tuple[bool, int]:
+        ctypes.set_last_error(0)
+        attached = bool(self.kernel32.DebugActiveProcess(int(pid)))
+        return attached, 0 if attached else int(ctypes.get_last_error())
+
+    def enable_debug_privilege(self) -> dict[str, Any]:
+        """Best-effort enable ``SeDebugPrivilege`` on the logger process."""
+
+        token = wintypes.HANDLE()
+        ctypes.set_last_error(0)
+        if not self.advapi32.OpenProcessToken(
+            self.kernel32.GetCurrentProcess(),
+            TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
+            ctypes.byref(token),
+        ):
+            return {
+                "available": False,
+                "enabled": False,
+                "last_error": int(ctypes.get_last_error()),
+            }
+        try:
+            luid = LUID()
+            ctypes.set_last_error(0)
+            if not self.advapi32.LookupPrivilegeValueW(None, "SeDebugPrivilege", ctypes.byref(luid)):
+                return {
+                    "available": False,
+                    "enabled": False,
+                    "last_error": int(ctypes.get_last_error()),
+                }
+            privileges = TOKEN_PRIVILEGES_ONE()
+            privileges.PrivilegeCount = 1
+            privileges.Privileges[0].Luid = luid
+            privileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED
+            ctypes.set_last_error(0)
+            adjusted = bool(
+                self.advapi32.AdjustTokenPrivileges(
+                    token,
+                    False,
+                    ctypes.byref(privileges),
+                    0,
+                    None,
+                    None,
+                )
+            )
+            error = int(ctypes.get_last_error())
+            enabled = adjusted and error != ERROR_NOT_ALL_ASSIGNED
+            return {
+                "available": True,
+                "enabled": enabled,
+                "last_error": error,
+            }
+        finally:
+            self.kernel32.CloseHandle(token)
 
     def modules(self, pid: int) -> list[dict[str, Any]]:
         flags = TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32
@@ -493,6 +681,63 @@ def make_session_id(label: Optional[str]) -> str:
     return f"{stamp}-{_clean_session_label(label)}"
 
 
+def _normalize_warp_target(value: Optional[str]) -> Optional[str]:
+    text = str(value or "").strip().strip("\"'").lower()
+    if not text:
+        return None
+    if text.startswith("warp "):
+        text = text[5:].strip()
+    text = text.replace("\\", "/").rsplit("/", 1)[-1]
+    for suffix in ("_s.rim", ".mod", ".rim", ".sav"):
+        if text.endswith(suffix):
+            text = text[: -len(suffix)]
+            break
+    if not text or not re.fullmatch(r"[a-z0-9_-]+", text):
+        raise ValueError(f"Invalid expected warp target: {value!r}")
+    return text
+
+
+def _normalize_expected_sha256(value: Optional[str]) -> Optional[str]:
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    if text.startswith("sha256:"):
+        text = text[7:].strip()
+    if not re.fullmatch(r"[0-9a-f]{64}", text):
+        raise ValueError("expected_module_sha256 must contain exactly 64 hexadecimal characters")
+    return text
+
+
+def _module_file_snapshot(path: Path, *, target: str, location: str) -> dict[str, Any]:
+    resolved = path.resolve()
+    snapshot: dict[str, Any] = {
+        "target": target,
+        "location": location,
+        "path": str(resolved),
+        "exists": resolved.is_file(),
+        "size": 0,
+        "sha256": None,
+    }
+    if not snapshot["exists"]:
+        return snapshot
+    try:
+        snapshot["size"] = int(resolved.stat().st_size)
+        snapshot["sha256"] = _sha256(resolved)
+    except OSError as exc:
+        snapshot["read_error"] = str(exc)
+    return snapshot
+
+
+def _expected_module_snapshot(game_root: Path, target: str, *, currentgame: bool = False) -> dict[str, Any]:
+    directory = "currentgame" if currentgame else "Modules"
+    location = "currentgame" if currentgame else "installed_modules"
+    return _module_file_snapshot(
+        game_root / directory / f"{target}.mod",
+        target=target,
+        location=location,
+    )
+
+
 def start_log_session(
     *,
     game: str = "k2",
@@ -503,7 +748,35 @@ def start_log_session(
     duration_seconds: int = DEFAULT_SESSION_SECONDS,
     asset_resrefs: Optional[list[str]] = None,
     session_root: Optional[str] = None,
+    expected_warp_target: Optional[str] = None,
+    expected_module_sha256: Optional[str] = None,
 ) -> dict[str, Any]:
+    normalized_target = _normalize_warp_target(expected_warp_target)
+    normalized_expected_sha256 = _normalize_expected_sha256(expected_module_sha256)
+    if normalized_expected_sha256 and not normalized_target:
+        raise ValueError("expected_module_sha256 requires expected_warp_target")
+    game_root_path = Path(game_root).resolve() if game_root else None
+    if normalized_target and game_root_path is None:
+        raise ValueError("expected_warp_target requires a resolved KOTOR game_root")
+    start_module_snapshot = (
+        _expected_module_snapshot(game_root_path, normalized_target)
+        if game_root_path is not None and normalized_target
+        else None
+    )
+    if normalized_expected_sha256 and start_module_snapshot:
+        actual_sha256 = start_module_snapshot.get("sha256")
+        if actual_sha256 != normalized_expected_sha256:
+            if not start_module_snapshot.get("exists"):
+                reason = f"module is missing at {start_module_snapshot['path']}"
+            elif start_module_snapshot.get("read_error"):
+                reason = f"module could not be read: {start_module_snapshot['read_error']}"
+            else:
+                reason = f"installed SHA-256 is {actual_sha256}"
+            raise ValueError(
+                f"Expected module hash check failed for {normalized_target}: {reason}; "
+                f"expected {normalized_expected_sha256}. Logger was not started."
+            )
+
     root = Path(session_root).resolve() if session_root else default_session_root()
     session_id = make_session_id(session_label)
     session_dir = root / session_id
@@ -521,8 +794,8 @@ def start_log_session(
         "--duration-seconds",
         str(max(5, int(duration_seconds or DEFAULT_SESSION_SECONDS))),
     ]
-    if game_root:
-        args.extend(["--game-root", str(Path(game_root))])
+    if game_root_path is not None:
+        args.extend(["--game-root", str(game_root_path)])
     if pid:
         args.extend(["--pid", str(int(pid))])
     if wait_for_process:
@@ -531,6 +804,24 @@ def start_log_session(
         if resref:
             args.extend(["--asset-resref", str(resref)])
 
+    metadata = {
+        "session_id": session_id,
+        "session_dir": str(session_dir),
+        "helper_pid": None,
+        "game": _game_key(game),
+        "game_root": str(game_root_path or ""),
+        "target_pid": int(pid) if pid else None,
+        "duration_seconds": max(5, int(duration_seconds or DEFAULT_SESSION_SECONDS)),
+        "asset_resrefs": asset_resrefs or ["c_drexlf", "appearance"],
+        "started_at": _utc_now(),
+        "events_path": str(session_dir / "events.jsonl"),
+        "summary_path": str(session_dir / "summary.json"),
+        "expected_warp_target": normalized_target,
+        "expected_warp_command": f"warp {normalized_target}" if normalized_target else None,
+        "expected_module_sha256": normalized_expected_sha256,
+        "expected_module_start_snapshot": start_module_snapshot,
+    }
+    _write_json(session_dir / "session.json", metadata)
     creationflags = 0x08000000 if os.name == "nt" else 0
     env = os.environ.copy()
     pythonpath_parts = [str(path) for path in sys.path if path]
@@ -547,19 +838,7 @@ def start_log_session(
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
-    metadata = {
-        "session_id": session_id,
-        "session_dir": str(session_dir),
-        "helper_pid": int(proc.pid),
-        "game": _game_key(game),
-        "game_root": str(game_root or ""),
-        "target_pid": int(pid) if pid else None,
-        "duration_seconds": max(5, int(duration_seconds or DEFAULT_SESSION_SECONDS)),
-        "asset_resrefs": asset_resrefs or ["c_drexlf", "appearance"],
-        "started_at": _utc_now(),
-        "events_path": str(session_dir / "events.jsonl"),
-        "summary_path": str(session_dir / "summary.json"),
-    }
+    metadata["helper_pid"] = int(proc.pid)
     _write_json(session_dir / "session.json", metadata)
     return metadata
 
@@ -607,6 +886,8 @@ def analyze_session(
     path = Path(session_dir)
     events = list(_read_jsonl(path / "events.jsonl"))
     exceptions = [event for event in events if event.get("event") == "exception"]
+    first_chance_count = sum(bool(event.get("first_chance", True)) for event in exceptions)
+    second_chance_count = len(exceptions) - first_chance_count
     crashes = [
         event
         for event in exceptions
@@ -625,6 +906,8 @@ def analyze_session(
         {
             "analysis_generated_at": _utc_now(),
             "exception_count": len(exceptions),
+            "first_chance_exception_count": first_chance_count,
+            "second_chance_exception_count": second_chance_count,
             "crash_count": len(crashes),
             "crashes": crashes,
             "ghidra_annotations": annotations,
@@ -699,6 +982,43 @@ def _instruction_at(result: dict[str, Any], address_hex: str) -> dict[str, Any]:
     return {}
 
 
+def _attach_debugger_with_retry(
+    probe: Win32ProcessProbe,
+    writer: "EventWriter",
+    pid: int,
+    *,
+    attempts: int = 4,
+    retry_delay_seconds: float = 0.25,
+) -> tuple[bool, int]:
+    """Attach to a live process, retrying only the transient invalid-PID race.
+
+    ``DebugActiveProcess`` may briefly report ``ERROR_INVALID_PARAMETER`` while
+    a newly discovered executable is still completing process creation.  Other
+    failures, especially access denied, require a privilege change and should
+    be surfaced immediately rather than hidden behind repeated calls.
+    """
+
+    last_error = 0
+    for attempt in range(1, max(1, int(attempts)) + 1):
+        attached, last_error = probe.debug_attach(pid)
+        writer.write(
+            {
+                "event": "debug_attach_attempt",
+                "pid": int(pid),
+                "attempt": attempt,
+                "attached": bool(attached),
+                "last_error": int(last_error),
+            }
+        )
+        if attached:
+            return True, 0
+        if last_error != ERROR_INVALID_PARAMETER or not probe.process_exists(pid):
+            break
+        if attempt < max(1, int(attempts)):
+            time.sleep(max(0.0, float(retry_delay_seconds)))
+    return False, int(last_error)
+
+
 def run_monitor(
     *,
     game: str,
@@ -749,12 +1069,23 @@ def run_monitor(
         return 2
 
     writer.write({"event": "process_selected", "timestamp": _utc_now(), "process": target.as_dict()})
+    monitor_handle = probe.open_monitor_handle(target.pid)
+    writer.write(
+        {
+            "event": "process_handle_opened" if monitor_handle is not None else "process_handle_failed",
+            "pid": target.pid,
+            "persistent": monitor_handle is not None,
+            "can_wait": bool(monitor_handle and monitor_handle.can_wait),
+            "last_error": 0 if monitor_handle is not None else int(ctypes.get_last_error()),
+        }
+    )
     modules = probe.modules(target.pid)
     module_inventory = summarize_module_inventory(modules, game_root=game_root)
     _write_json(session_path / "module_inventory.json", {"pid": target.pid, "modules": module_inventory})
-    attached = bool(probe.kernel32.DebugActiveProcess(int(target.pid)))
+    debug_privilege = probe.enable_debug_privilege()
+    writer.write({"event": "debug_privilege", "pid": target.pid, **debug_privilege})
+    attached, error = _attach_debugger_with_retry(probe, writer, target.pid)
     if not attached:
-        error = int(ctypes.get_last_error())
         writer.write({"event": "debug_attach_failed", "timestamp": _utc_now(), "pid": target.pid, "last_error": error})
         writer.write(
             {
@@ -767,28 +1098,96 @@ def run_monitor(
                 "modules": module_inventory,
             }
         )
-        _poll_until_exit(session_path, writer, probe, target.pid, started_epoch, duration_seconds)
-        _finalize_summary(session_path, writer, probe, started_epoch, game_root, asset_resrefs)
+        try:
+            exit_code = _poll_until_exit(
+                session_path,
+                writer,
+                probe,
+                target.pid,
+                started_epoch,
+                duration_seconds,
+                monitor_handle=monitor_handle,
+            )
+        finally:
+            probe.close_monitor_handle(monitor_handle)
+        _finalize_summary(
+            session_path,
+            writer,
+            probe,
+            started_epoch,
+            game_root,
+            asset_resrefs,
+            exit_code=exit_code,
+            exit_code_source="persistent_process_handle" if exit_code is not None else None,
+            debugger_attached=False,
+            debug_attach_error=error,
+        )
         return 0
 
-    probe.kernel32.DebugSetProcessKillOnExit(False)
+    kill_on_exit_disabled = bool(probe.kernel32.DebugSetProcessKillOnExit(False))
     writer.write(
         {
             "event": "debug_attached",
             "timestamp": _utc_now(),
             "pid": target.pid,
             "modules": module_inventory,
+            "kill_on_debugger_exit": not kill_on_exit_disabled,
         }
     )
 
-    exit_code = 0
+    exit_code: Optional[int] = None
+    exit_code_source: Optional[str] = None
+    enumeration_miss_logged = False
     try:
         deadline = time.time() + max(5, duration_seconds)
         while time.time() < deadline and not _stop_requested(session_path):
             debug_event = DEBUG_EVENT()
             if not probe.kernel32.WaitForDebugEvent(ctypes.byref(debug_event), 500):
                 if not probe.process_exists(target.pid):
-                    writer.write({"event": "process_missing", "timestamp": _utc_now(), "pid": target.pid})
+                    status = probe.monitor_status(monitor_handle)
+                    if status.get("running") is False:
+                        exit_code = status.get("exit_code")
+                        exit_code_source = "persistent_process_handle" if exit_code is not None else None
+                        writer.write(
+                            {
+                                "event": "process_exit_observed",
+                                "timestamp": _utc_now(),
+                                "pid": target.pid,
+                                "exit_code": exit_code,
+                                "exit_code_hex": _exit_code_hex(exit_code),
+                                "exit_code_source": exit_code_source,
+                                "monitor_status": status,
+                            }
+                        )
+                        break
+                    if monitor_handle is not None:
+                        # Toolhelp enumeration can transiently lose a WOW64
+                        # process.  A retained handle that still reports
+                        # STILL_ACTIVE is authoritative, so keep waiting for a
+                        # debug event or a signaled handle.
+                        if not enumeration_miss_logged:
+                            writer.write(
+                                {
+                                    "event": "process_enumeration_miss",
+                                    "timestamp": _utc_now(),
+                                    "pid": target.pid,
+                                    "persistent_handle_authoritative": True,
+                                    "monitor_status": status,
+                                }
+                            )
+                            enumeration_miss_logged = True
+                        continue
+                    writer.write(
+                        {
+                            "event": "process_missing",
+                            "timestamp": _utc_now(),
+                            "pid": target.pid,
+                            "exit_code": None,
+                            "exit_code_hex": None,
+                            "exit_code_source": None,
+                            "monitor_status": status,
+                        }
+                    )
                     break
                 continue
             event_dict, continue_status = _debug_event_to_dict(debug_event, probe, target.pid)
@@ -799,12 +1198,51 @@ def run_monitor(
                 continue_status,
             )
             if event_dict.get("event") == "process_exit":
-                exit_code = int(event_dict.get("exit_code") or 0)
+                exit_code = int(event_dict.get("exit_code", 0))
+                exit_code_source = "debug_exit_event"
                 break
     finally:
-        probe.kernel32.DebugActiveProcessStop(int(target.pid))
-    _finalize_summary(session_path, writer, probe, started_epoch, game_root, asset_resrefs, exit_code=exit_code)
-    return exit_code
+        if exit_code is None:
+            status = probe.monitor_status(monitor_handle)
+            if status.get("running") is False and status.get("exit_code") is not None:
+                exit_code = int(status["exit_code"])
+                exit_code_source = "persistent_process_handle"
+                writer.write(
+                    {
+                        "event": "process_exit_observed",
+                        "pid": target.pid,
+                        "exit_code": exit_code,
+                        "exit_code_hex": _exit_code_hex(exit_code),
+                        "exit_code_source": exit_code_source,
+                        "monitor_status": status,
+                    }
+                )
+        ctypes.set_last_error(0)
+        detached = bool(probe.kernel32.DebugActiveProcessStop(int(target.pid)))
+        if detached:
+            writer.write({"event": "debug_detached", "pid": target.pid})
+        elif exit_code is None:
+            writer.write(
+                {
+                    "event": "debug_detach_failed",
+                    "pid": target.pid,
+                    "last_error": int(ctypes.get_last_error()),
+                }
+            )
+        probe.close_monitor_handle(monitor_handle)
+    _finalize_summary(
+        session_path,
+        writer,
+        probe,
+        started_epoch,
+        game_root,
+        asset_resrefs,
+        exit_code=exit_code,
+        exit_code_source=exit_code_source,
+        debugger_attached=True,
+        debug_attach_error=None,
+    )
+    return int(exit_code) if exit_code is not None else 0
 
 
 class EventWriter:
@@ -865,6 +1303,22 @@ def _walk_ebp_frames(probe: "Win32ProcessProbe", pid: int, context: dict, module
     return frames
 
 
+def _exception_parameter_fields(code: int, parameters: list[int]) -> dict[str, Any]:
+    """Decode the stable Win32 fields carried by an access violation."""
+
+    if int(code) != EXCEPTION_ACCESS_VIOLATION or len(parameters) < 2:
+        return {}
+    operation = int(parameters[0])
+    operation_name = {0: "read", 1: "write", 8: "execute"}.get(operation, "unknown")
+    fault_address = int(parameters[1])
+    return {
+        "fault_operation": operation,
+        "fault_operation_name": operation_name,
+        "fault_address": fault_address,
+        "fault_address_hex": f"0x{fault_address:08x}",
+    }
+
+
 def _debug_event_to_dict(event: DEBUG_EVENT, probe: Win32ProcessProbe, pid: int) -> tuple[dict[str, Any], int]:
     code = int(event.dwDebugEventCode)
     base = {
@@ -878,6 +1332,8 @@ def _debug_event_to_dict(event: DEBUG_EVENT, probe: Win32ProcessProbe, pid: int)
         address = int(record.ExceptionAddress or 0)
         modules = probe.modules(pid)
         module = module_for_address(modules, address)
+        parameter_count = max(0, min(15, int(record.NumberParameters)))
+        parameters = [int(record.ExceptionInformation[i]) for i in range(parameter_count)]
         detail = {
             **base,
             "event": "exception",
@@ -889,13 +1345,17 @@ def _debug_event_to_dict(event: DEBUG_EVENT, probe: Win32ProcessProbe, pid: int)
             "address_hex": f"0x{address:08x}",
             "first_chance": bool(info.dwFirstChance),
             "module": module,
-            "exception_parameters": [int(record.ExceptionInformation[i]) for i in range(int(record.NumberParameters))],
+            "exception_parameters": parameters,
         }
+        detail.update(_exception_parameter_fields(int(record.ExceptionCode), parameters))
+        instruction_bytes = probe.read_memory(pid, address, 16)
+        if instruction_bytes:
+            detail["instruction_bytes_hex"] = instruction_bytes.hex(" ")
         context = probe.wow64_thread_context(int(event.dwThreadId))
         detail["thread_context"] = context
         if context.get("available"):
             esp = int(context.get("esp") or 0)
-            stack_bytes = probe.read_memory(pid, esp, 16 * 4)
+            stack_bytes = probe.read_memory(pid, esp, 32 * 4)
             detail["stack"] = _stack_sample(stack_bytes, esp, modules)
             detail["frames"] = _walk_ebp_frames(probe, pid, context, modules)
         detail.update(ghidra_address_fields(detail))
@@ -918,7 +1378,18 @@ def _debug_event_to_dict(event: DEBUG_EVENT, probe: Win32ProcessProbe, pid: int)
             DBG_CONTINUE,
         )
     if code == EXIT_PROCESS_DEBUG_EVENT:
-        return ({**base, "event": "process_exit", "exit_code": int(event.u.ExitProcess.dwExitCode)}, DBG_CONTINUE)
+        exit_code = int(event.u.ExitProcess.dwExitCode)
+        return (
+            {
+                **base,
+                "event": "process_exit",
+                "exit_code": exit_code,
+                "exit_code_hex": _exit_code_hex(exit_code),
+                "exit_code_name": _exit_code_name(exit_code),
+                "exit_code_source": "debug_exit_event",
+            },
+            DBG_CONTINUE,
+        )
     if code == LOAD_DLL_DEBUG_EVENT:
         info = event.u.LoadDll
         address = int(info.lpBaseOfDll or 0)
@@ -997,8 +1468,6 @@ def _is_crash_exception(event: dict[str, Any]) -> bool:
     code = int(event.get("exception_code") or 0)
     if code in HANDLED_DEBUGGER_EXCEPTIONS:
         return False
-    if code == EXCEPTION_ACCESS_VIOLATION:
-        return True
     return not bool(event.get("first_chance", True))
 
 
@@ -1196,6 +1665,19 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _exit_code_hex(exit_code: Optional[int]) -> Optional[str]:
+    if exit_code is None:
+        return None
+    return f"0x{int(exit_code) & 0xFFFFFFFF:08x}"
+
+
+def _exit_code_name(exit_code: Optional[int]) -> Optional[str]:
+    if exit_code is None:
+        return None
+    name = exception_name(int(exit_code) & 0xFFFFFFFF)
+    return None if name == "UNKNOWN" else name
+
+
 def _poll_until_exit(
     session_path: Path,
     writer: EventWriter,
@@ -1203,13 +1685,103 @@ def _poll_until_exit(
     pid: int,
     started_epoch: float,
     duration_seconds: int,
-) -> None:
+    *,
+    monitor_handle: Optional[ProcessMonitorHandle] = None,
+) -> Optional[int]:
+    del started_epoch  # retained in the call signature for compatibility
     deadline = time.time() + max(5, duration_seconds)
+    enumeration_miss_logged = False
+    last_monitor_status: dict[str, Any] = {
+        "available": False,
+        "running": None,
+        "exit_code": None,
+        "last_error": 0,
+    }
     while time.time() < deadline and not _stop_requested(session_path):
+        status = probe.monitor_status(monitor_handle)
+        last_monitor_status = status
+        if status.get("running") is False:
+            exit_code = status.get("exit_code")
+            writer.write(
+                {
+                    "event": "process_exit_observed",
+                    "pid": pid,
+                    "exit_code": exit_code,
+                    "exit_code_hex": _exit_code_hex(exit_code),
+                    "exit_code_name": _exit_code_name(exit_code),
+                    "exit_code_source": "persistent_process_handle" if exit_code is not None else None,
+                    "monitor_status": status,
+                }
+            )
+            return int(exit_code) if exit_code is not None else None
         if not probe.process_exists(pid):
-            writer.write({"event": "process_exit_observed", "pid": pid})
-            break
+            if monitor_handle is not None:
+                # Toolhelp snapshots are advisory once a persistent process
+                # handle exists.  Continue until WaitForSingleObject signals
+                # or GetExitCodeProcess returns something other than
+                # STILL_ACTIVE; neither condition has happened yet.
+                if not enumeration_miss_logged:
+                    writer.write(
+                        {
+                            "event": "process_enumeration_miss",
+                            "pid": pid,
+                            "persistent_handle_authoritative": True,
+                            "monitor_status": status,
+                        }
+                    )
+                    enumeration_miss_logged = True
+                time.sleep(0.5)
+                continue
+            # Windows denied the persistent handle, so enumeration is the only
+            # remaining liveness signal.  Preserve the unknown exit explicitly
+            # rather than inventing a successful exit code.
+            writer.write(
+                {
+                    "event": "process_exit_observed",
+                    "pid": pid,
+                    "exit_code": None,
+                    "exit_code_hex": None,
+                    "exit_code_source": None,
+                    "monitor_status": status,
+                }
+            )
+            return None
         time.sleep(0.5)
+    writer.write(
+        {
+            "event": "monitor_stopped" if _stop_requested(session_path) else "monitor_timeout",
+            "pid": pid,
+            "process_still_running": (
+                last_monitor_status.get("running")
+                if monitor_handle is not None
+                else bool(probe.process_exists(pid))
+            ),
+            "monitor_status": last_monitor_status,
+        }
+    )
+    return None
+
+
+def _final_warp_routing_evidence(session_path: Path, game_root: Optional[str]) -> Optional[dict[str, Any]]:
+    session_metadata = _read_json(session_path / "session.json")
+    try:
+        target = _normalize_warp_target(session_metadata.get("expected_warp_target"))
+    except ValueError:
+        target = None
+    if not target:
+        return None
+    root_text = str(game_root or session_metadata.get("game_root") or "").strip()
+    root = Path(root_text).resolve() if root_text else None
+    return {
+        "target": target,
+        "expected_command": str(session_metadata.get("expected_warp_command") or f"warp {target}"),
+        "expected_module_sha256": session_metadata.get("expected_module_sha256"),
+        "start_modules_snapshot": session_metadata.get("expected_module_start_snapshot"),
+        "end_modules_snapshot": _expected_module_snapshot(root, target) if root is not None else None,
+        "end_currentgame_snapshot": (
+            _expected_module_snapshot(root, target, currentgame=True) if root is not None else None
+        ),
+    }
 
 
 def _finalize_summary(
@@ -1220,18 +1792,55 @@ def _finalize_summary(
     game_root: Optional[str],
     asset_resrefs: list[str],
     *,
-    exit_code: int = 0,
+    exit_code: Optional[int] = None,
+    exit_code_source: Optional[str] = None,
+    debugger_attached: Optional[bool] = None,
+    debug_attach_error: Optional[int] = None,
 ) -> None:
     events = list(_read_jsonl(writer.events_path))
     exceptions = [event for event in events if event.get("event") == "exception"]
+    first_chance_count = sum(bool(event.get("first_chance", True)) for event in exceptions)
+    second_chance_count = len(exceptions) - first_chance_count
+    crashes = [event for event in exceptions if _is_crash_exception(event)]
+    warp_routing = _final_warp_routing_evidence(session_path, game_root)
+    exit_events = [
+        event
+        for event in events
+        if event.get("event") in {"process_exit", "process_exit_observed"}
+    ]
+    if exit_code is None:
+        for event in reversed(exit_events):
+            if event.get("exit_code") is not None:
+                exit_code = int(event["exit_code"])
+                exit_code_source = str(event.get("exit_code_source") or "event_log")
+                break
+    if debugger_attached is None:
+        debugger_attached = any(event.get("event") == "debug_attached" for event in events)
+    if debug_attach_error is None:
+        failures = [event for event in events if event.get("event") == "debug_attach_failed"]
+        if failures:
+            debug_attach_error = int(failures[-1].get("last_error") or 0)
     summary = {
         "session_dir": str(session_path),
         "finished_at": _utc_now(),
         "duration_seconds": round(_epoch() - started_epoch, 3),
-        "exit_code": int(exit_code),
+        "exit_code": int(exit_code) if exit_code is not None else None,
+        "exit_code_hex": _exit_code_hex(exit_code),
+        "exit_code_name": _exit_code_name(exit_code),
+        "exit_code_available": exit_code is not None,
+        "exit_code_source": exit_code_source,
+        "process_exit_observed": bool(exit_events),
+        "debugger_attached": bool(debugger_attached),
+        "debug_attach_error": debug_attach_error,
+        "capture_mode": "debug_events" if debugger_attached else "process_liveness",
         "event_count": len(events),
         "exception_count": len(exceptions),
+        "first_chance_exception_count": first_chance_count,
+        "second_chance_exception_count": second_chance_count,
+        "crash_count": len(crashes),
         "last_exception": exceptions[-1] if exceptions else None,
+        "last_crash": crashes[-1] if crashes else None,
+        "warp_routing": warp_routing,
         "override_assets": summarize_override_assets(game_root, asset_resrefs),
         "runtime_files": summarize_runtime_files(game_root),
         "game_logs": summarize_game_logs(game_root),
@@ -1279,7 +1888,29 @@ def _write_text_summary(path: Path, summary: dict[str, Any]) -> None:
         f"Finished: {summary.get('finished_at') or summary.get('analysis_generated_at')}",
         f"Events: {summary.get('event_count')}",
         f"Exceptions: {summary.get('exception_count')}",
+        f"First-chance exceptions: {summary.get('first_chance_exception_count')}",
+        f"Second-chance exceptions: {summary.get('second_chance_exception_count')}",
+        f"Crashes: {summary.get('crash_count')}",
+        (
+            f"Target exit: {summary.get('exit_code_hex')} {summary.get('exit_code_name') or ''} "
+            f"({summary.get('exit_code_source')})"
+            if summary.get("exit_code_available")
+            else "Target exit: unknown"
+        ),
+        f"Capture mode: {summary.get('capture_mode')}",
     ]
+    warp_routing = summary.get("warp_routing") or {}
+    if warp_routing:
+        lines.extend(
+            [
+                "",
+                "Warp routing evidence:",
+                f"  Expected command: {warp_routing.get('expected_command')}",
+                _format_module_snapshot("Start Modules", warp_routing.get("start_modules_snapshot")),
+                _format_module_snapshot("End Modules", warp_routing.get("end_modules_snapshot")),
+                _format_module_snapshot("End currentgame", warp_routing.get("end_currentgame_snapshot")),
+            ]
+        )
     last = summary.get("last_exception") or (summary.get("crashes") or [None])[-1]
     if last:
         lines.extend(
@@ -1305,6 +1936,15 @@ def _write_text_summary(path: Path, summary: dict[str, Any]) -> None:
             if instruction:
                 lines.append(f"    {instruction.get('address')} {instruction.get('mnemonic')} {instruction.get('operands')}")
     path.write_text("\n".join(str(line) for line in lines) + "\n", encoding="utf-8")
+
+
+def _format_module_snapshot(label: str, snapshot: Any) -> str:
+    if not isinstance(snapshot, dict):
+        return f"  {label}: unavailable"
+    return (
+        f"  {label}: exists={bool(snapshot.get('exists'))} size={int(snapshot.get('size') or 0)} "
+        f"sha256={snapshot.get('sha256') or 'unavailable'} path={snapshot.get('path') or ''}"
+    )
 
 
 def _stop_requested(session_path: Path) -> bool:

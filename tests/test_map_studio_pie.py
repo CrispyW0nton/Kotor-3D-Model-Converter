@@ -917,7 +917,8 @@ def test_pie_clean_runtime_presentation_masks_editor_helpers_without_disabling_l
     assert "self._sync_marker_geometry_overlay()" in pie_mode
 
     marker_sync = _method_source(panel_source, "_sync_marker_geometry_overlay")
-    assert "geometry = None if self._pie_active else base" in marker_sync
+    assert "geometry = pie if self._pie_active else base" in marker_sync
+    assert "pie = self._pie_overlay_geometry" in marker_sync
 
     frame = _method_source(render_source, "_render_frame")
     assert 'property("_gr_map_studio_pie_clean_runtime")' in frame
@@ -936,6 +937,7 @@ def test_pie_clean_runtime_presentation_masks_editor_helpers_without_disabling_l
     # The authored lights still feed the shader; only their editor wireframes
     # and selection state are masked.
     assert "build_scene_lighting_render_data" in gpu_frame
+    assert "self._renderer_consumes_scene_lighting_render_data(self._gpu_renderer)" in gpu_frame
     assert "lighting_render_data=lighting_render_data" in gpu_frame
 
 

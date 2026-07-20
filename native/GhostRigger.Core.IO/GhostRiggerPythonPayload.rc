@@ -37,3 +37,5 @@ PYTHON_PAYLOAD_IO_FBX_FBX_SCENE_ADAPTER RCDATA "Python/src/io/fbx/fbx_scene_adap
 PYTHON_PAYLOAD_IO_FBX_FBX_SDK_LOADER RCDATA "Python/src/io/fbx/fbx_sdk_loader.py"
 PYTHON_PAYLOAD_IO_FBX_FBX_SDK_PATHS RCDATA "Python/src/io/fbx/fbx_sdk_paths.py"
 PYTHON_PAYLOAD_IO_FBX_FBX_SDK_SETUP RCDATA "Python/src/io/fbx/fbx_sdk_setup.py"
+PYTHON_PAYLOAD_IO_KOTOR_GUI_IO RCDATA "Python/src/io/kotor_gui_io.py"
+PYTHON_PAYLOAD_IO_MDL_AUTO_IMPORT RCDATA "Python/src/io/mdl_auto_import.py"

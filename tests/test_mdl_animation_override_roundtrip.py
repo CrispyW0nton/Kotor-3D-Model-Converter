@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import struct
 from pathlib import Path
 
 import pytest
@@ -432,6 +433,40 @@ def test_animation_only_injection_uses_vanilla_depth_first_node_order() -> None:
     assert candidate.declared_node_count == 61
     assert candidate.visited_node_count == 61
     assert candidate.node_names == [node.name for node in target_model.all_nodes()]
+
+    # Aurora's retail runtime pairs animation nodes to geometry nodes through
+    # the u16 at node-header +2.  That value is a geometry node number, not the
+    # adjacent name-table index at +4.  PMBAM deliberately has many non-DFS
+    # identities, so this fixture catches writers that duplicate +4 into +2:
+    # GhostRigger's name-based preview accepts those files, but KOTOR does not
+    # deform the corresponding skinned body nodes.
+    base = 12
+    source_numbers = writer._read_geometry_node_numbers(target_mdl.read_bytes())
+    assert any(name_index != node_number for name_index, node_number in source_numbers.items())
+
+    animation_rel = writer._read_animation_offsets(mdl_bytes)[-1]
+    animation_root_rel = struct.unpack_from("<I", mdl_bytes, base + animation_rel + 0x28)[0]
+    pending = [animation_root_rel]
+    visited: set[int] = set()
+    while pending:
+        node_rel = pending.pop(0)
+        if node_rel in visited:
+            continue
+        visited.add(node_rel)
+        node_abs = base + node_rel
+        node_number, name_index = struct.unpack_from("<HH", mdl_bytes, node_abs + 0x02)
+        assert node_number == source_numbers[name_index]
+
+        child_array_rel, child_count = struct.unpack_from("<II", mdl_bytes, node_abs + 0x2C)
+        for child_index in range(child_count):
+            child_rel = struct.unpack_from(
+                "<I",
+                mdl_bytes,
+                base + child_array_rel + child_index * 4,
+            )[0]
+            pending.append(child_rel)
+
+    assert len(visited) == candidate.visited_node_count
 
 
 def test_raw_animation_footprint_validator_rejects_non_depth_first_child_layout() -> None:

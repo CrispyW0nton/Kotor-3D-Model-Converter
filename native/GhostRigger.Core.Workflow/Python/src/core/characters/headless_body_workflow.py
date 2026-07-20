@@ -7033,29 +7033,44 @@ def _kotor_skin_inverse_bind_arrays(
     splitter fixtures that do not embed the donor DAG in ``model``.
     """
 
+    model_nodes = _iter_model_nodes(model)
     bone_by_name: Dict[str, Any] = {}
     for source in (model, reference_model):
         if source is None:
             continue
         for bone in _iter_model_nodes(source):
             key = str(getattr(bone, "name", "") or "").strip().lower()
-            if key and key not in bone_by_name:
-                bone_by_name[key] = bone
+            if key:
+                bone_by_name.setdefault(key, bone)
 
-    skin_pos, skin_q_xyzw = _node_world_transform_or_local(skin_node)
+    skin_pos, skin_q_xyzw = _node_skin_palette_world_transform(skin_node)
+    palette_node_indices = list(
+        getattr(skin_node, "bone_node_indices", []) or []
+    )
     qbones: List[Tuple[float, float, float, float]] = []
     tbones: List[Vec3] = []
     missing: List[str] = []
-    for raw_name in list(getattr(skin_node, "bone_map", []) or []):
+    for slot, raw_name in enumerate(list(getattr(skin_node, "bone_map", []) or [])):
         name = str(raw_name or "").strip()
-        bone = bone_by_name.get(name.lower())
+        bone = None
+        if slot < len(palette_node_indices):
+            try:
+                node_index = int(palette_node_indices[slot])
+            except (TypeError, ValueError):
+                node_index = -1
+            if 0 <= node_index < len(model_nodes):
+                candidate = model_nodes[node_index]
+                if str(getattr(candidate, "name", "") or "").strip().lower() == name.lower():
+                    bone = candidate
+        if bone is None:
+            bone = bone_by_name.get(name.lower())
         if bone is None:
             missing.append(name)
             qbones.append((1.0, 0.0, 0.0, 0.0))  # identity, disk WXYZ
             tbones.append((0.0, 0.0, 0.0))
             continue
 
-        bone_pos, bone_q_xyzw = _node_world_transform_or_local(bone)
+        bone_pos, bone_q_xyzw = _node_skin_palette_world_transform(bone)
         inv_bone_q = _quat_inverse_xyzw(bone_q_xyzw)
         relative_q_xyzw = _quat_mul(inv_bone_q, skin_q_xyzw)
         relative_t = _quat_rotate_vec(
@@ -7879,6 +7894,48 @@ def _node_world_transform_or_local(node: Any) -> Tuple[Vec3, Tuple[float, float,
     )
 
 
+def _node_skin_palette_world_transform(
+    node: Any,
+) -> Tuple[Vec3, Tuple[float, float, float, float]]:
+    """Return the exact hierarchy transform consumed by the live skin palette.
+
+    ``ModelNode.world_transform()`` intentionally collapses near-180-degree
+    rotations on parent helper meshes for legacy non-skin display placement.
+    GPU skinning does not: every local quaternion participates in the bone
+    world matrix. Building qBone/tBone rows with the display transform therefore
+    corrupts descendants of a 180-degree finger base (PMBCM ``RcFngrT_g`` was
+    the visible Peragus failure). This path mirrors MatrixPaletteUploader's
+    parent-chain accumulation exactly and must be used for skin inverse binds.
+    """
+
+    chain: List[Any] = []
+    current = node
+    visited: set[int] = set()
+    while current is not None and id(current) not in visited:
+        visited.add(id(current))
+        chain.append(current)
+        current = getattr(current, "parent", None)
+    chain.reverse()
+
+    world_position: Vec3 = (0.0, 0.0, 0.0)
+    world_rotation: Tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
+    for current in chain:
+        local_position = getattr(current, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
+        rotated = _quat_rotate_vec(world_rotation, local_position)
+        world_position = (
+            world_position[0] + rotated[0],
+            world_position[1] + rotated[1],
+            world_position[2] + rotated[2],
+        )
+        local_rotation = getattr(current, "rotation", (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0)
+        try:
+            normalized_local = tuple(float(value) for value in local_rotation[:4])
+        except Exception:
+            normalized_local = (0.0, 0.0, 0.0, 1.0)
+        world_rotation = _quat_mul(world_rotation, normalized_local)  # type: ignore[arg-type]
+    return world_position, world_rotation
+
+
 def _node_vertices_are_model_world_for_split(node: Any) -> bool:
     """Return True when an imported payload stores vertices in model space."""
 
@@ -8507,6 +8564,15 @@ def _split_skinned_node_by_anatomical_regions(
         split_node.face_mats = new_face_mats
         split_node.skin_data = new_skin_rows
         split_node.bone_map = [bone_map[old] for old in used_local_indices]
+        source_bone_node_indices = list(
+            getattr(node, "bone_node_indices", []) or []
+        )
+        split_node.bone_node_indices = [
+            int(source_bone_node_indices[old])
+            if 0 <= old < len(source_bone_node_indices) else
+            -1
+            for old in used_local_indices
+        ]
         for attr in (
             "_gr_bound_to_kotor_skeleton",
             "_gr_kotor_skeleton_root",
@@ -12974,6 +13040,10 @@ def _export_single_format(
     label: str,
     out_dir: str,
     resref: str,
+    fbx_compatibility_profile: str = "standard",
+    tex_cache: Any = None,
+    fbx_animation_names: Optional[Sequence[str]] = None,
+    animation_resource_manager: Any = None,
 ) -> ExportFormatResult:
     """Dispatch one format.  Returns a structured per-format row.
 
@@ -13034,7 +13104,32 @@ def _export_single_format(
                 raise RuntimeError("; ".join(messages) or "Character export transaction failed")
         elif fmt_key == "fbx":
             fbx_cls, _gltf_cls, _obj_cls = _import_mesh_exporters()
-            ok = fbx_cls().export(body, out_path)
+            fbx_model = body
+            base_skeleton_model = getattr(body, "_gr_fbx_base_skeleton_model", None)
+            if fbx_animation_names is not None:
+                try:
+                    from src.core.animation.fbx_animation_selection import (
+                        prepare_fbx_animation_export_model,
+                    )
+                except ImportError:  # pragma: no cover - package-relative fallback
+                    from core.animation.fbx_animation_selection import (  # type: ignore
+                        prepare_fbx_animation_export_model,
+                    )
+                fbx_model = prepare_fbx_animation_export_model(
+                    body,
+                    tuple(fbx_animation_names),
+                    game=normalize_kotor_game_tag(getattr(scene, "game_version", "K1")),
+                    resource_manager=animation_resource_manager,
+                    base_skeleton_model=base_skeleton_model,
+                    require_all=True,
+                )
+            ok = fbx_cls().export(
+                fbx_model,
+                out_path,
+                tex_cache=tex_cache,
+                base_skeleton_model=base_skeleton_model,
+                compatibility_profile=fbx_compatibility_profile,
+            )
             if ok is False:
                 raise RuntimeError("FBX exporter returned False")
         elif fmt_key == "gltf":
@@ -13044,7 +13139,7 @@ def _export_single_format(
                 raise RuntimeError("glTF exporter returned False")
         elif fmt_key == "obj":
             _fbx_cls, _gltf_cls, obj_cls = _import_mesh_exporters()
-            ok = obj_cls().export(body, out_path)
+            ok = obj_cls().export(body, out_path, tex_cache=tex_cache)
             if ok is False:
                 raise RuntimeError("OBJ exporter returned False")
     except Exception as exc:
@@ -13069,6 +13164,10 @@ def export_scene(
     out_dir: str = "",
     write_sidecar: bool = True,
     skip_validation: bool = False,
+    fbx_compatibility_profile: str = "standard",
+    tex_cache: Any = None,
+    fbx_animation_names: Optional[Sequence[str]] = None,
+    animation_resource_manager: Any = None,
 ) -> ExportResult:
     """Workflow Step 6b — write the scene to disk in the requested formats.
 
@@ -13181,6 +13280,10 @@ def export_scene(
                 _export_single_format(
                     scene, body, fmt_key,
                     label_by_key[fmt_key], out_dir, resref,
+                    fbx_compatibility_profile,
+                    tex_cache,
+                    fbx_animation_names,
+                    animation_resource_manager,
                 )
             )
 
@@ -13221,6 +13324,12 @@ def export_scene(
             }
             for row in rows
         ]
+        metadata["fbx_compatibility_profile"] = str(
+            fbx_compatibility_profile or "standard"
+        )
+        metadata["fbx_animation_names"] = (
+            None if fbx_animation_names is None else list(fbx_animation_names)
+        )
         metadata["export_timestamps"] = {
             **dict(metadata.get("export_timestamps", {}) or {}),
             "last_export_at": export_stamp,

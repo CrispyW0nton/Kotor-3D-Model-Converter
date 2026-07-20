@@ -59,6 +59,28 @@ XPosition/YPosition/ZPosition (dumped from 202TEL), LYT doorhook lines are
 *behavioral* (what does the engine DO with a field, which lookup crashed,
 is a field optional) — and for K1-vs-K2 compatibility differences.
 
+## PIE reconstruction contract
+
+Treat the retail Odyssey runtime as the behavioral specification for every
+Map Studio Play-in-Editor gameplay system. Before expanding focus selection,
+the action queue, combat rounds, dialogue traversal, cameras, audio, inventory,
+doors, creatures, or HUD behavior:
+
+1. Recover the relevant control flow and data contracts from the analyzed K1
+   and/or K2 executable when the local evidence is available.
+2. Cross-check resource fields and presentation assets against unmodified game
+   files that the retail engine accepts.
+3. Keep recovered engine behavior, file-format evidence, and editor inference
+   separately labeled in code, tests, proof receipts, and change notes.
+4. Use a bounded approximation only when exact behavior is still unknown, and
+   expose that limitation rather than presenting it as KOTOR parity.
+5. Preserve manual retail-game proof as the final acceptance test; PIE evidence
+   is never a substitute for a K1/K2 run.
+
+The future GUI Editor is a separate main-workbench product surface. PIE may
+consume the same resource/preview contracts, but Map Studio must not own the GUI
+authoring implementation.
+
 Also available: the local ZBrush Ghidra project at
 `C:\Users\NewAdmin\Documents\GDeveloper\Workspaces\Ghidra\projects\active\ZBrush`
 for studying how ZModeler's modeling tools behave (educational reference for

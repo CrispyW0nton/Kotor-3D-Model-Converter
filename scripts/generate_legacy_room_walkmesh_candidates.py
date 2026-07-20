@@ -1016,8 +1016,235 @@ def _quaternion_delta(a: Sequence[float], b: Sequence[float]) -> float:
     return max(abs(float(x) - sign * float(y)) for x, y in zip(a, b))
 
 
+def _audit_static_room_controllers(model: Any, *, tolerance: float = 1.0e-5) -> dict[str, Any]:
+    """Prove that a room's controllers are redundant bind-transform keys.
+
+    Legacy MDLOps/NWMax room compiles commonly emitted one position and one
+    orientation controller at time zero for every non-root node.  Those keys
+    merely duplicate the node-header bind transform; they are not animation.
+    The controller-free K2 room writer is the proven promotion route for these
+    recovered static rooms.  It may strip this exact redundant pattern but must
+    reject real animation, multi-key curves, other controller types, or a value
+    that differs from the node's bind transform.
+    """
+
+    animations = tuple(getattr(model, "animations", ()) or ())
+    invalid: list[str] = []
+    controller_count = 0
+    redundant_count = 0
+    nodes_with_controllers = 0
+    type_counts: dict[str, int] = {}
+    for node in tuple(model.all_nodes()):
+        controllers = tuple(getattr(node, "controllers", ()) or ())
+        if not controllers:
+            continue
+        nodes_with_controllers += 1
+        seen_types: set[int] = set()
+        for controller in controllers:
+            controller_count += 1
+            if not isinstance(controller, dict):
+                invalid.append(f"{node.name}: controller {controller_count - 1} is not a decoded mapping.")
+                continue
+            controller_type = int(controller.get("type", controller.get("controller_type", -1)))
+            type_counts[str(controller_type)] = type_counts.get(str(controller_type), 0) + 1
+            if controller_type not in (8, 20):
+                invalid.append(f"{node.name}: controller type {controller_type} is not a static transform key.")
+                continue
+            if controller_type in seen_types:
+                invalid.append(f"{node.name}: duplicate controller type {controller_type}.")
+                continue
+            seen_types.add(controller_type)
+            times = tuple(controller.get("times", ()) or ())
+            values = tuple(controller.get("values", ()) or ())
+            if len(times) != 1 or len(values) != 1:
+                invalid.append(
+                    f"{node.name}: controller type {controller_type} has {len(times)} time(s) and "
+                    f"{len(values)} value row(s), expected one redundant key."
+                )
+                continue
+            if not math.isfinite(float(times[0])) or abs(float(times[0])) > tolerance:
+                invalid.append(
+                    f"{node.name}: controller type {controller_type} key time {times[0]!r} is not zero."
+                )
+                continue
+            value = tuple(float(component) for component in values[0])
+            expected = tuple(
+                float(component)
+                for component in (
+                    getattr(node, "position", (0.0, 0.0, 0.0))
+                    if controller_type == 8
+                    else getattr(node, "rotation", (0.0, 0.0, 0.0, 1.0))
+                )
+            )
+            expected_columns = 3 if controller_type == 8 else 4
+            if len(value) != expected_columns or len(expected) != expected_columns:
+                invalid.append(
+                    f"{node.name}: controller type {controller_type} has an invalid transform width."
+                )
+                continue
+            delta = (
+                max(abs(a - b) for a, b in zip(value, expected))
+                if controller_type == 8
+                else _quaternion_delta(value, expected)
+            )
+            if delta > tolerance:
+                invalid.append(
+                    f"{node.name}: controller type {controller_type} differs from its bind transform "
+                    f"by {delta:g}."
+                )
+                continue
+            redundant_count += 1
+
+    if animations:
+        invalid.append(f"model contains {len(animations)} animation block(s).")
+    safe_to_strip = not invalid and redundant_count == controller_count
+    return {
+        "animation_count": len(animations),
+        "controller_count": controller_count,
+        "controller_type_counts": type_counts,
+        "nodes_with_controllers": nodes_with_controllers,
+        "redundant_bind_transform_controller_count": redundant_count,
+        "pattern": "controller_free" if controller_count == 0 else "single_key_bind_transform",
+        "safe_to_strip": safe_to_strip,
+        "invalid_reasons": invalid,
+        "tolerance": tolerance,
+    }
+
+
+def _freeze_behavior_value(value: Any) -> Any:
+    """Return a stable, exact-comparison representation of node behavior data."""
+
+    if isinstance(value, dict):
+        return tuple(
+            (str(key), _freeze_behavior_value(item))
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze_behavior_value(item) for item in value)
+    if isinstance(value, bool):
+        return bool(value)
+    if isinstance(value, int):
+        return int(value)
+    if isinstance(value, float):
+        return float(value)
+    if value is None:
+        return None
+    return str(value)
+
+
+def _controller_inventory(controller: Any) -> tuple[Any, ...]:
+    """Capture every decoded and raw controller field required for lossless writing."""
+
+    if not isinstance(controller, dict):
+        return ("invalid", repr(controller))
+    fields = (
+        "type",
+        "name",
+        "columns",
+        "times",
+        "values",
+        "binary_unknown0",
+        "binary_column_count",
+        "binary_unknown1",
+        "binary_compressed_quaternion_words",
+        "is_bezier",
+        "binary_bezier_rows",
+    )
+    return tuple((field, _freeze_behavior_value(controller.get(field))) for field in fields)
+
+
+def _audit_preserved_room_controllers(model: Any) -> dict[str, Any]:
+    """Prove a static room controller bank is finite and safe to preserve exactly.
+
+    True K2 CHITIN rooms are the oracle: ``001ebo1`` carries 199 established
+    controllers and emitter partition ``001ebo17`` carries 837.  A conversion
+    must therefore retain source controller rows and raw entry metadata; it may
+    not infer that a room should be controller-free from an Override copy.
+    """
+
+    invalid: list[str] = []
+    type_counts: dict[str, int] = {}
+    controller_count = 0
+    nodes_with_controllers = 0
+    for node in tuple(model.all_nodes()):
+        controllers = tuple(getattr(node, "controllers", ()) or ())
+        if controllers:
+            nodes_with_controllers += 1
+        for ordinal, controller in enumerate(controllers):
+            controller_count += 1
+            if not isinstance(controller, dict):
+                invalid.append(f"{node.name}[{ordinal}] is not a decoded controller mapping.")
+                continue
+            controller_type = int(controller.get("type", -1))
+            type_counts[str(controller_type)] = type_counts.get(str(controller_type), 0) + 1
+            times = tuple(controller.get("times", ()) or ())
+            values = tuple(controller.get("values", ()) or ())
+            if not times or len(times) != len(values):
+                invalid.append(
+                    f"{node.name}[{ordinal}] type {controller_type} has {len(times)} time row(s) "
+                    f"and {len(values)} value row(s)."
+                )
+                continue
+            raw_columns = int(
+                controller.get("binary_column_count", controller.get("columns", 1)) or 1
+            )
+            logical_columns = raw_columns & 0x0F
+            if logical_columns <= 0:
+                invalid.append(
+                    f"{node.name}[{ordinal}] type {controller_type} has invalid column byte "
+                    f"0x{raw_columns & 0xFF:02x}."
+                )
+                continue
+            for time in times:
+                if not math.isfinite(float(time)):
+                    invalid.append(f"{node.name}[{ordinal}] contains a non-finite key time.")
+                    break
+            for row in values:
+                if not isinstance(row, (list, tuple)) or not all(
+                    math.isfinite(float(value)) for value in row
+                ):
+                    invalid.append(f"{node.name}[{ordinal}] contains a malformed/non-finite row.")
+                    break
+
+    animations = tuple(getattr(model, "animations", ()) or ())
+    if animations:
+        invalid.append(f"model contains {len(animations)} animation block(s).")
+    return {
+        "animation_count": len(animations),
+        "controller_count": controller_count,
+        "controller_type_counts": type_counts,
+        "nodes_with_controllers": nodes_with_controllers,
+        "safe_to_preserve": not invalid,
+        "invalid_reasons": invalid,
+        "oracle": "true K2 CHITIN 001ebo1/001ebo17 controller-bearing rooms",
+    }
+
+
+def _model_controller_inventory(model: Any) -> tuple[tuple[Any, ...], ...]:
+    """Controller banks in DFS node order, including the embedded AABB node."""
+
+    return tuple(
+        (
+            str(getattr(node, "name", "") or ""),
+            int(getattr(node, "flags", 0) or 0),
+            tuple(
+                _controller_inventory(controller)
+                for controller in (getattr(node, "controllers", ()) or ())
+            ),
+        )
+        for node in model.all_nodes()
+    )
+
+
 def _node_inventory(model: Any) -> list[dict[str, Any]]:
-    """DFS inventory of every non-AABB node for source/output parity checks."""
+    """DFS inventory of every non-AABB node for source/output parity checks.
+
+    The payload fields deliberately cover the complete static visual surface,
+    not only aggregate counts: indexed geometry, UV channels, normal/tangent
+    data, face-material assignments, texture slots, and render-material state.
+    Parsed source/output values are float32, so exact equality here proves the
+    writer did not numerically alter the room payload.
+    """
 
     rows: list[dict[str, Any]] = []
     for node in model.all_nodes():
@@ -1033,6 +1260,71 @@ def _node_inventory(model: Any) -> list[dict[str, Any]]:
                 "vertex_count": len(getattr(node, "vertices", []) or []),
                 "texture": str(getattr(node, "texture", "") or "").strip().casefold(),
                 "lightmap": str(getattr(node, "lightmap", "") or "").strip().casefold(),
+                "flags": flags,
+                "faces": tuple(tuple(int(value) for value in face) for face in (getattr(node, "faces", ()) or ())),
+                "vertices": tuple(tuple(float(value) for value in row) for row in (getattr(node, "vertices", ()) or ())),
+                "normals": tuple(tuple(float(value) for value in row) for row in (getattr(node, "normals", ()) or ())),
+                "tangents": tuple(tuple(float(value) for value in row) for row in (getattr(node, "tangents", ()) or ())),
+                "uvs": tuple(tuple(float(value) for value in row) for row in (getattr(node, "uvs", ()) or ())),
+                "uvs_lm": tuple(tuple(float(value) for value in row) for row in (getattr(node, "uvs_lm", ()) or ())),
+                "uvs_2": tuple(tuple(float(value) for value in row) for row in (getattr(node, "uvs_2", ()) or ())),
+                "uvs_3": tuple(tuple(float(value) for value in row) for row in (getattr(node, "uvs_3", ()) or ())),
+                "face_uvs": tuple(tuple(int(value) for value in row) for row in (getattr(node, "face_uvs", ()) or ())),
+                "face_mats": tuple(int(value) for value in (getattr(node, "face_mats", ()) or ())),
+                "texture_raw": str(getattr(node, "texture", "") or ""),
+                "lightmap_raw": str(getattr(node, "lightmap", "") or ""),
+                "bump_map": str(getattr(node, "bump_map", "") or ""),
+                "texture_names": tuple(str(value) for value in (getattr(node, "texture_names", ()) or ())),
+                "material_state": (
+                    tuple(float(value) for value in getattr(node, "diffuse", ())),
+                    tuple(float(value) for value in getattr(node, "ambient", ())),
+                    tuple(float(value) for value in getattr(node, "specular", ())),
+                    float(getattr(node, "shininess", 0.0)),
+                    float(getattr(node, "alpha", 1.0)),
+                    tuple(float(value) for value in getattr(node, "selfillum", ())),
+                    bool(getattr(node, "has_shadow", False)),
+                    bool(getattr(node, "render", False)),
+                    bool(getattr(node, "has_lightmap", False)),
+                    bool(getattr(node, "beaming", False)),
+                    bool(getattr(node, "background_geometry", False)),
+                    bool(getattr(node, "rotate_texture", False)),
+                    int(getattr(node, "transparency_hint", 0)),
+                    int(getattr(node, "tex_count", 1)),
+                ),
+                "uv_animation_state": (
+                    bool(getattr(node, "animate_uv", False)),
+                    float(getattr(node, "uv_dir_x", 0.0)),
+                    float(getattr(node, "uv_dir_y", 0.0)),
+                    float(getattr(node, "uv_jitter", 0.0)),
+                    float(getattr(node, "uv_jitter_speed", 0.0)),
+                ),
+                "controllers": tuple(
+                    _controller_inventory(controller)
+                    for controller in (getattr(node, "controllers", ()) or ())
+                ),
+                "light_header_state": (
+                    (
+                        float(getattr(node, "light_flare_radius", 0.0) or 0.0),
+                        int(getattr(node, "light_priority", 0) or 0),
+                        bool(getattr(node, "light_ambient_only", False)),
+                        int(getattr(node, "light_dynamic", 0) or 0),
+                        bool(getattr(node, "light_affect_dynamic", False)),
+                        bool(getattr(node, "light_shadow", False)),
+                        bool(getattr(node, "light_flare", False)),
+                        bool(getattr(node, "light_fading", False)),
+                        _freeze_behavior_value(getattr(node, "light_flare_sizes", ()) or ()),
+                        _freeze_behavior_value(getattr(node, "light_flare_positions", ()) or ()),
+                        _freeze_behavior_value(getattr(node, "light_flare_color_shifts", ()) or ()),
+                        _freeze_behavior_value(getattr(node, "light_flare_textures", ()) or ()),
+                    )
+                    if flags & int(NodeFlags.LIGHT)
+                    else None
+                ),
+                "emitter_header_state": (
+                    _freeze_behavior_value(getattr(node, "emitter_params", {}) or {})
+                    if flags & int(NodeFlags.EMITTER)
+                    else None
+                ),
                 "position": tuple(float(value) for value in (getattr(node, "position", None) or (0.0, 0.0, 0.0))),
                 "rotation": tuple(float(value) for value in (getattr(node, "rotation", None) or (0.0, 0.0, 0.0, 1.0))),
             }
@@ -1067,9 +1359,21 @@ def _compare_node_inventories(
             continue
         if canonical_name(before["parent"]) != after["parent"]:
             mismatches.append(f"{label}: parent {before['parent']!r} -> {after['parent']!r}.")
-        for field in ("kinds", "face_count", "vertex_count", "texture", "lightmap"):
-            if before[field] != after[field]:
-                mismatches.append(f"{label}: {field} {before[field]!r} -> {after[field]!r}.")
+        scalar_fields = (
+            "kinds", "face_count", "vertex_count", "texture", "lightmap", "flags",
+            "texture_raw", "lightmap_raw", "bump_map", "texture_names", "material_state",
+            "uv_animation_state", "controllers", "light_header_state", "emitter_header_state",
+        )
+        payload_fields = (
+            "faces", "vertices", "normals", "tangents", "uvs", "uvs_lm", "uvs_2", "uvs_3",
+            "face_uvs", "face_mats",
+        )
+        for field in scalar_fields:
+            if before.get(field) != after.get(field):
+                mismatches.append(f"{label}: {field} changed.")
+        for field in payload_fields:
+            if before.get(field) != after.get(field):
+                mismatches.append(f"{label}: indexed {field} payload changed.")
         position_delta = max(
             abs(before["position"][axis] - after["position"][axis]) for axis in range(3)
         )
@@ -1107,6 +1411,23 @@ def _build_embedded_aabb_node(room: str, wok: WOKData, parent: ModelNode) -> Mod
     return node
 
 
+def _replace_embedded_aabb_geometry(node: ModelNode, wok: WOKData) -> None:
+    """Replace only AABB topology while retaining the source node contract.
+
+    Legacy rooms already carry a named AABB node with source-authored transform
+    controllers.  Keeping that node preserves its identity and controller bank;
+    the writer rebuilds the invalid tree pointers from the authoritative WOK.
+    """
+
+    node.texture = "NULL"
+    node.lightmap = ""
+    node.render = False
+    node.has_shadow = False
+    node.vertices = [tuple(float(value) for value in vertex) for vertex in wok.verts]
+    node.faces = [(int(face.v1), int(face.v2), int(face.v3)) for face in wok.faces]
+    node.face_mats = [int(face.surface) for face in wok.faces]
+
+
 def _compile_static_binary_room(
     *,
     room: str,
@@ -1122,10 +1443,11 @@ def _compile_static_binary_room(
     ``Cylinder01``: 176 faces, texture ``LKO_dor01``), so this route parses the
     source MDL/MDX binary directly and makes exact source parity blocking:
     node names/counts/order, hierarchy, per-node vertex/face counts, textures,
-    lightmaps, and bind transforms must survive unchanged.  Source AABB nodes
-    are replaced by one embedded AABB derived from the authoritative external
-    WOK; visual-only partitions receive the retail no-AABB MDL plus the
-    canonical 136-byte empty WOK.  Static rooms are written controller-free.
+    lightmaps, bind transforms, controllers, and light/emitter headers must
+    survive unchanged.  A source AABB node keeps its identity/controllers while
+    its geometry and tree are rebuilt from the authoritative external WOK;
+    visual-only partitions receive the retail no-AABB MDL plus the canonical
+    136-byte empty WOK when that matches their source topology.
     """
 
     room = room.casefold()
@@ -1137,40 +1459,63 @@ def _compile_static_binary_room(
         raise RuntimeError(f"{room} source binary MDL could not be semantically parsed.")
     source_geometry = _model_geometry_fingerprint(source_model)
     source_inventory = _node_inventory(source_model)
+    source_controller_inventory = _model_controller_inventory(source_model)
     source_root_name = str(source_model.root_node.name or room)
+    controller_preservation_audit = _audit_preserved_room_controllers(source_model)
+    if not controller_preservation_audit["safe_to_preserve"]:
+        raise RuntimeError(
+            f"{room} source controller bank cannot be preserved safely: "
+            f"{controller_preservation_audit['invalid_reasons'][:8]}"
+        )
 
     model = MDLBinaryParser(source_mdl_bytes, source_mdx_bytes).parse()
     if model is None or model.root_node is None:
         raise RuntimeError(f"{room} source binary MDL failed its second parse.")
 
-    removed_aabb_nodes: list[str] = []
-    stripped_controller_count = 0
-    for node in model.all_nodes():
-        stripped_controller_count += len(getattr(node, "controllers", []) or [])
-        node.controllers = []
-        if int(getattr(node, "flags", 0)) & int(NodeFlags.AABB):
-            if getattr(node, "children", None):
-                raise RuntimeError(
-                    f"{room} source AABB node {node.name!r} has children; refusing to drop geometry."
-                )
+    parsed_controller_count = sum(
+        len(getattr(node, "controllers", ()) or ()) for node in model.all_nodes()
+    )
+    if parsed_controller_count != int(controller_preservation_audit["controller_count"]):
+        raise RuntimeError(
+            f"{room} controller audit counted {controller_preservation_audit['controller_count']} "
+            f"controller(s), but the promotion parse exposed {parsed_controller_count}."
+        )
+    source_aabb_nodes = [
+        node
+        for node in model.all_nodes()
+        if int(getattr(node, "flags", 0)) & int(NodeFlags.AABB)
+    ]
+    if len(source_aabb_nodes) > 1:
+        raise RuntimeError(f"{room} source contains {len(source_aabb_nodes)} AABB nodes; expected at most one.")
+    for node in source_aabb_nodes:
+        if getattr(node, "children", None):
+            raise RuntimeError(f"{room} source AABB node {node.name!r} has children.")
+    model.name = room
+    model.root_node.name = room
+    model.game_version = GameVersion.K2
+    # The audit above rejects animation blocks, so this is an assertion of the
+    # parsed source rather than destructive animation stripping.
+    if model.animations:
+        raise RuntimeError(f"{room} unexpectedly retained animation blocks after the controller audit.")
+
+    if visual_only:
+        removed_aabb_nodes: list[str] = []
+        for node in source_aabb_nodes:
             parent = getattr(node, "parent", None)
             if parent is None:
                 raise RuntimeError(f"{room} source AABB node {node.name!r} is the model root.")
             parent.children = [child for child in parent.children if child is not node]
             removed_aabb_nodes.append(str(node.name))
-    model.name = room
-    model.root_node.name = room
-    model.game_version = GameVersion.K2
-    model.animations = []
-
-    if visual_only:
         prepared_wok = WOKData(name=room)
         external_wok_bytes = prepared_wok.to_bytes()
         preparation: dict[str, Any] = {
             "policy": "retail_k2_visual_only_partition",
             "compile_route": "ghoststudio_binary_mdl",
             "embedded_aabb_removed": removed_aabb_nodes,
-            "stripped_controller_count": stripped_controller_count,
+            "preserved_controller_count": parsed_controller_count - sum(
+                len(getattr(node, "controllers", ()) or ()) for node in source_aabb_nodes
+            ),
+            "controller_preservation_audit": controller_preservation_audit,
             "external_wok": "canonical empty 136-byte BWM",
         }
     else:
@@ -1178,13 +1523,21 @@ def _compile_static_binary_room(
             raise FileNotFoundError(f"Playable room {room} requires an authoritative external WOK.")
         external_wok_bytes = external_wok_path.read_bytes()
         external_wok = WOKData.from_bytes(external_wok_bytes)
-        _build_embedded_aabb_node(room, external_wok, model.root_node)
+        if source_aabb_nodes:
+            embedded_aabb = source_aabb_nodes[0]
+            _replace_embedded_aabb_geometry(embedded_aabb, external_wok)
+            embedded_aabb_policy = "source_node_identity_and_controllers_preserved"
+        else:
+            embedded_aabb = _build_embedded_aabb_node(room, external_wok, model.root_node)
+            embedded_aabb_policy = "new_source_missing_aabb_node"
         preparation = {
             "policy": "binary_source_with_wok_derived_embedded_aabb",
             "compile_route": "ghoststudio_binary_mdl",
             "authoritative_external_wok": _artifact(external_wok_path),
-            "embedded_aabb_removed": removed_aabb_nodes,
-            "stripped_controller_count": stripped_controller_count,
+            "embedded_aabb_node": str(embedded_aabb.name),
+            "embedded_aabb_policy": embedded_aabb_policy,
+            "preserved_controller_count": parsed_controller_count,
+            "controller_preservation_audit": controller_preservation_audit,
             "embedded_aabb_faces": len(external_wok.faces),
             "embedded_aabb_vertices": len(external_wok.verts),
         }
@@ -1203,6 +1556,10 @@ def _compile_static_binary_room(
     if wok_audit["blocking"]:
         raise RuntimeError(f"{room} external WOK failed its structural contract.")
 
+    prepared_controller_inventory = _model_controller_inventory(model)
+    expected_controller_count = sum(
+        len(getattr(node, "controllers", ()) or ()) for node in model.all_nodes()
+    )
     mdl_bytes, mdx_bytes = MDLBinaryWriter().write(model)
     mdl_audit = _mdl_audit(
         room,
@@ -1212,12 +1569,18 @@ def _compile_static_binary_room(
     )
     if mdl_audit["blocking"]:
         raise RuntimeError(f"{room} K2 binary MDL failed vanilla-derived structural gates.")
-    if int(mdl_audit["fingerprint"]["controller_count"]) != 0:
-        raise RuntimeError(f"{room} promoted static MDL contains transform controllers.")
+    if int(mdl_audit["fingerprint"]["controller_count"]) != expected_controller_count:
+        raise RuntimeError(
+            f"{room} promoted MDL exposes {mdl_audit['fingerprint']['controller_count']} controller(s); "
+            f"expected the preserved {expected_controller_count}."
+        )
 
     binary_model = MDLBinaryParser(mdl_bytes, mdx_bytes).parse()
     if binary_model is None:
         raise RuntimeError(f"{room} promoted MDL/MDX failed semantic readback.")
+    output_controller_inventory = _model_controller_inventory(binary_model)
+    if output_controller_inventory != prepared_controller_inventory:
+        raise RuntimeError(f"{room} K2 writer changed source controller entry/order/payload data.")
     binary_geometry = _model_geometry_fingerprint(binary_model)
     geometry_mismatches = {
         field: {"source_binary": source_geometry[field], "binary_readback": binary_geometry[field]}
@@ -1306,6 +1669,21 @@ def _compile_static_binary_room(
         "binary_geometry_parity_mismatches": {},
         "source_node_parity": {
             "non_aabb_node_count": len(source_inventory),
+            "exact_payload_fields": [
+                "flags", "faces", "vertices", "normals", "tangents", "uvs", "uvs_lm", "uvs_2",
+                "uvs_3", "face_uvs", "face_mats", "texture_raw", "lightmap_raw", "bump_map",
+                "texture_names", "material_state", "uv_animation_state", "controllers",
+                "light_header_state", "emitter_header_state",
+            ],
+            "bind_transform_tolerance": 1.0e-5,
+            "exact_visual_geometry_material_texture_parity": True,
+            "mismatches": [],
+        },
+        "controller_parity": {
+            "source_node_count": len(source_controller_inventory),
+            "prepared_controller_count": expected_controller_count,
+            "binary_readback_controller_count": int(mdl_audit["fingerprint"]["controller_count"]),
+            "exact_entry_order_metadata_times_values": True,
             "mismatches": [],
         },
         "embedded_aabb_parity": embedded_aabb_parity,
@@ -1525,22 +1903,34 @@ def _generate_koq202_five_room_candidate(module_root: Path, output_root: Path) -
     room_dir = destination / "Rooms"
     room_dir.mkdir(parents=True, exist_ok=True)
     room_sources: dict[str, dict[str, Any]] = {}
+    room_compiles: dict[str, dict[str, Any]] = {}
     for room in rooms:
         source_dir = generated_01d if room == "koq202_01d" else source_candidate / "Resources"
-        room_sources[room] = {}
-        for restype in ("mdl", "mdx", "wok"):
-            source_path = source_dir / f"{room}.{restype}"
+        source_paths = {restype: source_dir / f"{room}.{restype}" for restype in ("mdl", "mdx", "wok")}
+        for source_path in source_paths.values():
             if not source_path.is_file():
                 raise FileNotFoundError(f"Missing retained KOQ202 room resource: {source_path}")
-            output_path = room_dir / source_path.name.lower()
-            output_path.write_bytes(source_path.read_bytes())
-            room_sources[room][restype] = {
-                "source": _artifact(source_path),
-                "output": _artifact(output_path),
+        room_compile = _compile_static_binary_room(
+            room=room,
+            source_mdl_path=source_paths["mdl"],
+            source_mdx_path=source_paths["mdx"],
+            output_dir=room_dir,
+            visual_only=False,
+            external_wok_path=source_paths["wok"],
+        )
+        room_compiles[room] = room_compile
+        room_sources[room] = {
+            restype: {
+                "source": _artifact(source_paths[restype]),
+                "output": dict(room_compile["outputs"][restype]),
             }
+            for restype in ("mdl", "mdx", "wok")
+        }
 
     core_inputs = destination / "CoreInputs"
-    lyt = _filtered_lyt(source_root / "BIN" / "KOQ202.lyt", rooms, core_inputs / "koq202.lyt")
+    source_lyt_path = source_root / "BIN" / "KOQ202.lyt"
+    source_transition_rooms = tuple(_parse_lyt_rooms(source_lyt_path))
+    lyt = _filtered_lyt(source_lyt_path, rooms, core_inputs / "koq202.lyt")
     vis = _filtered_vis(source_root / "BIN" / "KOQ202.vis", rooms, core_inputs / "koq202.vis")
     build = build_legacy_module_candidate(
         LegacyModuleCandidateRequest(
@@ -1553,9 +1943,31 @@ def _generate_koq202_five_room_candidate(module_root: Path, output_root: Path) -
             source_vis=str(core_inputs / "koq202.vis"),
             regenerate_pth=True,
             wok_coordinate_space="module",
+            source_transition_room_resrefs=source_transition_rooms,
             overwrite=True,
         )
     )
+    proof_overlay_sync: dict[str, dict[str, Any]] = {}
+    if build.ok:
+        # Map Studio deliberately indexes loose companion resources beside a
+        # community MOD.  This candidate also keeps its pre-package ``Rooms``
+        # worktree for review, so make that overlay byte-identical to the
+        # workflow's repaired final WOKs before running the KMAP proof.  Without
+        # this synchronization a loose stale WOK can outrank the correct MOD
+        # resource and make the proof test the wrong transition table.
+        for room in rooms:
+            module_wok = destination / "Resources" / f"{room}.wok"
+            overlay_wok = room_dir / f"{room}.wok"
+            if not module_wok.is_file():
+                raise FileNotFoundError(f"Module workflow did not stage final WOK: {module_wok}")
+            module_wok_bytes = module_wok.read_bytes()
+            overlay_wok.write_bytes(module_wok_bytes)
+            room_sources[room]["wok"]["output"] = _artifact(overlay_wok)
+            proof_overlay_sync[room] = {
+                "module_resource": _artifact(module_wok),
+                "loose_overlay": _artifact(overlay_wok),
+                "byte_identical": module_wok_bytes == overlay_wok.read_bytes(),
+            }
     proofs: dict[str, Any] = {"ready_for_manual_k2_test": False}
     if build.ok:
         proofs = _candidate_proofs(module="koq202", candidate_root=destination)
@@ -1564,11 +1976,14 @@ def _generate_koq202_five_room_candidate(module_root: Path, output_root: Path) -
         "candidate_kind": "five_surviving_collision_rooms",
         "candidate_root": str(destination),
         "rooms": rooms,
+        "source_transition_room_resrefs": source_transition_rooms,
         "excluded_missing_rooms": tuple(lyt["excluded_source_rooms"]),
         "room_sources": room_sources,
+        "room_compiles": room_compiles,
         "lyt": lyt,
         "vis": vis,
         "module_build": build.to_dict(),
+        "proof_overlay_sync": proof_overlay_sync,
         "proofs": proofs,
         "retail_game_tested": False,
         "ready_for_manual_k2_test": bool(build.ok and proofs.get("ready_for_manual_k2_test")),

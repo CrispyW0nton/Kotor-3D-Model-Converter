@@ -16,6 +16,13 @@ from src.gui.libtheme.theme_settings import ThemeLayoutSettings
 from src.gui.qt_lib.dialogs.qt_settings_dialog import QtSettingsDialog, save_settings
 from src.gui.qt_lib.dialogs.qt_getting_started_window import QtGettingStartedWindow
 from src.gui.qt_lib.panels.qt_character_builder_panel import QtCharacterBuilderWindow
+from src.gui.qt_lib.windows.qt_character_builder_mode_selector import QtCharacterBuilderModeSelector
+from src.gui.qt_lib.windows.qt_custom_rigged_character_builder_window import (
+    QtCustomRiggedCharacterBuilderWindow,
+)
+from src.gui.qt_lib.windows.qt_custom_rigged_character_builder_controller import (
+    QtCustomRiggedCharacterBuilderController,
+)
 from src.gui.qt_lib.panels.qt_log_panel import QtLogPanelHandler
 from src.core.rendering.renderer_backend import renderer_backend_label
 from src.core.rendering.renderer_settings import RendererSettings
@@ -29,24 +36,84 @@ log = logging.getLogger(__name__)
 class WindowLifecycleMixin:
     """Settings, theme editor, restart, measurement, close, and GUI log-handler behavior."""
 
-    def _open_qt_character_builder_window(self):
-        """Open (or raise) the M2 AccuRig-style Character Builder window.
+    def _open_qt_character_builder_window(self, mode: str = ""):
+        """Open the Character Builder selector or one independent workflow.
 
         Entry points (all wired here per M2/T206):
           * Tools → Character Builder (New Window)…
           * Main toolbar Character Builder button
           * Keyboard shortcut Ctrl+B
 
-        The window is created lazily on first access and reused for the
-        rest of the session — closing it merely hides it so QSettings
-        (T207) persists window/dock state between opens.
+        Native KOTOR assets route directly to the established builder. General
+        menu/toolbar/shortcut entry opens a beginner-facing two-card selector.
         """
+        if isinstance(mode, bool):  # QAction.triggered may provide ``checked``.
+            mode = ""
+        mode = str(mode or "").strip().lower()
+        if mode == "native_kotor_character":
+            self._show_native_character_builder()
+            return
+        if mode == "custom_rigged_character":
+            self._show_custom_rigged_character_builder()
+            return
+        selector = getattr(self, "_character_builder_mode_selector", None)
+        if selector is None:
+            selector = QtCharacterBuilderModeSelector(self)
+            selector.modeSelected.connect(self._open_qt_character_builder_window)
+            selector.destroyed.connect(
+                lambda _obj=None: setattr(self, "_character_builder_mode_selector", None)
+            )
+            try:
+                self.theme_manager.register_theme_aware_widget(selector)
+                theme = self.theme_manager.current_theme or self.theme_manager.get_theme()
+                layout = self.layout_manager.current_layout or self.layout_manager.get_layout()
+                selector.apply_ghost_theme(theme)
+                selector.apply_ghost_layout(layout)
+            except Exception:
+                pass
+            self._character_builder_mode_selector = selector
+        selector.show()
+        selector.raise_()
+        selector.activateWindow()
+
+    def _show_native_character_builder(self) -> None:
+        """Open the unchanged native-KOTOR-template Character Builder."""
+
         if self._character_builder_window is None:
             self._character_builder_window = QtCharacterBuilderWindow(self)
+            self._character_builder_window.customBuilderRequested.connect(
+                self._show_custom_rigged_character_builder
+            )
         self._character_builder_window.set_renderer_settings(RendererSettings.from_settings(self.settings_data))
         self._character_builder_window.show()
         self._character_builder_window.raise_()
         self._character_builder_window.activateWindow()
+
+    def _show_custom_rigged_character_builder(self) -> None:
+        """Open the independent foreign-rig conversion workbench."""
+
+        window = getattr(self, "_custom_rigged_character_builder_window", None)
+        if window is None:
+            window = QtCustomRiggedCharacterBuilderWindow(self)
+            window.nativeBuilderRequested.connect(self._show_native_character_builder)
+            self._custom_rigged_character_builder_controller = (
+                QtCustomRiggedCharacterBuilderController(window, self)
+            )
+            window.destroyed.connect(
+                lambda _obj=None: setattr(self, "_custom_rigged_character_builder_window", None)
+            )
+            try:
+                self.theme_manager.register_theme_aware_widget(window)
+                theme = self.theme_manager.current_theme or self.theme_manager.get_theme()
+                layout = self.layout_manager.current_layout or self.layout_manager.get_layout()
+                window.apply_ghost_theme(theme)
+                window.apply_ghost_layout(layout)
+            except Exception:
+                pass
+            self._custom_rigged_character_builder_window = window
+        window.show()
+        window.raise_()
+        window.activateWindow()
 
     def _open_getting_started_window(self, page_key: str = "") -> None:
         """Open the reusable tutorial window and optionally select one pillar."""
@@ -109,7 +176,7 @@ class WindowLifecycleMixin:
             return
         self._log(f"Tutorial opened workspace: {key}", "success")
     def _send_library_row_to_character_builder(self, row: dict) -> None:
-        self._open_qt_character_builder_window()
+        self._open_qt_character_builder_window("native_kotor_character")
         resref = str(row.get("resref") or "asset")
         game = str(row.get("game") or "")
         self._log(f"Character Builder <- {game}:{resref}", "success")

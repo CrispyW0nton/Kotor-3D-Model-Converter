@@ -25,6 +25,15 @@ def _resref(value: Any) -> str:
     return str(value or "").strip().lower()
 
 
+# feat.2da ids: category -> (Weapon Focus feat, Weapon Specialization feat).
+# Only the unambiguous lightsaber/melee categories are applied; blaster is
+# omitted because its pistol-vs-rifle focus feat can't be split from baseitems.
+_WEAPON_FEAT_IDS: dict[str, tuple[int, int]] = {
+    "lightsaber": (36, 50),
+    "melee": (37, 51),
+}
+
+
 def _ability_modifier(value: Any) -> int:
     try:
         score = int(value)
@@ -152,7 +161,16 @@ _UTD_SCRIPTS = (
 )
 
 
-def _creature_projection(utc: Any, tlk_lookup: TLKLookup | None) -> dict[str, Any]:
+def _creature_projection(
+    utc: Any,
+    tlk_lookup: TLKLookup | None,
+    *,
+    weapon_damage_resolver: Any = None,
+    armor_ac_resolver: Any = None,
+    weapon_critical_resolver: Any = None,
+    weapon_damage_type_resolver: Any = None,
+    weapon_feat_category_resolver: Any = None,
+) -> dict[str, Any]:
     first = localized_text(getattr(utc, "first_name", None), tlk_lookup)
     last = localized_text(getattr(utc, "last_name", None), tlk_lookup)
     name = _creature_display_name(" ".join(value for value in (first, last) if value))
@@ -167,9 +185,11 @@ def _creature_projection(utc: Any, tlk_lookup: TLKLookup | None) -> dict[str, An
     )
     current_hp = max(0, min(maximum_hp, int(getattr(utc, "current_hp", maximum_hp) or maximum_hp)))
     inventory = list(_inventory_rows(getattr(utc, "inventory", ())))
+    equipped_resrefs: list[str] = []
     for slot, item in dict(getattr(utc, "equipment", {}) or {}).items():
         resref = _resref(getattr(item, "resref", item))
         if resref:
+            equipped_resrefs.append(resref)
             inventory.append(
                 {
                     "resref": resref,
@@ -179,6 +199,81 @@ def _creature_projection(utc: Any, tlk_lookup: TLKLookup | None) -> dict[str, An
                     "equipped_slot": str(getattr(slot, "name", slot) or slot),
                 }
             )
+    # Faithful weapon damage: use the first equipped item the resolver identifies
+    # as a weapon (its baseitems.2da dice + Strength for melee). Non-weapons and
+    # an unarmed creature keep the generic Strength-scaled fallback below.
+    damage_min = max(1, 1 + strength_mod)
+    damage_max = max(2, 6 + strength_mod)
+    critical_threat = 1
+    critical_multiplier = 2
+    damage_type = "Physical"
+    attack_feat_bonus = 0
+    damage_feat_bonus = 0
+    if callable(weapon_damage_resolver):
+        for resref in equipped_resrefs:
+            try:
+                dice = weapon_damage_resolver(resref, strength_mod)
+            except Exception:
+                dice = None
+            if dice is not None:
+                weapon_min = int(dice.count) + int(dice.bonus)
+                weapon_max = int(dice.count) * int(dice.sides) + int(dice.bonus)
+                damage_min = max(1, weapon_min)
+                damage_max = max(damage_min, weapon_max)
+                # Same weapon's baseitems.2da crit threat/multiplier, if resolvable.
+                if callable(weapon_critical_resolver):
+                    try:
+                        crit = weapon_critical_resolver(resref)
+                    except Exception:
+                        crit = None
+                    if crit is not None:
+                        critical_threat = max(1, int(crit[0]))
+                        critical_multiplier = max(1, int(crit[1]))
+                if callable(weapon_damage_type_resolver):
+                    try:
+                        resolved_type = weapon_damage_type_resolver(resref)
+                    except Exception:
+                        resolved_type = None
+                    if resolved_type:
+                        damage_type = str(resolved_type)
+                # Weapon Focus (+1 attack) / Weapon Specialization (+2 damage) for
+                # the unambiguous lightsaber/melee categories, when the creature
+                # actually has the matching feat (feat.2da ids, folded in below).
+                if callable(weapon_feat_category_resolver):
+                    try:
+                        category = str(weapon_feat_category_resolver(resref) or "")
+                    except Exception:
+                        category = ""
+                    feat_ids = _WEAPON_FEAT_IDS.get(category)
+                    if feat_ids:
+                        creature_feats = {
+                            int(value)
+                            for value in tuple(getattr(utc, "feats", ()) or ())
+                            if isinstance(value, (int, float))
+                        }
+                        focus_id, spec_id = feat_ids
+                        if focus_id in creature_feats:
+                            attack_feat_bonus = 1
+                        if spec_id in creature_feats:
+                            damage_feat_bonus = 2
+                break
+    # Faithful armor class: equipped armor adds its baseitems.2da base AC and caps
+    # the Dexterity bonus. Without armor the Dexterity bonus is uncapped.
+    armor_bonus = 0
+    dexterity_ac = dexterity_mod
+    if callable(armor_ac_resolver):
+        for resref in equipped_resrefs:
+            try:
+                armor = armor_ac_resolver(resref)
+            except Exception:
+                armor = None
+            if armor is not None:
+                armor_bonus = int(armor[0])
+                dexterity_ac = min(dexterity_mod, int(armor[1]))
+                break
+    armor_class = max(1, 10 + int(getattr(utc, "natural_ac", 0) or 0) + armor_bonus + dexterity_ac)
+    damage_min = max(1, damage_min + damage_feat_bonus)
+    damage_max = max(damage_min, damage_max + damage_feat_bonus)
     return {
         "name": name,
         "tag": str(getattr(utc, "tag", "") or ""),
@@ -189,10 +284,13 @@ def _creature_projection(utc: Any, tlk_lookup: TLKLookup | None) -> dict[str, An
         "plot": bool(getattr(utc, "plot", False)),
         "current_hp": current_hp,
         "max_hp": maximum_hp,
-        "armor_class": max(1, 10 + int(getattr(utc, "natural_ac", 0) or 0) + dexterity_mod),
-        "attack_bonus": max(0, level) + strength_mod,
-        "damage_min": max(1, 1 + strength_mod),
-        "damage_max": max(2, 6 + strength_mod),
+        "armor_class": armor_class,
+        "attack_bonus": max(0, level) + strength_mod + attack_feat_bonus,
+        "damage_min": damage_min,
+        "damage_max": damage_max,
+        "critical_threat": critical_threat,
+        "critical_multiplier": critical_multiplier,
+        "damage_type": damage_type,
         "initiative_bonus": dexterity_mod,
         "level": level,
         "inventory_items": tuple(inventory),
@@ -292,6 +390,11 @@ def inspect_map_studio_pie_resource(
     data: bytes,
     *,
     tlk_lookup: TLKLookup | None = None,
+    weapon_damage_resolver: Any = None,
+    armor_ac_resolver: Any = None,
+    weapon_critical_resolver: Any = None,
+    weapon_damage_type_resolver: Any = None,
+    weapon_feat_category_resolver: Any = None,
 ) -> dict[str, Any]:
     """Decode and project one supported KOTOR resource for PIE."""
 
@@ -302,7 +405,15 @@ def inspect_map_studio_pie_resource(
     if clean_kind in {"creature", "utc"}:
         from pykotor.resource.generics.utc import read_utc
 
-        result = _creature_projection(read_utc(payload), tlk_lookup)
+        result = _creature_projection(
+            read_utc(payload),
+            tlk_lookup,
+            weapon_damage_resolver=weapon_damage_resolver,
+            armor_ac_resolver=armor_ac_resolver,
+            weapon_critical_resolver=weapon_critical_resolver,
+            weapon_damage_type_resolver=weapon_damage_type_resolver,
+            weapon_feat_category_resolver=weapon_feat_category_resolver,
+        )
     elif clean_kind in {"placeable", "utp"}:
         from pykotor.resource.generics.utp import read_utp
 

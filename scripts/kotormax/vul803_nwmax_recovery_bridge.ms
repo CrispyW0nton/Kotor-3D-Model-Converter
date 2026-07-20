@@ -35,26 +35,26 @@ fn ghostVul803NwmaxLog message =
 
 fn ghostVul803NwmaxCombinePath parent child =
 (
-    (dotNetClass "System.IO.Path").Combine parent child
+    pathConfig.appendPath parent child
 )
 
 
 fn ghostVul803NwmaxDirectoryExists path =
 (
-    (dotNetClass "System.IO.Directory").Exists path
+    doesDirectoryExist path
 )
 
 
 fn ghostVul803NwmaxFileExists path =
 (
-    (dotNetClass "System.IO.File").Exists path
+    doesFileExist path
 )
 
 
 fn ghostVul803NwmaxFileLength path =
 (
     if not ghostVul803NwmaxFileExists path then return 0
-    ((dotNetObject "System.IO.FileInfo" path).Length as integer)
+    getFileSize path
 )
 
 
@@ -94,6 +94,369 @@ fn ghostVul803NwmaxRestoreFrozen states =
 )
 
 
+fn ghostVul803NwmaxControllerIsProvenStatic controller visited =
+(
+    if controller == undefined then return true
+    if findItem visited controller != 0 then return true
+    append visited controller
+
+    local className = toLower ((classOf controller) as string)
+    local keyControllerClasses = #(
+        "bezier_float", "linear_float", "tcb_float",
+        "bezier_position", "linear_position", "tcb_position",
+        "bezier_rotation", "linear_rotation", "tcb_rotation", "smooth_rotation",
+        "bezier_scale", "linear_scale", "tcb_scale"
+    )
+    local compoundControllerClasses = #("position_xyz", "euler_xyz", "local_euler_xyz", "scalexyz")
+
+    if findItem keyControllerClasses className != 0 then
+    (
+        local supports = undefined
+        local keyCount = undefined
+        try (supports = controller.supportsKeys) catch ()
+        if supports != true then return false
+        try (keyCount = numKeys controller) catch ()
+        return keyCount == 0
+    )
+
+    if findItem compoundControllerClasses className == 0 then return false
+    local xyzControllers = undefined
+    try (xyzControllers = getXYZControllers controller) catch ()
+    if xyzControllers == undefined or xyzControllers.count != 3 then return false
+    for subController in xyzControllers do
+    (
+        if subController == undefined or \
+           not ghostVul803NwmaxControllerIsProvenStatic subController visited then return false
+    )
+    true
+)
+
+
+fn ghostVul803NwmaxTransformHasKeys node =
+(
+    if node == undefined then return true
+    local controllers = #(node.position.controller, node.rotation.controller, node.scale.controller)
+    local visited = #()
+    for controller in controllers where not ghostVul803NwmaxControllerIsProvenStatic controller visited do return true
+    false
+)
+
+
+fn ghostVul803NwmaxPointNear left right tolerance =
+(
+    abs (left.x - right.x) <= tolerance and \
+    abs (left.y - right.y) <= tolerance and \
+    abs (left.z - right.z) <= tolerance
+)
+
+
+fn ghostVul803NwmaxUnitScale scaleValue tolerance:0.0001 =
+(
+    ghostVul803NwmaxPointNear scaleValue [1.0, 1.0, 1.0] tolerance
+)
+
+
+fn ghostVul803NwmaxScalarNearRelative left right absoluteTolerance relativeTolerance =
+(
+    local magnitude = abs left
+    if abs right > magnitude do magnitude = abs right
+    local allowed = absoluteTolerance
+    if magnitude * relativeTolerance > allowed do allowed = magnitude * relativeTolerance
+    abs (left - right) <= allowed
+)
+
+
+fn ghostVul803NwmaxPointNearRelative left right absoluteTolerance relativeTolerance =
+(
+    ghostVul803NwmaxScalarNearRelative left.x right.x absoluteTolerance relativeTolerance and \
+    ghostVul803NwmaxScalarNearRelative left.y right.y absoluteTolerance relativeTolerance and \
+    ghostVul803NwmaxScalarNearRelative left.z right.z absoluteTolerance relativeTolerance
+)
+
+
+fn ghostVul803NwmaxMatrixNearRelative left right absoluteTolerance relativeTolerance =
+(
+    ghostVul803NwmaxPointNearRelative left.row1 right.row1 absoluteTolerance relativeTolerance and \
+    ghostVul803NwmaxPointNearRelative left.row2 right.row2 absoluteTolerance relativeTolerance and \
+    ghostVul803NwmaxPointNearRelative left.row3 right.row3 absoluteTolerance relativeTolerance and \
+    ghostVul803NwmaxPointNearRelative left.row4 right.row4 absoluteTolerance relativeTolerance
+)
+
+
+fn ghostVul803NwmaxWorldMeshSnapshot node =
+(
+    local evaluated = undefined
+    local errorText = undefined
+    local snapshot = undefined
+    try
+    (
+        evaluated = snapshotAsMesh node
+        -- snapshotAsMesh returns the evaluated world-state TriMesh. Applying
+        -- node/objectTransform again would double-transform scaled legacy data.
+        local vertices = for vertexIndex = 1 to evaluated.numverts collect \
+            (copy (getVert evaluated vertexIndex))
+        local faces = for faceIndex = 1 to evaluated.numfaces collect \
+            (copy (getFace evaluated faceIndex))
+        local materialIds = for faceIndex = 1 to evaluated.numfaces collect \
+            (getFaceMatID evaluated faceIndex)
+        local smoothingGroups = for faceIndex = 1 to evaluated.numfaces collect \
+            (getFaceSmoothGroup evaluated faceIndex)
+        local edgeVisibility = for faceIndex = 1 to evaluated.numfaces collect \
+            #(
+                getEdgeVis evaluated faceIndex 1,
+                getEdgeVis evaluated faceIndex 2,
+                getEdgeVis evaluated faceIndex 3
+            )
+        local mapChannels = #()
+        local mapCount = meshop.getNumMaps evaluated
+        for mapChannel = 0 to (mapCount - 1) where meshop.getMapSupport evaluated mapChannel do
+        (
+            local mapVertexCount = meshop.getNumMapVerts evaluated mapChannel
+            local mapFaceCount = meshop.getNumMapFaces evaluated mapChannel
+            local mapVertices = for mapVertexIndex = 1 to mapVertexCount collect \
+                (copy (meshop.getMapVert evaluated mapChannel mapVertexIndex))
+            local mapFaces = for mapFaceIndex = 1 to mapFaceCount collect \
+                (copy (meshop.getMapFace evaluated mapChannel mapFaceIndex))
+            append mapChannels #(mapChannel, mapVertices, mapFaces)
+        )
+        snapshot = #(
+            vertices, faces, materialIds, smoothingGroups, edgeVisibility, mapChannels
+        )
+    )
+    catch
+    (
+        errorText = getCurrentException() as string
+    )
+    if evaluated != undefined do delete evaluated
+    if errorText != undefined then throw ("Could not snapshot evaluated mesh for " + node.name + ": " + errorText)
+    snapshot
+)
+
+
+fn ghostVul803NwmaxPointArraysNear left right absoluteTolerance relativeTolerance =
+(
+    if left.count != right.count then return false
+    for index = 1 to left.count where \
+        not ghostVul803NwmaxPointNearRelative left[index] right[index] absoluteTolerance relativeTolerance do return false
+    true
+)
+
+
+fn ghostVul803NwmaxPointArraysMaximumDelta left right =
+(
+    if left.count != right.count then return undefined
+    local maximumDelta = 0.0
+    for index = 1 to left.count do
+    (
+        local difference = left[index] - right[index]
+        if abs difference.x > maximumDelta do maximumDelta = abs difference.x
+        if abs difference.y > maximumDelta do maximumDelta = abs difference.y
+        if abs difference.z > maximumDelta do maximumDelta = abs difference.z
+    )
+    maximumDelta
+)
+
+
+fn ghostVul803NwmaxPointArraysExact left right =
+(
+    if left.count != right.count then return false
+    for index = 1 to left.count do
+    (
+        local leftValue = left[index]
+        local rightValue = right[index]
+        if leftValue.x != rightValue.x or leftValue.y != rightValue.y or leftValue.z != rightValue.z then return false
+    )
+    true
+)
+
+
+fn ghostVul803NwmaxArraysExact left right =
+(
+    if left.count != right.count then return false
+    for index = 1 to left.count where left[index] != right[index] do return false
+    true
+)
+
+
+fn ghostVul803NwmaxNestedArraysExact left right =
+(
+    if left.count != right.count then return false
+    for outerIndex = 1 to left.count do
+    (
+        if left[outerIndex].count != right[outerIndex].count then return false
+        for innerIndex = 1 to left[outerIndex].count where \
+            left[outerIndex][innerIndex] != right[outerIndex][innerIndex] do return false
+    )
+    true
+)
+
+
+fn ghostVul803NwmaxMapChannelsMatch left right =
+(
+    if left.count != right.count then return false
+    for channelIndex = 1 to left.count do
+    (
+        if left[channelIndex][1] != right[channelIndex][1] then return false
+        if not ghostVul803NwmaxPointArraysNear \
+            left[channelIndex][2] right[channelIndex][2] 0.000001 0.000001 then return false
+        if not ghostVul803NwmaxPointArraysExact \
+            left[channelIndex][3] right[channelIndex][3] then return false
+    )
+    true
+)
+
+
+fn ghostVul803NwmaxWorldMeshSnapshotsMatch before after =
+(
+    ghostVul803NwmaxPointArraysNear before[1] after[1] 0.05 0.000001 and \
+    ghostVul803NwmaxPointArraysExact before[2] after[2] and \
+    ghostVul803NwmaxArraysExact before[3] after[3] and \
+    ghostVul803NwmaxArraysExact before[4] after[4] and \
+    ghostVul803NwmaxNestedArraysExact before[5] after[5] and \
+    ghostVul803NwmaxMapChannelsMatch before[6] after[6]
+)
+
+
+fn ghostVul803NwmaxNormalizeNamedScales base nodeNames reportPath =
+(
+    -- This repair is intentionally opt-in and is only used on the run-owned
+    -- in-memory copy loaded by 3dsMaxMCP. resetXForm bakes a node's scale into
+    -- an XForm modifier while preserving its world-space bounds. The batch
+    -- process exits without saving the staged .max scene.
+    if nodeNames.count == 0 then return true
+    if ghostVul803NwmaxFileExists reportPath then
+    (
+        ghostVul803NwmaxLog ("Refusing to overwrite transform-normalization report: " + reportPath)
+        return false
+    )
+
+    local roomNodes = #(base)
+    ghostVul803NwmaxCollectTree base roomNodes
+    local report = undefined
+    local errorText = undefined
+    local targetNodes = #()
+    local roomRecords = for node in roomNodes collect
+    (
+        local bounds = undefined
+        local evaluatedSnapshot = undefined
+        try (bounds = nodeGetBoundingBox node (matrix3 1)) catch ()
+        try (evaluatedSnapshot = ghostVul803NwmaxWorldMeshSnapshot node) catch ()
+        #(node, copy node.transform, bounds, evaluatedSnapshot)
+    )
+
+    try
+    (
+        report = createFile reportPath
+        if report == undefined then throw ("Cannot create transform-normalization report: " + reportPath)
+        format "room=%\noperation=resetXForm\nscene_saved=false\n" base.name to:report
+
+        for nodeName in nodeNames do
+        (
+            local matches = #()
+            for node in roomNodes where node.name == nodeName do append matches node
+            if matches.count != 1 then
+                throw ("Scale-normalization node " + nodeName + " resolved " + (matches.count as string) + " times inside " + base.name)
+
+            local target = matches[1]
+            if target.children.count != 0 then
+                throw ("Refusing resetXForm on non-leaf node " + target.name + " with " + (target.children.count as string) + " child node(s)")
+
+            local instanceNodes = #()
+            local instanceQueryOk = true
+            try (InstanceMgr.GetInstances target &instanceNodes) catch (instanceQueryOk = false)
+            if not instanceQueryOk then
+                throw ("Could not prove instance isolation for " + target.name)
+            if instanceNodes.count != 1 or instanceNodes[1] != target then
+                throw ("Refusing resetXForm on shared object pipeline " + target.name + "; instance count " + (instanceNodes.count as string))
+            if ghostVul803NwmaxTransformHasKeys target then
+                throw ("Refusing resetXForm on animated or procedural node: " + target.name)
+
+            local beforeScale = copy target.scale
+            local beforeBounds = nodeGetBoundingBox target (matrix3 1)
+            local beforeMesh = ghostVul803NwmaxWorldMeshSnapshot target
+            if not ghostVul803NwmaxUnitScale beforeScale then resetXForm target
+            local afterScale = copy target.scale
+            local afterBounds = nodeGetBoundingBox target (matrix3 1)
+            local afterMesh = ghostVul803NwmaxWorldMeshSnapshot target
+
+            format "node=%\nhandle=%\nposition_controller=%\nrotation_controller=%\nscale_controller=%\ntransform_static=true\nleaf=true\ninstance_count=%\nbefore_scale=%\nafter_scale=%\nbefore_bounds=%\nafter_bounds=%\n" \
+                target.name target.handle ((classOf target.position.controller) as string) \
+                ((classOf target.rotation.controller) as string) \
+                ((classOf target.scale.controller) as string) instanceNodes.count \
+                beforeScale afterScale beforeBounds afterBounds to:report
+            flush report
+
+            if not ghostVul803NwmaxUnitScale afterScale then
+                throw ("resetXForm did not produce unit scale for " + target.name + ": " + (afterScale as string))
+            if not ghostVul803NwmaxPointNearRelative beforeBounds[1] afterBounds[1] 0.05 0.000001 or \
+               not ghostVul803NwmaxPointNearRelative beforeBounds[2] afterBounds[2] 0.05 0.000001 then
+                throw ("resetXForm changed world-space bounds for " + target.name)
+            if not ghostVul803NwmaxWorldMeshSnapshotsMatch beforeMesh afterMesh then
+            (
+                ghostVul803NwmaxLog ("Export-channel comparison for " + target.name + \
+                    ": world_vertices=" + ((ghostVul803NwmaxPointArraysNear beforeMesh[1] afterMesh[1] 0.05 0.000001) as string) + \
+                    ", topology=" + ((ghostVul803NwmaxPointArraysExact beforeMesh[2] afterMesh[2]) as string) + \
+                    ", material_ids=" + ((ghostVul803NwmaxArraysExact beforeMesh[3] afterMesh[3]) as string) + \
+                    ", smoothing=" + ((ghostVul803NwmaxArraysExact beforeMesh[4] afterMesh[4]) as string) + \
+                    ", edge_visibility=" + ((ghostVul803NwmaxNestedArraysExact beforeMesh[5] afterMesh[5]) as string) + \
+                    ", map_channels=" + ((ghostVul803NwmaxMapChannelsMatch beforeMesh[6] afterMesh[6]) as string) + \
+                    ", maximum_world_vertex_delta=" + ((ghostVul803NwmaxPointArraysMaximumDelta beforeMesh[1] afterMesh[1]) as string))
+                throw ("resetXForm changed evaluated world vertices, topology, material IDs, smoothing groups, edge visibility, or map channels for " + target.name)
+            )
+
+            append targetNodes target
+            format "bounds_preserved=true\nevaluated_export_channels_preserved=true\nbounds_tolerance_absolute=0.05\nbounds_tolerance_relative=0.000001\n" to:report
+        )
+
+        for roomRecord in roomRecords do
+        (
+            local roomNode = roomRecord[1]
+            if not isValidNode roomNode then throw "A room node became invalid during transform normalization."
+            if findItem targetNodes roomNode == 0 and \
+               not ghostVul803NwmaxMatrixNearRelative roomRecord[2] roomNode.transform 0.001 0.000001 then
+                throw ("Transform normalization changed unregistered node transform: " + roomNode.name)
+            if roomRecord[3] != undefined then
+            (
+                local finalBounds = undefined
+                try (finalBounds = nodeGetBoundingBox roomNode (matrix3 1)) catch ()
+                if finalBounds == undefined or \
+                   not ghostVul803NwmaxPointNearRelative roomRecord[3][1] finalBounds[1] 0.05 0.000001 or \
+                   not ghostVul803NwmaxPointNearRelative roomRecord[3][2] finalBounds[2] 0.05 0.000001 then
+                    throw ("Transform normalization changed room-node world bounds: " + roomNode.name)
+            )
+            if roomRecord[4] != undefined then
+            (
+                local finalSnapshot = undefined
+                try (finalSnapshot = ghostVul803NwmaxWorldMeshSnapshot roomNode) catch ()
+                if finalSnapshot == undefined or \
+                   not ghostVul803NwmaxWorldMeshSnapshotsMatch roomRecord[4] finalSnapshot then
+                    throw ("Transform normalization changed room-node evaluated export channels: " + roomNode.name)
+            )
+        )
+        format "registered_node_count=%\nroom_node_count=%\nroom_nodes_preserved=true\n" \
+            targetNodes.count roomNodes.count to:report
+    )
+    catch
+    (
+        errorText = getCurrentException() as string
+    )
+
+    if report != undefined do
+    (
+        flush report
+        close report
+    )
+    if errorText != undefined then
+    (
+        ghostVul803NwmaxLog ("Transform normalization failed: " + errorText)
+        return false
+    )
+
+    ghostVul803NwmaxLog ("Normalized " + (nodeNames.count as string) + " explicitly registered non-unit scale node(s) without changing verified room export channels.")
+    true
+)
+
+
 fn ghostVul803NwmaxAllNodes =
 (
     local nodes = #()
@@ -115,6 +478,7 @@ fn ghostVul803NwmaxReadSanityManifest sanityReport roomName =
 (
     local names = #()
     local stream = undefined
+    local readError = undefined
 
     if not ghostVul803NwmaxFileExists sanityReport then
     (
@@ -141,11 +505,12 @@ fn ghostVul803NwmaxReadSanityManifest sanityReport roomName =
     )
     catch
     (
-        if stream != undefined do close stream
-        throw ("Failed to read sanity report " + sanityReport + ": " + (getCurrentException() as string))
+        readError = getCurrentException() as string
     )
 
     if stream != undefined do close stream
+    if readError != undefined then
+        throw ("Failed to read sanity report " + sanityReport + ": " + readError)
     names
 )
 
@@ -366,7 +731,7 @@ fn ghostVul803NwmaxExportBase base outputDirectory allowSanityFailure:false =
         return false
     )
     if not ghostVul803NwmaxOutputPathsAreClear roomName outputDirectory then return false
-    if nx_strclassof base != "aurorabase" then
+    if toLower (nx_strclassof base) != "aurorabase" then
     (
         ghostVul803NwmaxLog (roomName + " is not a legacy AuroraBase.")
         return false
@@ -389,7 +754,7 @@ fn ghostVul803NwmaxExportBase base outputDirectory allowSanityFailure:false =
 )
 
 
-fn ghostVul803NwmaxExportExistingRoot roomName outputDirectory allowSanityFailure:false =
+fn ghostVul803NwmaxExportExistingRoot roomName outputDirectory allowSanityFailure:false resetXformNodes:#() =
 (
     local roots = ghostVul803NwmaxNodesNamed roomName
     if roots.count != 1 then
@@ -401,15 +766,17 @@ fn ghostVul803NwmaxExportExistingRoot roomName outputDirectory allowSanityFailur
     local base = roots[1]
     local priorExportPath = if isProperty base #export_path then base.export_path else undefined
     local result = false
+    local normalizationPath = ghostVul803NwmaxCombinePath outputDirectory (roomName + "_transform_normalization.txt")
 
     if isProperty base #export_path do base.export_path = outputDirectory
-    result = ghostVul803NwmaxExportBase base outputDirectory allowSanityFailure:allowSanityFailure
+    if ghostVul803NwmaxNormalizeNamedScales base resetXformNodes normalizationPath then
+        result = ghostVul803NwmaxExportBase base outputDirectory allowSanityFailure:allowSanityFailure
     if priorExportPath != undefined do base.export_path = priorExportPath
     result
 )
 
 
-fn ghostVul803NwmaxExportManifest roomName sanityReport outputDirectory allowSanityFailure:false replaceExistingRoot:false =
+fn ghostVul803NwmaxExportManifest roomName sanityReport outputDirectory allowSanityFailure:false replaceExistingRoot:false resetXformNodes:#() =
 (
     if not ghostVul803NwmaxRequireLegacyNwmax() then return false
 
@@ -474,8 +841,11 @@ fn ghostVul803NwmaxExportManifest roomName sanityReport outputDirectory allowSan
         (
             if node.parent == undefined or findItem nodes node.parent == 0 then
             (
-                if isAnimated node.transform.controller then
-                    throw ("Refusing to reparent animated top-level manifest node: " + node.name)
+                if ghostVul803NwmaxTransformHasKeys node then
+                    throw ("Refusing to reparent animated, procedural, or unrecognized-controller top-level manifest node: " + node.name + \
+                        " [position=" + ((classOf node.position.controller) as string) + \
+                        ", rotation=" + ((classOf node.rotation.controller) as string) + \
+                        ", scale=" + ((classOf node.scale.controller) as string) + "]")
                 local worldTM = copy (at time 0 node.transform)
                 append changedParents #(node, node.parent, worldTM)
                 with animate off
@@ -486,7 +856,9 @@ fn ghostVul803NwmaxExportManifest roomName sanityReport outputDirectory allowSan
             )
         )
 
-        exportResult = ghostVul803NwmaxExportBase base outputDirectory allowSanityFailure:allowSanityFailure
+        local normalizationPath = ghostVul803NwmaxCombinePath outputDirectory (roomName + "_transform_normalization.txt")
+        if ghostVul803NwmaxNormalizeNamedScales base resetXformNodes normalizationPath then
+            exportResult = ghostVul803NwmaxExportBase base outputDirectory allowSanityFailure:allowSanityFailure
     )
     catch
     (

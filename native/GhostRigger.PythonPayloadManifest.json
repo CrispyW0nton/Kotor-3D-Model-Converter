@@ -50,7 +50,7 @@
     },
     {
         "project": "GhostRigger.Core.GUI.Display",
-        "python_file_count": 314,
+        "python_file_count": 320,
         "files": [
             "src\\gui\\__init__.py",
             "src\\gui\\assets\\__init__.py",
@@ -77,6 +77,7 @@
             "src\\gui\\dialogs\\lightmap_preview_window.py",
             "src\\gui\\dialogs\\qt_dialogs.py",
             "src\\gui\\dialogs\\qt_export_dialog.py",
+            "src\\gui\\dialogs\\qt_fbx_animation_selection_dialog.py",
             "src\\gui\\dialogs\\qt_getting_started_window.py",
             "src\\gui\\dialogs\\qt_lightmap_baker_dialog.py",
             "src\\gui\\dialogs\\qt_render_frame_dialog.py",
@@ -335,6 +336,7 @@
             "src\\gui\\windows\\application_core\\shared\\dock_hosts.py",
             "src\\gui\\windows\\application_core\\shared\\editor_services.py",
             "src\\gui\\windows\\application_core\\shared\\geometry.py",
+            "src\\gui\\windows\\application_core\\shared\\gui_editor_workflow.py",
             "src\\gui\\windows\\application_core\\shared\\log_panel.py",
             "src\\gui\\windows\\application_core\\shared\\main_layout.py",
             "src\\gui\\windows\\application_core\\shared\\model_io.py",
@@ -357,6 +359,10 @@
             "src\\gui\\windows\\application_core\\toolboxes\\__init__.py",
             "src\\gui\\windows\\application_core\\toolboxes\\workspace_docks.py",
             "src\\gui\\windows\\progress_toast.py",
+            "src\\gui\\windows\\qt_character_builder_mode_selector.py",
+            "src\\gui\\windows\\qt_custom_rigged_character_builder_controller.py",
+            "src\\gui\\windows\\qt_custom_rigged_character_builder_window.py",
+            "src\\gui\\windows\\qt_gui_editor_window.py",
             "src\\gui\\windows\\qt_main_window.py",
             "src\\gui\\windows\\qt_scripting_blueprint_page.py",
             "src\\gui\\windows\\qt_scripting_data_pages.py",
@@ -386,7 +392,7 @@
     },
     {
         "project": "GhostRigger.Core.IO",
-        "python_file_count": 37,
+        "python_file_count": 39,
         "files": [
             "src\\adapters\\files\\__init__.py",
             "src\\adapters\\files\\local_file_writer.py",
@@ -424,7 +430,9 @@
             "src\\io\\fbx\\fbx_scene_adapter.py",
             "src\\io\\fbx\\fbx_sdk_loader.py",
             "src\\io\\fbx\\fbx_sdk_paths.py",
-            "src\\io\\fbx\\fbx_sdk_setup.py"
+            "src\\io\\fbx\\fbx_sdk_setup.py",
+            "src\\io\\kotor_gui_io.py",
+            "src\\io\\mdl_auto_import.py"
         ]
     },
     {
@@ -494,9 +502,10 @@
     },
     {
         "project": "GhostRigger.Core.Project",
-        "python_file_count": 5,
+        "python_file_count": 6,
         "files": [
             "src\\core\\project\\__init__.py",
+            "src\\core\\project\\custom_rigged_character_project.py",
             "src\\core\\project\\ghostrigger_project.py",
             "src\\core\\project\\placeable_asset.py",
             "src\\core\\project\\project_validation.py",
@@ -524,7 +533,7 @@
     },
     {
         "project": "GhostRigger.Core.Rendering",
-        "python_file_count": 124,
+        "python_file_count": 125,
         "files": [
             "src\\adapters\\gpu\\__init__.py",
             "src\\adapters\\gpu\\lightmap_baker.py",
@@ -627,6 +636,7 @@
             "src\\core\\rendering\\gpu_shaders.py",
             "src\\core\\rendering\\gpu_vbo_layout.py",
             "src\\core\\rendering\\hardware_info.py",
+            "src\\core\\rendering\\kotor_gui_preview.py",
             "src\\core\\rendering\\mesh_render_data.py",
             "src\\core\\rendering\\picking.py",
             "src\\core\\rendering\\renderer_backend.py",
@@ -654,7 +664,7 @@
     },
     {
         "project": "GhostRigger.Core.Resources",
-        "python_file_count": 18,
+        "python_file_count": 19,
         "files": [
             "src\\core\\assets\\__init__.py",
             "src\\core\\assets\\asset_preview.py",
@@ -673,12 +683,13 @@
             "src\\core\\resources\\placeable_library.py",
             "src\\resources\\__init__.py",
             "src\\resources\\game_detector.py",
-            "src\\resources\\game_library.py"
+            "src\\resources\\game_library.py",
+            "src\\resources\\kotor_utc_template_catalog.py"
         ]
     },
     {
         "project": "GhostRigger.Core.Scene",
-        "python_file_count": 117,
+        "python_file_count": 129,
         "files": [
             "src\\core\\level\\__init__.py",
             "src\\core\\level\\kmap_model.py",
@@ -749,9 +760,21 @@
             "src\\core\\modules\\map_studio_multi_cut.py",
             "src\\core\\modules\\map_studio_pie.py",
             "src\\core\\modules\\map_studio_pie_audio.py",
+            "src\\core\\modules\\map_studio_pie_combat.py",
             "src\\core\\modules\\map_studio_pie_creatures.py",
+            "src\\core\\modules\\map_studio_pie_dialogue.py",
+            "src\\core\\modules\\map_studio_pie_dialogue_camera.py",
             "src\\core\\modules\\map_studio_pie_doors.py",
             "src\\core\\modules\\map_studio_pie_entities.py",
+            "src\\core\\modules\\map_studio_pie_gameplay.py",
+            "src\\core\\modules\\map_studio_pie_interactions.py",
+            "src\\core\\modules\\map_studio_pie_journal.py",
+            "src\\core\\modules\\map_studio_pie_nwscript_vm.py",
+            "src\\core\\modules\\map_studio_pie_party.py",
+            "src\\core\\modules\\map_studio_pie_resources.py",
+            "src\\core\\modules\\map_studio_pie_scripted_events.py",
+            "src\\core\\modules\\map_studio_pie_scripting.py",
+            "src\\core\\modules\\map_studio_pie_triggers.py",
             "src\\core\\modules\\map_studio_room_catalog.py",
             "src\\core\\modules\\map_studio_room_snapping.py",
             "src\\core\\modules\\map_studio_scene_animations.py",
@@ -801,7 +824,7 @@
     },
     {
         "project": "GhostRigger.Core.Tools",
-        "python_file_count": 380,
+        "python_file_count": 393,
         "files": [
             "src\\adapters\\qt_viewport\\camera_gizmo_renderer.py",
             "src\\adapters\\qt_viewport\\camera_overlays.py",
@@ -824,7 +847,6 @@
             "src\\core\\export\\__init__.py",
             "src\\core\\export\\export_job.py",
             "src\\core\\export\\gltf_importer.py",
-            "src\\core\\export\\unity_export_bridge.py",
             "src\\core\\export\\unity_import_validator.py",
             "src\\core\\game\\game_library_ext.py",
             "src\\core\\gizmo\\transform_controller.py",
@@ -938,9 +960,21 @@
             "src\\core\\modules\\map_studio_multi_cut.py",
             "src\\core\\modules\\map_studio_pie.py",
             "src\\core\\modules\\map_studio_pie_audio.py",
+            "src\\core\\modules\\map_studio_pie_combat.py",
             "src\\core\\modules\\map_studio_pie_creatures.py",
+            "src\\core\\modules\\map_studio_pie_dialogue.py",
+            "src\\core\\modules\\map_studio_pie_dialogue_camera.py",
             "src\\core\\modules\\map_studio_pie_doors.py",
             "src\\core\\modules\\map_studio_pie_entities.py",
+            "src\\core\\modules\\map_studio_pie_gameplay.py",
+            "src\\core\\modules\\map_studio_pie_interactions.py",
+            "src\\core\\modules\\map_studio_pie_journal.py",
+            "src\\core\\modules\\map_studio_pie_nwscript_vm.py",
+            "src\\core\\modules\\map_studio_pie_party.py",
+            "src\\core\\modules\\map_studio_pie_resources.py",
+            "src\\core\\modules\\map_studio_pie_scripted_events.py",
+            "src\\core\\modules\\map_studio_pie_scripting.py",
+            "src\\core\\modules\\map_studio_pie_triggers.py",
             "src\\core\\modules\\map_studio_room_catalog.py",
             "src\\core\\modules\\map_studio_room_snapping.py",
             "src\\core\\modules\\map_studio_scene_animations.py",
@@ -1005,6 +1039,7 @@
             "src\\core\\stock_modules\\stock_module_txi_editor.py",
             "src\\core\\stock_modules\\stock_module_walkmesh.py",
             "src\\core\\tools\\__init__.py",
+            "src\\core\\tools\\kotor_gui_document.py",
             "src\\core\\tools\\placeable_builder_tool_service.py",
             "src\\core\\walkmesh\\__init__.py",
             "src\\core\\walkmesh\\walkmesh_editor.py",
@@ -1028,6 +1063,7 @@
             "src\\gui\\camera\\render_manifest.py",
             "src\\gui\\camera\\render_output.py",
             "src\\gui\\dialogs\\qt_export_dialog.py",
+            "src\\gui\\dialogs\\qt_fbx_animation_selection_dialog.py",
             "src\\gui\\lighting\\__init__.py",
             "src\\gui\\lighting\\aurora_light_adapter.py",
             "src\\gui\\lighting\\light_export_bridge.py",
@@ -1196,13 +1232,14 @@
     },
     {
         "project": "GhostRigger.Core.Validation",
-        "python_file_count": 9,
+        "python_file_count": 10,
         "files": [
             "src\\core\\validation\\__init__.py",
             "src\\core\\validation\\_native.py",
             "src\\core\\validation\\animation_block_validator.py",
             "src\\core\\validation\\animation_roundtrip_validator.py",
             "src\\core\\validation\\capture_specs.py",
+            "src\\core\\validation\\custom_rigged_character_validator.py",
             "src\\core\\validation\\kotor_module_engine_contract.py",
             "src\\core\\validation\\validation_adapters.py",
             "src\\core\\validation\\validation_bus.py",
@@ -1211,7 +1248,7 @@
     },
     {
         "project": "GhostRigger.Core.Workflow",
-        "python_file_count": 134,
+        "python_file_count": 139,
         "files": [
             "src\\autorig\\__init__.py",
             "src\\autorig\\accurig.py",
@@ -1222,6 +1259,7 @@
             "src\\core\\animation\\__init__.py",
             "src\\core\\animation\\animation_engine.py",
             "src\\core\\animation\\animation_library.py",
+            "src\\core\\animation\\fbx_animation_selection.py",
             "src\\core\\animation\\gpu_skinning.py",
             "src\\core\\animation\\skinning_profiles\\__init__.py",
             "src\\core\\animation\\skinning_profiles\\animation_supermodel_skinning.py",
@@ -1278,6 +1316,10 @@
             "src\\core\\characters\\character_validation_report.py",
             "src\\core\\characters\\creature_appearance.py",
             "src\\core\\characters\\creature_package_builder.py",
+            "src\\core\\characters\\custom_rigged_character_behavior_service.py",
+            "src\\core\\characters\\custom_rigged_character_build_service.py",
+            "src\\core\\characters\\custom_rigged_character_import_service.py",
+            "src\\core\\characters\\custom_rigged_character_packaging_service.py",
             "src\\core\\characters\\head_workflow.py",
             "src\\core\\characters\\headless_body_workflow.py",
             "src\\core\\characters\\kotor_constants.py",

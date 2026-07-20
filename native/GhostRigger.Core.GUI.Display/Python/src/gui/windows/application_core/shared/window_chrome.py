@@ -45,6 +45,7 @@ MAIN_ACTION_ICON_KEYS: dict[str, str] = {
     "retarget_preview": "retarget_preview",
     "unreal_animator": "unreal_animator",
     "map_studio": "map_studio",
+    "gui_editor": "gui_editor",
     "placeable_builder": "placeable_builder",
     "scripting_dialogue_studio": "scripting_dialogue_studio",
     "module_editor": "module_editor",
@@ -61,6 +62,7 @@ MAIN_ACTION_ICON_KEYS: dict[str, str] = {
 MAIN_COMMAND_STRIP_ICON_KEYS: dict[str, str] = {
     "character_builder": "character_builder",
     "map_studio": "map_studio",
+    "gui_editor": "gui_editor",
     "placeable_builder": "placeable_builder",
     "scripting_dialogue_studio": "scripting_dialogue_studio",
     "module_editor": "module_editor",
@@ -94,13 +96,15 @@ class WindowChromeMixin:
         self.export_scene_action = QtGui.QAction("Export Scene...", self)
         self.export_scene_action.triggered.connect(self._export_scene)
 
-        self.open_model_action = QtGui.QAction(self._icon("open"), "Open MDL (binary)...", self)
+        self.open_model_action = QtGui.QAction(self._icon("open"), "Open KOTOR Model (Automatic)...", self)
         self.open_model_action.setShortcut("Ctrl+Shift+M")
+        self.open_model_action.setStatusTip("Automatically detect binary/ASCII MDL, KOTOR 1/2, MDX pairing, and model type")
         self.open_model_action.triggered.connect(self._open_model)
 
-        self.open_ascii_action = QtGui.QAction("Open MDL (ASCII text)...", self)
+        self.open_ascii_action = QtGui.QAction("Open KOTOR Model (Automatic; alternate shortcut)...", self)
         self.open_ascii_action.setShortcut("Ctrl+Shift+O")
-        self.open_ascii_action.triggered.connect(lambda _checked=False: self._open_model(ascii_only=True))
+        self.open_ascii_action.setStatusTip("Alternate shortcut for the automatic KOTOR model importer")
+        self.open_ascii_action.triggered.connect(self._open_model)
         self.clear_model_action = QtGui.QAction("Clear Model", self)
         self.clear_model_action.setShortcut("Ctrl+Shift+Delete")
         self.clear_model_action.triggered.connect(self._clear_model)
@@ -224,6 +228,15 @@ class WindowChromeMixin:
         self.modules_action = QtGui.QAction(self._icon(MAIN_ACTION_ICON_KEYS["map_studio"]), "Open Map Studio (KMAP Area Authoring)", self)
         self.modules_action.setStatusTip("Author new KMAP areas with room geometry, walkmeshes, and gameplay placements")
         self.modules_action.triggered.connect(self._open_map_studio_modeling_workspace)
+        self.gui_editor_action = QtGui.QAction(
+            self._icon(MAIN_ACTION_ICON_KEYS["gui_editor"]),
+            "Open GUI Editor (Odyssey UI)...",
+            self,
+        )
+        self.gui_editor_action.setStatusTip(
+            "Inspect and author KOTOR .gui resources in a standalone workbench with a shared PIE preview contract"
+        )
+        self.gui_editor_action.triggered.connect(self._open_gui_editor_window)
         self.placeable_builder_action = QtGui.QAction(
             self._icon(MAIN_ACTION_ICON_KEYS["placeable_builder"]), "Open Placeable Builder...", self
         )
@@ -386,7 +399,6 @@ class WindowChromeMixin:
         file_menu.addAction(self.close_scene_action)
         file_menu.addSeparator()
         file_menu.addAction(self.open_model_action)
-        file_menu.addAction(self.open_ascii_action)
         file_menu.addAction(self.clear_model_action)
         file_menu.addSeparator()
         file_menu.addAction(self.import_obj_action)
@@ -444,6 +456,7 @@ class WindowChromeMixin:
         tools_menu.addAction(self.remove_rig_action)
         tools_menu.addSeparator()
         tools_menu.addAction(self.modules_action)
+        tools_menu.addAction(self.gui_editor_action)
         tools_menu.addAction(self.placeable_builder_action)
         tools_menu.addAction(self.scripting_dialogue_studio_action)
         tools_menu.addAction(self.stock_module_editor_action)
@@ -760,6 +773,14 @@ class WindowChromeMixin:
         map_studio_button.setObjectName("CommandStripMapStudioButton")
         map_studio_button.setToolTip("Open Map Studio (KMAP Area Authoring)")
         layout.addWidget(map_studio_button)
+        gui_editor_button = self._tool_button(
+            "GUI Editor",
+            self.gui_editor_action,
+            MAIN_COMMAND_STRIP_ICON_KEYS["gui_editor"],
+        )
+        gui_editor_button.setObjectName("CommandStripGuiEditorButton")
+        gui_editor_button.setToolTip("Open the standalone GUI Editor for KOTOR .gui resources and PIE HUD previews")
+        layout.addWidget(gui_editor_button)
         placeable_builder_button = self._tool_button(
             "Placeables", self.placeable_builder_action, MAIN_COMMAND_STRIP_ICON_KEYS["placeable_builder"]
         )

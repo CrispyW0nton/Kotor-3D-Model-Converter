@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Workflow",
-    "file_count": 134,
+    "file_count": 139,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -51,19 +51,25 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_ANIMATION_ENGINE",
             "source_path": "src/core/animation/animation_engine.py",
             "packaged_path": "Python/src/core/animation/animation_engine.py",
-            "sha256": "c7f03e2fac0968e8dc5d3f4f87f22eeed55e494e40041624cae066d5cb72c449"
+            "sha256": "ce2943874d4e8d5a789c9ef349313bd99620dfd31759348da4d6600639de6350"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_ANIMATION_LIBRARY",
             "source_path": "src/core/animation/animation_library.py",
             "packaged_path": "Python/src/core/animation/animation_library.py",
-            "sha256": "ff0aae6d6fd341343e52ae02cf29bbb610ec0f166fe7eaf1362d9be86ef010e7"
+            "sha256": "e07b0ac29b2492143dc35d853ced7dfab3a093fe88be7600b6b911e07838fc94"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_FBX_ANIMATION_SELECTION",
+            "source_path": "src/core/animation/fbx_animation_selection.py",
+            "packaged_path": "Python/src/core/animation/fbx_animation_selection.py",
+            "sha256": "544ae6cb536cc6f5e4e5158cec7595c4d01338a5053484f6370e53584caa33f3"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_GPU_SKINNING",
             "source_path": "src/core/animation/gpu_skinning.py",
             "packaged_path": "Python/src/core/animation/gpu_skinning.py",
-            "sha256": "aa4dad367330cffc4efcfba5d1050ece2133bdcb8a54dc773e3748bd155917c7"
+            "sha256": "304819326ead597029bb01fd8b06dec1db0af19aecd8c2a37cc0f60ed7c6a4e0"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_SKINNING_PROFILES_INIT",
@@ -396,6 +402,30 @@
             "sha256": "be85affd9fee80fbe594fe603291ad2e90f9f2584a9f510a41090ab469fae168"
         },
         {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CUSTOM_RIGGED_CHARACTER_BEHAVIOR_SERVICE",
+            "source_path": "src/core/characters/custom_rigged_character_behavior_service.py",
+            "packaged_path": "Python/src/core/characters/custom_rigged_character_behavior_service.py",
+            "sha256": "70a7d2cf286e27ac980e20b0831880422432b27cff9407bb393cd2ad6d4f5920"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CUSTOM_RIGGED_CHARACTER_BUILD_SERVICE",
+            "source_path": "src/core/characters/custom_rigged_character_build_service.py",
+            "packaged_path": "Python/src/core/characters/custom_rigged_character_build_service.py",
+            "sha256": "a7e5d9dd89d40902caee0c8547b9f094d66dbe1b816611e5025f92f41604462e"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CUSTOM_RIGGED_CHARACTER_IMPORT_SERVICE",
+            "source_path": "src/core/characters/custom_rigged_character_import_service.py",
+            "packaged_path": "Python/src/core/characters/custom_rigged_character_import_service.py",
+            "sha256": "8df4a5d1863b06054ca2dc9ce1e87605af7c15cb5d46d931cf054046e71a215a"
+        },
+        {
+            "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_CUSTOM_RIGGED_CHARACTER_PACKAGING_SERVICE",
+            "source_path": "src/core/characters/custom_rigged_character_packaging_service.py",
+            "packaged_path": "Python/src/core/characters/custom_rigged_character_packaging_service.py",
+            "sha256": "d536957e26c47d59a6021f2508e927d4b55a793110b052481e6769aa1f14eed7"
+        },
+        {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEAD_WORKFLOW",
             "source_path": "src/core/characters/head_workflow.py",
             "packaged_path": "Python/src/core/characters/head_workflow.py",
@@ -405,7 +435,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_HEADLESS_BODY_WORKFLOW",
             "source_path": "src/core/characters/headless_body_workflow.py",
             "packaged_path": "Python/src/core/characters/headless_body_workflow.py",
-            "sha256": "b47bc648b54e8e3f6443c55d4a1e2fcb75d28316f018bfb0744d442f50a95815"
+            "sha256": "1245eb437a57e83bc92c3fb98d2acee9ea6c786873373f1d438a43c2aa9d42f4"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_CHARACTERS_KOTOR_CONSTANTS",
@@ -447,7 +477,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_AURORA_ANIMATION_WRITER",
             "source_path": "src/core/retargeting/aurora_animation_writer.py",
             "packaged_path": "Python/src/core/retargeting/aurora_animation_writer.py",
-            "sha256": "477a638d2366031a715b51b25ff616709b2e7f3417284ccacaa73bda05300cb7"
+            "sha256": "01b39a443bdb7446e858b6b86088c87300f4107ee5b0abd797984439aa1c2376"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_BAKER",
@@ -459,7 +489,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_BLENDER_ANIMATION_INJECTION",
             "source_path": "src/core/retargeting/blender_animation_injection.py",
             "packaged_path": "Python/src/core/retargeting/blender_animation_injection.py",
-            "sha256": "c67fe574dff03aa731ca428c549cee2dc6f14d85bbe3df2fb23c51eba304f2a4"
+            "sha256": "17502926294c1cf8c1bef42834c77d3f5a992745068f8d53839e0a253b4c442e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_COORDINATE",
@@ -687,7 +717,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_UE5_TO_AURORA_R3B_PREVIEW",
             "source_path": "src/core/retargeting/ue5_to_aurora_r3b_preview.py",
             "packaged_path": "Python/src/core/retargeting/ue5_to_aurora_r3b_preview.py",
-            "sha256": "dcd3ae4127e4207969007cb2a3edcda88fcba14261972cd721581c52cd4eabf1"
+            "sha256": "b77be4c737ea0089a1edffd465e89fc642121fe67d138c72f699154025c6fa63"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RETARGETING_UE_FBX_EXPORTER",
@@ -777,13 +807,13 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_COMPOSITE_WORKFLOW",
             "source_path": "src/core/workflow/composite_workflow.py",
             "packaged_path": "Python/src/core/workflow/composite_workflow.py",
-            "sha256": "ef6701b0664a835ab8467e04552e776f84fc049ba3a32e1eb75ea25f7801270a"
+            "sha256": "92a955da2308fc3a01d95f3b33bcdd30612cbc6a518dfed8cdaae3fef3bf91c0"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_LEGACY_MODULE_REPAIR",
             "source_path": "src/core/workflow/legacy_module_repair.py",
             "packaged_path": "Python/src/core/workflow/legacy_module_repair.py",
-            "sha256": "9458c0d0cce7f85a18d48bc66295098e405386e9962d09a62cc19a667a02777b"
+            "sha256": "5881eda9db1698d7dd2a96c337e06393607b67d7ba4222615f073287b9acc673"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_LEGACY_TEXTURE_PORT",

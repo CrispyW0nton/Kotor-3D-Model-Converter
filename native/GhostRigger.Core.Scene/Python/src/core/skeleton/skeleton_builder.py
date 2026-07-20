@@ -189,8 +189,16 @@ def bind_imported_meshes_to_skeleton(
         _make_skin_node(mesh)
         mesh.bone_map = [slot[0] for slot in bone_slots]
         mesh.bone_map_floats = [float(slot[1]) for slot in bone_slots]
-        mesh.qbone_list = [slot[2] for slot in bone_slots]
-        mesh.tbone_list = [slot[3] for slot in bone_slots]
+        mesh.bone_node_indices = [int(slot[1]) for slot in bone_slots]
+        mesh.qbone_list, mesh.tbone_list = _kotor_skin_inverse_bind_rows(
+            mesh,
+            bone_slots,
+        )
+        # Compact qBone/tBone rows authored here already use KOTOR's engine
+        # convention: WXYZ ``inverse(bone_world) * skin_world``.  Mark the
+        # layout so the live renderer consumes the rows directly, matching
+        # the node-indexed arrays produced after MDL write/readback.
+        setattr(mesh, "_gr_kotor_inverse_bind_qt", True)
         mesh.skin_data = []
         source_skin_rows = _source_skin_rows_for_mesh(
             mesh,
@@ -422,20 +430,49 @@ def _candidate_bones(
                 if _is_creature_wing_deform_candidate(node):
                     selected.append(node)
                     selected_ids.add(id(node))
-            return selected
+            return _dedupe_bones_by_name(selected)
 
     bones = [
         node for node in nodes
         if _is_deform_candidate(node)
     ]
     if bones:
-        return bones
-    return [
+        return _dedupe_bones_by_name(bones)
+    return _dedupe_bones_by_name([
         node for node in nodes
         if node is not None
         and not _has_vertices(node)
         and not _is_non_deform_hook(getattr(node, "name", ""))
-    ]
+    ])
+
+
+def _dedupe_bones_by_name(nodes: Sequence[Any]) -> List[Any]:
+    """Keep one unambiguous DFS bone for every engine-facing node name.
+
+    Some shipped Odyssey bodies contain duplicate helper names in separate
+    branches (K2 ``PFBCM`` repeats parts of the left-hand chain).  Vanilla
+    skin headers can distinguish those nodes by numeric node id, but a fresh
+    Character Builder skin starts name-driven. Runtime pose lookup retains the
+    first native joint for a duplicate name because later same-name nodes are
+    nested helper meshes (PFBCM's second ``lhand_g`` is the canonical example).
+    Keeping both duplicates would bind weights against one node and serialize
+    them against another, producing hand spikes after MDL reload. Collapse
+    duplicates at bind time, merge their donor weights onto the first native
+    joint, and record its explicit node id.
+    """
+
+    order: List[str] = []
+    by_name: dict[str, Any] = {}
+    for node in nodes:
+        key = str(getattr(node, "name", "") or "").strip().lower()
+        if not key:
+            continue
+        if key not in by_name:
+            order.append(key)
+        # Keep the first native joint; later duplicates are helper meshes
+        # nested under the real deform chain.
+        by_name.setdefault(key, node)
+    return [by_name[key] for key in order]
 
 
 def _donor_skin_bone_names(model: Any | None) -> List[str]:
@@ -532,6 +569,48 @@ def _bone_slots(nodes: Sequence[Any], dfs_index: dict[int, int]):
         pos, rot = _node_world(node)
         slots.append((name, idx, rot, pos, node, _child_positions(node)))
     return slots
+
+
+def _kotor_skin_inverse_bind_rows(
+    skin_node: Any,
+    slots: Sequence[Any],
+) -> tuple[
+    List[Tuple[float, float, float, float]],
+    List[Vec3],
+]:
+    """Return compact KOTOR inverse-bind rows for ``skin_node``.
+
+    Model-node rotations are XYZW, while a KOTOR skin's qBone rows are stored
+    WXYZ.  Each row must satisfy ``bone_world * inverse_bind == skin_world``
+    in the bind pose.  Forward bone world transforms can look structurally
+    valid but make inherited animation explode after MDL reload, when the
+    engine consumes qBone/tBone as inverse binds.
+    """
+
+    skin_pos, skin_rot = _node_world(skin_node)
+    qbones: List[Tuple[float, float, float, float]] = []
+    tbones: List[Vec3] = []
+    for slot in slots:
+        bone_pos = _vec3(slot[3])
+        bone_rot = _quat(slot[2])
+        inverse_bone_rot = _quat_inverse(bone_rot)
+        relative_rot = _quat_multiply(inverse_bone_rot, skin_rot)
+        relative_pos = _quat_rotate_vec(
+            inverse_bone_rot,
+            (
+                skin_pos[0] - bone_pos[0],
+                skin_pos[1] - bone_pos[1],
+                skin_pos[2] - bone_pos[2],
+            ),
+        )
+        qbones.append((
+            relative_rot[3],
+            relative_rot[0],
+            relative_rot[1],
+            relative_rot[2],
+        ))
+        tbones.append(relative_pos)
+    return qbones, tbones
 
 
 def _weights_for_vertex(vertex: Vec3, slots: Sequence[Any], *, max_influences: int) -> VertexSkinData:
@@ -1333,6 +1412,11 @@ def _compact_skin_bone_map_to_used_influences(mesh: Any) -> dict:
         used_indices,
         default=0.0,
     )
+    mesh.bone_node_indices = _filter_parallel_list(
+        getattr(mesh, "bone_node_indices", []) or [],
+        used_indices,
+        default=-1,
+    )
     mesh.qbone_list = _filter_parallel_list(
         getattr(mesh, "qbone_list", []) or [],
         used_indices,
@@ -1490,6 +1574,40 @@ def _quat_rotate_vec(
         vy + w * ty + (z * tx - x * tz),
         vz + w * tz + (x * ty - y * tx),
     )
+
+
+def _quat_inverse(
+    q: Tuple[float, float, float, float],
+) -> Tuple[float, float, float, float]:
+    x, y, z, w = _quat(q)
+    length_sq = x * x + y * y + z * z + w * w
+    if length_sq <= 1.0e-12:
+        return (0.0, 0.0, 0.0, 1.0)
+    inv_length_sq = 1.0 / length_sq
+    return (
+        -x * inv_length_sq,
+        -y * inv_length_sq,
+        -z * inv_length_sq,
+        w * inv_length_sq,
+    )
+
+
+def _quat_multiply(
+    a: Tuple[float, float, float, float],
+    b: Tuple[float, float, float, float],
+) -> Tuple[float, float, float, float]:
+    ax, ay, az, aw = _quat(a)
+    bx, by, bz, bw = _quat(b)
+    out = (
+        aw * bx + ax * bw + ay * bz - az * by,
+        aw * by - ax * bz + ay * bw + az * bx,
+        aw * bz + ax * by - ay * bx + az * bw,
+        aw * bw - ax * bx - ay * by - az * bz,
+    )
+    length = sqrt(sum(component * component for component in out))
+    if length <= 1.0e-12:
+        return (0.0, 0.0, 0.0, 1.0)
+    return tuple(component / length for component in out)  # type: ignore[return-value]
 
 
 def _make_skin_node(node: Any) -> None:

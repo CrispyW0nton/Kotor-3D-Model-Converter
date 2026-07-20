@@ -155,6 +155,7 @@ from src.gui.windows.application_core.application_core_lib.functions.splash_them
 )
 from src.gui.windows.application_core.application_core_lib.shared.scene_workflow import SceneWorkflowMixin
 from src.gui.windows.application_core.application_core_lib.shared.scripting_studio_workflow import ScriptingStudioWorkflowMixin
+from src.gui.windows.application_core.application_core_lib.shared.gui_editor_workflow import GuiEditorWorkflowMixin
 from src.gui.windows.application_core.application_core_lib.shared.viewport_tools import ViewportToolsMixin
 from src.gui.windows.application_core.application_core_lib.shared.model_io import ModelIoMixin
 from src.gui.windows.application_core.application_core_lib.shared.retarget_workflow import RetargetWorkflowMixin
@@ -216,6 +217,7 @@ def _build_prelaunch_library_input(
 class QtGhostRiggerMainWindow(
     WindowChromeMixin,
     ScriptingStudioWorkflowMixin,
+    GuiEditorWorkflowMixin,
     MainWindowLayoutMixin,
     ViewportToolsMixin,
     ModelIoMixin,
@@ -304,6 +306,12 @@ class QtGhostRiggerMainWindow(
         self._auto_detect_worker: Optional[QtCore.QObject] = None
         self._animation_scan_thread: Optional[QtCore.QThread] = None
         self._animation_scan_worker: Optional[QtCore.QObject] = None
+        self._animation_model_load_thread: Optional[QtCore.QThread] = None
+        self._animation_model_load_worker: Optional[QtCore.QObject] = None
+        self._animation_model_load_request_id = 0
+        self._animation_model_load_model_id = 0
+        self._pending_animation_model_load: Optional[tuple] = None
+        self._defer_inherited_animation_loading = True
         self._batch_thread: Optional[QtCore.QThread] = None
         self._batch_worker: Optional[QtCore.QObject] = None
         self._floating_dock_hosts: dict[str, QtFloatingDockHost] = {}
@@ -540,6 +548,8 @@ class QtGhostRiggerMainWindow(
                 "unreal_animator": self._open_unreal_animator_window,
                 "sequence_editor": self._open_sequence_editor_window,
                 "sequence_editor_window": self._open_sequence_editor_window,
+                "gui_editor": self._open_gui_editor_window,
+                "odyssey_gui_editor": self._open_gui_editor_window,
                 "settings": self._open_settings_dialog,
                 "theme_editor": self._open_theme_editor_window,
             }

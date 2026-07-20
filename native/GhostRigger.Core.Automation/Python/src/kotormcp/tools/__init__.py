@@ -17,13 +17,14 @@ Architecture note (Constantine, "Structured Design"):
   are context-free — the same tool works in a Discord bot, VS Code extension,
   CI pipeline, or any other consumer without modification.
 
-  Tool manifest (v3.13 — 160 total):
+  Tool manifest (v3.14 — 169 total):
   Installation   (3): detectInstallations, loadInstallation, kotor_installation_info
   Discovery      (4): listResources, describeResource, kotor_find_resource, kotor_search_resources
   Game data      (3): journalOverview, kotor_lookup_2da, kotor_lookup_tlk
-  GhostRigger    (8): ghostrigger_open_model, ghostrigger_render_model, ghostrigger_model_info,
+  GhostRigger    (9): ghostrigger_open_model, ghostrigger_render_model, ghostrigger_model_info,
                       ghostrigger_list_game_models, ghostrigger_audit,
-                      ghostrigger_export_model_for_unity, ghostrigger_validate_unity_import,
+                      ghostrigger_export_model_for_unity, ghostrigger_export_model_for_unreal,
+                      ghostrigger_validate_unity_import,
                       ghostrigger_run_malak_unity_smoke
   DebugSkinning (25): ghostrigger_debug_launch_app, ghostrigger_debug_close_app,
                       ghostrigger_debug_get_runtime_status, ghostrigger_debug_set_game_library_path,
@@ -152,7 +153,7 @@ def _native_tools() -> List[Dict[str, Any]]:
 
 
 def get_all_tools() -> List[Dict[str, Any]]:
-    """Return 108 native tools plus 52 clean-room compatibility definitions."""
+    """Return 109 native tools plus 60 clean-room compatibility definitions."""
 
     native = _native_tools()
     return native + legacy_ghostscripter.get_tools(native)
@@ -206,6 +207,8 @@ async def handle_tool(name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
         return await ghostrigger.handle_audit(arguments)
     if name == "ghostrigger_export_model_for_unity":
         return await ghostrigger.handle_export_model_for_unity(arguments)
+    if name == "ghostrigger_export_model_for_unreal":
+        return await ghostrigger.handle_export_model_for_unreal(arguments)
     if name == "ghostrigger_validate_unity_import":
         return await ghostrigger.handle_validate_unity_import(arguments)
     if name == "ghostrigger_run_malak_unity_smoke":

@@ -7,6 +7,16 @@ defaults and community customization.
 
 The standalone Module Editor is theme/layout aware. It consumes the active `ThemeManager` stylesheet and `LayoutManager` metrics, uses the `moduleEditor` toolbar id for its top command strip, and keeps KMAP outliner/properties/validation/export panels on shared table, tree, input, splitter, and toolbar metrics. No new colour tokens are required for the first KMAP pass.
 
+## GUI Editor Notes
+
+The standalone GUI Editor is a main-workbench product surface, not a Map Studio
+panel. It registers with the parent theme manager, consumes the existing `main`
+toolbar metrics, and sizes its splitter with `guiEditorCatalog` and
+`guiEditorInspector`. Its texture-backed move/resize canvas, typed property
+forms, resource catalog, validation summary, and add/delete actions all paint
+with the active Qt palette. PIE receives an immutable GUI preview payload and
+must not import the editor window.
+
 ## Scripting Suite Notes
 
 The Scripting Suite is a standalone, non-modal workbench with the
@@ -87,7 +97,8 @@ Required root attributes:
 Known panel ids include `contentBrowser`, `scene`, `library`, `modules`,
 `properties`, `animationLibrary`, `meshTools`, `nodes`, `lighting`, `cameras`,
 `moduleMeshes`, `spriteMaterials`, `adjustPivot`, `2das`, `resources`, `outputLog`, and
-`pythonTerminal`. The `contentBrowser`, `scene`, and `properties` ids control
+`pythonTerminal`, plus the standalone GUI Editor ids `guiEditorCatalog` and
+`guiEditorInspector`. The `contentBrowser`, `scene`, and `properties` ids control
 top-level dock widgets around the central viewport; the older `library` and
 `animationLibrary` ids remain valid for user layout compatibility. Unknown ids
 warn but do not crash, so future panels can be added safely.

@@ -13,6 +13,7 @@ Run: py -3.14 -u scripts/kotor_live_warp_plcaa.py [--skip-launch]
 from __future__ import annotations
 
 import asyncio
+import argparse
 import json
 import os
 import shutil
@@ -92,8 +93,17 @@ def step(name: str, payload: dict, keys: tuple[str, ...] = ()) -> dict:
     return payload
 
 
-async def main() -> int:
-    skip_launch = "--skip-launch" in sys.argv
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--skip-launch",
+        action="store_true",
+        help="Use an already-running KOTOR 2 process instead of launching the game.",
+    )
+    return parser.parse_args()
+
+
+async def main(*, skip_launch: bool = False) -> int:
     clean_slate()
 
     # 1. Hook status / install.
@@ -223,4 +233,5 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(asyncio.run(main()))
+    _args = _parse_args()
+    raise SystemExit(asyncio.run(main(skip_launch=_args.skip_launch)))

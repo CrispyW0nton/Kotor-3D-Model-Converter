@@ -45,6 +45,7 @@ def _test_client(monkeypatch: pytest.MonkeyPatch, callbacks: dict):
     class _FakeWerkzeugServer:
         def __init__(self, app) -> None:
             captured["app"] = app
+            self.server_port = 0
 
         def serve_forever(self) -> None:
             return None
@@ -133,6 +134,24 @@ def test_pie_focus_audit_distinguishes_user_activity_from_proof_window_activatio
     proof_stole_focus = module._map_studio_focus_audit(100, 300, proof_process_id=99)
     assert proof_stole_focus["foreground_unchanged"] is False
     assert proof_stole_focus["proof_became_foreground"] is True
+
+
+def test_pie_clean_presentation_accepts_only_transient_runtime_marker_geometry() -> None:
+    module = _resource_panels_module()
+    runtime = SimpleNamespace(
+        footprints=(SimpleNamespace(role="pie_focus", kind="pie_focus", placement_id="authored:creature:1"),),
+        lines=(SimpleNamespace(role="pie_path", kind="pie_path", placement_id="__map_studio_pie_path_0__"),),
+        icons=(),
+    )
+    authored = SimpleNamespace(
+        footprints=(SimpleNamespace(role="creature", kind="creature", placement_id="authored:creature:1"),),
+        lines=(),
+        icons=(),
+    )
+
+    assert module._map_studio_pie_marker_geometry_is_runtime_only(None) is True
+    assert module._map_studio_pie_marker_geometry_is_runtime_only(runtime) is True
+    assert module._map_studio_pie_marker_geometry_is_runtime_only(authored) is False
 
 
 def test_map_studio_visual_proof_route_is_synchronous_validated_and_uses_180_second_budget(
@@ -248,7 +267,7 @@ def test_map_studio_pie_visual_proof_route_is_focus_safe_validated_and_synchrono
     response = client.post("/api/map_studio_pie_visual_proof", json={"payload": _valid_pie_route_payload(tmp_path)})
     assert response.status_code == 200
     assert response.get_json()["proof"]["status"] == "passed"
-    assert timeout_values == [90.0]
+    assert timeout_values == [180.0]
     assert received[0]["activate"] is False
     assert Path(received[0]["kmap_path"]).is_absolute()
 
@@ -260,7 +279,7 @@ def test_map_studio_pie_visual_proof_route_is_focus_safe_validated_and_synchrono
         ({"capture_dir": "relative"}, "capture_dir must be an absolute path"),
         ({"activate": True}, "activate must be false"),
         ({"movement_ms": 99}, "movement_ms"),
-        ({"sample_count": 25}, "sample_count"),
+        ({"sample_count": 13}, "sample_count"),
         ({"forward": 1.1}, "forward"),
         ({"run": "yes"}, "run must be a boolean"),
     ],
@@ -340,6 +359,247 @@ def test_map_studio_visual_proof_blocks_when_known_foreground_handle_changes(
         "foreground_unchanged": False,
     }
     assert any("Foreground window changed" in blocker for blocker in result["blockers"])
+
+
+def test_pie_renderer_readiness_records_zero_draw_polls_before_capturing_real_content(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _resource_panels_module()
+    perf = {
+        "last_frame_ms": 0.0,
+        "draw_calls": 0,
+        "tri_count": 0,
+        "visible_meshes": 0,
+        "culled_meshes": 0,
+    }
+    paint_requests: list[dict] = []
+    settled: list[int] = []
+    captured: list[Path] = []
+    canvas_updates: list[str] = []
+
+    class _Surface:
+        def update(self) -> None:
+            canvas_updates.append("surface")
+
+    class _Canvas:
+        def update(self) -> None:
+            canvas_updates.append("canvas")
+
+        def current_surface(self):
+            return _Surface()
+
+    def request_render(*, fast: bool, reason: str, **dirty_flags: bool) -> None:
+        assert fast is True
+        assert reason == "PIE visual proof renderer readiness"
+        assert dirty_flags == {"scene": True}
+        paint_requests.append(dict(dirty_flags))
+
+    viewport = SimpleNamespace(
+        _gpu_renderer=SimpleNamespace(perf=perf),
+        _last_render_ms=0.0,
+        _request_render=request_render,
+    )
+
+    def settle(milliseconds: int) -> None:
+        # Renderer counters may transition only after this attempt has actively
+        # requested a frame and the queued host/native-surface paints exist.
+        assert len(paint_requests) == len(settled) + 1
+        assert canvas_updates[-2:] == ["canvas", "surface"]
+        settled.append(milliseconds)
+        if len(settled) == 3:
+            perf.update(
+                {
+                    "last_frame_ms": 18.0,
+                    "draw_calls": 443,
+                    "tri_count": 20000,
+                    "visible_meshes": 50,
+                }
+            )
+
+    def capture(_canvas: object, target: Path):
+        captured.append(target)
+        target.write_bytes(b"PNG")
+        return {
+            "path": str(target),
+            "width": 2,
+            "height": 1,
+            "bytes_per_line": 8,
+            "sha256": "ready",
+            "saved": True,
+        }, bytes((10, 20, 30, 255, 200, 210, 220, 255))
+
+    monkeypatch.setattr(module, "_settle_map_studio_visual_proof", settle)
+    monkeypatch.setattr(module, "_capture_map_studio_canvas", capture)
+    monkeypatch.setattr(
+        module,
+        "_map_studio_capture_content_metrics",
+        lambda _capture, _rgba: {"sample_count": 2, "content_present": True},
+    )
+
+    ready_frame: dict = {}
+    result = module._wait_for_map_studio_renderer_readiness(
+        _Canvas(),
+        viewport,
+        tmp_path,
+        max_attempts=5,
+        interval_ms=25,
+        ready_frame=ready_frame,
+    )
+
+    assert result["ready"] is True
+    assert result["attempt_count"] == 3
+    assert result["blank_attempt_count"] == 2
+    assert result["zero_draw_call_attempt_count"] == 2
+    assert result["varied_content_missing_attempt_count"] == 0
+    assert result["ready_attempt"] == 3
+    assert result["ready_after_wait_ms"] == 75
+    assert result["maximum_wait_ms"] == 125
+    assert settled == [25, 25, 25]
+    assert len(paint_requests) == 3
+    assert canvas_updates == ["canvas", "surface"] * 3
+    assert [path.name for path in captured] == ["pie_renderer_readiness_02.png"]
+    assert all(row["capture_attempted"] is False for row in result["attempts"][:2])
+    assert all(row["paint_drive"]["render_request_succeeded"] for row in result["attempts"])
+    assert all(row["paint_drive"]["canvas_update_requested"] for row in result["attempts"])
+    assert all(row["paint_drive"]["surface_update_requested"] for row in result["attempts"])
+    assert result["attempts"][2]["performance"]["draw_calls"] == 443
+    assert ready_frame["capture"]["sha256"] == "ready"
+    assert Path(ready_frame["capture"]["path"]).name == "pie_frame_00.png"
+    assert Path(ready_frame["capture"]["path"]).read_bytes() == b"PNG"
+    assert ready_frame["rgba"]
+
+
+def test_pie_renderer_readiness_caps_native_grab_when_drawn_surface_is_still_blank(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _resource_panels_module()
+    captures: list[Path] = []
+    paint_requests: list[str] = []
+
+    def capture(_canvas: object, target: Path):
+        captures.append(target)
+        target.write_bytes(b"PNG")
+        return {
+            "path": str(target),
+            "width": 2,
+            "height": 1,
+            "bytes_per_line": 8,
+            "sha256": "blank",
+            "saved": True,
+        }, bytes((20, 20, 20, 255) * 2)
+
+    viewport = SimpleNamespace(
+        _gpu_renderer=SimpleNamespace(perf={"draw_calls": 7}),
+        _last_render_ms=1.0,
+        _request_render=lambda **_kwargs: paint_requests.append("requested"),
+    )
+    monkeypatch.setattr(module, "_settle_map_studio_visual_proof", lambda _milliseconds: None)
+    monkeypatch.setattr(module, "_capture_map_studio_canvas", capture)
+    monkeypatch.setattr(
+        module,
+        "_map_studio_capture_content_metrics",
+        lambda _capture, _rgba: {"sample_count": 2, "content_present": False},
+    )
+
+    result = module._wait_for_map_studio_renderer_readiness(
+        object(),
+        viewport,
+        tmp_path,
+        max_attempts=12,
+        interval_ms=100,
+        ready_frame={},
+    )
+
+    assert result["ready"] is False
+    assert result["attempt_count"] == 1
+    assert result["varied_content_missing_attempt_count"] == 1
+    assert paint_requests == ["requested"]
+    assert len(captures) == 1
+
+
+def test_pie_visual_proof_blocks_before_requested_sequence_when_renderer_never_becomes_ready(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _resource_panels_module()
+    monkeypatch.setattr(module, "_foreground_window_handle", lambda: 7007)
+    monkeypatch.setattr(module, "_settle_map_studio_visual_proof", lambda _milliseconds: None)
+    monkeypatch.setattr(
+        module,
+        "_capture_map_studio_canvas",
+        lambda _canvas, _target: (_ for _ in ()).throw(AssertionError("zero-draw readiness must not grab")),
+    )
+
+    session = SimpleNamespace(state=SimpleNamespace(position=[0.0, 0.0, 0.0], simulation_time=0.0))
+    viewport = SimpleNamespace(
+        canvas=object(),
+        model=object(),
+        camera=SimpleNamespace(target=[0.0, 0.0, 1.6]),
+        frame_all=lambda: None,
+        _gpu_renderer=SimpleNamespace(perf={"draw_calls": 0}),
+        _last_render_ms=0.0,
+    )
+    panel = SimpleNamespace(
+        viewport=viewport,
+        _room_preview_model=object(),
+        set_view_mode=lambda _mode: None,
+    )
+
+    class _Controller:
+        def open_project(self, _path: Path, *, resource_manager=None) -> None:
+            return None
+
+        def create_map_studio_pie_session(self, *, preview_model=None):
+            return SimpleNamespace(
+                session=session,
+                validation=SimpleNamespace(ok=True, blocking_issues=(), warnings=()),
+                walkable_face_count=2,
+                collision_triangle_count=4,
+            )
+
+    class _Window:
+        project = SimpleNamespace(dirty=False, rooms=[], extra_sections={})
+        controller = _Controller()
+        resource_manager = object()
+        viewport_panel = panel
+        _map_studio_pie_session = None
+        stopped = False
+
+        def _reset_map_studio_texture_paint_session(self) -> None:
+            return None
+
+        def _refresh_all(self, _message: str) -> None:
+            return None
+
+        def _start_map_studio_pie(self, *, focus_viewport: bool = True) -> None:
+            assert focus_viewport is False
+            self._map_studio_pie_session = session
+
+        def _stop_map_studio_pie(self) -> None:
+            self.stopped = True
+            self._map_studio_pie_session = None
+
+    window = _Window()
+
+    class _Host(module.ResourcePanelsMixin):
+        module_editor_window = None
+
+        def _open_module_editor_window(self, activate: bool = True):
+            assert activate is False
+            return window
+
+    result = _Host()._map_studio_pie_visual_proof_from_ipc(_valid_pie_route_payload(tmp_path))
+
+    assert result["status"] == "blocked"
+    assert result["renderer_readiness"]["ready"] is False
+    assert result["renderer_readiness"]["attempt_count"] == 12
+    assert result["renderer_readiness"]["zero_draw_call_attempt_count"] == 12
+    assert result["captures"]["sequence_started"] is False
+    assert result["captures"]["completed"] == 0
+    assert window.stopped is True
+    assert any("requested continuous sample sequence was not started" in blocker for blocker in result["blockers"])
 
 
 def test_map_studio_visual_proof_callback_imports_toggles_captures_and_audits_without_activation(
@@ -479,12 +739,43 @@ def test_map_studio_visual_proof_callback_imports_toggles_captures_and_audits_wi
     assert result["foreground_unchanged"] is True
 
 
-def test_map_studio_pie_visual_proof_moves_animated_actor_and_captures_continuous_frames_without_activation(
+@pytest.mark.parametrize(
+    (
+        "motion_updates",
+        "expected_animation_required",
+        "expected_animation_observed",
+        "minimum_distance",
+        "expected_native_grabs",
+    ),
+    [
+        ({}, True, True, 0.2, 4),
+        (
+            {"forward": 0.0, "strafe": 0.0, "expected_min_distance": 0.0},
+            False,
+            False,
+            0.0,
+            3,
+        ),
+    ],
+    ids=("locomotion", "stationary-capture"),
+)
+def test_map_studio_pie_visual_proof_applies_motion_contract_and_captures_continuous_frames_without_activation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    motion_updates: dict,
+    expected_animation_required: bool,
+    expected_animation_observed: bool,
+    minimum_distance: float,
+    expected_native_grabs: int,
 ) -> None:
     module = _resource_panels_module()
-    state = {"activate_values": [], "moving": False, "stopped": False, "captures": 0}
+    state = {
+        "activate_values": [],
+        "focus_viewport_values": [],
+        "moving": False,
+        "stopped": False,
+        "captures": 0,
+    }
     monkeypatch.setattr(module, "_foreground_window_handle", lambda: 6006)
 
     session = SimpleNamespace(
@@ -523,8 +814,9 @@ def test_map_studio_pie_visual_proof_moves_animated_actor_and_captures_continuou
     panel = SimpleNamespace(viewport=viewport, _room_preview_model=object(), set_view_mode=lambda _mode: None)
 
     class _Controller:
-        def open_project(self, path: Path) -> None:
+        def open_project(self, path: Path, *, resource_manager=None) -> None:
             state["opened"] = str(path)
+            state["open_resource_manager"] = resource_manager
 
         def create_map_studio_pie_session(self, *, preview_model=None):
             assert preview_model is panel._room_preview_model
@@ -538,6 +830,7 @@ def test_map_studio_pie_visual_proof_moves_animated_actor_and_captures_continuou
     class _Window:
         project = SimpleNamespace(dirty=False, rooms=[], extra_sections={})
         controller = _Controller()
+        resource_manager = object()
         viewport_panel = panel
         _map_studio_pie_session = None
         _map_studio_pie_actor = None
@@ -550,7 +843,8 @@ def test_map_studio_pie_visual_proof_moves_animated_actor_and_captures_continuou
         def _refresh_all(self, _message: str) -> None:
             return None
 
-        def _start_map_studio_pie(self) -> None:
+        def _start_map_studio_pie(self, *, focus_viewport: bool = True) -> None:
+            state["focus_viewport_values"].append(bool(focus_viewport))
             self._map_studio_pie_session = session
             self._map_studio_pie_actor = object()
             viewport_properties["_gr_map_studio_pie_clean_runtime"] = True
@@ -607,14 +901,18 @@ def test_map_studio_pie_visual_proof_moves_animated_actor_and_captures_continuou
         lambda _capture, _rgba: {"content_present": True, "sample_count": 2},
     )
     payload = _valid_pie_route_payload(tmp_path)
+    payload.update(motion_updates)
     result = _Host()._map_studio_pie_visual_proof_from_ipc(payload)
 
     assert result["status"] == "passed"
     assert state["activate_values"] == [False]
+    assert state["focus_viewport_values"] == [False]
+    assert state["open_resource_manager"] is window.resource_manager
     assert state["stopped"] is True
-    assert result["runtime"]["movement_distance"] >= 0.2
+    assert result["runtime"]["movement_distance"] >= minimum_distance
     assert result["runtime"]["actor_attached"] is True
-    assert result["runtime"]["moving_animation_observed"] is True
+    assert result["runtime"]["moving_animation_required"] is expected_animation_required
+    assert result["runtime"]["moving_animation_observed"] is expected_animation_observed
     assert result["runtime"]["clean_runtime_presentation"]["ok"] is True
     assert result["runtime"]["performance"] == {
         "viewport_frame_median_ms": 22.0,
@@ -627,8 +925,13 @@ def test_map_studio_pie_visual_proof_moves_animated_actor_and_captures_continuou
     }
     assert result["captures"]["frames"][0]["performance"]["visible_meshes"] == 40
     assert result["captures"]["frames"][0]["performance"]["culled_meshes"] == 12
+    assert result["renderer_readiness"]["ready"] is True
+    assert result["renderer_readiness"]["ready_attempt"] == 1
+    assert result["captures"]["sequence_started"] is True
     assert result["captures"]["continuous_content"] is True
     assert result["captures"]["completed"] == 3
+    assert state["captures"] == expected_native_grabs
+    assert (result["captures"]["motion_frame"] is not None) is (expected_native_grabs == 4)
     assert result["foreground_unchanged"] is True
 
 
@@ -637,18 +940,20 @@ def test_map_studio_visual_proof_source_and_mirror_contracts() -> None:
     main_window = ROOT / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/qt_main_window.py"
     display = ROOT / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/shared/resource_panels.py"
     tools = ROOT / "native/GhostRigger.Core.Tools/Python/src/gui/windows/application_core/shared/resource_panels.py"
+    module_editor = ROOT / "native/GhostRigger.Core.Tools/Python/src/gui/windows/module_editor_window.py"
     app_runner = ROOT / "native/GhostRigger.Core.GUI.Display/Python/src/gui/windows/application_core/functions/app_runner.py"
     rendering_pipeline = ROOT / "native/GhostRigger.Core.GUI.Display/Python/src/gui/viewports/viewport_core/widgets/rendering_pipeline.py"
 
     server_source = server.read_text(encoding="utf-8")
     main_source = main_window.read_text(encoding="utf-8")
     resource_source = display.read_text(encoding="utf-8")
+    module_editor_source = module_editor.read_text(encoding="utf-8")
     app_runner_source = app_runner.read_text(encoding="utf-8")
     rendering_pipeline_source = rendering_pipeline.read_text(encoding="utf-8")
     assert '@app.route("/api/map_studio_visual_proof", methods=["POST"])' in server_source
     assert '@app.route("/api/map_studio_pie_visual_proof", methods=["POST"])' in server_source
-    assert "timeout=180.0" in server_source
-    assert "timeout=90.0" in server_source
+    assert server_source.count("timeout=180.0") == 2
+    assert "timeout=90.0" not in server_source
     assert '"map_studio_pie_visual_proof": map_studio_pie_visual_proof' in main_source
     assert "self._ipc_server.port" in main_source
     assert '"map_studio_visual_proof": map_studio_visual_proof' in main_source
@@ -660,8 +965,16 @@ def test_map_studio_visual_proof_source_and_mirror_contracts() -> None:
     assert "foreground_before = _foreground_window_handle()" in resource_source
     assert 'result["foreground_unchanged"] = foreground_unchanged' in resource_source
     assert "def _map_studio_pie_visual_proof_from_ipc" in resource_source
-    assert "window._start_map_studio_pie()" in resource_source
+    assert "window._start_map_studio_pie(focus_viewport=False)" in resource_source
+    assert "def _start_map_studio_pie(self, *, focus_viewport: bool = True)" in module_editor_source
+    assert "if focus_viewport:" in module_editor_source
+    assert "self._start_map_studio_pie()" in module_editor_source
+    assert 'resource_manager=getattr(window, "resource_manager", None)' in resource_source
+    assert "self.controller.open_project(path, resource_manager=self.resource_manager)" in module_editor_source
     assert "_map_studio_capture_content_metrics" in resource_source
+    assert "_wait_for_map_studio_renderer_readiness" in resource_source
+    assert "_MAP_STUDIO_PIE_RENDERER_READINESS_MAX_ATTEMPTS = 12" in resource_source
+    assert '"sequence_started": False' in resource_source
     assert "GHOSTRIGGER_START_WITHOUT_ACTIVATING" in app_runner_source
     assert "WA_ShowWithoutActivating" in app_runner_source
     assert 'clean_runtime = bool(self.property("_gr_map_studio_pie_clean_runtime"))' in rendering_pipeline_source

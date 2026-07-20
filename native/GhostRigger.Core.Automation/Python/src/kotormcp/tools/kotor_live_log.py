@@ -46,6 +46,14 @@ def get_tools() -> List[Dict[str, Any]]:
                         "default": ["c_drexlf", "appearance"],
                     },
                     "session_root": {"type": "string", "description": "Optional output root for log sessions"},
+                    "expected_warp_target": {
+                        "type": "string",
+                        "description": "Optional module resref expected in the warp command",
+                    },
+                    "expected_module_sha256": {
+                        "type": "string",
+                        "description": "Optional required SHA-256 for Modules/<expected_warp_target>.mod",
+                    },
                 },
             },
         },
@@ -108,6 +116,8 @@ async def handle_start(arguments: Dict[str, Any]) -> Dict[str, Any]:
             duration_seconds=int(inp.duration_seconds or 900),
             asset_resrefs=list(inp.asset_resrefs or ["c_drexlf", "appearance"]),
             session_root=inp.session_root,
+            expected_warp_target=inp.expected_warp_target,
+            expected_module_sha256=inp.expected_module_sha256,
         )
         return json_content({"ok": True, **result})
     except Exception as exc:

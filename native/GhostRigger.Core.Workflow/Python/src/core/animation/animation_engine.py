@@ -99,6 +99,7 @@ class SuperModelResolver:
     # Configured by ``configure()``.  When None, the resolver still works
     # for in-memory / pre-loaded models but cannot load chains from disk.
     _resource_manager: Any = None
+    _resource_manager_revision = 0
 
     _NULL_REFS = frozenset({'', 'null', 'none'})
 
@@ -106,9 +107,18 @@ class SuperModelResolver:
     def configure(cls, resource_manager: Any) -> None:
         """Install the ResourceManager used to load supermodel MDL/MDX.
 
-        Safe to call repeatedly; later calls replace the previous manager.
+        Safe to call repeatedly. Cached chains remain valid only while both
+        the manager object and its published resource revision are unchanged.
         """
+
+        try:
+            revision = max(0, int(getattr(resource_manager, "revision", 0) or 0))
+        except (TypeError, ValueError):
+            revision = 0
+        if resource_manager is not cls._resource_manager or revision != cls._resource_manager_revision:
+            cls.clear_cache()
         cls._resource_manager = resource_manager
+        cls._resource_manager_revision = revision
 
     @classmethod
     def clear_cache(cls) -> None:
@@ -186,8 +196,9 @@ class SuperModelResolver:
 
         cls._cache[key] = super_model
         # Proactively pre-load the rest of the chain so later lookups are hot.
-        if super_model is not None and not cls._is_null_ref(super_model.supermodel):
-            cls.load_supermodel(super_model.supermodel, game_tag)
+        next_super_ref = str(getattr(super_model, "supermodel", "") or "")
+        if super_model is not None and not cls._is_null_ref(next_super_ref):
+            cls.load_supermodel(next_super_ref, game_tag)
         return super_model
 
     @classmethod
@@ -440,6 +451,66 @@ def _ensure_quat_sign_consistency(values: List[List[float]]) -> List[List[float]
         px, py, pz, pw = x, y, z, w
 
     return out
+
+
+_SANITIZED_CHANNEL_KEY = "_sanitized_channel_cache"
+
+
+def _sanitize_channel(times: List[float], values: List[List[float]]):
+    """One-time channel cleanup so per-frame sampling can skip validation.
+
+    Drops keyframes with non-finite components (the documented NaN-skip
+    semantics of ``_interp_channel``) and sign-normalizes quaternion
+    sequences once, instead of rebuilding the sequence on every sample.
+    """
+
+    if not times or not values:
+        return (), ()
+    clean_times: List[float] = []
+    clean_values: List[List[float]] = []
+    for index in range(min(len(times), len(values))):
+        value = values[index]
+        if _is_finite_vec(value):
+            clean_times.append(times[index])
+            clean_values.append(list(value))
+    if clean_values and len(clean_values[0]) == 4:
+        clean_values = _ensure_quat_sign_consistency(clean_values)
+    return clean_times, clean_values
+
+
+def _channel_samples(ctrl: dict):
+    """Cached sanitized (times, values) for a controller channel dict."""
+
+    cached = ctrl.get(_SANITIZED_CHANNEL_KEY)
+    if cached is None:
+        cached = _sanitize_channel(ctrl.get("times") or [], ctrl.get("values") or [])
+        ctrl[_SANITIZED_CHANNEL_KEY] = cached
+    return cached
+
+
+def _interp_channel_sanitized(times, values, t: float) -> Optional[List[float]]:
+    """Lean sampler over a pre-sanitized channel (finite, sign-consistent)."""
+
+    if not times:
+        return None
+    if t <= times[0]:
+        return list(values[0])
+    if t >= times[-1]:
+        return list(values[-1])
+    lo, hi = 0, len(times) - 1
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        if times[mid] <= t:
+            lo = mid
+        else:
+            hi = mid
+    tf = (t - times[lo]) / max(1e-9, times[hi] - times[lo])
+    v0, v1 = values[lo], values[hi]
+    if len(v0) == 4:
+        return _slerp(v0, v1, tf)
+    if len(v0) == 3:
+        return list(_lerp3(v0, v1, tf))
+    return [_lerp(v0[k], v1[k], tf) for k in range(min(len(v0), len(v1)))]
 
 
 def _interp_channel(times: List[float], values: List[List[float]],
@@ -782,12 +853,23 @@ class AnimationEngine:
                 # animation remains independent through the attachment-source
                 # AnimationEngine in mesh_render_data.
                 existing = self._base_nodes.get(name_key)
-                if (
-                    existing is not None
-                    and not bool(getattr(existing, "_gr_bas_attachment_layer", False))
-                    and bool(getattr(n, "_gr_bas_attachment_layer", False))
-                ):
-                    continue
+                if existing is not None:
+                    existing_is_attachment = bool(
+                        getattr(existing, "_gr_bas_attachment_layer", False)
+                    )
+                    incoming_is_attachment = bool(
+                        getattr(n, "_gr_bas_attachment_layer", False)
+                    )
+                    # Preserve the first native DAG node for duplicate Odyssey
+                    # names. K2 PFBCM contains a second ``lhand_g`` nested
+                    # beneath the real wrist joint; last-wins lookup selects
+                    # that helper, turns its parent into a name-based self
+                    # cycle, and stretches the hand away from the sleeve.
+                    # A primary body node may still replace an attachment node
+                    # in a BAS composite, but attachments and later native
+                    # duplicates never replace an established body joint.
+                    if not existing_is_attachment or incoming_is_attachment:
+                        continue
                 self._base_nodes[name_key] = n
                 self._node_kinds_by_name[name_key] = str(
                     getattr(n, "_gr_scene_node_kind", "") or classify_scene_node(n, self._scene_identity)
@@ -1183,7 +1265,11 @@ class AnimationEngine:
 
         for ctrl in anim_node.controllers:
             ctype = ctrl['type']
-            val = _interp_channel(ctrl['times'], ctrl['values'], t)
+            # Hot path: sample the cached pre-sanitized channel. Sanitizing
+            # (finite filter + quaternion sign consistency) used to run per
+            # sample per frame and dominated evaluate() cost on PIE modules.
+            channel_times, channel_values = _channel_samples(ctrl)
+            val = _interp_channel_sanitized(channel_times, channel_values, t)
             if val is None:
                 continue
 

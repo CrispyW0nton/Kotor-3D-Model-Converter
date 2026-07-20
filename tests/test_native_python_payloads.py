@@ -74,7 +74,35 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     # ships through both, adding another two byte-identical payload rows.
     # Animated PIE door actors (map_studio_pie_doors.py) ship through both,
     # adding another two byte-identical payload rows.
-    assert len(payload_files) == 1316
+    # The composed PIE gameplay coordinator and typed template-resource
+    # projection ship through Scene and Tools, adding four payload rows.
+    # The standalone GUI Editor window/workflow and renderer-neutral KOTOR
+    # GUI preview contract add three owner payload rows.
+    # Unity transfer/export is now owned only by Core.IO; the stale Tools copy
+    # was removed so DLL discovery order cannot select divergent behavior.
+    # Engine-compatible FBX take selection adds one Workflow service plus the
+    # mirrored GUI Display/Tools selector dialog payloads.
+    # 2026-07-17: the Map Studio PIE gameplay-simulation core ships through both
+    # Scene and Tools — dialogue, dialogue cameras, triggers, party, combat,
+    # resources, interactions, gameplay coordinator — plus the bounded OnEnter
+    # scripting-state reader (map_studio_pie_scripting.py) and the runtime quest
+    # log (map_studio_pie_journal.py), each adding a byte-identical
+    # owner/consumer payload pair.
+    # 2026-07-17: the clean-room NCS virtual machine
+    # (map_studio_pie_nwscript_vm.py) and the scripted-event/cinematic playback
+    # runtime (map_studio_pie_scripted_events.py) ship through Scene and Tools,
+    # adding two more byte-identical owner/consumer payload pairs.
+    # 2026-07-18: editable KOTOR GUI documents and transactional GUI IO add
+    # one Core.Tools owner payload and one Core.IO owner payload.
+    # Automatic file-level MDL inspection/import adds one Core.IO owner
+    # payload shared by all GUI and tool entry points.
+    # 2026-07-19: the independent Custom Rigged Character Builder adds its
+    # versioned Project model, Validation snapshot/rules, three Workflow
+    # services (import/build/package), and three GUI Display entry/controller
+    # surfaces. Native Character Builder payload ownership is unchanged.
+    # Installed UTC behavior authoring adds one Resources catalog owner and one
+    # Workflow behavior compiler/profile owner.
+    assert len(payload_files) == 1358
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 
@@ -155,6 +183,29 @@ def test_twoda_parser_is_owned_by_domain_core_templates_only() -> None:
         assert not (workflow_project / path).exists()
         assert path not in workflow_sources
         assert path.replace("/", "\\") not in workflow_sources
+
+
+def test_unity_export_bridge_is_owned_only_by_core_io() -> None:
+    """Embedded import order must not select a stale Tools copy of Unity export."""
+
+    owner_project = ROOT / "native" / "GhostRigger.Core.IO"
+    tools_project = ROOT / "native" / "GhostRigger.Core.Tools"
+    packaged_path = "Python/src/core/export/unity_export_bridge.py"
+    include_path = packaged_path.replace("/", "\\")
+
+    owner_payload = json.loads((owner_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    tools_payload = json.loads((tools_project / "GhostRiggerPythonPayload.json").read_text(encoding="utf-8"))
+    owner_paths = {str(row["packaged_path"]) for row in owner_payload["files"]}
+    tools_paths = {str(row["packaged_path"]) for row in tools_payload["files"]}
+    tools_project_text = (
+        (tools_project / "GhostRigger.Core.Tools.vcxproj").read_text(encoding="utf-8")
+        + (tools_project / "GhostRigger.Core.Tools.vcxproj.filters").read_text(encoding="utf-8")
+    )
+
+    assert packaged_path in owner_paths
+    assert packaged_path not in tools_paths
+    assert not (tools_project / packaged_path).exists()
+    assert include_path not in tools_project_text
 
 
 def test_reusable_workflow_payloads_are_owned_by_workflow_not_tools() -> None:

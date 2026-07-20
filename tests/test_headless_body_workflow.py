@@ -1030,7 +1030,7 @@ def test_t503_place_body_guides_happy_path_returns_guides_and_instance(monkeypat
 def test_t503_place_body_guides_snap_kwarg_is_forwarded(monkeypatch):
     """``snap_to_bones=False`` must reach AcuRig.place_guides verbatim."""
     fake = _install_fake_accurig(monkeypatch)
-    scene, _body = _scene_with_body()
+    scene, body = _scene_with_body()
 
     wf.place_body_guides(scene, snap_to_bones=False)
 
@@ -2566,11 +2566,14 @@ def test_t506_export_scene_per_format_rows_returned_in_request_order(
     _install_fake_scene_io(monkeypatch)
     writers = _install_fake_exporters(monkeypatch)
     _make_check_service(monkeypatch, issues=[])
-    scene, _body = _scene_with_body()
+    scene, body = _scene_with_body()
+    base_skeleton = object()
+    body._gr_fbx_base_skeleton_model = base_skeleton
 
     result = wf.export_scene(
         scene, formats=["fbx", "kotor", "gltf", "obj"], out_dir=str(tmp_path),
         write_sidecar=False,
+        fbx_compatibility_profile="unity",
     )
 
     keys = [row.key for row in result.formats]
@@ -2582,6 +2585,8 @@ def test_t506_export_scene_per_format_rows_returned_in_request_order(
         # Each row's proposed path lives in out_dir.
         assert str(tmp_path) in row.path
     assert writers["fbx"].calls
+    assert writers["fbx"].calls[0][3]["compatibility_profile"] == "unity"
+    assert writers["fbx"].calls[0][3]["base_skeleton_model"] is base_skeleton
     assert writers["mdl"].calls
     assert writers["gltf"].calls
     assert writers["obj"].calls

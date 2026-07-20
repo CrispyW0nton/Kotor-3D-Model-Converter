@@ -9,7 +9,7 @@ import json
 import math
 from pathlib import Path
 from queue import Empty, SimpleQueue
-from threading import Event
+from threading import Event, Lock
 from time import perf_counter
 from typing import Any
 
@@ -52,7 +52,7 @@ from src.core.modules.map_studio_multi_cut import (
 )
 from src.gui.panels.module_editor.module_editor_asset_browser import ModuleEditorAssetBrowser
 from src.gui.panels.module_editor.module_editor_outliner import ModuleEditorOutliner, authored_primitive_item_id
-from src.gui.panels.module_editor.module_editor_properties import ModuleEditorPropertiesPanel
+from src.gui.panels.module_editor.module_editor_properties import MapStudioPIEContextPanel, ModuleEditorPropertiesPanel
 from src.gui.panels.module_editor.module_editor_toolbar import ModuleEditorToolbar
 from src.gui.panels.module_editor.module_editor_viewport_panel import ModuleEditorViewportPanel
 from src.gui.panels.module_editor.porter_tab import PorterTab
@@ -77,6 +77,12 @@ _MAP_STUDIO_PIE_ACTOR_EXECUTOR = ThreadPoolExecutor(
     thread_name_prefix="map-studio-pie-actors",
 )
 
+# Play may briefly join a body/head prewarm that is already at its publication
+# boundary.  Keep this bounded so a long pure-Python MDL parse never freezes
+# the editor; an unfinished actor falls back to the simulation marker for that
+# run instead of launching a duplicate parse on the GUI thread.
+_MAP_STUDIO_PIE_PLAYER_PREWARM_WAIT_SECONDS = 0.20
+
 _MAP_STUDIO_TEXTURE_CLONE_EXECUTOR = ThreadPoolExecutor(
     max_workers=1,
     thread_name_prefix="map-studio-texture-clone",
@@ -96,6 +102,25 @@ _MAP_STUDIO_PIE_CREATURE_POSE_HZ = 12.0
 # Keep the quota tied to one intended timer slice; each actor separately keeps
 # its real elapsed time until its round-robin turn.
 _MAP_STUDIO_PIE_CREATURE_SCHEDULER_HZ = 60.0
+
+
+def _stamp_map_studio_pie_actor_pose(pose: Any, actor: Any, animation_name: str) -> Any:
+    """Attach the actor/clip identity required by retained BAS head rendering.
+
+    The viewport row also carries ``animation_name``, but renderer-neutral BAS
+    pose resolution consumes the pose itself.  Keeping both in sync lets a
+    detachable head sample its own inherited hierarchy while the body pose
+    continues to place the animated ``headhook`` socket.
+    """
+
+    if pose is None or actor is None:
+        return pose
+    source_model = getattr(actor, "source_model", None)
+    setattr(pose, "_gr_animation_scene_object_id", str(getattr(actor, "actor_id", "") or ""))
+    setattr(pose, "_gr_animation_source_model_id", id(source_model))
+    setattr(pose, "_gr_animation_source_model_name", str(getattr(source_model, "name", "") or ""))
+    setattr(pose, "_gr_animation_name", str(animation_name or ""))
+    return pose
 
 
 class _MapStudioWorkflowStack(QtWidgets.QStackedWidget):
@@ -1187,15 +1212,20 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._map_studio_pie_scope_text = ""
         self._map_studio_pie_control_states: list[tuple[Any, bool]] = []
         self._map_studio_pie_actor: Any = None
+        self._map_studio_pie_party_actors: list[dict[str, Any]] = []
         self._map_studio_pie_animation_engine: Any = None
         self._map_studio_pie_animation_name = ""
         self._map_studio_pie_animation_run = False
         self._map_studio_pie_actor_warning = ""
+        self._map_studio_pie_player_model_cache: dict[tuple[Any, ...], tuple[Any, str]] = {}
+        self._map_studio_pie_player_prewarm_pending: dict[tuple[Any, ...], Event] = {}
+        self._map_studio_pie_player_cache_lock = Lock()
         self._map_studio_pie_camera_turn_input = 0.0
         self._map_studio_pie_camera_turn_velocity = 0.0
         self._map_studio_pie_creature_entries: list[dict[str, Any]] = []
         self._map_studio_pie_hidden_creature_groups: list[tuple[int, Any]] = []
         self._map_studio_pie_door_entries: list[dict[str, Any]] = []
+        self._map_studio_pie_hidden_door_groups: list[tuple[int, Any]] = []
         self._map_studio_pie_creature_summary = "creatures 0"
         self._map_studio_pie_creature_animation_budget = 0.0
         self._map_studio_pie_creature_animation_cursor = 0
@@ -1208,6 +1238,21 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._map_studio_pie_audio_runtime: Any = None
         self._map_studio_pie_audio_summary = "audio unavailable"
         self._map_studio_pie_audio_update_bucket = -1
+        self._map_studio_pie_dialogue_audio_runtime: Any = None
+        self._map_studio_pie_dialogue_audio_signature: tuple[str, ...] = ()
+        self._map_studio_pie_dialogue_line_signature: tuple[str, ...] = ()
+        self._map_studio_pie_dialogue_line_elapsed = 0.0
+        self._map_studio_pie_dialogue_line_interval = 0.0
+        self._map_studio_pie_player_action_state: dict[str, Any] = {}
+        self._map_studio_pie_dialogue_animation_entities: set[str] = set()
+        self._map_studio_pie_dialogue_animation_policies: dict[int, Any] = {}
+        self._map_studio_pie_dialogue_animation_policies_loaded = False
+        self._map_studio_pie_dialogue_node_id = ""
+        self._map_studio_pie_dialogue_lip_limitation_reported = False
+        self._map_studio_pie_dialogue_camera_animation_signature: tuple[str, int] | None = None
+        self._map_studio_pie_dialogue_camera_animation_active = False
+        self._map_studio_pie_dialogue_camera_snapshot: tuple[float, float, float, float] | None = None
+        self._map_studio_pie_gameplay_mode = "exploration"
         self.resource_manager: Any = None
         self._build_actions()
         self._build_menus()
@@ -1279,7 +1324,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.simulate_action.setStatusTip(self.simulate_action.toolTip())
         self.simulate_action.setProperty("mapStudioPIEState", "editing")
         self.build_action = QtGui.QAction("Build Module Files", self)
-        self.generate_walls_action = QtGui.QAction("Generate Walls", self)
+        self.generate_walls_action = QtGui.QAction("Walkmesh Boundary Rules...", self)
+        self.generate_walls_action.setObjectName("mapStudioWalkmeshBoundaryRulesAction")
+        self.generate_walls_action.setToolTip(
+            "KOTOR room WOKs are walkable floor regions. Visible walls belong in room geometry, not as vertical WOK faces."
+        )
         self.paint_walkmesh_action = QtGui.QAction("Paint Walkmesh Faces", self)
         self.open_output_action = QtGui.QAction("Open Output Folder", self)
         self.help_action = QtGui.QAction("Map Studio Help", self)
@@ -1596,12 +1645,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         right_layout = QtWidgets.QVBoxLayout(right)
         right_layout.setContentsMargins(0, 0, 0, 0)
         self.properties = ModuleEditorPropertiesPanel(right)
+        self.pie_context_panel = MapStudioPIEContextPanel(right)
         self.workflow_panel = MapStudioWorkflowPanel(right)
         self.readiness_panel = ModuleReadinessPanel(right)
         self.export_panel = ModuleExportPanel(right)
         self.right_tabs = QtWidgets.QTabWidget()
         self.right_tabs.setObjectName("mapStudioRightTabs")
         self.right_tabs.addTab(self.properties, "Properties")
+        pie_context_index = self.right_tabs.addTab(self.pie_context_panel, "PIE")
+        self.right_tabs.setTabToolTip(
+            pie_context_index,
+            "Set the simulated player context and resource-driven conversation start previews.",
+        )
         export_page = QtWidgets.QWidget(self.right_tabs)
         self.map_studio_export_page = export_page
         export_layout = QtWidgets.QVBoxLayout(export_page)
@@ -1660,7 +1715,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.validate_action.triggered.connect(self.validate_kmap)
         self.simulate_action.triggered.connect(self.toggle_map_studio_pie)
         self.build_action.triggered.connect(self.build_module_files)
-        self.generate_walls_action.triggered.connect(lambda: self._handle_tab_action("Generate Walls"))
+        self.generate_walls_action.triggered.connect(lambda: self._handle_tab_action("Walkmesh Boundary Rules"))
         self.paint_walkmesh_action.triggered.connect(lambda: self._handle_tab_action("Paint Face"))
         self.open_output_action.triggered.connect(self.open_output_folder)
         self.help_action.triggered.connect(lambda: self._show_help("Map Studio"))
@@ -1788,6 +1843,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.viewport_panel.pieDestinationRequested.connect(self._set_map_studio_pie_destination)
         self.viewport_panel.pieCameraInputChanged.connect(self._handle_map_studio_pie_camera_input)
         self.viewport_panel.pieStopRequested.connect(self._stop_map_studio_pie)
+        gameplay_signal = getattr(self.viewport_panel, "pieGameplayActionRequested", None)
+        if gameplay_signal is not None:
+            gameplay_signal.connect(self._handle_map_studio_pie_gameplay_action)
         self.viewport_panel.componentExtrudeCommitted.connect(self._commit_map_studio_component_extrude)
         self.viewport_panel.componentExtrudePreviewRequested.connect(self._preview_map_studio_component_extrude)
         self.viewport_panel.componentExtrudePreviewCancelled.connect(self._cancel_map_studio_component_preview)
@@ -1833,6 +1891,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.properties.transitionChanged.connect(self._set_authored_gameplay_transition)
         self.properties.cameraChanged.connect(self._set_authored_gameplay_camera_properties)
         self.properties.roomLightChanged.connect(self._set_authored_room_light_properties)
+        self.pie_context_panel.playerContextChanged.connect(self._set_map_studio_pie_player_context)
+        self.pie_context_panel.starterOverrideChanged.connect(self._set_map_studio_pie_starter_override)
+        self.pie_context_panel.previewRequested.connect(self._update_map_studio_pie_opening_preview)
+        self.pie_context_panel.resetRequested.connect(self._reset_map_studio_pie_context)
         self.export_panel.exportRequested.connect(self.export_fbx)
         self.export_panel.targetGameRequested.connect(self._retarget_map_studio_export_game)
         self.export_panel.devTestModuleRequested.connect(self.stage_dev_test_module)
@@ -2129,7 +2191,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if not path:
             return
         try:
-            self.controller.open_project(path)
+            self.controller.open_project(path, resource_manager=self.resource_manager)
             self._reset_map_studio_texture_paint_session()
             self._refresh_all(f"Opened {Path(path).name}.")
         except Exception as exc:
@@ -9935,6 +9997,151 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         else:
             self._log("No output folder has been generated yet.")
 
+    def _map_studio_pie_context_settings(self) -> dict[str, Any]:
+        getter = getattr(self.controller, "map_studio_pie_context_settings", None)
+        if not callable(getter):
+            return {
+                "player_role": "normal_pc",
+                "player_gender": "male",
+                "dialogue_start_overrides": {},
+            }
+        try:
+            values = getter()
+        except Exception as exc:
+            self._log(f"PIE conversation context could not be read: {exc}")
+            return {
+                "player_role": "normal_pc",
+                "player_gender": "male",
+                "dialogue_start_overrides": {},
+            }
+        return dict(values or {})
+
+    def _update_map_studio_pie_context_settings(self, **changes: object) -> bool:
+        updater = getattr(self.controller, "update_map_studio_pie_context_settings", None)
+        if not callable(updater):
+            updater = getattr(self.controller, "update_map_studio_pie_context", None)
+        if not callable(updater):
+            self._log("PIE conversation context editing is unavailable in this build.")
+            return False
+        try:
+            updater(**changes)
+        except Exception as exc:
+            self._log(f"PIE conversation context could not be updated: {exc}")
+            return False
+        self.setWindowTitle(
+            f"Ghost-Studio Map Studio - Level Editor - {self.project.name}{' *' if self.project.dirty else ''}"
+        )
+        self._refresh_map_studio_pie_context_panel()
+        return True
+
+    def _refresh_map_studio_pie_context_panel(self) -> None:
+        panel = getattr(self, "pie_context_panel", None)
+        if panel is None:
+            return
+        settings = self._map_studio_pie_context_settings()
+        catalog_getter = getattr(self.controller, "map_studio_pie_dialogue_catalog", None)
+        catalog: object = ()
+        unavailable_reason = ""
+        if callable(catalog_getter):
+            try:
+                catalog = tuple(catalog_getter() or ())
+            except Exception as exc:
+                unavailable_reason = f"Dialogue resources could not be inspected for PIE: {exc}"
+        if not catalog and not unavailable_reason:
+            unavailable_reason = (
+                "No dialogue resources are available in the loaded content. A bare .lyt contains room layout only; "
+                "attach or import a .mod or hydrated .kmap to tune conversation starts."
+            )
+        panel.set_catalog(
+            catalog,
+            player_role=str(settings.get("player_role") or "normal_pc"),
+            player_gender=str(settings.get("player_gender") or "male"),
+            overrides=settings.get("dialogue_start_overrides") or {},
+            unavailable_reason=unavailable_reason,
+        )
+        selected_resref = ""
+        combo = getattr(panel, "conversation_combo", None)
+        if combo is not None and combo.count() > 0:
+            selected_resref = str(combo.currentData() or "").strip().lower()
+        starter_getter = getattr(panel, "current_starter_link_id", None)
+        starter_link = starter_getter() if callable(starter_getter) else ""
+        self._update_map_studio_pie_opening_preview(selected_resref, starter_link)
+
+    def _update_map_studio_pie_opening_preview(self, conversation_resref: str, starter_link_id: str) -> None:
+        """Resolve and display the opening NPC line for the selected conversation."""
+
+        panel = getattr(self, "pie_context_panel", None)
+        if panel is None or not hasattr(panel, "set_opening_preview"):
+            return
+        resref = str(conversation_resref or "").strip().lower()
+        if not resref:
+            panel.clear_opening_preview()
+            return
+        previewer = getattr(self.controller, "map_studio_pie_dialogue_preview", None)
+        if not callable(previewer):
+            panel.clear_opening_preview()
+            return
+        try:
+            preview = previewer(resref, starter_link_id=str(starter_link_id or "").strip().lower())
+        except Exception as exc:  # the preview must never break the panel refresh
+            panel.set_opening_preview("", warning=f"Opening line could not be resolved: {exc}")
+            return
+        panel.set_opening_preview(
+            str(preview.get("text") or ""),
+            forced=bool(preview.get("forced")),
+            blocked=bool(preview.get("blocked")),
+            warning=str(preview.get("warning") or ""),
+        )
+
+    def _set_map_studio_pie_player_context(self, player_role: str, player_gender: str) -> None:
+        if self._update_map_studio_pie_context_settings(
+            player_role=str(player_role or "normal_pc"),
+            player_gender=str(player_gender or "male"),
+        ):
+            self.statusBar().showMessage("PIE player conversation context updated; it applies on the next Play.")
+
+    def _set_map_studio_pie_starter_override(
+        self,
+        conversation_resref: str,
+        starter_link_id: str,
+        resource_sha256: str,
+    ) -> None:
+        resref = str(conversation_resref or "").strip().lower()
+        if not resref:
+            return
+        settings = self._map_studio_pie_context_settings()
+        overrides = {
+            str(key or "").strip().lower(): dict(value or {})
+            for key, value in dict(settings.get("dialogue_start_overrides") or {}).items()
+            if str(key or "").strip() and isinstance(value, dict)
+        }
+        link_id = str(starter_link_id or "").strip()
+        if link_id:
+            overrides[resref] = {
+                "starter_link_id": link_id,
+                "resource_sha256": str(resource_sha256 or "").strip().lower(),
+            }
+        else:
+            overrides.pop(resref, None)
+        if self._update_map_studio_pie_context_settings(dialogue_start_overrides=overrides):
+            message = (
+                f"PIE will preview {resref}.dlg from starting link {link_id}; Active conditions are bypassed."
+                if link_id
+                else f"{resref}.dlg returned to canonical Auto start selection."
+            )
+            self.statusBar().showMessage(message)
+
+    def _reset_map_studio_pie_context(self) -> None:
+        if self._update_map_studio_pie_context_settings(
+            player_role="normal_pc",
+            player_gender="male",
+            global_numbers={},
+            global_booleans={},
+            local_booleans={},
+            dialogue_start_overrides={},
+        ):
+            self.statusBar().showMessage("PIE conversation context reset to a clean normal-player preview.")
+
     def select_item(self, item_id: str) -> None:
         primitive_identity = self._parse_map_studio_primitive_outliner_id(item_id)
         if primitive_identity is not None:
@@ -9952,6 +10159,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.viewport_panel.select_id(item_id)
         self.placement_tab.set_selected_placement(item_id if str(item_id).startswith("authored:") else "")
         self.properties.set_selection(item_id)
+        self.pie_context_panel.focus_conversation_for_owner(item_id)
         self.workflow_panel.set_selection_context(self._selected_item_label(item_id))
         self.statusBar().showMessage(f"Selected {item_id}")
 
@@ -9975,6 +10183,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.viewport_panel.set_selected_room_primitives(primitive_entries)
         active = selected[-1]
         self.properties.set_selection(active)
+        self.pie_context_panel.focus_conversation_for_owner(active)
         if primitive_entries:
             room_resref, primitive_name = primitive_entries[-1]
             self.builder_tab.select_room_primitive(room_resref, primitive_name)
@@ -10056,6 +10265,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self.asset_browser,
             self.workflow_tabs,
             self.properties,
+            self.pie_context_panel,
             getattr(self.viewport_panel, "scene_table", None),
             getattr(self.viewport_panel, "translate_gizmo_button", None),
             getattr(self.viewport_panel, "rotate_gizmo_button", None),
@@ -10129,14 +10339,42 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         head_resref = str(player_settings.get("head_resref") or "pmhc01").strip().lower()
         return body_resref, head_resref
 
-    def _prewarm_map_studio_pie_player_model(self) -> None:
-        """Warm the composed PIE player and its supermodel chain off-thread.
+    @staticmethod
+    def _map_studio_pie_resource_revision(manager: Any) -> int:
+        """Return a stable non-negative revision for cache keying."""
 
-        First Play measured ~30-50 s on large modules because the player body,
-        head, and supermodel animation chains load through the MDL reader on
-        the Qt thread. Warm the same caches a background worker (mirroring the
-        creature-preparation worker) so the first Play press attaches a
-        ready-made actor.
+        try:
+            return max(0, int(getattr(manager, "revision", 0) or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    def _map_studio_pie_player_cache_state(
+        self,
+    ) -> tuple[dict[tuple[Any, ...], tuple[Any, str]], dict[tuple[Any, ...], Event], Lock]:
+        """Return lazily compatible cache state for older construction harnesses."""
+
+        cache = getattr(self, "_map_studio_pie_player_model_cache", None)
+        if cache is None:
+            cache = {}
+            self._map_studio_pie_player_model_cache = cache
+        pending = getattr(self, "_map_studio_pie_player_prewarm_pending", None)
+        if not isinstance(pending, dict):
+            pending = {}
+            self._map_studio_pie_player_prewarm_pending = pending
+        cache_lock = getattr(self, "_map_studio_pie_player_cache_lock", None)
+        if cache_lock is None:
+            cache_lock = Lock()
+            self._map_studio_pie_player_cache_lock = cache_lock
+        return cache, pending, cache_lock
+
+    def _prewarm_map_studio_pie_player_model(self) -> None:
+        """Warm the composed PIE player model off-thread.
+
+        First Play measured ~30-50 s on large modules because the player body
+        and head load through the MDL reader on the Qt thread. A background
+        worker prepares the reusable composed model without touching
+        SuperModelResolver's process-global manager/cache; inherited animation
+        setup remains on the GUI-thread Play path.
         """
 
         manager = getattr(self, "resource_manager", None)
@@ -10145,18 +10383,17 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         game = str(getattr(self.project, "game", "K1") or "K1").strip().upper()
         body_resref, head_resref = self._map_studio_pie_player_settings()
-        cache = getattr(self, "_map_studio_pie_player_model_cache", None)
-        if cache is None:
-            cache = {}
-            self._map_studio_pie_player_model_cache = cache
-        pending = getattr(self, "_map_studio_pie_player_prewarm_pending", None)
-        if pending is None:
-            pending = set()
-            self._map_studio_pie_player_prewarm_pending = pending
-        cache_key = (id(manager), game, body_resref, head_resref)
-        if cache_key in cache or cache_key in pending:
-            return
-        pending.add(cache_key)
+        manager_revision = self._map_studio_pie_resource_revision(manager)
+        cache_key = (manager, manager_revision, game, body_resref, head_resref)
+        cache, pending, cache_lock = self._map_studio_pie_player_cache_state()
+        completion = Event()
+        with cache_lock:
+            for prior_key in tuple(cache):
+                if len(prior_key) < 2 or prior_key[0] is not manager or prior_key[1] != manager_revision:
+                    cache.pop(prior_key, None)
+            if cache_key in cache or cache_key in pending:
+                return
+            pending[cache_key] = completion
 
         def _worker() -> None:
             warning = ""
@@ -10184,20 +10421,18 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                     except Exception as exc:
                         actor_model = body_model
                         warning = f"The player head could not be attached; PIE is using the body model only ({exc})."
-                try:
-                    # Resolving one clip loads the supermodel animation chain
-                    # into SuperModelResolver's process-wide cache.
-                    from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
-
-                    SuperModelResolver.configure(manager)
-                    AnimationEngine(actor_model).play("pause1", loop=True, blend=False)
-                except Exception:
-                    pass
-                cache[cache_key] = (actor_model, warning)
             except Exception:
                 pass
             finally:
-                pending.discard(cache_key)
+                with cache_lock:
+                    if (
+                        actor_model is not None
+                        and getattr(self, "resource_manager", None) is manager
+                        and self._map_studio_pie_resource_revision(manager) == manager_revision
+                    ):
+                        cache[cache_key] = (actor_model, warning)
+                    pending.pop(cache_key, None)
+                    completion.set()
 
         import threading
 
@@ -10220,29 +10455,67 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         # the MDL reader measured ~49 s per Play press on large-module
         # sessions; the composed actor is immutable to PIE (attachment deep
         # copies the DAG), so reuse it across Play presses.
-        cache = getattr(self, "_map_studio_pie_player_model_cache", None)
-        if cache is None:
-            cache = {}
-            self._map_studio_pie_player_model_cache = cache
-        cache_key = (id(manager), str(game or ""), body_resref, head_resref)
-        cached = cache.get(cache_key)
+        manager_revision = self._map_studio_pie_resource_revision(manager)
+        normalized_game = str(game or "K1").strip().upper()
+        cache_key = (manager, manager_revision, normalized_game, body_resref, head_resref)
+        cache, pending, cache_lock = self._map_studio_pie_player_cache_state()
+        with cache_lock:
+            for prior_key in tuple(cache):
+                if len(prior_key) < 2 or prior_key[0] is not manager or prior_key[1] != manager_revision:
+                    cache.pop(prior_key, None)
+            cached = cache.get(cache_key)
+            pending_completion = pending.get(cache_key)
+            owns_load = cached is None and pending_completion is None
+            if owns_load:
+                pending_completion = Event()
+                pending[cache_key] = pending_completion
         warning = ""
         if cached is not None:
             actor_model, warning = cached
+        elif not owns_load:
+            completed = pending_completion.wait(_MAP_STUDIO_PIE_PLAYER_PREWARM_WAIT_SECONDS)
+            with cache_lock:
+                cached = cache.get(cache_key)
+            if cached is not None:
+                actor_model, warning = cached
+            elif (
+                getattr(self, "resource_manager", None) is not manager
+                or self._map_studio_pie_resource_revision(manager) != manager_revision
+            ):
+                return (
+                    "Game resources changed while the animated player model was preparing; "
+                    "this PIE run uses the simulation marker only. Stop and Play again to load the updated player."
+                )
+            elif completed or pending_completion.is_set():
+                return (
+                    "Background player preparation did not produce a usable animated model; "
+                    "this PIE run uses the simulation marker only. Stop and Play again to retry."
+                )
+            else:
+                return (
+                    "The animated player model is still preparing in the background; "
+                    "this PIE run uses the simulation marker only. Stop and Play again after preparation completes."
+                )
         else:
+            actor_model = None
+            load_error = ""
             try:
-                body_model = strict_loader(body_resref, game)
+                body_model = strict_loader(body_resref, normalized_game)
             except Exception as exc:
-                return f"Animated player body could not be loaded: {exc}"
-            if body_model is None:
-                return f"Animated player body {body_resref}.mdl was not found in the {game} resource library."
+                body_model = None
+                load_error = f"Animated player body could not be loaded: {exc}"
+            if body_model is None and not load_error:
+                load_error = (
+                    f"Animated player body {body_resref}.mdl was not found in the {normalized_game} resource library."
+                )
+            if body_model is not None:
+                actor_model = body_model
             head_model = None
-            if head_resref:
+            if body_model is not None and head_resref:
                 try:
-                    head_model = strict_loader(head_resref, game)
+                    head_model = strict_loader(head_resref, normalized_game)
                 except Exception as exc:
                     warning = f"The player head could not be loaded; PIE is using the body model only ({exc})."
-            actor_model = body_model
             if head_model is not None:
                 try:
                     # Use the same BAS composition contract as Character Studio.
@@ -10258,7 +10531,30 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 except Exception as exc:
                     actor_model = body_model
                     warning = f"The player head could not be attached; PIE is using the body model only ({exc})."
-            cache[cache_key] = (actor_model, warning)
+            with cache_lock:
+                resources_unchanged = (
+                    getattr(self, "resource_manager", None) is manager
+                    and self._map_studio_pie_resource_revision(manager) == manager_revision
+                )
+                if actor_model is not None and resources_unchanged:
+                    cache[cache_key] = (actor_model, warning)
+                pending.pop(cache_key, None)
+                pending_completion.set()
+            if load_error:
+                return load_error
+            if not resources_unchanged:
+                return (
+                    "Game resources changed while the animated player model was loading; "
+                    "this PIE run uses the simulation marker only. Stop and Play again to load the updated player."
+                )
+        if (
+            getattr(self, "resource_manager", None) is not manager
+            or self._map_studio_pie_resource_revision(manager) != manager_revision
+        ):
+            return (
+                "Game resources changed before the animated player could be attached; "
+                "this PIE run uses the simulation marker only. Stop and Play again to load the updated player."
+            )
         actor = None
         try:
             from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
@@ -10294,6 +10590,114 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return f"Animated player setup failed: {exc}"
         return warning
 
+    def _create_map_studio_pie_party_actors(self, session: Any, preview_model: Any, game: str) -> str:
+        """Attach runtime-only companion actors that trail the player.
+
+        Companions come from the configurable PIE party roster (UTC resrefs).
+        Each is a SEPARATE retained actor (never the creature cohort), placed at
+        its walkmesh-snapped follow slot and idle-posed; positions update per
+        tick. Body model resolved via the same appearance path creatures use.
+        Fully guarded so a resolution/load failure never breaks PIE.
+        """
+
+        self._map_studio_pie_party_actors = []
+        manager = getattr(self, "resource_manager", None)
+        if manager is None or preview_model is None or session is None:
+            return ""
+        roster = tuple(self._map_studio_pie_context_settings().get("party_roster") or ())
+        follow = getattr(session, "party_follow_targets", None)
+        if not roster or not callable(follow):
+            return ""
+        resolver = getattr(self.controller, "_map_studio_stock_template_resolver", None)
+        strict_loader = getattr(manager, "load_model_strict", None)
+        resolve_body = getattr(resolver, "creature_model", None)
+        if resolver is None or not callable(strict_loader) or not callable(resolve_body):
+            return "PIE party companions could not be resolved (resource resolver unavailable)."
+        try:
+            from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
+            from src.core.modules.map_studio_pie import attach_map_studio_pie_actor
+
+            SuperModelResolver.configure(manager)
+        except Exception as exc:
+            return f"PIE party companion actors are unavailable ({exc})."
+        game_tag = str(game or "K1").strip().upper()
+        targets = tuple(follow(len(roster)))
+        warnings: list[str] = []
+        for slot, resref in enumerate(roster, start=1):
+            resref = str(resref or "").strip().lower()
+            if not resref:
+                continue
+            try:
+                body_resref = str(resolve_body(resref) or "").strip().lower()
+            except Exception:
+                body_resref = ""
+            if not body_resref:
+                warnings.append(f"companion {resref} has no resolvable body model")
+                continue
+            try:
+                actor_model = strict_loader(body_resref, game_tag)
+            except Exception as exc:
+                warnings.append(f"companion {resref} body {body_resref} failed to load ({exc})")
+                continue
+            if actor_model is None:
+                warnings.append(f"companion {resref} body {body_resref} not found")
+                continue
+            position = targets[slot - 1] if slot - 1 < len(targets) else tuple(session.state.position)
+            try:
+                actor = attach_map_studio_pie_actor(
+                    preview_model,
+                    actor_model,
+                    position=tuple(float(v) for v in tuple(position)[:3]),
+                    facing_radians=float(session.state.facing_radians),
+                    recompute_bounds=False,
+                )
+            except Exception as exc:
+                warnings.append(f"companion {resref} could not attach ({exc})")
+                continue
+            if actor is None:
+                continue
+            engine = None
+            try:
+                engine = AnimationEngine(actor_model)
+                if not engine.play("pause1", loop=True, blend=False):
+                    engine.play("idlepose", loop=True, blend=False)
+            except Exception:
+                engine = None
+            self._map_studio_pie_party_actors.append(
+                {"actor": actor, "engine": engine, "slot": slot, "resref": resref}
+            )
+        return "; ".join(warnings)
+
+    def _update_map_studio_pie_party_actors(self, delta_time: float) -> None:
+        """Drive each companion actor to its current follow slot with an idle pose."""
+
+        entries = self._map_studio_pie_party_actors
+        if not entries:
+            return
+        session = self._map_studio_pie_session
+        follow = getattr(session, "party_follow_targets", None)
+        if session is None or not callable(follow):
+            return
+        targets = tuple(follow(len(entries)))
+        step = max(0.0, min(float(delta_time), 0.25))
+        facing = float(session.state.facing_radians)
+        for entry in entries:
+            actor = entry.get("actor")
+            slot = int(entry.get("slot", 0) or 0)
+            if actor is None or slot < 1 or slot - 1 >= len(targets):
+                continue
+            position = tuple(float(v) for v in tuple(targets[slot - 1])[:3])
+            try:
+                actor.set_transform(position, facing)
+            except Exception:
+                pass
+            engine = entry.get("engine")
+            if engine is not None:
+                try:
+                    engine.advance(step)
+                except Exception:
+                    pass
+
     def _update_map_studio_pie_player_actor(self, frame: Any, delta_time: float) -> tuple[Any, ...] | None:
         """Advance locomotion and return one deferred retained-renderer row."""
 
@@ -10303,22 +10707,27 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return None
         speed = math.sqrt(sum(float(value) * float(value) for value in tuple(frame.velocity)[:2]))
         running = bool(frame.moving and speed > 3.25)
-        wanted = "run" if running else ("walk" if frame.moving else "pause1")
+        action_state = self._map_studio_pie_player_action_state
         current = str(getattr(getattr(engine, "current_animation", None), "name", "") or "").lower()
-        if wanted != current:
-            played = engine.play(
-                wanted,
-                loop=True,
-                blend=True,
-                sync_phase=bool(current in {"walk", "run"} and wanted in {"walk", "run"}),
-            )
-            if not played and wanted == "pause1":
-                engine.play("idlepose", loop=True, blend=True)
+        if action_state.get("pie_action_active"):
+            still_playing = engine.advance(max(0.0, min(float(delta_time), 0.25)))
+            if not still_playing and not action_state.get("pie_action_hold"):
+                self._restore_map_studio_pie_actor_action_animation("pie:player", force=True)
             current = str(getattr(getattr(engine, "current_animation", None), "name", "") or "").lower()
-        engine.advance(max(0.0, min(float(delta_time), 0.25)))
-        pose = engine.evaluate()
-        setattr(pose, "_gr_animation_scene_object_id", actor.actor_id)
-        setattr(pose, "_gr_animation_source_model_id", id(actor.source_model))
+        else:
+            wanted = "run" if running else ("walk" if frame.moving else "pause1")
+            if wanted != current:
+                played = engine.play(
+                    wanted,
+                    loop=True,
+                    blend=True,
+                    sync_phase=bool(current in {"walk", "run"} and wanted in {"walk", "run"}),
+                )
+                if not played and wanted == "pause1":
+                    engine.play("idlepose", loop=True, blend=True)
+                current = str(getattr(getattr(engine, "current_animation", None), "name", "") or "").lower()
+            engine.advance(max(0.0, min(float(delta_time), 0.25)))
+        pose = _stamp_map_studio_pie_actor_pose(engine.evaluate(), actor, current)
         actor.set_transform(tuple(frame.position), float(frame.facing_radians))
         self._map_studio_pie_animation_name = current
         self._map_studio_pie_animation_run = running
@@ -10378,6 +10787,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 scene_animations = controller.map_studio_scene_animation_map(manager)
             except Exception:
                 scene_animations = {}
+            scene_source = str(getattr(scene_animations, "source", "") or "")
+            if scene_source:
+                scene_hash = str(getattr(scene_animations, "source_sha256", "") or "")
+                scene_script = str(getattr(scene_animations, "script_resref", "") or "")
+                intent_count = len(dict(getattr(scene_animations, "intents", {}) or {}))
+                self._log(
+                    f"Simulation scene animations: {scene_script or '(OnEnter)'}.ncs from {scene_source}; "
+                    f"SHA-256 {scene_hash[:12] or '(unavailable)'}, {intent_count} literal intent(s)."
+                )
             plan = build_map_studio_pie_creature_plan(
                 placements,
                 resolver,
@@ -10628,9 +11046,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             actor = self._map_studio_pie_actor
             engine = self._map_studio_pie_animation_engine
             if actor is not None and engine is not None:
-                pose = engine.evaluate()
-                setattr(pose, "_gr_animation_scene_object_id", actor.actor_id)
-                setattr(pose, "_gr_animation_source_model_id", id(actor.source_model))
+                pose = _stamp_map_studio_pie_actor_pose(
+                    engine.evaluate(), actor, self._map_studio_pie_animation_name
+                )
                 runtime_rows.append(
                     (
                         actor.root_node,
@@ -10644,15 +11062,20 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             for entry in self._map_studio_pie_creature_entries:
                 creature_actor = entry["actor"]
                 creature_engine = entry["engine"]
-                pose = entry.pop("initial_pose", None) or creature_engine.evaluate()
-                setattr(pose, "_gr_animation_scene_object_id", creature_actor.actor_id)
-                setattr(pose, "_gr_animation_source_model_id", id(creature_actor.source_model))
+                creature_animation_name = str(
+                    getattr(getattr(creature_engine, "current_animation", None), "name", "") or ""
+                )
+                pose = _stamp_map_studio_pie_actor_pose(
+                    entry.pop("initial_pose", None) or creature_engine.evaluate(),
+                    creature_actor,
+                    creature_animation_name,
+                )
                 runtime_rows.append(
                     (
                         creature_actor.root_node,
                         creature_actor.actor_id,
                         pose,
-                        str(getattr(getattr(creature_engine, "current_animation", None), "name", "") or ""),
+                        creature_animation_name,
                         float(getattr(creature_engine, "current_time", 0.0) or 0.0),
                         float(getattr(getattr(creature_engine, "current_animation", None), "length", 0.0) or 0.0),
                     )
@@ -10734,16 +11157,24 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             engine = entry["engine"]
             step = min(0.25, float(entry.get("pie_animation_elapsed", elapsed) or elapsed))
             entry["pie_animation_elapsed"] = 0.0
-            engine.advance(step)
-            pose = engine.evaluate()
-            setattr(pose, "_gr_animation_scene_object_id", actor.actor_id)
-            setattr(pose, "_gr_animation_source_model_id", id(actor.source_model))
+            still_playing = engine.advance(step)
+            if (
+                entry.get("pie_action_active")
+                and not still_playing
+                and not entry.get("pie_action_hold")
+            ):
+                entity_id = str(getattr(entry.get("spec"), "placement_id", "") or "")
+                self._restore_map_studio_pie_actor_action_animation(entity_id, force=True)
+            animation_name = str(
+                getattr(getattr(engine, "current_animation", None), "name", "") or ""
+            )
+            pose = _stamp_map_studio_pie_actor_pose(engine.evaluate(), actor, animation_name)
             rows.append(
                 (
                     actor.root_node,
                     actor.actor_id,
                     pose,
-                    str(getattr(getattr(engine, "current_animation", None), "name", "") or ""),
+                    animation_name,
                     float(getattr(engine, "current_time", 0.0) or 0.0),
                     float(getattr(getattr(engine, "current_animation", None), "length", 0.0) or 0.0),
                 )
@@ -10751,15 +11182,63 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._map_studio_pie_creature_animation_cursor = (cursor + update_count) % actor_count
         return tuple(rows)
 
+    def map_studio_pie_door_diagnostics(self) -> dict[str, Any]:
+        """Report the loaded module's PIE door plan for artifact/culling diagnosis.
+
+        Editor-side diagnostic: each authored door's resolved genericdoors model,
+        world position (Z reveals a 'floating' door), whether the model loaded,
+        and whether an animated actor was built and matched a static group.
+        """
+
+        manager = getattr(self, "resource_manager", None)
+        game = str(getattr(self.project, "game", "K1") or "K1").strip().upper()
+        result: dict[str, Any] = {"doors": [], "built_actor_count": len(getattr(self, "_map_studio_pie_door_entries", []) or [])}
+        try:
+            from src.core.modules.map_studio_pie_doors import build_map_studio_pie_door_plan
+            from src.core.modules.map_studio_stock_content_preview import load_stock_kotor_model
+
+            placements = self.controller.map_studio_authored_placements_snapshot()
+            resolver = getattr(self.controller, "_map_studio_stock_template_resolver", None)
+            if placements is None or resolver is None:
+                return {**result, "reason": "no authored placements/resolver"}
+            built_ids = {
+                str(getattr(entry.get("spec"), "door_id", "")) for entry in (getattr(self, "_map_studio_pie_door_entries", []) or [])
+            }
+            for spec in build_map_studio_pie_door_plan(placements, resolver):
+                model_loads = False
+                if spec.model_resref and manager is not None:
+                    try:
+                        model_loads = load_stock_kotor_model(manager, spec.model_resref, game) is not None
+                    except Exception:
+                        model_loads = False
+                result["doors"].append({
+                    "door_id": spec.door_id,
+                    "tag": spec.tag,
+                    "model_resref": spec.model_resref,
+                    "position": [round(float(v), 3) for v in spec.position],
+                    "z": round(float(spec.position[2]), 3),
+                    "can_build_actor": bool(spec.can_build_actor),
+                    "model_loads": bool(model_loads),
+                    "actor_built": spec.door_id in built_ids,
+                })
+        except Exception as exc:
+            result["reason"] = f"door diagnostics failed: {exc}"
+        result["door_count"] = len(result["doors"])
+        result["unresolved_model_count"] = sum(1 for d in result["doors"] if not d["model_resref"])
+        result["model_load_fail_count"] = sum(1 for d in result["doors"] if d["model_resref"] and not d["model_loads"])
+        return result
+
     def _create_map_studio_pie_door_actors(self, preview_model: Any, game: str) -> str:
         """Swap each static door for an animated door actor that opens in PIE."""
 
         self._map_studio_pie_door_entries = []
+        self._map_studio_pie_hidden_door_groups = []
         manager = getattr(self, "resource_manager", None)
         root = getattr(preview_model, "root_node", None)
         session = self._map_studio_pie_session
         if manager is None or root is None or session is None:
             return ""
+        original_children = list(tuple(getattr(root, "children", ()) or ()))
         try:
             from src.core.animation.animation_engine import AnimationEngine, SuperModelResolver
             from src.core.modules.map_studio_pie import attach_map_studio_pie_actor
@@ -10778,7 +11257,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             if not specs:
                 return ""
             SuperModelResolver.configure(manager)
-            # Baked door groups in the resident scene, matched to specs by position.
+            # Build every actor off-tree first. Publication is one transaction:
+            # either all successful wrappers replace their matching static
+            # groups together, or the resident scene stays byte-for-byte intact.
             door_groups = [
                 node
                 for node in tuple(getattr(root, "children", ()) or ())
@@ -10786,49 +11267,84 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             ]
             model_cache: dict[str, Any] = {}
             hidden_nodes: set[int] = set()
+            hidden_groups: list[tuple[int, Any]] = []
             entries: list[dict[str, Any]] = []
+            failures: list[str] = []
             for spec in specs:
-                source = model_cache.get(spec.model_resref)
-                if source is None:
-                    source = load_stock_kotor_model(manager, spec.model_resref, game)
-                    model_cache[spec.model_resref] = source
-                if source is None:
-                    continue
-                import copy as _copy
+                try:
+                    source = model_cache.get(spec.model_resref)
+                    if source is None:
+                        source = load_stock_kotor_model(manager, spec.model_resref, game)
+                        model_cache[spec.model_resref] = source
+                    if source is None:
+                        failures.append(f"{spec.tag or spec.door_id}: model {spec.model_resref} was unavailable")
+                        continue
+                    import copy as _copy
 
-                actor_model = _copy.deepcopy(source)
-                actor = attach_map_studio_pie_actor(
-                    preview_model,
-                    actor_model,
-                    position=spec.position,
-                    facing_radians=spec.bearing,
-                    actor_id=f"__map_studio_pie_door__:{spec.door_id}",
-                    recompute_bounds=False,
-                    append_to_preview=True,
-                )
-                if actor is None:
-                    continue
-                engine = AnimationEngine(actor_model)
-                play_map_studio_pie_door_clip(
-                    engine, door_state_clip_candidates(is_open=False, transitioning=False), loop=True
-                )
-                # Hide the nearest baked door node (avoid a doubled static door).
-                nearest = min(
-                    (node for node in door_groups if id(node) not in hidden_nodes),
-                    key=lambda node: sum(
-                        (float(getattr(node, "position", (0, 0, 0))[i]) - spec.position[i]) ** 2 for i in range(3)
-                    ),
-                    default=None,
-                )
-                if nearest is not None:
-                    hidden_nodes.add(id(nearest))
-                entries.append({"actor": actor, "engine": engine, "spec": spec, "is_open": False, "transition_time": 0.0})
-            if hidden_nodes:
-                root.children = [node for node in tuple(getattr(root, "children", ()) or ()) if id(node) not in hidden_nodes]
+                    actor_model = _copy.deepcopy(source)
+                    actor = attach_map_studio_pie_actor(
+                        preview_model,
+                        actor_model,
+                        position=spec.position,
+                        facing_radians=spec.bearing,
+                        actor_id=f"__map_studio_pie_door__:{spec.door_id}",
+                        recompute_bounds=False,
+                        append_to_preview=False,
+                        model_yaw_offset_radians=0.0,
+                    )
+                    if actor is None:
+                        failures.append(f"{spec.tag or spec.door_id}: actor hierarchy could not be retained")
+                        continue
+                    engine = AnimationEngine(actor_model)
+                    play_map_studio_pie_door_clip(
+                        engine, door_state_clip_candidates(is_open=False, transitioning=False), loop=True
+                    )
+                    exact = next(
+                        (
+                            node
+                            for node in door_groups
+                            if id(node) not in hidden_nodes
+                            and str(getattr(node, "_gr_map_studio_placement_id", "") or "") == spec.door_id
+                        ),
+                        None,
+                    )
+                    nearest = exact or min(
+                        (node for node in door_groups if id(node) not in hidden_nodes),
+                        key=lambda node: sum(
+                            (float(getattr(node, "position", (0, 0, 0))[i]) - spec.position[i]) ** 2 for i in range(3)
+                        ),
+                        default=None,
+                    )
+                    if nearest is not None:
+                        hidden_nodes.add(id(nearest))
+                        hidden_groups.append((original_children.index(nearest), nearest))
+                    entries.append(
+                        {
+                            "actor": actor,
+                            "engine": engine,
+                            "spec": spec,
+                            "is_open": False,
+                            "transitioning": False,
+                        }
+                    )
+                except Exception as exc:
+                    failures.append(f"{spec.tag or spec.door_id}: {exc}")
+
+            wrappers = [entry["actor"].root_node for entry in entries]
+            root.children = [node for node in original_children if id(node) not in hidden_nodes] + wrappers
+            for node in tuple(root.children or ()):
+                node.parent = root
             self._map_studio_pie_door_entries = entries
+            self._map_studio_pie_hidden_door_groups = sorted(hidden_groups, key=lambda item: item[0])
+            if failures:
+                return "Animated door preview skipped " + "; ".join(failures[:4])
             return ""
         except Exception as exc:
+            root.children = original_children
+            for node in original_children:
+                node.parent = root
             self._map_studio_pie_door_entries = []
+            self._map_studio_pie_hidden_door_groups = []
             return f"Animated door setup failed: {exc}"
 
     def _update_map_studio_pie_door_actors(self, frame: Any, delta_time: float) -> tuple[tuple[Any, ...], ...]:
@@ -10837,28 +11353,33 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         entries = self._map_studio_pie_door_entries
         if not entries:
             return ()
-        from src.core.modules.map_studio_pie_doors import (
-            door_state_clip_candidates,
-            play_map_studio_pie_door_clip,
-        )
+        from src.core.modules.map_studio_pie_doors import advance_map_studio_pie_door_animation
 
         states = {str(getattr(state, "entity_id", "")): bool(getattr(state, "is_open", False)) for state in tuple(getattr(frame, "door_states", ()) or ())}
-        step = max(0.0, min(float(delta_time), 0.25))
         rows: list[tuple[Any, ...]] = []
         for entry in entries:
             spec = entry["spec"]
             engine = entry["engine"]
             actor = entry["actor"]
-            wanted_open = states.get(spec.door_id, entry["is_open"])
-            if wanted_open != entry["is_open"]:
-                entry["is_open"] = wanted_open
-                entry["transition_time"] = 0.35  # brief swing before the held pose
-                play_map_studio_pie_door_clip(engine, door_state_clip_candidates(is_open=wanted_open, transitioning=True), loop=False)
-            elif entry["transition_time"] > 0.0:
-                entry["transition_time"] = max(0.0, entry["transition_time"] - step)
-                if entry["transition_time"] <= 0.0:
-                    play_map_studio_pie_door_clip(engine, door_state_clip_candidates(is_open=wanted_open, transitioning=False), loop=True)
-            engine.advance(step)
+            current_open = bool(entry["is_open"])
+            transitioning = bool(entry.get("transitioning", False))
+            wanted_open = states.get(spec.door_id, current_open)
+            # The initial closed/open hold pose was published with the actor
+            # batch. Stable doors do not need their identical pose evaluated,
+            # cache-invalidated, and resubmitted on every 16 ms PIE tick.
+            # Continue publishing while a one-shot transition is active and
+            # once more when it lands on the final held pose.
+            if bool(wanted_open) == current_open and not transitioning:
+                continue
+            animation_step = advance_map_studio_pie_door_animation(
+                engine,
+                wanted_open=wanted_open,
+                current_open=current_open,
+                transitioning=transitioning,
+                delta_time=delta_time,
+            )
+            entry["is_open"] = animation_step.is_open
+            entry["transitioning"] = animation_step.transitioning
             pose = engine.evaluate()
             setattr(pose, "_gr_animation_scene_object_id", actor.actor_id)
             setattr(pose, "_gr_animation_source_model_id", id(actor.source_model))
@@ -10881,9 +11402,11 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         player = self._map_studio_pie_actor
         creature_entries = tuple(self._map_studio_pie_creature_entries)
         door_entries = tuple(self._map_studio_pie_door_entries)
+        party_entries = tuple(self._map_studio_pie_party_actors)
         actors = (
             ([player] if player is not None else [])
             + [entry["actor"] for entry in creature_entries]
+            + [entry["actor"] for entry in party_entries if entry.get("actor") is not None]
             + [entry["actor"] for entry in door_entries]
         )
         preview_model = next((actor.preview_model for actor in actors if actor is not None), None)
@@ -10900,6 +11423,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 pass
         root = getattr(preview_model, "root_node", None)
         if root is not None:
+            # Door indices were captured after creature statics were hidden, so
+            # unwind in reverse publication order: doors first, creatures next.
+            for original_index, group in self._map_studio_pie_hidden_door_groups:
+                if any(group is child for child in tuple(root.children or ())):
+                    continue
+                group.parent = root
+                root.children.insert(min(max(0, int(original_index)), len(root.children)), group)
             for original_index, group in self._map_studio_pie_hidden_creature_groups:
                 if any(group is child for child in tuple(root.children or ())):
                     continue
@@ -10917,12 +11447,14 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 except Exception:
                     pass
         self._map_studio_pie_actor = None
+        self._map_studio_pie_party_actors = []
         self._map_studio_pie_animation_engine = None
         self._map_studio_pie_animation_name = ""
         self._map_studio_pie_animation_run = False
         self._map_studio_pie_creature_entries = []
         self._map_studio_pie_hidden_creature_groups = []
         self._map_studio_pie_door_entries = []
+        self._map_studio_pie_hidden_door_groups = []
         self._map_studio_pie_creature_summary = "creatures 0"
         self._map_studio_pie_creature_animation_budget = 0.0
         self._map_studio_pie_creature_animation_cursor = 0
@@ -11002,6 +11534,142 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._map_studio_pie_audio_summary = "audio unavailable"
             return f"Ambient UTS preview could not start: {exc}"
 
+    def _start_map_studio_pie_dialogue_audio(self, game: str) -> str:
+        """Create the bounded authored DLG voice/sound playback adapter."""
+
+        self._stop_map_studio_pie_dialogue_audio()
+        manager = getattr(self, "resource_manager", None)
+        if manager is None:
+            return "Dialogue audio is unavailable because the resource library is missing."
+        try:
+            from src.adapters.qt_audio.map_studio_pie_audio import MapStudioPIEDialogueAudio
+
+            audio = MapStudioPIEDialogueAudio(manager, game, self)
+            audio.warningRaised.connect(
+                lambda message: self._log(f"Simulation dialogue audio: {message}")
+            )
+            self._map_studio_pie_dialogue_audio_runtime = audio
+            self._map_studio_pie_dialogue_audio_signature = ()
+            return ""
+        except Exception as exc:
+            self._map_studio_pie_dialogue_audio_runtime = None
+            return f"Dialogue audio preview could not start: {exc}"
+
+    def _sync_map_studio_pie_dialogue_audio(self, gameplay: Any) -> None:
+        audio = self._map_studio_pie_dialogue_audio_runtime
+        if audio is None:
+            return
+        dialogue = getattr(gameplay, "dialogue", None)
+        listening = bool(
+            dialogue is not None
+            and not bool(getattr(dialogue, "ended", False))
+            and str(getattr(dialogue, "state", "") or "").strip().lower() == "listening"
+        )
+        signature = (
+            str(getattr(dialogue, "current_node_id", "") or ""),
+            str(getattr(dialogue, "voice_resref", "") or "").strip().lower(),
+            str(getattr(dialogue, "sound_resref", "") or "").strip().lower(),
+        ) if listening else ()
+        if signature == self._map_studio_pie_dialogue_audio_signature:
+            return
+        self._map_studio_pie_dialogue_audio_signature = signature
+        if not signature:
+            audio.stop()
+            self._reset_map_studio_pie_dialogue_line_timer()
+            return
+        audio.play_line(signature[1], signature[2])
+        self._begin_map_studio_pie_dialogue_line_timer(dialogue, signature)
+
+    def _reset_map_studio_pie_dialogue_line_timer(self) -> None:
+        self._map_studio_pie_dialogue_line_signature = ()
+        self._map_studio_pie_dialogue_line_elapsed = 0.0
+        self._map_studio_pie_dialogue_line_interval = 0.0
+
+    def _begin_map_studio_pie_dialogue_line_timer(
+        self,
+        dialogue: Any,
+        signature: tuple[str, ...],
+    ) -> None:
+        from src.core.modules.map_studio_pie_dialogue import map_studio_pie_dialogue_line_interval
+
+        audio = self._map_studio_pie_dialogue_audio_runtime
+        duration = getattr(audio, "current_duration_seconds", None) if audio is not None else None
+        self._map_studio_pie_dialogue_line_signature = tuple(signature)
+        self._map_studio_pie_dialogue_line_elapsed = 0.0
+        self._map_studio_pie_dialogue_line_interval = map_studio_pie_dialogue_line_interval(
+            str(getattr(dialogue, "text", "") or ""),
+            delay_milliseconds=int(getattr(dialogue, "delay", -1) or -1),
+            audio_duration_seconds=duration,
+        )
+
+    def _advance_map_studio_pie_dialogue_line_timer(self, gameplay: Any, delta_time: float) -> None:
+        """Auto-advance only after the node's scheduled editor interval.
+
+        Audio completion never advances the graph directly.  This timer owns
+        progression, extends to WAV/Qt duration when available, and freezes
+        with the RTwP pause.  Exact retail WaitFlags bits and LIP timing remain
+        unknown and are deliberately not fabricated here.
+        """
+
+        dialogue = getattr(gameplay, "dialogue", None)
+        listening = bool(
+            dialogue is not None
+            and not bool(getattr(dialogue, "ended", False))
+            and str(getattr(dialogue, "state", "") or "").strip().lower() == "listening"
+        )
+        signature = (
+            str(getattr(dialogue, "current_node_id", "") or ""),
+            str(getattr(dialogue, "voice_resref", "") or "").strip().lower(),
+            str(getattr(dialogue, "sound_resref", "") or "").strip().lower(),
+        ) if listening else ()
+        if not signature:
+            self._reset_map_studio_pie_dialogue_line_timer()
+            return
+        if signature != self._map_studio_pie_dialogue_line_signature:
+            self._begin_map_studio_pie_dialogue_line_timer(dialogue, signature)
+
+        combat = getattr(gameplay, "combat", None)
+        if combat is not None and bool(getattr(combat, "paused", False)):
+            return
+
+        from src.core.modules.map_studio_pie_dialogue import map_studio_pie_dialogue_line_interval
+
+        audio = self._map_studio_pie_dialogue_audio_runtime
+        duration = getattr(audio, "current_duration_seconds", None) if audio is not None else None
+        self._map_studio_pie_dialogue_line_interval = map_studio_pie_dialogue_line_interval(
+            str(getattr(dialogue, "text", "") or ""),
+            delay_milliseconds=int(getattr(dialogue, "delay", -1) or -1),
+            audio_duration_seconds=duration,
+        )
+        self._map_studio_pie_dialogue_line_elapsed += max(0.0, min(float(delta_time), 0.25))
+        if self._map_studio_pie_dialogue_line_elapsed + 1.0e-9 < self._map_studio_pie_dialogue_line_interval:
+            return
+        # If Qt has not reported duration yet, do not cut off a still-playing
+        # authored line merely because the text fallback expired.
+        if audio is not None and bool(getattr(audio, "active", False)) and duration is None:
+            return
+        session = self._map_studio_pie_session
+        self._reset_map_studio_pie_dialogue_line_timer()
+        if session is not None:
+            session.continue_gameplay_dialogue()
+            self._publish_map_studio_pie_gameplay_state()
+
+    def _stop_map_studio_pie_dialogue_audio(self) -> None:
+        audio = self._map_studio_pie_dialogue_audio_runtime
+        self._map_studio_pie_dialogue_audio_runtime = None
+        self._map_studio_pie_dialogue_audio_signature = ()
+        self._reset_map_studio_pie_dialogue_line_timer()
+        if audio is None:
+            return
+        try:
+            audio.close()
+        except Exception as exc:
+            self._log(f"Simulation dialogue audio cleanup warning: {exc}")
+        try:
+            audio.deleteLater()
+        except RuntimeError:
+            pass
+
     def _update_map_studio_pie_ambient_audio(self, session: Any, frame: Any) -> None:
         """Move the editor listener at 5 Hz so audio cannot consume the render budget."""
 
@@ -11036,8 +11704,13 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         except RuntimeError:
             pass
 
-    def _start_map_studio_pie(self) -> None:
-        """Build a runtime-only WOK/camera preflight from the current KMAP."""
+    def _start_map_studio_pie(self, *, focus_viewport: bool = True) -> None:
+        """Build a runtime-only WOK/camera preflight from the current KMAP.
+
+        Manual Play keeps its keyboard-focus handoff. Focus-safe automation can
+        suppress that final handoff so a non-activating Map Studio window does
+        not promote itself to the foreground on Windows.
+        """
 
         self._cancel_map_studio_component_preview()
         self._cancel_map_studio_texture_paint_stroke()
@@ -11045,7 +11718,10 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if preview_model is None:
             preview_model = getattr(getattr(self.viewport_panel, "viewport", None), "model", None)
         try:
-            build = self.controller.create_map_studio_pie_session(preview_model=preview_model)
+            build = self.controller.create_map_studio_pie_session(
+                preview_model=preview_model,
+                resource_manager=getattr(self, "resource_manager", None),
+            )
         except Exception as exc:
             self._set_map_studio_pie_command_active(False)
             QtWidgets.QMessageBox.warning(self, "Simulation Blocked", f"Map Studio could not start simulation:\n{exc}")
@@ -11077,6 +11753,20 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             float(getattr(camera, "_far", 1000.0)),
         )
         game = str(getattr(self.project, "game", "K1") or "K1").strip().upper()
+        hud_skin_warning = ""
+        configure_game_hud = getattr(self.viewport_panel, "configure_map_studio_pie_game_hud", None)
+        if callable(configure_game_hud):
+            _body_resref, head_resref = self._map_studio_pie_player_settings()
+            player_portrait_resref = f"po_{head_resref}" if head_resref else "po_pmhc01"
+            hud_skin_warning = str(
+                configure_game_hud(
+                    getattr(self, "resource_manager", None),
+                    game,
+                    module_root=self._authored_module_root(),
+                    player_portrait_resref=player_portrait_resref,
+                )
+                or ""
+            )
         # K1 and K2 share the retail DEFAULT camerastyle distance/FOV.
         self._map_studio_pie_desired_camera_distance = 3.2
         camera.fov = 55.0
@@ -11086,29 +11776,49 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._map_studio_pie_status_bucket = -1
         self._map_studio_pie_camera_turn_input = 0.0
         self._map_studio_pie_camera_turn_velocity = 0.0
+        self._map_studio_pie_player_action_state = {}
+        self._map_studio_pie_dialogue_animation_entities = set()
+        self._map_studio_pie_dialogue_animation_policies = {}
+        self._map_studio_pie_dialogue_animation_policies_loaded = False
+        self._map_studio_pie_dialogue_node_id = ""
+        self._map_studio_pie_dialogue_lip_limitation_reported = False
+        self._map_studio_pie_dialogue_camera_animation_signature = None
+        self._map_studio_pie_dialogue_camera_animation_active = False
+        self._map_studio_pie_dialogue_camera_snapshot = None
+        self._reset_map_studio_pie_dialogue_line_timer()
+        self._map_studio_pie_gameplay_mode = "exploration"
         self._map_studio_pie_scope_text = self.map_studio_scope_label.text()
         self._set_map_studio_pie_authoring_enabled(False)
         self._set_map_studio_pie_command_active(True)
         self.viewport_panel.set_map_studio_pie_active(True)
         self._map_studio_pie_actor_warning = self._create_map_studio_pie_player_actor(session, preview_model, game)
         creature_warning = self._create_map_studio_pie_creature_actors(preview_model, game)
+        party_warning = self._create_map_studio_pie_party_actors(session, preview_model, game)
+        if party_warning:
+            self._log(f"Simulation party companions: {party_warning}")
         door_warning = self._create_map_studio_pie_door_actors(preview_model, game)
         runtime_actor_warning = self._activate_map_studio_pie_runtime_actors(preview_model)
         audio_warning = self._start_map_studio_pie_ambient_audio(session, game)
+        dialogue_audio_warning = self._start_map_studio_pie_dialogue_audio(game)
         camera.target = list(session.player_eye_target())
         camera.azimuth = (math.degrees(float(session.state.facing_radians)) + 180.0) % 360.0
         camera.elevation = 7.0
         camera.distance = self._map_studio_pie_desired_camera_distance
         session.set_camera_azimuth(float(camera.azimuth))
         session.reset_camera_collision()
+        set_gameplay_state = getattr(self.viewport_panel, "set_map_studio_pie_gameplay_state", None)
+        if callable(set_gameplay_state):
+            set_gameplay_state(session.gameplay_snapshot())
+        self.viewport_panel.set_map_studio_pie_overlay(session.overlay_geometry())
         self.map_studio_scope_label.setText(
-            "Simulation — not KOTOR proof: W/S moves, Z/C strafes, A/D turns the camera, Ctrl or MMB "
-            "looks about, Caps Lock toggles free-look, and a floor click routes the player. Shift-to-run is "
-            "an editor convenience. Ambient UTS audio is approximated; NCS, dialogue, and creature AI still "
-            "require export and a manual warp to plcaa."
+            "Simulation — not KOTOR proof: W/S moves, Z/C strafes, A/D turns the camera, Q/E cycle targets, "
+            "Enter uses the primary action, number keys choose dialogue replies, and Space pauses combat. "
+            "A floor click routes the player; click a runtime actor to interact. DLG, doors, containers, and "
+            "deterministic d20 combat are editor previews; arbitrary NCS and exact Odyssey AI still require export."
         )
         self._map_studio_pie_timer.start()
-        self.viewport_panel.viewport.setFocus(QtCore.Qt.FocusReason.OtherFocusReason)
+        if focus_viewport:
+            self.viewport_panel.viewport.setFocus(QtCore.Qt.FocusReason.OtherFocusReason)
         self.statusBar().showMessage(
             f"Simulation started: {getattr(build, 'walkable_face_count', 0)} walkable WOK faces; "
             f"{getattr(build, 'collision_triangle_count', 0)} camera-collision triangles."
@@ -11125,19 +11835,32 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._log(f"Simulation retained actor warning: {runtime_actor_warning}")
         if audio_warning:
             self._log(f"Simulation ambient audio warning: {audio_warning}")
+        if dialogue_audio_warning:
+            self._log(f"Simulation dialogue audio warning: {dialogue_audio_warning}")
+        if hud_skin_warning:
+            self._log(f"Simulation game-HUD skin warning: {hud_skin_warning}")
 
     def _stop_map_studio_pie(self) -> None:
         """Stop simulation and restore the exact authoring camera and controls."""
 
         if self._map_studio_pie_session is None:
             self._stop_map_studio_pie_ambient_audio()
+            self._stop_map_studio_pie_dialogue_audio()
             self._set_map_studio_pie_command_active(False)
             return
         self._map_studio_pie_timer.stop()
         self._stop_map_studio_pie_ambient_audio()
+        self._stop_map_studio_pie_dialogue_audio()
         self._remove_map_studio_pie_runtime_actors()
         self.viewport_panel.set_map_studio_pie_active(False)
         self.viewport_panel.set_map_studio_pie_overlay(None)
+        clear_gameplay_state = getattr(self.viewport_panel, "clear_map_studio_pie_gameplay_state", None)
+        if callable(clear_gameplay_state):
+            clear_gameplay_state()
+        else:
+            set_gameplay_state = getattr(self.viewport_panel, "set_map_studio_pie_gameplay_state", None)
+            if callable(set_gameplay_state):
+                set_gameplay_state(None)
         camera = getattr(getattr(self.viewport_panel, "viewport", None), "camera", None)
         snapshot = self._map_studio_pie_camera_snapshot
         if camera is not None and snapshot is not None:
@@ -11154,6 +11877,17 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._map_studio_pie_actor_warning = ""
         self._map_studio_pie_camera_turn_input = 0.0
         self._map_studio_pie_camera_turn_velocity = 0.0
+        self._map_studio_pie_player_action_state = {}
+        self._map_studio_pie_dialogue_animation_entities = set()
+        self._map_studio_pie_dialogue_animation_policies = {}
+        self._map_studio_pie_dialogue_animation_policies_loaded = False
+        self._map_studio_pie_dialogue_node_id = ""
+        self._map_studio_pie_dialogue_lip_limitation_reported = False
+        self._map_studio_pie_dialogue_camera_animation_signature = None
+        self._map_studio_pie_dialogue_camera_animation_active = False
+        self._map_studio_pie_dialogue_camera_snapshot = None
+        self._reset_map_studio_pie_dialogue_line_timer()
+        self._map_studio_pie_gameplay_mode = "exploration"
         self._set_map_studio_pie_authoring_enabled(True)
         self._set_map_studio_pie_command_active(False)
         if self._map_studio_pie_scope_text:
@@ -11180,6 +11914,443 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             run=bool(values.get("run", False)),
         )
 
+    @staticmethod
+    def _map_studio_pie_entity_id_from_runtime_id(value: object) -> str:
+        """Normalize retained actor IDs back to the registry's authored IDs."""
+
+        text = str(value or "").strip()
+        for prefix in (
+            "__map_studio_pie_creature__:",
+            "__map_studio_pie_door__:",
+            "__map_studio_pie_placeable__:",
+        ):
+            if text.startswith(prefix):
+                return text[len(prefix) :]
+        return text
+
+    def _publish_map_studio_pie_gameplay_state(self) -> None:
+        session = self._map_studio_pie_session
+        if session is None:
+            return
+        setter = getattr(self.viewport_panel, "set_map_studio_pie_gameplay_state", None)
+        if callable(setter):
+            setter(session.gameplay_snapshot())
+        self.viewport_panel.set_map_studio_pie_overlay(session.overlay_geometry())
+
+    def _handle_map_studio_pie_gameplay_action(self, payload: object) -> None:
+        """Route one HUD/keyboard action through the headless PIE session."""
+
+        session = self._map_studio_pie_session
+        if session is None:
+            return
+        values = dict(payload or {}) if isinstance(payload, dict) else {"action": str(payload or "")}
+        action = str(values.get("action") or values.get("command") or "").strip().lower()
+        result: Any = None
+        try:
+            if action == "focus_cycle":
+                result = session.cycle_gameplay_focus(int(values.get("direction", 1) or 1))
+            elif action == "focus_entity":
+                entity_id = self._map_studio_pie_entity_id_from_runtime_id(values.get("entity_id"))
+                result = session.focus_gameplay_entity(entity_id)
+            elif action in {"primary", "dialogue_continue"}:
+                snapshot = session.gameplay_snapshot()
+                dialogue = getattr(snapshot, "dialogue", None)
+                if dialogue is not None and not bool(getattr(dialogue, "ended", False)):
+                    if bool(getattr(dialogue, "can_continue", False)):
+                        result = session.continue_gameplay_dialogue()
+                    elif tuple(getattr(dialogue, "choices", ()) or ()):
+                        self.statusBar().showMessage("Choose a numbered dialogue reply (1–9).", 4000)
+                    else:
+                        result = session.continue_gameplay_dialogue()
+                else:
+                    requested_command = str(values.get("action_command") or "").strip() or None
+                    result = session.activate_gameplay_focus(requested_command)
+            elif action == "dialogue_choice":
+                result = session.choose_gameplay_dialogue(int(values.get("number", 0) or 0))
+            elif action == "combat_toggle_pause":
+                result = session.toggle_gameplay_combat_pause()
+            elif action == "combat_clear_queue":
+                result = session.clear_gameplay_combat_queue()
+            elif action == "combat_attack":
+                target_id = self._map_studio_pie_entity_id_from_runtime_id(values.get("target_id"))
+                result = session.activate_gameplay_entity(target_id, "attack")
+            elif action == "modal_close":
+                if not session.close_gameplay_modal():
+                    self._stop_map_studio_pie()
+                    return
+            elif action == "interact_entity":
+                entity_id = self._map_studio_pie_entity_id_from_runtime_id(values.get("entity_id"))
+                result = session.activate_gameplay_entity(entity_id)
+            elif action == "inventory_take":
+                entity_id = self._map_studio_pie_entity_id_from_runtime_id(values.get("entity_id"))
+                result = session.take_gameplay_item(
+                    entity_id,
+                    str(values.get("resref") or ""),
+                    int(values.get("quantity", 1) or 1),
+                )
+            elif action == "inventory_take_all":
+                entity_id = self._map_studio_pie_entity_id_from_runtime_id(values.get("entity_id"))
+                result = session.take_all_gameplay_items(entity_id)
+            else:
+                self._log(f"Simulation ignored unknown gameplay action {action or '(blank)'!r}.")
+                return
+        except Exception as exc:
+            self._log(f"Simulation gameplay action {action or '(blank)'} failed: {exc}")
+            self.statusBar().showMessage(f"Simulation action failed: {exc}", 6000)
+        else:
+            message = str(getattr(result, "message", "") or "")
+            if message:
+                self.statusBar().showMessage(message, 5000)
+        self._publish_map_studio_pie_gameplay_state()
+
+    def _map_studio_pie_actor_action_target(self, entity_id: str) -> tuple[Any, dict[str, Any]] | None:
+        wanted = str(entity_id or "")
+        if wanted == "pie:player":
+            engine = self._map_studio_pie_animation_engine
+            return (engine, self._map_studio_pie_player_action_state) if engine is not None else None
+        for entry in self._map_studio_pie_creature_entries:
+            spec = entry.get("spec")
+            if str(getattr(spec, "placement_id", "") or "") == wanted:
+                return entry.get("engine"), entry
+        return None
+
+    def _play_map_studio_pie_actor_action_animation(
+        self,
+        entity_id: str,
+        candidates: tuple[str, ...],
+        *,
+        role: str,
+        loop: bool,
+    ) -> bool:
+        target = self._map_studio_pie_actor_action_target(entity_id)
+        if target is None:
+            return False
+        engine, state = target
+        if engine is None:
+            return False
+        current = str(getattr(getattr(engine, "current_animation", None), "name", "") or "").lower()
+        if not state.get("pie_action_active"):
+            state["pie_action_restore"] = current or "pause1"
+        for candidate in tuple(dict.fromkeys(str(value or "").strip().lower() for value in candidates)):
+            if candidate and engine.play(candidate, loop=loop, blend=True):
+                state["pie_action_active"] = True
+                state["pie_action_role"] = str(role or "")
+                state["pie_action_hold"] = str(role or "") == "death"
+                state["pie_action_loop"] = bool(loop)
+                return True
+        return False
+
+    def _restore_map_studio_pie_actor_action_animation(self, entity_id: str, *, force: bool = False) -> None:
+        target = self._map_studio_pie_actor_action_target(entity_id)
+        if target is None:
+            return
+        engine, state = target
+        if engine is None or not state.get("pie_action_active"):
+            return
+        if state.get("pie_action_hold") and not force:
+            return
+        restore = str(state.get("pie_action_restore") or "pause1")
+        if not engine.play(restore, loop=True, blend=True):
+            engine.play("pause1", loop=True, blend=True)
+        for key in ("pie_action_active", "pie_action_role", "pie_action_hold", "pie_action_loop", "pie_action_restore"):
+            state.pop(key, None)
+
+    def _apply_map_studio_pie_combat_animation_event(self, event: Any) -> None:
+        role = str(getattr(event, "animation_role", "") or "").strip().lower()
+        entity_id = str(getattr(event, "entity_id", "") or "")
+        if not role or not entity_id:
+            return
+        defaults = {
+            "ready": ("ready", "combat", "pause1"),
+            "attack": ("c2a1", "c1a1", "c3a1", "attack1"),
+            "damage": ("c2d1", "c1d1", "c3d1", "damage1", "hit"),
+            "death": ("dead1", "death1", "dead", "death"),
+        }
+        candidates = tuple(getattr(event, "animation_candidates", ()) or ()) + defaults.get(role, ())
+        if candidates and not self._play_map_studio_pie_actor_action_animation(
+            entity_id,
+            candidates,
+            role=role,
+            loop=role == "ready",
+        ):
+            self._log(f"Simulation actor {entity_id} has no resolvable {role} combat clip.")
+
+    def _map_studio_pie_dialogue_animation_policy(self, animation_id: int) -> Any:
+        """Resolve retail DialogAnimations flags once per PIE run."""
+
+        if not self._map_studio_pie_dialogue_animation_policies_loaded:
+            self._map_studio_pie_dialogue_animation_policies_loaded = True
+            manager = getattr(self, "resource_manager", None)
+            payload = b""
+            if manager is not None:
+                try:
+                    from pykotor.resource.type import ResourceType
+
+                    getter = getattr(manager, "get_strict", None) or getattr(manager, "get", None)
+                    game = str(getattr(self.project, "game", "K1") or "K1").strip().upper()
+                    if callable(getter):
+                        try:
+                            value = getter("dialoganimations", ResourceType.TwoDA.type_id, game)
+                        except TypeError:
+                            value = getter("dialoganimations", ResourceType.TwoDA.type_id)
+                    else:
+                        value = None
+                    if isinstance(value, (bytes, bytearray, memoryview)):
+                        payload = bytes(value)
+                    else:
+                        data = getattr(value, "data", None)
+                        payload = bytes(data() if callable(data) else data or b"")
+                except Exception as exc:
+                    self._log(f"Simulation dialogue animation policy lookup failed: {exc}")
+            try:
+                from src.core.modules.map_studio_pie_dialogue import (
+                    load_map_studio_pie_dialogue_animation_policies,
+                )
+
+                self._map_studio_pie_dialogue_animation_policies = (
+                    load_map_studio_pie_dialogue_animation_policies(payload)
+                )
+            except Exception:
+                self._map_studio_pie_dialogue_animation_policies = {}
+        wanted = int(animation_id)
+        return self._map_studio_pie_dialogue_animation_policies.get(
+            wanted,
+            self._map_studio_pie_dialogue_animation_policies.get(wanted % 10000),
+        )
+
+    def _sync_map_studio_pie_dialogue_animations(self, gameplay: Any) -> None:
+        dialogue = getattr(gameplay, "dialogue", None)
+        active = bool(
+            dialogue is not None
+            and not bool(getattr(dialogue, "ended", False))
+            and str(getattr(dialogue, "current_node_id", "") or "")
+        )
+        dialogue_state = str(getattr(dialogue, "state", "") or "").strip().lower() if active else ""
+        node_id = str(getattr(dialogue, "current_node_id", "") or "") if active else ""
+        animation_signature = f"{node_id}:{dialogue_state}" if node_id else ""
+        if animation_signature == self._map_studio_pie_dialogue_node_id:
+            return
+        for entity_id in tuple(self._map_studio_pie_dialogue_animation_entities):
+            self._restore_map_studio_pie_actor_action_animation(entity_id, force=True)
+        self._map_studio_pie_dialogue_animation_entities.clear()
+        self._map_studio_pie_dialogue_node_id = animation_signature
+        if not active or dialogue_state != "listening":
+            return
+        owner_id = str(getattr(dialogue, "owner_id", "") or "")
+        registry = getattr(self._map_studio_pie_session, "entity_registry", None)
+        owner = registry.by_id(owner_id) if registry is not None else None
+        owner_tags = {
+            "owner",
+            str(getattr(owner, "tag", "") or "").strip().lower(),
+            str(getattr(dialogue, "speaker_tag", "") or "").strip().lower(),
+        }
+        try:
+            from src.core.modules.map_studio_scene_animations import scene_animation_clip_candidates
+        except Exception:
+            scene_animation_clip_candidates = lambda _constant: ()
+        for participant, constant in tuple(getattr(dialogue, "animations", ()) or ()):
+            clean_participant = str(participant or "").strip().lower()
+            if clean_participant in {"player", "pc", "listener"}:
+                entity_id = "pie:player"
+            elif clean_participant in owner_tags or not clean_participant:
+                entity_id = owner_id
+            else:
+                entity = next(
+                    (
+                        row
+                        for row in tuple(getattr(registry, "entities", ()) or ())
+                        if str(getattr(row, "tag", "") or "").strip().lower() == clean_participant
+                    ),
+                    None,
+                )
+                entity_id = str(getattr(entity, "entity_id", "") or "")
+            # PyKotor retains the historical 10000-based DLG value; both the
+            # retail table row and the existing clip resolver use its base ID.
+            candidates = tuple(scene_animation_clip_candidates(int(constant) % 10000))
+            policy = self._map_studio_pie_dialogue_animation_policy(int(constant))
+            looping = bool(getattr(policy, "looping", False))
+            fire_and_forget = bool(getattr(policy, "fire_and_forget", False))
+            overlay = bool(getattr(policy, "overlay", False))
+            if overlay:
+                self._log(
+                    f"Simulation dialogue animation {constant} requests Overlay; the retained actor API "
+                    "has no layered track, so PIE presents it as a blended base clip."
+                )
+            if entity_id and candidates and self._play_map_studio_pie_actor_action_animation(
+                entity_id,
+                candidates,
+                role="dialogue",
+                loop=looping,
+            ):
+                # FireForget clips own their natural one-shot completion; all
+                # other node intents are stopped/replaced at the node boundary.
+                if not fire_and_forget:
+                    self._map_studio_pie_dialogue_animation_entities.add(entity_id)
+        # Retail keeps node AnimList body gestures and LIP facial curves on
+        # separate channels.  The current retained-actor API has no facial
+        # LIP track, while Character Studio's LIPPlayback mutates an authored
+        # scene and is therefore unsafe to reuse here.  Preserve only explicit
+        # DLG animations; never turn a voiced line into a fabricated looping
+        # body-talk animation as a substitute for missing facial playback.
+        if (
+            str(getattr(dialogue, "voice_resref", "") or "")
+            and not self._map_studio_pie_dialogue_lip_limitation_reported
+        ):
+            self._map_studio_pie_dialogue_lip_limitation_reported = True
+            self._log(
+                "Simulation dialogue facial animation: authored VO is playing and explicit DLG body "
+                "animations are preserved, but retained actors do not yet expose the facial LIP curve "
+                "track. PIE leaves lip motion unavailable instead of fabricating a looping body-talk clip."
+            )
+
+    def _try_map_studio_pie_dialogue_camera_animation(
+        self,
+        dialogue: Any,
+        *,
+        speaker_position: tuple[float, ...],
+        listener_position: tuple[float, ...],
+    ) -> bool:
+        """Try the renderer's optional authored camera-animation hook first."""
+
+        animation_id = getattr(dialogue, "camera_animation", None)
+        if animation_id is None:
+            self._map_studio_pie_dialogue_camera_animation_signature = None
+            self._map_studio_pie_dialogue_camera_animation_active = False
+            return False
+        signature = (str(getattr(dialogue, "current_node_id", "") or ""), int(animation_id))
+        if signature == self._map_studio_pie_dialogue_camera_animation_signature:
+            return bool(self._map_studio_pie_dialogue_camera_animation_active)
+        self._map_studio_pie_dialogue_camera_animation_signature = signature
+        self._map_studio_pie_dialogue_camera_animation_active = False
+        viewport = getattr(self.viewport_panel, "viewport", None)
+        presenter = getattr(viewport, "play_map_studio_pie_dialogue_camera_animation", None)
+        if not callable(presenter):
+            # The current ArcBall renderer has no camera-animation track API;
+            # keep the ordered attempt explicit and fall through to the placed
+            # camera / angle solver instead of pretending the track played.
+            return False
+        try:
+            active = bool(
+                presenter(
+                    int(animation_id),
+                    speaker_position=speaker_position,
+                    listener_position=listener_position,
+                    field_of_view=getattr(dialogue, "camera_fov", None),
+                    camera_height_offset=float(getattr(dialogue, "camera_height_offset", 0.0) or 0.0),
+                    target_height_offset=float(getattr(dialogue, "target_height_offset", 0.0) or 0.0),
+                )
+            )
+        except Exception as exc:
+            self._log(f"Simulation dialogue camera animation {animation_id} fell back: {exc}")
+            active = False
+        self._map_studio_pie_dialogue_camera_animation_active = active
+        return active
+
+    def _update_map_studio_pie_dialogue_camera(self, gameplay: Any, camera: Any) -> None:
+        """Apply animation-first, placed-camera, then angle-based framing."""
+
+        mode = str(getattr(gameplay, "mode", "exploration") or "exploration")
+        dialogue = getattr(gameplay, "dialogue", None)
+        if mode != "dialogue" or dialogue is None:
+            if self._map_studio_pie_gameplay_mode == "dialogue":
+                snapshot = self._map_studio_pie_dialogue_camera_snapshot
+                if snapshot is not None:
+                    camera.azimuth, camera.elevation, camera.distance, camera.fov = snapshot
+                    self._map_studio_pie_desired_camera_distance = float(snapshot[2])
+                else:
+                    camera.fov = 55.0
+                    self._map_studio_pie_desired_camera_distance = 3.2
+                    camera.distance = 3.2
+                self._map_studio_pie_dialogue_camera_snapshot = None
+                self._map_studio_pie_dialogue_camera_animation_signature = None
+                self._map_studio_pie_dialogue_camera_animation_active = False
+                reset_collision = getattr(self._map_studio_pie_session, "reset_camera_collision", None)
+                if callable(reset_collision):
+                    reset_collision()
+            self._map_studio_pie_gameplay_mode = mode
+            return
+        session = self._map_studio_pie_session
+        registry = getattr(session, "entity_registry", None)
+        owner = registry.by_id(str(getattr(dialogue, "owner_id", "") or "")) if registry is not None else None
+        if owner is None:
+            self._map_studio_pie_gameplay_mode = mode
+            return
+        player = tuple(session.state.position)
+        target = tuple(getattr(owner, "position", player) or player)
+        target_height_offset = float(getattr(dialogue, "target_height_offset", 0.0) or 0.0)
+        camera_height_offset = float(getattr(dialogue, "camera_height_offset", 0.0) or 0.0)
+        entering_dialogue = self._map_studio_pie_gameplay_mode != "dialogue"
+        if entering_dialogue:
+            self._map_studio_pie_dialogue_camera_snapshot = (
+                float(camera.azimuth),
+                float(camera.elevation),
+                float(camera.distance),
+                float(getattr(camera, "fov", 55.0)),
+            )
+        if self._try_map_studio_pie_dialogue_camera_animation(
+            dialogue,
+            speaker_position=target,
+            listener_position=player,
+        ):
+            if getattr(dialogue, "camera_fov", None) is not None:
+                camera.fov = float(dialogue.camera_fov)
+            self._map_studio_pie_gameplay_mode = mode
+            return
+        # Placed shots (CameraAngle 6) resolve the authored area camera; the
+        # discrete angle shot table and all framing math live in the headless
+        # solver so they stay testable outside Qt.
+        from src.core.modules.map_studio_pie_dialogue_camera import (
+            DialoguePlacedCamera,
+            solve_map_studio_pie_dialogue_camera,
+        )
+
+        placed_camera = None
+        camera_id = getattr(dialogue, "camera_id", None)
+        if int(getattr(dialogue, "camera_angle", 0) or 0) == 6 and camera_id is not None and registry is not None:
+            authored_camera = next(
+                (
+                    row
+                    for row in registry.of_kind("camera")
+                    if int((getattr(row, "metadata", {}) or {}).get("camera_id", -1)) == int(camera_id)
+                ),
+                None,
+            )
+            if authored_camera is not None:
+                metadata = dict(getattr(authored_camera, "metadata", {}) or {})
+                placed_camera = DialoguePlacedCamera(
+                    position=tuple(
+                        float(value)
+                        for value in tuple(getattr(authored_camera, "position", player) or player)[:3]
+                    ),
+                    height=float(metadata.get("height", 0.0) or 0.0),
+                    field_of_view=float(metadata.get("field_of_view", 45.0) or 45.0),
+                )
+        framing = solve_map_studio_pie_dialogue_camera(
+            listener_position=player,
+            speaker_position=target,
+            camera_angle=int(getattr(dialogue, "camera_angle", 0) or 0),
+            camera_fov=getattr(dialogue, "camera_fov", None),
+            camera_height_offset=camera_height_offset,
+            target_height_offset=target_height_offset,
+            placed_camera=placed_camera,
+        )
+        camera.target = list(framing.target)
+        camera.azimuth = framing.azimuth_deg
+        camera.elevation = framing.elevation_deg
+        camera.fov = framing.fov
+        self._map_studio_pie_desired_camera_distance = framing.distance
+        if framing.mode == "placed":
+            camera.distance = framing.distance
+        else:
+            # An angle shot never pushes the camera further out than its authored
+            # shot distance, but a player who walked closer keeps that framing.
+            camera.distance = min(float(getattr(camera, "distance", framing.distance) or framing.distance), framing.distance)
+        if entering_dialogue:
+            reset_collision = getattr(session, "reset_camera_collision", None)
+            if callable(reset_collision):
+                reset_collision()
+        self._map_studio_pie_gameplay_mode = mode
+
     def _set_map_studio_pie_destination(self, position: object) -> None:
         session = self._map_studio_pie_session
         if session is None:
@@ -11205,6 +12376,14 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         delta_time = max(0.0, now - self._map_studio_pie_last_time)
         self._map_studio_pie_last_time = now
         frame = session.advance(delta_time)
+        gameplay = getattr(frame, "gameplay", None)
+        for event in tuple(getattr(frame, "events", ()) or ()):
+            if str(getattr(event, "animation_role", "") or ""):
+                self._apply_map_studio_pie_combat_animation_event(event)
+        if gameplay is not None:
+            self._sync_map_studio_pie_dialogue_animations(gameplay)
+            self._sync_map_studio_pie_dialogue_audio(gameplay)
+            self._advance_map_studio_pie_dialogue_line_timer(gameplay, delta_time)
         camera = getattr(getattr(self.viewport_panel, "viewport", None), "camera", None)
         camera_blocked = False
         if camera is not None:
@@ -11248,8 +12427,15 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             camera.distance = resolved
             self._map_studio_pie_last_resolved_camera_distance = resolved
             camera_blocked = resolved + 0.02 < desired_distance
+            if gameplay is not None:
+                self._update_map_studio_pie_dialogue_camera(gameplay, camera)
+            # The selected-target plate is projected and composed at the scene
+            # presentation boundary.  Updating a separate full-canvas child at
+            # this 16 ms simulation cadence races QLabel pixmap publication and
+            # can preserve old reticles while postponing the new world frame.
         player_runtime_row = self._update_map_studio_pie_player_actor(frame, delta_time)
         runtime_rows = list(self._update_map_studio_pie_creature_actors(delta_time))
+        self._update_map_studio_pie_party_actors(delta_time)
         runtime_rows.extend(self._update_map_studio_pie_door_actors(frame, delta_time))
         if player_runtime_row is not None:
             runtime_rows.insert(0, player_runtime_row)
@@ -11266,17 +12452,19 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         status_bucket = int(frame.simulation_time * 10.0)
         if status_bucket != self._map_studio_pie_status_bucket:
             self._map_studio_pie_status_bucket = status_bucket
+            self._publish_map_studio_pie_gameplay_state()
             motion = "BLOCKED" if frame.blocked else ("moving" if frame.moving else "idle")
             route = f" | route {len(frame.path)}" if frame.destination is not None else ""
             camera_state = " | camera blocked" if camera_blocked else ""
             animation_state = f" | anim {self._map_studio_pie_animation_name or 'unavailable'}"
             audio_state = f" | {self._map_studio_pie_audio_summary}"
             creature_state = f" | {self._map_studio_pie_creature_summary}"
+            gameplay_state = f" | {getattr(gameplay, 'mode', 'exploration')}"
             self.viewport_panel.marker_summary_label.setText(
                 "Simulation — not KOTOR proof | "
                 f"Player {frame.position[0]:.2f}, {frame.position[1]:.2f}, {frame.position[2]:.2f} "
                 f"| WOK face {frame.face_index} | {motion}{route}{camera_state}{animation_state}"
-                f"{creature_state}{audio_state} | Esc stops"
+                f"{creature_state}{audio_state}{gameplay_state} | Esc closes/stops"
             )
         for event in frame.events:
             self._log(f"Simulation: {event.message}")
@@ -11747,6 +12935,106 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
                 message = f"Saved {room}.wok ({len(data)} bytes)."
                 self._log(f"Map Studio: {message} -> {path}")
                 self.statusBar().showMessage(message, 6000)
+            return
+        if action == "Walkmesh Boundary Rules":
+            QtWidgets.QMessageBox.information(
+                self,
+                "KOTOR Walkmesh Boundaries",
+                "KOTOR room WOK files describe the walkable floor region and its perimeter loops. "
+                "Do not bake vertical wall or ceiling triangles into the WOK; an enclosing NON_WALK slab can "
+                "freeze player movement. Build visible walls with the room modeling tools, and let the floor "
+                "boundary/perimeter block movement.",
+            )
+            return
+        if action == "Generate from Selected Floor Faces":
+            selection = tuple(self.viewport_panel.map_studio_component_selection() or ())
+            selected_faces = tuple(
+                row
+                for row in selection
+                if str(row.get("component_type") or "") == "face"
+                and int(row.get("face_index", -1)) >= 0
+            )
+            if not selected_faces:
+                QtWidgets.QMessageBox.information(
+                    self,
+                    action,
+                    "Switch to Face mode and select only the imported room faces that are truly walkable floor. "
+                    "Do not select roofs, tables, decorative ledges, walls, or ceilings.",
+                )
+                return
+            rooms = {str(row.get("room_resref") or "").strip() for row in selected_faces}
+            rooms.discard("")
+            if len(rooms) != 1:
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    action,
+                    "A reviewed floor selection must belong to exactly one imported room.",
+                )
+                return
+            room = next(iter(rooms))
+            room_spec = self.controller.imported_mesh_room(room)
+            primitive = getattr(room_spec, "primitive", None)
+            if not isinstance(primitive, ImportedMeshRoomPrimitive):
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    action,
+                    f"Room {room} is not editable imported geometry.",
+                )
+                return
+            if primitive.wok is not None and primitive.wok.faces:
+                QtWidgets.QMessageBox.information(
+                    self,
+                    action,
+                    f"Room {room} already has an authoritative source WOK. It was not replaced. "
+                    "Use Fill Floor Faces for a reviewed coverage repair, or edit the WOK directly.",
+                )
+                return
+            surface_faces: dict[int, tuple[int, ...]] = {}
+            grouped_faces: dict[int, set[int]] = {}
+            for row in selected_faces:
+                role = str(row.get("mesh_role") or "")
+                surface_index = imported_mesh_surface_index_for_role(primitive, role)
+                if surface_index < 0:
+                    QtWidgets.QMessageBox.warning(
+                        self,
+                        action,
+                        f"Selected mesh role {role or '(unnamed)'} is not an editable surface in {room}.",
+                    )
+                    return
+                grouped_faces.setdefault(surface_index, set()).add(int(row["face_index"]))
+            surface_faces.update(
+                (surface_index, tuple(sorted(face_indices)))
+                for surface_index, face_indices in sorted(grouped_faces.items())
+            )
+            face_count = sum(len(indices) for indices in surface_faces.values())
+            default_reason = (
+                f"Reviewed {face_count} selected render face(s) in the Map Studio viewport as the real "
+                f"walkable floor for {room}."
+            )
+            reason, accepted = QtWidgets.QInputDialog.getText(
+                self,
+                "Confirm Walkmesh Floor Intent",
+                "Why are these selected faces safe to use as KOTOR floor collision?",
+                QtWidgets.QLineEdit.Normal,
+                default_reason,
+            )
+            if not accepted:
+                return
+            ok, message = self.controller.prepare_imported_room_walkmesh_generation_intent(
+                room_resref=room,
+                surface_faces=surface_faces,
+                reason=str(reason or ""),
+            )
+            if not ok:
+                QtWidgets.QMessageBox.warning(self, action, message)
+                return
+            generated, generation_message = self.controller.auto_generate_map_studio_walkmesh()
+            combined_message = f"{message} {generation_message}"
+            if not generated:
+                QtWidgets.QMessageBox.warning(self, action, combined_message)
+                return
+            self._select_map_studio_component_mode("walkmesh")
+            self._refresh_all(combined_message)
             return
         if action == "Auto Generate Walkmesh":
             try:
@@ -12713,8 +14001,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         primitive_selection = tuple(self.viewport_panel.selected_room_primitives())
         self.setWindowTitle(f"Ghost-Studio Map Studio - Level Editor - {self.project.name}{' *' if self.project.dirty else ''}")
         self._sync_map_studio_viewport_resource_manager()
-        # Warm the PIE player actor + supermodel caches in the background so
-        # the first Play press does not block on ~30-50 s of MDL loading.
+        # Warm the PIE player model cache in the background so the first Play
+        # press does not block on the body/head share of MDL loading. Global
+        # supermodel resolution intentionally remains on the GUI-thread path.
         # Deferred: the pure-Python MDL parse contends for the GIL, so it must
         # not overlap this refresh's own scene load.
         QtCore.QTimer.singleShot(1500, self._prewarm_map_studio_pie_player_model)
@@ -12766,6 +14055,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.walkmesh_tab.set_walkmesh_status(authored_walkmesh_status)
         self.walkmesh_tab.set_room_surface_choices(authored_walkmesh_room_surfaces)
         self.properties.set_project(self.project, authored_placements, authored_room_lights)
+        self._refresh_map_studio_pie_context_panel()
         self.outliner.set_project(self.project, authored_placements, authored_room_lights, authored_room_primitives)
         self.viewport_panel.set_project(
             self.project,

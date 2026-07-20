@@ -102,10 +102,7 @@
     <None Include="Python\src\core\validation\viewport_validator.py">
       <Filter>Python\src\core\validation</Filter>
     </None>
-    <None Include="Python\src\core\geometry\component_editing.py">
-      <Filter>Python\src\core\geometry</Filter>
-    </None>
-  </ItemGroup>
+  <None Include="Python\src\core\validation\custom_rigged_character_validator.py"><Filter>Python\src\core\validation</Filter></None></ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="GhostRiggerPythonPayload.rc" />
   </ItemGroup>
