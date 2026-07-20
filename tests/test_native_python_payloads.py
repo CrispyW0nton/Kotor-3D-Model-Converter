@@ -77,7 +77,9 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     # Unity transfer/export is owned only by Core.IO; removing the stale Tools
     # copy and adding the Workflow selector plus its two GUI payload mirrors
     # produces a net gain of two payload rows.
-    assert len(payload_files) == 1318
+    # The existing PIE dialogue and resource services are embedded by both
+    # Scene and Tools, adding four previously unmanifested payload rows.
+    assert len(payload_files) == 1322
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 

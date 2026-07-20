@@ -39,7 +39,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_KOTOR_MODULE_ENGINE_CONTRACT",
             "source_path": "src/core/validation/kotor_module_engine_contract.py",
             "packaged_path": "Python/src/core/validation/kotor_module_engine_contract.py",
-            "sha256": "b1ad2bf5607ab2e183f7c0a23926a28bef40520dd7a8f3d5591f3a24fea36738"
+            "sha256": "4920da087ed5122e919c194b94317a460eef521f597b65017e8b2394b2c39c9d"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_VALIDATION_VALIDATION_ADAPTERS",

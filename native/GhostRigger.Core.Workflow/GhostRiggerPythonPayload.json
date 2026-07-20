@@ -789,7 +789,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_LEGACY_MODULE_REPAIR",
             "source_path": "src/core/workflow/legacy_module_repair.py",
             "packaged_path": "Python/src/core/workflow/legacy_module_repair.py",
-            "sha256": "9458c0d0cce7f85a18d48bc66295098e405386e9962d09a62cc19a667a02777b"
+            "sha256": "e5cf2872aae423d354c7ff8c0e87b32708d492d0769367c05df2dbc14a2bcf95"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_LEGACY_TEXTURE_PORT",

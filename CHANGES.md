@@ -11,6 +11,42 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-19
 
+### [2026-07-19] T2906/T3101: restore embedded payload parity for clean builds
+
+Owner: LordVaderCW
+
+T###: T2906, T3101
+
+Intersects: `ghost-studio` commit `5e524858`, which updated the packaged
+walkmesh engine-contract validator without updating its canonical `src/` twin.
+
+Subsystem: Core.Validation embedded-Python generation and shared native payload
+metadata consumed by Visual Studio builds.
+
+- Synchronized `src/core/validation/kotor_module_engine_contract.py` with the
+  newer Core.Validation packaged implementation so the generator's
+  byte-identity gate no longer rejects a fresh checkout with MSB3073.
+- Regenerated the affected Validation manifest and reconciled stale recorded
+  hashes in GUI Display, Scene, Tools, and Workflow payload manifests.
+- Registered the existing PIE dialogue and resource services in both Scene and
+  Tools payload metadata/RC/project lists, bringing the root payload census from
+  1,318 to 1,322 rows.
+
+Affected files: canonical Validation walkmesh contract source, affected native
+payload manifests/RC/project metadata, the payload contract census test, and
+`CHANGES.md`.
+
+Verification:
+
+- The canonical and packaged Validation files are byte-identical; the
+  project-local generator completed successfully and all nine Validation
+  payload rows matched their recorded hashes.
+- Four focused payload identity, generator, manifest-census, and Visual Studio
+  inclusion checks passed.
+- `GhostRigger.Core.Validation.vcxproj` built successfully as Debug|x64
+  through MSBuild, including the exact pre-build payload step that previously
+  returned MSB3073.
+
 ### [2026-07-19] T2404/T2505/T3506: preserve attached-head facial animation in Unity FBX exports
 
 Owner: LordVaderCW
