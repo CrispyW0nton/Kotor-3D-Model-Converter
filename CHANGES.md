@@ -11,6 +11,224 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-20
 
+### [2026-07-20] Fix `/mcp/*` IPC routes failing with "No module named 'kotormcp'"
+
+Owner: deadonfps
+
+Subsystem: `GhostRigger.Core.Automation` IPC server (embedded Python payload).
+
+Problem: `GhostStudio.exe` answered `/api/ping` on port 7001, but every
+`/mcp/*` route (`/mcp/tools/list`, `/mcp/tools/call`, `/mcp/resources/list`,
+`/mcp/resources/read`) returned HTTP 500 `{"error": "No module named
+'kotormcp'"}`. Root cause was an import-namespace mismatch, not a missing
+payload file: the native payload importer registers packaged paths by
+stripping only the leading `Python/`, so `Python/src/kotormcp/...` is
+registered under the `src` package as `src.kotormcp`. But `kotormcp` was
+ported in as a standalone MCP server and imports itself (and its submodules)
+with bare top-level `kotormcp.*` names, which never resolve under the
+`src.`-prefixed payload namespace. The rest of `src` uses `src.`-prefixed
+imports and was unaffected.
+
+Fix: added `_ensure_kotormcp_importable()` in
+`native/GhostRigger.Core.Automation/Python/src/ipc/server.py`, which aliases
+the payload-registered `src.kotormcp` package to the top-level `kotormcp`
+name in `sys.modules` (with a `sys.path` fallback). It is called at the top
+of all four `/mcp/*` route handlers before their `kotormcp` imports. The
+alias is scoped to `kotormcp` only, so no other `src` subpackage becomes
+importable under a second identity. Regenerated the Automation payload
+manifest/RC via `native/GhostRigger.Core.Automation/GeneratePythonPayload.py`.
+
+Verification:
+- Isolation repro (mimicking the payload's `src.kotormcp` registration):
+  bare `import kotormcp` raises `No module named 'kotormcp'` (matches the
+  bug); after the alias, `from kotormcp.tools import get_all_tools` returns
+  169 tools.
+- `tests/test_native_python_payloads.py`: 21 passed; the one remaining
+  failure is pre-existing, unrelated payload drift in
+  `GhostRigger.Core.Rendering` (untracked `moderngl_particles.py` from the
+  in-progress particle work below), not this change.
+- Live `/mcp/tools/list` reverification is pending a GhostStudio restart
+  (the running instance had an unsaved scene and was left untouched).
+
+### [2026-07-20] Placeable Builder: attach game particle assets from the emitter library
+
+Owner: LordVaderCW
+
+Intersects: the same-day emitter particle system and retail-parity entries
+below (shared `src/core/particles` ownership).
+
+Subsystem: Placeable Builder window/controller (Core.Tools), new grafting and
+capture helpers in `src/core/particles/emitter_library.py` (Core.Rendering
+payload), focused tests.
+
+- New "Particles" inspector tab in the Placeable Builder: attach emitter
+  effects from either scanned game library — a single emitter or a whole
+  authored effect such as the Ebon Hawk planet holograms (``plc_holoXXX``)
+  with their complete ring lattices.  A modal picker (search + per-model
+  grouping) reads the Particle Editor's scan caches; per-effect X/Y/Z offsets
+  are editable in the tab.
+- Effects persist as portable records in the placeable document's
+  ``metadata.particle_effects`` (definition + baked strict-FK source
+  transform + user offset; human-readable JSON, no blobs).  The controller
+  grafts them onto the resolved preview model on every document refresh, so
+  they simulate live in the builder's viewport.
+- ``build_effect_records`` bakes each emitter's strict-FK bind transform and,
+  by default, overlays the source model's activation animation channels
+  (``on`` first, then ambient loops): display effects authored with bind
+  alpha 0 (Star Map, planet holograms) arrive visible instead of dormant.
+- ``graft_particle_effects`` attaches records to any model as new emitter
+  nodes with collision-safe ``fx_<model>_<node>`` names; the Particle
+  Editor's add-as-node flow and the builder share this core path.
+
+Verification:
+
+- Focused particle suite now 11 tests (new baked-transform graft case under a
+  real 180-degree parent flip) plus the 22-test payload suite: 33 passed.
+- Visible proof ``scripts/capture_placeable_particles_proof.py`` PASSED: a
+  K2 ``plc_footlker`` placeable with the entire ``plc_holopera`` hologram
+  (17 emitters) attached — document stores 17 records, preview simulates 17
+  particle draw calls, screenshot under ``artifacts/particle_proof/``.
+- Core.Tools and Core.Rendering payloads regenerated; DLLs rebuilt and all 18
+  staged/verified.
+
+### [2026-07-20] Retail-parity pass for emitter particles: engine semantics, depth-mask fix, TXI delivery, bloom
+
+Owner: LordVaderCW
+
+Intersects: the same-day emitter particle system entry below; KotOR.js
+(KobaltBlu) emitter/shader sources used as the reference implementation.
+
+Subsystem: `src/core/particles` simulation semantics, ModernGL renderer
+(`moderngl_renderer_impl`, `gpu_shaders`, new `moderngl_bloom`), frame-core
+`texture_cache`, Core.Workflow `animation_engine`, native payloads.
+
+- Verified emitter semantics against KotOR.js and corrected the simulation:
+  xsize/ysize are centimeters (x0.01), particlerot is radians/second,
+  over-lifetime interpolation uses a fixed 0.5 midpoint (percent* channels do
+  not shift it), fps-less flipbooks advance with lifetime progress, and
+  Punch-Through blends normally with a 0.5 alpha test.  Points-mode
+  (Normal/Motion_Blur) particles now live in world space, spawn their surface
+  box in the parent frame (inscribed-ellipse sampling trims corners that
+  poked outside the Star Map dome from below), aim velocities with the full
+  emitter orientation, and honor the INHERIT flag.
+- Fixed a renderer-wide latent bug: ``ctx.depth_mask`` assignments were inert
+  Python attributes (moderngl exposes depth_mask on the Framebuffer), so the
+  "depth write OFF" transparent pass always wrote depth and the Star Map's
+  additive dome z-rejected every particle and additive mesh inside it.  All
+  depth-write toggles now go through the bound framebuffer.
+- TXI ``blending additive`` surfaces render unlit (Phong plus the flat
+  selfillum term washed overlapping additive shells to solid white) and
+  premultiply node alpha so alpha-keyed additive meshes (SkyDome off/on)
+  actually fade under ONE,ONE blending.  Mesh draws now skip entirely below
+  1/255 alpha instead of rasterizing invisible depth.
+- ``TextureCache.get_txi``/``get_raw_header`` now consult the attached
+  ResourceManager (texture packs, Override), so TPC-embedded TXI such as the
+  dome's ``blending 1`` reaches classification in the running app.
+- Emitter world transforms use strict Aurora FK (no 180-degree bind-flip
+  collapse): the star-field emitters under ``Dummy01``'s real (1,0,0,0) flip
+  moved from below the pedestal up into the dome.
+- The AnimationEngine attaches the resolved Animation block to each evaluated
+  pose; scene/viewport models carry an empty ``animations`` list, so emitter
+  channel gates (Star Map ``on`` birthrate/alpha) now reach the particle pass
+  in the packaged app.
+- Added a bloom post-process (bright-pass, quarter-res separable gaussian
+  blur, additive composite; texture-backed resolve/simple framebuffers) tuned
+  as an accent (threshold 0.72, strength 0.5) after visible testing showed
+  stronger settings washing the dome milky and flooding the off2on ignition
+  flash, plus flipbook frame blending in the particle shader.
+- Untextured self-illuminated mesh planes (``texture='null'`` + selfillum:
+  the Star Map ``lightflare`` ignition burst and its holo ``Object*`` bits)
+  now classify and draw as additive selfillum glows instead of opaque/cutout
+  white geometry — this was the "giant white wedges" glitch during
+  ``off2on``.  Particle continuation frames also stopped requesting
+  fast-mode renders, which had pinned the viewport in no-MSAA interactive
+  quality for as long as any particle stayed visible.
+
+Verification:
+
+- Focused particle suite (10 tests) and payload byte-identity/coverage suite
+  (22 tests, pinned count 1364 -> 1365 for moderngl_bloom.py) passed.
+- Offscreen renders match the retail in-game Star Map reference: transparent
+  additive dome, cyan dotted nav rings, bloomed galaxy with bright core,
+  star field inside the dome (front and bottom cameras), off2on flash frame
+  clean with tuned bloom.
+- Packaged GhostStudio.exe (rebuilt and staged Core.Rendering,
+  Core.GUI.Display, Core.Tools, Core.Workflow DLLs) verified via IPC: load
+  plc_starmap, play looped ``on``, live particle counters and window captures
+  recorded under ``artifacts/particle_proof/``.
+
+### [2026-07-20] KOTOR emitter particle simulation, ModernGL particle pass, and Particle Editor
+
+Owner: LordVaderCW
+
+Subsystem: new `src/core/particles` domain package (Core.Rendering payload),
+ModernGL renderer particle pass, viewport particle scheduling and texture
+prewarm, main-window chrome (new command-strip icon), and the new Core.Tools
+Particle Editor window.
+
+- Added `src/core/particles/` (headless, no Qt): the canonical K1/K2 binary
+  emitter controller table (empirically verified against retail `plc_starmap`
+  data — 88=birthrate, 84/216/80=alpha start/mid/end, 144/232/148=size
+  start/mid/end, 392/284/380=color start/mid/end; the xoreos numbering
+  diverges and must not be used), `EmitterDefinition` with node/dict
+  round-trips, a pooled numpy `EmitterSimulation` (fractional-surplus
+  emission, Fountain/Single/Explosion updates, gravity/drag/spread cone,
+  start-mid-end interpolation over life, flipbook frames, invisible-batch
+  culling), `ModelParticleSystems`, and the emitter template library scanner
+  with `Fountain`/`Single`/`Explosion`/`Lightning` byte prefilter and
+  versioned JSON caches under `Saved/ParticleLibrary/`. The update/render
+  split, particle pooling, and emission accumulator follow the referenced
+  open-source particle systems (jpaolasini/3D-OpenGL-Particle-System,
+  mehmetfatiherdem/Particle-System-Simulator, konivo/particle_system,
+  sotoea/3D-Particle-System).
+- Added `moderngl_particles.py` (Core.Rendering, package-local): a billboard
+  pass drawing CPU-expanded quads per emitter batch with Normal / Lighten
+  (additive) / Punch-Through blending, camera / world-Z / local-Z / particle
+  direction / motion-blur orientation modes, per-particle roll, and flipbook
+  UV windows. `GpuRenderer` gained `show_particles`, `particles_active`,
+  `invalidate_particles(node)`, an `anim_name` render parameter, and a
+  particle pass after the transparent pass (depth test on, depth write off);
+  animation emitter channels (for example the Star Map `on` birthrate/alpha
+  gates) override bind-pose values while playing.
+- Viewport: passes the active animation name to the renderer, mirrors a
+  `show_particles` toggle, reschedules frames while particle batches are
+  visible (idles when everything fades), and prewarms emitter sprite/depth
+  textures which vertex-less emitter nodes previously never loaded.
+- Added the Particle Editor (`qt_particle_editor.py`, Core.Tools) opened from
+  a new main-window command-strip icon/tools-menu action: embedded main
+  viewport preview, per-emitter live editing of every header field, scalar
+  channel, color, and flag (edits restart that emitter's simulation
+  immediately), editor-driven animation playback, and a K1/K2 template
+  library (background scan + cached load) supporting apply-to-emitter and
+  add-as-new-emitter-node. A GC guard keeps automatic Python GC disabled
+  while library worker threads run and performs collections on the GUI
+  thread, preventing PySide wrapper finalization off the GUI thread (this
+  crashed with an access violation during the 39 MB K1 cache parse).
+
+Verification:
+
+- `tests/test_particle_system.py` (10 focused tests) passed: retail
+  controller-table decode, channel sampling, node/dict round-trips, animation
+  channel override, Fountain spawn-rate steady state, Single pooling, batch
+  interpolation, invisible-batch culling, and library prefilter/round-trip.
+- Offscreen GpuRenderer proof rendered K1 `plc_starmap` with 151 particles in
+  21 batch draw calls during the `on` animation; 8,017 pixels differed from a
+  particle-free render of the same pose.
+- Visible proof `scripts/capture_starmap_particle_proof.py` PASSED in the real
+  main window: `plc_starmap` loaded through the game-resource route, particles
+  simulated at bind pose, during looped `on` playback, and after stop, with
+  screenshots under `artifacts/particle_proof/`.
+- Visible proof `scripts/capture_particle_editor_proof.py` PASSED: the new
+  toolbar action opened the editor, cached libraries loaded (K1 8,870 emitter
+  templates from 517 models; K2 3,099 from 556 models), Sun_gas birthrate
+  live-edit kept ~290 particles rendering, and K2 template `000trl:Mist01`
+  applied onto the K1 starmap emitter.
+- Core.Rendering, Core.GUI.Display, and Core.Tools payloads regenerated; the
+  payload byte-identity/coverage suite passed (22 tests, pinned payload count
+  deliberately raised 1358 → 1364 for the six new files).
+- Full K1+K2 library scans completed in 411 s / 435 s and produced the JSON
+  caches consumed by the editor.
+
 ### [2026-07-20] T2705/T3501: preserve creature AI while authoring native KOTOR soundsets
 
 Owner: LordVaderCW

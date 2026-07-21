@@ -1126,6 +1126,12 @@ class AnimationEngine:
             return AnimPose(time=t)
 
         pose = AnimPose(time=t)
+        # The emitter particle pass needs the active Animation block to sample
+        # emitter channels (birthrate/alpha gates such as the Star Map "on").
+        # Viewport models frequently carry an empty ``animations`` list — the
+        # Animation Browser resolves clips through source/supermodel chains —
+        # so the resolved block rides along on the evaluated pose.
+        pose._gr_animation = anim
         for anim_node in anim.nodes:
             np_ = self._eval_node(anim_node, t)
             if np_:

@@ -246,6 +246,9 @@ screenshot*.png
 .tmp*/
 .tmp_*
 *.tmp
+/tmp/
+/outputs/
+/KotorDebugger/launcher_logs/
 lava_exercise/
 KotorModTools/
 /screenshots/
@@ -423,6 +426,7 @@ knowledge_base/test_artifacts/*.zip
 !/tests/test_custom_rigged_character_import.py
 !/tests/test_custom_rigged_character_packaging.py
 !/tests/test_custom_rigged_character_validation.py
+!/tests/test_particle_system.py
 /knowledge_base/books
 /docs/architecture
 /docs

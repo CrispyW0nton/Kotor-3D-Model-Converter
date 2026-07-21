@@ -603,6 +603,20 @@ void main() {
         lit_color = diffuse_samp.rgb;
     }
 
+    // TXI 'blending additive' surfaces are unlit emissive textures in the
+    // Odyssey engine (reone/xoreos draw them fullbright).  Phong shading plus
+    // the flat u_selfillum term pushes overlapping additive shells (e.g. the
+    // K1 Star Map SkyDome pair) to solid white under ONE,ONE blending.
+    // Untextured additive planes (texture 'null' + selfillum, e.g. the Star
+    // Map lightflare burst) glow with their selfillum color instead of the
+    // white fallback texture.
+    if (u_blend_mode == 1 && !sprite_emissive) {
+        lit_color = diffuse_samp.rgb;
+        if (u_has_tex == 0) {
+            lit_color = diffuse_samp.rgb * u_selfillum;
+        }
+    }
+
     if (u_selected == 1) {
         lit_color = mix(lit_color, vec3(1.0, 0.78, 0.12), 0.45);
     }
@@ -663,6 +677,11 @@ void main() {
         frag_color = vec4(lit_color * final_alpha * w, final_alpha * w);
         // Note: second render target (revealage) would need MRT support;
         // for now we encode revealage in alpha and use single-target approximation.
+    } else if (u_blend_mode == 1) {
+        // Additive blending is ONE,ONE: destination ignores alpha entirely, so
+        // node-alpha fades (Star Map SkyDome off/on animation) must premultiply
+        // into the added color or additive surfaces can never fade out.
+        frag_color = vec4(lit_color * final_alpha, final_alpha);
     } else {
         frag_color = vec4(lit_color, final_alpha);
     }

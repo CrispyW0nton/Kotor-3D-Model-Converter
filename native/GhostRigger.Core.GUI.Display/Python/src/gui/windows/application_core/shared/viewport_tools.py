@@ -874,6 +874,41 @@ class ViewportToolsMixin:
         window.raise_()
         window.activateWindow()
 
+    def _open_particle_editor_window(self):
+        """Lazily open the emitter particle editing workspace."""
+
+        window = getattr(self, "particle_editor_window", None)
+        manager = getattr(self, "_resource_manager", None)
+        if manager is None:
+            get_manager = getattr(self, "_get_resource_manager", None)
+            if callable(get_manager):
+                try:
+                    manager = get_manager()
+                except Exception:
+                    manager = None
+        if window is None:
+            from src.gui.qt_lib.windows.qt_particle_editor import QtParticleEditorWindow
+
+            window = QtParticleEditorWindow(
+                self,
+                resource_manager=manager,
+                settings_data=getattr(self, "settings_data", {}) or {},
+                app_root=Path(getattr(self, "app_root", Path.cwd())),
+            )
+            self.particle_editor_window = window
+            theme_manager = getattr(self, "theme_manager", None)
+            current_theme = getattr(theme_manager, "current_theme", None)
+            if current_theme is not None:
+                try:
+                    window.apply_ghost_theme(current_theme)
+                except Exception:
+                    pass
+        elif manager is not None:
+            window.set_resource_manager(manager)
+        window.show()
+        window.raise_()
+        window.activateWindow()
+
     def _on_placeable_library_changed(self, root: str) -> None:
         """Refresh both the workbench and any open Map Studio after a save."""
 

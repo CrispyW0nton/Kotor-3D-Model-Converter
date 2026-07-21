@@ -47,6 +47,7 @@ MAIN_ACTION_ICON_KEYS: dict[str, str] = {
     "map_studio": "map_studio",
     "gui_editor": "gui_editor",
     "placeable_builder": "placeable_builder",
+    "particle_editor": "particle_editor",
     "scripting_dialogue_studio": "scripting_dialogue_studio",
     "module_editor": "module_editor",
     "rigging": "rigging",
@@ -64,6 +65,7 @@ MAIN_COMMAND_STRIP_ICON_KEYS: dict[str, str] = {
     "map_studio": "map_studio",
     "gui_editor": "gui_editor",
     "placeable_builder": "placeable_builder",
+    "particle_editor": "particle_editor",
     "scripting_dialogue_studio": "scripting_dialogue_studio",
     "module_editor": "module_editor",
     "content_browser": "content_browser",
@@ -244,6 +246,13 @@ class WindowChromeMixin:
             "Design reusable containers, terminals, puzzles, interactive props, and decor for the Placeable Library"
         )
         self.placeable_builder_action.triggered.connect(self._open_placeable_builder_window)
+        self.particle_editor_action = QtGui.QAction(
+            self._icon(MAIN_ACTION_ICON_KEYS["particle_editor"]), "Open Particle Editor...", self
+        )
+        self.particle_editor_action.setStatusTip(
+            "Edit KOTOR emitter particle systems live and browse every retail emitter as a reusable template"
+        )
+        self.particle_editor_action.triggered.connect(self._open_particle_editor_window)
         self.scripting_dialogue_studio_action = QtGui.QAction(
             self._icon(MAIN_ACTION_ICON_KEYS["scripting_dialogue_studio"]),
             "Open Scripting Suite...",
@@ -458,6 +467,7 @@ class WindowChromeMixin:
         tools_menu.addAction(self.modules_action)
         tools_menu.addAction(self.gui_editor_action)
         tools_menu.addAction(self.placeable_builder_action)
+        tools_menu.addAction(self.particle_editor_action)
         tools_menu.addAction(self.scripting_dialogue_studio_action)
         tools_menu.addAction(self.stock_module_editor_action)
         tools_menu.addAction(self.rig_window_action)
@@ -789,6 +799,14 @@ class WindowChromeMixin:
             "Open Placeable Builder and author reusable objects for the Map Studio Placeable Library"
         )
         layout.addWidget(placeable_builder_button)
+        particle_editor_button = self._tool_button(
+            "Particles", self.particle_editor_action, MAIN_COMMAND_STRIP_ICON_KEYS["particle_editor"]
+        )
+        particle_editor_button.setObjectName("CommandStripParticleEditorButton")
+        particle_editor_button.setToolTip(
+            "Open the Particle Editor: live emitter editing plus the K1/K2 retail emitter template library"
+        )
+        layout.addWidget(particle_editor_button)
         scripting_studio_button = self._tool_button(
             "Scripting Suite",
             self.scripting_dialogue_studio_action,

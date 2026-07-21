@@ -51,7 +51,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_ANIMATION_ENGINE",
             "source_path": "src/core/animation/animation_engine.py",
             "packaged_path": "Python/src/core/animation/animation_engine.py",
-            "sha256": "ce2943874d4e8d5a789c9ef349313bd99620dfd31759348da4d6600639de6350"
+            "sha256": "fe5bbbe53c44ae8211b33ab979b0e394caea102eb0a645e1a28af378e3bec94a"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_ANIMATION_ANIMATION_LIBRARY",

@@ -550,6 +550,10 @@ class QtGhostRiggerMainWindow(
                 "sequence_editor_window": self._open_sequence_editor_window,
                 "gui_editor": self._open_gui_editor_window,
                 "odyssey_gui_editor": self._open_gui_editor_window,
+                "particle_editor": self._open_particle_editor_window,
+                "particles": self._open_particle_editor_window,
+                "placeable_builder": self._open_placeable_builder_window,
+                "placeables": self._open_placeable_builder_window,
                 "settings": self._open_settings_dialog,
                 "theme_editor": self._open_theme_editor_window,
             }

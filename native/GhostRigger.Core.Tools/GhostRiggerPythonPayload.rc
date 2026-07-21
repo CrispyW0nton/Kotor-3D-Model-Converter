@@ -326,6 +326,7 @@ PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_RESOURCE_PANELS RCDATA "Pytho
 PYTHON_PAYLOAD_GUI_WINDOWS_MODULE_EDITOR_WINDOW RCDATA "Python/src/gui/windows/module_editor_window.py"
 PYTHON_PAYLOAD_GUI_WINDOWS_QT_BLUEPRINT_EDITOR RCDATA "Python/src/gui/windows/qt_blueprint_editor.py"
 PYTHON_PAYLOAD_GUI_WINDOWS_QT_CHARACTER_BUILDER_WINDOW RCDATA "Python/src/gui/windows/qt_character_builder_window.py"
+PYTHON_PAYLOAD_GUI_WINDOWS_QT_PARTICLE_EDITOR RCDATA "Python/src/gui/windows/qt_particle_editor.py"
 PYTHON_PAYLOAD_GUI_WINDOWS_QT_PLACEABLE_BUILDER RCDATA "Python/src/gui/windows/qt_placeable_builder.py"
 PYTHON_PAYLOAD_GUI_WINDOWS_QT_PLACEABLE_BUILDER_CONTROLLER RCDATA "Python/src/gui/windows/qt_placeable_builder_controller.py"
 PYTHON_PAYLOAD_GUI_WINDOWS_QT_RETARGET_PREVIEW_CONTROLLER RCDATA "Python/src/gui/windows/qt_retarget_preview_controller.py"

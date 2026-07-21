@@ -232,6 +232,86 @@ class _ExactBlendSubmission:
                 self._stats["blend_state_skips"] += 1
 
 
+def _strict_emitter_world_transform(node, anim_pose):
+    """Strict Aurora FK world transform for emitter nodes.
+
+    The shared mesh transform paths collapse 180°-about-axis bind rotations on
+    parent nodes (a droid/character rendering workaround).  Emitter placement
+    must NOT collapse them: K1 ``plc_starmap`` parents its star-field emitters
+    under ``Dummy01`` with a real (1,0,0,0) 180° X flip that moves the stars
+    from below the pedestal up into the dome.  Pose-node locals replace bind
+    locals when the node is animated (NodePose positions are absolute locals).
+    """
+    import math as _math
+
+    from src.core.geometry.model_data import _quat_mul, _quat_normalize, _quat_rotate
+    from src.core.rendering.mesh_render_data import _pose_node_for_transform
+
+    chain = []
+    current = node
+    seen: set = set()
+    while current is not None and id(current) not in seen and len(chain) <= 512:
+        seen.add(id(current))
+        chain.append(current)
+        current = getattr(current, "parent", None)
+    chain.reverse()
+
+    wx = wy = wz = 0.0
+    orientation = [0.0, 0.0, 0.0, 1.0]
+    for chain_node in chain:
+        pose_node = _pose_node_for_transform(chain_node, anim_pose) if anim_pose is not None else None
+        if pose_node is not None:
+            lx, ly, lz = getattr(pose_node, "position", chain_node.position)
+            rot = list(getattr(pose_node, "rotation", chain_node.rotation))
+        else:
+            lx, ly, lz = getattr(chain_node, "position", (0.0, 0.0, 0.0))
+            rot = list(getattr(chain_node, "rotation", (0.0, 0.0, 0.0, 1.0)))
+        if not (_math.isfinite(lx) and _math.isfinite(ly) and _math.isfinite(lz)):
+            lx, ly, lz = 0.0, 0.0, 0.0
+        if not all(_math.isfinite(v) for v in rot):
+            rot = [0.0, 0.0, 0.0, 1.0]
+        rx, ry, rz = _quat_rotate(orientation, (lx, ly, lz))
+        wx += rx
+        wy += ry
+        wz += rz
+        orientation = _quat_normalize(_quat_mul(orientation, _quat_normalize(rot)))
+    return (float(wx), float(wy), float(wz)), tuple(float(v) for v in orientation)
+
+
+def _is_untextured_glow(node) -> bool:
+    """Untextured self-illuminated planes are additive glows in the engine.
+
+    The Star Map's ``lightflare`` ignition burst and its holo ``Object*``
+    planes are authored with ``texture='null'`` plus a selfillum color.
+    Routing them through the opaque/cutout passes rasterizes hard-edged solid
+    white geometry (the giant white wedges seen during ``off2on``); retail
+    composites them as soft additive selfillum glows.
+    """
+    tex = str(getattr(node, 'texture', '') or '').strip().lower()
+    if tex and tex not in ('null', 'none', '****'):
+        return False
+    selfillum = getattr(node, 'selfillum', (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0)
+    try:
+        return (float(selfillum[0]) + float(selfillum[1]) + float(selfillum[2])) > 0.05
+    except Exception:
+        return False
+
+
+def _set_depth_write(ctx, enabled: bool) -> None:
+    """Set glDepthMask through the bound framebuffer.
+
+    moderngl (5.12) exposes ``depth_mask`` on ``Framebuffer``, not ``Context``.
+    Assigning ``ctx.depth_mask`` silently creates an inert Python attribute, so
+    the "depth write OFF" transparent pass still wrote depth — an additive
+    surface such as the K1 Star Map dome then z-rejected every particle and
+    additive mesh drawn behind it.
+    """
+    try:
+        ctx.fbo.depth_mask = bool(enabled)
+    except Exception:
+        pass
+
+
 def _skin_vbo_signature_for_node(node):
     """Return the skin state that must match a cached GPU VBO."""
     if node is None or not bool(getattr(node, "is_skin", False)):
@@ -443,6 +523,31 @@ class GpuRenderer:
         self._lm_data_dump_seen: set = set()
         self._skin_dump_path: str = _skin_dump_path()
         self._skin_dump_seen: set = set()
+        # ── Emitter particle simulation state ────────────────────────────────
+        # One ModelParticleSystems per rendered model (single-entry cache: the
+        # viewport renders one model/scene at a time).  Advanced with wall-clock
+        # time each frame; the viewport polls ``particles_active`` to keep
+        # scheduling live frames while emitters are visible.
+        self.show_particles: bool = True
+        self.particles_active: bool = False
+        self._particle_pass = None
+        self._particle_systems = None
+        self._particle_model_id: int = 0
+        self._particle_last_wall: float = 0.0
+        self._particle_anim_cache: tuple = ("", None)
+        # ── Bloom post-process ───────────────────────────────────────────────
+        # Subtle glow accent for genuinely bright content (star cores, ring
+        # dashes, saber blades).  Retail KOTOR has no bloom — its glow comes
+        # from the additive textures' own falloff — so the threshold sits high
+        # enough that mid-brightness additive surfaces (the Star Map's dome
+        # starfield) do not bloom into a milky veil, and the strength stays an
+        # accent rather than a wash.
+        self.bloom_enabled: bool = True
+        self.bloom_threshold: float = 0.72
+        self.bloom_strength: float = 0.5
+        self._bloom_pass = None
+        self._fbo_resolve_tex = None
+        self._fbo_simple_tex = None
         # Performance counters
         self.perf: Dict[str, float] = {
             'last_frame_ms': 0.0,
@@ -652,6 +757,23 @@ class GpuRenderer:
             m.release()
         self._mesh_cache.clear()
         self._skin_palette_bytes_cache.clear()
+        if self._particle_pass is not None:
+            try:
+                self._particle_pass.release()
+            except Exception:
+                pass
+            self._particle_pass = None
+        self._particle_systems = None
+        self._particle_model_id = 0
+        self._particle_anim_cache = ("", None)
+        if self._bloom_pass is not None:
+            try:
+                self._bloom_pass.release()
+            except Exception:
+                pass
+            self._bloom_pass = None
+        self._fbo_resolve_tex = None
+        self._fbo_simple_tex = None
         # Release persistent FBO
         if self._fbo is not None:
             try:
@@ -761,6 +883,10 @@ class GpuRenderer:
             self._skin_uploader = None
         self._skin_model_id = 0
         self._skin_bone_count = 0
+        # Drop live particle simulations (new model = new emitter set)
+        self._particle_systems = None
+        self._particle_model_id = 0
+        self._particle_anim_cache = ("", None)
         # NOTE: _init_attempted is intentionally NOT reset here — the EGL context
         # remains alive and valid across clear_caches() calls.
 
@@ -789,11 +915,19 @@ class GpuRenderer:
         self._fbo = None
         self._fbo_resolve = None
         self._fbo_simple = None
+        self._fbo_resolve_tex = None
+        self._fbo_simple_tex = None
         self._fbo_w = 0
         self._fbo_h = 0
         self._fbo_simple_w = 0
         self._fbo_simple_h = 0
         self._fbo_msaa = False
+        if self._bloom_pass is not None:
+            try:
+                self._bloom_pass.release()
+            except Exception:
+                pass
+            self._bloom_pass = None
 
     def _reset_frame_state(self, ctx, width: int, height: int) -> None:
         """Reset mutable GL state that can leak between scene/grid/overlay passes."""
@@ -814,7 +948,7 @@ class GpuRenderer:
             pass
         try:
             ctx.depth_func = '<='
-            ctx.depth_mask = True
+            _set_depth_write(ctx, True)
         except Exception:
             pass
         try:
@@ -880,7 +1014,7 @@ class GpuRenderer:
             return
         self._grid_prog['u_mvp'].write(_mat4_tobytes(mvp))
         ctx.disable(moderngl.BLEND)
-        ctx.depth_mask = False
+        _set_depth_write(ctx, False)
         try:
             ctx.line_width = 1.0
         except Exception:
@@ -888,7 +1022,7 @@ class GpuRenderer:
         try:
             vao.render(moderngl.LINES)
         finally:
-            ctx.depth_mask = True
+            _set_depth_write(ctx, True)
 
     def _is_node_selected_for_render(self, node) -> bool:
         if node is getattr(self, "selected_node", None) or bool(getattr(node, "_gr_selected", False)):
@@ -1017,14 +1151,14 @@ class GpuRenderer:
         try:
             ctx.disable(moderngl.DEPTH_TEST)
             ctx.disable(moderngl.BLEND)
-            ctx.depth_mask = False
+            _set_depth_write(ctx, False)
             try:
                 ctx.line_width = 1.0
             except Exception:
                 pass
             vao.render(moderngl.LINES)
         finally:
-            ctx.depth_mask = True
+            _set_depth_write(ctx, True)
             if depth_was_enabled:
                 ctx.enable(moderngl.DEPTH_TEST)
             vao.release()
@@ -1358,7 +1492,8 @@ class GpuRenderer:
                anim_pose=None,
                anim_time: float = 0.0,
                anim_base_pose=None,
-               display_options=None) -> Optional['Image.Image']:
+               display_options=None,
+               anim_name: str = '') -> Optional['Image.Image']:
         """
         Render `model` from `camera` into a W×H PIL RGBA image.
 
@@ -1388,7 +1523,7 @@ class GpuRenderer:
 
         if self._ensure_context():
             result = self._render_gpu(model, camera, W, H, textures, anim_pose, anim_time,
-                                       anim_base_pose=anim_base_pose)
+                                       anim_base_pose=anim_base_pose, anim_name=anim_name)
             if result is not None:
                 self.perf['last_frame_ms'] = (time.perf_counter() - t0) * 1000
                 self.perf['backend'] = 'gpu'
@@ -1404,7 +1539,7 @@ class GpuRenderer:
     def _render_gpu(self, model, camera, W: int, H: int,
                     textures: Dict[str, 'Image.Image'],
                     anim_pose, anim_time: float,
-                    anim_base_pose=None) -> Optional['Image.Image']:
+                    anim_base_pose=None, anim_name: str = '') -> Optional['Image.Image']:
         """Full GPU render via ModernGL EGL."""
         ctx = self._ctx
         prog = self._prog
@@ -1460,8 +1595,11 @@ class GpuRenderer:
                             color_attachments=[ctx.renderbuffer((W, H), components=4, samples=_MSAA_SAMPLES)],
                             depth_attachment=ctx.depth_renderbuffer((W, H), samples=_MSAA_SAMPLES),
                         )
+                        # Texture color attachment (not a renderbuffer) so the
+                        # bloom bright-pass can sample the resolved scene.
+                        self._fbo_resolve_tex = ctx.texture((W, H), 4)
                         self._fbo_resolve = ctx.framebuffer(
-                            color_attachments=[ctx.renderbuffer((W, H), components=4)],
+                            color_attachments=[self._fbo_resolve_tex],
                         )
                         self._fbo_msaa = True
                     except Exception:
@@ -1470,6 +1608,7 @@ class GpuRenderer:
                             depth_attachment=ctx.depth_renderbuffer((W, H)),
                         )
                         self._fbo_resolve = None
+                        self._fbo_resolve_tex = None
                         self._fbo_msaa = False
                     self._fbo_w = W
                     self._fbo_h = H
@@ -1485,8 +1624,9 @@ class GpuRenderer:
                             if da is not None: da.release()
                             self._fbo_simple.release()
                         except Exception: pass
+                    self._fbo_simple_tex = ctx.texture((W, H), 4)
                     self._fbo_simple = ctx.framebuffer(
-                        color_attachments=[ctx.renderbuffer((W, H), components=4)],
+                        color_attachments=[self._fbo_simple_tex],
                         depth_attachment=ctx.depth_renderbuffer((W, H)),
                     )
                     self._fbo_simple_w = W
@@ -1506,7 +1646,7 @@ class GpuRenderer:
             # GL_LEQUAL allows co-planar decal geometry to render correctly without
             # z-fighting, matching the original engine's depth test mode.
             ctx.depth_func = '<='
-            ctx.depth_mask = True  # depth writes ON by default
+            _set_depth_write(ctx, True)  # depth writes ON by default
 
             # BUG-WIND FIX: KotOR models use CLOCKWISE triangle winding (Direct3D
             # convention).  OpenGL defaults to COUNTER-CLOCKWISE front faces.
@@ -2094,6 +2234,11 @@ class GpuRenderer:
                 if _gpu_is_module and _render_mode_int in (1, 2):
                     return 1.0, 0, False, False
 
+                # Untextured selfillum planes render as additive glows, never
+                # opaque/cutout geometry (Star Map lightflare burst/holo bits).
+                if tb == 0 and _is_untextured_glow(nd):
+                    tb = 1
+
                 # Punchthrough classification (alpha-test discard in shader):
                 # Use cutout pass when the MDL node explicitly requests it
                 # via transparency_hint > 0 (head meshes, hair cards, foliage).
@@ -2296,6 +2441,12 @@ class GpuRenderer:
                             selfillum = _pn.selfillum
                 if _gpu_is_module and _render_mode_int in (1, 2):
                     node_alpha = 1.0
+                if node_alpha <= (1.0 / 255.0) and not self._wireframe_pass:
+                    # Alpha-keyed-off geometry (Star Map Sphere02 during "on")
+                    # must not rasterize at all: an invisible surface that
+                    # still writes depth z-rejects every particle and additive
+                    # mesh behind it, and the engine treats alpha 0 as hidden.
+                    return
                 _is_blade_node = is_lightsaber_blade_node(node)
                 if _is_blade_node:
                     # The procedural texture already contains the emissive core
@@ -2660,6 +2811,10 @@ class GpuRenderer:
 
                 txi_blend = int(getattr(node, 'txi_blending', 0))
                 if _is_blade_node and not self._has_sprite_material_override(node):
+                    txi_blend = 1
+                if txi_blend == 0 and _is_untextured_glow(node):
+                    # Keep the draw's blend state in sync with the additive
+                    # classification of untextured selfillum glow planes.
                     txi_blend = 1
 
                 # FIX-ALPHATEST: Per-node punchthrough alpha-test threshold.
@@ -3219,7 +3374,7 @@ class GpuRenderer:
             # ── Pass 1: Opaque geometry (depth write ON, no blending) ─────────────
             # Solid, fully-opaque surfaces with no alpha-test.
             # Cross-ref: Hayes (2025) §6.3; reone: GL_DEPTH_TEST + depth write ON.
-            ctx.depth_mask = True
+            _set_depth_write(ctx, True)
             self._begin_draw_pass(ctx, blend_enabled=False)
             for node in opaque_nodes:
                 _draw_node_multitex(node, pass_name='opaque')
@@ -3277,17 +3432,36 @@ class GpuRenderer:
                 # Sort farthest-first (painter's algorithm: draw back before front)
                 transparent_nodes_sorted = sorted(transparent_nodes,
                                                   key=_node_sort_depth, reverse=True)
-                ctx.depth_mask = False
+                _set_depth_write(ctx, False)
                 for node in transparent_nodes_sorted:
                     _draw_node_multitex(node, pass_name='transparent')
                 # Restore depth writes after transparent pass
-                ctx.depth_mask = True
+                _set_depth_write(ctx, True)
                 self._blend_submission.apply(ctx, enabled=False)
+
+            # ── Pass 4: Emitter particles (depth test ON, depth write OFF) ────
+            # KOTOR emitter nodes carry no geometry; their particles are
+            # simulated on the CPU (src.core.particles) and drawn as billboard
+            # batches after all scene geometry so blending composites over the
+            # already-resolved surfaces.
+            _particle_count = 0
+            _particle_draw_calls = 0
+            if self.show_particles and not self._wireframe_pass:
+                try:
+                    _particle_count, _particle_draw_calls = self._update_and_draw_particles(
+                        ctx, model, textures, mvp, eye, target, up,
+                        _get_world_transform, anim_pose, anim_time, anim_name,
+                    )
+                except Exception as _particle_exc:
+                    log.debug("Particle pass failed: %s", _particle_exc, exc_info=True)
+            self.perf['particles'] = _particle_count
+            self.perf['particle_draw_calls'] = _particle_draw_calls
+
             if self.show_solid and self.show_wireframe:
                 try:
                     self._wireframe_pass = True
                     ctx.wireframe = True
-                    ctx.depth_mask = False
+                    _set_depth_write(ctx, False)
                     self._begin_draw_pass(ctx, blend_enabled=False)
                     for node in opaque_nodes:
                         _draw_node_multitex(node, pass_name='opaque')
@@ -3297,7 +3471,7 @@ class GpuRenderer:
                         _draw_node_multitex(node, pass_name='transparent')
                 finally:
                     self._wireframe_pass = False
-                    ctx.depth_mask = True
+                    _set_depth_write(ctx, True)
             try:
                 ctx.wireframe = False
             except Exception:
@@ -3332,6 +3506,37 @@ class GpuRenderer:
                     read_fbo = fbo
             else:
                 read_fbo = fbo
+
+            # ── Bloom post-process (retail-style glow) ────────────────────
+            # Runs on the resolved/simple framebuffer, whose color attachment
+            # is a sampleable texture.  MSAA-fallback frames (renderbuffer
+            # only) skip bloom rather than fail.
+            if self.bloom_enabled and _render_mode_int == 0:
+                bloom_tex = None
+                if read_fbo is self._fbo_resolve:
+                    bloom_tex = self._fbo_resolve_tex
+                elif read_fbo is self._fbo_simple:
+                    bloom_tex = self._fbo_simple_tex
+                if bloom_tex is not None:
+                    t_bloom = time.perf_counter()
+                    try:
+                        if self._bloom_pass is None:
+                            from src.adapters.rendering.moderngl_bloom import ModernGLBloomPass
+
+                            self._bloom_pass = ModernGLBloomPass()
+                        self._bloom_pass.apply(
+                            ctx,
+                            self._blend_submission,
+                            read_fbo,
+                            bloom_tex,
+                            W,
+                            H,
+                            threshold=float(self.bloom_threshold),
+                            strength=float(self.bloom_strength),
+                        )
+                    except Exception as _bloom_exc:
+                        log.debug("Bloom pass failed: %s", _bloom_exc, exc_info=True)
+                    self.perf['bloom_ms'] = (time.perf_counter() - t_bloom) * 1000
 
             # ── Read back framebuffer to PIL Image ────────────────────
             # PERF-FIX: Use dtype='f1' (RGBA8 UNorm) for fbo.read().
@@ -3418,6 +3623,94 @@ class GpuRenderer:
         ]
         for key in stale_palette_keys:
             del self._skin_palette_bytes_cache[key]
+        if bool(getattr(node, "is_emitter", False)):
+            self.invalidate_particles(node)
+
+    def invalidate_particles(self, node=None) -> None:
+        """Restart particle simulations after emitter parameter edits."""
+        systems = self._particle_systems
+        if systems is None:
+            return
+        if node is None:
+            systems.invalidate_all()
+        else:
+            systems.invalidate_node(node)
+
+    def _update_and_draw_particles(self, ctx, model, textures, mvp, eye, target, up,
+                                   get_world_transform, anim_pose, anim_time: float,
+                                   anim_name: str = '') -> tuple:
+        """Advance emitter simulations with wall-clock time and draw batches."""
+        self.particles_active = False
+        if model is None:
+            return (0, 0)
+
+        model_id = id(model)
+        systems = self._particle_systems
+        if systems is None or self._particle_model_id != model_id:
+            from src.core.particles.simulation import ModelParticleSystems
+
+            systems = ModelParticleSystems(model)
+            self._particle_systems = systems
+            self._particle_model_id = model_id
+            self._particle_last_wall = 0.0
+            self._particle_anim_cache = ("", None)
+        if not systems.has_emitters:
+            return (0, 0)
+
+        now = time.perf_counter()
+        last = self._particle_last_wall or now
+        dt = min(0.1, max(0.0, now - last))
+        self._particle_last_wall = now
+
+        # Resolve the active animation block so emitter channels keyed by the
+        # animation (birthrate/alpha gates like the Star Map "on") override the
+        # bind pose while it plays.  The AnimationEngine attaches the resolved
+        # block to each evaluated pose; viewport/scene models often carry an
+        # empty ``animations`` list (the Animation Browser resolves clips via
+        # source/supermodel chains), so the name lookup is only a fallback.
+        animation = getattr(anim_pose, "_gr_animation", None) if anim_pose is not None else None
+        wanted = str(anim_name or "").strip().lower()
+        if animation is None and wanted and anim_pose is not None:
+            cached_name, cached_anim = self._particle_anim_cache
+            if cached_name == wanted and cached_anim is not None:
+                animation = cached_anim
+            else:
+                for anim in getattr(model, "animations", None) or []:
+                    if str(getattr(anim, "name", "") or "").strip().lower() == wanted:
+                        animation = anim
+                        break
+                self._particle_anim_cache = (wanted, animation)
+
+        def _emitter_transform(nd):
+            return _strict_emitter_world_transform(nd, anim_pose)
+
+        systems.update(dt, _emitter_transform, animation, float(anim_time))
+        batches = systems.batches(_emitter_transform, tuple(eye))
+        # Only visible batches keep the viewport's continuous particle frames
+        # alive; a model whose emitters are all faded out costs nothing.
+        self.particles_active = bool(batches)
+        if not batches:
+            return (0, 0)
+
+        if self._particle_pass is None:
+            from src.adapters.rendering.moderngl_particles import ModernGLParticlePass
+
+            self._particle_pass = ModernGLParticlePass()
+        if self._white_tex is None:
+            self._white_tex = ctx.texture((1, 1), 4, bytes([255, 255, 255, 255]))
+        return self._particle_pass.draw(
+            ctx,
+            self._blend_submission,
+            self._tex_cache,
+            self._white_tex,
+            textures,
+            batches,
+            _mat4_tobytes(mvp),
+            tuple(eye),
+            tuple(target),
+            tuple(up),
+            restore_cull=bool(self.cull_faces and not self.show_wireframe),
+        )
 
     def invalidate_all(self) -> None:
         """Remove all cached GPU buffers and world-transform cache."""

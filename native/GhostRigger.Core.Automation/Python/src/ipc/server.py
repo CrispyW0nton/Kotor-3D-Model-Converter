@@ -18,17 +18,48 @@ Actions sent (client calls):
 
 from __future__ import annotations
 
+import importlib
 import json
 import logging
 import os
 from pathlib import Path
 import re
+import sys
 import threading
 from typing import Callable, Optional, Dict, Any
 
 from src.adapters.qt_ipc.threading import marshal_to_gui_thread
 
 log = logging.getLogger(__name__)
+
+
+def _ensure_kotormcp_importable() -> bool:
+    """Make the standalone ``kotormcp`` package importable under its own name.
+
+    The native payload importer registers this package as ``src.kotormcp``
+    (it strips only the leading ``Python/`` from packaged paths), but
+    ``kotormcp`` was ported in as a self-contained MCP server and imports
+    itself with bare ``kotormcp.*`` names — including its submodules. Alias the
+    payload-registered package to the top-level ``kotormcp`` name so those
+    imports resolve, without adding ``src`` to ``sys.path`` (which would make
+    every ``src`` subpackage importable twice under two identities).
+
+    Returns True if ``kotormcp`` is importable afterwards.
+    """
+    if "kotormcp" in sys.modules:
+        return True
+    try:
+        sys.modules["kotormcp"] = importlib.import_module("src.kotormcp")
+        return True
+    except Exception:  # noqa: BLE001 - fall back to a path-based import
+        src_root = Path(__file__).resolve().parents[1]  # .../Python/src
+        if (src_root / "kotormcp" / "__init__.py").exists():
+            p = str(src_root)
+            if p not in sys.path:
+                sys.path.insert(0, p)
+            return True
+        log.exception("kotormcp package could not be made importable")
+        return False
 
 # ── IPC Port Assignment (per GHOSTWORKS_BLUEPRINT.md Section 3.1) ──────────
 PORT_GHOSTRIGGER  = 7001
@@ -1004,6 +1035,7 @@ class GhostRiggerIPCServer:
         def route_mcp_tools_list():
             """Return all available MCP tool definitions."""
             try:
+                _ensure_kotormcp_importable()
                 from kotormcp.tools import get_all_tools  # noqa: PLC0415
                 return jsonify({"tools": get_all_tools()})
             except Exception as exc:
@@ -1022,6 +1054,7 @@ class GhostRiggerIPCServer:
                 arguments = body.get("arguments", {})
                 if not tool_name:
                     return jsonify({"error": "Missing 'name' in request body"}), 400
+                _ensure_kotormcp_importable()
                 from kotormcp.tools import handle_tool  # noqa: PLC0415
                 result = asyncio.run(handle_tool(tool_name, arguments))
                 return jsonify({"result": result})
@@ -1036,6 +1069,7 @@ class GhostRiggerIPCServer:
             """Return the kotor:// URI resource template list."""
             import asyncio  # noqa: PLC0415
             try:
+                _ensure_kotormcp_importable()
                 from kotormcp import mcp_resources  # noqa: PLC0415
                 resources = asyncio.run(mcp_resources.list_resources())
                 return jsonify({"resources": resources})
@@ -1054,6 +1088,7 @@ class GhostRiggerIPCServer:
                 uri = body.get("uri", "")
                 if not uri:
                     return jsonify({"error": "Missing 'uri' in request body"}), 400
+                _ensure_kotormcp_importable()
                 from kotormcp import mcp_resources  # noqa: PLC0415
                 content = asyncio.run(mcp_resources.read_resource(uri))
                 return jsonify({"content": content})

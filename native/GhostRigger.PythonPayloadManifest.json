@@ -533,7 +533,7 @@
     },
     {
         "project": "GhostRigger.Core.Rendering",
-        "python_file_count": 125,
+        "python_file_count": 131,
         "files": [
             "src\\adapters\\gpu\\__init__.py",
             "src\\adapters\\gpu\\lightmap_baker.py",
@@ -545,8 +545,10 @@
             "src\\adapters\\rendering\\gpu_renderer_exports.py",
             "src\\adapters\\rendering\\mesh_render_data.py",
             "src\\adapters\\rendering\\moderngl_benchmark.py",
+            "src\\adapters\\rendering\\moderngl_bloom.py",
             "src\\adapters\\rendering\\moderngl_cli.py",
             "src\\adapters\\rendering\\moderngl_legacy_bridge.py",
+            "src\\adapters\\rendering\\moderngl_particles.py",
             "src\\adapters\\rendering\\moderngl_renderer.py",
             "src\\adapters\\rendering\\moderngl_renderer_impl.py",
             "src\\adapters\\rendering\\moderngl_resources.py",
@@ -604,6 +606,10 @@
             "src\\core\\lighting\\shader_complexity.py",
             "src\\core\\lighting\\uv_atlas_generator.py",
             "src\\core\\lighting\\uv_channel_info.py",
+            "src\\core\\particles\\__init__.py",
+            "src\\core\\particles\\emitter_data.py",
+            "src\\core\\particles\\emitter_library.py",
+            "src\\core\\particles\\simulation.py",
             "src\\core\\ports\\__init__.py",
             "src\\core\\ports\\files.py",
             "src\\core\\ports\\resources.py",
@@ -824,7 +830,7 @@
     },
     {
         "project": "GhostRigger.Core.Tools",
-        "python_file_count": 393,
+        "python_file_count": 394,
         "files": [
             "src\\adapters\\qt_viewport\\camera_gizmo_renderer.py",
             "src\\adapters\\qt_viewport\\camera_overlays.py",
@@ -1152,6 +1158,7 @@
             "src\\gui\\windows\\module_editor_window.py",
             "src\\gui\\windows\\qt_blueprint_editor.py",
             "src\\gui\\windows\\qt_character_builder_window.py",
+            "src\\gui\\windows\\qt_particle_editor.py",
             "src\\gui\\windows\\qt_placeable_builder.py",
             "src\\gui\\windows\\qt_placeable_builder_controller.py",
             "src\\gui\\windows\\qt_retarget_preview_controller.py",

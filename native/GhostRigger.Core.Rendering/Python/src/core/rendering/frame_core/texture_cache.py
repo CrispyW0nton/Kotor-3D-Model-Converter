@@ -161,6 +161,7 @@ class TextureCache:
             with self._lock:
                 search_dirs = list(self._search_dirs)
                 game_library = self._game_library
+                resource_manager = self._resource_manager
                 game_tag = self._game_tag
 
             # 1. Look for standalone .txi file on disk
@@ -195,6 +196,26 @@ class TextureCache:
                             log.debug(f"TXI TPC extract error {tex_path}: {e}")
                     if txi_str:
                         break
+
+            # 2.5 Unified ResourceManager (standalone TXI resource, then the
+            # TXI embedded in the TPC).  The main window attaches textures via
+            # set_resource_manager(); without this step, texture-pack TPCs
+            # (e.g. plc_starmap_06 with 'blending 1') never delivered their TXI
+            # and additive surfaces rendered opaque.
+            if not txi_str and resource_manager is not None:
+                try:
+                    txi_str = str(resource_manager.get_txi(clean, game_tag) or '').strip()
+                except Exception as e:
+                    log.debug(f"TXI resource-manager lookup error '{clean}': {e}")
+                if not txi_str:
+                    try:
+                        raw = resource_manager.get_texture(clean, game_tag)
+                        if raw and _is_tpc_data(raw):
+                            txi_str = _extract_txi_from_tpc(raw)
+                            if txi_str:
+                                log.debug(f"TXI '{clean}' extracted from ResourceManager TPC")
+                    except Exception as e:
+                        log.debug(f"TXI resource-manager TPC extract error '{clean}': {e}")
 
             # 3. Load from BIF/ERF archive via GameLibrary
             if not txi_str and game_library is not None:
@@ -246,6 +267,7 @@ class TextureCache:
             with self._lock:
                 search_dirs = list(self._search_dirs)
                 game_library = self._game_library
+                resource_manager = self._resource_manager
                 game_tag = self._game_tag
             # 1. Search on-disk directories
             for search_dir in search_dirs:
@@ -260,6 +282,14 @@ class TextureCache:
                             return header
                     except Exception:
                         pass
+            # 1.5 Unified ResourceManager (KEY/BIF, texture packs, Override)
+            if resource_manager is not None:
+                try:
+                    raw = resource_manager.get_texture(clean, game_tag)
+                    if raw and len(raw) >= 128 and _is_tpc_data(raw[:128]):
+                        return raw[:128]
+                except Exception:
+                    pass
             # 2. BIF/ERF archive
             if game_library is not None:
                 try:

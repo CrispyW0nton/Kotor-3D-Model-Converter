@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Tools",
-    "file_count": 393,
+    "file_count": 394,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -1962,16 +1962,22 @@
             "sha256": "39a1de19df332445508c5242d223036c1576560c362e93c9e365a06294c9f3a6"
         },
         {
+            "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_PARTICLE_EDITOR",
+            "source_path": "src/gui/windows/qt_particle_editor.py",
+            "packaged_path": "Python/src/gui/windows/qt_particle_editor.py",
+            "sha256": "1679d67cd702f99d5081abbff9a5fbe2607a09aaa8923f818d4e41364b66b1f3"
+        },
+        {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_PLACEABLE_BUILDER",
             "source_path": "src/gui/windows/qt_placeable_builder.py",
             "packaged_path": "Python/src/gui/windows/qt_placeable_builder.py",
-            "sha256": "fb65eb64b0e6ba269b3a590d8979e9f5e5530d379c8878e71570d0f9874b1610"
+            "sha256": "1fa7ebe74c788422dbc83bf0778b4a0198eb96d15e2430d26edff01ee04a2a60"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_PLACEABLE_BUILDER_CONTROLLER",
             "source_path": "src/gui/windows/qt_placeable_builder_controller.py",
             "packaged_path": "Python/src/gui/windows/qt_placeable_builder_controller.py",
-            "sha256": "7630db3459079386c01d33e16bfd3a305d828e2a5220de2a7abe1aec949298ad"
+            "sha256": "52590da1d148db655d09166fdb33d008f40a8ca6cae8af221b4bd034728d4d0b"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_RETARGET_PREVIEW_CONTROLLER",

@@ -33,7 +33,7 @@
             "resource_name": "PYTHON_PAYLOAD_IPC_SERVER",
             "source_path": "src/ipc/server.py",
             "packaged_path": "Python/src/ipc/server.py",
-            "sha256": "6b193b527bf2fe9071e6664c2a7aeb05ca1e2c5542c49a69eead5d8aa7375adc"
+            "sha256": "f935ca711cc0feac5f744c053667f953e021614bdece78a5ba19f229122feafc"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_KOTORMCP_INIT",

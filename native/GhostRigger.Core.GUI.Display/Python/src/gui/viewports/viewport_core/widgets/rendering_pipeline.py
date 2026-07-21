@@ -437,6 +437,7 @@ class ViewportRenderingPipelineMixin:
         self._gpu_renderer.selected_node = None if clean_runtime else getattr(self._renderer, "selected_node", None)
         self._gpu_renderer.selected_nodes = [] if clean_runtime else list(getattr(self, "_selected_meshes", []) or [])
         self._gpu_renderer.show_grid = bool(getattr(self._renderer, "show_grid", True))
+        self._gpu_renderer.show_particles = bool(getattr(self._renderer, "show_particles", True))
         self._gpu_renderer.show_bones = bool(getattr(self._renderer, "show_bones", False)) and not clean_runtime
         self._gpu_renderer.show_joint_dots = bool(getattr(self, "_joint_dot_enabled", True)) and not clean_runtime
         self._gpu_renderer._hovered_bone = getattr(self._renderer, "_hovered_bone", None)
@@ -517,6 +518,11 @@ class ViewportRenderingPipelineMixin:
             anim_pose=getattr(self._renderer, "_anim_pose", None),
             anim_time=float(getattr(self._renderer, "_anim_time", 0.0)),
             anim_base_pose=getattr(self._renderer, "_anim_base_pose", None),
+            anim_name=(
+                str(getattr(self._renderer, "_anim_name", "") or "")
+                if getattr(self._renderer, "_anim_pose", None) is not None
+                else ""
+            ),
             dirty_flags=dirty_flags,
         )
         diagnostics = {}
@@ -552,6 +558,24 @@ class ViewportRenderingPipelineMixin:
                     self._request_render(fast=True)
 
             QtCore.QTimer.singleShot(1, _continue_uploads)
+        if bool(getattr(self._gpu_renderer, "particles_active", False)):
+            # Visible emitter particles keep their own frame cadence alive, the
+            # same way animation playback does.  The reschedule stops as soon as
+            # every particle batch fades out or the model changes.  These frames
+            # deliberately stay on the quality path (fast=True would pin the
+            # renderer in no-MSAA interactive mode for as long as any particle
+            # is visible, leaving sprites aliased and washed out).
+            particle_model_id = id(self.model)
+            interval_ms = max(
+                16,
+                int(round(1000.0 / max(1, int(getattr(self._renderer_settings, "target_fps", 60) or 60)))),
+            )
+
+            def _advance_particles() -> None:
+                if self.model is not None and id(self.model) == particle_model_id:
+                    self._request_render(reason="particle simulation", scene=True)
+
+            QtCore.QTimer.singleShot(interval_ms, _advance_particles)
         if self._gpu_upload_total > 0 and self.model is not None and id(self.model) == self._gpu_upload_model_id:
             uploaded = min(len(getattr(self._gpu_renderer, "_mesh_cache", {}) or {}), self._gpu_upload_total)
             if not getattr(self._gpu_renderer, "deferred_mesh_uploads", False):

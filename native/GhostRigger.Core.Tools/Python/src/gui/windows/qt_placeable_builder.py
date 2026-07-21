@@ -115,6 +115,184 @@ class _PlaceableLibraryFilterProxyModel(QtCore.QSortFilterProxyModel):
         return True
 
 
+_PARTICLE_LIBRARY_CACHE: dict[tuple[str, str], list] = {}
+
+
+def _load_particle_templates(app_root: Path, game: str) -> list:
+    """Load (and memoize) the scanned emitter template library for one game."""
+    from src.core.particles.emitter_library import (
+        library_cache_path,
+        load_library,
+        resolve_library_root,
+    )
+
+    root = resolve_library_root(Path(app_root))
+    key = (str(root), str(game).upper())
+    cached = _PARTICLE_LIBRARY_CACHE.get(key)
+    if cached is not None:
+        return cached
+    templates = load_library(library_cache_path(root, game))
+    _PARTICLE_LIBRARY_CACHE[key] = templates
+    return templates
+
+
+class _ParticleAssetPickerDialog(QtWidgets.QDialog):
+    """Modal picker over the scanned K1/K2 emitter template library."""
+
+    def __init__(self, parent: QtWidgets.QWidget, game: str, templates: list):
+        super().__init__(parent)
+        self.setObjectName("placeableParticleAssetPicker")
+        self.setWindowTitle(f"Add Particle Effect — {game} Library")
+        self.resize(560, 620)
+        self._templates = templates
+        self.selected_model: str = ""
+        self.selected_nodes: list[str] = []
+        self.whole_effect: bool = False
+
+        layout = QtWidgets.QVBoxLayout(self)
+        self.search_edit = QtWidgets.QLineEdit()
+        self.search_edit.setObjectName("placeableParticlePickerSearch")
+        self.search_edit.setPlaceholderText(
+            "Filter by model or emitter name (e.g. holo, starmap, smoke)..."
+        )
+        self.search_edit.textChanged.connect(self._rebuild_tree)
+        layout.addWidget(self.search_edit)
+
+        self.tree = QtWidgets.QTreeWidget()
+        self.tree.setObjectName("placeableParticlePickerTree")
+        self.tree.setHeaderLabels(["Source", "Info"])
+        self.tree.setColumnWidth(0, 260)
+        self.tree.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
+        self.tree.itemDoubleClicked.connect(lambda *_a: self._accept(whole=False))
+        layout.addWidget(self.tree, 1)
+
+        hint = QtWidgets.QLabel(
+            "Select emitters, or select a model row and use Add Entire Effect to attach the complete "
+            "authored effect (e.g. plc_holoXXX planet holograms keep their full ring lattice)."
+        )
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+
+        buttons = QtWidgets.QHBoxLayout()
+        add_selected = QtWidgets.QPushButton("Add Selected Emitters")
+        add_selected.setObjectName("placeableParticlePickerAddSelected")
+        add_selected.clicked.connect(lambda: self._accept(whole=False))
+        buttons.addWidget(add_selected)
+        add_all = QtWidgets.QPushButton("Add Entire Effect")
+        add_all.setObjectName("placeableParticlePickerAddAll")
+        add_all.clicked.connect(lambda: self._accept(whole=True))
+        buttons.addWidget(add_all)
+        buttons.addStretch(1)
+        cancel = QtWidgets.QPushButton("Cancel")
+        cancel.clicked.connect(self.reject)
+        buttons.addWidget(cancel)
+        layout.addLayout(buttons)
+
+        self._rebuild_tree()
+
+    def _rebuild_tree(self) -> None:
+        query = self.search_edit.text().strip().lower()
+        self.tree.setUpdatesEnabled(False)
+        try:
+            self.tree.clear()
+            by_model: dict[str, list] = {}
+            for template in self._templates:
+                if query and query not in template.model.lower() and query not in template.node.lower():
+                    continue
+                by_model.setdefault(template.model, []).append(template)
+            for model_name in sorted(by_model):
+                rows = by_model[model_name]
+                model_item = QtWidgets.QTreeWidgetItem([model_name, f"{len(rows)} emitters"])
+                model_item.setData(0, QtCore.Qt.UserRole, ("model", model_name))
+                children = []
+                for template in rows:
+                    defn = template.definition
+                    info = f"{defn.get('update', '')}/{defn.get('blend', '')} {defn.get('texture', '')}"
+                    child = QtWidgets.QTreeWidgetItem([template.node, info])
+                    child.setData(0, QtCore.Qt.UserRole, ("emitter", (model_name, template.node)))
+                    children.append(child)
+                model_item.addChildren(children)
+                self.tree.addTopLevelItem(model_item)
+            if query:
+                self.tree.expandToDepth(0)
+        finally:
+            self.tree.setUpdatesEnabled(True)
+
+    def _accept(self, *, whole: bool) -> None:
+        model_name = ""
+        nodes: list[str] = []
+        for item in self.tree.selectedItems():
+            payload = item.data(0, QtCore.Qt.UserRole)
+            if not payload:
+                continue
+            kind, ref = payload
+            if kind == "model":
+                model_name = model_name or str(ref)
+            else:
+                item_model, item_node = ref
+                model_name = model_name or str(item_model)
+                nodes.append(str(item_node))
+        if not model_name:
+            self.reject()
+            return
+        self.selected_model = model_name
+        self.selected_nodes = [] if whole else nodes
+        self.whole_effect = whole or not nodes
+        self.accept()
+
+
+def _pick_particle_effects(parent: QtWidgets.QWidget, game: str, resource_manager) -> list[dict[str, Any]]:
+    """Run the picker and return portable effect records with baked transforms."""
+    from src.core.particles.emitter_library import build_effect_records
+
+    app_root = Path(getattr(parent.parent(), "app_root", Path.cwd()) or Path.cwd())
+    QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+    try:
+        templates = _load_particle_templates(app_root, game)
+    finally:
+        QtWidgets.QApplication.restoreOverrideCursor()
+    if not templates:
+        raise RuntimeError(
+            f"No scanned {game} emitter library found. Run Scan Game Libraries in the Particle Editor first."
+        )
+    dialog = _ParticleAssetPickerDialog(parent, game, templates)
+    if dialog.exec() != QtWidgets.QDialog.Accepted or not dialog.selected_model:
+        return []
+
+    if resource_manager is not None:
+        source_model = None
+        try:
+            source_model = resource_manager.load_model(dialog.selected_model, game)
+        except Exception:
+            source_model = None
+        if source_model is not None:
+            return build_effect_records(
+                source_model,
+                game,
+                dialog.selected_model,
+                node_names=None if dialog.whole_effect else dialog.selected_nodes,
+            )
+
+    # No resource manager: fall back to definition-only records at the origin.
+    wanted = None if dialog.whole_effect else {name.lower() for name in dialog.selected_nodes}
+    records: list[dict[str, Any]] = []
+    for template in templates:
+        if template.model != dialog.selected_model:
+            continue
+        if wanted is not None and template.node.lower() not in wanted:
+            continue
+        records.append({
+            "game": str(game).upper(),
+            "model": template.model,
+            "node": template.node,
+            "definition": deepcopy(template.definition),
+            "base_position": [0.0, 0.0, 1.0],
+            "base_rotation": [0.0, 0.0, 0.0, 1.0],
+            "offset": [0.0, 0.0, 0.0],
+        })
+    return records
+
+
 class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
     """Standalone workbench for a project Placeable Library asset."""
 
@@ -146,6 +324,8 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
         self._scripts_passthrough: dict[str, Any] = {}
         self._readiness: dict[str, Any] = {}
         self._resource_rows: list[dict[str, Any]] = []
+        self._particle_effects: list[dict[str, Any]] = []
+        self._resource_manager: Any = None
         self._updating_document = False
         self._dirty = False
         self._renderer_settings = RendererSettings.from_settings(getattr(parent, "settings_data", {}) or {})
@@ -395,6 +575,7 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
         tabs.addTab(self._build_visual_tab(), "Visual")
         tabs.addTab(self._build_interaction_tab(), "Interaction")
         tabs.addTab(self._build_scripts_tab(), "Scripts & Conversation")
+        tabs.addTab(self._build_particles_tab(), "Particles")
         tabs.addTab(self._build_resources_tab(), "Resources")
         tabs.addTab(self._build_readiness_tab(), "Readiness")
         return tabs
@@ -627,6 +808,109 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
         root.addStretch(1)
         return self._scroll_tab(content, "placeableScriptsScroll")
 
+    def _build_particles_tab(self) -> QtWidgets.QWidget:
+        content = QtWidgets.QWidget()
+        root = QtWidgets.QVBoxLayout(content)
+        group = QtWidgets.QGroupBox("Attached Particle Effects")
+        group.setObjectName("placeableParticleEffectsGroup")
+        group_layout = QtWidgets.QVBoxLayout(group)
+
+        self.particle_effects_table = QtWidgets.QTableWidget(0, 4)
+        self.particle_effects_table.setObjectName("placeableParticleEffectsTable")
+        self.particle_effects_table.setHorizontalHeaderLabels(
+            ["Effect (game:model:node)", "Offset X", "Offset Y", "Offset Z"]
+        )
+        self.particle_effects_table.horizontalHeader().setSectionResizeMode(
+            0, QtWidgets.QHeaderView.Stretch
+        )
+        self.particle_effects_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.particle_effects_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
+        self.particle_effects_table.setMinimumHeight(180)
+        group_layout.addWidget(self.particle_effects_table)
+
+        buttons = QtWidgets.QHBoxLayout()
+        self.add_particle_effect_button = QtWidgets.QPushButton("Add From Game Library...")
+        self.add_particle_effect_button.setObjectName("placeableAddParticleEffectButton")
+        self.add_particle_effect_button.clicked.connect(self._open_particle_asset_picker)
+        buttons.addWidget(self.add_particle_effect_button)
+        self.remove_particle_effect_button = QtWidgets.QPushButton("Remove Selected")
+        self.remove_particle_effect_button.setObjectName("placeableRemoveParticleEffectButton")
+        self.remove_particle_effect_button.clicked.connect(self._remove_selected_particle_effects)
+        buttons.addWidget(self.remove_particle_effect_button)
+        buttons.addStretch(1)
+        group_layout.addLayout(buttons)
+        root.addWidget(group)
+
+        note = QtWidgets.QLabel(
+            "Attach emitter effects from either game library — a single emitter or a whole authored effect "
+            "such as the Ebon Hawk planet holograms (plc_holoXXX). Effects are stored in the placeable "
+            "document, grafted onto the preview model with their authored transforms, and simulate live "
+            "in the preview viewport. Offsets shift each emitter relative to its authored position."
+        )
+        note.setObjectName("placeableParticleEffectsNote")
+        note.setWordWrap(True)
+        root.addWidget(note)
+        root.addStretch(1)
+        return self._scroll_tab(content, "placeableParticlesScroll")
+
+    def _refresh_particle_effects_table(self) -> None:
+        table = self.particle_effects_table
+        table.blockSignals(True)
+        try:
+            table.setRowCount(len(self._particle_effects))
+            for row, record in enumerate(self._particle_effects):
+                label = f"{record.get('game', '')}:{record.get('model', '')}:{record.get('node', '')}"
+                table.setItem(row, 0, QtWidgets.QTableWidgetItem(label))
+                offset = list(record.get("offset") or (0.0, 0.0, 0.0))
+                for axis in range(3):
+                    spin = QtWidgets.QDoubleSpinBox()
+                    spin.setRange(-1000.0, 1000.0)
+                    spin.setDecimals(3)
+                    spin.setSingleStep(0.05)
+                    spin.setValue(float(offset[axis]))
+                    spin.valueChanged.connect(
+                        lambda value, r=row, a=axis: self._on_particle_offset_changed(r, a, value)
+                    )
+                    table.setCellWidget(row, 1 + axis, spin)
+        finally:
+            table.blockSignals(False)
+
+    def _on_particle_offset_changed(self, row: int, axis: int, value: float) -> None:
+        if self._updating_document or row >= len(self._particle_effects):
+            return
+        offset = list(self._particle_effects[row].get("offset") or [0.0, 0.0, 0.0])
+        while len(offset) < 3:
+            offset.append(0.0)
+        offset[axis] = float(value)
+        self._particle_effects[row]["offset"] = offset
+        self._document_edited()
+
+    def _remove_selected_particle_effects(self) -> None:
+        rows = sorted({index.row() for index in self.particle_effects_table.selectedIndexes()}, reverse=True)
+        if not rows:
+            return
+        for row in rows:
+            if 0 <= row < len(self._particle_effects):
+                del self._particle_effects[row]
+        self._refresh_particle_effects_table()
+        self._document_edited()
+
+    def _open_particle_asset_picker(self) -> None:
+        game = self.game_combo.currentText().strip().upper() or "K2"
+        try:
+            records = _pick_particle_effects(self, game, self._resource_manager)
+        except Exception as exc:
+            self.statusBar().showMessage(f"Particle library unavailable: {exc}", 8000)
+            return
+        if not records:
+            return
+        self._particle_effects.extend(records)
+        self._refresh_particle_effects_table()
+        self._document_edited()
+        self.statusBar().showMessage(
+            f"Attached {len(records)} emitter(s). They simulate live in the preview.", 8000
+        )
+
     def _build_resources_tab(self) -> QtWidgets.QWidget:
         content = QtWidgets.QWidget()
         root = QtWidgets.QVBoxLayout(content)
@@ -822,6 +1106,12 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
                 restype = str(row.get("restype") or "").lower()
                 texture_lines.append(f"{resref}.{restype}" if resref and restype else resref)
             self.texture_resrefs_edit.setPlainText("\n".join(line for line in texture_lines if line))
+            metadata = _mapping(data.get("metadata"))
+            self._particle_effects = [
+                dict(record) for record in (metadata.get("particle_effects") or [])
+                if isinstance(record, dict)
+            ]
+            self._refresh_particle_effects_table()
             self._update_visual_contract_text()
         finally:
             self._updating_document = False
@@ -922,6 +1212,10 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
             metadata["model_resref_hint"] = model_hint
         else:
             metadata.pop("model_resref_hint", None)
+        if self._particle_effects:
+            metadata["particle_effects"] = deepcopy(self._particle_effects)
+        else:
+            metadata.pop("particle_effects", None)
         data["metadata"] = metadata
         return data
 
@@ -997,6 +1291,7 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
         message: str = "",
     ) -> None:
         if resource_manager is not None:
+            self._resource_manager = resource_manager
             self.preview_viewport.set_resource_manager(resource_manager, game or self.game_combo.currentText())
         self.preview_viewport.load_model(model, texture_dir)
         self.preview_status_label.setText(

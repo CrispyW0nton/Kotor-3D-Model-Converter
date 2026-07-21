@@ -215,6 +215,7 @@ _GROUPS: dict[str, tuple[str, ...]] = {
         "qt_custom_rigged_character_builder_controller",
         "qt_gui_editor_window",
         "qt_main_window",
+        "qt_particle_editor",
         "qt_placeable_builder",
         "qt_placeable_builder_controller",
         "qt_retarget_preview_controller",

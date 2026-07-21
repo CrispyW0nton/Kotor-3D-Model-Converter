@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -28,7 +29,7 @@ class QtPlaceableBuilderController(QtCore.QObject):
         self.window = window
         self.service = PlaceableBuilderToolService(library_root, provider=provider)
         self.resource_manager = resource_manager
-        self._preview_key: tuple[str, str] = ("", "")
+        self._preview_key: tuple[str, ...] = ("", "", "")
         self._refresh_timer = QtCore.QTimer(self)
         self._refresh_timer.setSingleShot(True)
         self._refresh_timer.setInterval(180)
@@ -60,7 +61,7 @@ class QtPlaceableBuilderController(QtCore.QObject):
         if resource_manager is not None:
             self.resource_manager = resource_manager
         self.refresh_library()
-        self._preview_key = ("", "")
+        self._preview_key = ("", "", "")
         self._refresh_document_feedback()
 
     def refresh_library(self) -> None:
@@ -76,7 +77,7 @@ class QtPlaceableBuilderController(QtCore.QObject):
         asset = self.service.new_asset(game=game)
         self.window.set_document(asset, mark_clean=bool(initial))
         self.validate_document(asset.to_dict())
-        self._preview_key = ("", "")
+        self._preview_key = ("", "", "")
         self._update_preview(asset)
 
     def clone_document(self, document: Mapping[str, Any]) -> None:
@@ -87,7 +88,7 @@ class QtPlaceableBuilderController(QtCore.QObject):
             return
         self.window.set_document(asset, mark_clean=False)
         self.validate_document(asset.to_dict())
-        self._preview_key = ("", "")
+        self._preview_key = ("", "", "")
         self._update_preview(asset)
 
     def choose_open(self) -> None:
@@ -108,7 +109,7 @@ class QtPlaceableBuilderController(QtCore.QObject):
             return
         self.window.set_document(asset, mark_clean=True)
         self.validate_document(asset.to_dict())
-        self._preview_key = ("", "")
+        self._preview_key = ("", "", "")
         self._update_preview(asset)
 
     def validate_document(self, document: Mapping[str, Any]) -> Any:
@@ -194,7 +195,12 @@ class QtPlaceableBuilderController(QtCore.QObject):
     def _update_preview(self, asset: PlaceableAsset) -> None:
         game = str(asset.game or "K2").upper()
         model_resref = self.service.preview_model_resref(asset)
-        key = (game, model_resref)
+        particle_effects = list((asset.metadata or {}).get("particle_effects") or [])
+        try:
+            effects_stamp = json.dumps(particle_effects, sort_keys=True, default=str)
+        except Exception:
+            effects_stamp = str(len(particle_effects))
+        key = (game, model_resref, effects_stamp)
         if key == self._preview_key:
             return
         self._preview_key = key
@@ -221,6 +227,15 @@ class QtPlaceableBuilderController(QtCore.QObject):
                 if model is not None
                 else f"{game}:{model_resref} did not resolve to an MDL/MDX pair."
             )
+        if model is not None and particle_effects:
+            try:
+                from src.core.particles.emitter_library import graft_particle_effects
+
+                grafted = graft_particle_effects(model, particle_effects)
+                if grafted:
+                    message += f" {grafted} particle emitter(s) attached."
+            except Exception as exc:
+                message += f" Particle effects failed to attach: {exc}"
         self.window.set_preview_model(
             model,
             resource_manager=self.resource_manager,

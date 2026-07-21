@@ -180,7 +180,8 @@ class ViewportResourceCacheMixin:
         names: list[str] = []
         seen: set[str] = set()
         for node in nodes:
-            if not getattr(node, "vertices", None):
+            emitter_params = getattr(node, "emitter_params", None) if getattr(node, "is_emitter", False) else None
+            if not getattr(node, "vertices", None) and not emitter_params:
                 continue
             candidates = [
                 getattr(node, "texture_clean", ""),
@@ -192,6 +193,11 @@ class ViewportResourceCacheMixin:
                 getattr(node, "txi_bumpmaptexture", ""),
             ]
             candidates.extend(getattr(node, "texture_names", []) or [])
+            if emitter_params:
+                # Emitter nodes have no vertices but still sample their sprite
+                # texture (and optional depth texture) at render time.
+                candidates.append(str(emitter_params.get("texture", "") or ""))
+                candidates.append(str(emitter_params.get("depth_texture_name", "") or ""))
             for raw in candidates:
                 clean = str(raw or "").strip()
                 if not clean:

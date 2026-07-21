@@ -102,7 +102,14 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     # surfaces. Native Character Builder payload ownership is unchanged.
     # Installed UTC behavior authoring adds one Resources catalog owner and one
     # Workflow behavior compiler/profile owner.
-    assert len(payload_files) == 1358
+    # 2026-07-20: the KOTOR emitter particle system adds four Core.Rendering
+    # payloads (src/core/particles: __init__, emitter_data, simulation,
+    # emitter_library) plus the ModernGL billboard pass
+    # (adapters/rendering/moderngl_particles.py) and the Core.Tools Particle
+    # Editor window (gui/windows/qt_particle_editor.py).
+    # The retail-style glow post-process adds the Core.Rendering bloom pass
+    # (adapters/rendering/moderngl_bloom.py).
+    assert len(payload_files) == 1365
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 
