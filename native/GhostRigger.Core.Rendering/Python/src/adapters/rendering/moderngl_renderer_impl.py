@@ -370,6 +370,52 @@ def _skin_influence_summary_for_log(node):
     }
 
 
+def _diffuse_is_reflectivity_mask(img) -> bool:
+    """True when a diffuse image's alpha is a KOTOR environment/spec mask.
+
+    KOTOR stores a reflectivity mask in the diffuse alpha of opaque skins: the
+    engine blends the environment cube map by ``1 - alpha`` (bright metal where
+    alpha is low, matte cloth where alpha is 1).  Packaged TPC assets get this
+    driven by their TXI ``envmaptexture``; a raw TGA/PNG dropped into the
+    viewport keeps the mask but names no cube map, so it would render as its
+    (deliberately dark) diffuse with no sheen.  Detect that mask so the caller
+    can fall back to the default environment map.
+
+    A texture qualifies when a meaningful band of texels is partially
+    transparent (the mask) *without* a hard cutout (which would indicate
+    punch-through/foliage alpha) and it is not effectively fully opaque.  The
+    verdict is memoized on the image.
+    """
+    if img is None:
+        return False
+    cached = getattr(img, "_gr_reflectivity_mask", None)
+    if cached is not None:
+        return bool(cached)
+    result = False
+    try:
+        if "A" in img.getbands():
+            sample = img
+            if max(img.size) > 256:
+                sample = img.resize((256, 256))
+            hist = sample.getchannel("A").histogram()
+            total = float(sum(hist)) or 1.0
+            frac_cutout = sum(hist[0:8]) / total      # near-zero → transparency/cutout
+            frac_partial = sum(hist[16:248]) / total  # the reflectivity band
+            frac_opaque = sum(hist[248:256]) / total
+            result = (
+                frac_partial >= 0.05
+                and frac_cutout < 0.02
+                and frac_opaque < 0.995
+            )
+    except Exception:
+        result = False
+    try:
+        img._gr_reflectivity_mask = result
+    except Exception:
+        pass
+    return result
+
+
 class GpuRenderer:
     """
     GPU renderer for KotOR models.
@@ -426,6 +472,12 @@ class GpuRenderer:
         # correct: the env blend weight (diffuse alpha) modulates towards grey
         # rather than towards zero, keeping the surface opaque.
         self._grey_env_tex: Optional['moderngl.Texture'] = None
+        # FIX-ENVDEFAULT: Built-in metallic sphere-map used as the default
+        # environment reflection for opaque skins whose diffuse alpha is a
+        # reflectivity mask but that name no cube map (bare TGA/PNG drops).
+        # Mirrors appearance.2da envmap=DEFAULT so metallic armour previews
+        # with sheen instead of rendering as its dark diffuse.
+        self._default_env_tex: Optional['moderngl.Texture'] = None
         # FIX-PERSCACHE: Persistent world-transform cache keyed by (model_id, node_id).
         # Survives across frames for static geometry; invalidated when the model changes.
         # This reduces per-frame cost from O(N×depth) parent-chain walks to O(1) lookups.
@@ -543,8 +595,13 @@ class GpuRenderer:
         # starfield) do not bloom into a milky veil, and the strength stays an
         # accent rather than a wash.
         self.bloom_enabled: bool = True
-        self.bloom_threshold: float = 0.72
-        self.bloom_strength: float = 0.5
+        # Tightened to stop bloom veiling dense additive holograms (galaxy map,
+        # planet holos): the higher threshold blooms only genuinely blown-out
+        # cores instead of the whole mid-bright cyan structure, and the lower
+        # strength keeps it a subtle accent — closer to KotOR.js Forge, which
+        # renders these sprites with no post-process glow at all.
+        self.bloom_threshold: float = 0.82
+        self.bloom_strength: float = 0.30
         self._bloom_pass = None
         self._fbo_resolve_tex = None
         self._fbo_simple_tex = None
@@ -810,6 +867,11 @@ class GpuRenderer:
             try: self._grey_env_tex.release()
             except Exception: pass
             self._grey_env_tex = None
+        # Release default metallic env sphere-map
+        if self._default_env_tex is not None:
+            try: self._default_env_tex.release()
+            except Exception: pass
+            self._default_env_tex = None
         # Phase A: Release GPU skinning uploader
         if self._skin_uploader is not None:
             try: self._skin_uploader.release()
@@ -841,6 +903,42 @@ class GpuRenderer:
         self._blend_submission.reset()
         self._gpu_available = False
         self._init_attempted = False  # allow re-initialisation after release
+
+    def _default_env_texture(self, ctx):
+        """Lazily build the default metallic sphere-map (matcap) reflection.
+
+        A vertical grey gradient — bright near the top with a soft highlight
+        band, darkening toward the bottom — reads as a neutral chrome/sky
+        reflection through the shader's ``env_uv = R.xy/m + 0.5`` sphere map.
+        Blended by ``1 - diffuse_alpha`` it lifts a dark metallic diffuse into a
+        metallic sheen without tinting matte (alpha=1) regions.
+        """
+        if self._default_env_tex is not None:
+            return self._default_env_tex
+        size = 128
+        buf = bytearray(size * size * 4)
+        for y in range(size):
+            v = y / (size - 1)                       # 0 = top row, 1 = bottom
+            base = 1.0 - v                           # bright top → dark bottom
+            highlight = math.exp(-((v - 0.25) ** 2) / (2 * 0.06 ** 2)) * 0.45
+            lum = 0.22 + 0.66 * base + highlight
+            c = int(max(0.0, min(1.0, lum)) * 255)
+            row = y * size * 4
+            for x in range(size):
+                i = row + x * 4
+                buf[i] = c
+                buf[i + 1] = c
+                buf[i + 2] = c
+                buf[i + 3] = 255
+        tex = ctx.texture((size, size), 4, bytes(buf))
+        try:
+            tex.build_mipmaps()
+        except Exception:
+            pass
+        tex.repeat_x = False
+        tex.repeat_y = False
+        self._default_env_tex = tex
+        return tex
 
     def clear_caches(self) -> None:
         """Clear per-model GPU mesh and texture caches without destroying the context.
@@ -3117,16 +3215,37 @@ class GpuRenderer:
                 # alpha applied as transparency), which is wrong — the surface
                 # should remain opaque with a slight metallic tint.
                 env_name = str(getattr(node, 'txi_envmaptexture', '')).strip().lower()
-                if _detail_texture_allowed and bool(self.show_environment_map) and env_name:
-                    env_img  = textures.get(env_name)
-                    gl_env   = self._tex_cache.get(env_img) if env_img else None
-                    if gl_env is None:
-                        # Use grey fallback: neutral env tint keeps surface opaque
-                        if self._grey_env_tex is None:
-                            # 128,128,128,255 → 50% grey → neutral metallic tint
-                            self._grey_env_tex = ctx.texture((1, 1), 4,
-                                                              bytes([128, 128, 128, 255]))
-                        gl_env = self._grey_env_tex
+                # FIX-ENVDEFAULT: A bare TGA/PNG drop names no cube map, so an
+                # opaque metallic skin whose diffuse alpha is a reflectivity mask
+                # would render as its (deliberately dark) diffuse with no sheen —
+                # the "loads too dark" report.  KOTOR drives that sheen from the
+                # alpha mask plus a default cube map (appearance.2da envmap=
+                # DEFAULT); mirror it here with the built-in metallic sphere-map.
+                # Gated to genuinely opaque, non-decal, non-punch-through nodes so
+                # transparency/cutout alphas are never turned into reflections.
+                _env_default = False
+                if (not env_name
+                        and _detail_texture_allowed
+                        and bool(self.show_environment_map)
+                        and txi_decal == 0
+                        and txi_blend == 0
+                        and int(getattr(node, 'transparency_hint', 0) or 0) == 0
+                        and float(getattr(node, 'alpha', 1.0) or 1.0) >= 0.999
+                        and _diffuse_is_reflectivity_mask(diff_img)):
+                    _env_default = True
+                if _detail_texture_allowed and bool(self.show_environment_map) and (env_name or _env_default):
+                    if _env_default:
+                        gl_env = self._default_env_texture(ctx)
+                    else:
+                        env_img  = textures.get(env_name)
+                        gl_env   = self._tex_cache.get(env_img) if env_img else None
+                        if gl_env is None:
+                            # Use grey fallback: neutral env tint keeps surface opaque
+                            if self._grey_env_tex is None:
+                                # 128,128,128,255 → 50% grey → neutral metallic tint
+                                self._grey_env_tex = ctx.texture((1, 1), 4,
+                                                                  bytes([128, 128, 128, 255]))
+                            gl_env = self._grey_env_tex
                     gl_env.use(location=2)
                     _u['u_env_tex'].value = 2
                     _u['u_has_env'].value = 1
@@ -3179,7 +3298,7 @@ class GpuRenderer:
                 _feat_mask = 0
                 if gl_diff and diff_img: _feat_mask |= (1 << 0)   # FEAT_TEXTURE
                 if _detail_texture_allowed and bool(self.show_lightmap_map) and gl_lm: _feat_mask |= (1 << 1)   # FEAT_LIGHTMAP
-                if _detail_texture_allowed and bool(self.show_environment_map) and env_name: _feat_mask |= (1 << 2)   # FEAT_ENVMAP
+                if _detail_texture_allowed and bool(self.show_environment_map) and (env_name or _env_default): _feat_mask |= (1 << 2)   # FEAT_ENVMAP
                 if _detail_texture_allowed and bool(self.show_specular_map) and spec_name: _feat_mask |= (1 << 3)   # FEAT_SPECMAP
                 if _detail_texture_allowed and bool(self.show_normal_map) and bump_name: _feat_mask |= (1 << 4)   # FEAT_BUMPMAP
                 if _is_dangly:          _feat_mask |= (1 << 6)   # FEAT_DANGLY
