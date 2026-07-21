@@ -11,6 +11,7 @@ from pathlib import Path
 from src.adapters.rendering.moderngl_legacy_bridge import GpuRenderer, moderngl_runtime_available
 from src.core.rendering.renderer_backend import RendererBackend
 from src.core.rendering.renderer_capabilities import MODERNGL_DISPLAY_MODES, RendererCapabilities
+from src.core.rendering.renderer_settings import RendererSettings
 
 
 _NATIVE_MODERNGL_ENV = "GHOSTRIGGER_RENDERER_MODERNGL"
@@ -29,6 +30,17 @@ class ModernGLRenderer(GpuRenderer):
 
     name = "ModernGL"
     backend_id = RendererBackend.MODERNGL_GL330.value
+
+    def __init__(self, settings: RendererSettings | None = None) -> None:
+        super().__init__()
+        self.set_settings(settings or RendererSettings())
+
+    def set_settings(self, settings: RendererSettings) -> None:
+        """Apply quality controls while preserving retail-parity defaults."""
+
+        self.bloom_enabled = bool(settings.bloom_enabled)
+        self.bloom_threshold = max(0.0, min(2.0, float(settings.bloom_threshold)))
+        self.bloom_strength = max(0.0, min(1.0, float(settings.bloom_strength)))
 
     def is_available(self) -> bool:
         try:

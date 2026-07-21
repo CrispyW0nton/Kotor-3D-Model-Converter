@@ -2,7 +2,7 @@
     "schema": "ghostrigger_python_payload.v1",
     "phase": "P1.5 embedded python payload",
     "project": "GhostRigger.Core.Workflow",
-    "file_count": 139,
+    "file_count": 140,
     "originals_remain_in_src": true,
     "files": [
         {
@@ -828,10 +828,16 @@
             "sha256": "23e10ea08d43e9a0d76bff9cb57f02612ec2eec4f072d525c90a2f75275b054a"
         },
         {
+            "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_PARTICLE_PLACEABLE_EXPORT",
+            "source_path": "src/core/workflow/particle_placeable_export.py",
+            "packaged_path": "Python/src/core/workflow/particle_placeable_export.py",
+            "sha256": "66e07163790cabf5cfe0e80acd1aa917ece9be120418adf2c29cb1d9daa56116"
+        },
+        {
             "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_PLACEABLE_BUILDER_SERVICE",
             "source_path": "src/core/workflow/placeable_builder_service.py",
             "packaged_path": "Python/src/core/workflow/placeable_builder_service.py",
-            "sha256": "38f6490a20f67d42bd7e9706351ea3df8828611ad962626817b61c358e670600"
+            "sha256": "5372075e44ff9eeb04a880b9a7db0b6eb2452123f4997a97933e2f49fc3daa35"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_WORKFLOW_PLCAA_MANUAL_PROOF_KIT",

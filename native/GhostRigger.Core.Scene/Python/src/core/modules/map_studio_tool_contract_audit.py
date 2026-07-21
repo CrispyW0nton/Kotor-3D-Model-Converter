@@ -121,7 +121,7 @@ def _rich_context() -> MapStudioToolActionContext:
         metadata={
             "edge_indices": (0, 1),
             "position_policy": "target",
-            "texture": "CM_Baremetal",
+            "texture": "ruler01",
             "surface_id": 4,
             "curve_name": "audit_curve",
             "curve_purpose": "terrain_ridge",

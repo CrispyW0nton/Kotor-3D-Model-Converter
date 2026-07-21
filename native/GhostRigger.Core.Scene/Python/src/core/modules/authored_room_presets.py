@@ -175,7 +175,7 @@ def _preset_room_lights(*, preset: AuthoredRoomPrimitivePreset, root: str, room_
             position=(0.0, -1.5, max(2.25, float(preset.wall_height) * 0.75)),
             color=(1.0, 0.92, 0.76),
             radius=max(8.0, max(abs(float(x)) for point in preset.points for x in point)),
-            intensity=1.0,
+            intensity=0.65,
             light_type="point",
             metadata={
                 "source": "map_studio:room_primitive_preset",
@@ -191,10 +191,15 @@ def _preset_lighting_metadata(preset: AuthoredRoomPrimitivePreset) -> dict[str, 
 
     return {
         "lighting": {
-            "profile": "fullbright",
-            "source": "map_studio:room_primitive_preset_fullbright",
+            "profile": "standard",
+            "source": "map_studio:room_primitive_preset_balanced",
             "preset_id": preset.preset_id,
-            "purpose": "editable_graybox_visibility",
+            "purpose": "readable_textured_room_preview",
+            "sun_ambient": [48, 48, 48],
+            "sun_diffuse": [150, 150, 150],
+            "dynamic_ambient": [72, 72, 72],
+            "shadow_opacity": 80,
+            "sun_shadows": 0,
         }
     }
 

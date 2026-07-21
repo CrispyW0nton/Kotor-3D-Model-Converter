@@ -45,7 +45,7 @@ class QtPlaceableBuilderController(QtCore.QObject):
         self.window.openRequested.connect(self.choose_open)
         self.window.saveToLibraryRequested.connect(self.save_document)
         self.window.exportUtpRequested.connect(self.choose_export)
-        self.window.validateRequested.connect(self.validate_document)
+        self.window.validateRequested.connect(lambda document: self.validate_document(document, reveal=True))
         self.window.refreshLibraryRequested.connect(self.refresh_library)
         self.window.libraryAssetActivated.connect(self.open_library_row)
         self.window.openLibraryFolderRequested.connect(self.open_library_folder)
@@ -112,7 +112,7 @@ class QtPlaceableBuilderController(QtCore.QObject):
         self._preview_key = ("", "", "")
         self._update_preview(asset)
 
-    def validate_document(self, document: Mapping[str, Any]) -> Any:
+    def validate_document(self, document: Mapping[str, Any], *, reveal: bool = False) -> Any:
         try:
             validation = self.service.validate(document)
         except Exception as exc:
@@ -123,10 +123,11 @@ class QtPlaceableBuilderController(QtCore.QObject):
                     "utp_export_ready": False,
                     "structural_evidence_ready": False,
                     "engine_ready": False,
-                }
+                },
+                reveal=reveal,
             )
             return None
-        self.window.set_readiness(validation)
+        self.window.set_readiness(validation, reveal=reveal)
         try:
             asset = PlaceableAsset.from_dict(dict(document))
             self.window.set_resource_rows(self._resource_rows(asset))
@@ -154,28 +155,30 @@ class QtPlaceableBuilderController(QtCore.QObject):
 
     def choose_export(self, document: Mapping[str, Any]) -> None:
         resref = str(document.get("template_resref") or "placeable").strip().lower()
-        path, _selected = QtWidgets.QFileDialog.getSaveFileName(
+        default_parent = self.service.library_root / "Exports"
+        default_parent.mkdir(parents=True, exist_ok=True)
+        path = QtWidgets.QFileDialog.getExistingDirectory(
             self.window,
-            "Export KOTOR Placeable UTP",
-            str(self.service.library_root / f"{resref}.utp"),
-            "KOTOR Placeable Template (*.utp)",
+            f"Choose Folder for {resref} Game Bundle",
+            str(default_parent),
         )
         if path:
             self.export_document(document, path)
 
     def export_document(self, document: Mapping[str, Any], output_path: str | Path) -> Any:
-        result = self.service.export_utp(document, output_path)
+        result = self.service.export_game_bundle(document, output_path)
         self.window.set_readiness(result.validation)
         if not result.ok:
             QtWidgets.QMessageBox.warning(
                 self.window,
-                "Export Placeable UTP",
-                "\n".join(result.messages) or "The placeable is not ready for UTP export.",
+                "Export Placeable Game Bundle",
+                "\n".join(result.messages) or "The placeable is not ready for game-bundle export.",
             )
             return result
         self.window.statusBar().showMessage(
-            f"Exported {Path(result.utp_path).name}; UTP readback passed, manual KOTOR proof remains.",
-            7000,
+            f"Exported {len(result.bundle_resources)} verified resource(s) to {Path(result.bundle_dir).name}; "
+            "copy install/Override into the target game or place the saved asset in Map Studio.",
+            10000,
         )
         return result
 

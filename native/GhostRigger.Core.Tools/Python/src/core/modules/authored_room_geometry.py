@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .authored_room_materials import DEFAULT_AUTHORED_ROOM_TEXTURE, DEFAULT_AUTHORED_ROOM_UV_TILE_SIZE
 from .authored_walkmesh_surfaces import resolve_walkmesh_surface_id, walkmesh_surface_name
 from .module_format import WOKData, WOKFace
 
@@ -139,46 +140,52 @@ def build_rectangular_room_mesh(primitive: RectangularRoomPrimitive) -> Primitiv
     w = float(primitive.width) * 0.5
     d = float(primitive.depth) * 0.5
     h = float(primitive.wall_height)
-    vertices: tuple[Vec3, ...] = (
-        (-w, -d, 0.0),
-        (w, -d, 0.0),
-        (w, d, 0.0),
-        (-w, d, 0.0),
-        (-w, -d, h),
-        (w, -d, h),
-        (w, d, h),
-        (-w, d, h),
+    texture = str(primitive.texture or "")
+    tile_size = (
+        DEFAULT_AUTHORED_ROOM_UV_TILE_SIZE
+        if texture.strip().lower() == DEFAULT_AUTHORED_ROOM_TEXTURE.lower()
+        else 0.0
     )
-    faces: tuple[Face, ...] = (
-        (0, 1, 2),
-        (0, 2, 3),
-        (0, 5, 1),
-        (0, 4, 5),
-        (1, 6, 2),
-        (1, 5, 6),
-        (2, 7, 3),
-        (2, 6, 7),
-        (3, 4, 0),
-        (3, 7, 4),
-    )
-    uvs: tuple[Vec2, ...] = (
-        (0.0, 0.0),
-        (1.0, 0.0),
-        (1.0, 1.0),
-        (0.0, 1.0),
-        (0.0, 0.0),
-        (1.0, 0.0),
-        (1.0, 1.0),
-        (0.0, 1.0),
-    )
+    vertices: list[Vec3] = []
+    faces: list[Face] = []
+    normals: list[Vec3] = []
+    uvs: list[Vec2] = []
+
+    def append_quad(
+        corners: tuple[Vec3, Vec3, Vec3, Vec3],
+        normal: Vec3,
+        size_u: float,
+        size_v: float,
+    ) -> None:
+        start = len(vertices)
+        repeat_u = float(size_u) / tile_size if tile_size else 1.0
+        repeat_v = float(size_v) / tile_size if tile_size else 1.0
+        vertices.extend(corners)
+        normals.extend((normal,) * 4)
+        uvs.extend(((0.0, 0.0), (repeat_u, 0.0), (repeat_u, repeat_v), (0.0, repeat_v)))
+        faces.extend(((start, start + 1, start + 2), (start, start + 2, start + 3)))
+
+    # Independent face corners preserve the inward wall normals and the UV
+    # seams that the earlier eight-vertex shell could not represent.
+    append_quad(((-w, -d, 0.0), (w, -d, 0.0), (w, d, 0.0), (-w, d, 0.0)), (0.0, 0.0, 1.0), 2.0 * w, 2.0 * d)
+    append_quad(((w, -d, 0.0), (-w, -d, 0.0), (-w, -d, h), (w, -d, h)), (0.0, 1.0, 0.0), 2.0 * w, h)
+    append_quad(((w, d, 0.0), (w, -d, 0.0), (w, -d, h), (w, d, h)), (-1.0, 0.0, 0.0), 2.0 * d, h)
+    append_quad(((-w, d, 0.0), (w, d, 0.0), (w, d, h), (-w, d, h)), (0.0, -1.0, 0.0), 2.0 * w, h)
+    append_quad(((-w, -d, 0.0), (-w, d, 0.0), (-w, d, h), (-w, -d, h)), (1.0, 0.0, 0.0), 2.0 * d, h)
     return PrimitiveMesh(
         name=f"{primitive.room_resref}_mesh",
-        vertices=vertices,
-        faces=faces,
-        normals=((0.0, 0.0, 1.0),) * len(vertices),
-        uvs=uvs,
-        texture=str(primitive.texture or ""),
-        metadata={"primitive": "rectangular_room_shell", "source": "map_studio:t2601"},
+        vertices=tuple(vertices),
+        faces=tuple(faces),
+        normals=tuple(normals),
+        uvs=tuple(uvs),
+        texture=texture,
+        metadata={
+            "primitive": "rectangular_room_shell",
+            "source": "map_studio:t2601",
+            "hard_face_normals": True,
+            "uv_layout": "plcaa_world_tiled" if tile_size else "per_face_0_1",
+            "uv_tile_size_m": tile_size,
+        },
     )
 
 

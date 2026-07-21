@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 def _renderer_for_backend(backend: RendererBackend, settings: RendererSettings | None = None) -> ViewportRendererPort:
     backend = supported_renderer_backend(backend)
     if backend == RendererBackend.MODERNGL_GL330:
-        return ModernGLRenderer()
+        return ModernGLRenderer(settings=settings)
     if backend == RendererBackend.WGPU_D3D12:
         return WgpuRenderer(RendererBackend.WGPU_D3D12, settings=settings)
     if backend == RendererBackend.PYGFX_WGPU:

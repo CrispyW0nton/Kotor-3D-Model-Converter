@@ -1255,7 +1255,7 @@
     },
     {
         "project": "GhostRigger.Core.Workflow",
-        "python_file_count": 139,
+        "python_file_count": 140,
         "files": [
             "src\\autorig\\__init__.py",
             "src\\autorig\\accurig.py",
@@ -1394,6 +1394,7 @@
             "src\\core\\workflow\\legacy_module_repair.py",
             "src\\core\\workflow\\legacy_texture_port.py",
             "src\\core\\workflow\\map_studio_lightmap_apply.py",
+            "src\\core\\workflow\\particle_placeable_export.py",
             "src\\core\\workflow\\placeable_builder_service.py",
             "src\\core\\workflow\\plcaa_manual_proof_kit.py"
         ]

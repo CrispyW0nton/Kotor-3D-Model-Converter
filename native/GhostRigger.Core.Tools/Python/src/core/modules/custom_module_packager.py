@@ -7,6 +7,7 @@ modder can inspect before copying anything into Override or Modules.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import importlib
 import json
@@ -22,6 +23,9 @@ from typing import Any, Iterable, Optional
 
 CORE_PACKAGE_RESTYPES = {"are", "git", "ifo", "lyt", "vis", "wok"}
 ROOM_MODEL_RESTYPES = {"mdl", "mdx"}
+# Global engine tables are loaded before a module archive is opened.  Keep
+# these out of the MOD and stage them in install/Override instead.
+GLOBAL_OVERRIDE_RESOURCE_KEYS = {("placeables", "2da")}
 
 
 @dataclass(frozen=True)
@@ -75,9 +79,11 @@ class CustomModulePackResult:
     save_result: Any = None
     module_path: str = ""
     modules_dir: str = ""
+    override_dir: str = ""
     resources_dir: str = ""
     manifest_path: str = ""
     staged_resources: list[StagedResourceResult] = field(default_factory=list)
+    staged_override_resources: list[StagedResourceResult] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     blocking_issues: list[str] = field(default_factory=list)
     reference_report: Any = None
@@ -402,6 +408,8 @@ def _manifest_dict(
             "modules_dir": result.modules_dir,
             "module_path": result.module_path,
             "archives": archives,
+            "override_dir": result.override_dir,
+            "override_resources": [resource.__dict__ for resource in result.staged_override_resources],
         },
         "source": {
             "resources_dir": result.resources_dir,
@@ -437,7 +445,16 @@ def package_custom_module(
             code="invalid_request",
         )
 
-    resource_list = list(resources or [])
+    all_resources = list(resources or [])
+    global_resources = [resource for resource in all_resources if resource.key in GLOBAL_OVERRIDE_RESOURCE_KEYS]
+    resource_list = [resource for resource in all_resources if resource.key not in GLOBAL_OVERRIDE_RESOURCE_KEYS]
+    archive_module_like = module_like
+    module_resources = getattr(module_like, "resources", None)
+    if isinstance(module_resources, dict) and any(key in module_resources for key in GLOBAL_OVERRIDE_RESOURCE_KEYS):
+        archive_module_like = copy.copy(module_like)
+        archive_module_like.resources = {
+            key: value for key, value in module_resources.items() if key not in GLOBAL_OVERRIDE_RESOURCE_KEYS
+        }
     generated_replacements = _generated_layout_replacements(module_like, request, sp)
     explicit_replacements, explicit_blocking = _explicit_replacements(resource_list, sp)
     replacements = [*generated_replacements, *explicit_replacements]
@@ -463,12 +480,14 @@ def package_custom_module(
     output_root = Path(request.output_dir or ".")
     output_root.mkdir(parents=True, exist_ok=True)
     install_modules_dir = output_root / "install" / "Modules"
+    install_override_dir = output_root / "install" / "Override"
     resources_dir = output_root / "source" / "resources"
     manifest_path = output_root / f"{root}_pack_manifest.json"
 
     if blocking and request.strict:
         result = CustomModulePackResult(
             modules_dir=str(install_modules_dir),
+            override_dir=str(install_override_dir),
             resources_dir=str(resources_dir),
             manifest_path=str(manifest_path),
             warnings=warnings,
@@ -500,6 +519,7 @@ def package_custom_module(
 
     staging_root = Path(tempfile.mkdtemp(prefix=f".ghostrigger_pack_{root}_", dir=str(output_root)))
     staging_install_modules_dir = staging_root / "install" / "Modules"
+    staging_install_override_dir = staging_root / "install" / "Override"
     staging_resources_dir = staging_root / "source" / "resources"
     staging_manifest_path = staging_root / f"{root}_pack_manifest.json"
     promoted_outputs: list[dict[str, Any]] = []
@@ -520,7 +540,7 @@ def package_custom_module(
         write_manifest=True,
     )
     try:
-        save_result = sp.save_module_package(module_like, save_request, replacements=replacements, now=now)
+        save_result = sp.save_module_package(archive_module_like, save_request, replacements=replacements, now=now)
         save_blocking = list(getattr(save_result, "blocking_issues", []) or [])
         save_warnings = list(getattr(save_result, "warnings", []) or [])
         warnings.extend(item for item in save_warnings if item not in warnings)
@@ -528,15 +548,20 @@ def package_custom_module(
         archives = list(getattr(save_result, "archives", []) or [])
 
         staged: list[StagedResourceResult] = []
+        staged_override: list[StagedResourceResult] = []
         if request.write_loose_resources:
             entries, entry_warnings, entry_blocking = sp.collect_module_archive_entries(
-                module_like,
+                archive_module_like,
                 save_request,
                 replacements=replacements,
             )
             warnings.extend(item for item in entry_warnings if item not in warnings)
             blocking.extend(item for item in entry_blocking if item not in blocking)
             staged = _stage_loose_resources(entries, staging_resources_dir)
+            if global_resources:
+                staged.extend(_stage_loose_resources(global_resources, staging_resources_dir))
+        if global_resources:
+            staged_override = _stage_loose_resources(global_resources, staging_install_override_dir)
 
         ok = bool(getattr(save_result, "ok", False)) and (not blocking or not request.strict)
         if not ok:
@@ -546,9 +571,11 @@ def package_custom_module(
                 save_result=save_result,
                 module_path=str(archives[0].path) if archives else "",
                 modules_dir=str(install_modules_dir),
+                override_dir=str(install_override_dir),
                 resources_dir=str(resources_dir),
                 manifest_path=str(manifest_path),
                 staged_resources=staged,
+                staged_override_resources=staged_override,
                 warnings=warnings,
                 blocking_issues=blocking,
                 reference_report=reference_report,
@@ -604,15 +631,33 @@ def package_custom_module(
                 }
             )
 
+        final_staged_override: list[StagedResourceResult] = []
+        for resource in staged_override:
+            staged_resource_path = Path(resource.path)
+            final_resource = _relocated_staged_resource(resource, install_override_dir)
+            final_staged_override.append(final_resource)
+            export_artifacts.append(
+                {
+                    "artifact_kind": "override_resource",
+                    "resref": resource.resref,
+                    "restype": resource.restype,
+                    "staged_path": str(staged_resource_path),
+                    "final_path": final_resource.path,
+                    "backup_path": "",
+                }
+            )
+
         transaction["status"] = "succeeded"
         result = CustomModulePackResult(
             ok=True,
             save_result=save_result,
             module_path=module_path,
             modules_dir=str(install_modules_dir),
+            override_dir=str(install_override_dir),
             resources_dir=str(resources_dir),
             manifest_path=str(manifest_path),
             staged_resources=final_staged,
+            staged_override_resources=final_staged_override,
             warnings=warnings,
             blocking_issues=blocking,
             reference_report=reference_report,
@@ -736,6 +781,7 @@ def package_custom_module(
             save_result=locals().get("save_result"),
             module_path="",
             modules_dir=str(install_modules_dir),
+            override_dir=str(install_override_dir),
             resources_dir=str(resources_dir),
             manifest_path=str(manifest_path),
             staged_resources=[],

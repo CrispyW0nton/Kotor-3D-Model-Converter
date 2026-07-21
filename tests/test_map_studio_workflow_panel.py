@@ -2136,6 +2136,20 @@ def test_t2600_map_studio_outliner_add_camera_and_light_are_wired_to_services() 
     assert "Lighting: authored room light added" in window_source
 
 
+def test_coordinate_placeable_placement_resolves_preview_resources_immediately() -> None:
+    window_source = _read(
+        "native/GhostRigger.Core.Tools/Python/src/gui/windows/"
+        "module_editor_window.py"
+    )
+
+    start = window_source.index("    def add_authored_gameplay_placement(")
+    end = window_source.index("    def _set_map_studio_placement_mode(", start)
+    method_source = window_source[start:end]
+    assert 'if kind in {"placeable", "door"}:' in method_source
+    assert "self._sync_placeable_library_resources_for_export()" in method_source
+    assert "real model/effects appear" in method_source
+
+
 def test_t2600_map_studio_properties_exposes_transition_controls() -> None:
     properties_source = _read(
         "native/GhostRigger.Core.GUI.Display/Python/src/gui/panels/"

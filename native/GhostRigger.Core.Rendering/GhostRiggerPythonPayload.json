@@ -93,13 +93,13 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RENDERER",
             "source_path": "src/adapters/rendering/moderngl_renderer.py",
             "packaged_path": "Python/src/adapters/rendering/moderngl_renderer.py",
-            "sha256": "46043958a34bc4f517dde74ed39e9c6a0cf41c38e50fb0c4d803845b756a026d"
+            "sha256": "d3658256999b46892ff0a60212702de7443c66eafe99648ff729acd63579cdf8"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RENDERER_IMPL",
             "source_path": "src/adapters/rendering/moderngl_renderer_impl.py",
             "packaged_path": "Python/src/adapters/rendering/moderngl_renderer_impl.py",
-            "sha256": "c63b097deab74a57ac49e0b13b4634d6dbaec770c9081ec05a2db8c25b7f2656"
+            "sha256": "cfa7d11eebc4cde95d7b982a9d279142f8a5fcc2ab0c6719adaf6415be5eb651"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RESOURCES",
@@ -159,7 +159,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_RENDERER_FACTORY",
             "source_path": "src/adapters/rendering/renderer_factory.py",
             "packaged_path": "Python/src/adapters/rendering/renderer_factory.py",
-            "sha256": "fec91e91c112d0542aebd46404c9d03eda1d8a69314c1bf70495e2054473dabc"
+            "sha256": "704fa9a82f07cba94f61c1976b0c14c0f344af340ab21ecf36c5a020a70f7864"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_WGPU_CORE_INIT",
@@ -699,7 +699,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_RENDERER_SETTINGS",
             "source_path": "src/core/rendering/renderer_settings.py",
             "packaged_path": "Python/src/core/rendering/renderer_settings.py",
-            "sha256": "684619227852012bd973bb5b9badf9cd58508be913aa24eda9c5eb63a7f91224"
+            "sha256": "db2f7891c9cd40bcd998012efb1ba61ff704f3c48e88d6bdb5f320a539fa11cd"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_SKELETON_RENDER_DATA",

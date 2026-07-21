@@ -572,6 +572,21 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
     def set_resource_manager(self, manager) -> None:
         self._resource_manager = manager
 
+    def set_renderer_settings(self, settings) -> None:
+        """Apply viewport quality changes without reopening the editor."""
+
+        from src.core.rendering.renderer_settings import RendererSettings
+
+        self._settings_data = (
+            {"renderer": settings.to_settings_dict()}
+            if isinstance(settings, RendererSettings)
+            else dict(settings or {})
+        )
+        resolved = settings if isinstance(settings, RendererSettings) else RendererSettings.from_settings(self._settings_data)
+        apply_settings = getattr(self.viewport, "set_renderer_settings", None)
+        if callable(apply_settings):
+            apply_settings(resolved)
+
     def _manager(self):
         if self._resource_manager is not None:
             return self._resource_manager

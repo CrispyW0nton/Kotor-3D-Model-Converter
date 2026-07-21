@@ -21,6 +21,7 @@ reference geometry apart from authored geometry.
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -616,6 +617,22 @@ def _bearing_quat(bearing: float) -> tuple[float, float, float, float]:
     return (0.0, 0.0, math.sin(half), math.cos(half))
 
 
+def _quat_multiply(
+    left: tuple[float, float, float, float],
+    right: tuple[float, float, float, float],
+) -> tuple[float, float, float, float]:
+    """Compose two xyzw quaternions without importing a GUI/math adapter."""
+
+    lx, ly, lz, lw = left
+    rx, ry, rz, rw = right
+    return (
+        lw * rx + lx * rw + ly * rz - lz * ry,
+        lw * ry - lx * rz + ly * rw + lz * rx,
+        lw * rz + lx * ry - ly * rx + lz * rw,
+        lw * rw - lx * rx - ly * ry - lz * rz,
+    )
+
+
 def _model_node_named(source_model: Any, name: str) -> Any | None:
     """Find one node by case-insensitive name in a loaded Kotor model."""
 
@@ -760,6 +777,56 @@ def _flattened_mesh_nodes(
     return flattened
 
 
+def _flattened_emitter_nodes(
+    md: Any,
+    source_model: Any,
+    group_node: Any,
+    *,
+    group_resref: str,
+    role: str,
+    rotation: tuple[float, float, float, float] | None = None,
+) -> list[Any]:
+    """Copy source emitters into the combined preview in group-local space.
+
+    Map Studio flattens mesh transforms for picking, but emitter nodes carry
+    simulation state rather than triangles.  Their model-space transform is
+    therefore baked onto a lightweight child while the authored placement
+    group continues to own world translation and later transform edits.
+    """
+
+    flattened: list[Any] = []
+    root = getattr(source_model, "root_node", None)
+    stack = [root] if root is not None else []
+    while stack:
+        node = stack.pop()
+        stack.extend(tuple(getattr(node, "children", ()) or ()))
+        if not bool(getattr(node, "is_emitter", False)):
+            continue
+        try:
+            position, orientation = node.world_transform()
+        except Exception:
+            position, orientation = (0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 1.0)
+        position = tuple(float(value) for value in tuple(position)[:3])
+        orientation = tuple(float(value) for value in tuple(orientation)[:4])
+        if rotation is not None:
+            position = _quat_rotate(rotation, position)
+            orientation = _quat_multiply(rotation, orientation)
+        emitter_node = md.ModelNode(
+            name=str(getattr(node, "name", "") or f"{group_resref}_{role}_emitter"),
+            flags=int(getattr(node, "flags", int(md.NodeFlags.EMITTER)) or int(md.NodeFlags.EMITTER)),
+            position=position,
+            rotation=orientation,
+        )
+        emitter_node.parent = group_node
+        emitter_node.emitter_params = deepcopy(dict(getattr(node, "emitter_params", {}) or {}))
+        emitter_node.controllers = deepcopy(list(getattr(node, "controllers", ()) or ()))
+        setattr(emitter_node, "_gr_map_studio_room_resref", group_resref)
+        setattr(emitter_node, "_gr_map_studio_emitter_role", f"{role}_{len(flattened)}")
+        setattr(emitter_node, "_gr_map_studio_stock_emitter", True)
+        flattened.append(emitter_node)
+    return flattened
+
+
 @dataclass(frozen=True)
 class StockContentPreviewResult:
     """Result of merging stock rooms + instance geometry into a preview model."""
@@ -767,6 +834,7 @@ class StockContentPreviewResult:
     room_count: int = 0
     instance_count: int = 0
     mesh_count: int = 0
+    emitter_count: int = 0
     resolved_placement_ids: tuple[str, ...] = field(default_factory=tuple)
     unresolved_placement_ids: tuple[str, ...] = field(default_factory=tuple)
     placement_models: tuple[tuple[str, str], ...] = field(default_factory=tuple)
@@ -851,6 +919,7 @@ def append_stock_content_to_preview_root(
     room_count = 0
     instance_count = 0
     mesh_count = 0
+    emitter_count = 0
     resolved_placement_ids: list[str] = []
     unresolved_placement_ids: list[str] = []
     placement_models: list[tuple[str, str]] = []
@@ -886,13 +955,17 @@ def append_stock_content_to_preview_root(
         setattr(group, "_gr_map_studio_stock_room", True)
         setattr(group, "_gr_map_studio_room_id", str(getattr(room, "room_id", "") or ""))
         meshes = _flattened_mesh_nodes(md, source_model, group, group_resref=resref, role="stock_room")
-        if not meshes:
-            warnings.append(f"Stock room {resref} has no renderable mesh nodes.")
+        emitters = _flattened_emitter_nodes(
+            md, source_model, group, group_resref=resref, role="stock_room"
+        )
+        if not meshes and not emitters:
+            warnings.append(f"Stock room {resref} has no renderable mesh or emitter nodes.")
             continue
-        group.children.extend(meshes)
+        group.children.extend((*meshes, *emitters))
         root.children.append(group)
         room_count += 1
         mesh_count += len(meshes)
+        emitter_count += len(emitters)
 
     active_resolver = resolver
     if active_resolver is None and resource_manager is not None:
@@ -966,8 +1039,19 @@ def append_stock_content_to_preview_root(
             rotation=rotation,
             override_texture=body_texture_resref,
         )
-        if not meshes:
-            warnings.append(f"{kind.replace('_', ' ').title()} {template_resref} model {model_resref} has no renderable meshes.")
+        emitters = _flattened_emitter_nodes(
+            md,
+            source_model,
+            group,
+            group_resref=placement_id,
+            role=f"stock_{kind}",
+            rotation=rotation,
+        )
+        if not meshes and not emitters:
+            warnings.append(
+                f"{kind.replace('_', ' ').title()} {template_resref} model {model_resref} "
+                "has no renderable meshes or emitters."
+            )
             unresolved_placement_ids.append(placement_id)
             continue
         head_for_kind = getattr(active_resolver, "head_model_for_placement_kind", None)
@@ -1008,10 +1092,14 @@ def append_stock_content_to_preview_root(
         for mesh in meshes:
             setattr(mesh, "_gr_map_studio_placement_id", placement_id)
             setattr(mesh, "_gr_map_studio_placement_kind", kind)
-        group.children.extend(meshes)
+        for emitter in emitters:
+            setattr(emitter, "_gr_map_studio_placement_id", placement_id)
+            setattr(emitter, "_gr_map_studio_placement_kind", kind)
+        group.children.extend((*meshes, *emitters))
         root.children.append(group)
         instance_count += 1
         mesh_count += len(meshes)
+        emitter_count += len(emitters)
         resolved_placement_ids.append(placement_id)
         placement_models.append((placement_id, model_resref))
 
@@ -1019,6 +1107,7 @@ def append_stock_content_to_preview_root(
         room_count=room_count,
         instance_count=instance_count,
         mesh_count=mesh_count,
+        emitter_count=emitter_count,
         resolved_placement_ids=tuple(resolved_placement_ids),
         unresolved_placement_ids=tuple(unresolved_placement_ids),
         placement_models=tuple(placement_models),
@@ -1081,7 +1170,7 @@ def build_map_studio_combined_preview_model(
         model_loader=model_loader,
         resolver=resolver,
     )
-    if result.mesh_count <= 0 and authored_model is None:
+    if result.mesh_count <= 0 and result.emitter_count <= 0 and authored_model is None:
         return None, result
 
     import hashlib as _hashlib

@@ -8297,9 +8297,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.placement_tab.search_edit.setFocus()
         self.placement_tab.search_edit.selectAll()
         self.workflow_panel.set_active_authoring_context(
-            "Placement: choose a KOTOR asset, arm Place in Viewport, click the level, then use W/E to adjust."
+            "Placement: drag a KOTOR asset from the list onto the exact level surface, then use W/E to adjust."
         )
-        self._log("Map Studio placement workspace focused. Choose an asset, click Place in Viewport, then click the level.")
+        self._log("Map Studio placement workspace focused. Drag an asset from the list and release it on the level.")
 
     def show_map_studio_script_tools(self) -> None:
         """Focus Builder's authored module/area script-hook controls."""
@@ -9632,6 +9632,14 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, "Add Gameplay Placement", str(exc))
             return
+        if kind in {"placeable", "door"}:
+            try:
+                # Coordinate placement must resolve the same authored resource
+                # graph as a viewport drop so its real model/effects appear
+                # immediately instead of remaining a marker until export.
+                self._sync_placeable_library_resources_for_export()
+            except Exception as exc:
+                self._log(f"Placeable preview resource warning: {exc}")
         readiness = result.readiness
         message = f"Added authored {kind} placement; previous exports/proofs are now stale."
         if readiness is not None:

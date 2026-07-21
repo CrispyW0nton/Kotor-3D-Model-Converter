@@ -129,13 +129,13 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_EXPORT",
             "source_path": "src/core/modules/authored_module_export.py",
             "packaged_path": "Python/src/core/modules/authored_module_export.py",
-            "sha256": "d8fb4086fe5765164b3f457b8b2ab4a93bd1d40558c82022ce4ce24942643c64"
+            "sha256": "00a27e490ad7a42b0aa842d858f55ea6810d2084aac3993a9a2525a02bce6b15"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_KMAP_BRIDGE",
             "source_path": "src/core/modules/authored_module_kmap_bridge.py",
             "packaged_path": "Python/src/core/modules/authored_module_kmap_bridge.py",
-            "sha256": "e1987786ea8761ccc1c6daedf4c9bde35804d6251eba538e488d9b2d9d4cb4bb"
+            "sha256": "a03a995f3c097ab4da02a0e81bb86ab5c84743919285423caef2af57e55c0a42"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_MODULE_LAYOUT",
@@ -243,13 +243,13 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_GEOMETRY",
             "source_path": "src/core/modules/authored_room_geometry.py",
             "packaged_path": "Python/src/core/modules/authored_room_geometry.py",
-            "sha256": "292f28ba410fe3eefdbab00ae0e5d2f1df40ef598326e06cfbb9b978f88390a3"
+            "sha256": "4ebef190621a79726c0d8d9c72cd1a0a6a8186c4ca17243c8a090a7f1e0621b9"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_MATERIALS",
             "source_path": "src/core/modules/authored_room_materials.py",
             "packaged_path": "Python/src/core/modules/authored_room_materials.py",
-            "sha256": "0883aa54be3bca5b9fcd269ff8d34824a3a317f357b8f023aa638a5a1d09724c"
+            "sha256": "703fc14ac06c5a6294ad37655c971ab099ec93ec99f52192acfdbdc18140418f"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_OPERATIONS",
@@ -267,13 +267,13 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_PRESETS",
             "source_path": "src/core/modules/authored_room_presets.py",
             "packaged_path": "Python/src/core/modules/authored_room_presets.py",
-            "sha256": "3be3237e7c674bdb6ac2cac627373af84faf411fc24ac1cc2246f888d3b6be47"
+            "sha256": "2e5b52693312d92570de0a2bbd4474c2e7d27b8a62091300257f6b5370054312"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_PRIMITIVES",
             "source_path": "src/core/modules/authored_room_primitives.py",
             "packaged_path": "Python/src/core/modules/authored_room_primitives.py",
-            "sha256": "1dd4d2147948f395844c1df05c7a77449d9bdfbea025acc34d1f973f10c1731a"
+            "sha256": "d5c0eb3dee5db35f12ada57041d40231e4249f0cdeab3c3789a57e410d2b50d1"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_STYLE",
@@ -339,7 +339,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_CUSTOM_MODULE_PACKAGER",
             "source_path": "src/core/modules/custom_module_packager.py",
             "packaged_path": "Python/src/core/modules/custom_module_packager.py",
-            "sha256": "abb4693a8d4e5c31b3f088d2f47b2683658177656eb1ed5c0da06156fd6340c4"
+            "sha256": "36ff62ccb8284dcc68bd9637417339e4c5f1585ceb8d166599ca8da15f712b83"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_DEV_MODULE_SMOKE",
@@ -531,7 +531,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_STOCK_CONTENT_PREVIEW",
             "source_path": "src/core/modules/map_studio_stock_content_preview.py",
             "packaged_path": "Python/src/core/modules/map_studio_stock_content_preview.py",
-            "sha256": "c2956f1f59a20183460d79e15485f5992cfb89f0bec4cc750f85b6980e121a9a"
+            "sha256": "bdd842570d877d2d6046e60c5482754b6e48300f5ad5f18234ba5f06d1f670ae"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_TERRAIN_SCULPT_SESSION",
@@ -561,7 +561,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_TOOL_CONTRACT_AUDIT",
             "source_path": "src/core/modules/map_studio_tool_contract_audit.py",
             "packaged_path": "Python/src/core/modules/map_studio_tool_contract_audit.py",
-            "sha256": "24bd8d63693c5fd57f39e32afa26301a192b213887bbbfe6a499ee94462bdd6b"
+            "sha256": "9769ea09703698c4d80b68510cb3029db1515f84554e75e85fb39da1d9b90fa5"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_UNIVERSAL_TRANSFORM_OVERLAY",

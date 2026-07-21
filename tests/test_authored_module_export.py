@@ -2889,6 +2889,54 @@ def test_t2644_prepare_authored_module_install_copies_to_modules_with_backup(tmp
     assert proof["modder_test_plan"]["install"]["installed"] is True
 
 
+def test_particle_placeable_install_stages_and_backs_up_required_override_table(tmp_path: Path) -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_export import (
+        AuthoredModuleExportRequest,
+        AuthoredModuleInstallPrepRequest,
+        prepare_authored_module_install,
+    )
+
+    project = _dev_authored_project()
+    game_root = tmp_path / "KOTOR"
+    modules_dir = game_root / "Modules"
+    override_dir = game_root / "Override"
+    modules_dir.mkdir(parents=True)
+    override_dir.mkdir()
+    existing_table = override_dir / "placeables.2da"
+    existing_table.write_bytes(b"previous-user-table")
+    generated_table = b"2DA V2.0\n\n"
+    export_request = AuthoredModuleExportRequest(
+        project=project,
+        output_dir=str(tmp_path / "out"),
+        extra_resources=(("placeables", "2da", generated_table),),
+    )
+
+    result = prepare_authored_module_install(
+        AuthoredModuleInstallPrepRequest(
+            project=project,
+            output_dir=str(tmp_path / "out"),
+            game_modules_dir=str(modules_dir),
+            game_root_dir=str(game_root),
+            overwrite=True,
+            export_request=export_request,
+        )
+    )
+
+    assert result.ok is True
+    assert result.installed_override_paths == (str(existing_table),)
+    assert len(result.backup_override_paths) == 1
+    assert Path(result.backup_override_paths[0]).read_bytes() == b"previous-user-table"
+    assert existing_table.read_bytes() == generated_table
+    proof = json.loads(Path(result.proof_manifest_path).read_text(encoding="utf-8"))
+    assert proof["install"]["installed_override_paths"] == [str(existing_table)]
+    assert proof["install"]["backup_override_paths"] == list(result.backup_override_paths)
+    checklist = Path(result.checklist_path).read_text(encoding="utf-8")
+    assert "Required Override resources" in checklist
+    assert "placeables.2da" in checklist
+
+
 def test_t2644_prepare_authored_module_install_refreshes_stale_currentgame_cache(tmp_path: Path) -> None:
     _install_native_payload_paths()
 

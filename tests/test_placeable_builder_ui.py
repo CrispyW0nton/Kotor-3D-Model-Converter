@@ -29,7 +29,7 @@ def test_placeable_builder_is_a_dedicated_service_facing_workbench() -> None:
             "Identity",
             "Visual",
             "Interaction",
-            "Scripts & Conversation",
+            "Scripts / Conversation",
             "Particles",
             "Resources",
             "Readiness",
@@ -40,14 +40,15 @@ def test_placeable_builder_is_a_dedicated_service_facing_workbench() -> None:
         assert window.preview_viewport.viewport_role == "main"
         assert window.preview_viewport.map_studio_authoring_chrome_enabled is False
         assert window.preview_viewport.viewport_map_studio_modeling_tabs is None
-        assert window.inspector_tabs.tabBar().usesScrollButtons() is False
-        assert window.inspector_tabs.tabBar().elideMode() == QtCore.Qt.ElideRight
+        assert window.inspector_tabs.tabBar().usesScrollButtons() is True
+        assert window.inspector_tabs.tabBar().expanding() is False
+        assert window.inspector_tabs.tabBar().elideMode() == QtCore.Qt.ElideNone
         assert [action.text() for action in window.placeable_toolbar.actions() if not action.isSeparator()] == [
             "New",
             "Clone",
             "Open",
             "Save to Library",
-            "Export UTP",
+            "Export Game Bundle…",
             "Validate",
             "Open Library Folder",
         ]
@@ -74,8 +75,11 @@ def test_placeable_particle_tab_is_honest_and_actionable() -> None:
 
     window = QtPlaceableBuilderWindow()
     try:
-        assert window.particle_effects_table.horizontalHeaderItem(1).text() == "Offset X (m)"
-        assert "Export UTP does not write" in window.particle_export_warning.text()
+        assert window.particle_effects_table.horizontalHeaderItem(1).text() == "X (m)"
+        assert window.findChild(QtWidgets.QScrollArea, "placeableParticlesScroll").horizontalScrollBarPolicy() == QtCore.Qt.ScrollBarAlwaysOff
+        assert "bakes these emitters" in window.particle_export_warning.text()
+        assert "Map Studio" in window.particle_export_warning.text()
+        assert "same resources are added" in window.particle_export_warning.text()
         assert window.remove_particle_effect_button.isEnabled() is False
         assert window.reset_particle_offsets_button.isEnabled() is False
 
@@ -98,6 +102,18 @@ def test_placeable_particle_tab_is_honest_and_actionable() -> None:
     finally:
         window.mark_clean()
         window.close()
+
+
+def test_particle_game_bundle_manifest_keeps_runtime_mapping_evidence() -> None:
+    source = (
+        ROOT
+        / "native/GhostRigger.Core.Tools/Python/src/core/tools/placeable_builder_tool_service.py"
+    ).read_text(encoding="utf-8")
+
+    assert '"appearance_id": particle_build.appearance_id' in source
+    assert '"model_resref": particle_build.model_resref' in source
+    assert '"source_model_resref": particle_build.source_model_resref' in source
+    assert '"emitter_count": particle_build.emitter_count' in source
 
 
 def test_placeable_builder_round_trips_domain_shape_without_dropping_evidence_or_unknown_fields() -> None:
@@ -221,10 +237,13 @@ def test_placeable_builder_library_search_readiness_and_completion_signals(tmp_p
             engine_ready=False,
         )
         window.set_readiness(report)
+        assert window.inspector_tabs.currentIndex() == 0
         assert window.readiness_labels["library"].text() == "Ready"
         assert "Blocked" in window.readiness_labels["module"].text()
         assert "Not proven" in window.readiness_labels["game"].text()
         assert window.validation_issues_tree.topLevelItemCount() == 1
+        window.set_readiness(report, reveal=True)
+        assert window.inspector_tabs.currentIndex() == 6
 
         window.saveToLibraryRequested.connect(saved.append)
         window.libraryChanged.connect(changed.append)

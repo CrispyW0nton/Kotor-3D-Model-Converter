@@ -137,5 +137,6 @@ PYTHON_PAYLOAD_CORE_WORKFLOW_COMPOSITE_WORKFLOW RCDATA "Python/src/core/workflow
 PYTHON_PAYLOAD_CORE_WORKFLOW_LEGACY_MODULE_REPAIR RCDATA "Python/src/core/workflow/legacy_module_repair.py"
 PYTHON_PAYLOAD_CORE_WORKFLOW_LEGACY_TEXTURE_PORT RCDATA "Python/src/core/workflow/legacy_texture_port.py"
 PYTHON_PAYLOAD_CORE_WORKFLOW_MAP_STUDIO_LIGHTMAP_APPLY RCDATA "Python/src/core/workflow/map_studio_lightmap_apply.py"
+PYTHON_PAYLOAD_CORE_WORKFLOW_PARTICLE_PLACEABLE_EXPORT RCDATA "Python/src/core/workflow/particle_placeable_export.py"
 PYTHON_PAYLOAD_CORE_WORKFLOW_PLACEABLE_BUILDER_SERVICE RCDATA "Python/src/core/workflow/placeable_builder_service.py"
 PYTHON_PAYLOAD_CORE_WORKFLOW_PLCAA_MANUAL_PROOF_KIT RCDATA "Python/src/core/workflow/plcaa_manual_proof_kit.py"

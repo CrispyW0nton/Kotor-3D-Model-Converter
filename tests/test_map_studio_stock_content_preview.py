@@ -326,6 +326,69 @@ def test_t3001_placeable_mesh_keeps_world_transform_and_selection_identity() -> 
     assert getattr(mesh, "_gr_map_studio_placement_id") == placement_id
 
 
+def test_particle_placeable_emitters_play_in_edit_mode_combined_preview() -> None:
+    md = _model_data()
+    from src.core.modules.map_studio_stock_content_preview import append_stock_content_to_preview_root
+    from src.core.particles.simulation import ModelParticleSystems
+
+    source = _source_model(md, name="plc_particle", mesh_position=(1.0, 0.0, 0.0))
+    emitter = md.ModelNode(
+        name="live_fx",
+        flags=int(md.NodeFlags.EMITTER),
+        position=(0.5, 0.0, 0.0),
+        emitter_params={
+            "update": "Fountain",
+            "emitter_render": "Normal",
+            "blend": "Lighten",
+            "texture": "fx_live",
+            "xgrid": 1,
+            "ygrid": 1,
+        },
+        controllers=[
+            {"type": 88, "columns": 1, "times": [0.0], "values": [[40.0]]},
+            {"type": 120, "columns": 1, "times": [0.0], "values": [[1.0]]},
+            {"type": 144, "columns": 1, "times": [0.0], "values": [[0.25]]},
+        ],
+    )
+    emitter.parent = source.root_node.children[0]
+    emitter.parent.children.append(emitter)
+    root = md.ModelNode(name="preview_root", flags=int(md.NodeFlags.HEADER))
+    placement_id = "authored:placeable:particle"
+
+    result = append_stock_content_to_preview_root(
+        md,
+        root,
+        placements=(
+            _placement(
+                "placeable",
+                "gs_particle",
+                bearing=math.pi / 2.0,
+                placement_id=placement_id,
+            ),
+        ),
+        model_loader=lambda resref: source if resref == "plc_particle" else None,
+        resolver=_StubResolver({("placeable", "gs_particle"): "plc_particle"}),
+        game="K1",
+    )
+
+    assert result.emitter_count == 1
+    group = root.children[0]
+    preview_emitter = next(node for node in group.children if node.is_emitter)
+    assert getattr(preview_emitter, "_gr_map_studio_placement_id") == placement_id
+    assert getattr(preview_emitter, "_gr_map_studio_stock_emitter") is True
+    assert preview_emitter.emitter_params == emitter.emitter_params
+    assert preview_emitter.emitter_params is not emitter.emitter_params
+    # Source world X=1.5 is rotated by the authored 90-degree bearing.
+    assert abs(preview_emitter.position[0]) < 1e-6
+    assert abs(preview_emitter.position[1] - 1.5) < 1e-6
+
+    preview_model = md.KotorModel(name="edit_preview", supermodel="NULL", root_node=root)
+    particles = ModelParticleSystems(preview_model)
+    assert particles.has_emitters is True
+    particles.update(0.25, lambda node: node.world_transform())
+    assert sum(batch.count for batch in particles.batches(lambda node: node.world_transform(), (0.0, 0.0, 10.0))) > 0
+
+
 def test_t3001_project_utp_bytes_and_library_rows_follow_placeables_2da(monkeypatch) -> None:
     _install_native_payload_paths()
     from src.core.modules import map_studio_stock_content_preview as preview

@@ -466,9 +466,11 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
         self.save_library_action.triggered.connect(self.request_save_to_library)
 
         self.export_utp_action = QtGui.QAction(
-            self._workspace_icon("export", QtWidgets.QStyle.SP_DialogSaveButton), "Export UTP", self
+            self._workspace_icon("export", QtWidgets.QStyle.SP_DialogSaveButton), "Export Game Bundle…", self
         )
-        self.export_utp_action.setStatusTip("Export through the vanilla-structural UTP pipeline")
+        self.export_utp_action.setStatusTip(
+            "Build a verified UTP + MDL/MDX + particle texture + placeables.2da Override bundle"
+        )
         self.export_utp_action.triggered.connect(self.request_export_utp)
 
         self.validate_action = QtGui.QAction(
@@ -651,7 +653,7 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
             (self._build_identity_tab(), "Identity"),
             (self._build_visual_tab(), "Visual"),
             (self._build_interaction_tab(), "Interaction"),
-            (self._build_scripts_tab(), "Scripts & Conversation"),
+            (self._build_scripts_tab(), "Scripts / Conversation"),
             (self._build_particles_tab(), "Particles"),
             (self._build_resources_tab(), "Resources"),
             (self._build_readiness_tab(), "Readiness"),
@@ -659,9 +661,12 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
         for page, label in pages:
             index = tabs.addTab(page, label)
             tabs.setTabToolTip(index, label)
-        tabs.tabBar().setUsesScrollButtons(False)
-        tabs.tabBar().setExpanding(True)
-        tabs.tabBar().setElideMode(QtCore.Qt.ElideRight)
+        # The inspector is intentionally narrow beside the viewport.  Preserve
+        # readable tab names and scroll the strip instead of reducing every tab
+        # to an ambiguous one- or two-letter ellipsis.
+        tabs.tabBar().setUsesScrollButtons(True)
+        tabs.tabBar().setExpanding(False)
+        tabs.tabBar().setElideMode(QtCore.Qt.ElideNone)
         return tabs
 
     @staticmethod
@@ -902,11 +907,12 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
         self.particle_effects_table = QtWidgets.QTableWidget(0, 4)
         self.particle_effects_table.setObjectName("placeableParticleEffectsTable")
         self.particle_effects_table.setHorizontalHeaderLabels(
-            ["Effect source", "Offset X (m)", "Offset Y (m)", "Offset Z (m)"]
+            ["Effect source", "X (m)", "Y (m)", "Z (m)"]
         )
-        self.particle_effects_table.horizontalHeader().setSectionResizeMode(
-            0, QtWidgets.QHeaderView.Stretch
-        )
+        particle_header = self.particle_effects_table.horizontalHeader()
+        particle_header.setSectionResizeMode(0, QtWidgets.QHeaderView.Stretch)
+        for column in (1, 2, 3):
+            particle_header.setSectionResizeMode(column, QtWidgets.QHeaderView.ResizeToContents)
         self.particle_effects_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.particle_effects_table.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         self.particle_effects_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
@@ -918,20 +924,21 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
         self.particle_effects_summary.setObjectName("placeableParticleEffectsSummary")
         group_layout.addWidget(self.particle_effects_summary)
 
-        buttons = QtWidgets.QHBoxLayout()
+        buttons = QtWidgets.QGridLayout()
         self.add_particle_effect_button = QtWidgets.QPushButton("Add From Game Library...")
         self.add_particle_effect_button.setObjectName("placeableAddParticleEffectButton")
         self.add_particle_effect_button.clicked.connect(self._open_particle_asset_picker)
-        buttons.addWidget(self.add_particle_effect_button)
+        buttons.addWidget(self.add_particle_effect_button, 0, 0, 1, 2)
         self.remove_particle_effect_button = QtWidgets.QPushButton("Remove Selected")
         self.remove_particle_effect_button.setObjectName("placeableRemoveParticleEffectButton")
         self.remove_particle_effect_button.clicked.connect(self._remove_selected_particle_effects)
-        buttons.addWidget(self.remove_particle_effect_button)
+        buttons.addWidget(self.remove_particle_effect_button, 1, 0)
         self.reset_particle_offsets_button = QtWidgets.QPushButton("Reset Selected Offsets")
         self.reset_particle_offsets_button.setObjectName("placeableResetParticleOffsetsButton")
         self.reset_particle_offsets_button.clicked.connect(self._reset_selected_particle_offsets)
-        buttons.addWidget(self.reset_particle_offsets_button)
-        buttons.addStretch(1)
+        buttons.addWidget(self.reset_particle_offsets_button, 1, 1)
+        buttons.setColumnStretch(0, 1)
+        buttons.setColumnStretch(1, 1)
         group_layout.addLayout(buttons)
         root.addWidget(group)
 
@@ -944,12 +951,13 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
         note.setObjectName("placeableParticleEffectsNote")
         note.setWordWrap(True)
         root.addWidget(note)
-        export_limit = QtWidgets.QGroupBox("Export limitation")
+        export_limit = QtWidgets.QGroupBox("Game export")
         export_limit.setObjectName("placeableParticleExportLimitationGroup")
         export_limit_layout = QtWidgets.QVBoxLayout(export_limit)
         self.particle_export_warning = QtWidgets.QLabel(
-            "Preview attachment only: Export UTP does not write these emitter nodes into a game MDL yet. "
-            "They remain in the Ghost Studio placeable document and live preview."
+            "Export Game Bundle bakes these emitters into a new retail KOTOR MDL/MDX, copies their textures, "
+            "adds a collision-safe placeables.2da row, patches the UTP Appearance value, and reads everything back. "
+            "When this saved placeable is used in Map Studio, the same resources are added to the map package automatically."
         )
         self.particle_export_warning.setObjectName("placeableParticleExportWarning")
         self.particle_export_warning.setWordWrap(True)
@@ -962,7 +970,9 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
         root.addWidget(open_editor, 0, QtCore.Qt.AlignLeft)
         root.addStretch(1)
         self._update_particle_action_state()
-        return self._scroll_tab(content, "placeableParticlesScroll")
+        scroll = self._scroll_tab(content, "placeableParticlesScroll")
+        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        return scroll
 
     def _refresh_particle_effects_table(self) -> None:
         table = self.particle_effects_table
@@ -1103,7 +1113,7 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
         self.readiness_labels: dict[str, QtWidgets.QLabel] = {}
         rows = (
             ("library", "Library-ready", "The reusable JSON asset passes document validation."),
-            ("module", "Module-ready", "UTP export and structural/dependency evidence pass."),
+            ("module", "Bundle-ready", "UTP, model, appearance mapping, and dependencies pass export preflight."),
             ("game", "Manual game proof", "A packaged module has spawned this placeable in KOTOR."),
         )
         for key, title, explanation in rows:
@@ -1370,7 +1380,7 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
         data["metadata"] = metadata
         return data
 
-    def set_readiness(self, report: object) -> None:
+    def set_readiness(self, report: object, *, reveal: bool = False) -> None:
         if isinstance(report, Mapping):
             snapshot = dict(report)
         else:
@@ -1416,7 +1426,8 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
             if fix_hint:
                 item.setToolTip(2, fix_hint)
             self.validation_issues_tree.addTopLevelItem(item)
-        self.inspector_tabs.setCurrentWidget(self.inspector_tabs.widget(5))
+        if reveal:
+            self.inspector_tabs.setCurrentWidget(self.inspector_tabs.widget(6))
         self.statusBar().showMessage("Placeable validation updated.", 4000)
 
     def readiness_snapshot(self) -> dict[str, Any]:
@@ -1484,7 +1495,7 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
 
     def request_export_utp(self) -> None:
         self.exportUtpRequested.emit(self.current_document())
-        self.statusBar().showMessage("UTP export requested; vanilla-structural preflight must pass first.", 5000)
+        self.statusBar().showMessage("Game-bundle export requested; target-game resource preflight must pass first.", 5000)
 
     def request_validate(self) -> None:
         self.validateRequested.emit(self.current_document())
@@ -1656,7 +1667,7 @@ class QtPlaceableBuilderWindow(QtWidgets.QMainWindow):
         if row is None:
             return
         self.statusBar().showMessage(
-            f"Selected {row.get('label') or row.get('resref') or 'placeable'}. Double-click to open.", 4000
+            f"Selected {row.get('label') or row.get('resref') or 'placeable'}. Double-click or press Enter to open.", 4000
         )
 
     @staticmethod

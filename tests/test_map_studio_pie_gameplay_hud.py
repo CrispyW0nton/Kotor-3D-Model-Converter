@@ -254,9 +254,73 @@ def test_t3008_pie_gameplay_hud_exposes_focus_dialogue_inventory_and_combat_acti
     assert "setAutoFillBackground(True)" in source
     assert '"direction": -1 if key == QtCore.Qt.Key_Q else 1' in source
     assert "Q/E focus" in source
-    assert "Round action queue:" in source
+    assert 'self.combat_queue_label.setText("Queue: "' in source
+    assert "canvas.width() - hud.width() - margin" in source
     assert "QtGui.QPalette.ColorRole.Window" in source
     assert "setStyleSheet" not in source[source.index("class _MapStudioPIEGameplayHUD"):source.index("class ModuleEditorViewportPanel")]
+
+
+def test_pie_combat_hud_is_compact_and_removes_duplicate_focus_rows(monkeypatch) -> None:
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    pytest.importorskip("PySide6")
+    from PySide6 import QtWidgets
+    from src.gui.panels.module_editor.module_editor_viewport_panel import _MapStudioPIEGameplayHUD
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    parent = QtWidgets.QWidget()
+    parent.resize(900, 600)
+    hud = _MapStudioPIEGameplayHUD(parent)
+    attack = SimpleNamespace(command="combat_attack", label="Attack", supported=True)
+    player = SimpleNamespace(
+        entity_id="player",
+        display_name="Player",
+        current_hp=14,
+        max_hp=24,
+        engaged=True,
+        alive=True,
+    )
+    target = SimpleNamespace(
+        entity_id="authored:creature:assault_droid",
+        display_name="Assault Droid",
+        current_hp=28,
+        max_hp=40,
+        engaged=True,
+        alive=True,
+        semantic_state="hostile",
+        actions=(attack,),
+        primary_action=attack,
+        in_range=True,
+    )
+    snapshot = SimpleNamespace(
+        mode="combat",
+        focus=target,
+        combat_player_id="player",
+        combat=SimpleNamespace(
+            active=True,
+            player_id="player",
+            combatants=(player, target),
+            queued_actions=(),
+            round_index=6,
+            next_round_in=1.9,
+            paused=False,
+        ),
+    )
+
+    hud.set_state(snapshot)
+    app.processEvents()
+
+    assert hud.combat_active is True
+    assert hud.focus_frame.isHidden() is True
+    assert hud.context_label.isHidden() is True
+    assert hud.combat_attack_button.text() == "Attack"
+    assert hud.combat_clear_button.text() == "Clear"
+    assert hud.combat_queue_label.text() == "Queue: empty"
+    assert hud.shortcut_label.text() == "Q/E target · Attack queues · Space pause"
+    assert "real-time" not in hud.combat_status_label.text()
+    assert "Round 6" in hud.combat_status_label.text()
+
+    parent.deleteLater()
+    app.processEvents()
 
 
 def test_t3008_pie_hud_skin_uses_target_game_gui_gffs_and_strict_texture_resources() -> None:
@@ -918,9 +982,9 @@ def test_t3008_repeated_hud_updates_do_not_reorder_renderer_siblings() -> None:
     first_return = position.index("return", unchanged)
     assert "raise_" not in position[unchanged:first_return]
     assert "and not layers_reparented" in position[unchanged:first_return]
-    # Exploration, fixed retail dialogue, and generic modal/combat placement
-    # each establish the same stable sibling order exactly once.
-    assert position.count("self._raise_map_studio_pie_gameplay_layers()") == 3
+    # Exploration, fixed retail dialogue, compact corner combat, and generic
+    # modal placement each establish the same stable sibling order once.
+    assert position.count("self._raise_map_studio_pie_gameplay_layers()") == 4
 
     raise_start = position_end
     raise_end = source.index("    def _sync_map_studio_pie_target_overlay(", raise_start)

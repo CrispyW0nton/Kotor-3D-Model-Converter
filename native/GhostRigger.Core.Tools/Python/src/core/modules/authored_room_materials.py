@@ -13,7 +13,11 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_AUTHORED_ROOM_TEXTURE = "CM_Baremetal"
+# PLCaa's stock room shell uses ``ruler01`` on its floor, ceiling, and walls.
+# ``CM_Baremetal`` is an environment map, not a useful authored-room diffuse
+# default, and renders nearly black when supplied as the primitive base texture.
+DEFAULT_AUTHORED_ROOM_TEXTURE = "ruler01"
+DEFAULT_AUTHORED_ROOM_UV_TILE_SIZE = 2.0
 
 
 @dataclass(frozen=True)
@@ -133,6 +137,7 @@ def compile_authored_room_material_preflight(
 __all__ = [
     "AuthoredRoomMaterialPreflight",
     "DEFAULT_AUTHORED_ROOM_TEXTURE",
+    "DEFAULT_AUTHORED_ROOM_UV_TILE_SIZE",
     "compile_authored_room_material_preflight",
     "normalize_authored_room_texture",
 ]

@@ -165,9 +165,28 @@ class QtSettingsDialog(QtWidgets.QDialog):
         self.renderer_diagnostics_hz_spin.setDecimals(1)
         self.renderer_diagnostics_hz_spin.setSingleStep(0.5)
         self.renderer_overlay_dirty_check = QtWidgets.QCheckBox("Dirty overlay rendering")
+        self.renderer_bloom_check = QtWidgets.QCheckBox("Enable bloom glow")
+        self.renderer_bloom_check.setToolTip(
+            "Adds a restrained glow around genuinely bright pixels in the ModernGL viewport."
+        )
+        self.renderer_bloom_threshold_spin = QtWidgets.QDoubleSpinBox()
+        self.renderer_bloom_threshold_spin.setRange(0.0, 2.0)
+        self.renderer_bloom_threshold_spin.setDecimals(2)
+        self.renderer_bloom_threshold_spin.setSingleStep(0.05)
+        self.renderer_bloom_threshold_spin.setToolTip(
+            "Higher values protect cyan hologram detail; lower values glow more of the image."
+        )
+        self.renderer_bloom_strength_spin = QtWidgets.QDoubleSpinBox()
+        self.renderer_bloom_strength_spin.setRange(0.0, 1.0)
+        self.renderer_bloom_strength_spin.setDecimals(2)
+        self.renderer_bloom_strength_spin.setSingleStep(0.05)
+        self.renderer_bloom_strength_spin.setToolTip(
+            "Controls the glow accent without changing the underlying KOTOR particle colours."
+        )
         self.renderer_status_label = QtWidgets.QLabel()
         self.renderer_status_label.setWordWrap(True)
         self.renderer_backend_combo.currentIndexChanged.connect(self._update_renderer_status)
+        self.renderer_bloom_check.toggled.connect(self._update_bloom_controls)
         renderer_form.addRow("Renderer:", self.renderer_backend_combo)
         renderer_form.addRow("", self.renderer_fallback_check)
         renderer_form.addRow("", self.renderer_diagnostics_check)
@@ -177,6 +196,9 @@ class QtSettingsDialog(QtWidgets.QDialog):
         renderer_form.addRow("", self.renderer_throttle_diagnostics_check)
         renderer_form.addRow("Diagnostics Hz:", self.renderer_diagnostics_hz_spin)
         renderer_form.addRow("", self.renderer_overlay_dirty_check)
+        renderer_form.addRow("", self.renderer_bloom_check)
+        renderer_form.addRow("Bloom Threshold:", self.renderer_bloom_threshold_spin)
+        renderer_form.addRow("Bloom Strength:", self.renderer_bloom_strength_spin)
         renderer_form.addRow("Status:", self.renderer_status_label)
         general_root.addWidget(renderer_group)
         general_root.addStretch(1)
@@ -383,6 +405,10 @@ class QtSettingsDialog(QtWidgets.QDialog):
         self.renderer_throttle_diagnostics_check.setChecked(renderer_settings.throttle_diagnostics)
         self.renderer_diagnostics_hz_spin.setValue(float(renderer_settings.diagnostics_hz))
         self.renderer_overlay_dirty_check.setChecked(renderer_settings.overlay_dirty_rendering)
+        self.renderer_bloom_check.setChecked(renderer_settings.bloom_enabled)
+        self.renderer_bloom_threshold_spin.setValue(float(renderer_settings.bloom_threshold))
+        self.renderer_bloom_strength_spin.setValue(float(renderer_settings.bloom_strength))
+        self._update_bloom_controls()
         self._update_renderer_status()
         self._load_cached_hardware_text()
         self._set_combo_data(self.theme_mode_combo, self.theme_layout_settings.theme_mode)
@@ -506,6 +532,9 @@ class QtSettingsDialog(QtWidgets.QDialog):
                 "throttle_diagnostics": self.renderer_throttle_diagnostics_check.isChecked(),
                 "diagnostics_hz": self.renderer_diagnostics_hz_spin.value(),
                 "overlay_dirty_rendering": self.renderer_overlay_dirty_check.isChecked(),
+                "bloom_enabled": self.renderer_bloom_check.isChecked(),
+                "bloom_threshold": self.renderer_bloom_threshold_spin.value(),
+                "bloom_strength": self.renderer_bloom_strength_spin.value(),
                 "wgpu": {
                     "enable_batching": current_renderer.wgpu_enable_batching,
                     "enable_instancing": current_renderer.wgpu_enable_instancing,
@@ -554,6 +583,7 @@ class QtSettingsDialog(QtWidgets.QDialog):
 
     def _update_renderer_status(self) -> None:
         backend_id = str(self.renderer_backend_combo.currentData() or RendererBackend.MODERNGL_GL330.value)
+        self._update_bloom_controls()
         status = self._renderer_capability_text.get(backend_id, "Available")
         current_settings = RendererSettings.from_settings(self.settings)
         candidate = self.values()
@@ -565,6 +595,13 @@ class QtSettingsDialog(QtWidgets.QDialog):
         else:
             suffix = " Restart may be required for a real backend switch."
         self.renderer_status_label.setText(f"{status}.{suffix}")
+
+    def _update_bloom_controls(self, *_args) -> None:
+        modern_gl = str(self.renderer_backend_combo.currentData() or "") == RendererBackend.MODERNGL_GL330.value
+        self.renderer_bloom_check.setEnabled(modern_gl)
+        enabled = modern_gl and self.renderer_bloom_check.isChecked()
+        self.renderer_bloom_threshold_spin.setEnabled(enabled)
+        self.renderer_bloom_strength_spin.setEnabled(enabled)
 
     def _renderer_restart_required(self, old_settings: RendererSettings, new_settings: RendererSettings) -> bool:
         old_type = _wgpu_backend_type(old_settings.backend.value)
@@ -755,4 +792,3 @@ def load_settings(path: Path) -> dict:
 
 def save_settings(path: Path, values: dict) -> None:
     path.write_text(json.dumps(values, indent=2), encoding="utf-8")
-

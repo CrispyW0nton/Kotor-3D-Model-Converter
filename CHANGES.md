@@ -11,6 +11,58 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-21
 
+### [2026-07-21] Particle placeables ship through Map Studio; primitive rooms and PIE HUD are presentation-ready
+
+Owner: ShaolinGhost
+
+Subsystem: particle authoring/export (`GhostRigger.Core.Workflow`,
+`GhostRigger.Core.Tools`), Map Studio placement preview/package/install
+(`GhostRigger.Core.Scene`, `GhostRigger.Core.Tools`), renderer quality settings
+(`GhostRigger.Core.Rendering`, `GhostRigger.Core.GUI.Display`), primitive-room
+materials/geometry/lighting, and the PIE gameplay HUD.
+
+Placeable Builder can now bake attached retail emitters into a read-back-verified
+UTP/MDL/MDX bundle, allocate and preserve its collision-safe `placeables.2da`
+mapping, collect all referenced particle textures, and expose an install-shaped
+`Override` folder with a manifest containing the appearance, model, donor, and
+emitter evidence. Map Studio resolves that authored asset during placement,
+plays its emitters continuously in the normal edit viewport, carries its
+resources into the module build, and stages the global `placeables.2da` in
+`install/Override` rather than incorrectly embedding it in the MOD.
+
+The Particle Editor and Placeable Builder UI audit added searchable/lazy retail
+libraries, safe selection/edit states, readable inspector tabs, actionable
+particle attachment controls, clear export readiness language, and live bloom
+quality settings. Map Studio's Place workspace now leads with direct palette
+drag-and-drop, removes its redundant visible selector, carries a readable drag
+card, and paints a green landing marker plus exact coordinates on the surface
+that will receive the object. Primitive rooms now default to vanilla PLCaa's `ruler01`
+diffuse at a two-metre repeat, use independent inward-facing wall normals and UV
+seams, and start with balanced standard ambient/key lighting instead of an
+environment map plus fullbright illumination. PIE combat now uses a compact
+bottom-right panel, removes duplicated target rows, and shows only real queued
+actions instead of four padded empty slots.
+
+Intersects: the concurrent Map Studio light-gizmo, lightmap shadowing, Dathomir
+OBJ, and export-performance task `019f489a-168a-7b20-875e-cd33a47c53da`;
+primitive/particle/PIE hunks were coordinated and its separate light-selection,
+topology, and lightmap work was preserved.
+
+Verification: focused particle simulation, bloom settings, edit-mode preview,
+Placeable Builder UI, module packaging/install, primitive-room geometry, and
+compact combat HUD contracts passed (30 focused checks). The generated
+`gs_ux_fxbench` K1 bundle contains a UTP, a read-back-loadable MDL/MDX with 76
+grafted emitters, a verified `placeables.2da`, and 14 retail TPC dependencies.
+Visible Debug-app checks covered Particle Editor and Placeable Builder in
+Default, Matrix, Droid, Dark, Light, and Classic themes; a real Map Studio drag
+placed the saved particle asset and two captures 1.25 seconds apart changed
+255,880 viewport pixels while PIE was off. Final rebuilt-app checks covered the
+PLCaa-style room, live edit-mode particles, compact combat HUD, and staged
+module/Override workflow. The duplicate Rendering/Runtime.Shared mesh-render
+contract was also restored to byte identity so loose-atlas UV orientation does
+not depend on DLL discovery order. No retail KOTOR warp proof is claimed.
+
+
 ### [2026-07-21] Particle authoring UI: searchable libraries, safe edit states, and honest placeable export guidance
 
 Owner: ShaolinGhost

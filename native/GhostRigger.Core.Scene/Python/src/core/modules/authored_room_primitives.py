@@ -14,6 +14,7 @@ from typing import Any
 from uuid import UUID, uuid5
 
 from .authored_room_geometry import Face, PrimitiveMesh, Vec2, Vec3
+from .authored_room_materials import DEFAULT_AUTHORED_ROOM_TEXTURE, DEFAULT_AUTHORED_ROOM_UV_TILE_SIZE
 from .authored_walkmesh_surfaces import resolve_walkmesh_surface_id, walkmesh_surface_name
 from .module_format import WOKData, WOKFace
 
@@ -219,6 +220,26 @@ class ArchPrimitive:
     material: PrimitiveMaterial = field(default_factory=PrimitiveMaterial)
 
 
+def _vector_length(vector: Vec3) -> float:
+    return math.sqrt(sum(float(value) * float(value) for value in vector[:3]))
+
+
+def _material_uv_tile_size(material: PrimitiveMaterial) -> float:
+    """Return world meters per texture repeat for PLCaa-style primitives."""
+
+    metadata = dict(getattr(material, "metadata", {}) or {})
+    try:
+        requested = float(metadata.get("uv_tile_size_m", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        requested = 0.0
+    if math.isfinite(requested) and requested > 1.0e-6:
+        return requested
+    texture = str(getattr(material, "texture", "") or "").strip().lower()
+    if texture == DEFAULT_AUTHORED_ROOM_TEXTURE.lower():
+        return DEFAULT_AUTHORED_ROOM_UV_TILE_SIZE
+    return 0.0
+
+
 def _mesh(
     *,
     name: str,
@@ -412,8 +433,10 @@ def _append_subdivided_quad(
     u_subdivisions: int,
     v_subdivisions: int,
     normal: Vec3,
+    uv_u_repeats: float = 1.0,
+    uv_v_repeats: float = 1.0,
 ) -> None:
-    """Append one outward quad grid with one shared normal and 0..1 UV island."""
+    """Append one outward quad grid with one shared normal and tiled UV island."""
 
     u_count = max(1, int(u_subdivisions))
     v_count = max(1, int(v_subdivisions))
@@ -429,7 +452,14 @@ def _append_subdivided_quad(
         )
         vertices.extend(corners)
         normals.extend((normal,) * 4)
-        uvs.extend(((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)))
+        uvs.extend(
+            (
+                (0.0, 0.0),
+                (float(uv_u_repeats), 0.0),
+                (float(uv_u_repeats), float(uv_v_repeats)),
+                (0.0, float(uv_v_repeats)),
+            )
+        )
         faces.extend(((start, start + 1, start + 2), (start, start + 2, start + 3)))
         return
 
@@ -444,7 +474,7 @@ def _append_subdivided_quad(
                 )
             )
             normals.append(normal)
-            uvs.append((u, v))
+            uvs.append((u * float(uv_u_repeats), v * float(uv_v_repeats)))
     stride = u_count + 1
     for v_index in range(v_count):
         for u_index in range(u_count):
@@ -508,7 +538,10 @@ def _box_vertices_faces(
         (p110, (-x, 0.0, 0.0), (0.0, 0.0, z), sub_x, sub_z, (0.0, 1.0, 0.0)),
         (p010, (0.0, -y, 0.0), (0.0, 0.0, z), sub_y, sub_z, (-1.0, 0.0, 0.0)),
     )
+    tile_size = _material_uv_tile_size(material)
     for origin, u_vector, v_vector, u_subdivisions, v_subdivisions, normal in face_specs:
+        uv_u_repeats = _vector_length(u_vector) / tile_size if tile_size else 1.0
+        uv_v_repeats = _vector_length(v_vector) / tile_size if tile_size else 1.0
         _append_subdivided_quad(
             vertices,
             faces,
@@ -520,6 +553,8 @@ def _box_vertices_faces(
             u_subdivisions=u_subdivisions,
             v_subdivisions=v_subdivisions,
             normal=normal,
+            uv_u_repeats=uv_u_repeats,
+            uv_v_repeats=uv_v_repeats,
         )
     vertices, normals = _orient_primitive_channels(
         vertices,
@@ -610,6 +645,7 @@ def build_floor_mesh(primitive: FloorPrimitive) -> PrimitiveMesh:
     faces: list[Face] = []
     normals: list[Vec3] = []
     uvs: list[Vec2] = []
+    tile_size = _material_uv_tile_size(primitive.material)
     _append_subdivided_quad(
         vertices,
         faces,
@@ -621,6 +657,8 @@ def build_floor_mesh(primitive: FloorPrimitive) -> PrimitiveMesh:
         u_subdivisions=subdivisions_width,
         v_subdivisions=subdivisions_depth,
         normal=(0.0, 0.0, 1.0),
+        uv_u_repeats=float(primitive.width) / tile_size if tile_size else 1.0,
+        uv_v_repeats=float(primitive.depth) / tile_size if tile_size else 1.0,
     )
     vertices, normals = _orient_primitive_channels(
         vertices,

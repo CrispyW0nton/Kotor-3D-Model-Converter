@@ -905,6 +905,9 @@ class ViewportToolsMixin:
                     pass
         elif manager is not None:
             window.set_resource_manager(manager)
+        set_renderer_settings = getattr(window, "set_renderer_settings", None)
+        if callable(set_renderer_settings):
+            set_renderer_settings(getattr(self, "settings_data", {}) or {})
         window.show()
         window.raise_()
         window.activateWindow()

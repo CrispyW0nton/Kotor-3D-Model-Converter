@@ -4,14 +4,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from hashlib import sha256
+import json
 from pathlib import Path
+import shutil
+import tempfile
 from typing import Any, Mapping
 
 from pykotor.resource.formats.gff import GFFContent, read_gff
 from pykotor.resource.formats.twoda import read_2da
 from pykotor.resource.generics.utp import read_utp
 
-from src.core.placeables.placeable_utp_io import PlaceableUTPExportResult, export_placeable_utp
+from src.core.placeables.placeable_utp_io import (
+    PlaceableBundleResource,
+    PlaceableUTPExportResult,
+    build_placeable_resource_bundle,
+    export_placeable_utp,
+)
 from src.core.project.placeable_asset import (
     PLACEABLE_ASSET_FILE_SUFFIX,
     PLACEABLE_SCRIPT_HOOKS,
@@ -26,6 +34,7 @@ from src.core.project.placeable_asset import (
 )
 from src.core.project.resource_address import ResourceAddress
 from src.core.resources.game_resource_provider import GameResourceProvider, GameResourceQuery
+from src.core.workflow.particle_placeable_export import build_particle_placeable
 from src.core.workflow.placeable_builder_service import placeable_library_rows
 
 
@@ -37,6 +46,8 @@ class PlaceableBuilderSaveResult:
     sidecar_path: str = ""
     utp_path: str = ""
     utp_result: PlaceableUTPExportResult | None = None
+    bundle_dir: str = ""
+    bundle_resources: tuple[tuple[str, str, int], ...] = ()
     messages: tuple[str, ...] = ()
     engine_ready: bool = False
 
@@ -293,6 +304,145 @@ class PlaceableBuilderToolService:
             messages=tuple(result.warnings),
             engine_ready=False,
         )
+
+    def export_game_bundle(
+        self,
+        value: PlaceableAsset | Mapping[str, Any],
+        output_parent: str | Path,
+    ) -> PlaceableBuilderSaveResult:
+        """Write an install-shaped Override bundle without touching the game."""
+
+        asset = self._with_provider_evidence(value)
+        validation = validate_placeable_asset(asset)
+        if not validation.utp_export_ready:
+            messages = tuple(issue.message for issue in validation.issues if issue.severity == "blocking")
+            return PlaceableBuilderSaveResult(False, asset, validation, messages=messages)
+        parent = Path(output_parent)
+        parent.mkdir(parents=True, exist_ok=True)
+        target = parent / f"{asset.template_resref}_game_bundle"
+        if target.exists():
+            for index in range(2, 1000):
+                candidate = parent / f"{asset.template_resref}_game_bundle_{index}"
+                if not candidate.exists():
+                    target = candidate
+                    break
+            else:
+                return PlaceableBuilderSaveResult(
+                    False,
+                    asset,
+                    validation,
+                    messages=("Could not allocate a new game-bundle output folder.",),
+                )
+        if self.provider is None:
+            return PlaceableBuilderSaveResult(
+                False,
+                asset,
+                validation,
+                messages=("Connect the target KOTOR installation before exporting a game bundle.",),
+            )
+
+        temporary = Path(tempfile.mkdtemp(prefix=f".{target.name}.", dir=str(parent)))
+        try:
+            appearance = self._placeables_2da(asset.game)
+            particle_effects = tuple((asset.metadata or {}).get("particle_effects") or ())
+            particle_build = None
+            resources: list[PlaceableBundleResource]
+            if particle_effects:
+                particle_build = build_particle_placeable(
+                    asset,
+                    base_utp_bytes=self._base_bytes(asset),
+                    appearance_2da_bytes=bytes(appearance or b""),
+                    resource_reader=self.provider.read_bytes,
+                )
+                utp_result = particle_build.utp_result
+                resources = [
+                    *particle_build.resources,
+                    PlaceableBundleResource(
+                        "placeables",
+                        "2DA",
+                        particle_build.appearance_2da_bytes,
+                        "generated_particle_placeable_appearance_table",
+                    ),
+                ]
+                messages = tuple(issue.message for issue in particle_build.issues)
+            else:
+                utp_result = export_placeable_utp(
+                    asset,
+                    base_utp_bytes=self._base_bytes(asset),
+                    appearance_2da_bytes=appearance,
+                )
+                bundle = build_placeable_resource_bundle(
+                    asset,
+                    utp_result,
+                    resource_reader=self.provider.read_bytes,
+                )
+                resources = list(bundle.resources)
+                messages = tuple(utp_result.warnings) + tuple(issue.message for issue in bundle.issues)
+
+            unique: dict[tuple[str, str], PlaceableBundleResource] = {}
+            for resource in resources:
+                prior = unique.get(resource.key)
+                if prior is not None and prior.data != resource.data:
+                    raise ValueError(f"Bundle collision for {resource.key[0]}.{resource.key[1].lower()}.")
+                unique.setdefault(resource.key, resource)
+            override_dir = temporary / "install" / "Override"
+            override_dir.mkdir(parents=True, exist_ok=True)
+            inventory: list[dict[str, Any]] = []
+            for key, resource in sorted(unique.items()):
+                path = override_dir / f"{key[0]}.{key[1].lower()}"
+                path.write_bytes(resource.data)
+                if path.read_bytes() != resource.data:
+                    raise IOError(f"Bundle write verification failed: {path.name}")
+                inventory.append(
+                    {
+                        "resref": key[0],
+                        "restype": key[1],
+                        "size": len(resource.data),
+                        "sha256": sha256(resource.data).hexdigest(),
+                        "source": resource.source,
+                    }
+                )
+            manifest = {
+                "schema": "ghostrigger.particle_placeable_game_bundle.v1",
+                "game": asset.game,
+                "template_resref": asset.template_resref,
+                "particle_effect_count": len(particle_effects),
+                "appearance_id": particle_build.appearance_id if particle_build is not None else asset.appearance_id,
+                "model_resref": particle_build.model_resref if particle_build is not None else "",
+                "source_model_resref": particle_build.source_model_resref if particle_build is not None else "",
+                "emitter_count": particle_build.emitter_count if particle_build is not None else 0,
+                "install_root": "install/Override",
+                "resources": inventory,
+                "verification": {
+                    "utp_readback": True,
+                    "mdl_mdx_readback": bool(particle_effects),
+                    "placeables_2da_readback": bool(particle_effects),
+                    "in_game_proof": False,
+                },
+            }
+            (temporary / "particle_placeable_bundle.json").write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            temporary.replace(target)
+            return PlaceableBuilderSaveResult(
+                True,
+                asset,
+                validation,
+                utp_path=str(target / "install" / "Override" / f"{asset.template_resref}.utp"),
+                utp_result=utp_result,
+                bundle_dir=str(target),
+                bundle_resources=tuple(
+                    (str(row["resref"]), str(row["restype"]), int(row["size"])) for row in inventory
+                ),
+                messages=messages,
+                engine_ready=False,
+            )
+        except Exception as exc:
+            return PlaceableBuilderSaveResult(False, asset, validation, messages=(str(exc),))
+        finally:
+            if temporary.exists():
+                shutil.rmtree(temporary, ignore_errors=True)
 
     def preview_model_resref(self, value: PlaceableAsset | Mapping[str, Any]) -> str:
         asset = self._with_provider_evidence(value)

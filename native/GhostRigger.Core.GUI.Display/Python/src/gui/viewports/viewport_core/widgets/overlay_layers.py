@@ -898,6 +898,7 @@ class ViewportOverlayLayersMixin:
             return
         try:
             component = str(payload.get("component_type", "") or "")
+            placement_drop = bool(payload.get("placement_drop", False))
             world_points = tuple(payload.get("world_points", ()) or ())
             projected = []
             for point in world_points[:3]:
@@ -906,7 +907,11 @@ class ViewportOverlayLayersMixin:
                     projected = []
                     break
                 projected.append((float(proj[0]), float(proj[1])))
-            if component == "walkmesh_face":
+            if placement_drop:
+                # Reuse the established walkable-green cue so a drag has one
+                # unambiguous valid landing color across every theme.
+                color = (0, 255, 122)
+            elif component == "walkmesh_face":
                 color = (0, 255, 122) if bool(payload.get("walkable", False)) else (255, 95, 95)
             else:
                 # Orange is reserved for the live component/edge-selector cue;
@@ -931,6 +936,21 @@ class ViewportOverlayLayersMixin:
                 bounds = (cx - 5.0, cy - 5.0, cx + 5.0, cy + 5.0)
                 draw.ellipse(bounds, outline=(0, 0, 0, 200), width=4)
                 draw.ellipse(bounds, outline=(255, 128, 16, 255), width=3)
+
+            if placement_drop:
+                proj = self._map_studio_project_point(tuple(payload.get("world_point", ()) or ()), w, h)
+                if proj is not None:
+                    cx, cy = float(proj[0]), float(proj[1])
+                    draw.ellipse((cx - 12.0, cy - 12.0, cx + 12.0, cy + 12.0), fill=(0, 0, 0, 150))
+                    draw.ellipse(
+                        (cx - 9.0, cy - 9.0, cx + 9.0, cy + 9.0),
+                        outline=(0, 255, 122, 255),
+                        width=3,
+                    )
+                    draw.line((cx - 15.0, cy, cx + 15.0, cy), fill=(0, 255, 122, 255), width=2)
+                    draw.line((cx, cy - 15.0, cx, cy + 15.0), fill=(0, 255, 122, 255), width=2)
+                    label = str(payload.get("placement_label", "object") or "object")
+                    draw.text((cx + 16.0, cy - 9.0), f"Drop {label}", fill=(230, 255, 241, 255))
 
             # The edge-selector widget makes the next operation's
             # direction predictable.  Faces point from their center to the

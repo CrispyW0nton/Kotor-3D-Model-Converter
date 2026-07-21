@@ -47,6 +47,9 @@ class RendererSettings:
     throttle_diagnostics: bool = True
     diagnostics_hz: float = 2.0
     overlay_dirty_rendering: bool = True
+    bloom_enabled: bool = True
+    bloom_threshold: float = 0.82
+    bloom_strength: float = 0.18
     wgpu_enable_batching: bool = True
     wgpu_enable_instancing: bool = True
     wgpu_enable_frustum_culling: bool = True
@@ -82,6 +85,9 @@ class RendererSettings:
             throttle_diagnostics=_safe_bool(values.get("throttle_diagnostics", True), True),
             diagnostics_hz=_safe_float(values.get("diagnostics_hz", 2.0), 2.0, minimum=0.1),
             overlay_dirty_rendering=_safe_bool(values.get("overlay_dirty_rendering", True), True),
+            bloom_enabled=_safe_bool(values.get("bloom_enabled", True), True),
+            bloom_threshold=min(2.0, _safe_float(values.get("bloom_threshold", 0.82), 0.82)),
+            bloom_strength=min(1.0, _safe_float(values.get("bloom_strength", 0.18), 0.18)),
             wgpu_enable_batching=_safe_bool(wgpu_values.get("enable_batching", values.get("wgpu_enable_batching", True)), True),
             wgpu_enable_instancing=_safe_bool(wgpu_values.get("enable_instancing", values.get("wgpu_enable_instancing", True)), True),
             wgpu_enable_frustum_culling=_safe_bool(wgpu_values.get("enable_frustum_culling", values.get("wgpu_enable_frustum_culling", True)), True),
@@ -124,6 +130,9 @@ class RendererSettings:
             "throttle_diagnostics": self.throttle_diagnostics,
             "diagnostics_hz": self.diagnostics_hz,
             "overlay_dirty_rendering": self.overlay_dirty_rendering,
+            "bloom_enabled": self.bloom_enabled,
+            "bloom_threshold": self.bloom_threshold,
+            "bloom_strength": self.bloom_strength,
             "wgpu": {
                 "enable_batching": self.wgpu_enable_batching,
                 "enable_instancing": self.wgpu_enable_instancing,

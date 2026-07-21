@@ -132,11 +132,18 @@ def test_drag_coordinates_from_outer_and_nested_widgets_are_normalized_to_canvas
             assert drag_event.ignored is False
             assert panel._hover_context.is_hit is True
             assert panel._hover_context.room_resref == "grdrop01"
+            assert panel._map_placement_drag_payload["template_resref"] == "plc_test"
+            drop_highlight = panel.viewport._map_studio_hover_highlight
+            assert drop_highlight["placement_drop"] is True
+            assert drop_highlight["placement_label"] == "plc_test"
+            assert len(drop_highlight["world_point"]) == 3
 
             drop_event = DropEvent(QtCore.QEvent.Drop, local_point)
             assert panel._handle_map_placement_drop_event(drop_event, watched) is True
             assert drop_event.accepted is True
             assert drop_event.ignored is False
+            assert panel._map_placement_drag_payload is None
+            assert panel.viewport._map_studio_hover_highlight is None
 
         assert len(emitted) == 2
         assert all(request["room_resref"] == "grdrop01" for request in emitted)

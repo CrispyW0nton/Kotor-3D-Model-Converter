@@ -109,7 +109,9 @@ def test_python_payload_manifest_covers_every_python_source_and_dll_project() ->
     # Editor window (gui/windows/qt_particle_editor.py).
     # The retail-style glow post-process adds the Core.Rendering bloom pass
     # (adapters/rendering/moderngl_bloom.py).
-    assert len(payload_files) == 1365
+    # 2026-07-21: retail particle-placeable compilation adds the Workflow
+    # owner that bakes emitters into MDL/MDX and allocates placeables.2da.
+    assert len(payload_files) == 1366
     assert set(source_files).issubset(set(payload_files))
     assert payload_projects == dll_projects
 

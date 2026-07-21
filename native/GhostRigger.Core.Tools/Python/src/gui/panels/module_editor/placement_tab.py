@@ -136,11 +136,30 @@ class _PlacementAssetListView(QtWidgets.QListView):
             return
         drag = QtGui.QDrag(self)
         drag.setMimeData(mime_data)
+        label = str(self.currentIndex().data(QtCore.Qt.ItemDataRole.DisplayRole) or "Place object")
+        metrics = self.fontMetrics()
+        card_width = max(150, min(320, metrics.horizontalAdvance(label) + 54))
+        card_height = max(34, metrics.height() + 16)
+        card = QtGui.QPixmap(card_width, card_height)
+        card.fill(QtCore.Qt.GlobalColor.transparent)
+        painter = QtGui.QPainter(card)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        palette = self.palette()
+        background = palette.color(QtGui.QPalette.ColorRole.Highlight)
+        foreground = palette.color(QtGui.QPalette.ColorRole.HighlightedText)
+        painter.setPen(palette.color(QtGui.QPalette.ColorRole.Mid))
+        painter.setBrush(background)
+        painter.drawRoundedRect(card.rect().adjusted(1, 1, -2, -2), 6, 6)
+        painter.setPen(foreground)
+        painter.drawText(14, 0, card_width - 24, card_height, QtCore.Qt.AlignmentFlag.AlignVCenter, label)
+        painter.end()
+        drag.setPixmap(card)
+        drag.setHotSpot(QtCore.QPoint(18, card_height // 2))
         drag.exec(QtCore.Qt.DropAction.CopyAction)
 
 
 class PlacementTab(QtWidgets.QWidget):
-    """Choose an asset, click the level, then refine the selected GIT instance."""
+    """Drag an asset onto the level, then refine the selected GIT instance."""
 
     placementModeChanged = QtCore.Signal(object)
     placementRequested = QtCore.Signal(str, str, str, float, float, float, float)
@@ -162,12 +181,12 @@ class PlacementTab(QtWidgets.QWidget):
         root.setContentsMargins(6, 6, 6, 6)
         root.setSpacing(6)
 
-        guide = QtWidgets.QLabel("1  Choose asset   →   2  Place in viewport   →   3  W/E adjust   →   4  Validate")
+        guide = QtWidgets.QLabel("1  Find an asset   →   2  Drag it onto the level   →   3  W/E adjust   →   4  Validate")
         guide.setObjectName("mapStudioPlacementGuideLabel")
         guide.setWordWrap(True)
         root.addWidget(guide)
 
-        asset_box = QtWidgets.QGroupBox("Place a KOTOR object")
+        asset_box = QtWidgets.QGroupBox("Drag a KOTOR object into the level")
         asset_box.setObjectName("mapStudioPlacementAssetGroupBox")
         asset_layout = QtWidgets.QFormLayout(asset_box)
         self.kind_combo = QtWidgets.QComboBox(asset_box)
@@ -180,11 +199,13 @@ class PlacementTab(QtWidgets.QWidget):
         self._asset_proxy_model.setSourceModel(self._asset_model)
         self.asset_list = _PlacementAssetListView(self._drag_payload_for_entry, asset_box)
         self.asset_list.setModel(self._asset_proxy_model)
+        self.asset_list.setMinimumHeight(160)
         self.asset_list.setToolTip(
-            "Drag an asset into the viewport for direct placement, or select it and use Place in Viewport."
+            "Press and drag an asset onto the exact visible surface where it should be placed."
         )
         self.palette_combo = QtWidgets.QComboBox(asset_box)
         self.palette_combo.setObjectName("mapStudioPlacementPaletteComboBox")
+        self.palette_combo.setVisible(False)
         self.template_edit = QtWidgets.QLineEdit(asset_box)
         self.template_edit.setObjectName("mapStudioPlacementTemplateLineEdit")
         self.template_edit.setPlaceholderText("Template resref")
@@ -194,12 +215,11 @@ class PlacementTab(QtWidgets.QWidget):
         asset_layout.addRow("Type", self.kind_combo)
         asset_layout.addRow("Find", self.search_edit)
         asset_layout.addRow("Assets", self.asset_list)
-        asset_layout.addRow("Selected", self.palette_combo)
         asset_layout.addRow("Template", self.template_edit)
         asset_layout.addRow("Tag", self.tag_edit)
 
         drag_hint = QtWidgets.QLabel(
-            "Drag a resource into the viewport for the fastest workflow, or select it here and click Place in Viewport.",
+            "Drag and release on a highlighted floor, wall, terrain, or walkmesh point. The new object is selected immediately for W/E adjustment.",
             asset_box,
         )
         drag_hint.setObjectName("mapStudioPlacementAssetDragHintLabel")
@@ -213,17 +233,17 @@ class PlacementTab(QtWidgets.QWidget):
         self.snap_wok_box.setToolTip(
             "Enabled by default: dropped and moved objects settle onto generated walkable ground. Press End to ground the selection again."
         )
-        self.keep_placing_box = QtWidgets.QCheckBox("Keep placing", asset_box)
+        self.keep_placing_box = QtWidgets.QCheckBox("Repeat click placement", asset_box)
         self.keep_placing_box.setObjectName("mapStudioPlacementKeepPlacingCheckBox")
         self.keep_placing_box.setChecked(True)
         options.addWidget(self.snap_wok_box)
         options.addWidget(self.keep_placing_box)
         asset_layout.addRow(options)
 
-        self.place_button = QtWidgets.QPushButton("Place in Viewport", asset_box)
+        self.place_button = QtWidgets.QPushButton("Click-place mode", asset_box)
         self.place_button.setObjectName("mapStudioPlaceInViewportButton")
         self.place_button.setCheckable(True)
-        self.place_button.setToolTip("Arm placement, then click the visible level surface. Esc exits placement mode.")
+        self.place_button.setToolTip("Optional alternative to dragging: arm placement, then click visible level surfaces. Esc exits placement mode.")
         self.add_coordinates_button = QtWidgets.QPushButton("Add at coordinates", asset_box)
         self.add_coordinates_button.setObjectName("mapStudioAddPlacementAtCoordinatesButton")
         buttons = QtWidgets.QHBoxLayout()
@@ -568,7 +588,7 @@ class PlacementTab(QtWidgets.QWidget):
             self.place_button.setChecked(False)
             self.asset_status_label.setText("Choose an asset before entering placement mode.")
             return
-        self.place_button.setText("Placing — Esc to stop" if enabled else "Place in Viewport")
+        self.place_button.setText("Click-placing — Esc to stop" if enabled else "Click-place mode")
         self.placementModeChanged.emit(context)
 
     def _refresh_active_placement_context(self, _value: object = None) -> None:

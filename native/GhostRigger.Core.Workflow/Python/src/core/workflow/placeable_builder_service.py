@@ -20,6 +20,7 @@ from src.core.project.placeable_asset import PlaceableAsset, load_placeable_asse
 from src.core.project.resource_address import ResourceAddress
 from src.core.resources.game_resource_provider import GameResourceProvider, GameResourceQuery
 from src.core.resources.placeable_library import discover_placeable_library_rows
+from src.core.workflow.particle_placeable_export import build_particle_placeable
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,7 @@ def referenced_placeable_resource_report(
     selected: list[str] = []
     missing: list[str] = []
     externally_resolved_dependencies: set[tuple[str, str]] = set()
+    particle_appearance_changed = False
 
     def add(resource: PlaceableBundleResource) -> None:
         prior = collected.get(resource.key)
@@ -104,26 +106,45 @@ def referenced_placeable_resource_report(
                 base_bytes = base_resolver(asset) if base_resolver is not None else None
                 if base_bytes is None and provider is not None and asset.base_template is not None:
                     base_bytes = provider.read_bytes(asset.base_template)
-                exported = export_placeable_utp(
-                    asset,
-                    base_utp_bytes=base_bytes,
-                    appearance_2da_bytes=appearance_bytes,
-                )
-                if reader is not None:
-                    bundle = build_placeable_resource_bundle(asset, exported, resource_reader=reader)
-                    for resource in bundle.resources:
-                        add(resource)
-                else:
-                    add(PlaceableBundleResource(exported.template_resref, "UTP", exported.utp_bytes, path))
-                    if any((asset.resources.mdl, asset.resources.mdx, asset.resources.pwk, *asset.resources.textures)):
-                        issues.append(
-                            PlaceableBundleIssue(
-                                "blocking",
-                                "placeable_resource_reader_missing",
-                                f"{resref} references model/texture resources but no resource reader was provided.",
-                                (resref, "UTP"),
-                            )
+                particle_effects = tuple((asset.metadata or {}).get("particle_effects") or ())
+                if particle_effects:
+                    if reader is None:
+                        raise ValueError(
+                            f"{resref} has particle effects, but no target-game resource reader is connected."
                         )
+                    build = build_particle_placeable(
+                        asset,
+                        base_utp_bytes=base_bytes,
+                        appearance_2da_bytes=bytes(appearance_bytes or b""),
+                        resource_reader=reader,
+                    )
+                    appearance_bytes = build.appearance_2da_bytes
+                    particle_appearance_changed = True
+                    exported = build.utp_result
+                    for resource in build.resources:
+                        add(resource)
+                    issues.extend(build.issues)
+                else:
+                    exported = export_placeable_utp(
+                        asset,
+                        base_utp_bytes=base_bytes,
+                        appearance_2da_bytes=appearance_bytes,
+                    )
+                    if reader is not None:
+                        bundle = build_placeable_resource_bundle(asset, exported, resource_reader=reader)
+                        for resource in bundle.resources:
+                            add(resource)
+                    else:
+                        add(PlaceableBundleResource(exported.template_resref, "UTP", exported.utp_bytes, path))
+                        if any((asset.resources.mdl, asset.resources.mdx, asset.resources.pwk, *asset.resources.textures)):
+                            issues.append(
+                                PlaceableBundleIssue(
+                                    "blocking",
+                                    "placeable_resource_reader_missing",
+                                    f"{resref} references model/texture resources but no resource reader was provided.",
+                                    (resref, "UTP"),
+                                )
+                            )
                 issues.extend(PlaceableBundleIssue("warning", "placeable_export_unproven", warning, (resref, "UTP")) for warning in exported.warnings)
                 if reader is not None:
                     for dependency_resref, dependency_type in exported.readback.dependency_keys:
@@ -158,6 +179,16 @@ def referenced_placeable_resource_report(
             selected.append(resref)
         except Exception as exc:
             issues.append(PlaceableBundleIssue("blocking", "stock_utp_read_failed", str(exc), (resref, "UTP")))
+
+    if particle_appearance_changed and appearance_bytes:
+        add(
+            PlaceableBundleResource(
+                "placeables",
+                "2DA",
+                bytes(appearance_bytes),
+                "generated_particle_placeable_appearance_table",
+            )
+        )
 
     for issue in validate_placeable_resource_bundle(collected.values()):
         key = tuple(issue.resource_key or ())

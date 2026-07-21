@@ -299,6 +299,14 @@ class WindowLifecycleMixin:
             set_renderer_settings = getattr(character_builder_window, "set_renderer_settings", None)
             if callable(set_renderer_settings) and not renderer_restart_required:
                 set_renderer_settings(new_renderer_settings)
+        for particle_window in (
+            getattr(self, "placeable_builder_window", None),
+            getattr(self, "particle_editor_window", None),
+        ):
+            if particle_window is not None:
+                set_renderer_settings = getattr(particle_window, "set_renderer_settings", None)
+                if callable(set_renderer_settings) and not renderer_restart_required:
+                    set_renderer_settings(new_renderer_settings)
         for sequence_window in (
             getattr(self, "sequence_editor_window", None),
             getattr(self, "sequence_editor_docked_window", None),

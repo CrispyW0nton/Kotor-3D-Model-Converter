@@ -183,7 +183,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_QT_SETTINGS_DIALOG",
             "source_path": "src/gui/dialogs/qt_settings_dialog.py",
             "packaged_path": "Python/src/gui/dialogs/qt_settings_dialog.py",
-            "sha256": "ec8cc255a12c46a351bdb7f10ea9ad6077b15e7cea8bc2eea6a155943260a7e1"
+            "sha256": "d42ce40e9c0ed2336aa99588dd58efa93269d909fc8f6a660573b0948228e50c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_DIALOGS_UV_GEOMETRY_PREVIEW_WINDOW",
@@ -651,7 +651,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_BUILDER_TAB",
             "source_path": "src/gui/panels/module_editor/builder_tab.py",
             "packaged_path": "Python/src/gui/panels/module_editor/builder_tab.py",
-            "sha256": "b7bb5dec8b977958347588ff914091f88e6a56bfb486060332be2267a6061b68"
+            "sha256": "bceba737f8803578f98e95346ffbb83b0af7711886be45b73d96f10f49d1c82e"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_COMPONENT_MARKING_MENU",
@@ -711,13 +711,13 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_MODULE_EDITOR_VIEWPORT_PANEL",
             "source_path": "src/gui/panels/module_editor/module_editor_viewport_panel.py",
             "packaged_path": "Python/src/gui/panels/module_editor/module_editor_viewport_panel.py",
-            "sha256": "0cba6756cb21e4be0580c778e21e2c5888c1e528ecc0b9a2b982cc4f279d3c14"
+            "sha256": "de20695c1c002f9ae78218ac7493c5e2bf7b7a8ff568706b1a27833325a7cc92"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_PLACEMENT_TAB",
             "source_path": "src/gui/panels/module_editor/placement_tab.py",
             "packaged_path": "Python/src/gui/panels/module_editor/placement_tab.py",
-            "sha256": "82b12cff0e2066420d3fd6efe26f118433f0f00f0d3b06c28b694952495980ad"
+            "sha256": "e172213305d2d31008cdfec8d3de66d8e2c9c3b8e4f911b0ca0f0262acf5d8cc"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_PORTER_TAB",
@@ -1521,7 +1521,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_OVERLAY_LAYERS",
             "source_path": "src/gui/viewports/viewport_core/widgets/overlay_layers.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/overlay_layers.py",
-            "sha256": "9657ba8cc1e7756a1ba3e164a460f0570b6d77eb98b49ab5116643a8c06a3bb6"
+            "sha256": "96973a6659087ef3ce02bebb9a22bc9c5383c445306c685717801387569ad676"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_PICKING_HOVER",
@@ -1545,7 +1545,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_SCENE_MODELS",
             "source_path": "src/gui/viewports/viewport_core/widgets/scene_models.py",
             "packaged_path": "Python/src/gui/viewports/viewport_core/widgets/scene_models.py",
-            "sha256": "fc5fe72d58591f7478f49234d398bba259783630114bb26c0be6d5f796f7fbde"
+            "sha256": "375d36ac1888c99e45e9092bba5a0995b2f075e8a4ada713d971c3c863df0877"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_VIEWPORTS_VIEWPORT_CORE_WIDGETS_SELECTION_MESH",
@@ -1803,7 +1803,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_VIEWPORT_TOOLS",
             "source_path": "src/gui/windows/application_core/shared/viewport_tools.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/viewport_tools.py",
-            "sha256": "5bb51ed0c1543b89d9fd61685dd3e0cc48f805534edec81734ee56215b7a6c9a"
+            "sha256": "7ea7a51e1d33cec0aa3bdba5cf4d92ef3b35328b855f88d396bf0e5197ba8407"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WINDOW_CHROME",
@@ -1815,7 +1815,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WINDOW_LIFECYCLE",
             "source_path": "src/gui/windows/application_core/shared/window_lifecycle.py",
             "packaged_path": "Python/src/gui/windows/application_core/shared/window_lifecycle.py",
-            "sha256": "2e03b254025b24a65288850bae4257aa1ed658b22d48ee1eadc23557d65f4b43"
+            "sha256": "2c8ba991fe77107964db10a939606d83979e463d631940c5792d1dd0f675af89"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_APPLICATION_CORE_SHARED_WORKERS",

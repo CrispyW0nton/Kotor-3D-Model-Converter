@@ -938,6 +938,9 @@ class ViewportSceneModelMixin:
                 throttle_diagnostics=bool(getattr(settings, "throttle_diagnostics", True)),
                 diagnostics_hz=float(getattr(settings, "diagnostics_hz", 2.0) or 2.0),
                 overlay_dirty_rendering=bool(getattr(settings, "overlay_dirty_rendering", True)),
+                bloom_enabled=bool(getattr(settings, "bloom_enabled", True)),
+                bloom_threshold=float(getattr(settings, "bloom_threshold", 0.82)),
+                bloom_strength=float(getattr(settings, "bloom_strength", 0.18)),
             )
         else:
             new_settings = RendererSettings.from_settings(settings or {})

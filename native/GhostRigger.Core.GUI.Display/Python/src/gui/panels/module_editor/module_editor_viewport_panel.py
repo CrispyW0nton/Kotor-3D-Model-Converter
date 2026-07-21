@@ -1807,8 +1807,8 @@ class _MapStudioPIEGameplayHUD(QtWidgets.QFrame):
         self.combat_frame.setObjectName("mapStudioPIECombatHUD")
         self.combat_frame.setAutoFillBackground(True)
         combat_layout = QtWidgets.QVBoxLayout(self.combat_frame)
-        combat_layout.setContentsMargins(0, 2, 0, 0)
-        combat_layout.setSpacing(5)
+        combat_layout.setContentsMargins(4, 2, 4, 2)
+        combat_layout.setSpacing(3)
         self.combat_status_label = QtWidgets.QLabel(self.combat_frame)
         self.combat_status_label.setObjectName("mapStudioPIECombatStatusLabel")
         self.combat_status_label.setWordWrap(True)
@@ -1817,10 +1817,12 @@ class _MapStudioPIEGameplayHUD(QtWidgets.QFrame):
         self.combat_queue_label.setWordWrap(True)
         combat_buttons = QtWidgets.QHBoxLayout()
         combat_buttons.setContentsMargins(0, 0, 0, 0)
-        self.combat_attack_button = QtWidgets.QPushButton("Queue Attack", self.combat_frame)
+        self.combat_attack_button = QtWidgets.QPushButton("Attack", self.combat_frame)
         self.combat_attack_button.setObjectName("mapStudioPIECombatAttackButton")
-        self.combat_clear_button = QtWidgets.QPushButton("Clear Queue", self.combat_frame)
+        self.combat_attack_button.setToolTip("Queue a basic attack against the focused hostile.")
+        self.combat_clear_button = QtWidgets.QPushButton("Clear", self.combat_frame)
         self.combat_clear_button.setObjectName("mapStudioPIECombatClearQueueButton")
+        self.combat_clear_button.setToolTip("Clear the queued round actions.")
         self.combat_pause_button = QtWidgets.QPushButton("Pause", self.combat_frame)
         self.combat_pause_button.setObjectName("mapStudioPIECombatPauseButton")
         for button in (self.combat_attack_button, self.combat_clear_button, self.combat_pause_button):
@@ -1849,6 +1851,7 @@ class _MapStudioPIEGameplayHUD(QtWidgets.QFrame):
         self._focus_id = ""
         self._container_id = ""
         self._combat_target_id = ""
+        self._combat_active = False
         self._dialogue_active = False
         self._inventory_active = False
         self._exploration_mode = False
@@ -1876,6 +1879,10 @@ class _MapStudioPIEGameplayHUD(QtWidgets.QFrame):
     @property
     def dialogue_active(self) -> bool:
         return bool(self._dialogue_active)
+
+    @property
+    def combat_active(self) -> bool:
+        return bool(self._combat_active)
 
     def dialogue_authored_extent(self) -> tuple[float, float, float, float]:
         """Return K2 ``dialog_p``'s fixed 640x480-space conversation rectangle."""
@@ -2352,6 +2359,7 @@ class _MapStudioPIEGameplayHUD(QtWidgets.QFrame):
         self._focus_id = ""
         self._container_id = ""
         self._combat_target_id = ""
+        self._combat_active = False
         self._dialogue_active = False
         self._inventory_active = False
         self._exploration_mode = False
@@ -2536,6 +2544,7 @@ class _MapStudioPIEGameplayHUD(QtWidgets.QFrame):
             self.inventory_list.clear()
 
         combat_active = bool(_pie_hud_value(combat, "active", False))
+        self._combat_active = combat_active
         combatants = _pie_hud_sequence(combat, "combatants")
         self.combat_frame.setVisible(combat_active)
         if combat_active:
@@ -2585,7 +2594,6 @@ class _MapStudioPIEGameplayHUD(QtWidgets.QFrame):
             target_name = str(_pie_hud_value(target, "display_name", "") or "No target")
             target_hp = int(_pie_hud_value(target, "current_hp", 0) or 0)
             target_max = int(_pie_hud_value(target, "max_hp", 0) or 0)
-            queued_text = f" · queued {len(queued)}" if queued else ""
             round_index = int(_pie_hud_value(combat, "round_index", 0) or 0)
             next_round = _pie_hud_value(combat, "next_round_in", None)
             next_round_text = (
@@ -2594,9 +2602,8 @@ class _MapStudioPIEGameplayHUD(QtWidgets.QFrame):
                 else ""
             )
             self.combat_status_label.setText(
-                f"Round {round_index} (real-time) · {player_name} {player_hp}/{player_max} HP  ·  "
-                f"{target_name} {target_hp}/{target_max} HP{queued_text}"
-                f"{next_round_text}"
+                f"Round {round_index} · {player_name} {player_hp}/{player_max} HP · "
+                f"{target_name} {target_hp}/{target_max} HP{next_round_text}"
             )
             combatant_names = {
                 str(_pie_hud_value(row, "entity_id", "") or ""):
@@ -2604,12 +2611,11 @@ class _MapStudioPIEGameplayHUD(QtWidgets.QFrame):
                 for row in combatants
             }
             queue_rows = tuple(
-                f"{index + 1}. Basic Attack → "
+                f"{index + 1} Attack → "
                 f"{combatant_names.get(str(_pie_hud_value(action, 'target_id', '') or ''), 'target')}"
-                for index, action in enumerate(queued[:4])
+                for index, action in enumerate(queued[:3])
             )
-            queue_rows += tuple("— empty —" for _index in range(max(0, 4 - len(queue_rows))))
-            self.combat_queue_label.setText("Round action queue:  " + "   |   ".join(queue_rows))
+            self.combat_queue_label.setText("Queue: " + (" · ".join(queue_rows) if queue_rows else "empty"))
             paused = bool(_pie_hud_value(combat, "paused", False))
             self.combat_pause_button.setText("Resume" if paused else "Pause")
             self.combat_attack_button.setEnabled(bool(self._combat_target_id))
@@ -2619,10 +2625,13 @@ class _MapStudioPIEGameplayHUD(QtWidgets.QFrame):
         mode = str(_pie_hud_value(snapshot, "mode", "exploration") or "exploration").strip().lower()
         self._exploration_mode = bool(mode == "exploration" and not modal_active and not combat_active)
         self.action_strip.setVisible(self._exploration_mode)
-        self.focus_frame.setVisible(bool(focus is not None and not modal_active))
-        self.focus_label.setVisible(bool(focus is not None and not modal_active))
-        self.primary_button.setVisible(bool(focus is not None and not modal_active))
-        self.context_label.setVisible(bool(semantic_state and not modal_active and not self._exploration_mode))
+        focus_visible = bool(focus is not None and not modal_active and not combat_active)
+        self.focus_frame.setVisible(focus_visible)
+        self.focus_label.setVisible(focus_visible)
+        self.primary_button.setVisible(focus_visible)
+        self.context_label.setVisible(
+            bool(semantic_state and not modal_active and not self._exploration_mode and not combat_active)
+        )
         if self._exploration_mode:
             self.focus_frame.hide()
             self.focus_label.hide()
@@ -2638,7 +2647,15 @@ class _MapStudioPIEGameplayHUD(QtWidgets.QFrame):
             self._root_layout.setSpacing(0)
             self.setFrameShape(QtWidgets.QFrame.NoFrame)
             self.setAutoFillBackground(False)
+        elif combat_active:
+            self.shortcut_label.setText("Q/E target · Attack queues · Space pause")
+            self.shortcut_label.show()
+            self.setFrameShape(QtWidgets.QFrame.StyledPanel)
+            self.setAutoFillBackground(True)
+            self._root_layout.setContentsMargins(6, 4, 6, 4)
+            self._root_layout.setSpacing(3)
         else:
+            self.shortcut_label.setText("Q/E focus  ·  Enter interact  ·  1–9 reply  ·  Space pause")
             self.shortcut_label.setVisible(bool(modal_active or combat_active))
             self.setFrameShape(QtWidgets.QFrame.StyledPanel)
             self.setAutoFillBackground(True)
@@ -4221,6 +4238,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._marker_drag: dict[str, object] | None = None
         self._placement_context: dict[str, object] = {"enabled": False}
         self._placement_previous_hover: tuple[bool, str] | None = None
+        self._map_placement_drag_payload: dict[str, object] | None = None
         self._room_outline_point_drag: dict[str, object] | None = None
         self._room_outline_vertex_snap_candidates: dict[tuple[str, int], tuple[object, ...]] = {}
         self._vertex_snap_modifier_active = False
@@ -4629,7 +4647,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 # returns.  A queued zero-delay flush therefore rebuilds the
                 # camera-dependent hover buckets once, on the release frame.
                 self._hover_update_timer.start(0)
-            if event_type in {QtCore.QEvent.DragEnter, QtCore.QEvent.DragMove, QtCore.QEvent.Drop}:
+            if event_type in {QtCore.QEvent.DragEnter, QtCore.QEvent.DragMove, QtCore.QEvent.Drop, QtCore.QEvent.DragLeave}:
                 if self._handle_map_placement_drop_event(event, watched):
                     return True
             if event_type in {QtCore.QEvent.Leave, QtCore.QEvent.FocusOut}:
@@ -4957,13 +4975,24 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     ) -> bool:
         """Accept a Placeables-browser drag and create one surface-snapped GIT instance."""
 
+        event_type = event.type()
+        if event_type == QtCore.QEvent.DragLeave:
+            if self._map_placement_drag_payload is None:
+                return False
+            self._map_placement_drag_payload = None
+            self._clear_map_studio_hover()
+            getattr(event, "accept", lambda: None)()
+            self.marker_summary_label.setText("Placeable drop cancelled.")
+            return True
         payload = self._map_placement_drop_payload(event)
         if payload is None:
             return False
-        event_type = event.type()
+        self._map_placement_drag_payload = payload
         payload_game = str(payload.get("game") or "").strip().upper()
         project_game = str(getattr(self, "_project_game", "") or "").strip().upper()
         if payload_game and project_game and payload_game != project_game:
+            self._map_placement_drag_payload = None
+            self._clear_map_studio_hover()
             getattr(event, "ignore", lambda: None)()
             self.marker_summary_label.setText(
                 f"Cannot place {payload_game} content in a {project_game} map. Choose the matching game resource."
@@ -4977,7 +5006,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             if valid_surface:
                 getattr(event, "acceptProposedAction", lambda: None)()
                 template = str(payload.get("template_resref", "") or payload.get("kind", "object"))
-                self.marker_summary_label.setText(f"Drop {template} on this visible surface.")
+                x, y, z = (float(value) for value in world_point[:3])
+                self.marker_summary_label.setText(
+                    f"Release to place {template} at {x:.2f}, {y:.2f}, {z:.2f}."
+                )
             else:
                 getattr(event, "ignore", lambda: None)()
                 self.marker_summary_label.setText("Drag the asset over a visible room, terrain, or walkmesh surface.")
@@ -4985,6 +5017,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if event_type != QtCore.QEvent.Drop:
             return False
         if not valid_surface:
+            self._map_placement_drag_payload = None
+            self._clear_map_studio_hover()
             getattr(event, "ignore", lambda: None)()
             self.marker_summary_label.setText("Placeable drop cancelled: no visible level surface was under the cursor.")
             return True
@@ -4998,6 +5032,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "keep_placing": False,
         }
         self.placementRequested.emit(request)
+        self._map_placement_drag_payload = None
+        self._clear_map_studio_hover()
         getattr(event, "acceptProposedAction", lambda: None)()
         return True
 
@@ -5098,6 +5134,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             )
         exploration_mode = bool(getattr(hud, "exploration_mode", False))
         dialogue_mode = bool(getattr(hud, "dialogue_active", False))
+        combat_mode = bool(getattr(hud, "combat_active", False))
         dialogue_extent = hud.dialogue_authored_extent() if dialogue_mode else ()
         hint = hud.sizeHint() if not dialogue_mode else QtCore.QSize()
         geometry_key = (
@@ -5108,6 +5145,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             hint.height(),
             int(exploration_mode),
             int(dialogue_mode),
+            int(combat_mode),
             tuple(round(float(value), 3) for value in dialogue_extent),
         )
         if geometry_key == self._pie_gameplay_hud_geometry_key and not layers_reparented:
@@ -5149,6 +5187,21 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             hud.move(
                 max(0, (canvas.width() - width) // 2),
                 max(0, canvas.height() - height - bottom_margin),
+            )
+            self._raise_map_studio_pie_gameplay_layers()
+            return
+        if combat_mode:
+            hud.setMinimumSize(0, 0)
+            hud.setMaximumSize(max(1, canvas.width()), max(1, canvas.height()))
+            available_width = max(1, canvas.width() - (margin * 2))
+            compact_width = max(260, self.fontMetrics().averageCharWidth() * 38)
+            hud.setFixedWidth(min(available_width, compact_width))
+            hud.adjustSize()
+            available_height = max(1, canvas.height() - (margin * 2))
+            hud.resize(hud.width(), min(hud.height(), available_height))
+            hud.move(
+                max(margin, canvas.width() - hud.width() - margin),
+                max(margin, canvas.height() - hud.height() - margin),
             )
             self._raise_map_studio_pie_gameplay_layers()
             return
@@ -7129,9 +7182,14 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         if screen is None:
             self._clear_map_studio_hover()
             return
-        self._update_map_studio_hover_at_screen(screen)
+        self._update_map_studio_hover_at_screen(screen, force=force)
 
-    def _update_map_studio_hover_at_screen(self, screen: tuple[float, float]) -> None:
+    def _update_map_studio_hover_at_screen(
+        self,
+        screen: tuple[float, float],
+        *,
+        force: bool = False,
+    ) -> None:
         """Resolve one already-coalesced canvas-space hover position."""
 
         self._cached_map_studio_hover_candidates(screen)
@@ -7147,11 +7205,13 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             prefer_walkmesh=self._hover_component_mode in {"walkmesh", "terrain"},
         )
         self._set_texture_paint_cursor_at_screen(context, candidates, screen)
-        if context == self._hover_context:
+        context_changed = context != self._hover_context
+        if not context_changed and not force:
             return
-        self._hover_context = context
-        self.hoverContextChanged.emit(context)
-        self._sync_quad_draw_feedback()
+        if context_changed:
+            self._hover_context = context
+            self.hoverContextChanged.emit(context)
+            self._sync_quad_draw_feedback()
         setter = getattr(self.viewport, "set_map_studio_hover_highlight", None)
         if not callable(setter):
             return
@@ -7194,6 +7254,12 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 "selector_edge_corners": tuple(getattr(context, "selector_edge_corners", (-1, -1))),
                 "walkable": context.walkable,
                 "summary": map_studio_hover_context_summary(context),
+                "placement_drop": self._map_placement_drag_payload is not None,
+                "placement_label": str(
+                    (self._map_placement_drag_payload or {}).get("template_resref")
+                    or (self._map_placement_drag_payload or {}).get("kind")
+                    or "object"
+                ),
             }
         )
 

@@ -307,5 +307,29 @@ def test_bloom_uses_luminance_gate_for_saturated_holograms():
     assert cyan_luminance < threshold < yellow_luminance
 
 
+def test_bloom_quality_settings_round_trip_and_clamp():
+    from src.core.rendering.renderer_settings import RendererSettings
+
+    settings = RendererSettings.from_settings(
+        {
+            "renderer": {
+                "bloom_enabled": False,
+                "bloom_threshold": 1.25,
+                "bloom_strength": 0.45,
+            }
+        }
+    )
+    assert settings.bloom_enabled is False
+    assert settings.bloom_threshold == 1.25
+    assert settings.bloom_strength == 0.45
+    assert settings.to_settings_dict()["bloom_enabled"] is False
+
+    clamped = RendererSettings.from_settings(
+        {"renderer": {"bloom_threshold": 9.0, "bloom_strength": 4.0}}
+    )
+    assert clamped.bloom_threshold == 2.0
+    assert clamped.bloom_strength == 1.0
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

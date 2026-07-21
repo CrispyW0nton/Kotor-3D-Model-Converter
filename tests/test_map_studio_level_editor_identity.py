@@ -4661,7 +4661,7 @@ def test_t2600_map_studio_visible_tool_belt_buttons_mutate_kmap_state_runtime() 
 
         click_tool("paint_material")
         assert window.controller.command_history.undo_label == "Style primitive new_level_room01_floor"
-        assert getattr(primitive_rows()["new_level_room01_floor"], "texture") == "CM_Baremetal"
+        assert getattr(primitive_rows()["new_level_room01_floor"], "texture") == "ruler01"
 
         click_tool("paint_wok")
         assert window.controller.command_history.undo_label == "Style primitive new_level_room01_floor"
@@ -5757,7 +5757,7 @@ def test_t2600_visible_map_studio_controls_stage_export_candidate_runtime(tmp_pa
         authored_manifest = manifest["map_studio_authored_module"]
         material_uv = authored_manifest["material_uv"]
         assert material_uv[0]["room_resref"] == "new_level_room01"
-        assert material_uv[0]["texture"] == "CM_Baremetal"
+        assert material_uv[0]["texture"] == "ruler01"
         assert material_uv[0]["floor_surface_id"] == 4
         assert material_uv[0]["floor_surface_name"] == "STONE"
         assert material_uv[0]["all_mesh_uvs_complete"] is True
@@ -5797,7 +5797,7 @@ def test_t2600_visible_map_studio_controls_stage_export_candidate_runtime(tmp_pa
         assert reopened_readiness.can_export_candidate is True
         reopened_manifest = json.loads(Path(reopened_payload["pack_manifest_path"]).read_text(encoding="utf-8"))
         reopened_material_uv = reopened_manifest["map_studio_authored_module"]["material_uv"]
-        assert reopened_material_uv[0]["texture"] == "CM_Baremetal"
+        assert reopened_material_uv[0]["texture"] == "ruler01"
         assert reopened_material_uv[0]["all_mesh_uvs_complete"] is True
         assert reopened_material_uv[0]["meshes"][0]["uv_coordinate_space"] == "mesh_uv0"
         assert reader.findChild(QtWidgets.QToolButton, "mapStudioToolBeltButton_stage_module") is not None

@@ -174,6 +174,8 @@ class AuthoredModuleInstallPrepResult:
     export_result: AuthoredModuleExportResult | None = None
     installed_module_path: str = ""
     backup_module_path: str = ""
+    installed_override_paths: tuple[str, ...] = ()
+    backup_override_paths: tuple[str, ...] = ()
     resolved_modules_dir: str = ""
     resolved_game_root_dir: str = ""
     launch_helper_command: str = ""
@@ -2636,11 +2638,26 @@ def _package_output_records(package_result: CustomModulePackResult | None) -> li
         _artifact_output_record(package_result.module_path, "module_package"),
         _artifact_output_record(package_result.manifest_path, "pack_manifest"),
         _artifact_output_record(package_result.resources_dir, "loose_resource_directory", required=False),
+        _artifact_output_record(package_result.override_dir, "override_resource_directory", required=False),
     ]
     for resource in list(package_result.staged_resources or []):
         outputs.append(
             {
                 "artifact_kind": "loose_resource",
+                "resref": resource.resref,
+                "restype": resource.restype,
+                "final_path": resource.path,
+                "required": True,
+                "exists": Path(resource.path).is_file(),
+                "size": resource.size,
+                "sha256": resource.sha256,
+                "source": resource.source,
+            }
+        )
+    for resource in list(package_result.staged_override_resources or []):
+        outputs.append(
+            {
+                "artifact_kind": "override_resource",
                 "resref": resource.resref,
                 "restype": resource.restype,
                 "final_path": resource.path,
@@ -3361,6 +3378,8 @@ def _write_authored_install_proof_files(
     game: str,
     install_path: str,
     backup_path: str,
+    installed_override_paths: tuple[str, ...],
+    backup_override_paths: tuple[str, ...],
     modules_dir: str,
     game_root_dir: str,
     installed: bool,
@@ -3409,6 +3428,8 @@ def _write_authored_install_proof_files(
         f"- Package: `{export_result.module_path}`",
         f"- Install target: `{install_path or '(not installed)'}`",
         f"- Previous module backup: `{backup_path or '(none)'}`",
+        f"- Required Override resources: `{', '.join(installed_override_paths) or '(none)'}`",
+        f"- Previous Override backups: `{', '.join(backup_override_paths) or '(none)'}`",
         f"- Game root: `{game_root_dir or '(not supplied)'}`",
         f"- Expected executable: `{executable_path}`",
         f"- Dry-run helper: `{launch_helper_command or '(manual launch)'}`",
@@ -3479,6 +3500,8 @@ def _write_authored_install_proof_files(
             "dry_run": dry_run,
             "installed_module_path": install_path,
             "backup_module_path": backup_path,
+            "installed_override_paths": list(installed_override_paths),
+            "backup_override_paths": list(backup_override_paths),
         },
         "manual_proof_required": True,
         "game_tested": False,
@@ -3541,6 +3564,8 @@ def prepare_authored_module_install(request: AuthoredModuleInstallPrepRequest) -
     installed = False
     install_path = ""
     backup_path = ""
+    installed_override_paths: list[str] = []
+    backup_override_paths: list[str] = []
     modules_dir_text = request.game_modules_dir
     resolved_game_root_dir = request.game_root_dir
     if not modules_dir_text and request.auto_detect_game_modules_dir:
@@ -3579,9 +3604,38 @@ def prepare_authored_module_install(request: AuthoredModuleInstallPrepRequest) -
                 install_path = str(destination)
                 if destination.exists() and not request.overwrite:
                     blocking.append(f"{destination} already exists. Re-run with overwrite=True to replace it.")
+                override_resources = tuple(
+                    getattr(export_result.package_result, "staged_override_resources", ()) or ()
+                )
+                game_root = Path(resolved_game_root_dir) if resolved_game_root_dir else modules_dir.parent
+                override_dir = game_root / "Override"
+                override_targets = [override_dir / Path(str(resource.path)).name for resource in override_resources]
+                for target in override_targets:
+                    if target.exists() and not request.overwrite:
+                        blocking.append(
+                            f"{target} already exists. Re-run with overwrite=True to merge the generated placeable table with a backup."
+                        )
+                if blocking:
+                    pass
                 elif request.dry_run:
                     warnings.append(f"Dry run: would copy {export_result.module_path} to {destination}.")
+                    warnings.extend(
+                        f"Dry run: would copy {resource.path} to {target}."
+                        for resource, target in zip(override_resources, override_targets, strict=True)
+                    )
                 else:
+                    override_dir.mkdir(parents=True, exist_ok=True)
+                    for resource, target in zip(override_resources, override_targets, strict=True):
+                        source = Path(str(resource.path))
+                        if not source.is_file():
+                            raise FileNotFoundError(f"Generated Override resource is missing: {source}")
+                        if target.exists():
+                            backup = _next_install_backup_path(target)
+                            shutil.copy2(target, backup)
+                            backup_override_paths.append(str(backup))
+                            warnings.append(f"Backed up existing {target.name} to {backup}.")
+                        shutil.copy2(source, target)
+                        installed_override_paths.append(str(target))
                     if destination.exists():
                         backup = _next_install_backup_path(destination)
                         shutil.copy2(destination, backup)
@@ -3602,6 +3656,8 @@ def prepare_authored_module_install(request: AuthoredModuleInstallPrepRequest) -
         game=request.project.game,
         install_path=install_path,
         backup_path=backup_path,
+        installed_override_paths=tuple(installed_override_paths),
+        backup_override_paths=tuple(backup_override_paths),
         modules_dir=modules_dir_text,
         game_root_dir=resolved_game_root_dir,
         installed=installed,
@@ -3626,6 +3682,8 @@ def prepare_authored_module_install(request: AuthoredModuleInstallPrepRequest) -
         export_result=export_result,
         installed_module_path=install_path if installed else "",
         backup_module_path=backup_path,
+        installed_override_paths=tuple(installed_override_paths) if installed else (),
+        backup_override_paths=tuple(backup_override_paths),
         resolved_modules_dir=modules_dir_text,
         resolved_game_root_dir=resolved_game_root_dir,
         launch_helper_command=launch_helper_command,
@@ -3636,7 +3694,12 @@ def prepare_authored_module_install(request: AuthoredModuleInstallPrepRequest) -
         warnings=warnings,
         blocking_issues=blocking,
         message=(
-            f"Installed {export_result.module_root}.mod to {install_path}."
+            f"Installed {export_result.module_root}.mod to {install_path}"
+            + (
+                f" and {len(installed_override_paths)} required Override resource(s)."
+                if installed_override_paths
+                else "."
+            )
             if installed
             else "Authored module staged with manual in-game checklist."
         ),
