@@ -1,9 +1,9 @@
 """ModernGL bloom post-process for the offscreen viewport renderer.
 
-Bright-pass → two-iteration separable gaussian blur at quarter resolution →
-additive composite back onto the scene framebuffer.  This is what gives the
-retail-style glow to additive content: emitter particles (Star Map nav rings,
-galaxy, flares), lightsaber blades, holograms, and self-illuminated panels.
+Luminance-gated bright-pass → separable gaussian blur at half resolution →
+additive composite back onto the scene framebuffer.  This gives genuinely
+bright cores a restrained glow without blurring saturated cyan hologram detail
+into a full-frame veil.
 
 Package-local to ``GhostRigger.Core.Rendering`` like the other ModernGL
 adapter modules.
@@ -40,9 +40,13 @@ in vec2 v_uv;
 out vec4 fragColor;
 void main() {
     vec3 c = texture(u_scene, v_uv).rgb;
-    // Soft knee: keep energy proportional above the threshold.
-    vec3 bright = max(c - vec3(u_threshold), vec3(0.0));
-    fragColor = vec4(bright / max(1e-4, 1.0 - u_threshold), 1.0);
+    // Gate bloom by perceived brightness, not by each RGB channel.  The old
+    // per-channel threshold treated saturated cyan as full-white energy and
+    // blurred most KOTOR holograms back over themselves.  Rec.709 luminance
+    // keeps cyan rings crisp while retaining the white/yellow emitter cores.
+    float luminance = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    float contribution = smoothstep(u_threshold, 1.0, luminance);
+    fragColor = vec4(c * contribution, 1.0);
 }
 """
 
@@ -171,7 +175,7 @@ class ModernGLBloomPass:
 
     def apply(self, ctx, blend_submission, scene_fbo, scene_texture,
               width: int, height: int, *, threshold: float = 0.5,
-              strength: float = 0.85, iterations: int = 2) -> bool:
+              strength: float = 0.85, iterations: int = 1) -> bool:
         """Composite bloom extracted from ``scene_texture`` onto ``scene_fbo``."""
         if scene_fbo is None or scene_texture is None:
             return False

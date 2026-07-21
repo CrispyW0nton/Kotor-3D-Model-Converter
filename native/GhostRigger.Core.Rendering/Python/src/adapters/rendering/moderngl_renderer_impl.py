@@ -588,20 +588,16 @@ class GpuRenderer:
         self._particle_last_wall: float = 0.0
         self._particle_anim_cache: tuple = ("", None)
         # ── Bloom post-process ───────────────────────────────────────────────
-        # Subtle glow accent for genuinely bright content (star cores, ring
-        # dashes, saber blades).  Retail KOTOR has no bloom — its glow comes
-        # from the additive textures' own falloff — so the threshold sits high
-        # enough that mid-brightness additive surfaces (the Star Map's dome
-        # starfield) do not bloom into a milky veil, and the strength stays an
-        # accent rather than a wash.
+        # Subtle glow accent for genuinely bright content (star cores and saber
+        # blades).  Retail KOTOR's emitter glow primarily comes from additive
+        # texture falloff, so the luminance threshold excludes saturated cyan
+        # structure and the strength stays an accent rather than a wash.
         self.bloom_enabled: bool = True
-        # Tightened to stop bloom veiling dense additive holograms (galaxy map,
-        # planet holos): the higher threshold blooms only genuinely blown-out
-        # cores instead of the whole mid-bright cyan structure, and the lower
-        # strength keeps it a subtle accent — closer to KotOR.js Forge, which
-        # renders these sprites with no post-process glow at all.
+        # Luminance-gated extraction in ModernGLBloomPass blooms only genuinely
+        # bright cores.  Keep the residual halo restrained because KotOR.js
+        # Forge renders these emitter sprites with no post-process glow at all.
         self.bloom_threshold: float = 0.82
-        self.bloom_strength: float = 0.30
+        self.bloom_strength: float = 0.18
         self._bloom_pass = None
         self._fbo_resolve_tex = None
         self._fbo_simple_tex = None

@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -30,6 +30,7 @@ def test_placeable_builder_is_a_dedicated_service_facing_workbench() -> None:
             "Visual",
             "Interaction",
             "Scripts & Conversation",
+            "Particles",
             "Resources",
             "Readiness",
         ]
@@ -39,6 +40,8 @@ def test_placeable_builder_is_a_dedicated_service_facing_workbench() -> None:
         assert window.preview_viewport.viewport_role == "main"
         assert window.preview_viewport.map_studio_authoring_chrome_enabled is False
         assert window.preview_viewport.viewport_map_studio_modeling_tabs is None
+        assert window.inspector_tabs.tabBar().usesScrollButtons() is False
+        assert window.inspector_tabs.tabBar().elideMode() == QtCore.Qt.ElideRight
         assert [action.text() for action in window.placeable_toolbar.actions() if not action.isSeparator()] == [
             "New",
             "Clone",
@@ -60,6 +63,38 @@ def test_placeable_builder_is_a_dedicated_service_facing_workbench() -> None:
                 window.open_library_folder_action,
             )
         )
+    finally:
+        window.mark_clean()
+        window.close()
+
+
+def test_placeable_particle_tab_is_honest_and_actionable() -> None:
+    _qapp()
+    from src.gui.qt_lib.windows.qt_placeable_builder import QtPlaceableBuilderWindow
+
+    window = QtPlaceableBuilderWindow()
+    try:
+        assert window.particle_effects_table.horizontalHeaderItem(1).text() == "Offset X (m)"
+        assert "Export UTP does not write" in window.particle_export_warning.text()
+        assert window.remove_particle_effect_button.isEnabled() is False
+        assert window.reset_particle_offsets_button.isEnabled() is False
+
+        document = window.current_document()
+        document.setdefault("metadata", {})["particle_effects"] = [
+            {
+                "game": "K2",
+                "model": "plc_holo01",
+                "node": "emitter01",
+                "offset": [1.0, 2.0, 3.0],
+            }
+        ]
+        window.set_document(document)
+        assert window.particle_effects_summary.text() == "1 emitter attachment(s)."
+        window.particle_effects_table.selectRow(0)
+        assert window.remove_particle_effect_button.isEnabled() is True
+        assert window.reset_particle_offsets_button.isEnabled() is True
+        window._reset_selected_particle_offsets()
+        assert window.current_document()["metadata"]["particle_effects"][0]["offset"] == [0.0, 0.0, 0.0]
     finally:
         window.mark_clean()
         window.close()

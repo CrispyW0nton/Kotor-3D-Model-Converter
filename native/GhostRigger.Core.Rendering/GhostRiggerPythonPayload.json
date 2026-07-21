@@ -69,7 +69,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_BLOOM",
             "source_path": "src/adapters/rendering/moderngl_bloom.py",
             "packaged_path": "Python/src/adapters/rendering/moderngl_bloom.py",
-            "sha256": "b604a090cfc2725bb36fdb765cfcc6877c2a38fc7cebe443b2ba77ee1e5794ed"
+            "sha256": "08c02539e0c082702da8530d34c264d2b5c500348d14ef55e687662513477014"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_CLI",
@@ -99,7 +99,7 @@
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RENDERER_IMPL",
             "source_path": "src/adapters/rendering/moderngl_renderer_impl.py",
             "packaged_path": "Python/src/adapters/rendering/moderngl_renderer_impl.py",
-            "sha256": "8b509cb429775282e8a48a5661ae7da25156ddc4cd1ef48d8c3bb360efe3cae6"
+            "sha256": "c63b097deab74a57ac49e0b13b4634d6dbaec770c9081ec05a2db8c25b7f2656"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_ADAPTERS_RENDERING_MODERNGL_RESOURCES",

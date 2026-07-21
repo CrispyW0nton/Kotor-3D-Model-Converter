@@ -1965,13 +1965,13 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_PARTICLE_EDITOR",
             "source_path": "src/gui/windows/qt_particle_editor.py",
             "packaged_path": "Python/src/gui/windows/qt_particle_editor.py",
-            "sha256": "a387201e1f27f9bbf38b7f40ced93bb2db39d4933029c3bf03adb915101dd9cc"
+            "sha256": "b9ef1298aaa9f8af659be0035ab622c07d5cb75d5e40a8090f3cd70d20cd39d0"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_PLACEABLE_BUILDER",
             "source_path": "src/gui/windows/qt_placeable_builder.py",
             "packaged_path": "Python/src/gui/windows/qt_placeable_builder.py",
-            "sha256": "1fa7ebe74c788422dbc83bf0778b4a0198eb96d15e2430d26edff01ee04a2a60"
+            "sha256": "f68e33d79986dabcc5ebd5e53069238c4ba2c635d36655f2674588a9ad0d7f78"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_PLACEABLE_BUILDER_CONTROLLER",

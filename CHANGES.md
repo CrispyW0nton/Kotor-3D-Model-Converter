@@ -11,6 +11,82 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-21
 
+### [2026-07-21] Particle authoring UI: searchable libraries, safe edit states, and honest placeable export guidance
+
+Owner: ShaolinGhost
+
+Subsystem: particle authoring workflows (`GhostRigger.Core.Tools`:
+`qt_particle_editor.py`, `qt_placeable_builder.py`) with focused contracts in
+`tests/test_particle_editor_ui.py` and `tests/test_placeable_builder_ui.py`.
+
+Audited and corrected the Particle Editor and Placeable Builder particle
+workflows in the real Debug application.  The Particle Editor now searches the
+retail cache by model, emitter, texture, update mode, or blend mode; lazily
+materializes emitter rows beneath source models; shows library/result counts;
+keeps all parameter groups disabled until a model emitter is selected; and
+separates template browsing from the active edit target.  Direct-load versus
+Main Window edit ownership is now explicit, edited sessions are marked, closing
+a preview-only modified session requires confirmation, and applying a template
+requires an overwrite confirmation.  The editor now participates in live
+theme/layout updates and protects its inspector from narrow saved main-window
+dock overrides.
+
+Placeable Builder's particle tab now keeps all inspector tabs reachable,
+provides attachment counts, metre-labelled offsets, disabled-until-selected
+remove/reset actions, offset reset, removal confirmation, and a direct route to
+Particle Editor.  The retail picker lazily expands source models, searches all
+useful emitter fields, constrains multi-selection to one source model, reports
+the active selection, and enables only valid add actions.  Most importantly,
+the UI now states that particle attachments are stored in the Ghost Studio
+document and live preview but are not yet written into a game MDL by Export
+UTP.
+
+Verification: both payload-owned Python modules compiled; the Core.Tools
+payload manifest was regenerated, the Debug x64 DLL rebuilt, and all 18 native
+payload DLLs staged and verified.  Three focused UI contracts passed.  Visible
+testing used the staged Debug `GhostStudio.exe`, the real 11,969-emitter cache,
+the `plc_holo` search (12 matching source models), the K2 placeable particle
+picker, and its empty/model selection action states.  Default/native, Matrix,
+Droid, Dark, Light, and Classic themes were applied without persistence; the
+corrected layouts and label/input contrast were inspected in both tools.
+Proof captures are under `artifacts/particle_proof/ux_*_verified.png` and
+`ux_*_final.png`.
+
+### [2026-07-21] Particle quality: luminance-gated bloom preserves hologram detail
+
+Owner: ShaolinGhost
+
+Subsystem: particle presentation and bloom post-process
+(`GhostRigger.Core.Rendering`: `moderngl_bloom.py`,
+`moderngl_renderer_impl.py`), with a focused contract in
+`tests/test_particle_system.py`.
+
+Fixed the remaining washed-out look in dense additive effects such as
+`plc_starmap`.  The previous bloom bright pass compared each RGB channel with
+the threshold independently, so saturated cyan passed as maximum bloom energy
+and blurred the entire holographic shell back over itself.  Bright extraction
+now uses Rec.709 perceived luminance and a smooth high-light gate, preserving
+the sharp cyan rings, stars, and dark gaps while still blooming white/yellow
+energy cores.  The default halo strength is reduced from 0.30 to 0.18 and the
+half-resolution blur uses one iteration instead of two.
+
+The emitter fragment composition, KOTOR `Lighten` blend mapping, texture
+sampling, particle colors/alpha, and CPU simulation are unchanged.  The change
+was cross-checked against KotOR.js's authoritative `ShaderOdysseyEmitter.ts`,
+which performs the same non-premultiplied sprite composition without a bloom
+post-process.
+
+Verification: focused particle/bloom contract passed; both edited Python files
+compiled; the bloom GLSL compiled in an OpenGL 3.3 context; and the
+Core.Rendering embedded payload and Debug DLL were regenerated and rebuilt.
+Visible proof ran the real Debug `GhostStudio.exe` in an isolated temporary
+runtime, loaded K1 `plc_starmap`, looped the `on` animation, and captured
+`artifacts/particle_proof/starmap_luminance_bloom.png` plus a viewport-only
+capture.  The cyan rings and star points remain crisp with dark separation,
+while the white/yellow core retains a restrained halo.  After the original app
+closed independently, all 18 payload DLLs were staged and verified without
+terminating the user's process.
+
 ### [2026-07-21] Loose K1 Mandalorian model: correct custom-atlas orientation and wrapping
 
 Owner: LordVaderCW

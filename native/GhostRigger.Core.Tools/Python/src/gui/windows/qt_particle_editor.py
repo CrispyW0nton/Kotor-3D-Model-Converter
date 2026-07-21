@@ -136,6 +136,7 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
                  app_root: Optional[Path] = None):
         super().__init__(parent)
         self.setObjectName("ParticleEditorWindow")
+        self.setProperty("ghostLayoutId", "particleEditor")
         self.setWindowTitle("Particle Editor — KOTOR Emitters")
         self.resize(1480, 900)
 
@@ -146,6 +147,8 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
         self._model_game = "K1"
         self._selected_node = None
         self._definition: Optional[EmitterDefinition] = None
+        self._session_modified = False
+        self._shared_main_model = False
         self._updating_widgets = False
         self._templates: Dict[str, List[EmitterTemplate]] = {"K1": [], "K2": []}
         self._scan_thread: Optional[threading.Thread] = None
@@ -174,6 +177,14 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
         self.workerDone.connect(self._end_gc_guard)
 
         self._build_ui()
+        theme_manager = getattr(parent, "theme_manager", None)
+        layout_manager = getattr(parent, "layout_manager", None)
+        if theme_manager is not None:
+            theme_manager.register_theme_aware_widget(self)
+            self.apply_ghost_theme(theme_manager.current_theme or theme_manager.get_theme())
+        if layout_manager is not None:
+            layout_manager.layoutChanged.connect(self.apply_ghost_layout)
+            self.apply_ghost_layout(layout_manager.current_layout or layout_manager.get_layout())
         self._load_cached_libraries()
 
     # ── UI construction ──────────────────────────────────────────────────────
@@ -216,20 +227,37 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
         self.status_label.setObjectName("ParticleEditorStatus")
         toolbar.addWidget(self.status_label)
 
-        splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal, self)
-        splitter.setObjectName("ParticleEditorSplitter")
-        self.setCentralWidget(splitter)
+        self.workspace_splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal, self)
+        self.workspace_splitter.setObjectName("ParticleEditorSplitter")
+        self.workspace_splitter.setChildrenCollapsible(False)
+        self.setCentralWidget(self.workspace_splitter)
 
         # Left: emitters + template library tree
+        self.library_panel = QtWidgets.QWidget(self)
+        library_layout = QtWidgets.QVBoxLayout(self.library_panel)
+        library_layout.setContentsMargins(6, 6, 6, 6)
+        self.library_search_edit = QtWidgets.QLineEdit()
+        self.library_search_edit.setObjectName("ParticleEditorLibrarySearch")
+        self.library_search_edit.setClearButtonEnabled(True)
+        self.library_search_edit.setPlaceholderText(
+            "Search model, emitter, texture, update, or blend…"
+        )
+        library_layout.addWidget(self.library_search_edit)
+        self.library_summary_label = QtWidgets.QLabel("Loading retail emitter libraries…")
+        self.library_summary_label.setObjectName("ParticleEditorLibrarySummary")
+        self.library_summary_label.setWordWrap(True)
+        library_layout.addWidget(self.library_summary_label)
         self.tree = QtWidgets.QTreeWidget()
         self.tree.setObjectName("ParticleEditorTree")
         self.tree.setHeaderLabels(["Emitter", "Info"])
         self.tree.setColumnWidth(0, 220)
         self.tree.itemSelectionChanged.connect(self._on_tree_selection)
         self.tree.itemDoubleClicked.connect(self._on_tree_double_clicked)
+        self.tree.itemExpanded.connect(self._on_tree_item_expanded)
         self.tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._on_tree_context_menu)
-        splitter.addWidget(self.tree)
+        library_layout.addWidget(self.tree, 1)
+        self.workspace_splitter.addWidget(self.library_panel)
 
         self.model_group = QtWidgets.QTreeWidgetItem(["Model Emitters", ""])
         self.k1_group = QtWidgets.QTreeWidgetItem(["K1 Library", ""])
@@ -247,7 +275,7 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
         set_settings = getattr(self.viewport, "set_renderer_settings", None)
         if callable(set_settings):
             set_settings(self._settings_data)
-        splitter.addWidget(self.viewport)
+        self.workspace_splitter.addWidget(self.viewport)
 
         # Right: parameter editor
         panel = QtWidgets.QScrollArea()
@@ -258,17 +286,29 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
         form_layout = QtWidgets.QVBoxLayout(panel_body)
         form_layout.setContentsMargins(8, 8, 8, 8)
         form_layout.setSpacing(6)
-        splitter.addWidget(panel)
-        splitter.setSizes([300, 780, 400])
+        self.workspace_splitter.addWidget(panel)
+        self.workspace_splitter.setStretchFactor(0, 0)
+        self.workspace_splitter.setStretchFactor(1, 1)
+        self.workspace_splitter.setStretchFactor(2, 0)
+        self.workspace_splitter.setSizes([320, 760, 400])
         self._param_panel = panel
 
         self.selected_label = QtWidgets.QLabel("No emitter selected")
         self.selected_label.setObjectName("ParticleEditorSelectedLabel")
+        self.selected_label.setWordWrap(True)
         form_layout.addWidget(self.selected_label)
+        self.session_notice_label = QtWidgets.QLabel(
+            "Live preview session — edits to a directly loaded model are not saved automatically. "
+            "Use Main Window Model when you intend to continue into export."
+        )
+        self.session_notice_label.setObjectName("ParticleEditorSessionNotice")
+        self.session_notice_label.setWordWrap(True)
+        form_layout.addWidget(self.session_notice_label)
 
         self._scalar_widgets: Dict[str, QtWidgets.QDoubleSpinBox] = {}
         self._color_buttons: Dict[str, QtWidgets.QPushButton] = {}
         self._flag_checks: Dict[int, QtWidgets.QCheckBox] = {}
+        self._parameter_groups: List[QtWidgets.QWidget] = []
 
         header_box = QtWidgets.QGroupBox("Emitter")
         header_form = QtWidgets.QFormLayout(header_box)
@@ -299,6 +339,7 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
         self.render_order_spin.setRange(0, 255)
         header_form.addRow("Render Order", self.render_order_spin)
         form_layout.addWidget(header_box)
+        self._parameter_groups.append(header_box)
 
         self.update_combo.currentTextChanged.connect(self._on_param_changed)
         self.render_combo.currentTextChanged.connect(self._on_param_changed)
@@ -321,6 +362,7 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
             color_form.addRow(label, button)
             self._color_buttons[channel] = button
         form_layout.addWidget(color_box)
+        self._parameter_groups.append(color_box)
 
         for section, rows in _SCALAR_SPECS.items():
             box = QtWidgets.QGroupBox(section)
@@ -335,6 +377,7 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
                 grid.addRow(label, spin)
                 self._scalar_widgets[channel] = spin
             form_layout.addWidget(box)
+            self._parameter_groups.append(box)
 
         flags_box = QtWidgets.QGroupBox("Flags")
         flags_grid = QtWidgets.QGridLayout(flags_box)
@@ -344,13 +387,25 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
             flags_grid.addWidget(check, index // 2, index % 2)
             self._flag_checks[int(flag)] = check
         form_layout.addWidget(flags_box)
+        self._parameter_groups.append(flags_box)
 
-        self._build_forces_section(form_layout)
+        self._parameter_groups.append(self._build_forces_section(form_layout))
         form_layout.addStretch(1)
+
+        for group in self._parameter_groups:
+            group.setEnabled(False)
+
+        self._library_query_timer = QtCore.QTimer(self)
+        self._library_query_timer.setSingleShot(True)
+        self._library_query_timer.setInterval(180)
+        self._library_query_timer.timeout.connect(self._refresh_template_groups)
+        self.library_search_edit.textChanged.connect(
+            lambda _text: self._library_query_timer.start()
+        )
 
         self.statusBar().showMessage("Load a model to edit its emitters.", 8000)
 
-    def _build_forces_section(self, form_layout: QtWidgets.QVBoxLayout) -> None:
+    def _build_forces_section(self, form_layout: QtWidgets.QVBoxLayout) -> QtWidgets.QGroupBox:
         """Ghost Studio force-field + dynamic-colour controls.
 
         These are non-KOTOR authoring extensions (adapted from the GPU gravity
@@ -400,6 +455,7 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
         layout.addLayout(buttons)
 
         form_layout.addWidget(box)
+        return box
 
     def _refresh_force_table(self) -> None:
         prev = self._updating_widgets
@@ -476,9 +532,41 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
                 hook(theme)
             except Exception:
                 pass
+        self.update()
 
     def apply_ghost_layout(self, layout) -> None:  # stable layout ID surface
-        return None
+        self.resize(layout.main_width, layout.main_height)
+        self.workspace_splitter.setHandleWidth(
+            layout.spacing_value("splitterHandleWidth", 6)
+        )
+        library = layout.panel("library")
+        inspector = layout.panel("properties")
+        inspector_width = max(
+            inspector.preferred_width,
+            5 * layout.spacing_value("tabWidth", 78),
+        )
+        self.library_panel.setMinimumWidth(library.min_width)
+        self._param_panel.setMinimumWidth(inspector_width)
+        self.viewport.setMinimumWidth(layout.viewport.min_width)
+        self.viewport.setSizePolicy(
+            QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Expanding
+        )
+        self.workspace_splitter.setSizes(
+            [library.preferred_width, layout.viewport.preferred_width, inspector_width]
+        )
+        toolbar_layout = layout.toolbar("main")
+        toolbar = self.findChild(QtWidgets.QToolBar, "ParticleEditorToolbar")
+        if toolbar is not None:
+            toolbar.setIconSize(QtCore.QSize(toolbar_layout.icon_size, toolbar_layout.icon_size))
+            toolbar.setMinimumHeight(toolbar_layout.height)
+        input_height = layout.spacing_value("inputHeight", 24)
+        for widget in [
+            *self.findChildren(QtWidgets.QLineEdit),
+            *self.findChildren(QtWidgets.QComboBox),
+            *self.findChildren(QtWidgets.QSpinBox),
+            *self.findChildren(QtWidgets.QDoubleSpinBox),
+        ]:
+            widget.setMinimumHeight(input_height)
 
     # ── Model loading ────────────────────────────────────────────────────────
     def set_resource_manager(self, manager) -> None:
@@ -509,7 +597,7 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
         if model is None:
             self.statusBar().showMessage(f"Model not found: {game}:{resref}", 8000)
             return
-        self.use_model(model, game, f"{game}:{resref}")
+        self.use_model(model, game, f"{game}:{resref}", shared_main=False)
 
     def _use_main_window_model(self) -> None:
         parent = self.parent()
@@ -518,11 +606,15 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
             self.statusBar().showMessage("The main window has no loaded model.", 8000)
             return
         game = str(getattr(parent, "_current_game", "K1") or "K1").upper()
-        self.use_model(model, game, str(getattr(model, "name", "model")))
+        self.use_model(model, game, str(getattr(model, "name", "model")), shared_main=True)
 
-    def use_model(self, model, game: str, label: str) -> None:
+    def use_model(self, model, game: str, label: str, *, shared_main: bool = False) -> None:
         self._stop_animation()
         self._model = model
+        self._selected_node = None
+        self._definition = None
+        self._session_modified = False
+        self._shared_main_model = bool(shared_main)
         self._model_game = "K2" if str(game).upper().startswith("K2") else "K1"
         self.game_combo.setCurrentText(self._model_game)
         manager = self._manager()
@@ -538,6 +630,10 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
                 pass
         self._refresh_emitter_tree()
         self._populate_animations()
+        self.selected_label.setText("Select a model emitter to edit its parameters")
+        for group in self._parameter_groups:
+            group.setEnabled(False)
+        self._update_session_notice()
         self.statusBar().showMessage(
             f"Loaded {label} — {self.model_group.childCount()} emitter node(s).", 8000
         )
@@ -555,6 +651,23 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
             self.model_group.addChild(item)
         self.model_group.setText(1, f"{self.model_group.childCount()} emitters")
         self.model_group.setExpanded(True)
+
+    def _update_session_notice(self) -> None:
+        if self._shared_main_model:
+            message = (
+                "Editing the Main Window model — changes remain live in that working model"
+                + (" (modified)." if self._session_modified else ".")
+            )
+        else:
+            message = (
+                "Live preview session — direct-load edits remain in memory and are not saved automatically"
+                + (" (modified)." if self._session_modified else ".")
+            )
+        self.session_notice_label.setText(message)
+
+    def _mark_session_modified(self) -> None:
+        self._session_modified = True
+        self._update_session_notice()
 
     def _node_by_id(self, node_id: int):
         if self._model is None:
@@ -586,9 +699,9 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
             game, key = ref
             template = self._template_by_key(game, key)
             if template is not None:
-                self.selected_label.setText(
-                    f"Template {template.model}:{template.node} ({template.game}) — "
-                    "double-click to apply to the selected emitter"
+                self.library_summary_label.setText(
+                    f"Selected template: {template.game}:{template.model}:{template.node}. "
+                    "Double-click to replace the currently selected emitter."
                 )
 
     def _on_tree_double_clicked(self, item, _column: int) -> None:
@@ -600,7 +713,7 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
             game, key = ref
             template = self._template_by_key(game, key)
             if template is not None:
-                self._apply_template(template)
+                self._request_apply_template(template)
 
     def _on_tree_context_menu(self, pos) -> None:
         item = self.tree.itemAt(pos)
@@ -619,7 +732,7 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
         load_action = menu.addAction("Load Source Model")
         chosen = menu.exec(self.tree.viewport().mapToGlobal(pos))
         if chosen is apply_action:
-            self._apply_template(template)
+            self._request_apply_template(template)
         elif chosen is add_action:
             self._add_template_as_node(template)
         elif chosen is load_action:
@@ -632,6 +745,8 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
         self._selected_node = node
         self._definition = EmitterDefinition.from_node(node)
         self._updating_widgets = True
+        for group in self._parameter_groups:
+            group.setEnabled(True)
         try:
             defn = self._definition
             keyed = [name for name, rows in defn.channels.items() if len(rows) > 1]
@@ -720,6 +835,7 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
         if node is None or self._definition is None:
             return
         self._definition.apply_to_node(node)
+        self._mark_session_modified()
         self._restart_node_particles(node)
 
     def _restart_node_particles(self, node) -> None:
@@ -849,25 +965,83 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
         try:
             group.takeChildren()
             templates = self._templates.get(game, [])
+            query = self.library_search_edit.text().strip().lower()
             by_model: Dict[str, List[EmitterTemplate]] = {}
             for template in templates:
+                defn = template.definition
+                haystack = " ".join(
+                    (
+                        template.model,
+                        template.node,
+                        str(defn.get("texture", "")),
+                        str(defn.get("update", "")),
+                        str(defn.get("blend", "")),
+                    )
+                ).lower()
+                if query and query not in haystack:
+                    continue
                 by_model.setdefault(template.model, []).append(template)
             model_items: List[QtWidgets.QTreeWidgetItem] = []
             for model_name in sorted(by_model):
                 model_item = QtWidgets.QTreeWidgetItem([model_name, f"{len(by_model[model_name])}"])
-                children: List[QtWidgets.QTreeWidgetItem] = []
-                for template in by_model[model_name]:
-                    defn = template.definition
-                    info = f"{defn.get('update', '')}/{defn.get('blend', '')} {defn.get('texture', '')}"
-                    child = QtWidgets.QTreeWidgetItem([template.node, info])
-                    child.setData(0, QtCore.Qt.UserRole, ("template", (game, template.key)))
-                    children.append(child)
-                model_item.addChildren(children)
+                model_item.setData(0, QtCore.Qt.UserRole, ("template_model", (game, model_name)))
+                if query:
+                    self._populate_template_model_item(model_item, game, model_name, by_model[model_name])
+                else:
+                    model_item.addChild(QtWidgets.QTreeWidgetItem(["Expand to view emitters", ""]))
                 model_items.append(model_item)
             group.addChildren(model_items)
-            group.setText(1, f"{len(templates)} emitters" if templates else "not scanned")
+            if query:
+                group.setText(1, f"{sum(len(rows) for rows in by_model.values())} matches")
+                group.setExpanded(True)
+            else:
+                group.setText(1, f"{len(templates)} emitters" if templates else "not scanned")
         finally:
             self.tree.setUpdatesEnabled(True)
+
+    def _populate_template_model_item(
+        self,
+        item: QtWidgets.QTreeWidgetItem,
+        game: str,
+        model_name: str,
+        templates: Optional[List[EmitterTemplate]] = None,
+    ) -> None:
+        item.takeChildren()
+        rows = templates
+        if rows is None:
+            rows = [row for row in self._templates.get(game, []) if row.model == model_name]
+        children: List[QtWidgets.QTreeWidgetItem] = []
+        for template in rows:
+            defn = template.definition
+            info = f"{defn.get('update', '')}/{defn.get('blend', '')} {defn.get('texture', '')}"
+            child = QtWidgets.QTreeWidgetItem([template.node, info])
+            child.setData(0, QtCore.Qt.UserRole, ("template", (game, template.key)))
+            children.append(child)
+        item.addChildren(children)
+
+    def _on_tree_item_expanded(self, item: QtWidgets.QTreeWidgetItem) -> None:
+        payload = item.data(0, QtCore.Qt.UserRole)
+        if not payload or payload[0] != "template_model":
+            return
+        game, model_name = payload[1]
+        first = item.child(0)
+        if first is not None and first.data(0, QtCore.Qt.UserRole) is None:
+            self._populate_template_model_item(item, game, model_name)
+
+    def _refresh_template_groups(self) -> None:
+        self._populate_template_group("K1", self.k1_group)
+        self._populate_template_group("K2", self.k2_group)
+        query = self.library_search_edit.text().strip()
+        if query:
+            matches = self.k1_group.childCount() + self.k2_group.childCount()
+            self.library_summary_label.setText(
+                f"{matches} matching source model(s). Expand a model, then choose an emitter template."
+            )
+        else:
+            total = len(self._templates["K1"]) + len(self._templates["K2"])
+            self.library_summary_label.setText(
+                f"{total:,} retail emitter templates. Search, or expand a library and source model."
+            )
 
     def _start_library_scan(self) -> None:
         if self._scan_thread is not None and self._scan_thread.is_alive():
@@ -918,10 +1092,30 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
     def _on_scan_finished(self, game: str, count: int) -> None:
         group = self.k1_group if game == "K1" else self.k2_group
         self._populate_template_group(game, group)
+        total = len(self._templates["K1"]) + len(self._templates["K2"])
+        self.library_summary_label.setText(
+            f"{total:,} retail emitter templates. Search, or expand a library and source model."
+        )
         if count:
             self.statusBar().showMessage(f"{game} emitter library: {count} templates.", 8000)
 
     # ── Template application ─────────────────────────────────────────────────
+    def _request_apply_template(self, template: EmitterTemplate) -> None:
+        if self._selected_node is None:
+            self.statusBar().showMessage("Select a model emitter first, then apply the template.", 8000)
+            return
+        target = str(getattr(self._selected_node, "name", "emitter"))
+        choice = QtWidgets.QMessageBox.question(
+            self,
+            "Replace Emitter Parameters?",
+            f"Replace every editable parameter on '{target}' with "
+            f"{template.game}:{template.model}:{template.node}?",
+            QtWidgets.QMessageBox.Apply | QtWidgets.QMessageBox.Cancel,
+            QtWidgets.QMessageBox.Cancel,
+        )
+        if choice == QtWidgets.QMessageBox.Apply:
+            self._apply_template(template)
+
     def _apply_template(self, template: EmitterTemplate) -> None:
         node = self._selected_node
         if node is None:
@@ -930,6 +1124,7 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
         defn = template.emitter_definition()
         defn.name = str(getattr(node, "name", defn.name))
         defn.apply_to_node(node)
+        self._mark_session_modified()
         self._bind_node(node)
         self._restart_node_particles(node)
         self._refresh_emitter_tree()
@@ -963,6 +1158,7 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
         root = self._model.root_node
         node.parent = root
         root.children.append(node)
+        self._mark_session_modified()
 
         renderer = getattr(self.viewport, "_gpu_renderer", None)
         invalidate_all = getattr(renderer, "invalidate_particles", None)
@@ -985,6 +1181,18 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
 
     # ── Lifecycle ────────────────────────────────────────────────────────────
     def closeEvent(self, event) -> None:
+        if self._session_modified and not self._shared_main_model:
+            choice = QtWidgets.QMessageBox.warning(
+                self,
+                "Discard Particle Edits?",
+                "This directly loaded model has particle edits that are only held in this preview session. "
+                "Closing now discards them.",
+                QtWidgets.QMessageBox.Discard | QtWidgets.QMessageBox.Cancel,
+                QtWidgets.QMessageBox.Cancel,
+            )
+            if choice != QtWidgets.QMessageBox.Discard:
+                event.ignore()
+                return
         self._scan_cancel.set()
         self._stop_animation()
         # Never leave automatic GC disabled past this window's lifetime.

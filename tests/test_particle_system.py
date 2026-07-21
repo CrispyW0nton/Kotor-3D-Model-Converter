@@ -290,5 +290,22 @@ def test_library_prefilter_and_round_trip(tmp_path):
     assert loaded[0].emitter_definition().value("birthrate") == 50.0
 
 
+def test_bloom_uses_luminance_gate_for_saturated_holograms():
+    """Cyan emitter detail must not pass bloom as if it were white."""
+    bloom_path = (
+        ROOT
+        / "native/GhostRigger.Core.Rendering/Python/src/adapters/rendering/moderngl_bloom.py"
+    )
+    source = bloom_path.read_text(encoding="utf-8")
+    assert "dot(c, vec3(0.2126, 0.7152, 0.0722))" in source
+    assert "smoothstep(u_threshold, 1.0, luminance)" in source
+    assert "max(c - vec3(u_threshold)" not in source
+
+    threshold = 0.82
+    cyan_luminance = 0.7152 + 0.0722
+    yellow_luminance = 0.2126 + 0.7152
+    assert cyan_luminance < threshold < yellow_luminance
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))
