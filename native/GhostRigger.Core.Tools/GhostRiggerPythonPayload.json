@@ -1965,7 +1965,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_PARTICLE_EDITOR",
             "source_path": "src/gui/windows/qt_particle_editor.py",
             "packaged_path": "Python/src/gui/windows/qt_particle_editor.py",
-            "sha256": "1679d67cd702f99d5081abbff9a5fbe2607a09aaa8923f818d4e41364b66b1f3"
+            "sha256": "a387201e1f27f9bbf38b7f40ced93bb2db39d4933029c3bf03adb915101dd9cc"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_PLACEABLE_BUILDER",

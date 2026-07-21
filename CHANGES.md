@@ -11,6 +11,103 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-20
 
+### [2026-07-20] Particle quality: stop bloom veiling holograms (cross-checked vs KotOR.js)
+
+Owner: LordVaderCW
+
+Subsystem: bloom post-process + defaults (`GhostRigger.Core.Rendering`:
+`moderngl_bloom.py`, `moderngl_renderer_impl.py`).
+
+User report: emitter particles (K2 galaxy/planet holograms) still looked
+"washed out and low quality" versus KotOR.js.  Cross-checked our pipeline
+against KotOR.js's authoritative emitter shader
+(`src/shaders/ShaderOdysseyEmitter.ts`): its fragment composition
+(`finalColor = colorMixed * texture.rgb`, `finalAlpha = texture.a * alpha`,
+non-premultiplied) and its "Lighten"→`AdditiveBlending` = `(SRC_ALPHA, ONE)`
+mapping are **identical to ours** — so the sprite math was never the problem.
+The divergence is post-processing: KotOR.js Forge applies no bloom, while our
+bloom ran full-frame at quarter resolution with a low 0.72 threshold and an
+amplifying soft-knee, laying a broad milky veil over the whole bright additive
+structure.
+
+Fix — turn bloom from a veil into a tight accent:
+- Bright/blur targets quarter-res → **half-res**: the coarse quarter-res blob
+  upsampled into a frame-wide smear; half-res keeps the glow tight and crisp.
+- Threshold 0.72 → **0.82**: blooms only genuinely blown-out cores, not the
+  mid-bright cyan ring/star structure (the soft-knee normalisation means a
+  higher threshold specifically cuts the mid-bright veil while full-white
+  cores still bloom).
+- Strength 0.5 → **0.30**: a subtle accent rather than an additive wash.
+
+Verification: offscreen A/B on the K1 `plc_starmap` galaxy (the same star-
+sphere hologram, 157–171 live particles) rendered bloom-off (≈ Forge) vs the
+new bloom.  The new bloom now reads nearly identical to the crisp bloom-off
+image — saturated rings, sharp stars, dark gaps preserved — with only a soft
+core glow, instead of the previous frame-wide haze.  Core.Rendering payload
+regenerated, DLL rebuilt, all 18 staged.
+
+Note: the central additive core still saturates to white where many additive
+sprites overlap — that is inherent additive behaviour and matches the engine /
+KotOR.js; it is not the bloom veil.
+
+### [2026-07-20] Particle upgrade: force fields + dynamic colour (conanwu777/particle_system)
+
+Owner: LordVaderCW
+
+Subsystem: `src/core/particles` (canonical, mirrored to the Core.Rendering
+payload) and the Particle Editor (`GhostRigger.Core.Tools`).
+
+Adapted the transferable ideas from the OpenCL/OpenGL gravity-well demo
+`conanwu777/particle_system` into our KOTOR emitter simulation as an optional
+Ghost-Studio authoring extension.  A literal port was neither feasible nor
+desirable — that project is a 3-million-particle OpenCL N-body art toy with no
+emitter/blend/texture semantics — so its *essence* was extracted instead:
+
+- **Force fields** — each emitter can carry any number of point forces
+  (`ForceField`: attract / repel / vortex, emitter-relative position,
+  strength, optional radius cutoff, vortex axis).  The acceleration law is the
+  reference's inverse-distance kernel, `a += strength * disp / sqrt(|disp|² +
+  eps)`; vortices swirl about an axis with the same falloff.  This produces
+  orbiting / imploding / tornado motion the stock birthrate/velocity/gravity
+  controllers cannot express.
+- **Dynamic colour** — a per-emitter hue-cycle speed (turns/second) rotates
+  each particle's hue over its own age using a luminance-preserving RGB
+  hue-rotation matrix (survives HDR/additive values; no per-particle
+  RGB↔HSV round trip), mirroring the reference's animated HSV cycling.
+- **Capacity** — per-emitter pool cap raised 4096 → 16384 so dense
+  force-field effects look fluid.  Retail emitters never approach this; the
+  cap only bounds runaway authored birthrates.
+- **Editor** — new "Force Fields & Dynamic Colour (Ghost Studio)" panel in the
+  Particle Editor: a hue-cycle spin plus an add/remove force-field table
+  (+ Attractor / + Repeller / + Vortex).  Edits restart the live pool
+  immediately, same as every other parameter.
+
+The extension is off by default (no force fields, hue speed 0), so stock KOTOR
+emitters and the retail-parity starmap/hologram effects render byte-identically
+to before.  Persistence rides the existing round-trip: extras are written under
+`gr_force_fields` / `gr_hue_cycle_speed` keys the MDL writer ignores, so they
+survive template caches, node edits, and placeable-document metadata without
+corrupting binary export.
+
+Files: `src/core/particles/emitter_data.py` (`ForceField`,
+`EmitterDefinition.force_fields`/`hue_cycle_speed`, round-trips),
+`src/core/particles/simulation.py` (`_apply_force_fields`, `_shift_hue`, cap),
+their Core.Rendering payload mirrors, and
+`native/GhostRigger.Core.Tools/.../qt_particle_editor.py` (editor panel).
+
+Verification: targeted physics smoke test — attractor pulls the pool from
+mean z≈0.66 to z≈5.58 toward a point at z=6; hue cycle rotates authored pure
+red across the full spectrum; vortex imparts tangential velocity with no NaNs;
+`ForceField` persists through the emitter-node round trip.  Core.Rendering and
+Core.Tools payloads regenerated, DLLs rebuilt, all 18 staged/verified.
+
+Note: while rebuilding, the payload generator's canonical==payload guard
+surfaced pre-existing drift — the shipping Core.Rendering payload copy of
+`gpu_diagnostics_records.py` carried a single-tile-atlas UV-clamp fix
+(`_SINGLE_TILE_UV_TOLERANCE`) that the canonical `src/` copy lacked.  Canonical
+was reconciled up to match the version already embedded in the DLL
+(behaviour-neutral for the running app).
+
 ### [2026-07-20] Fix `/mcp/*` IPC routes failing with "No module named 'kotormcp'"
 
 Owner: deadonfps

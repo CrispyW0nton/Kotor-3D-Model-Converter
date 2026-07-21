@@ -29,11 +29,16 @@ from .emitter_data import (
     CHANNEL_DEFAULTS,
     EmitterDefinition,
     EmitterFlags,
+    ForceField,
     animation_channels_for_node,
     sample_channel,
 )
 
-_MAX_PARTICLES = 4096
+# Raised from the original 4096 so authored force-field effects (attractor
+# swirls, vortices) have room for a denser, more fluid look — a nod to the
+# high-count GPU gravity wells in conanwu777/particle_system.  Retail emitters
+# never approach this; the cap only bounds runaway user-authored birthrates.
+_MAX_PARTICLES = 16384
 _TWO_PI = 2.0 * math.pi
 
 
@@ -171,6 +176,32 @@ def _life_interp_color(u: np.ndarray, start: Tuple[float, float, float],
     return np.stack(channels, axis=1)
 
 
+_HUE_ROT_S = math.sqrt(1.0 / 3.0)
+
+
+def _shift_hue(rgb: np.ndarray, shift_turns: np.ndarray) -> np.ndarray:
+    """Rotate each row's hue by ``shift_turns`` (in [0, 1) turns) about the
+    luminance axis.
+
+    Uses the standard RGB hue-rotation matrix so brightness is preserved and
+    HDR values (> 1, used by additive emitters) survive intact — matching the
+    time-animated HSV cycling in conanwu777/particle_system without an
+    expensive per-particle RGB<->HSV round trip.
+    """
+    theta = shift_turns.astype(np.float64) * _TWO_PI
+    c = np.cos(theta)
+    s = np.sin(theta)
+    k = (1.0 - c) / 3.0
+    r3 = _HUE_ROT_S * s
+    red = rgb[:, 0].astype(np.float64)
+    grn = rgb[:, 1].astype(np.float64)
+    blu = rgb[:, 2].astype(np.float64)
+    out_r = (c + k) * red + (k - r3) * grn + (k + r3) * blu
+    out_g = (k + r3) * red + (c + k) * grn + (k - r3) * blu
+    out_b = (k - r3) * red + (k + r3) * grn + (c + k) * blu
+    return np.clip(np.stack([out_r, out_g, out_b], axis=1), 0.0, None).astype(np.float32)
+
+
 @dataclass
 class ParticleBatch:
     """Renderer-neutral billboard batch for one emitter."""
@@ -224,6 +255,10 @@ class EmitterSimulation:
         self._capacity = 0
         self._surplus = 0.0
         self._detonated = False
+        # Ghost Studio authoring extensions (default-empty → identical to the
+        # stock KOTOR emitter behaviour).
+        self.force_fields: List[ForceField] = list(getattr(definition, "force_fields", []) or [])
+        self.hue_cycle_speed = float(getattr(definition, "hue_cycle_speed", 0.0) or 0.0)
         # world coordinates for points modes; emitter-local otherwise
         self.pos = np.zeros((0, 3), dtype=np.float64)
         self.vel = np.zeros((0, 3), dtype=np.float64)
@@ -404,10 +439,54 @@ class EmitterSimulation:
                 self.vel[live] += gravity_local * dt
         if params.drag:
             self.vel[live] *= max(0.0, 1.0 - float(params.drag) * dt)
+        if self.force_fields:
+            self._apply_force_fields(dt, live, emitter_pos, emitter_quat)
         self.pos[live] += self.vel[live] * dt
         self.age[live] += dt
         if params.particlerot:
             self.rot[live] += float(params.particlerot) * dt
+
+    def _apply_force_fields(self, dt: float, live: np.ndarray,
+                            emitter_pos: Tuple[float, float, float],
+                            emitter_quat: Tuple[float, float, float, float]) -> None:
+        """Accelerate live particles toward/around each Ghost Studio force field.
+
+        The acceleration law is ported from conanwu777/particle_system's
+        OpenCL gravity kernel: for each attractor ``acc += strength * disp /
+        sqrt(|disp|^2 + eps)`` (negated for repellers).  Vortex fields swirl
+        the particles about an axis with the same inverse-distance falloff.  A
+        non-zero ``radius`` adds a linear cutoff so a field stays local.
+        """
+        positions = self.pos[live]
+        if positions.shape[0] == 0:
+            return
+        accel = np.zeros_like(positions)
+        eps = 1e-4
+        emitter_np = np.asarray(emitter_pos, dtype=np.float64)
+        for fld in self.force_fields:
+            fpos = np.asarray(fld.position, dtype=np.float64)
+            axis = np.asarray(fld.axis, dtype=np.float64)
+            if self.world_space:
+                # Fields are authored emitter-relative; lift them into the
+                # world frame the way the pooled particles are stored.
+                fpos = _quat_rotate_many(emitter_quat, fpos.reshape(1, 3))[0] + emitter_np
+                axis = _quat_rotate_many(emitter_quat, axis.reshape(1, 3))[0]
+            disp = fpos - positions                       # (N, 3) toward the field
+            dist2 = np.einsum("ij,ij->i", disp, disp)
+            inv = 1.0 / np.sqrt(dist2 + eps)              # inverse-distance falloff
+            radius = float(fld.radius)
+            if radius > 0.0:
+                inv = inv * np.clip(1.0 - np.sqrt(dist2) / radius, 0.0, 1.0)
+            weight = (float(fld.strength) * inv)[:, None]
+            if fld.mode == "vortex":
+                nrm = float(np.linalg.norm(axis))
+                axis = axis / nrm if nrm > 1e-9 else np.array([0.0, 0.0, 1.0])
+                accel += weight * np.cross(np.broadcast_to(axis, disp.shape), disp)
+            elif fld.mode == "repel":
+                accel -= weight * disp
+            else:  # attract
+                accel += weight * disp
+        self.vel[live] += accel * dt
 
     # ── Render batch ─────────────────────────────────────────────────────────
     def build_batch(self, params: EffectiveEmitterParams,
@@ -452,6 +531,10 @@ class EmitterSimulation:
             0.0, 4.0,
         )
         rgba = np.concatenate([colors, alphas[:, None]], axis=1).astype(np.float32)
+        if self.hue_cycle_speed:
+            # Animate each particle's hue over its own age (turns/second).
+            hue_shift = (self.age[live] * self.hue_cycle_speed) % 1.0
+            rgba[:, :3] = _shift_hue(rgba[:, :3], hue_shift)
 
         if self.world_space:
             world_pos = self.pos[live]

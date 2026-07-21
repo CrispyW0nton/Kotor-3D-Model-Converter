@@ -29,6 +29,7 @@ from src.core.particles.emitter_data import (
     BLEND_MODES,
     EmitterDefinition,
     EmitterFlags,
+    ForceField,
     RENDER_MODES,
     UPDATE_MODES,
     emitter_nodes,
@@ -343,9 +344,129 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
             flags_grid.addWidget(check, index // 2, index % 2)
             self._flag_checks[int(flag)] = check
         form_layout.addWidget(flags_box)
+
+        self._build_forces_section(form_layout)
         form_layout.addStretch(1)
 
         self.statusBar().showMessage("Load a model to edit its emitters.", 8000)
+
+    def _build_forces_section(self, form_layout: QtWidgets.QVBoxLayout) -> None:
+        """Ghost Studio force-field + dynamic-colour controls.
+
+        These are non-KOTOR authoring extensions (adapted from the GPU gravity
+        wells in conanwu777/particle_system) that add swirling/orbiting motion
+        and animated hue cycling on top of the stock emitter model.
+        """
+        box = QtWidgets.QGroupBox("Force Fields & Dynamic Colour (Ghost Studio)")
+        layout = QtWidgets.QVBoxLayout(box)
+
+        hue_form = QtWidgets.QFormLayout()
+        self.hue_cycle_spin = QtWidgets.QDoubleSpinBox()
+        self.hue_cycle_spin.setRange(0.0, 10.0)
+        self.hue_cycle_spin.setSingleStep(0.05)
+        self.hue_cycle_spin.setDecimals(3)
+        self.hue_cycle_spin.setToolTip(
+            "Rotate each particle's hue over its lifetime (turns/second). "
+            "0 keeps the authored colours."
+        )
+        self.hue_cycle_spin.valueChanged.connect(self._on_param_changed)
+        hue_form.addRow("Hue Cycle (turns/s)", self.hue_cycle_spin)
+        layout.addLayout(hue_form)
+
+        self.force_table = QtWidgets.QTableWidget(0, 6)
+        self.force_table.setObjectName("ParticleForceTable")
+        self.force_table.setHorizontalHeaderLabels(
+            ["Mode", "X", "Y", "Z", "Strength", "Radius"]
+        )
+        self.force_table.horizontalHeader().setSectionResizeMode(
+            QtWidgets.QHeaderView.Stretch
+        )
+        self.force_table.verticalHeader().setVisible(False)
+        self.force_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.force_table.setMaximumHeight(160)
+        self.force_table.itemChanged.connect(self._on_force_table_changed)
+        layout.addWidget(self.force_table)
+
+        buttons = QtWidgets.QHBoxLayout()
+        for label, mode in (("+ Attractor", "attract"),
+                            ("+ Repeller", "repel"),
+                            ("+ Vortex", "vortex")):
+            button = QtWidgets.QPushButton(label)
+            button.clicked.connect(lambda _c=False, m=mode: self._add_force_field(m))
+            buttons.addWidget(button)
+        remove_button = QtWidgets.QPushButton("Remove")
+        remove_button.clicked.connect(self._remove_selected_force_field)
+        buttons.addWidget(remove_button)
+        layout.addLayout(buttons)
+
+        form_layout.addWidget(box)
+
+    def _refresh_force_table(self) -> None:
+        prev = self._updating_widgets
+        self._updating_widgets = True
+        try:
+            self.force_table.setRowCount(0)
+            defn = self._definition
+            if defn is None:
+                return
+            for fld in defn.force_fields:
+                row = self.force_table.rowCount()
+                self.force_table.insertRow(row)
+                mode_item = QtWidgets.QTableWidgetItem(str(fld.mode))
+                mode_item.setFlags(mode_item.flags() & ~QtCore.Qt.ItemIsEditable)
+                self.force_table.setItem(row, 0, mode_item)
+                cells = (fld.position[0], fld.position[1], fld.position[2],
+                         fld.strength, fld.radius)
+                for col, value in enumerate(cells, start=1):
+                    self.force_table.setItem(row, col, QtWidgets.QTableWidgetItem(f"{value:.3f}"))
+        finally:
+            self._updating_widgets = prev
+
+    def _add_force_field(self, mode: str) -> None:
+        if self._definition is None:
+            self.statusBar().showMessage("Select an emitter before adding a force.", 6000)
+            return
+        self._definition.force_fields.append(
+            ForceField(mode=mode, position=(0.0, 0.0, 1.0), strength=2.0, radius=0.0)
+        )
+        self._refresh_force_table()
+        self._commit_definition()
+
+    def _remove_selected_force_field(self) -> None:
+        if self._definition is None:
+            return
+        rows = sorted({idx.row() for idx in self.force_table.selectedIndexes()}, reverse=True)
+        if not rows:
+            return
+        for row in rows:
+            if 0 <= row < len(self._definition.force_fields):
+                del self._definition.force_fields[row]
+        self._refresh_force_table()
+        self._commit_definition()
+
+    def _on_force_table_changed(self, _item) -> None:
+        if self._updating_widgets or self._definition is None:
+            return
+
+        def _num(row: int, col: int, default: float = 0.0) -> float:
+            item = self.force_table.item(row, col)
+            try:
+                return float(item.text()) if item is not None else default
+            except (TypeError, ValueError):
+                return default
+
+        fields: List[ForceField] = []
+        for row in range(self.force_table.rowCount()):
+            mode_item = self.force_table.item(row, 0)
+            mode = mode_item.text() if mode_item is not None else "attract"
+            fields.append(ForceField(
+                mode=mode,
+                position=(_num(row, 1), _num(row, 2), _num(row, 3)),
+                strength=_num(row, 4, 1.0),
+                radius=max(0.0, _num(row, 5, 0.0)),
+            ))
+        self._definition.force_fields = fields
+        self._commit_definition()
 
     # ── Theme/layout hooks ───────────────────────────────────────────────────
     def apply_ghost_theme(self, theme) -> None:
@@ -533,6 +654,8 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
             flags = int(defn.flags)
             for bit, check in self._flag_checks.items():
                 check.setChecked(bool(flags & bit))
+            self.hue_cycle_spin.setValue(float(getattr(defn, "hue_cycle_speed", 0.0) or 0.0))
+            self._refresh_force_table()
         finally:
             self._updating_widgets = False
 
@@ -589,6 +712,7 @@ class QtParticleEditorWindow(QtWidgets.QMainWindow):
             if check.isChecked():
                 flags |= bit
         defn.flags = flags
+        defn.hue_cycle_speed = float(self.hue_cycle_spin.value())
         self._commit_definition()
 
     def _commit_definition(self) -> None:

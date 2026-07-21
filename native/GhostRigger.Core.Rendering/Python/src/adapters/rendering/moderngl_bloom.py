@@ -140,7 +140,12 @@ class ModernGLBloomPass:
                 self._failed = True
                 return False
 
-        wanted = (max(8, width // 4), max(8, height // 4))
+        # Half-resolution (was quarter): a quarter-res blur upsamples into a
+        # coarse, blocky blob that veils the whole frame — the "washed out"
+        # look.  Half-res keeps the glow tight and crisp (KotOR.js Forge shows
+        # no bloom at all, so a subtle accent is closer to that than a wide
+        # smear).  Trivial cost on modern GPUs.
+        wanted = (max(16, width // 2), max(16, height // 2))
         if wanted != self._size:
             for resource in (self._fbo_a, self._fbo_b, self._tex_a, self._tex_b):
                 if resource is not None:

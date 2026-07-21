@@ -227,6 +227,63 @@ def controllers_to_channels(controllers: Sequence[Dict[str, Any]]) -> Dict[str, 
 
 
 @dataclass
+class ForceField:
+    """A Ghost Studio point force acting on an emitter's live particles.
+
+    This is NOT part of the KOTOR binary emitter model; it is a Ghost Studio
+    authoring extension inspired by the GPU gravity wells in
+    conanwu777/particle_system.  It lets an emitter produce swirling, orbiting,
+    and imploding motion that the stock birthrate/velocity/gravity controllers
+    cannot express.  ``position`` is emitter-relative and ``strength`` follows
+    an inverse-distance law (``a += strength * disp / sqrt(|disp|^2 + eps)``).
+    """
+
+    mode: str = "attract"                                 # attract | repel | vortex
+    position: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    strength: float = 1.0
+    radius: float = 0.0                                   # 0 = unbounded influence
+    axis: Tuple[float, float, float] = (0.0, 0.0, 1.0)    # vortex swirl axis
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "mode": str(self.mode),
+            "position": [float(v) for v in self.position],
+            "strength": float(self.strength),
+            "radius": float(self.radius),
+            "axis": [float(v) for v in self.axis],
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ForceField":
+        def _vec3(raw: Any, fallback: Tuple[float, float, float]) -> Tuple[float, float, float]:
+            try:
+                return (float(raw[0]), float(raw[1]), float(raw[2]))
+            except (TypeError, ValueError, IndexError):
+                return fallback
+
+        mode = str((data or {}).get("mode", "attract") or "attract").lower()
+        if mode not in ("attract", "repel", "vortex"):
+            mode = "attract"
+        return cls(
+            mode=mode,
+            position=_vec3((data or {}).get("position"), (0.0, 0.0, 0.0)),
+            strength=float((data or {}).get("strength", 1.0) or 0.0),
+            radius=max(0.0, float((data or {}).get("radius", 0.0) or 0.0)),
+            axis=_vec3((data or {}).get("axis"), (0.0, 0.0, 1.0)),
+        )
+
+
+def _force_fields_from_raw(raw: Any) -> List[ForceField]:
+    fields: List[ForceField] = []
+    for item in raw or []:
+        try:
+            fields.append(ForceField.from_dict(item))
+        except Exception:
+            continue
+    return fields
+
+
+@dataclass
 class EmitterDefinition:
     """One emitter node's complete authorable parameter set."""
 
@@ -251,6 +308,9 @@ class EmitterDefinition:
     control_point_smoothing: int = 0
     flags: int = 0
     channels: Dict[str, ChannelRows] = field(default_factory=dict)
+    # Ghost Studio authoring extensions (not part of the KOTOR binary model).
+    force_fields: List[ForceField] = field(default_factory=list)
+    hue_cycle_speed: float = 0.0
 
     # ── Channel access ───────────────────────────────────────────────────────
     def value(self, channel: str, t: float = 0.0) -> float:
@@ -302,11 +362,19 @@ class EmitterDefinition:
             flags=int(params.get("flags", 0) or 0),
         )
         defn.channels = controllers_to_channels(getattr(node, "controllers", None) or [])
+        defn.force_fields = _force_fields_from_raw(params.get("gr_force_fields"))
+        defn.hue_cycle_speed = float(params.get("gr_hue_cycle_speed", 0.0) or 0.0)
         return defn
 
     def header_params(self) -> Dict[str, Any]:
-        """Return the emitter header dict in ``ModelNode.emitter_params`` layout."""
-        return {
+        """Return the emitter header dict in ``ModelNode.emitter_params`` layout.
+
+        Ghost Studio's non-KOTOR extensions (``gr_force_fields``,
+        ``gr_hue_cycle_speed``) are only emitted when set, so stock emitters
+        keep a byte-identical header and the MDL writer (which reads the fixed
+        Odyssey fields) simply ignores the extra keys.
+        """
+        params: Dict[str, Any] = {
             "deadspace": float(self.dead_space),
             "blastradius": float(self.blast_radius),
             "blastlength": float(self.blast_length),
@@ -327,6 +395,11 @@ class EmitterDefinition:
             "depth_texture_name": str(self.depth_texture),
             "flags": int(self.flags),
         }
+        if self.force_fields:
+            params["gr_force_fields"] = [f.to_dict() for f in self.force_fields]
+        if self.hue_cycle_speed:
+            params["gr_hue_cycle_speed"] = float(self.hue_cycle_speed)
+        return params
 
     def apply_to_node(self, node: Any) -> None:
         """Write header + channels back into a ``ModelNode`` emitter node.
@@ -402,6 +475,8 @@ class EmitterDefinition:
             if decoded:
                 channels[str(name)] = decoded
         defn.channels = channels
+        defn.force_fields = _force_fields_from_raw(data.get("gr_force_fields"))
+        defn.hue_cycle_speed = float(data.get("gr_hue_cycle_speed", 0.0) or 0.0)
         return defn
 
 
