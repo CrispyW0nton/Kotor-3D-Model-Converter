@@ -50,8 +50,15 @@ class _SplashStream:
         with self._lock:
             written = None
             if self._wrapped is not None:
-                written = self._wrapped.write(value)
-                self._wrapped.flush()
+                try:
+                    written = self._wrapped.write(value)
+                    self._wrapped.flush()
+                except (OSError, ValueError):
+                    # A native GUI launch may inherit a console stream whose
+                    # OS handle closes before Qt finishes its splash cleanup.
+                    # The splash and file logger remain valid, so a stale
+                    # console must not abort application startup.
+                    written = None
             self._buffer += value
             while "\n" in self._buffer:
                 line, self._buffer = self._buffer.split("\n", 1)
@@ -66,7 +73,10 @@ class _SplashStream:
                 self._emit_line(f"{self._label}  {self._buffer.strip()}")
             self._buffer = ""
             if self._wrapped is not None:
-                self._wrapped.flush()
+                try:
+                    self._wrapped.flush()
+                except (OSError, ValueError):
+                    pass
 
     def isatty(self) -> bool:
         if self._wrapped is None:

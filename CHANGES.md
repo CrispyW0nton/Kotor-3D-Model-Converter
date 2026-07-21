@@ -9,6 +9,51 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-07-21
+
+### [2026-07-21] Loose K1 Mandalorian model: correct custom-atlas orientation and wrapping
+
+Owner: LordVaderCW
+
+Subsystem: character/item texture addressing (`GhostRigger.Core.Rendering`)
+and native Qt splash cleanup (`GhostRigger.Core.GUI.Display`), with focused
+contracts in `tests/test_core_contracts.py`,
+`tests/test_skeleton_template_hud_wiring.py`,
+`tests/test_tpc_viewport_mip_fast_path.py`, and
+`tests/test_map_studio_visual_proof_ipc.py`.
+
+Fixed the visible texture smear when opening the supplied binary K1
+`N_Mandalorianf.mdl`/`.mdx` with `N_Mandalorian02.tga`.  The custom
+`MandaHelmetMod` mesh is a single-tile atlas but contains a legitimate UV
+overshoot to V=-0.144.  Strict [0,1] detection treated the node as repeating,
+so the overshoot sampled the opposite red edge of the 4096x4096 armor sheet.
+The shared CPU/GPU atlas classifier now clamps character atlas islands within
+one tile of authoring slack while preserving repeat for genuinely tiled stock
+body nodes (for example U=-12.86..12.86).  The texture loader now also detects
+the narrow bottom-origin/RLE/Paint.NET TGA 2.0 provenance profile used by this
+KotorBlender workflow and preserves its bottom-left UV convention in the
+ModernGL, WGPU/PyGFX mesh-data, and CPU preview paths.  Stock TPC textures,
+generic RLE TGAs, and the uncompressed PFBC09 Ghost Studio export retain the
+established KotOR V-flip.
+
+The isolated native Debug validation launch also exposed a closed inherited
+console handle during splash-log cleanup.  `_SplashStream` now treats
+`OSError`/`ValueError` from that optional console as unavailable output instead
+of aborting Qt startup; the file logger and splash stream continue normally.
+
+Verification: GhostRigger and PyKotor loose-file parsing agreed on the model UV
+bounds and texture reference; the exact MDL/MDX/TGA trio rendered successfully
+through the rebuilt native Debug application and active ModernGL path (3,206
+triangles, nine textured draw calls).  The captured front viewport shows the
+red/white chest plate, black undersuit, vambraces, thigh plates, greaves, and
+boots on their intended geometry.  Focused regressions cover the supplied
+atlas profile, generic/stock orientation preservation, tiled-body repeat,
+module-geometry exclusion, ModernGL/CPU/WGPU/PyGFX orientation parity, shared
+CPU/GPU wiring, and closed-console startup cleanup.  Regenerated the Rendering
+and GUI Display payload manifests, rebuilt
+`GhostRigger.Native.Core.Host` Debug|x64 with all 18 payload DLLs, and confirmed
+the isolated app state reported K1, one loaded model, and ModernGL Textured mode.
+
 ## 2026-07-20
 
 ### [2026-07-20] Particle quality: stop bloom veiling holograms (cross-checked vs KotOR.js)

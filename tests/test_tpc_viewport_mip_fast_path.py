@@ -173,3 +173,36 @@ def test_texture_cache_normalizes_loose_tga_for_kotor_uv_sampling() -> None:
     # KOTOR binary UV V=0 means top, so the shader must convert it to GL V=1.
     # Imported DCC nodes remain correct because they carry uv_v_flip=False.
     assert image._gr_gpu_uv_v_flip is True
+
+
+def test_texture_cache_detects_paintnet_bottom_left_dcc_tga_profile() -> None:
+    from PIL import Image
+    from src.core.rendering.frame_core.texture_cache import TextureCache
+
+    source = Image.new("RGBA", (2, 2), (200, 100, 50, 255))
+    encoded = BytesIO()
+    source.save(encoded, format="TGA", compression="tga_rle")
+    raw = bytearray(encoded.getvalue())
+    assert raw[2] == 10
+    assert raw[17] & 0x20 == 0
+
+    # Paint.NET records its software ID in a TGA 2.0 extension area. This is
+    # the conservative provenance signal used by the KotorBlender loose-atlas
+    # orientation path; generic RLE TGAs must retain stock KotOR behavior.
+    generic = TextureCache()._load_bytes(bytes(raw))
+    assert generic is not None
+    assert generic._gr_gpu_uv_v_flip is True
+
+    extension_offset = len(raw)
+    extension = bytearray(495)
+    extension[:2] = (495).to_bytes(2, "little")
+    extension[426:426 + len(b"Paint.NET 5.1.12")] = b"Paint.NET 5.1.12"
+    raw.extend(extension)
+    raw.extend(extension_offset.to_bytes(4, "little"))
+    raw.extend((0).to_bytes(4, "little"))
+    raw.extend(b"TRUEVISION-XFILE.\x00")
+
+    image = TextureCache()._load_bytes(bytes(raw))
+
+    assert image is not None
+    assert image._gr_gpu_uv_v_flip is False

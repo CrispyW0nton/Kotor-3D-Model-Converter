@@ -640,6 +640,28 @@ class RendererMeshMixin:
                         v1r += _accel_uv_scroll_v
                         v2r += _accel_uv_scroll_v
 
+                    # Resolve the face image before the V-orientation step. A
+                    # loose DCC-authored TGA can opt out of the renderer's
+                    # KotOR/D3D V conversion while stock textures retain it.
+                    if _node_is_multitex:
+                        _raw_ft = self._get_tex_for_face(node, _fi)
+                        _pil_ft = self.tex_cache.get_mip1(_raw_ft) if (_use_lq and _raw_ft) else _raw_ft
+                        _face_pil_tex = _pil_ft
+                        _ta = self._tex_arr_cache.get(_pil_ft) if _pil_ft else None
+                    else:
+                        _face_pil_tex = _pil_tex
+                        _ta = _tex_arr
+                    _effective_v_flip = (
+                        bool(getattr(node, "uv_v_flip", True))
+                        and bool(getattr(_face_pil_tex, "_gr_gpu_uv_v_flip", True))
+                    )
+                    if not _effective_v_flip:
+                        # The accelerated rasterizer applies 1-v internally;
+                        # pre-flip to cancel it for bottom-left DCC UVs.
+                        v0r = 1.0 - v0r
+                        v1r = 1.0 - v1r
+                        v2r = 1.0 - v2r
+
                     # Seam fix (reuse existing helpers)
                     # Only apply when span < 1.0 — multi-tile faces (span >= 1.0)
                     # are handled by the accel rasterizer's frac() UV wrapping and
@@ -663,13 +685,6 @@ class RendererMeshMixin:
                             v2r = _uwrap_global(v0r, v2r)
                     uv0 = (u0r, v0r); uv1 = (u1r, v1r); uv2 = (u2r, v2r)
 
-                    # Multi-tex face texture
-                    if _node_is_multitex:
-                        _raw_ft = self._get_tex_for_face(node, _fi)
-                        _pil_ft = self.tex_cache.get_mip1(_raw_ft) if (_use_lq and _raw_ft) else _raw_ft
-                        _ta = self._tex_arr_cache.get(_pil_ft) if _pil_ft else None
-                    else:
-                        _ta = _tex_arr
                     face_tex_arr.append(_ta)
                 else:
                     uv0 = uv1 = uv2 = (0.5, 0.5)
@@ -1347,10 +1362,14 @@ class RendererMeshMixin:
                         uv0 = (uv0[0], _clamp(uv0[1], 0.0, 1.0))
                         uv1 = (uv1[0], _clamp(uv1[1], 0.0, 1.0))
                         uv2 = (uv2[0], _clamp(uv2[1], 0.0, 1.0))
-                    if not bool(getattr(node, "uv_v_flip", True)):
+                    if not (
+                        bool(getattr(node, "uv_v_flip", True))
+                        and bool(getattr(face_tex, "_gr_gpu_uv_v_flip", True))
+                    ):
                         # _paste_textured_triangle always applies the KotOR
-                        # V flip. Imported DCC meshes keep bottom-left UVs,
-                        # so pre-flip here to cancel that renderer-level flip.
+                        # V flip. Imported DCC meshes and provenance-marked
+                        # loose atlases keep bottom-left UVs, so pre-flip here
+                        # to cancel that renderer-level flip.
                         uv0 = (uv0[0], 1.0 - uv0[1])
                         uv1 = (uv1[0], 1.0 - uv1[1])
                         uv2 = (uv2[0], 1.0 - uv2[1])

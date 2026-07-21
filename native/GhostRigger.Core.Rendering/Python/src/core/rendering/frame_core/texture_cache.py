@@ -11,6 +11,42 @@ from src.math.frame_math import _clean_tex_name, _clamp, _lerp
 from src.core.graphics.tpc import _extract_txi_from_tpc, _is_tpc_data, _is_tpc_file, _load_tpc_bytes
 from src.core.graphics.txi import _apply_txi_to_node, _extract_alpha_test_from_tpc, _parse_txi_string
 
+
+def _uses_bottom_left_uv_tga_profile(raw: bytes) -> bool:
+    """Identify the narrow loose-TGA profile emitted by this DCC workflow.
+
+    Stock KotOR binary meshes use the renderer's Direct3D-style V conversion.
+    KotorBlender-authored geometry can instead retain Blender's bottom-left UVs.
+    The binary MDL format does not record which convention its author used, so
+    loose textures need a conservative provenance hint. Paint.NET's TGA 2.0
+    writer supplies one: the affected workflow writes bottom-origin, RLE
+    true-colour images and records ``Paint.NET`` in the extension area.
+
+    Requiring all three properties keeps ordinary uncompressed override TGAs
+    (including Ghost Studio's PFBC09 output), stock TPC data, and generic RLE
+    textures on the established KotOR path.
+    """
+    try:
+        if len(raw) < 26 or raw[2] != 10 or (raw[17] & 0x20):
+            return False
+        if raw[-18:] != b"TRUEVISION-XFILE.\x00":
+            return False
+        extension_offset = int.from_bytes(raw[-26:-22], "little")
+        if extension_offset <= 0 or extension_offset + 468 > len(raw) - 26:
+            return False
+        extension = raw[extension_offset:extension_offset + 495]
+        if len(extension) < 468 or int.from_bytes(extension[:2], "little") < 468:
+            return False
+        software_id = extension[426:467].split(b"\x00", 1)[0]
+        return software_id.strip().lower().startswith(b"paint.net")
+    except (IndexError, TypeError, ValueError):
+        return False
+
+
+def _gpu_uv_v_flip_for_loose_texture(raw: bytes) -> bool:
+    """Return the renderer V-conversion policy for a non-TPC loose texture."""
+    return not _uses_bottom_left_uv_tga_profile(raw)
+
 # ─────────────────────────────────────────────────────────────────────
 #  Texture loader
 # ─────────────────────────────────────────────────────────────────────
@@ -811,7 +847,7 @@ class TextureCache:
             # Marking normalized TGA/PNG images False here inverted custom
             # character atlases such as PFBC09 after otherwise-correct UV and
             # anatomy splitting.
-            img._gr_gpu_uv_v_flip = True  # type: ignore[attr-defined]
+            img._gr_gpu_uv_v_flip = _gpu_uv_v_flip_for_loose_texture(raw)  # type: ignore[attr-defined]
             return img
         except Exception:
             return None
@@ -854,7 +890,7 @@ class TextureCache:
                 img = img.transpose(Image.FLIP_TOP_BOTTOM)
                 # Bottom-up GPU rows need the per-node KOTOR/D3D V conversion;
                 # DCC/OpenGL UV nodes explicitly disable it with uv_v_flip=False.
-                img._gr_gpu_uv_v_flip = True  # type: ignore[attr-defined]
+                img._gr_gpu_uv_v_flip = _gpu_uv_v_flip_for_loose_texture(raw)  # type: ignore[attr-defined]
                 return img
             except Exception:
                 pass

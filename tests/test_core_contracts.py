@@ -4259,7 +4259,10 @@ def test_qt_realistic_texture_prewarm_loads_detail_textures_without_paint_stall(
 def test_gpu_auto_clamp_diffuse_is_disabled_for_module_geometry() -> None:
     from types import SimpleNamespace
 
-    from src.core.rendering.gpu_diagnostics_records import _should_auto_clamp_diffuse
+    from src.core.rendering.gpu_diagnostics_records import (
+        _node_uses_single_tile_atlas,
+        _should_auto_clamp_diffuse,
+    )
 
     atlas_like_node = SimpleNamespace(
         txi_clamp_s=False,
@@ -4272,6 +4275,32 @@ def test_gpu_auto_clamp_diffuse_is_disabled_for_module_geometry() -> None:
 
     assert _should_auto_clamp_diffuse(atlas_like_node, is_module=False) is True
     assert _should_auto_clamp_diffuse(atlas_like_node, is_module=True) is False
+
+    # N_Mandalorianf's MandaHelmetMod reaches V=-0.144.  It is still one
+    # character-atlas island and must clamp; repeating it samples the red
+    # opposite edge of N_Mandalorian02 across the collar/chest.
+    mandalorian_atlas_node = SimpleNamespace(
+        txi_clamp_s=False,
+        txi_clamp_t=False,
+        animate_uv=False,
+        txi_proceduretype="",
+        txi_blending=0,
+        uvs=[(0.0, -0.14418), (0.71938, 0.97929)],
+    )
+    assert _node_uses_single_tile_atlas(mandalorian_atlas_node) is True
+    assert _should_auto_clamp_diffuse(mandalorian_atlas_node, is_module=False) is True
+
+    # The stock base-skin nodes are genuinely tiled and must retain repeat.
+    tiled_base_skin_node = SimpleNamespace(
+        txi_clamp_s=False,
+        txi_clamp_t=False,
+        animate_uv=False,
+        txi_proceduretype="",
+        txi_blending=0,
+        uvs=[(-12.86, 0.0), (12.86, 1.0)],
+    )
+    assert _node_uses_single_tile_atlas(tiled_base_skin_node) is False
+    assert _should_auto_clamp_diffuse(tiled_base_skin_node, is_module=False) is False
 
 
 def test_module_mesh_properties_panel_lists_selects_and_hides_meshes() -> None:
@@ -6850,6 +6879,38 @@ def test_wgpu_render_data_generates_area_weighted_normals_when_missing() -> None
 
     assert len(rows) == 1
     np.testing.assert_allclose(rows[0].normals, np.asarray([(0.0, 0.0, 1.0)] * 3, dtype=np.float32), atol=1e-6)
+
+
+def test_wgpu_render_data_respects_loose_texture_v_orientation_profile() -> None:
+    import numpy as np
+
+    from src.core.rendering.mesh_render_data import iter_mesh_render_data
+
+    node = SimpleNamespace(
+        name="dcc_atlas",
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        normals=[(0.0, 0.0, 1.0)] * 3,
+        uvs=[(0.1, 0.2), (0.9, 0.3), (0.2, 0.8)],
+        uvs_lm=[],
+        faces=[(0, 1, 2)],
+        face_uvs=[],
+        is_skin=False,
+        vertex_space=1,
+        render=True,
+        texture="dcc_atlas",
+        uv_v_flip=True,
+        alpha=1.0,
+    )
+    model = SimpleNamespace(all_nodes=lambda: [node])
+    bottom_left_texture = SimpleNamespace(size=(2, 2), _gr_gpu_uv_v_flip=False)
+
+    row = list(iter_mesh_render_data(model, textures={"dcc_atlas": bottom_left_texture}))[0]
+
+    np.testing.assert_allclose(
+        row.uvs0,
+        np.asarray([(0.1, 0.8), (0.9, 0.7), (0.2, 0.2)], dtype=np.float32),
+        atol=1e-6,
+    )
 
 
 def test_wgpu_skinned_mesh_revision_changes_between_bind_and_lbs_modes(monkeypatch) -> None:

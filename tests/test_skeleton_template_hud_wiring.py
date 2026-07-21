@@ -460,15 +460,19 @@ def test_gpu_renderer_clamps_single_tile_character_atlases_like_cpu_renderer() -
 
     assert "FIX-EDGEBLEED (CPU)" in viewport
     assert "FIX-EDGEBLEED (GPU)" in viewport
-    assert "_has_no_repeat_features" in viewport
+    assert "from src.core.rendering.gpu_diagnostics_records import _node_uses_single_tile_atlas" in viewport
+    assert viewport.count("_node_uses_single_tile_atlas(node)") >= 2
     assert "_accel_clamp_s = True" in viewport
     assert "_accel_clamp_t = True" in viewport
-    assert "0.0 <= u <= 1.0 and 0.0 <= v <= 1.0" in viewport
     assert "def _node_uses_single_tile_atlas" in gpu
+    assert "_SINGLE_TILE_UV_TOLERANCE = 1.0" in gpu
     assert "_node_uses_single_tile_atlas(node)" in gpu
     assert "gl_diff.repeat_x = not _node_clamp_s" in gpu
     assert "_gr_gpu_uv_v_flip" in gpu
-    assert "img._gr_gpu_uv_v_flip = True" in viewport
+    assert "def _uses_bottom_left_uv_tga_profile" in viewport
+    assert "_gpu_uv_v_flip_for_loose_texture(raw)" in viewport
+    assert 'getattr(face_tex, "_gr_gpu_uv_v_flip", True)' in viewport
+    assert 'getattr(_face_pil_tex, "_gr_gpu_uv_v_flip", True)' in viewport
 
 
 def test_manual_v_key_bone_snap_is_wired_without_auto_snap() -> None:

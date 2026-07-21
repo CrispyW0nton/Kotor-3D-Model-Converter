@@ -63,7 +63,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_GPU_DIAGNOSTICS_RECORDS",
             "source_path": "src/core/rendering/gpu_diagnostics_records.py",
             "packaged_path": "Python/src/core/rendering/gpu_diagnostics_records.py",
-            "sha256": "6edc68ed86bf3525331e0dbd9e42b80117ccbfebcbf354a5af11e25f123e8116"
+            "sha256": "3b6018b0b3945646d4d80567707301fe900e18e1d9aeb4c8bc839ae6d7946605"
         }
     ]
 }

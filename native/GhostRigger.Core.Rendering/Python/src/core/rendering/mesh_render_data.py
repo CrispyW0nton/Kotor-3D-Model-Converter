@@ -147,6 +147,15 @@ def iter_mesh_render_data(
             continue
         if positions is None or len(positions) == 0:
             continue
+        diffuse_name = _clean_tex_name(getattr(node, "texture", "") or "")
+        diffuse_source = textures.get(diffuse_name.lower()) or textures.get(diffuse_name)
+        texture_v_flip = bool(getattr(diffuse_source, "_gr_gpu_uv_v_flip", True))
+        node_v_flip = bool(getattr(node, "uv_v_flip", True))
+        if uvs0 is not None and node_v_flip and not texture_v_flip:
+            # WGPU/PyGFX shaders apply the KotOR V conversion. Match ModernGL
+            # by pre-flipping loose bottom-left DCC atlases to cancel it.
+            uvs0 = np.asarray(uvs0, dtype=np.float32).copy()
+            uvs0[:, 1] = 1.0 - uvs0[:, 1]
         skinning = _extract_skinning(
             node,
             len(positions),
@@ -220,7 +229,7 @@ def iter_mesh_render_data(
             except Exception:
                 pass
         material = _material_data(node, textures)
-        source_revision = _node_revision(node)
+        source_revision = (*_node_revision(node), int(node_v_flip and texture_v_flip))
         if getattr(skinning, "is_skinned", False):
             skin_lbs_input_mode = 1 if node_anim_pose is not None else 0
             source_revision = (

@@ -573,7 +573,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER_MESHES",
             "source_path": "src/core/rendering/frame_core/renderer_meshes.py",
             "packaged_path": "Python/src/core/rendering/frame_core/renderer_meshes.py",
-            "sha256": "0509743164f09f61cc094e96892add2186a7a0e4467d682a5ea8cdff026077cd"
+            "sha256": "21107dc8ed653195d0955cd080dac924d38f6fe5b4bae03a008f9814c0dcdba8"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_RENDERER_OVERLAYS",
@@ -603,7 +603,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_FRAME_CORE_TEXTURE_CACHE",
             "source_path": "src/core/rendering/frame_core/texture_cache.py",
             "packaged_path": "Python/src/core/rendering/frame_core/texture_cache.py",
-            "sha256": "6cf34f16be76edf49c21372540662c7035626edea90a630a40ab3aa5c1c64701"
+            "sha256": "b3b3b552a1c454696eebe898e0f6a87fc1b60f0b64eaa05a2977b740c9c7e031"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_GPU_DEBUG_TABLES",
@@ -657,7 +657,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_MESH_RENDER_DATA",
             "source_path": "src/core/rendering/mesh_render_data.py",
             "packaged_path": "Python/src/core/rendering/mesh_render_data.py",
-            "sha256": "5099af2ff97ae4d50262af938d7d2b06a19b002858e27a18814522953fc341af"
+            "sha256": "2ad95bc4be366298ada0d9cff32658e2c6e95f4e486520f5d0da68a1ccf09a3c"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_RENDERING_PICKING",

@@ -37,6 +37,27 @@ def _app_runner_module():
     return importlib.import_module("src.gui.windows.application_core.functions.app_runner")
 
 
+def test_splash_stream_tolerates_closed_native_console_handle() -> None:
+    module = _app_runner_module()
+    emitted: list[str] = []
+
+    class ClosedConsole:
+        encoding = "utf-8"
+        errors = "replace"
+
+        def write(self, _text: str) -> int:
+            raise OSError(22, "Invalid argument")
+
+        def flush(self) -> None:
+            raise OSError(22, "Invalid argument")
+
+    stream = module._SplashStream(ClosedConsole(), emitted.append, "STDERR")
+
+    assert stream.write("native startup continued\n") == len("native startup continued\n")
+    stream.flush()
+    assert emitted == ["STDERR  native startup continued"]
+
+
 def _test_client(monkeypatch: pytest.MonkeyPatch, callbacks: dict):
     pytest.importorskip("flask")
     module = _server_module()
