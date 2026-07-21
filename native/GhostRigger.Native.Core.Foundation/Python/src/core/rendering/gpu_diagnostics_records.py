@@ -1709,8 +1709,29 @@ def _node_parent_chain_names(node) -> List[str]:
     return list(reversed([name for name in chain if name]))
 
 
+# A single-tile atlas is one whose UV island is anchored to a single [0,1]
+# tile, within a generous authoring tolerance.  Genuinely *tiled* surfaces
+# (walls, floors, base-skin ``_g`` nodes) span many tiles and land far outside
+# this box, so they keep GL_REPEAT.  Character/item atlases live in [0,1] but
+# very commonly overshoot by a handful of verts — e.g. N_Mandalorianf's
+# ``MandaHelmetMod`` dips to V=-0.144 while its base-skin ``torso_g`` runs
+# U=[-12.86, 12.86].  The old "every UV strictly in [0,1]" test flipped the
+# whole atlas node to REPEAT the moment one vert crossed the border, so those
+# overshooting verts wrapped to the opposite edge of the 4K sheet (the reported
+# red collar/chest smear).  One tile of slack keeps such atlases clamped while
+# still leaving real multi-tile geometry on REPEAT (the tiled cases here miss
+# by 12+ tiles, so the exact tolerance is not delicate).
+_SINGLE_TILE_UV_TOLERANCE = 1.0
+
+
 def _node_uses_single_tile_atlas(node) -> bool:
-    """Return True for ordinary 0..1 character atlases that should not repeat."""
+    """Return True for character/item atlases that should clamp, not repeat.
+
+    Uses the UV *bounding box* rather than strict per-vertex containment so a
+    few verts spilling just outside [0,1] (normal for hand-authored atlases)
+    no longer force the whole node onto GL_REPEAT, which wrap-samples the
+    opposite atlas edge.  See ``_SINGLE_TILE_UV_TOLERANCE``.
+    """
     if bool(getattr(node, "txi_clamp_s", False) and getattr(node, "txi_clamp_t", False)):
         return True
     if bool(getattr(node, "animate_uv", False)):
@@ -1722,10 +1743,28 @@ def _node_uses_single_tile_atlas(node) -> bool:
     uvs = getattr(node, "uvs", []) or []
     if not uvs:
         return False
+    # Per-draw recompute of a whole-node scan is wasteful; memoize against the
+    # identity of the UV list so an edited/replaced UV set re-evaluates.
+    cache = getattr(node, "_gr_single_tile_atlas_cache", None)
+    if cache is not None and cache[0] is uvs:
+        return cache[1]
+    tol = _SINGLE_TILE_UV_TOLERANCE
+    lo, hi = -tol, 1.0 + tol
+    result = True
     try:
-        return all(0.0 <= float(u) <= 1.0 and 0.0 <= float(v) <= 1.0 for u, v in uvs)
+        for u, v in uvs:
+            fu = float(u)
+            fv = float(v)
+            if fu < lo or fu > hi or fv < lo or fv > hi:
+                result = False
+                break
     except Exception:
-        return False
+        result = False
+    try:
+        node._gr_single_tile_atlas_cache = (uvs, result)
+    except Exception:
+        pass
+    return result
 
 
 def _should_auto_clamp_diffuse(node, *, is_module: bool = False) -> bool:

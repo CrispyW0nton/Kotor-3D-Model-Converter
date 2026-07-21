@@ -32,6 +32,7 @@ from .mixin_imports import (
     np,
 )
 from src.core.rendering.mesh_render_data import _pose_node_for_transform
+from src.core.rendering.gpu_diagnostics_records import _node_uses_single_tile_atlas
 
 
 class RendererMeshMixin:
@@ -515,21 +516,14 @@ class RendererMeshMixin:
             # use normal 0..1 character atlases without TXI clamp flags; wrapping
             # those UVs makes armor panels sample the opposite edge of the atlas.
             # Nodes with true tiled UVs or animated/procedural TXI still use repeat.
-            if not _accel_clamp_s or not _accel_clamp_t:
-                _has_no_repeat_features = bool(
-                    getattr(node, 'txi_blending', 0) == 0
-                    and getattr(node, 'txi_proceduretype', '') == ''
-                    and not getattr(node, 'animate_uv', False)
-                )
-                if _has_no_repeat_features and node.uvs:
-                    _sample = node.uvs[:min(30, len(node.uvs))]
-                    _uv_in_range = all(
-                        0.0 <= u <= 1.0 and 0.0 <= v <= 1.0
-                        for u, v in _sample
-                    )
-                    if _uv_in_range:
-                        _accel_clamp_s = True
-                        _accel_clamp_t = True
+            # Shared single-tile-atlas test (see gpu_diagnostics_records):
+            # clamps character/item atlases whose UV island stays within one
+            # tile even if a few verts overshoot [0,1], instead of the old
+            # first-30-vertex sample that both missed later overshoots and
+            # depended on vertex ordering.
+            if (not _accel_clamp_s or not _accel_clamp_t) and _node_uses_single_tile_atlas(node):
+                _accel_clamp_s = True
+                _accel_clamp_t = True
             # UV animation (animate_uv): add time-based scroll offset.
             _accel_animate_uv = bool(getattr(node, 'animate_uv', False))
             _accel_uv_scroll_u = 0.0
@@ -1093,17 +1087,12 @@ class RendererMeshMixin:
             # axes.  This prevents bright corner pixels (e.g. yellow at V≈1.0 of the
             # bantha texture) from bleeding into near-boundary UVs through bilinear
             # interpolation.  Tiling nodes (UVs outside [0,1]) keep GL_REPEAT.
-            if not _node_txi_clamp_s or not _node_txi_clamp_t:
-                _has_explicit_repeat = bool(getattr(node, 'txi_blending', 0) == 0 and
-                                            getattr(node, 'txi_proceduretype', '') == '' and
-                                            not getattr(node, 'animate_uv', False))
-                if _has_explicit_repeat and node.uvs:
-                    _sample = node.uvs[:min(30, len(node.uvs))]
-                    _uv_in_range = all(0.0 <= u <= 1.0 and 0.0 <= v <= 1.0
-                                       for u, v in _sample)
-                    if _uv_in_range:
-                        _node_txi_clamp_s = True
-                        _node_txi_clamp_t = True
+            # Shared single-tile-atlas test (see gpu_diagnostics_records) — keeps
+            # this PIL path in lockstep with the accel/GPU paths and fixes the
+            # same overshoot-wraps-to-opposite-edge bug.
+            if (not _node_txi_clamp_s or not _node_txi_clamp_t) and _node_uses_single_tile_atlas(node):
+                _node_txi_clamp_s = True
+                _node_txi_clamp_t = True
             # Beaming nodes use additive blending (glow/lightshaft effect).
             # background_geometry nodes (skybox/floor tiles) need no special depth bias —
             # they are sorted naturally by depth, just like opaque geometry.
