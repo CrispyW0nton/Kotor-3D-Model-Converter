@@ -9,6 +9,47 @@ For each completed change, add a dated entry with:
 - The files or area affected
 - The verification performed, such as tests, MCP comparisons, or manual checks
 
+## 2026-07-22
+
+### [2026-07-22] T2907 Hosted door/window preview and multi-opening walls
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio Pascal-style room authoring, floor-plan topology and
+Odyssey wall-mesh generation, viewport picking/overlays, Build workflow UI,
+controller history, and embedded Scene/Tools/GUI Display payloads.
+
+Door and Window tools now resolve the hovered authored wall before commit and
+show the exact hosted opening as a disposable viewport ghost. Valid openings
+are green, invalid wall-fit or overlap states are red with a reason, and the
+same clamped wall-local values are sent to the controller when the user clicks.
+Clean-view construction keeps wall guides targetable; canvas-coordinate picks
+fall back to projecting the current floor-plan outline when a regenerated wall
+invalidates a retained hit zone. Door height remains 2.20 m while Window has a
+separate 1.20 m default above the 1.00 m sill, so its stock settings fit a
+standard 3.00 m room.
+
+One wall can now own several non-overlapping doors/windows. Opening identity is
+stable by name instead of edge alone; preview and validation reject only actual
+wall-plane intersections. Wall compilation preserves the established optimized
+single-opening path and fills the complement around multiple openings with
+exportable Odyssey panels, while KMAP round-trip and Undo retain every hosted
+opening.
+
+Intersects: the 2026-07-21 T2907 Pascal environment-kit, transient-overlay,
+selection, Player Start, terrain-kit, and module-export work on `ghost-studio`;
+their payload ownership and behavior were preserved.
+
+Verification: changed Python files compile; four focused controller/UI source
+and widget checks pass; all 22 native payload contract checks pass. Scene,
+Tools, and GUI Display Debug x64 payloads were regenerated and rebuilt, then
+all 18 DLLs were staged to the repository root. In the actual staged
+GhostStudio app, the Build > Window tool displayed a wall-hosted green ghost
+and `Click to place window`, committed openings through ordinary viewport
+clicks, saved 1.20 m window records to KMAP, and kept the tool armed for the
+next opening. A focused floor-plan test additionally proves two windows on one
+wall compile into panel meshes while an overlapping door preview is blocked.
+
 ## 2026-07-21
 
 ### [2026-07-21] T2907 Universal transient overlays and Pascal-style direct building

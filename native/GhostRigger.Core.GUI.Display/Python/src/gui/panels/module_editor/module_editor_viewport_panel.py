@@ -2688,6 +2688,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     environmentKitSnapPreviewRequested = QtCore.Signal(object)
     buildingRoomRequested = QtCore.Signal(object)
     buildingOpeningRequested = QtCore.Signal(object)
+    buildingOpeningPreviewRequested = QtCore.Signal(object)
     placementModeExited = QtCore.Signal()
     roomOutlinePointEdited = QtCore.Signal(str, int, object)
     roomOutlinePointSnapPreviewRequested = QtCore.Signal(str, int)
@@ -4296,6 +4297,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         }
         self._building_points: list[tuple[float, float, float]] = []
         self._building_hover_world: tuple[float, float, float] | None = None
+        self._building_opening_preview: dict[str, Any] | None = None
         self._room_outline_point_drag: dict[str, object] | None = None
         self._room_outline_vertex_snap_candidates: dict[tuple[str, int], tuple[object, ...]] = {}
         self._vertex_snap_modifier_active = False
@@ -4913,7 +4915,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                     position = self._event_position(event)
                     if position is not None:
                         self._map_studio_click_candidate = position
-            if event_type == QtCore.QEvent.MouseMove and self._building_tool == "walls":
+            if event_type == QtCore.QEvent.MouseMove and self._building_tool in {"walls", "door", "window"}:
                 buttons = getattr(event, "buttons", lambda: QtCore.Qt.NoButton)()
                 if buttons == QtCore.Qt.NoButton:
                     self._update_building_hover(event)
@@ -6325,16 +6327,20 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._building_tool = key
         if isinstance(settings, Mapping):
             self._building_settings.update(dict(settings))
+        self._building_opening_preview = None
         if key != "walls":
             self._building_points.clear()
             self._building_hover_world = None
         self._sync_building_preview()
+        self._sync_clean_viewport_presentation()
         if key == "walls":
             self.marker_summary_label.setText(
                 "Draw Walls: click floor corners, then click the first corner to close the room. Esc cancels; Backspace removes the last corner."
             )
         elif key in {"door", "window"}:
-            self.marker_summary_label.setText(f"{key.title()}: click a cyan room edge where the opening belongs.")
+            self.marker_summary_label.setText(
+                f"{key.title()}: move over a cyan wall edge, then click when the hosted preview is green."
+            )
 
     def update_pascal_building_settings(self, settings: object) -> None:
         if isinstance(settings, Mapping):
@@ -6348,10 +6354,9 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         setter = getattr(self.viewport, "set_map_studio_building_preview", None)
         if not callable(setter):
             return
-        active = self._building_tool == "walls"
-        setter(
-            {
-                "active": active,
+        if self._building_tool == "walls":
+            payload = {
+                "active": True,
                 "tool": self._building_tool,
                 "points": tuple(self._building_points),
                 "hover_world": self._building_hover_world,
@@ -6360,9 +6365,16 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 "close_ready": bool(len(self._building_points) >= 3 and self._building_hover_world is not None and self._building_close_ready()),
                 "label": "Draw Walls",
             }
-            if active
-            else None
-        )
+        elif self._building_tool in {"door", "window"} and isinstance(self._building_opening_preview, dict):
+            payload = {
+                "active": True,
+                "tool": self._building_tool,
+                "opening": dict(self._building_opening_preview),
+                "label": self._building_tool.title(),
+            }
+        else:
+            payload = None
+        setter(payload)
 
     def _building_close_ready(self) -> bool:
         if len(self._building_points) < 3 or self._building_hover_world is None:
@@ -6420,11 +6432,60 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         return (round(point[0] / grid) * grid, round(point[1] / grid) * grid, point[2])
 
     def _update_building_hover(self, event: QtCore.QEvent) -> bool:
-        if self._building_tool != "walls":
+        if self._building_tool == "walls":
+            self._building_hover_world = self._building_world_at_event(event)
+            self._sync_building_preview()
+            return self._building_hover_world is not None
+        if self._building_tool not in {"door", "window"}:
             return False
-        self._building_hover_world = self._building_world_at_event(event)
+        edge = self._room_outline_edge_at_event(event)
+        if edge is None:
+            self._building_opening_preview = None
+            self._sync_building_preview()
+            return False
+        room_resref, edge_index, start, end = edge
+        hit = self._building_world_at_event(event, plane_z=float(start[2]))
+        if hit is None:
+            hit = ((start[0] + end[0]) * 0.5, (start[1] + end[1]) * 0.5, start[2])
+        dx, dy = float(end[0]) - float(start[0]), float(end[1]) - float(start[1])
+        length_sq = dx * dx + dy * dy
+        fraction = 0.5 if length_sq <= 1.0e-9 else max(
+            0.0,
+            min(1.0, ((hit[0] - start[0]) * dx + (hit[1] - start[1]) * dy) / length_sq),
+        )
+        kind = self._building_tool
+        request = {
+            **dict(self._building_settings),
+            "room_resref": room_resref,
+            "edge_index": int(edge_index),
+            "opening_kind": kind,
+            "center_fraction": fraction,
+            "width": float(self._building_settings.get("opening_width", 1.25) or 1.25),
+            "height": float(
+                self._building_settings.get(
+                    "window_height" if kind == "window" else "opening_height",
+                    1.2 if kind == "window" else 2.2,
+                )
+                or (1.2 if kind == "window" else 2.2)
+            ),
+            "bottom": float(self._building_settings.get("window_sill", 1.0) or 1.0) if kind == "window" else 0.0,
+            "world_start": tuple(start),
+            "world_end": tuple(end),
+        }
+        self._building_opening_preview = {**request, "valid": False, "reason": "Checking wall fit…"}
+        self.buildingOpeningPreviewRequested.emit(request)
         self._sync_building_preview()
-        return self._building_hover_world is not None
+        return True
+
+    def set_pascal_building_opening_preview(self, preview: object | None) -> None:
+        """Publish the controller-resolved hosted ghost used by the next click."""
+
+        self._building_opening_preview = dict(preview) if isinstance(preview, Mapping) else None
+        self._sync_building_preview()
+        if isinstance(self._building_opening_preview, dict):
+            reason = str(self._building_opening_preview.get("reason") or "")
+            if reason:
+                self.marker_summary_label.setText(reason)
 
     def _handle_building_left_click(self, event: QtCore.QEvent) -> bool:
         if self._building_tool == "walls":
@@ -6455,26 +6516,25 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return True
         if self._building_tool not in {"door", "window"}:
             return False
-        edge = self._room_outline_edge_at_event(event)
-        if edge is None:
+        self._update_building_hover(event)
+        preview = self._building_opening_preview
+        if not isinstance(preview, dict):
             self.marker_summary_label.setText(f"{self._building_tool.title()}: click directly on a room edge.")
             return True
-        room_resref, edge_index, start, end = edge
-        hit = self._building_world_at_event(event, plane_z=float(start[2]))
-        if hit is None:
-            hit = ((start[0] + end[0]) * 0.5, (start[1] + end[1]) * 0.5, start[2])
-        dx, dy = float(end[0]) - float(start[0]), float(end[1]) - float(start[1])
-        length_sq = dx * dx + dy * dy
-        fraction = 0.5 if length_sq <= 1.0e-9 else max(0.0, min(1.0, ((hit[0] - start[0]) * dx + (hit[1] - start[1]) * dy) / length_sq))
-        kind = self._building_tool
+        if not bool(preview.get("valid", False)):
+            self.marker_summary_label.setText(str(preview.get("reason") or "Move the opening until the preview turns green."))
+            return True
+        kind = str(preview.get("opening_kind") or self._building_tool)
         self.buildingOpeningRequested.emit(
             {
                 **dict(self._building_settings),
-                "room_resref": room_resref,
-                "edge_index": int(edge_index),
+                "room_resref": str(preview.get("room_resref") or ""),
+                "edge_index": int(preview.get("edge_index", 0) or 0),
                 "opening_kind": kind,
-                "center_fraction": fraction,
-                "bottom": float(self._building_settings.get("window_sill", 1.0) or 1.0) if kind == "window" else 0.0,
+                "center_fraction": float(preview.get("center_fraction", 0.5) or 0.5),
+                "opening_width": float(preview.get("width", self._building_settings.get("opening_width", 1.25)) or 1.25),
+                "opening_height": float(preview.get("height", self._building_settings.get("opening_height", 2.2)) or 2.2),
+                "bottom": float(preview.get("bottom", 0.0) or 0.0),
             }
         )
         return True
@@ -6483,11 +6543,10 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         point_at_screen = getattr(self.viewport, "map_studio_room_outline_point_at_screen", None)
         if not callable(point_at_screen):
             return None
-        pos_fn = getattr(event, "position", None)
-        pos = pos_fn() if callable(pos_fn) else getattr(event, "pos", lambda: None)()
-        if pos is None:
+        screen = self._event_position(event)
+        if screen is None:
             return None
-        hit = point_at_screen(float(pos.x()), float(pos.y()))
+        hit = point_at_screen(float(screen[0]), float(screen[1]))
         if not hit or len(hit) < 3:
             return None
         room_resref = str(hit[0] or "")
@@ -6504,11 +6563,12 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         edge_at_screen = getattr(self.viewport, "map_studio_room_outline_edge_at_screen", None)
         if not callable(edge_at_screen):
             return None
-        pos_fn = getattr(event, "position", None)
-        pos = pos_fn() if callable(pos_fn) else getattr(event, "pos", lambda: None)()
-        if pos is None:
+        screen = self._event_position(event)
+        if screen is None:
             return None
-        hit = edge_at_screen(float(pos.x()), float(pos.y()))
+        hit = edge_at_screen(float(screen[0]), float(screen[1]))
+        if not hit:
+            hit = self._room_outline_edge_from_current_geometry(screen)
         if not hit or len(hit) < 4:
             return None
         room_resref = str(hit[0] or "")
@@ -6519,15 +6579,56 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return None
         return (room_resref, edge_index, world_start, world_end)
 
+    def _room_outline_edge_from_current_geometry(
+        self,
+        screen: tuple[float, float],
+    ) -> tuple[str, int, tuple[float, float, float], tuple[float, float, float]] | tuple[()]:
+        """Resolve the visible floor edge when retained hit zones lag a frame."""
+
+        geometry = getattr(self, "_room_outline_geometry", None)
+        projector = getattr(self.viewport, "_map_studio_project_point", None)
+        distance_to_segment = getattr(self.viewport, "_map_studio_distance_to_segment", None)
+        if geometry is None or not callable(projector) or not callable(distance_to_segment):
+            return ()
+        width, height = self._viewport_canvas_size()
+        best: tuple[float, str, int, tuple[float, float, float], tuple[float, float, float]] | None = None
+        for polygon in tuple(getattr(geometry, "polygons", ()) or ()):
+            if str(getattr(polygon, "role", "") or "").strip().lower() != "floor":
+                continue
+            room_resref = str(getattr(polygon, "room_resref", "") or "")
+            points = tuple(tuple(float(value) for value in tuple(point)[:3]) for point in tuple(getattr(polygon, "points", ()) or ()))
+            if not room_resref or len(points) < 3 or any(len(point) < 3 for point in points):
+                continue
+            projected = [projector(point, width, height) for point in points]
+            if any(point is None for point in projected):
+                continue
+            for edge_index, (world_start, world_end, start, end) in enumerate(
+                zip(points, points[1:] + points[:1], projected, projected[1:] + projected[:1])
+            ):
+                distance = float(
+                    distance_to_segment(
+                        float(screen[0]),
+                        float(screen[1]),
+                        float(start[0]),
+                        float(start[1]),
+                        float(end[0]),
+                        float(end[1]),
+                    )
+                )
+                if distance <= 14.0 and (best is None or distance < best[0]):
+                    best = (distance, room_resref, edge_index, world_start, world_end)
+        if best is None:
+            return ()
+        return (best[1], best[2], best[3], best[4])
+
     def _room_primitive_at_event(self, event: QtCore.QEvent) -> tuple[str, str, tuple[float, float, float]] | None:
         primitive_at_screen = getattr(self.viewport, "map_studio_room_primitive_at_screen", None)
         if not callable(primitive_at_screen):
             return None
-        pos_fn = getattr(event, "position", None)
-        pos = pos_fn() if callable(pos_fn) else getattr(event, "pos", lambda: None)()
-        if pos is None:
+        screen = self._event_position(event)
+        if screen is None:
             return None
-        hit = primitive_at_screen(float(pos.x()), float(pos.y()))
+        hit = primitive_at_screen(float(screen[0]), float(screen[1]))
         if not hit or len(hit) < 3:
             return None
         room_resref = str(hit[0] or "")
@@ -9507,6 +9608,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self._room_outline_point_drag is not None
             or bool(self._vertex_snap_modifier_active)
             or bool(self._transform_snap_modifier_active)
+            or self._building_tool in {"walls", "door", "window"}
         )
         primitive_drag_active = self._room_primitive_drag is not None
         preview_model_loaded = self._room_preview_model is not None
@@ -9516,7 +9618,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "preview_model_loaded": preview_model_loaded,
             "show_render_geometry_overlay": render_geometry_edit_active if preview_model_loaded else True,
             "show_room_mesh_fill_overlay": not preview_model_loaded,
-            "subtle_room_outlines": True,
+            "subtle_room_outlines": not room_edit_active,
             "show_room_guides": room_edit_active,
             "show_room_vertex_handles": room_edit_active,
             "show_primitive_handles": render_geometry_edit_active if preview_model_loaded else True,

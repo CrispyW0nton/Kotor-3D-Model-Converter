@@ -4983,7 +4983,13 @@ def set_authored_floor_plan_wall_opening(
             "operation": "set_wall_opening",
         },
     )
-    openings = tuple(item for item in tuple(primitive.openings or ()) if int(item.edge_index) != edge and str(item.name or "").strip() != opening_name)
+    # Opening identity is name-based. Multiple non-overlapping doors/windows
+    # may share one wall edge; reusing a name updates only that authored node.
+    openings = tuple(
+        item
+        for item in tuple(primitive.openings or ())
+        if str(item.name or "").strip() != opening_name
+    )
     updated_primitive = replace(
         primitive,
         openings=openings + (opening,),

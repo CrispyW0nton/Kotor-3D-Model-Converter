@@ -4192,6 +4192,8 @@ def test_t2907_direct_building_replaces_primary_room_wall_of_controls() -> None:
         assert settings[-1]["level_index"] == 1
         assert settings[-1]["floor_z"] == 3.5
         assert settings[-1]["wall_height"] == 3.5
+        assert settings[-1]["opening_height"] == 2.2
+        assert settings[-1]["window_height"] == 1.2
         assert settings[-1]["style_id"] == "plcaa_graybox"
     finally:
         builder.close()
@@ -4215,8 +4217,12 @@ def test_t2907_direct_building_uses_level_plane_snap_and_universal_transient_ove
         for token in (
             "buildingRoomRequested = QtCore.Signal(object)",
             "buildingOpeningRequested = QtCore.Signal(object)",
+            "buildingOpeningPreviewRequested = QtCore.Signal(object)",
             "def set_pascal_building_tool",
+            "def set_pascal_building_opening_preview",
             "def _building_world_at_event",
+            "def _room_outline_edge_from_current_geometry",
+            '"window_height" if kind == "window" else "opening_height"',
             "ray_from_mouse",
             "snap_to_grid",
             "Click the first corner to close",
@@ -4232,4 +4238,10 @@ def test_t2907_direct_building_uses_level_plane_snap_and_universal_transient_ove
     assert "self._draw_map_studio_building_preview(draw, w, h)" in compositor
     assert "return Image.alpha_composite(scene_img, overlay_img)" in compositor
     assert "buildingRoomRequested.connect(self._build_map_studio_room_from_viewport)" in window_source
+    assert "buildingOpeningPreviewRequested.connect(" in window_source
+    assert "def _preview_map_studio_opening_from_viewport" in window_source
     assert "buildingOpeningRequested.connect(self._build_map_studio_opening_from_viewport)" in window_source
+    assert "Click to place" in overlay_source
+    assert "multi_opening_fill" in _read(
+        "native/GhostRigger.Core.Scene/Python/src/core/modules/authored_room_floorplan.py"
+    )

@@ -1943,6 +1943,9 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._preview_authored_terrain_kit_from_viewport
         )
         self.viewport_panel.buildingRoomRequested.connect(self._build_map_studio_room_from_viewport)
+        self.viewport_panel.buildingOpeningPreviewRequested.connect(
+            self._preview_map_studio_opening_from_viewport
+        )
         self.viewport_panel.buildingOpeningRequested.connect(self._build_map_studio_opening_from_viewport)
         self.viewport_panel.roomOutlinePointEdited.connect(self._set_authored_room_outline_point)
         self.viewport_panel.roomOutlinePointSnapPreviewRequested.connect(self.preview_authored_floor_plan_vertex_snap_candidates)
@@ -10717,6 +10720,24 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         self._refresh_all(f"Added a {kind} opening; generated room and module outputs are now stale.")
         self.viewport_panel.set_pascal_building_tool(kind, values)
+
+    def _preview_map_studio_opening_from_viewport(self, payload: object) -> None:
+        """Resolve one live hosted-opening ghost through the headless policy."""
+
+        values = dict(payload) if isinstance(payload, dict) else {}
+        try:
+            resolved = self.controller.preview_map_studio_building_opening(
+                room_resref=str(values.get("room_resref") or ""),
+                edge_index=int(values.get("edge_index", 0) or 0),
+                opening_kind=str(values.get("opening_kind") or "door"),
+                center_fraction=float(values.get("center_fraction", 0.5) or 0.5),
+                width=float(values.get("width", values.get("opening_width", 1.25)) or 1.25),
+                height=float(values.get("height", values.get("opening_height", 2.2)) or 2.2),
+                bottom=float(values.get("bottom", 0.0) or 0.0),
+            )
+        except Exception as exc:
+            resolved = {"valid": False, "reason": str(exc)}
+        self.viewport_panel.set_pascal_building_opening_preview({**values, **dict(resolved or {})})
 
     def _apply_placement_tab_transform(self, placement_id: str, position: object, bearing: float) -> None:
         try:

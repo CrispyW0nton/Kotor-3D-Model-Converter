@@ -226,6 +226,9 @@ class BuilderTab(QtWidgets.QWidget):
         self.buildingOpeningHeightSpinBox = self._make_transform_spin(
             "mapStudioBuildingOpeningHeightSpinBox", 0.25, 20.0, " m", value=2.2, step=0.05
         )
+        self.buildingWindowHeightSpinBox = self._make_transform_spin(
+            "mapStudioBuildingWindowHeightSpinBox", 0.25, 20.0, " m", value=1.2, step=0.05
+        )
         self.buildingWindowSillSpinBox = self._make_transform_spin(
             "mapStudioBuildingWindowSillSpinBox", 0.0, 20.0, " m", value=1.0, step=0.05
         )
@@ -251,7 +254,8 @@ class BuilderTab(QtWidgets.QWidget):
         building_settings_form.addRow(self.buildingSnapCheckBox)
         building_settings_form.addRow(self.buildingCeilingCheckBox)
         building_settings_form.addRow("Opening width:", self.buildingOpeningWidthSpinBox)
-        building_settings_form.addRow("Opening height:", self.buildingOpeningHeightSpinBox)
+        building_settings_form.addRow("Door height:", self.buildingOpeningHeightSpinBox)
+        building_settings_form.addRow("Window height:", self.buildingWindowHeightSpinBox)
         building_settings_form.addRow("Window sill:", self.buildingWindowSillSpinBox)
         self.buildingSettingsContainer.setVisible(False)
         building_layout.addWidget(self.buildingSettingsContainer)
@@ -1250,6 +1254,7 @@ class BuilderTab(QtWidgets.QWidget):
             self.buildingCeilingCheckBox,
             self.buildingOpeningWidthSpinBox,
             self.buildingOpeningHeightSpinBox,
+            self.buildingWindowHeightSpinBox,
             self.buildingWindowSillSpinBox,
         ):
             signal = getattr(control, "valueChanged", None) or getattr(control, "currentIndexChanged", None) or getattr(control, "toggled", None)
@@ -1403,6 +1408,7 @@ class BuilderTab(QtWidgets.QWidget):
             "style_id": str(style.get("style_id") or "plcaa_graybox"),
             "opening_width": float(self.buildingOpeningWidthSpinBox.value()),
             "opening_height": float(self.buildingOpeningHeightSpinBox.value()),
+            "window_height": float(self.buildingWindowHeightSpinBox.value()),
             "window_sill": float(self.buildingWindowSillSpinBox.value()),
         }
 

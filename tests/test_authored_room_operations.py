@@ -3016,6 +3016,82 @@ def test_t2907_controller_builds_room_and_door_as_two_undoable_actions() -> None
     assert controller.map_studio_building_levels()[0].name == "Ground Floor"
 
 
+def test_t2907_pascal_opening_preview_matches_commit_and_allows_multiple_windows() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import authored_project_from_kmap_payload
+    from src.core.modules.authored_room_floorplan import build_floor_plan_wall_meshes
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="gropenings", game="K1")
+    room_resref = controller.add_map_studio_building_room(
+        points=((0.0, 0.0), (8.0, 0.0), (8.0, 5.0), (0.0, 5.0)),
+        wall_height=3.2,
+    )
+    left = controller.preview_map_studio_building_opening(
+        room_resref=room_resref,
+        edge_index=0,
+        opening_kind="window",
+        center_fraction=0.25,
+        width=1.2,
+        height=1.0,
+        bottom=1.0,
+    )
+    assert left["valid"] is True
+    controller.set_map_studio_building_opening(
+        room_resref=room_resref,
+        edge_index=0,
+        opening_kind="window",
+        center_fraction=left["center_fraction"],
+        width=left["width"],
+        height=left["height"],
+        bottom=left["bottom"],
+    )
+    right = controller.preview_map_studio_building_opening(
+        room_resref=room_resref,
+        edge_index=0,
+        opening_kind="window",
+        center_fraction=0.75,
+        width=1.2,
+        height=1.0,
+        bottom=1.0,
+    )
+    assert right["valid"] is True
+    controller.set_map_studio_building_opening(
+        room_resref=room_resref,
+        edge_index=0,
+        opening_kind="window",
+        center_fraction=right["center_fraction"],
+        width=right["width"],
+        height=right["height"],
+        bottom=right["bottom"],
+    )
+    overlap = controller.preview_map_studio_building_opening(
+        room_resref=room_resref,
+        edge_index=0,
+        opening_kind="door",
+        center_fraction=0.25,
+        width=1.25,
+        height=2.2,
+        bottom=0.0,
+    )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    primitive = authored.rooms[0].primitive
+
+    assert overlap["valid"] is False
+    assert "overlaps" in overlap["reason"]
+    assert len(primitive.openings) == 2
+    assert [opening.center_fraction for opening in primitive.openings] == [0.25, 0.75]
+    assert all(mesh.faces for mesh in build_floor_plan_wall_meshes(primitive))
+    assert any("_panel_" in mesh.name for mesh in build_floor_plan_wall_meshes(primitive))
+    assert [record.action_key for record in controller.command_history.undo_stack] == [
+        "map_studio.building.room.create",
+        "map_studio.building.window.create",
+        "map_studio.building.window.create",
+    ]
+
+
 def test_t2907_vanilla_building_style_catalog_learns_surface_roles_and_roundtrips(
     monkeypatch,
     tmp_path: Path,

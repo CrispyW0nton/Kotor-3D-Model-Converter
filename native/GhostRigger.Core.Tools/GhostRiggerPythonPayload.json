@@ -627,7 +627,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_FLOORPLAN",
             "source_path": "src/core/modules/authored_room_floorplan.py",
             "packaged_path": "Python/src/core/modules/authored_room_floorplan.py",
-            "sha256": "b3549df1d6cfbd408188a1d022acf885ae9a7890a49c0c8b490928dde97b1d20"
+            "sha256": "b89be51de856d2fa8a62ea5f6bec637fe162da95130498fae89441c682de5bea"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_GEOMETRY",
@@ -645,7 +645,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_OPERATIONS",
             "source_path": "src/core/modules/authored_room_operations.py",
             "packaged_path": "Python/src/core/modules/authored_room_operations.py",
-            "sha256": "38f1adbef478069a8e19d3b4d996f77acd9078a07f28dfb0f18e8c90142d870c"
+            "sha256": "bd83d40756271aa877279d6e184359b1cc6791cf683cceca7e48273d05a87961"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_AUTHORED_ROOM_OUTLINE_GEOMETRY",
@@ -807,7 +807,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PASCAL_BUILDING",
             "source_path": "src/core/modules/map_studio_pascal_building.py",
             "packaged_path": "Python/src/core/modules/map_studio_pascal_building.py",
-            "sha256": "44e9f69b59ea4825015e04cd1305ed5d332e018485329d11c291f66e0c3c306c"
+            "sha256": "1d904c4a3020258c6e3fc7048260c625a86b71d39e9c22084db4734f1b34ac41"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PIE",
@@ -993,7 +993,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "fa4e26e6135af128ec53523e07f846c4b8695575c2cdf8c16808f1e7ca587bc7"
+            "sha256": "9ee0f62105e20cff36218d9ae13e856a95da84d92094f758e74ee22c04bf8935"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",
@@ -1695,7 +1695,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_BUILDER_TAB",
             "source_path": "src/gui/panels/module_editor/builder_tab.py",
             "packaged_path": "Python/src/gui/panels/module_editor/builder_tab.py",
-            "sha256": "7fa5394e82d43d5f1f797f3c5303b6bff0ed0e5ad6b9bb042e32b506b061655f"
+            "sha256": "1e3fae0ccb5feea364d6a0b6054e092ef381328910cccb4c6e8adca75f8f41ca"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_COMPONENT_MARKING_MENU",
@@ -1761,7 +1761,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_MODULE_EDITOR_VIEWPORT_PANEL",
             "source_path": "src/gui/panels/module_editor/module_editor_viewport_panel.py",
             "packaged_path": "Python/src/gui/panels/module_editor/module_editor_viewport_panel.py",
-            "sha256": "d668f0c9088a1a1a244ad504f3b06e4cbe95deb13c3ef1da362ab04168d0413e"
+            "sha256": "f1cf6c9670365f2563c599446c89ec7f899a092767086a18dc6a1afe99f13333"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_PANELS_MODULE_EDITOR_PLACEMENT_TAB",
@@ -1977,7 +1977,7 @@
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_MODULE_EDITOR_WINDOW",
             "source_path": "src/gui/windows/module_editor_window.py",
             "packaged_path": "Python/src/gui/windows/module_editor_window.py",
-            "sha256": "1bc410baf707c63c989efe19547fd0bce3105322c9fc6b72cd77d67a24f54f1a"
+            "sha256": "9917e7f8fc61425594a2bee26f3054c1f19bc70b006b15a6a8c449d69b7dacfd"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_GUI_WINDOWS_QT_BLUEPRINT_EDITOR",

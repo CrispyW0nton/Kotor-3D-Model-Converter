@@ -462,7 +462,7 @@ class ViewportOverlayLayersMixin:
                             edge_index,
                             start=(float(screen_start[0]), float(screen_start[1])),
                             end=(float(screen_end[0]), float(screen_end[1])),
-                            tolerance=8.0,
+                            tolerance=12.0,
                             world_start=start_point,
                             world_end=end_point,
                         )
@@ -591,6 +591,51 @@ class ViewportOverlayLayersMixin:
         if not isinstance(preview, dict) or not bool(preview.get("active", False)):
             return
         try:
+            opening = preview.get("opening")
+            if isinstance(opening, dict):
+                start = tuple(float(value) for value in tuple(opening.get("world_start") or ())[:3])
+                end = tuple(float(value) for value in tuple(opening.get("world_end") or ())[:3])
+                if len(start) != 3 or len(end) != 3:
+                    return
+                dx, dy = end[0] - start[0], end[1] - start[1]
+                edge_length = max(1.0e-8, (dx * dx + dy * dy) ** 0.5)
+                ux, uy = dx / edge_length, dy / edge_length
+                center_fraction = max(0.0, min(1.0, float(opening.get("center_fraction", 0.5) or 0.5)))
+                width = max(0.01, float(opening.get("width", 1.25) or 1.25))
+                height = max(0.01, float(opening.get("height", 2.2) or 2.2))
+                bottom = float(opening.get("bottom", 0.0) or 0.0)
+                center_x = start[0] + dx * center_fraction
+                center_y = start[1] + dy * center_fraction
+                half = width * 0.5
+                left = (center_x - ux * half, center_y - uy * half)
+                right = (center_x + ux * half, center_y + uy * half)
+                base_z = start[2] + bottom
+                corners = (
+                    (left[0], left[1], base_z),
+                    (right[0], right[1], base_z),
+                    (right[0], right[1], base_z + height),
+                    (left[0], left[1], base_z + height),
+                )
+                projected = [self._map_studio_project_point(point, w, h) for point in corners]
+                if any(point is None for point in projected):
+                    return
+                screen = [(float(point[0]), float(point[1])) for point in projected]
+                valid = bool(opening.get("valid", False))
+                role = "success" if valid else "danger"
+                fallback = "#58e88b" if valid else "#ff5a67"
+                color = self._map_studio_theme_rgba(role, fallback, 245)
+                draw.polygon(screen, fill=(color[0], color[1], color[2], 46 if valid else 62))
+                draw.line(screen + [screen[0]], fill=(0, 0, 0, 215), width=5)
+                draw.line(screen + [screen[0]], fill=color, width=3)
+                if not valid:
+                    draw.line((screen[0], screen[2]), fill=color, width=2)
+                    draw.line((screen[1], screen[3]), fill=color, width=2)
+                label_point = screen[2]
+                kind = str(opening.get("opening_kind") or preview.get("tool") or "opening").title()
+                reason = str(opening.get("reason") or "")
+                label = f"{kind} · {'Click to place' if valid else reason or 'Invalid'}"
+                draw.text((label_point[0] + 9.0, label_point[1] - 10.0), label, fill=color)
+                return
             world_points = [tuple(float(value) for value in tuple(point)[:3]) for point in tuple(preview.get("points") or ())]
             hover = preview.get("hover_world")
             hover_world = tuple(float(value) for value in tuple(hover)[:3]) if hover is not None else None

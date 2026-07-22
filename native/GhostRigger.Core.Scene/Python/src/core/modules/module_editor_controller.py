@@ -204,6 +204,7 @@ from .map_studio_pascal_building import (
     add_pascal_building_room as add_pascal_building_room_to_project,
     available_pascal_building_styles,
     pascal_building_levels as pascal_building_levels_for_project,
+    preview_pascal_building_opening,
     scan_vanilla_pascal_building_styles,
     set_pascal_building_opening as set_pascal_building_opening_in_project,
     vanilla_pascal_building_styles,
@@ -3236,6 +3237,47 @@ class ModuleEditorController:
                 "bottom": float(bottom),
             },
         )
+
+    def preview_map_studio_building_opening(
+        self,
+        *,
+        room_resref: str,
+        edge_index: int,
+        opening_kind: str,
+        center_fraction: float,
+        width: float,
+        height: float,
+        bottom: float = 0.0,
+    ) -> dict[str, Any]:
+        """Resolve a hosted door/window ghost without mutating KMAP state."""
+
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is None:
+            return {
+                "valid": False,
+                "reason": "Draw and close a room before adding a door or window.",
+            }
+        preview = preview_pascal_building_opening(
+            authored,
+            room_resref=room_resref,
+            edge_index=int(edge_index),
+            opening_kind=opening_kind,
+            center_fraction=float(center_fraction),
+            width=float(width),
+            height=float(height),
+            bottom=float(bottom),
+        )
+        return {
+            "room_resref": preview.room_resref,
+            "edge_index": preview.edge_index,
+            "opening_kind": preview.opening_kind,
+            "center_fraction": preview.center_fraction,
+            "width": preview.width,
+            "height": preview.height,
+            "bottom": preview.bottom,
+            "valid": preview.valid,
+            "reason": preview.reason,
+        }
 
     def refresh_map_studio_vanilla_terrain_kit_assets(
         self,

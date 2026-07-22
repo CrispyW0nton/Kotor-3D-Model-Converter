@@ -50,6 +50,21 @@ class PascalBuildingStyle:
     tags: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class PascalOpeningPreview:
+    """Resolved hosted-opening candidate shared by viewport preview and commit."""
+
+    room_resref: str
+    edge_index: int
+    opening_kind: str
+    center_fraction: float
+    width: float
+    height: float
+    bottom: float
+    valid: bool
+    reason: str = ""
+
+
 _DEFAULT_STYLES = (
     PascalBuildingStyle(
         style_id="plcaa_graybox",
@@ -434,15 +449,45 @@ def set_pascal_building_opening(
     kind = str(opening_kind or "door").strip().lower()
     if kind not in {"door", "window"}:
         raise ValueError("Building openings must be doors or windows.")
+    preview = preview_pascal_building_opening(
+        project,
+        room_resref=room_resref,
+        edge_index=edge_index,
+        opening_kind=kind,
+        center_fraction=center_fraction,
+        width=width,
+        height=height,
+        bottom=bottom,
+    )
+    if not preview.valid:
+        raise ValueError(preview.reason or f"The {kind} does not fit on this wall.")
+    target_room = next(
+        room
+        for room in project.rooms
+        if normalise_resref(room.room_resref) == normalise_resref(room_resref)
+    )
+    primitive = target_room.primitive
+    used_names = {
+        str(opening.name or "").strip().lower()
+        for opening in tuple(getattr(primitive, "openings", ()) or ())
+    }
+    opening_name = ""
+    for ordinal in range(1, 10_000):
+        candidate = f"{kind}_edge_{int(edge_index)}_{ordinal:03d}"
+        if candidate.lower() not in used_names:
+            opening_name = candidate
+            break
+    if not opening_name:
+        raise ValueError(f"Wall {int(edge_index) + 1} has exhausted its opening identifiers.")
     updated = set_authored_floor_plan_wall_opening(
         project,
         room_resref=normalise_resref(room_resref),
-        name=f"{kind}_edge_{int(edge_index)}",
+        name=opening_name,
         edge_index=int(edge_index),
-        center_fraction=float(center_fraction),
-        width=float(width),
-        height=float(height),
-        bottom=float(bottom),
+        center_fraction=preview.center_fraction,
+        width=preview.width,
+        height=preview.height,
+        bottom=preview.bottom,
     )
     rooms = []
     for room in updated.rooms:
@@ -452,7 +497,7 @@ def set_pascal_building_opening(
         primitive = room.primitive
         opening_rows = []
         for opening in tuple(getattr(primitive, "openings", ()) or ()):
-            if int(opening.edge_index) == int(edge_index):
+            if str(opening.name or "").strip() == opening_name:
                 opening = replace(
                     opening,
                     metadata={
@@ -464,6 +509,103 @@ def set_pascal_building_opening(
             opening_rows.append(opening)
         rooms.append(replace(room, primitive=replace(primitive, openings=tuple(opening_rows))))
     return replace(updated, rooms=tuple(rooms))
+
+
+def preview_pascal_building_opening(
+    project: AuthoredModuleProject,
+    *,
+    room_resref: str,
+    edge_index: int,
+    opening_kind: str,
+    center_fraction: float,
+    width: float,
+    height: float,
+    bottom: float,
+) -> PascalOpeningPreview:
+    """Resolve one wall-hosted opening without mutating the authored project.
+
+    Horizontal clamping happens here so the translucent viewport ghost and the
+    committed cut use the exact same wall-local values. Existing openings on
+    the edge participate in a 2D wall-plane overlap check.
+    """
+
+    kind = str(opening_kind or "door").strip().lower()
+    clean_room = normalise_resref(room_resref)
+    edge = int(edge_index)
+    try:
+        room = next(item for item in project.rooms if normalise_resref(item.room_resref) == clean_room)
+    except StopIteration:
+        return PascalOpeningPreview(clean_room, edge, kind, 0.5, 0.0, 0.0, 0.0, False, "The wall's room no longer exists.")
+    primitive = getattr(room, "primitive", None)
+    points = tuple(getattr(primitive, "points", ()) or ())
+    if kind not in {"door", "window"}:
+        return PascalOpeningPreview(clean_room, edge, kind, 0.5, 0.0, 0.0, 0.0, False, "Choose Door or Window first.")
+    if edge < 0 or edge >= len(points):
+        return PascalOpeningPreview(clean_room, edge, kind, 0.5, 0.0, 0.0, 0.0, False, "Move over a visible wall edge.")
+    values = (float(center_fraction), float(width), float(height), float(bottom))
+    if not all(math.isfinite(value) for value in values):
+        return PascalOpeningPreview(clean_room, edge, kind, 0.5, 0.0, 0.0, 0.0, False, "Opening dimensions must be finite.")
+    center, opening_width, opening_height, opening_bottom = values
+    start = points[edge]
+    end = points[(edge + 1) % len(points)]
+    edge_length = math.hypot(float(end[0]) - float(start[0]), float(end[1]) - float(start[1]))
+    wall_height = float(getattr(primitive, "wall_height", 0.0) or 0.0)
+    if opening_width <= 0.0 or opening_height <= 0.0:
+        return PascalOpeningPreview(clean_room, edge, kind, center, opening_width, opening_height, opening_bottom, False, "Opening width and height must be greater than zero.")
+    if edge_length <= opening_width + 0.02:
+        return PascalOpeningPreview(clean_room, edge, kind, center, opening_width, opening_height, opening_bottom, False, f"This {kind} is wider than the wall.")
+    half_fraction = (opening_width * 0.5) / edge_length
+    margin_fraction = min(0.02 / edge_length, 0.02)
+    center = max(half_fraction + margin_fraction, min(1.0 - half_fraction - margin_fraction, center))
+    if opening_bottom < 0.0 or opening_bottom + opening_height >= wall_height - 0.01:
+        return PascalOpeningPreview(
+            clean_room,
+            edge,
+            kind,
+            center,
+            opening_width,
+            opening_height,
+            opening_bottom,
+            False,
+            f"The {kind} must fit below the {wall_height:.2f} m wall top.",
+        )
+    proposed_start = center - half_fraction
+    proposed_end = center + half_fraction
+    proposed_bottom = opening_bottom
+    proposed_top = opening_bottom + opening_height
+    for existing in tuple(getattr(primitive, "openings", ()) or ()):
+        if int(getattr(existing, "edge_index", -1)) != edge:
+            continue
+        existing_half = (float(existing.width) * 0.5) / edge_length
+        existing_start = float(existing.center_fraction) - existing_half
+        existing_end = float(existing.center_fraction) + existing_half
+        existing_bottom = float(existing.bottom)
+        existing_top = existing_bottom + float(existing.height)
+        horizontal_overlap = min(proposed_end, existing_end) - max(proposed_start, existing_start)
+        vertical_overlap = min(proposed_top, existing_top) - max(proposed_bottom, existing_bottom)
+        if horizontal_overlap > 1.0e-6 and vertical_overlap > 1.0e-6:
+            return PascalOpeningPreview(
+                clean_room,
+                edge,
+                kind,
+                center,
+                opening_width,
+                opening_height,
+                opening_bottom,
+                False,
+                f"Move the {kind}; it overlaps {str(existing.name or 'another opening').replace('_', ' ')}.",
+            )
+    return PascalOpeningPreview(
+        clean_room,
+        edge,
+        kind,
+        center,
+        opening_width,
+        opening_height,
+        opening_bottom,
+        True,
+        f"Click to place {kind}.",
+    )
 
 
 def pascal_building_levels(project: AuthoredModuleProject) -> tuple[PascalBuildingLevel, ...]:
@@ -491,10 +633,12 @@ def pascal_building_levels(project: AuthoredModuleProject) -> tuple[PascalBuildi
 
 __all__ = [
     "PascalBuildingLevel",
+    "PascalOpeningPreview",
     "PascalBuildingStyle",
     "add_pascal_building_room",
     "available_pascal_building_styles",
     "pascal_building_levels",
+    "preview_pascal_building_opening",
     "set_pascal_building_opening",
     "scan_vanilla_pascal_building_styles",
     "vanilla_pascal_building_styles",

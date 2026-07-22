@@ -369,16 +369,14 @@ def validate_floor_plan_room_primitive(primitive: FloorPlanRoomPrimitive) -> Flo
             blocking.append(str(exc))
     if float(primitive.wall_height) <= 0.0:
         blocking.append("Floor-plan room wall height must be positive.")
-    openings_by_edge: set[int] = set()
+    openings_by_edge: dict[int, list[FloorPlanWallOpening]] = {}
     for opening in primitive.openings:
         opening_name = str(opening.name or "").strip() or f"edge {opening.edge_index}"
         edge_index = int(opening.edge_index)
         if edge_index < 0 or edge_index >= max(len(points), 1):
             blocking.append(f"Opening {opening_name} references missing wall edge {edge_index}.")
             continue
-        if edge_index in openings_by_edge:
-            blocking.append(f"Only one floor-plan opening per wall edge is supported for now: edge {edge_index}.")
-        openings_by_edge.add(edge_index)
+        openings_by_edge.setdefault(edge_index, []).append(opening)
         if float(opening.width) <= 0.0:
             blocking.append(f"Opening {opening_name} width must be positive.")
         if float(opening.height) <= 0.0:
@@ -392,6 +390,24 @@ def validate_floor_plan_room_primitive(primitive: FloorPlanRoomPrimitive) -> Flo
             start_fraction, end_fraction = _opening_span(opening, edge_len)
             if start_fraction <= 0.0 or end_fraction >= 1.0:
                 blocking.append(f"Opening {opening_name} does not fit within wall edge {edge_index}.")
+    for edge_index, edge_openings in openings_by_edge.items():
+        if edge_index < 0 or edge_index >= len(points):
+            continue
+        edge_len = _edge_length(points[edge_index], points[(edge_index + 1) % len(points)])
+        for opening_index, first in enumerate(edge_openings):
+            first_start, first_end = _opening_span(first, edge_len)
+            first_bottom = float(first.bottom)
+            first_top = first_bottom + float(first.height)
+            for second in edge_openings[opening_index + 1 :]:
+                second_start, second_end = _opening_span(second, edge_len)
+                second_bottom = float(second.bottom)
+                second_top = second_bottom + float(second.height)
+                horizontal_overlap = min(first_end, second_end) - max(first_start, second_start)
+                vertical_overlap = min(first_top, second_top) - max(first_bottom, second_bottom)
+                if horizontal_overlap > 1.0e-7 and vertical_overlap > 1.0e-7:
+                    blocking.append(
+                        f"Openings {str(first.name or 'opening')} and {str(second.name or 'opening')} overlap on wall edge {edge_index}."
+                    )
     try:
         require_walkable_walkmesh_surface(primitive.floor_surface_id, context=f"{primitive.room_resref} floor plan")
     except ValueError as exc:
@@ -937,11 +953,16 @@ def build_floor_plan_wall_meshes(primitive: FloorPlanRoomPrimitive) -> tuple[Pri
     z = float(primitive.z)
     top_z = z + float(primitive.wall_height)
     wall_material = primitive.wall_material or primitive.material
-    openings_by_edge = {int(opening.edge_index): opening for opening in primitive.openings}
+    openings_by_edge: dict[int, list[FloorPlanWallOpening]] = {}
+    for opening in primitive.openings:
+        openings_by_edge.setdefault(int(opening.edge_index), []).append(opening)
     meshes: list[PrimitiveMesh] = []
     for index, (x0, y0) in enumerate(points):
         x1, y1 = points[(index + 1) % len(points)]
-        opening = openings_by_edge.get(index)
+        edge_openings = sorted(
+            openings_by_edge.get(index, ()),
+            key=lambda item: (float(item.center_fraction), float(item.bottom), str(item.name or "")),
+        )
         base_metadata = {
             "primitive": "floor_plan_wall",
             "source": "map_studio:t2611",
@@ -949,7 +970,7 @@ def build_floor_plan_wall_meshes(primitive: FloorPlanRoomPrimitive) -> tuple[Pri
             "wall_height": float(primitive.wall_height),
             **dict(primitive.material.metadata),
         }
-        if opening is None:
+        if not edge_openings:
             meshes.append(
                 _quad_mesh(
                     name=f"{room_resref}_wall_{index + 1:02d}",
@@ -960,6 +981,65 @@ def build_floor_plan_wall_meshes(primitive: FloorPlanRoomPrimitive) -> tuple[Pri
             )
             continue
         edge_len = _edge_length((x0, y0), (x1, y1))
+        if len(edge_openings) > 1:
+            # Split the wall plane at every opening boundary. Each resulting
+            # vertical strip is filled only outside active opening intervals,
+            # producing any number of non-overlapping rectangular cut-outs.
+            horizontal_bounds = {0.0, 1.0}
+            spans: list[tuple[FloorPlanWallOpening, float, float, float, float]] = []
+            for item in edge_openings:
+                start_fraction, end_fraction = _opening_span(item, edge_len)
+                horizontal_bounds.update((start_fraction, end_fraction))
+                spans.append(
+                    (
+                        item,
+                        start_fraction,
+                        end_fraction,
+                        float(item.bottom),
+                        float(item.bottom) + float(item.height),
+                    )
+                )
+            ordered_x = sorted(horizontal_bounds)
+            panel_ordinal = 0
+            for start_fraction, end_fraction in zip(ordered_x, ordered_x[1:]):
+                if end_fraction - start_fraction <= 1.0e-8:
+                    continue
+                midpoint = (start_fraction + end_fraction) * 0.5
+                active = [span for span in spans if span[1] < midpoint < span[2]]
+                blocked_z = sorted((span[3], span[4]) for span in active)
+                visible_z: list[tuple[float, float]] = []
+                cursor_z = 0.0
+                for blocked_bottom, blocked_top in blocked_z:
+                    if blocked_bottom > cursor_z + 1.0e-8:
+                        visible_z.append((cursor_z, blocked_bottom))
+                    cursor_z = max(cursor_z, blocked_top)
+                if cursor_z < float(primitive.wall_height) - 1.0e-8:
+                    visible_z.append((cursor_z, float(primitive.wall_height)))
+                start = _lerp_point((x0, y0), (x1, y1), start_fraction)
+                end = _lerp_point((x0, y0), (x1, y1), end_fraction)
+                for lower, upper in visible_z:
+                    if upper - lower <= 1.0e-8:
+                        continue
+                    panel_ordinal += 1
+                    meshes.append(
+                        _quad_mesh(
+                            name=f"{room_resref}_wall_{index + 1:02d}_panel_{panel_ordinal:02d}",
+                            vertices=(
+                                (start[0], start[1], z + lower),
+                                (end[0], end[1], z + lower),
+                                (end[0], end[1], z + upper),
+                                (start[0], start[1], z + upper),
+                            ),
+                            material=wall_material,
+                            metadata={
+                                **base_metadata,
+                                "wall_panel": "multi_opening_fill",
+                                "opening_names": tuple(str(span[0].name or "") for span in active),
+                            },
+                        )
+                    )
+            continue
+        opening = edge_openings[0]
         start_fraction, end_fraction = _opening_span(opening, edge_len)
         start = _lerp_point((x0, y0), (x1, y1), start_fraction)
         end = _lerp_point((x0, y0), (x1, y1), end_fraction)
