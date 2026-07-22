@@ -3606,3 +3606,71 @@ def test_t2907_selected_authored_objects_delete_in_one_undo_transaction() -> Non
     }
     assert not remaining.intersection(selected)
     assert controller.command_history.undo_stack[-1].action_key == "map_studio.primitive.remove_many"
+
+
+def test_t2907_mixed_kit_player_and_placeable_selection_moves_and_deletes_atomically() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="mixed_selection", game="K1")
+    controller.create_authored_room_preset_module(
+        preset_id="composition_starter_room",
+        module_root="grmixed",
+    )
+    controller.add_authored_room_primitive(
+        primitive_kind="cube",
+        room_resref="grmixed_room01",
+        primitive_name="terrain_rock",
+        translation=(1.0, 2.0, 0.0),
+    )
+    controller.add_authored_gameplay_placement(
+        kind="placeable",
+        template_resref="plc_bench",
+        tag="Bench",
+        position=(4.0, 5.0, 0.0),
+    )
+    primitive = ("grmixed_room01", "terrain_rock")
+    entry_before = controller.authored_module_entry_point()
+    placement_before = next(row for row in controller.authored_gameplay_placements() if row.tag == "Bench")
+    placement_id = placement_before.placement_id
+    controller.command_history.clear()
+
+    moved_primitives, moved_placements = controller.translate_map_studio_scene_objects(
+        primitive_selections=(primitive,),
+        placement_ids=("entry_point", placement_id),
+        world_delta=(2.0, -1.0, 0.5),
+    )
+
+    assert moved_primitives == (primitive,)
+    assert moved_placements == ("entry_point", placement_id)
+    primitive_after = next(
+        row for row in controller.authored_room_primitive_transforms() if row.primitive_name == "terrain_rock"
+    )
+    assert primitive_after.translation == (3.0, 1.0, 0.5)
+    assert controller.authored_module_entry_point().position == tuple(
+        entry_before.position[index] + (2.0, -1.0, 0.5)[index] for index in range(3)
+    )
+    placement_after = next(row for row in controller.authored_gameplay_placements() if row.placement_id == placement_id)
+    assert placement_after.position == tuple(
+        placement_before.position[index] + (2.0, -1.0, 0.5)[index] for index in range(3)
+    )
+    assert controller.command_history.undo_stack[-1].action_key == "map_studio.scene.move_objects"
+    controller.undo_map_studio_command()
+
+    removed_primitives, removed_placements = controller.remove_map_studio_scene_objects(
+        primitive_selections=(primitive,),
+        placement_ids=("entry_point", placement_id),
+    )
+
+    assert removed_primitives == (primitive,)
+    assert removed_placements == ("entry_point", placement_id)
+    assert not any(row.primitive_name == "terrain_rock" for row in controller.authored_room_primitive_transforms())
+    assert controller.authored_module_entry_point_preview_row() is None
+    assert not any(row.placement_id == placement_id for row in controller.authored_gameplay_placements())
+    assert controller.command_history.undo_stack[-1].action_key == "map_studio.scene.remove_objects"
+    controller.undo_map_studio_command()
+    assert any(row.primitive_name == "terrain_rock" for row in controller.authored_room_primitive_transforms())
+    assert controller.authored_module_entry_point_preview_row() is not None
+    assert any(row.placement_id == placement_id for row in controller.authored_gameplay_placements())

@@ -621,7 +621,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "92caa0ac6c84fea9df311ba81cac375139106503c701beb8e83317a3d98fdc02"
+            "sha256": "0cc0da45e13d1f9a532952d7719300d082999f942a353662ac7332c40409e771"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",

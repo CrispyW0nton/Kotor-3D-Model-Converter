@@ -1885,6 +1885,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.map_studio_delete_selection_shortcut.setObjectName("mapStudioDeleteSelectionShortcut")
         self.map_studio_delete_selection_shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
         self.map_studio_delete_selection_shortcut.activated.connect(self.delete_map_studio_current_selection)
+        self.map_studio_outliner_delete_selection_shortcut = QtGui.QShortcut(
+            QtGui.QKeySequence(QtCore.Qt.Key_Delete), self.outliner
+        )
+        self.map_studio_outliner_delete_selection_shortcut.setObjectName("mapStudioOutlinerDeleteSelectionShortcut")
+        self.map_studio_outliner_delete_selection_shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
+        self.map_studio_outliner_delete_selection_shortcut.activated.connect(self.delete_map_studio_current_selection)
         self.map_studio_ground_snap_shortcut = QtGui.QShortcut(QtGui.QKeySequence(QtCore.Qt.Key_End), self.viewport_panel)
         self.map_studio_ground_snap_shortcut.setObjectName("mapStudioGroundSnapShortcut")
         self.map_studio_ground_snap_shortcut.setContext(QtCore.Qt.WidgetWithChildrenShortcut)
@@ -1957,6 +1963,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.viewport_panel.roomPrimitiveRotated.connect(self._rotate_authored_room_primitive)
         self.viewport_panel.roomPrimitiveScaled.connect(self._scale_authored_room_primitive)
         self.viewport_panel.roomPrimitivesTransformCommitted.connect(self._transform_authored_room_primitives)
+        self.viewport_panel.sceneObjectsTranslated.connect(self._translate_map_studio_scene_objects)
         self.viewport_panel.terrainBrushFrameRequested.connect(self.apply_map_studio_viewport_terrain_brush_frame)
         self.viewport_panel.terrainBrushStrokeCommitted.connect(self.commit_map_studio_viewport_terrain_brush_stroke)
         self.viewport_panel.terrainBrushOptionsChanged.connect(self._set_map_studio_terrain_brush_options)
@@ -3838,14 +3845,22 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             return
         self._handle_map_studio_tool_belt_action(action)
 
-    def _handle_map_studio_room_clicked(self, room_resref: str, additive: bool) -> None:
-        """Viewport click selection: click a room to select it (Ctrl/Shift adds)."""
+    def _handle_map_studio_room_clicked(self, room_resref: str, additive: bool, subtractive: bool = False) -> None:
+        """Viewport object selection: Shift adds and Alt removes, like Maya."""
 
         clicked_id = str(room_resref or "").strip()
         entry_point = self.controller.authored_module_entry_point_preview_row()
         if clicked_id.lower() == "entry_point" and entry_point is not None:
-            self._map_studio_selected_rooms = []
-            self.select_item("entry_point")
+            selected_ids = list(self.controller.model.selected_ids or ())
+            if subtractive:
+                selected_ids = [value for value in selected_ids if value != "entry_point"]
+                self._select_map_studio_items(selected_ids)
+            elif additive:
+                if "entry_point" not in selected_ids:
+                    selected_ids.append("entry_point")
+                self._select_map_studio_items(selected_ids)
+            else:
+                self.select_item("entry_point")
             return
         known_placements = {
             str(getattr(row, "placement_id", "") or "").strip().lower():
@@ -3855,20 +3870,28 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         }
         placement_id = known_placements.get(clicked_id.lower())
         if placement_id:
-            self._map_studio_selected_rooms = []
-            self.select_item(placement_id)
+            selected_ids = list(self.controller.model.selected_ids or ())
+            if subtractive:
+                selected_ids = [value for value in selected_ids if value != placement_id]
+                self._select_map_studio_items(selected_ids)
+            elif additive:
+                if placement_id not in selected_ids:
+                    selected_ids.append(placement_id)
+                self._select_map_studio_items(selected_ids)
+            else:
+                self.select_item(placement_id)
             return
         resref = clicked_id.lower()
         selected = list(getattr(self, "_map_studio_selected_rooms", []) or [])
         if not resref:
-            if not additive and selected:
+            if not additive and not subtractive and selected:
                 self._map_studio_selected_rooms = []
                 self.statusBar().showMessage("Map Studio selection cleared.", 2500)
             return
-        if additive:
-            if resref in selected:
-                selected.remove(resref)
-            else:
+        if subtractive:
+            selected = [value for value in selected if value != resref]
+        elif additive:
+            if resref not in selected:
                 selected.append(resref)
         else:
             selected = [resref]
@@ -3990,6 +4013,59 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         )
         return True
 
+    def _delete_map_studio_scene_object_selection(self) -> bool:
+        """Delete selected kit pieces, placements, and Player Start together."""
+
+        selected_ids = [
+            str(value or "")
+            for value in tuple(self.controller.model.selected_ids or ())
+            if str(value or "")
+        ]
+        if not selected_ids:
+            return False
+        primitive_selections = tuple(
+            identity
+            for identity in (self._parse_map_studio_primitive_outliner_id(item_id) for item_id in selected_ids)
+            if identity is not None
+        )
+        known_placements = {
+            str(getattr(row, "placement_id", "") or "")
+            for row in tuple(self.controller.authored_gameplay_placements() or ())
+        }
+        if self.controller.authored_module_entry_point_preview_row() is not None:
+            known_placements.add("entry_point")
+        placement_ids = tuple(item_id for item_id in selected_ids if item_id in known_placements)
+        if not primitive_selections and not placement_ids:
+            return False
+        try:
+            removed_primitives, removed_placements = self.controller.remove_map_studio_scene_objects(
+                primitive_selections=primitive_selections,
+                placement_ids=placement_ids,
+            )
+        except Exception as exc:
+            self._log(f"Map Studio: selected scene objects could not be removed: {exc}")
+            return False
+        removed_count = len(removed_primitives) + len(removed_placements)
+        if not removed_count:
+            return False
+        self.controller.model.select_many(())
+        self.outliner.select_ids(())
+        self.viewport_panel.set_selected_room_primitives(())
+        self.viewport_panel.set_selected_gameplay_placement_ids(())
+        self.viewport_panel.set_map_studio_scene_selection_ids(())
+        self._map_studio_selected_rooms = []
+        message = f"Removed {removed_count} selected scene object(s). Undo restores the complete selection."
+        if "entry_point" in removed_placements:
+            message += " Module export is blocked until a Player Start is set."
+        self._refresh_map_studio_geometry_change(
+            message,
+            refresh_outlines=True,
+            refresh_terrain=True,
+            refresh_room_choices=True,
+            refresh_connections=True,
+        )
+        return True
+
     def delete_map_studio_current_selection(self) -> None:
         """Delete key: hovered component, then selected rooms, then selection.
 
@@ -4002,6 +4078,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         if self._delete_map_studio_component_selection():
             return
         if self._delete_map_studio_hovered_component():
+            return
+        if self._delete_map_studio_scene_object_selection():
             return
         # An explicit marquee/multi selection outranks the hovered object:
         # deleting five selected desks must not collapse to the one under
@@ -11323,8 +11401,12 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self.statusBar().showMessage("PIE conversation context reset to a clean normal-player preview.")
 
     def select_item(self, item_id: str) -> None:
+        item_id = str(item_id or "")
+        self._map_studio_selected_rooms = []
         self.viewport_panel.clear_map_studio_room_geometry_selection()
-        if str(item_id or "").startswith("authored_room:"):
+        self.viewport_panel.set_selected_gameplay_placement_ids(())
+        self.viewport_panel.set_map_studio_scene_selection_ids((item_id,) if item_id else ())
+        if item_id.startswith("authored_room:"):
             room_resref = str(item_id).split(":", 1)[1].strip().lower()
             self._map_studio_selected_rooms = [room_resref] if room_resref else []
             self.controller.model.select(item_id)
@@ -11362,6 +11444,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self.outliner.select_ids(())
             self.viewport_panel.set_selected_gameplay_placement_ids(())
             self.viewport_panel.set_selected_room_primitives(())
+            self.viewport_panel.set_map_studio_scene_selection_ids(())
+            self._map_studio_selected_rooms = []
             self.properties.set_selection("")
             self.workflow_panel.set_selection_context("")
             self.statusBar().showMessage("Map Studio selection cleared.", 2500)
@@ -11373,6 +11457,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.controller.model.select_many(selected)
         self.placement_tab.set_selected_placement("")
         self.outliner.select_ids(selected)
+        self.viewport_panel.set_map_studio_scene_selection_ids(selected)
         primitive_entries = [
             identity
             for identity in (self._parse_map_studio_primitive_outliner_id(item_id) for item_id in selected)
@@ -11385,6 +11470,19 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             if item_id == "entry_point" or str(item_id).startswith("authored:")
         ]
         self.viewport_panel.set_selected_gameplay_placement_ids(placement_ids)
+        authored_room_resrefs = {
+            str(value or "").strip().lower()
+            for value in tuple(self.controller.authored_room_resrefs() or ())
+            if str(value or "").strip()
+        }
+        self._map_studio_selected_rooms = [
+            (item_id.split(":", 1)[1].strip().lower() if item_id.startswith("authored_room:") else item_id.lower())
+            for item_id in selected
+            if (
+                (item_id.startswith("authored_room:") and item_id.split(":", 1)[1].strip().lower() in authored_room_resrefs)
+                or item_id.lower() in authored_room_resrefs
+            )
+        ]
         active = selected[-1]
         self.properties.set_selection(active)
         self.pie_context_panel.focus_conversation_for_owner(active)
@@ -14398,8 +14496,16 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self._log(f"{action} is available as an editor hook; backend support is experimental.")
 
     def _outliner_action(self, action: str, item_id: str) -> None:
-        if item_id:
+        selected_ids = {
+            str(value or "")
+            for value in tuple(self.controller.model.selected_ids or ())
+            if str(value or "")
+        }
+        preserve_multi_delete = action == "delete" and item_id in selected_ids and len(selected_ids) > 1
+        if item_id and not preserve_multi_delete:
             self.select_item(item_id)
+        if action == "delete" and self._delete_map_studio_scene_object_selection():
+            return
         if item_id == "entry_point" and action == "delete":
             self._delete_map_studio_placement_ids(["entry_point"])
             return
@@ -14507,6 +14613,34 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.viewport_panel.set_selected_gameplay_placement_ids(moved)
         self.controller.model.select_many(moved)
         self.outliner.select_ids(moved)
+
+    def _translate_map_studio_scene_objects(self, payload: object) -> None:
+        """Commit one drag spanning terrain/building pieces and placements."""
+
+        values = dict(payload) if isinstance(payload, dict) else {}
+        primitive_selections = tuple(values.get("primitive_selections") or ())
+        placement_ids = tuple(values.get("placement_ids") or ())
+        item_ids = tuple(str(value or "") for value in tuple(values.get("item_ids") or ()) if str(value or ""))
+        delta = tuple(values.get("world_delta") or ())
+        try:
+            moved_primitives, moved_placements = self.controller.translate_map_studio_scene_objects(
+                primitive_selections=primitive_selections,
+                placement_ids=placement_ids,
+                world_delta=delta,
+            )
+        except Exception as exc:
+            self.viewport_panel.cancel_pending_room_primitive_commit_preview()
+            QtWidgets.QMessageBox.warning(self, "Move Selected Objects", str(exc))
+            self._refresh_all()
+            return
+        moved_count = len(moved_primitives) + len(moved_placements)
+        if not moved_count:
+            self.viewport_panel.cancel_pending_room_primitive_commit_preview()
+            self._refresh_all()
+            return
+        self.viewport_panel.promote_room_primitive_drag_preview(moved_primitives)
+        self._refresh_all(f"Moved {moved_count} selected scene objects together.")
+        self._select_map_studio_items(item_ids)
 
     def _set_authored_room_outline_point(self, room_resref: str, point_index: int, world_position: object) -> None:
         try:
@@ -14621,6 +14755,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         item_ids = [self._map_studio_primitive_outliner_id(room, name) for room, name in selected]
         self.controller.model.select_many(item_ids)
         self.outliner.select_ids(item_ids)
+        self.viewport_panel.set_map_studio_scene_selection_ids(item_ids)
         self.viewport_panel.set_selected_room_primitives(selected)
         self.properties.set_selection(item_ids[-1])
         self.workflow_tabs.setCurrentWidget(self.builder_tab)

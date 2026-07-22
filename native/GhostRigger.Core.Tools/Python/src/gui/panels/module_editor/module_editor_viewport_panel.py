@@ -2700,6 +2700,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     roomPrimitiveRotated = QtCore.Signal(str, str, float)
     roomPrimitiveScaled = QtCore.Signal(str, str, object)
     roomPrimitivesTransformCommitted = QtCore.Signal(object)
+    sceneObjectsTranslated = QtCore.Signal(object)
     terrainBrushFrameRequested = QtCore.Signal(str, str, object)
     terrainBrushStrokeCommitted = QtCore.Signal(str, str)
     terrainBrushOptionsChanged = QtCore.Signal(int, float)
@@ -2708,7 +2709,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     terrainBrushDeltaChanged = QtCore.Signal(float)
     terrainSculptModeChanged = QtCore.Signal(bool)
     modeMarkingMenuRequested = QtCore.Signal(QtCore.QPoint)
-    mapStudioRoomClicked = QtCore.Signal(str, bool)
+    mapStudioRoomClicked = QtCore.Signal(str, bool, bool)
     mapStudioRoomsRectSelected = QtCore.Signal(object, bool)
     componentExtrudeCommitted = QtCore.Signal(dict)
     componentExtrudePreviewRequested = QtCore.Signal(dict)
@@ -2733,6 +2734,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
     _map_studio_click_candidate = None
     _map_studio_component_selection: list = []
     _map_studio_room_primitive_selection: list = []
+    _map_studio_scene_selection_ids: list = []
     #: Maya-style interactive extrude (Ctrl+E arms, LMB drag pulls, release commits).
     _component_extrude_armed = None
     _component_extrude_drag = None
@@ -3137,6 +3139,33 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
 
     def selected_room_primitives(self) -> list[tuple[str, str]]:
         return list(getattr(self, "_map_studio_room_primitive_selection", []) or [])
+
+    def map_studio_scene_selection_ids(self) -> list[str]:
+        """Return the shared Maya-style object selection in visible order."""
+
+        return list(getattr(self, "_map_studio_scene_selection_ids", []) or [])
+
+    def set_map_studio_scene_selection_ids(self, item_ids) -> None:
+        """Synchronise viewport clicks with the Outliner/window selection."""
+
+        selected: list[str] = []
+        for value in tuple(item_ids or ()):
+            item_id = str(value or "").strip()
+            if item_id and item_id not in selected:
+                selected.append(item_id)
+        self._map_studio_scene_selection_ids = selected
+
+    @staticmethod
+    def _map_studio_primitive_item_id(room_resref: str, primitive_name: str) -> str:
+        return f"authored_primitive:{str(room_resref or '').strip()}:{str(primitive_name or '').strip()}"
+
+    @staticmethod
+    def _map_studio_primitive_identity_from_item_id(item_id: str) -> tuple[str, str] | None:
+        parts = str(item_id or "").split(":", 2)
+        if len(parts) != 3 or parts[0] != "authored_primitive":
+            return None
+        room_resref, primitive_name = parts[1].strip(), parts[2].strip()
+        return (room_resref, primitive_name) if room_resref and primitive_name else None
 
     def set_selected_room_primitives(self, entries) -> None:
         selected: list[tuple[str, str]] = []
@@ -4276,6 +4305,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         self._primitive_recipe_commit_serial = 0
         self._terrain_walkability_overlay: object | None = None
         self._universal_transform_overlay: object | None = None
+        self._map_studio_scene_selection_ids: list[str] = []
         self._marker_drag: dict[str, object] | None = None
         self._placement_context: dict[str, object] = {"enabled": False}
         self._placement_previous_hover: tuple[bool, str] | None = None
@@ -7595,10 +7625,11 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         context = self._hover_context
         modifiers = getattr(event, "modifiers", lambda: QtCore.Qt.NoModifier)()
         additive = bool(modifiers & (QtCore.Qt.ShiftModifier | QtCore.Qt.ControlModifier))
+        subtractive = bool(modifiers & QtCore.Qt.AltModifier)
         if context is None or not getattr(context, "is_hit", False):
-            if not additive:
+            if not additive and not subtractive:
                 self.clear_map_studio_component_selection()
-            self.mapStudioRoomClicked.emit("", False)
+            self.mapStudioRoomClicked.emit("", False, subtractive)
             return
         if self._hover_probe_enabled and self._hover_component_mode != "object":
             # Edit/component modes: clicks build the yellow component
@@ -7606,7 +7637,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self._toggle_map_studio_component_selection(context, additive)
             return
         resref = str(getattr(context, "room_resref", "") or "")
-        self.mapStudioRoomClicked.emit(resref, additive)
+        self.mapStudioRoomClicked.emit(resref, additive, subtractive)
 
     def _clear_map_studio_hover(self) -> None:
         if self._hover_context is not None:
@@ -8549,29 +8580,41 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self._marker_drag = None
             return False
         modifiers = event.modifiers() if hasattr(event, "modifiers") else QtCore.Qt.NoModifier
-        selected = self.selected_gameplay_placement_ids()
+        placement_id = str(placement_id)
+        selected_scene = self.map_studio_scene_selection_ids()
+        if not selected_scene:
+            selected_scene = self.selected_gameplay_placement_ids()
         if bool(modifiers & QtCore.Qt.AltModifier):
-            selected = [value for value in selected if value != str(placement_id)]
-            self.set_selected_gameplay_placement_ids(selected)
-            self.itemsSelected.emit(tuple(selected))
+            selected_scene = [value for value in selected_scene if value != placement_id]
+            self.set_map_studio_scene_selection_ids(selected_scene)
+            self.itemsSelected.emit(tuple(selected_scene))
             self._marker_drag = None
             return True
         if bool(modifiers & QtCore.Qt.ShiftModifier):
-            if str(placement_id) not in selected:
-                selected.append(str(placement_id))
-            self.set_selected_gameplay_placement_ids(selected)
-            self.itemsSelected.emit(tuple(selected))
+            if placement_id not in selected_scene:
+                selected_scene.append(placement_id)
+            self.set_map_studio_scene_selection_ids(selected_scene)
+            self.itemsSelected.emit(tuple(selected_scene))
             self._marker_drag = None
             return True
-        if str(placement_id) not in selected:
-            selected = [str(placement_id)]
-        self.set_selected_gameplay_placement_ids(selected)
-        if len(selected) > 1:
-            self.itemsSelected.emit(tuple(selected))
+        if placement_id not in selected_scene:
+            selected_scene = [placement_id]
+        self.set_map_studio_scene_selection_ids(selected_scene)
+        placement_selection = [value for value in selected_scene if value in self._placement_markers]
+        primitive_selection = [
+            identity
+            for identity in (
+                self._map_studio_primitive_identity_from_item_id(value) for value in selected_scene
+            )
+            if identity is not None
+        ]
+        self.set_selected_gameplay_placement_ids(placement_selection)
+        if len(selected_scene) > 1:
+            self.itemsSelected.emit(tuple(selected_scene))
         else:
-            self.itemSelected.emit(str(placement_id))
+            self.itemSelected.emit(placement_id)
         mode = self.transform_gizmo_mode()
-        if len(selected) > 1 and mode != "translate":
+        if (len(selected_scene) > 1 or primitive_selection) and mode != "translate":
             mode = "translate"
             self.set_transform_gizmo_mode("translate", announce=False)
         if mode == "scale":
@@ -8581,11 +8624,14 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             self._marker_drag = None
             return True
         start_position = self._marker_position(marker)
-        preview_node = self._placement_preview_node(str(placement_id))
+        preview_node = self._placement_preview_node(placement_id)
         preview_rotation = tuple(getattr(preview_node, "rotation", (0.0, 0.0, 0.0, 1.0)) or (0.0, 0.0, 0.0, 1.0))
+        primitive_preview_baselines, primitive_pivot = self._capture_room_primitive_drag_preview(primitive_selection)
         self._marker_drag = {
-            "placement_id": str(placement_id),
-            "selection": tuple(selected),
+            "placement_id": placement_id,
+            "selection": tuple(placement_selection),
+            "scene_selection": tuple(selected_scene),
+            "primitive_selection": tuple(primitive_selection),
             "start_screen": start_screen,
             "start_position": start_position,
             "bearing": float(getattr(marker, "bearing", 0.0) or 0.0),
@@ -8597,6 +8643,8 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             "preview_node": preview_node,
             "preview_start_position": tuple(getattr(preview_node, "position", start_position) or start_position),
             "preview_start_rotation": preview_rotation,
+            "primitive_preview_baselines": tuple(primitive_preview_baselines),
+            "primitive_group_pivot": primitive_pivot,
             "preview_baselines": tuple(
                 {
                     "placement_id": selected_id,
@@ -8610,7 +8658,7 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                         or self._marker_position(self._placement_markers[selected_id])
                     ),
                 }
-                for selected_id in selected
+                for selected_id in placement_selection
                 if selected_id in self._placement_markers
             ),
         }
@@ -8668,6 +8716,18 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return True
         bearing = float(drag.get("pending_bearing", drag.get("bearing", 0.0)) or 0.0)
         selection = tuple(drag.get("selection", ()) or ())
+        primitive_selection = tuple(drag.get("primitive_selection", ()) or ())
+        scene_selection = tuple(drag.get("scene_selection", ()) or ())
+        if primitive_selection and str(drag.get("mode") or "translate") == "translate":
+            self.sceneObjectsTranslated.emit(
+                {
+                    "item_ids": scene_selection,
+                    "placement_ids": selection,
+                    "primitive_selections": primitive_selection,
+                    "world_delta": tuple(drag.get("pending_delta", (0.0, 0.0, 0.0))),
+                }
+            )
+            return True
         if len(selection) > 1 and str(drag.get("mode") or "translate") == "translate":
             self.placementsTranslated.emit(
                 {"placement_ids": selection, "world_delta": tuple(drag.get("pending_delta", (0.0, 0.0, 0.0)))}
@@ -9096,7 +9156,12 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 compute_bounds()
             if callable(invalidate):
                 invalidate(node)
-        if baselines:
+        placement_baselines = tuple(drag.get("placement_preview_baselines", ()) or ())
+        for baseline in placement_baselines:
+            node = baseline.get("node")
+            if node is not None:
+                node.position = tuple(baseline.get("node_position", (0.0, 0.0, 0.0)))
+        if baselines or placement_baselines:
             request = getattr(self.viewport, "_request_render", None)
             if callable(request):
                 request(fast=True, reason="Map Studio transform preview restored", resources=True, overlay=True, gizmo=True)
@@ -9112,6 +9177,13 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         cos_a, sin_a = math.cos(angle), math.sin(angle)
         scale = tuple(float(value) for value in tuple(drag.get("pending_scale_multiplier", (1.0, 1.0, 1.0)))[:3])
         invalidate = getattr(self.viewport, "_evict_transform_cache", None)
+        if mode == "translate":
+            for baseline in tuple(drag.get("placement_preview_baselines", ()) or ()):
+                node = baseline.get("node")
+                if node is None:
+                    continue
+                start = tuple(float(value) for value in tuple(baseline.get("node_position", (0.0, 0.0, 0.0)))[:3])
+                node.position = tuple(start[index] + delta[index] for index in range(3))
         for baseline in baselines:
             node = baseline.get("node")
             if node is None:
@@ -9383,50 +9455,91 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return False
         room_resref, primitive_name, world_center = hit
         key = (str(room_resref or ""), str(primitive_name or ""))
+        item_id = self._map_studio_primitive_item_id(*key)
         modifiers = event.modifiers() if hasattr(event, "modifiers") else QtCore.Qt.NoModifier
+        selected_scene = self.map_studio_scene_selection_ids()
+        if not selected_scene:
+            selected_scene = [self._map_studio_primitive_item_id(*value) for value in self.selected_room_primitives()]
         if modifiers & QtCore.Qt.AltModifier:
-            selected = [value for value in self.selected_room_primitives() if value != key]
-            self.set_selected_room_primitives(selected)
-            self.roomPrimitivesSelected.emit(selected)
+            selected_scene = [value for value in selected_scene if value != item_id]
+            self.set_map_studio_scene_selection_ids(selected_scene)
+            self.itemsSelected.emit(tuple(selected_scene))
             self._room_primitive_drag = None
-            self.marker_summary_label.setText(f"{len(selected)} object(s) selected. Alt-click removed {primitive_name}.")
+            self.marker_summary_label.setText(f"{len(selected_scene)} object(s) selected. Alt-click removed {primitive_name}.")
             return True
         if modifiers & QtCore.Qt.ShiftModifier:
-            selected = self.selected_room_primitives()
-            if key not in selected:
-                selected.append(key)
-            self.set_selected_room_primitives(selected)
-            self.roomPrimitivesSelected.emit(selected)
+            if item_id not in selected_scene:
+                selected_scene.append(item_id)
+            self.set_map_studio_scene_selection_ids(selected_scene)
+            self.itemsSelected.emit(tuple(selected_scene))
             self._room_primitive_drag = None
-            self.marker_summary_label.setText(f"{len(selected)} object(s) selected. Drag any selected object to move the group.")
+            self.marker_summary_label.setText(f"{len(selected_scene)} object(s) selected. Drag any selected object to move the group.")
             return True
-        selected = self.selected_room_primitives()
+        if item_id not in selected_scene:
+            selected_scene = [item_id]
+        self.set_map_studio_scene_selection_ids(selected_scene)
+        selected = [
+            identity
+            for identity in (
+                self._map_studio_primitive_identity_from_item_id(value) for value in selected_scene
+            )
+            if identity is not None
+        ]
+        placement_selection = [value for value in selected_scene if value in self._placement_markers]
         # Clicking an already-selected object keeps the complete selection,
         # matching Maya/Unreal group manipulation.  Clicking outside it starts
         # a new selection.
         if key not in selected:
             selected = [key]
+            selected_scene = [item_id]
+            placement_selection = []
+            self.set_map_studio_scene_selection_ids(selected_scene)
         self.set_selected_room_primitives(selected)
+        if len(selected_scene) > 1:
+            self.itemsSelected.emit(tuple(selected_scene))
+        else:
+            self.roomPrimitiveSelected.emit(room_resref, primitive_name)
+            self.roomPrimitivesSelected.emit(tuple(selected))
         preview_baselines, group_pivot = self._capture_room_primitive_drag_preview(selected)
         if not preview_baselines:
             group_pivot = tuple(float(value) for value in world_center[:3])
+        mode = self.transform_gizmo_mode()
+        if placement_selection and mode != "translate":
+            mode = "translate"
+            self.set_transform_gizmo_mode("translate", announce=False)
         self._room_primitive_drag = {
             "room_resref": room_resref,
             "primitive_name": primitive_name,
             "selection": tuple(selected),
+            "scene_selection": tuple(selected_scene),
+            "placement_selection": tuple(placement_selection),
             "start_screen": start_screen,
             "start_center": group_pivot,
             "start_center_screen": self._project_world_to_screen(group_pivot),
             "group_pivot": group_pivot,
             "preview_baselines": preview_baselines,
-            "mode": self.transform_gizmo_mode(),
+            "placement_preview_baselines": tuple(
+                {
+                    "placement_id": selected_id,
+                    "node": self._placement_preview_node(selected_id),
+                    "node_position": tuple(
+                        getattr(
+                            self._placement_preview_node(selected_id),
+                            "position",
+                            self._marker_position(self._placement_markers[selected_id]),
+                        )
+                        or self._marker_position(self._placement_markers[selected_id])
+                    ),
+                }
+                for selected_id in placement_selection
+                if selected_id in self._placement_markers
+            ),
+            "mode": mode,
             "active": False,
             "pending_delta": (0.0, 0.0, 0.0),
             "pending_rotation_delta_degrees": 0.0,
             "pending_scale_multiplier": (1.0, 1.0, 1.0),
         }
-        self.roomPrimitiveSelected.emit(room_resref, primitive_name)
-        self.roomPrimitivesSelected.emit(tuple(selected))
         self._sync_clean_viewport_presentation()
         return True
 
@@ -9552,12 +9665,25 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             node.rotation = self._quat_multiply_xyzw(z_rotation, start_rotation)
         else:
             delta = tuple(drag.get("pending_delta", (0.0, 0.0, 0.0)))
-            for baseline in tuple(drag.get("preview_baselines", ()) or ()):
+            placement_baselines = tuple(drag.get("preview_baselines", ()) or ())
+            if not placement_baselines and node is not None:
+                node.position = tuple(drag.get("pending_position", getattr(node, "position", (0.0, 0.0, 0.0))))
+            for baseline in placement_baselines:
                 preview_node = baseline.get("node")
                 if preview_node is None:
                     continue
                 start = tuple(baseline.get("node_position", (0.0, 0.0, 0.0)))
                 preview_node.position = tuple(float(start[index]) + float(delta[index]) for index in range(3))
+            primitive_baselines = tuple(drag.get("primitive_preview_baselines", ()) or ())
+            if primitive_baselines:
+                self._apply_room_primitive_drag_preview(
+                    {
+                        "preview_baselines": primitive_baselines,
+                        "mode": "translate",
+                        "group_pivot": tuple(drag.get("primitive_group_pivot", (0.0, 0.0, 0.0))),
+                        "pending_delta": delta,
+                    }
+                )
         # The hover buckets include model-space positions, so invalidate them
         # while the lightweight proxy moves.  This is far cheaper than the old
         # broad _refresh_all on every mouse frame.
@@ -9587,6 +9713,19 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
         # this preview on success or rolls it back on failure.  If no receiver
         # handled the signal, the fallback below restores the baseline.
         self._pending_room_primitive_commit_preview = drag
+        placement_selection = tuple(drag.get("placement_selection", ()) or ())
+        if placement_selection and mode == "translate":
+            self.sceneObjectsTranslated.emit(
+                {
+                    "item_ids": tuple(drag.get("scene_selection", ()) or ()),
+                    "placement_ids": placement_selection,
+                    "primitive_selections": selection,
+                    "world_delta": tuple(drag.get("pending_delta", (0.0, 0.0, 0.0))),
+                }
+            )
+            if self._pending_room_primitive_commit_preview is drag:
+                self.cancel_pending_room_primitive_commit_preview()
+            return True
         if len(selection) > 1:
             self.roomPrimitivesTransformCommitted.emit(
                 {

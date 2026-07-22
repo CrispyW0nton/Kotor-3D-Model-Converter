@@ -9921,6 +9921,88 @@ class ModuleEditorController:
         self.model.log(f"Removed {len(removed)} selected Map Studio objects; previous exports/proofs are now stale.")
         return tuple(removed)
 
+    def remove_map_studio_scene_objects(
+        self,
+        *,
+        primitive_selections: Any = (),
+        placement_ids: Any = (),
+    ) -> tuple[tuple[tuple[str, str], ...], tuple[str, ...]]:
+        """Delete a mixed viewport/Outliner selection as one undoable edit."""
+
+        primitives = tuple(
+            dict.fromkeys(
+                (str(room or "").strip(), str(name or "").strip())
+                for room, name in tuple(primitive_selections or ())
+                if str(room or "").strip() and str(name or "").strip()
+            )
+        )
+        placements = tuple(
+            dict.fromkeys(
+                str(value or "").strip()
+                for value in tuple(placement_ids or ())
+                if str(value or "").strip()
+            )
+        )
+        if not primitives and not placements:
+            return (), ()
+        for placement_id in placements:
+            if placement_id != "entry_point":
+                parse_authored_gameplay_placement_id(placement_id)
+        payload = (getattr(self.project, "extra_sections", {}) or {}).get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        before = self._capture_map_studio_command_state()
+        removed_primitives: list[tuple[str, str]] = []
+        for room_resref, primitive_name in primitives:
+            try:
+                authored = remove_authored_room_composition_primitive(
+                    authored,
+                    room_resref=room_resref,
+                    primitive_name=primitive_name,
+                )
+            except Exception as exc:
+                self.model.log(f"Map Studio object {room_resref}/{primitive_name} could not be removed: {exc}")
+                continue
+            removed_primitives.append((room_resref, primitive_name))
+        removed_placements: list[str] = []
+        for placement_id in placements:
+            try:
+                if placement_id == "entry_point":
+                    if not str(authored.placements.entry_point.area_resref or "").strip():
+                        continue
+                    authored = remove_authored_module_entry_point(authored).project
+                else:
+                    authored = remove_authored_gameplay_placement(authored, placement_id).project
+            except Exception as exc:
+                self.model.log(f"Map Studio placement {placement_id} could not be removed: {exc}")
+                continue
+            removed_placements.append(placement_id)
+        if not removed_primitives and not removed_placements:
+            return (), ()
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(authored)
+        self.project.name = authored.metadata.module_root
+        self.project.game = authored.game
+        self.project.dirty = True
+        removed_count = len(removed_primitives) + len(removed_placements)
+        self._record_map_studio_command(
+            action_key="map_studio.scene.remove_objects",
+            label=f"Remove {removed_count} scene objects",
+            before=before,
+            metadata={
+                "primitive_selections": tuple(removed_primitives),
+                "placement_ids": tuple(removed_placements),
+            },
+        )
+        self.model.log(
+            f"Removed {removed_count} mixed Map Studio scene objects; previous exports/proofs are now stale."
+        )
+        return tuple(removed_primitives), tuple(removed_placements)
+
     def separate_authored_room_primitive(
         self,
         *,
@@ -10347,6 +10429,101 @@ class ModuleEditorController:
         )
         self.model.log(f"Moved {len(moved)} Map Studio objects together; previous exports/proofs are now stale.")
         return tuple(moved)
+
+    def translate_map_studio_scene_objects(
+        self,
+        *,
+        primitive_selections: Any = (),
+        placement_ids: Any = (),
+        world_delta: Any = (0.0, 0.0, 0.0),
+    ) -> tuple[tuple[tuple[str, str], ...], tuple[str, ...]]:
+        """Move a mixed authored-object selection in one KMAP/Undo command."""
+
+        primitives = tuple(
+            dict.fromkeys(
+                (str(room or "").strip(), str(name or "").strip())
+                for room, name in tuple(primitive_selections or ())
+                if str(room or "").strip() and str(name or "").strip()
+            )
+        )
+        placements = tuple(
+            dict.fromkeys(
+                str(value or "").strip()
+                for value in tuple(placement_ids or ())
+                if str(value or "").strip()
+            )
+        )
+        delta = tuple(float(value) for value in tuple(world_delta or ())[:3])
+        if (not primitives and not placements) or len(delta) != 3:
+            return (), ()
+        for placement_id in placements:
+            if placement_id != "entry_point":
+                parse_authored_gameplay_placement_id(placement_id)
+        payload = (getattr(self.project, "extra_sections", {}) or {}).get("authored_module")
+        if payload is None:
+            raise ValueError("No authored Map Studio module is stored in this KMAP. Create or load an authored module first.")
+        authored = authored_project_from_kmap_payload(
+            payload,
+            fallback_name=str(getattr(self.project, "name", "") or "new_level"),
+            fallback_game=str(getattr(self.project, "game", "") or "K1"),
+        )
+        before = self._capture_map_studio_command_state()
+        moved_primitives: tuple[tuple[str, str], ...] = ()
+        if primitives:
+            authored = transform_authored_room_composition_primitives(
+                authored,
+                selections=primitives,
+                mode="translate",
+                world_delta=delta,
+                world_pivot=(0.0, 0.0, 0.0),
+            )
+            moved_primitives = primitives
+        rows = {row.placement_id: row for row in authored_gameplay_placement_rows(authored)}
+        moved_placements: list[str] = []
+        for placement_id in placements:
+            if placement_id == "entry_point":
+                entry = authored.placements.entry_point
+                if not str(entry.area_resref or "").strip():
+                    continue
+                authored = update_authored_module_entry_point(
+                    authored,
+                    area_resref=str(entry.area_resref),
+                    position=tuple(float(entry.position[index]) + delta[index] for index in range(3)),
+                    facing=float(entry.facing),
+                ).project
+                moved_placements.append(placement_id)
+                continue
+            row = rows.get(placement_id)
+            if row is None or not bool(row.is_spatial):
+                continue
+            authored = update_authored_gameplay_placement_transform(
+                authored,
+                placement_id,
+                position=tuple(float(row.position[index]) + delta[index] for index in range(3)),
+                bearing=float(row.bearing),
+            ).project
+            moved_placements.append(placement_id)
+        if not moved_primitives and not moved_placements:
+            return (), ()
+        self.project.extra_sections["authored_module"] = authored_project_to_kmap_payload(authored)
+        self.project.name = authored.metadata.module_root
+        self.project.game = authored.game
+        self.project.dirty = True
+        moved_count = len(moved_primitives) + len(moved_placements)
+        self._record_map_studio_command(
+            action_key="map_studio.scene.move_objects",
+            label=f"Move {moved_count} scene objects",
+            before=before,
+            metadata={
+                "primitive_selections": moved_primitives,
+                "placement_ids": tuple(moved_placements),
+                "world_delta": delta,
+            },
+        )
+        self.model.log(
+            f"Moved {moved_count} mixed Map Studio scene objects together; previous exports/proofs are now stale."
+        )
+        return moved_primitives, tuple(moved_placements)
 
     def rename_authored_gameplay_placement(self, placement_id: str, *, tag: Any):
         """Rename one authored gameplay placement by virtual id."""

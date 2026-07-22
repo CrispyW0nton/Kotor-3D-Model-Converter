@@ -4288,6 +4288,8 @@ def test_t2907_direct_building_uses_level_plane_snap_and_universal_transient_ove
     assert "buildingOpeningRequested.connect(self._build_map_studio_opening_from_viewport)" in window_source
     assert "buildingLevelCreateRequested.connect(self._add_map_studio_building_level)" in window_source
     assert "buildingLevelViewChanged.connect(self._apply_map_studio_level_presentation)" in window_source
+    assert "mapStudioOutlinerDeleteSelectionShortcut" in window_source
+    assert 'preserve_multi_delete = action == "delete"' in window_source
     assert "Click to place" in overlay_source
     assert 'snap_label = str(preview.get("snap_label") or "")' in overlay_source
     assert "multi_opening_fill" in _read(

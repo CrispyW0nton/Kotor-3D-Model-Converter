@@ -11,6 +11,48 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-22
 
+### [2026-07-22] T2907 Unified Maya-style Map Studio object selection
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio viewport picking, Outliner selection, mixed scene-object
+transforms/deletion, Player Start preview identity, controller history, and
+embedded Scene/Tools/GUI Display payloads.
+
+Map Studio now treats authored room/terrain kit pieces, gameplay placements,
+and Player Start as one scene selection. Shift-click adds an individual object
+without Qt's range-selection behavior, Alt-click removes only the clicked
+object, and the same rules work in the viewport and Outliner. A mixed
+selection moves through one grouped transform transaction and Delete removes
+all supported selected objects through one undo record. Delete is now active
+while keyboard focus is in either the viewport or Outliner, and Outliner
+context-menu deletion preserves the whole multi-selection.
+
+The visible Player Start body and attached head retain one shared placement
+identity, so clicking or dragging either resolves to the Player Start root;
+body/head pieces can no longer be transformed independently. Removing Player
+Start updates the IFO-backed entry point and immediately reports that module
+export is blocked until a replacement start is set.
+
+Intersects: the T2907 Pascal building/terrain-kit work on `ghost-studio` and
+the existing authored-gameplay placement workflow; room geometry, placement
+serialization, and previous selection behavior for non-scene resources were
+preserved.
+
+Verification: changed Python files compile; focused viewport Shift/Alt,
+Outliner Shift/Alt, atomic Player Start transform, mixed move/delete/undo, and
+Map Studio workflow-contract checks pass; all 22 native payload contract tests
+pass. Scene, Tools, and GUI Display Debug x64 DLLs were rebuilt and all 18
+manifest payload DLLs staged. In the staged GhostStudio application, clicking
+the rendered Player Start selected one character proxy, dragging moved the
+complete character, Shift-click selected a room wall plus Player Start,
+Alt-click removed only Player Start, Outliner-focused Delete removed the wall
+and Player Start together (`Removed 2 selected scene object(s)`), and one Undo
+restored both. Manual captures are in `artifacts/map_studio_proof/`, including
+`player_model_clicked_atomic.png`, `player_start_moved_atomic.png`,
+`rebuilt_shift_add_outliner.png`, `rebuilt_alt_remove_outliner.png`,
+`final_wall_player_deleted.png`, and `final_wall_player_undo_restored.png`.
+
 ### [2026-07-22] T2907 Persistent multi-level Pascal building stacks
 
 Owner: LordVaderCW

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from src.core.level import KMapProject
 
@@ -274,13 +274,35 @@ class ModuleEditorOutliner(QtWidgets.QTreeWidget):
             for item in self.selectedItems()
             if str(item.data(0, QtCore.Qt.UserRole) or "")
         ]
+        self.itemsSelected.emit(selected_ids)
         if not selected_ids:
             return
-        self.itemsSelected.emit(selected_ids)
         current = self.currentItem()
         item_id = str(current.data(0, QtCore.Qt.UserRole) or "") if current is not None else selected_ids[-1]
         if len(selected_ids) == 1:
             self.itemSelected.emit(item_id or selected_ids[-1])
+
+    def mousePressEvent(self, event: QtGui.QMouseEvent) -> None:  # noqa: N802 - Qt API
+        """Use Maya-style add/remove clicks instead of Qt's range selection."""
+
+        if event.button() == QtCore.Qt.LeftButton:
+            point = event.position().toPoint()
+            item = self.itemAt(point)
+            modifiers = event.modifiers()
+            if item is not None and modifiers & (QtCore.Qt.ShiftModifier | QtCore.Qt.AltModifier):
+                blocked = self.blockSignals(True)
+                try:
+                    if modifiers & QtCore.Qt.AltModifier:
+                        item.setSelected(False)
+                    else:
+                        item.setSelected(True)
+                        self.setCurrentItem(item, 0, QtCore.QItemSelectionModel.NoUpdate)
+                finally:
+                    self.blockSignals(blocked)
+                event.accept()
+                self._selection_changed()
+                return
+        super().mousePressEvent(event)
 
     def _item_changed(self, item: QtWidgets.QTreeWidgetItem, _column: int) -> None:
         item_id = str(item.data(0, QtCore.Qt.UserRole) or "")

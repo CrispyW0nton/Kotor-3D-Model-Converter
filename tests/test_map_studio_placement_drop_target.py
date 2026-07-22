@@ -606,6 +606,79 @@ def test_player_start_model_is_selectable_and_commits_ifo_transform() -> None:
         app.processEvents()
 
 
+def test_maya_shift_and_alt_click_share_selection_between_kit_piece_and_player_start() -> None:
+    _configure_native_python_roots()
+    from PySide6 import QtCore, QtWidgets
+    from src.gui.panels.module_editor.module_editor_viewport_panel import ModuleEditorViewportPanel
+
+    class _Click:
+        def __init__(self, modifier):
+            self._modifier = modifier
+
+        def modifiers(self):
+            return self._modifier
+
+        def position(self):
+            return QtCore.QPointF(10.0, 10.0)
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    panel = ModuleEditorViewportPanel()
+    marker = SimpleNamespace(placement_id="entry_point", position=(0.0, 0.0, 0.0), bearing=0.0)
+    primitive_id = "authored_primitive:grmixed_room01:terrain_rock"
+    emitted: list[tuple[str, ...]] = []
+    panel.itemsSelected.connect(lambda values: emitted.append(tuple(values)))
+    try:
+        panel._placement_markers = {"entry_point": marker}
+        panel.set_map_studio_scene_selection_ids((primitive_id,))
+
+        assert panel._begin_marker_drag("entry_point", _Click(QtCore.Qt.ShiftModifier)) is True
+        assert emitted[-1] == (primitive_id, "entry_point")
+        assert panel.map_studio_scene_selection_ids() == [primitive_id, "entry_point"]
+
+        assert panel._begin_marker_drag("entry_point", _Click(QtCore.Qt.AltModifier)) is True
+        assert emitted[-1] == (primitive_id,)
+        assert panel.map_studio_scene_selection_ids() == [primitive_id]
+    finally:
+        panel.close()
+        panel.deleteLater()
+        app.processEvents()
+
+
+def test_outliner_shift_adds_and_alt_removes_without_selecting_a_range() -> None:
+    _configure_native_python_roots()
+    from PySide6 import QtCore, QtTest, QtWidgets
+    from src.gui.panels.module_editor.module_editor_outliner import ModuleEditorOutliner
+
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    outliner = ModuleEditorOutliner()
+    floor = outliner._item("Floor", "authored_primitive:room01:floor", "authored_primitive")
+    wall = outliner._item("Wall", "authored_primitive:room01:wall", "authored_primitive")
+    player = outliner._item("Player Start", "entry_point", "authored_entry_point")
+    outliner.addTopLevelItems((floor, wall, player))
+    emitted: list[tuple[str, ...]] = []
+    outliner.itemsSelected.connect(lambda values: emitted.append(tuple(values)))
+    try:
+        outliner.resize(360, 240)
+        outliner.show()
+        app.processEvents()
+        viewport = outliner.viewport()
+        QtTest.QTest.mouseClick(viewport, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, outliner.visualItemRect(floor).center())
+        QtTest.QTest.mouseClick(viewport, QtCore.Qt.LeftButton, QtCore.Qt.ShiftModifier, outliner.visualItemRect(player).center())
+
+        assert set(emitted[-1]) == {"authored_primitive:room01:floor", "entry_point"}
+        assert wall.isSelected() is False
+
+        QtTest.QTest.mouseClick(viewport, QtCore.Qt.LeftButton, QtCore.Qt.AltModifier, outliner.visualItemRect(player).center())
+
+        assert emitted[-1] == ("authored_primitive:room01:floor",)
+        assert floor.isSelected() is True
+        assert player.isSelected() is False
+    finally:
+        outliner.close()
+        outliner.deleteLater()
+        app.processEvents()
+
+
 def test_outliner_light_selection_binds_gizmo_and_commits_position() -> None:
     _configure_native_python_roots()
     from PySide6 import QtWidgets
