@@ -6319,6 +6319,71 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             return ""
         return str(marker_at_screen(float(pos.x()), float(pos.y())) or "")
 
+    def set_pascal_building_level_presentation(
+        self,
+        presentation: object,
+        room_levels: object,
+    ) -> None:
+        """Apply stacked/exploded/solo state without mutating authored KMAP coordinates."""
+
+        values = dict(presentation) if isinstance(presentation, Mapping) else {}
+        mapping = {
+            str(room or "").strip().lower(): int(level)
+            for room, level in (dict(room_levels).items() if isinstance(room_levels, Mapping) else ())
+            if str(room or "").strip()
+        }
+        mode = str(values.get("mode") or "stacked").strip().lower()
+        if mode not in {"stacked", "exploded", "solo"}:
+            mode = "stacked"
+        active_level = int(values.get("active_level_index", 0) or 0)
+        gap = max(0.0, float(values.get("exploded_gap", 1.5) or 0.0))
+        ranks = {level: rank for rank, level in enumerate(sorted(set(mapping.values())))}
+        root = getattr(getattr(self, "_room_preview_model", None), "root_node", None)
+        for room_node in tuple(getattr(root, "children", ()) or ()):
+            room_resref = str(getattr(room_node, "_gr_map_studio_room_resref", "") or "").strip().lower()
+            if room_resref not in mapping:
+                continue
+            level = mapping[room_resref]
+            if not hasattr(room_node, "_gr_map_studio_level_base_position"):
+                setattr(
+                    room_node,
+                    "_gr_map_studio_level_base_position",
+                    tuple(float(value) for value in tuple(getattr(room_node, "position", (0.0, 0.0, 0.0)))[:3]),
+                )
+            base = tuple(getattr(room_node, "_gr_map_studio_level_base_position", (0.0, 0.0, 0.0)))
+            if len(base) < 3:
+                base = (0.0, 0.0, 0.0)
+            offset = gap * float(ranks.get(level, 0)) if mode == "exploded" else 0.0
+            room_node.position = (float(base[0]), float(base[1]), float(base[2]) + offset)
+            hide_level = mode == "solo" and level != active_level
+            stack = [room_node]
+            while stack:
+                node = stack.pop()
+                stack.extend(tuple(getattr(node, "children", ()) or ()))
+                if not hasattr(node, "_gr_map_studio_level_base_hidden"):
+                    setattr(node, "_gr_map_studio_level_base_hidden", bool(getattr(node, "_gr_hidden", False)))
+                hidden = bool(getattr(node, "_gr_map_studio_level_base_hidden", False)) or hide_level
+                if bool(getattr(node, "_gr_hidden", False)) != hidden:
+                    setattr(node, "_gr_hidden", hidden)
+                    setattr(node, "_gr_revision", int(getattr(node, "_gr_revision", 0) or 0) + 1)
+            setattr(room_node, "_gr_revision", int(getattr(room_node, "_gr_revision", 0) or 0) + 1)
+        payload = {
+            "mode": mode,
+            "active_level_index": active_level,
+            "exploded_gap": gap,
+            "room_levels": mapping,
+        }
+        self._pascal_building_level_presentation = payload
+        setter = getattr(self.viewport, "set_map_studio_level_presentation", None)
+        if callable(setter):
+            setter(payload)
+        self._hover_candidate_cache_key = None
+        self._hover_candidate_cache = []
+        self._hover_candidate_grid = {}
+        request = getattr(self.viewport, "_request_render", None)
+        if callable(request):
+            request(fast=True, reason=f"Map Studio level view: {mode}", resources=True, overlay=True, hud=True)
+
     def set_pascal_building_tool(self, tool: str, settings: object | None = None) -> None:
         """Activate direct room/wall authoring without coupling the viewport to KMAP IO."""
 
@@ -6722,6 +6787,15 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
             if str(getattr(polygon, "role", "") or "").strip().lower() != "floor":
                 continue
             room_resref = str(getattr(polygon, "room_resref", "") or "")
+            level_presentation = dict(getattr(self, "_pascal_building_level_presentation", {}) or {})
+            room_levels = dict(level_presentation.get("room_levels") or {})
+            if (
+                str(level_presentation.get("mode") or "stacked") == "solo"
+                and room_resref.strip().lower() in room_levels
+                and int(room_levels[room_resref.strip().lower()])
+                != int(level_presentation.get("active_level_index", 0) or 0)
+            ):
+                continue
             points = tuple(tuple(float(value) for value in tuple(point)[:3]) for point in tuple(getattr(polygon, "points", ()) or ()))
             if not room_resref or len(points) < 3 or any(len(point) < 3 for point in points):
                 continue
@@ -7708,12 +7782,16 @@ class ModuleEditorViewportPanel(QtWidgets.QWidget):
                 # a component-modeling face/edge/vertex hover.
                 if bool(getattr(room_node, "_gr_map_studio_backdrop", False)):
                     continue
+                if bool(getattr(room_node, "_gr_hidden", False)):
+                    continue
                 offset = tuple(getattr(room_node, "position", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
                 if len(offset) < 3:
                     offset = (0.0, 0.0, 0.0)
                 room_resref = str(getattr(room_node, "_gr_map_studio_room_resref", "") or "")
                 for mesh_node in tuple(getattr(room_node, "children", ()) or ()):
                     if bool(getattr(mesh_node, "_gr_map_studio_backdrop", False)):
+                        continue
+                    if bool(getattr(mesh_node, "_gr_hidden", False)):
                         continue
                     vertices = tuple(getattr(mesh_node, "vertices", ()) or ())
                     faces = tuple(getattr(mesh_node, "faces", ()) or ())

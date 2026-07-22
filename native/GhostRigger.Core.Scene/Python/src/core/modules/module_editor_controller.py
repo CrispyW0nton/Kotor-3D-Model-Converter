@@ -206,6 +206,7 @@ from .map_studio_pascal_building import (
     pascal_building_levels as pascal_building_levels_for_project,
     preview_pascal_building_opening,
     scan_vanilla_pascal_building_styles,
+    set_pascal_building_level as set_pascal_building_level_in_project,
     set_pascal_building_opening as set_pascal_building_opening_in_project,
     vanilla_pascal_building_styles,
     write_vanilla_pascal_style_catalog,
@@ -3126,6 +3127,66 @@ class ModuleEditorController:
         path = write_vanilla_environment_kit_catalog(retained + collections)
         return self.available_map_studio_environment_kit_pieces(), str(path)
 
+    def _map_studio_building_project(self):
+        """Return the authored module, creating the lightweight KMAP owner when needed."""
+
+        authored = self._map_studio_authored_project_snapshot()
+        if authored is not None:
+            return authored
+        from .authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
+        from .authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject
+
+        root = normalise_resref(str(getattr(self.project, "name", "") or "")) or "grbuild"
+        return AuthoredModuleProject(
+            metadata=AuthoredModuleMetadata(
+                module_root=root,
+                game=str(getattr(self.project, "game", "K1") or "K1").upper(),
+                display_name=f"{root} authored map",
+                tag=root,
+            ),
+            rooms=(),
+            placements=AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref=root)),
+        )
+
+    def add_map_studio_building_level(
+        self,
+        *,
+        level_index: int,
+        name: str = "",
+        floor_z: float = 0.0,
+        floor_to_floor_height: float = 3.0,
+    ) -> int:
+        """Persist an empty or occupied level as one undoable authoring action."""
+
+        authored = self._map_studio_building_project()
+        before = self._capture_map_studio_command_state()
+        updated = set_pascal_building_level_in_project(
+            authored,
+            level_index=int(level_index),
+            name=str(name or f"Level {int(level_index) + 1}"),
+            floor_z=float(floor_z),
+            floor_to_floor_height=float(floor_to_floor_height),
+        )
+        self._store_authored_project(updated)
+        self.model.log(
+            f"Added {name or f'Level {int(level_index) + 1}'} at {float(floor_z):.2f} m; "
+            "the level is authoring state until rooms are drawn on it."
+        )
+        self._record_map_studio_command(
+            action_key="map_studio.building.level.create",
+            label=f"Add {name or f'Level {int(level_index) + 1}'}",
+            before=before,
+            stale_outputs=(),
+            readiness_impact="presentation-only level definition",
+            metadata={
+                "level_index": int(level_index),
+                "name": str(name or f"Level {int(level_index) + 1}"),
+                "floor_z": float(floor_z),
+                "floor_to_floor_height": float(floor_to_floor_height),
+            },
+        )
+        return int(level_index)
+
     def add_map_studio_building_room(
         self,
         *,
@@ -3144,22 +3205,7 @@ class ModuleEditorController:
     ) -> str:
         """Create one exportable room from a closed direct-wall loop."""
 
-        authored = self._map_studio_authored_project_snapshot()
-        if authored is None:
-            from .authored_module_objects import AuthoredGameplayPlacement, ModuleEntryPoint
-            from .authored_module_project import AuthoredModuleMetadata, AuthoredModuleProject
-
-            root = normalise_resref(str(getattr(self.project, "name", "") or "")) or "grbuild"
-            authored = AuthoredModuleProject(
-                metadata=AuthoredModuleMetadata(
-                    module_root=root,
-                    game=str(getattr(self.project, "game", "K1") or "K1").upper(),
-                    display_name=f"{root} authored map",
-                    tag=root,
-                ),
-                rooms=(),
-                placements=AuthoredGameplayPlacement(entry_point=ModuleEntryPoint(area_resref=root)),
-            )
+        authored = self._map_studio_building_project()
         styles = {style.style_id: style for style in available_pascal_building_styles(authored.game)}
         style = styles.get(str(style_id or "")) or next(iter(styles.values()))
         before = self._capture_map_studio_command_state()

@@ -53,6 +53,8 @@ class BuilderTab(QtWidgets.QWidget):
     buildingToolChanged = QtCore.Signal(str)
     buildingSettingsChanged = QtCore.Signal(object)
     buildingStyleChanged = QtCore.Signal(str, str)
+    buildingLevelCreateRequested = QtCore.Signal(object)
+    buildingLevelViewChanged = QtCore.Signal(object)
     browseVanillaRoomKitsRequested = QtCore.Signal()
 
     ACTIONS = (
@@ -178,11 +180,22 @@ class BuilderTab(QtWidgets.QWidget):
         self.buildingLevelComboBox.addItem("Level 1 (0.00 m)", {"index": 0, "name": "Level 1", "floor_z": 0.0})
         self.addBuildingLevelButton = QtWidgets.QPushButton("Add Level", building_box)
         self.addBuildingLevelButton.setObjectName("mapStudioAddBuildingLevelButton")
+        self.addBuildingLevelButton.setToolTip(
+            "Create a persistent level directly above the selected level using the current floor-to-floor height."
+        )
         level_row = QtWidgets.QWidget(building_box)
         level_row_layout = QtWidgets.QHBoxLayout(level_row)
         level_row_layout.setContentsMargins(0, 0, 0, 0)
         level_row_layout.addWidget(self.buildingLevelComboBox, 1)
         level_row_layout.addWidget(self.addBuildingLevelButton)
+        self.buildingLevelViewComboBox = QtWidgets.QComboBox(building_box)
+        self.buildingLevelViewComboBox.setObjectName("mapStudioBuildingLevelViewComboBox")
+        self.buildingLevelViewComboBox.addItem("Stacked", "stacked")
+        self.buildingLevelViewComboBox.addItem("Exploded", "exploded")
+        self.buildingLevelViewComboBox.addItem("Solo active level", "solo")
+        self.buildingLevelViewComboBox.setToolTip(
+            "Stacked shows true elevations. Exploded adds a temporary visual gap. Solo hides other levels for precise editing."
+        )
         self.buildingStyleComboBox = QtWidgets.QComboBox(building_box)
         self.buildingStyleComboBox.setObjectName("mapStudioBuildingStyleComboBox")
         self.buildingStyleComboBox.setEditable(True)
@@ -210,6 +223,12 @@ class BuilderTab(QtWidgets.QWidget):
         )
         self.buildingFloorZSpinBox = self._make_transform_spin(
             "mapStudioBuildingFloorZSpinBox", -1000.0, 1000.0, " m", value=0.0, step=0.25
+        )
+        self.buildingFloorToFloorSpinBox = self._make_transform_spin(
+            "mapStudioBuildingFloorToFloorSpinBox", 0.25, 50.0, " m", value=3.0, step=0.25
+        )
+        self.buildingExplodedGapSpinBox = self._make_transform_spin(
+            "mapStudioBuildingExplodedGapSpinBox", 0.25, 25.0, " m", value=1.5, step=0.25
         )
         self.buildingGridSizeSpinBox = self._make_transform_spin(
             "mapStudioBuildingGridSizeSpinBox", 0.05, 10.0, " m", value=0.25, step=0.05
@@ -248,6 +267,7 @@ class BuilderTab(QtWidgets.QWidget):
             "mapStudioBuildingWindowSillSpinBox", 0.0, 20.0, " m", value=1.0, step=0.05
         )
         building_form.addRow("Level:", level_row)
+        building_form.addRow("Level view:", self.buildingLevelViewComboBox)
         building_form.addRow("Build type:", self.buildingKindComboBox)
         building_form.addRow("Module style:", self.buildingStyleComboBox)
         building_layout.addLayout(building_form)
@@ -265,6 +285,8 @@ class BuilderTab(QtWidgets.QWidget):
         building_settings_form.setContentsMargins(0, 0, 0, 0)
         building_settings_form.addRow("Wall height:", self.buildingWallHeightSpinBox)
         building_settings_form.addRow("Floor elevation:", self.buildingFloorZSpinBox)
+        building_settings_form.addRow("Floor-to-floor:", self.buildingFloorToFloorSpinBox)
+        building_settings_form.addRow("Exploded gap:", self.buildingExplodedGapSpinBox)
         building_settings_form.addRow("Grid:", self.buildingGridSizeSpinBox)
         building_settings_form.addRow(self.buildingSnapCheckBox)
         building_settings_form.addRow(self.buildingCeilingCheckBox)
@@ -1261,6 +1283,8 @@ class BuilderTab(QtWidgets.QWidget):
             button.clicked.connect(lambda _checked=False, tool=key: self._emit_building_tool(tool))
         self.addBuildingLevelButton.clicked.connect(self._add_building_level)
         self.buildingLevelComboBox.currentIndexChanged.connect(self._on_building_level_changed)
+        self.buildingLevelViewComboBox.currentIndexChanged.connect(self._emit_building_level_view)
+        self.buildingExplodedGapSpinBox.valueChanged.connect(self._emit_building_level_view)
         self.buildingKindComboBox.currentIndexChanged.connect(self._on_building_kind_changed)
         self.buildingStyleComboBox.currentIndexChanged.connect(self._on_building_style_changed)
         self.buildingRoofTypeComboBox.currentIndexChanged.connect(self._update_building_roof_controls)
@@ -1268,6 +1292,7 @@ class BuilderTab(QtWidgets.QWidget):
             self.buildingStyleComboBox,
             self.buildingWallHeightSpinBox,
             self.buildingFloorZSpinBox,
+            self.buildingFloorToFloorSpinBox,
             self.buildingGridSizeSpinBox,
             self.buildingSnapCheckBox,
             self.buildingCeilingCheckBox,
@@ -1424,6 +1449,9 @@ class BuilderTab(QtWidgets.QWidget):
             "level_index": int(level.get("index", max(0, self.buildingLevelComboBox.currentIndex()))),
             "level_name": str(level.get("name") or self.buildingLevelComboBox.currentText().split(" (")[0]),
             "floor_z": float(self.buildingFloorZSpinBox.value()),
+            "floor_to_floor_height": float(self.buildingFloorToFloorSpinBox.value()),
+            "level_view_mode": str(self.buildingLevelViewComboBox.currentData() or "stacked"),
+            "exploded_gap": float(self.buildingExplodedGapSpinBox.value()),
             "wall_height": float(self.buildingWallHeightSpinBox.value()),
             "grid_size": float(self.buildingGridSizeSpinBox.value()),
             "snap_to_grid": bool(self.buildingSnapCheckBox.isChecked()),
@@ -1444,6 +1472,10 @@ class BuilderTab(QtWidgets.QWidget):
 
     def _emit_building_tool(self, tool: str) -> None:
         key = str(tool or "select").strip().lower()
+        if key != "select" and str(self.buildingLevelViewComboBox.currentData() or "stacked") == "exploded":
+            solo_index = self.buildingLevelViewComboBox.findData("solo")
+            if solo_index >= 0:
+                self.buildingLevelViewComboBox.setCurrentIndex(solo_index)
         self.buildingStatusLabel.setText(
             "Click successive floor points; click the first point to close and build the room. Esc cancels, Backspace removes the last point."
             if key == "walls"
@@ -1459,7 +1491,31 @@ class BuilderTab(QtWidgets.QWidget):
         self.buildingFloorZSpinBox.blockSignals(True)
         self.buildingFloorZSpinBox.setValue(float(level.get("floor_z", 0.0) or 0.0))
         self.buildingFloorZSpinBox.blockSignals(False)
+        self.buildingFloorToFloorSpinBox.blockSignals(True)
+        self.buildingFloorToFloorSpinBox.setValue(float(level.get("floor_to_floor_height", 3.0) or 3.0))
+        self.buildingFloorToFloorSpinBox.blockSignals(False)
         self._emit_building_settings()
+        self._emit_building_level_view()
+
+    def building_level_presentation(self) -> dict[str, object]:
+        level = dict(self.buildingLevelComboBox.currentData() or {})
+        return {
+            "active_level_index": int(level.get("index", max(0, self.buildingLevelComboBox.currentIndex()))),
+            "mode": str(self.buildingLevelViewComboBox.currentData() or "stacked"),
+            "exploded_gap": float(self.buildingExplodedGapSpinBox.value()),
+        }
+
+    def _emit_building_level_view(self, _value: object = None) -> None:
+        payload = self.building_level_presentation()
+        mode = str(payload["mode"])
+        active = int(payload["active_level_index"])
+        self.buildingLevelViewChanged.emit(payload)
+        if mode == "exploded":
+            self.buildingStatusLabel.setText(
+                "Exploded view is a temporary spacing preview; choosing a construction tool switches to Solo for exact editing."
+            )
+        elif mode == "solo":
+            self.buildingStatusLabel.setText(f"Solo: editing Level {active + 1} at its true authored elevation.")
 
     def _apply_default_roof_for_kind(self, kind: str) -> None:
         roof_type = "hip" if str(kind or "").strip().lower() == "exterior" else "none"
@@ -1485,13 +1541,17 @@ class BuilderTab(QtWidgets.QWidget):
             (int(dict(self.buildingLevelComboBox.itemData(index) or {}).get("index", index)) for index in range(self.buildingLevelComboBox.count())),
             default=-1,
         ) + 1
-        floor_z = float(self.buildingFloorZSpinBox.value()) + float(self.buildingWallHeightSpinBox.value())
+        floor_z = float(self.buildingFloorZSpinBox.value()) + float(self.buildingFloorToFloorSpinBox.value())
         name = f"Level {next_index + 1}"
-        self.buildingLevelComboBox.addItem(
-            f"{name} ({floor_z:.2f} m)",
-            {"index": next_index, "name": name, "floor_z": floor_z},
+        self.buildingLevelCreateRequested.emit(
+            {
+                "level_index": next_index,
+                "name": name,
+                "floor_z": floor_z,
+                "floor_to_floor_height": float(self.buildingFloorToFloorSpinBox.value()),
+            }
         )
-        self.buildingLevelComboBox.setCurrentIndex(self.buildingLevelComboBox.count() - 1)
+        self.buildingStatusLabel.setText(f"Adding {name} at {floor_z:.2f} m…")
 
     def set_building_styles(self, styles) -> None:
         preserve = bool(self._buildingStyleRows)
@@ -1582,15 +1642,30 @@ class BuilderTab(QtWidgets.QWidget):
             index = int(getattr(level, "level_index", offset))
             name = str(getattr(level, "name", "") or f"Level {index + 1}")
             floor_z = float(getattr(level, "floor_z", 0.0) or 0.0)
+            floor_to_floor = float(getattr(level, "floor_to_floor_height", 3.0) or 3.0)
+            room_count = len(tuple(getattr(level, "room_resrefs", ()) or ()))
+            room_label = f" · {room_count} room{'s' if room_count != 1 else ''}" if room_count else " · empty"
             self.buildingLevelComboBox.addItem(
-                f"{name} ({floor_z:.2f} m)",
-                {"index": index, "name": name, "floor_z": floor_z},
+                f"{name} ({floor_z:.2f} m){room_label}",
+                {
+                    "index": index,
+                    "name": name,
+                    "floor_z": floor_z,
+                    "floor_to_floor_height": floor_to_floor,
+                    "room_count": room_count,
+                },
             )
             if index == current:
                 selected = offset
         self.buildingLevelComboBox.setCurrentIndex(selected)
         self.buildingLevelComboBox.blockSignals(False)
         self._on_building_level_changed(selected)
+
+    def select_building_level(self, level_index: int) -> None:
+        for offset in range(self.buildingLevelComboBox.count()):
+            if int(dict(self.buildingLevelComboBox.itemData(offset) or {}).get("index", offset)) == int(level_index):
+                self.buildingLevelComboBox.setCurrentIndex(offset)
+                return
 
     def focus_build_section(self, section: str) -> None:
         """Show one of the three task-oriented Build sections."""

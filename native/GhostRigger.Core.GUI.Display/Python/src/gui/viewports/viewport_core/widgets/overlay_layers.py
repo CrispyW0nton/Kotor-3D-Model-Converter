@@ -411,6 +411,32 @@ class ViewportOverlayLayersMixin:
         except Exception as exc:
             log.debug("Map Studio placement marker overlay failed: %s", exc)
 
+    def _map_studio_level_room_presentation(self, room_resref: object) -> tuple[bool, float]:
+        payload = getattr(self, "_map_studio_level_presentation", None)
+        if not isinstance(payload, dict):
+            return (True, 0.0)
+        mapping = dict(payload.get("room_levels") or {})
+        room = str(room_resref or "").strip().lower()
+        if room not in mapping:
+            return (True, 0.0)
+        level = int(mapping[room])
+        mode = str(payload.get("mode") or "stacked")
+        active = int(payload.get("active_level_index", 0) or 0)
+        if mode == "solo":
+            return (level == active, 0.0)
+        if mode == "exploded":
+            ordered = sorted({int(value) for value in mapping.values()})
+            rank = ordered.index(level) if level in ordered else 0
+            return (True, max(0.0, float(payload.get("exploded_gap", 1.5) or 0.0)) * rank)
+        return (True, 0.0)
+
+    @staticmethod
+    def _map_studio_offset_level_point(point: object, z_offset: float) -> tuple[float, float, float]:
+        values = tuple(point or ())
+        if len(values) < 3:
+            return (0.0, 0.0, float(z_offset))
+        return (float(values[0]), float(values[1]), float(values[2]) + float(z_offset))
+
     def _draw_map_studio_room_outlines(self, draw, w: int, h: int) -> None:
         self._map_studio_room_outline_hit_zones = []
         self._map_studio_room_outline_edge_hit_zones = []
@@ -439,7 +465,14 @@ class ViewportOverlayLayersMixin:
             return
         try:
             for polygon in polygons:
-                points = tuple(getattr(polygon, "points", ()) or ())
+                room_resref = getattr(polygon, "room_resref", "")
+                visible, z_offset = self._map_studio_level_room_presentation(room_resref)
+                if not visible:
+                    continue
+                points = tuple(
+                    self._map_studio_offset_level_point(point, z_offset)
+                    for point in tuple(getattr(polygon, "points", ()) or ())
+                )
                 projected = []
                 for point in points:
                     proj = self._map_studio_project_point(point, w, h)
@@ -453,7 +486,6 @@ class ViewportOverlayLayersMixin:
                 color = self._map_studio_marker_rgba(getattr(polygon, "color", ""), 145 if preview_model_loaded else 170 if subtle_outlines else 230)
                 closed = projected + [projected[0]]
                 if role == "floor":
-                    room_resref = getattr(polygon, "room_resref", "")
                     for edge_index, (start_point, end_point, screen_start, screen_end) in enumerate(
                         zip(points, points[1:] + points[:1], projected, projected[1:] + projected[:1])
                     ):
@@ -508,8 +540,17 @@ class ViewportOverlayLayersMixin:
             if not show_render_geometry_overlay:
                 lines = ()
             for guide in lines:
-                start = self._map_studio_project_point(getattr(guide, "start", ()), w, h)
-                end = self._map_studio_project_point(getattr(guide, "end", ()), w, h)
+                visible, z_offset = self._map_studio_level_room_presentation(
+                    getattr(guide, "room_resref", "")
+                )
+                if not visible:
+                    continue
+                start = self._map_studio_project_point(
+                    self._map_studio_offset_level_point(getattr(guide, "start", ()), z_offset), w, h
+                )
+                end = self._map_studio_project_point(
+                    self._map_studio_offset_level_point(getattr(guide, "end", ()), z_offset), w, h
+                )
                 if start is None or end is None:
                     continue
                 color = self._map_studio_marker_rgba(getattr(guide, "color", ""), 220)
@@ -1133,7 +1174,14 @@ class ViewportOverlayLayersMixin:
             for room, name in tuple(getattr(self, "_map_studio_room_primitive_selection", ()) or ())
         }
         for handle in primitive_handles:
-            footprint = tuple(getattr(handle, "footprint", ()) or ())
+            room_resref = getattr(handle, "room_resref", "")
+            visible, z_offset = self._map_studio_level_room_presentation(room_resref)
+            if not visible:
+                continue
+            footprint = tuple(
+                self._map_studio_offset_level_point(point, z_offset)
+                for point in tuple(getattr(handle, "footprint", ()) or ())
+            )
             projected = []
             for point in footprint:
                 proj = self._map_studio_project_point(point, w, h)
@@ -1141,16 +1189,16 @@ class ViewportOverlayLayersMixin:
                     projected = []
                     break
                 projected.append((float(proj[0]), float(proj[1])))
-            center = self._map_studio_project_point(getattr(handle, "center", ()), w, h)
+            offset_center = self._map_studio_offset_level_point(getattr(handle, "center", ()), z_offset)
+            center = self._map_studio_project_point(offset_center, w, h)
             if center is None:
                 continue
             color = self._map_studio_marker_rgba(getattr(handle, "color", "#ff9f43"), 155 if subtle_handles else 235)
-            room_resref = getattr(handle, "room_resref", "")
             primitive_name = getattr(handle, "primitive_name", "")
             is_selected = (str(room_resref or ""), str(primitive_name or "")) in selected
             if is_selected:
                 color = (255, 204, 0, 255)
-            world_center = tuple(getattr(handle, "center", (0.0, 0.0, 0.0)) or (0.0, 0.0, 0.0))
+            world_center = offset_center
             if len(projected) >= 3:
                 closed = projected + [projected[0]]
                 xs = [point[0] for point in projected]

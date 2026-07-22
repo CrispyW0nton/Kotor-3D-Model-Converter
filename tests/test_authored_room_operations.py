@@ -2978,7 +2978,55 @@ def test_t2907_pascal_room_kmap_roundtrip_preserves_surface_materials_and_level(
     assert levels[0].level_index == 1
     assert levels[0].name == "Upper Floor"
     assert levels[0].floor_z == 3.0
+    assert levels[0].floor_to_floor_height == 3.25
     assert restored.placements.entry_point.position == (2.5, 1.5, 3.05)
+
+
+def test_t2907_pascal_empty_levels_persist_and_collect_rooms_without_changing_elevation() -> None:
+    _install_native_payload_paths()
+
+    from src.core.modules.authored_module_kmap_bridge import (
+        authored_project_from_kmap_payload,
+        authored_project_to_kmap_payload,
+    )
+    from src.core.modules.map_studio_pascal_building import pascal_building_levels
+    from src.core.modules.module_editor_controller import ModuleEditorController
+
+    controller = ModuleEditorController()
+    controller.new_project(name="grlevels", game="K2")
+    controller.add_map_studio_building_level(
+        level_index=1,
+        name="Upper Deck",
+        floor_z=3.5,
+        floor_to_floor_height=3.5,
+    )
+    empty_levels = controller.map_studio_building_levels()
+
+    assert [(level.level_index, level.floor_z) for level in empty_levels] == [(0, 0.0), (1, 3.5)]
+    assert empty_levels[1].name == "Upper Deck"
+    assert empty_levels[1].floor_to_floor_height == 3.5
+    assert empty_levels[1].room_resrefs == ()
+    assert controller.command_history.undo_stack[-1].action_key == "map_studio.building.level.create"
+
+    room_resref = controller.add_map_studio_building_room(
+        points=((0.0, 0.0), (4.0, 0.0), (4.0, 3.0), (0.0, 3.0)),
+        floor_z=3.5,
+        wall_height=3.25,
+        level_index=1,
+        level_name="Upper Deck",
+    )
+    authored = authored_project_from_kmap_payload(controller.project.extra_sections["authored_module"])
+    restored = authored_project_from_kmap_payload(authored_project_to_kmap_payload(authored))
+    restored_levels = pascal_building_levels(restored)
+
+    assert restored.rooms[0].primitive.z == 3.5
+    assert restored.extra["pascal_building_levels"][1]["floor_z"] == 3.5
+    assert restored_levels[1].room_resrefs == (room_resref,)
+    assert restored_levels[1].floor_to_floor_height == 3.5
+    assert [record.action_key for record in controller.command_history.undo_stack] == [
+        "map_studio.building.level.create",
+        "map_studio.building.room.create",
+    ]
 
 
 def test_t2907_controller_builds_room_and_door_as_two_undoable_actions() -> None:

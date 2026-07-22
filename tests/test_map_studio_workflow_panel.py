@@ -4182,11 +4182,31 @@ def test_t2907_direct_building_replaces_primary_room_wall_of_controls() -> None:
 
         tools: list[str] = []
         settings: list[dict[str, object]] = []
+        level_requests: list[dict[str, object]] = []
+        level_views: list[dict[str, object]] = []
         builder.buildingToolChanged.connect(tools.append)
         builder.buildingSettingsChanged.connect(lambda value: settings.append(dict(value)))
+        builder.buildingLevelCreateRequested.connect(lambda value: level_requests.append(dict(value)))
+        builder.buildingLevelViewChanged.connect(lambda value: level_views.append(dict(value)))
         builder.buildingToolButtons["walls"].click()
         builder.buildingWallHeightSpinBox.setValue(3.5)
+        builder.buildingFloorToFloorSpinBox.setValue(3.5)
         builder.addBuildingLevelButton.click()
+        assert level_requests == [
+            {
+                "level_index": 1,
+                "name": "Level 2",
+                "floor_z": 3.5,
+                "floor_to_floor_height": 3.5,
+            }
+        ]
+        builder.set_building_levels(
+            (
+                SimpleNamespace(level_index=0, name="Level 1", floor_z=0.0, floor_to_floor_height=3.5, room_resrefs=()),
+                SimpleNamespace(level_index=1, name="Level 2", floor_z=3.5, floor_to_floor_height=3.5, room_resrefs=()),
+            )
+        )
+        builder.select_building_level(1)
 
         assert tools == ["walls"]
         assert settings[-1]["level_index"] == 1
@@ -4197,6 +4217,15 @@ def test_t2907_direct_building_replaces_primary_room_wall_of_controls() -> None:
         assert settings[-1]["building_kind"] == "interior"
         assert settings[-1]["roof_type"] == "none"
         assert settings[-1]["style_id"] == "plcaa_graybox"
+        assert settings[-1]["floor_to_floor_height"] == 3.5
+
+        exploded_index = builder.buildingLevelViewComboBox.findData("exploded")
+        builder.buildingLevelViewComboBox.setCurrentIndex(exploded_index)
+        assert level_views[-1]["mode"] == "exploded"
+        builder.buildingToolButtons["select"].click()
+        builder.buildingToolButtons["walls"].click()
+        assert builder.buildingLevelViewComboBox.currentData() == "solo"
+        assert level_views[-1]["active_level_index"] == 1
 
         exterior_index = builder.buildingKindComboBox.findData("exterior")
         builder.buildingKindComboBox.setCurrentIndex(exterior_index)
@@ -4227,6 +4256,7 @@ def test_t2907_direct_building_uses_level_plane_snap_and_universal_transient_ove
             "buildingRoomRequested = QtCore.Signal(object)",
             "buildingOpeningRequested = QtCore.Signal(object)",
             "buildingOpeningPreviewRequested = QtCore.Signal(object)",
+            "def set_pascal_building_level_presentation",
             "def set_pascal_building_tool",
             "def set_pascal_building_opening_preview",
             "def _building_world_at_event",
@@ -4243,6 +4273,9 @@ def test_t2907_direct_building_uses_level_plane_snap_and_universal_transient_ove
         ):
             assert token in source
     assert "def _draw_map_studio_building_preview" in overlay_source
+    assert "def _map_studio_level_room_presentation" in overlay_source
+    assert 'mode == "solo"' in overlay_source
+    assert 'mode == "exploded"' in overlay_source
     compositor = rendering_source[
         rendering_source.index("def _draw_gpu_viewport_overlays") :
         rendering_source.index("def _draw_renderer_statistics_overlay")
@@ -4253,6 +4286,8 @@ def test_t2907_direct_building_uses_level_plane_snap_and_universal_transient_ove
     assert "buildingOpeningPreviewRequested.connect(" in window_source
     assert "def _preview_map_studio_opening_from_viewport" in window_source
     assert "buildingOpeningRequested.connect(self._build_map_studio_opening_from_viewport)" in window_source
+    assert "buildingLevelCreateRequested.connect(self._add_map_studio_building_level)" in window_source
+    assert "buildingLevelViewChanged.connect(self._apply_map_studio_level_presentation)" in window_source
     assert "Click to place" in overlay_source
     assert 'snap_label = str(preview.get("snap_label") or "")' in overlay_source
     assert "multi_opening_fill" in _read(

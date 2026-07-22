@@ -11,6 +11,38 @@ For each completed change, add a dated entry with:
 
 ## 2026-07-22
 
+### [2026-07-22] T2907 Persistent multi-level Pascal building stacks
+
+Owner: LordVaderCW
+
+Subsystem: Map Studio Pascal-style building levels, Build workflow controls,
+viewport level presentation, KMAP persistence, controller history, and embedded
+Scene/Tools/GUI Display payloads.
+
+Map Studio now stores explicit building levels with a stable order, true floor
+elevation, and floor-to-floor height even before a room is added. The Room
+Building workflow exposes the active level, adds new levels as one undoable
+authoring command, assigns rooms to the selected level without rewriting their
+coordinates, and offers Stacked, Exploded, and Solo active-level views.
+Exploded and Solo are presentation-only: they offset or hide rendered room
+subtrees without mutating authored geometry, while entering a construction tool
+automatically returns to Solo so wall placement remains spatially exact.
+
+Intersects: the T2907 Pascal environment-kit, semantic wall graph, hosted
+openings, exterior roofs, selection, and terrain authoring work on
+`ghost-studio`; existing KMAP room coordinates and export behavior are
+preserved.
+
+Verification: edited Python files compile; focused domain/controller KMAP
+round-trip, empty-level persistence, Builder widget, and viewport source
+contract checks pass; all 22 native payload contract checks pass. Scene, Tools,
+and GUI Display Debug x64 DLLs were rebuilt and all 18 manifest payload DLLs
+staged. In the staged GhostStudio app, two closed rooms were drawn on Level 1
+(0.00 m) and Level 2 (3.00 m), the Level 2 empty state appeared before drawing,
+Stacked/Exploded/Solo controls updated live, and the saved proof reopened with
+Level 2 selected and both one-room level records intact. The KMAP retained room
+Z values of 0.0 m and 3.0 m without presentation offsets.
+
 ### [2026-07-22] T2907 Semantic wall junction graph and reliable T-junction drawing
 
 Owner: LordVaderCW

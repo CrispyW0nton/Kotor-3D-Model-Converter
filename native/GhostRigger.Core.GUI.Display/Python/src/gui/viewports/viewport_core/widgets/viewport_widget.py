@@ -271,6 +271,7 @@ class QtViewportWidget(
         self._map_studio_room_outline_snap_highlight = None
         self._map_studio_room_outline_edge_highlight = None
         self._map_studio_building_preview = None
+        self._map_studio_level_presentation: dict[str, object] = {}
         self._map_studio_marker_geometry = None
         self._map_studio_terrain_walkability_overlay = None
         self._map_studio_terrain_brush_cursor = None

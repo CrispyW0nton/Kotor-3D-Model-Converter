@@ -423,7 +423,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PASCAL_BUILDING",
             "source_path": "src/core/modules/map_studio_pascal_building.py",
             "packaged_path": "Python/src/core/modules/map_studio_pascal_building.py",
-            "sha256": "24feea88c92aea7ef3daec7f8a196d004d157bc6d24385c2932874c178cfe576"
+            "sha256": "5ffca2832f598949d9e31252df5f56da6e9bc0dbd1d6b62eb195ab440b1ba216"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MAP_STUDIO_PASCAL_GRAPH",
@@ -621,7 +621,7 @@
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_CONTROLLER",
             "source_path": "src/core/modules/module_editor_controller.py",
             "packaged_path": "Python/src/core/modules/module_editor_controller.py",
-            "sha256": "f444c2d49bf68dc134ed627c1dd5c107da72e490c0134e66b1c0da90281b308f"
+            "sha256": "92caa0ac6c84fea9df311ba81cac375139106503c701beb8e83317a3d98fdc02"
         },
         {
             "resource_name": "PYTHON_PAYLOAD_CORE_MODULES_MODULE_EDITOR_MODEL",

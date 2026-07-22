@@ -703,6 +703,12 @@ class ViewportSceneModelMixin:
     def clear_map_studio_building_preview(self) -> None:
         self.set_map_studio_building_preview(None)
 
+    def set_map_studio_level_presentation(self, presentation: object | None) -> None:
+        """Display level filtering/spacing without changing authored geometry."""
+
+        self._map_studio_level_presentation = dict(presentation) if isinstance(presentation, dict) else {}
+        self._request_render(fast=True, reason="map studio level presentation changed", overlay=True)
+
     def set_map_studio_universal_transform_overlay(self, overlay: object | None) -> None:
         """Display Map Studio Universal Manipulator bounds and dimensions."""
 

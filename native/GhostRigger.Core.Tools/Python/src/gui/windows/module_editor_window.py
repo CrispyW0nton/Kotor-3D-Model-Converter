@@ -2069,6 +2069,8 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
         self.builder_tab.buildSectionChanged.connect(self._on_map_studio_build_section_changed)
         self.builder_tab.buildingToolChanged.connect(self._set_map_studio_building_tool)
         self.builder_tab.buildingSettingsChanged.connect(self.viewport_panel.update_pascal_building_settings)
+        self.builder_tab.buildingLevelCreateRequested.connect(self._add_map_studio_building_level)
+        self.builder_tab.buildingLevelViewChanged.connect(self._apply_map_studio_level_presentation)
         self.builder_tab.browseVanillaRoomKitsRequested.connect(self._add_room_from_module)
         for combo_name in ("terrainRoomComboBox", "terrainBrushComboBox"):
             combo = getattr(self.builder_tab, combo_name, None)
@@ -10682,6 +10684,37 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             self._sync_map_studio_terrain_brush_context(force_enabled=False)
             self.viewport_panel.set_placement_tool_context({"enabled": False})
 
+    def _add_map_studio_building_level(self, payload: object) -> None:
+        values = dict(payload) if isinstance(payload, dict) else {}
+        level_index = int(values.get("level_index", 0) or 0)
+        try:
+            self.controller.add_map_studio_building_level(
+                level_index=level_index,
+                name=str(values.get("name") or f"Level {level_index + 1}"),
+                floor_z=float(values.get("floor_z", 0.0) or 0.0),
+                floor_to_floor_height=float(values.get("floor_to_floor_height", 3.0) or 3.0),
+            )
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self, "Add Building Level", str(exc))
+            return
+        self._refresh_all(
+            f"Added Level {level_index + 1}; choose Draw Walls to author rooms at its true elevation."
+        )
+        self.builder_tab.select_building_level(level_index)
+
+    def _apply_map_studio_level_presentation(self, payload: object = None) -> None:
+        presentation = (
+            dict(payload)
+            if isinstance(payload, dict)
+            else dict(self.builder_tab.building_level_presentation())
+        )
+        room_levels = {
+            room_resref: int(level.level_index)
+            for level in self.controller.map_studio_building_levels()
+            for room_resref in tuple(level.room_resrefs or ())
+        }
+        self.viewport_panel.set_pascal_building_level_presentation(presentation, room_levels)
+
     def _build_map_studio_room_from_viewport(self, payload: object) -> None:
         values = dict(payload) if isinstance(payload, dict) else {}
         try:
@@ -15306,6 +15339,7 @@ class ModuleEditorWindow(QtWidgets.QMainWindow):
             authored_terrain_walkability_overlay,
             authored_room_preview_model,
         )
+        self._apply_map_studio_level_presentation()
         self.texture_paint_tab.set_material_inventory(
             self._used_map_diffuse_resrefs(authored_room_preview_model),
             self.project,

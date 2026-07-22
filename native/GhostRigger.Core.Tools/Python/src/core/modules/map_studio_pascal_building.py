@@ -35,6 +35,7 @@ class PascalBuildingLevel:
     level_index: int
     name: str
     floor_z: float
+    floor_to_floor_height: float = 3.0
     room_resrefs: tuple[str, ...] = ()
 
 
@@ -81,6 +82,7 @@ _DEFAULT_STYLES = (
 
 _VANILLA_STYLE_SCHEMA = "ghostrigger.map-building-style-vanilla/v1"
 _VANILLA_STYLE_RELATIVE = Path("assets/map_studio/environment_kits/vanilla_styles.json")
+_PASCAL_LEVELS_KEY = "pascal_building_levels"
 
 
 def _candidate_roots() -> tuple[Path, ...]:
@@ -390,6 +392,15 @@ def add_pascal_building_room(
         raise ValueError("Roof pitch must be between 5 and 70 degrees.")
     if not math.isfinite(overhang) or overhang < 0.0 or overhang > 5.0:
         raise ValueError("Roof overhang must be between 0 and 5 metres.")
+    project = set_pascal_building_level(
+        project,
+        level_index=int(level_index),
+        name=str(level_name or f"Level {int(level_index) + 1}"),
+        floor_z=z,
+        floor_to_floor_height=height,
+        include_default_when_empty=False,
+        overwrite=False,
+    )
     room_resref = _next_room_resref(project)
     source = {
         "source": "map_studio:pascal_building",
@@ -632,8 +643,24 @@ def preview_pascal_building_opening(
     )
 
 
-def pascal_building_levels(project: AuthoredModuleProject) -> tuple[PascalBuildingLevel, ...]:
+def _pascal_building_level_rows(project: AuthoredModuleProject) -> dict[int, dict[str, Any]]:
     grouped: dict[int, dict[str, Any]] = {}
+    for raw in tuple(dict(getattr(project, "extra", {}) or {}).get(_PASCAL_LEVELS_KEY) or ()):
+        row = dict(raw or {})
+        try:
+            index = int(row.get("level_index", 0))
+            floor_z = float(row.get("floor_z", 0.0))
+            height = max(0.25, float(row.get("floor_to_floor_height", 3.0) or 3.0))
+        except (TypeError, ValueError):
+            continue
+        if index < 0 or not all(math.isfinite(value) for value in (floor_z, height)):
+            continue
+        grouped[index] = {
+            "name": str(row.get("name") or f"Level {index + 1}"),
+            "floor_z": floor_z,
+            "floor_to_floor_height": height,
+            "rooms": [],
+        }
     for room in tuple(project.rooms or ()):
         primitive = getattr(room, "primitive", None)
         metadata = dict(getattr(primitive, "metadata", {}) or {})
@@ -645,12 +672,79 @@ def pascal_building_levels(project: AuthoredModuleProject) -> tuple[PascalBuildi
             {
                 "name": str(metadata.get("building_level_name") or f"Level {index + 1}"),
                 "floor_z": float(getattr(primitive, "z", 0.0) or 0.0),
+                "floor_to_floor_height": max(0.25, float(getattr(primitive, "wall_height", 3.0) or 3.0)),
                 "rooms": [],
             },
         )
         row["rooms"].append(normalise_resref(room.room_resref))
+    return grouped
+
+
+def set_pascal_building_level(
+    project: AuthoredModuleProject,
+    *,
+    level_index: int,
+    name: str = "",
+    floor_z: float = 0.0,
+    floor_to_floor_height: float = 3.0,
+    include_default_when_empty: bool = True,
+    overwrite: bool = True,
+) -> AuthoredModuleProject:
+    """Persist one semantic level without changing authored room coordinates."""
+
+    index = int(level_index)
+    elevation = float(floor_z)
+    height = max(0.25, float(floor_to_floor_height))
+    if index < 0:
+        raise ValueError("Building level index must be zero or greater.")
+    if not all(math.isfinite(value) for value in (elevation, height)):
+        raise ValueError("Building level elevation and height must be finite.")
+    grouped = _pascal_building_level_rows(project)
+    if not grouped and include_default_when_empty and index != 0:
+        grouped[0] = {
+            "name": "Level 1",
+            "floor_z": 0.0,
+            "floor_to_floor_height": height,
+            "rooms": [],
+        }
+    if overwrite or index not in grouped:
+        rooms = list(grouped.get(index, {}).get("rooms", ()))
+        grouped[index] = {
+            "name": str(name or f"Level {index + 1}"),
+            "floor_z": elevation,
+            "floor_to_floor_height": height,
+            "rooms": rooms,
+        }
+    extra = dict(getattr(project, "extra", {}) or {})
+    extra[_PASCAL_LEVELS_KEY] = [
+        {
+            "level_index": level,
+            "name": str(row["name"]),
+            "floor_z": float(row["floor_z"]),
+            "floor_to_floor_height": float(row["floor_to_floor_height"]),
+        }
+        for level, row in sorted(grouped.items())
+    ]
+    return replace(project, extra=extra)
+
+
+def pascal_building_levels(project: AuthoredModuleProject) -> tuple[PascalBuildingLevel, ...]:
+    grouped = _pascal_building_level_rows(project)
+    if not grouped:
+        grouped[0] = {
+            "name": "Level 1",
+            "floor_z": 0.0,
+            "floor_to_floor_height": 3.0,
+            "rooms": [],
+        }
     return tuple(
-        PascalBuildingLevel(index, row["name"], row["floor_z"], tuple(row["rooms"]))
+        PascalBuildingLevel(
+            level_index=index,
+            name=row["name"],
+            floor_z=row["floor_z"],
+            floor_to_floor_height=row["floor_to_floor_height"],
+            room_resrefs=tuple(row["rooms"]),
+        )
         for index, row in sorted(grouped.items())
     )
 
@@ -663,6 +757,7 @@ __all__ = [
     "available_pascal_building_styles",
     "pascal_building_levels",
     "preview_pascal_building_opening",
+    "set_pascal_building_level",
     "set_pascal_building_opening",
     "scan_vanilla_pascal_building_styles",
     "vanilla_pascal_building_styles",
